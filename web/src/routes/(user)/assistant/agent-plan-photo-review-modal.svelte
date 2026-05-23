@@ -24,6 +24,7 @@
     onResetSelection,
   }: Props = $props();
 
+  let dialog: HTMLDivElement | undefined = $state();
   let closeButton: HTMLButtonElement | undefined = $state();
   const titleId = $derived(`agent-plan-photo-review-title-${item.id}`);
 
@@ -31,6 +32,38 @@
     if (event.key === 'Escape') {
       event.stopPropagation();
       onClose();
+      return;
+    }
+
+    if (event.key !== 'Tab' || !dialog) {
+      return;
+    }
+
+    const focusableElements = Array.from(
+      dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => !element.hasAttribute('disabled') && !element.hidden && element.tabIndex >= 0);
+
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements.at(-1);
+
+    if (!firstFocusable || !lastFocusable) {
+      event.preventDefault();
+      return;
+    }
+
+    if (event.shiftKey) {
+      if (document.activeElement === firstFocusable || !dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        lastFocusable.focus();
+      }
+      return;
+    }
+
+    if (document.activeElement === lastFocusable || !dialog.contains(document.activeElement)) {
+      event.preventDefault();
+      firstFocusable.focus();
     }
   };
 
@@ -48,12 +81,13 @@
   <button
     type="button"
     class="absolute inset-0 cursor-default"
-    aria-label="Dismiss photo review backdrop"
+    aria-label={$t('assistant_operation_photo_review_dismiss_backdrop')}
     tabindex="-1"
     onclick={onClose}
   ></button>
 
   <div
+    bind:this={dialog}
     class="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-950"
     role="dialog"
     aria-modal="true"
