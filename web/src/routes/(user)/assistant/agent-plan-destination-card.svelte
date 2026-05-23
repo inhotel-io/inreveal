@@ -2,7 +2,7 @@
   import { t } from 'svelte-i18n';
   import type { OperationReviewGroup } from './agent-operation-plan-ui';
   import AgentPlanOperationRow from './agent-plan-operation-row.svelte';
-  import AgentPlanThumbnailStrip from './agent-plan-thumbnail-strip.svelte';
+  import AgentPlanPhotoStage from './agent-plan-photo-stage.svelte';
 
   interface Props {
     group: OperationReviewGroup;
@@ -15,6 +15,7 @@
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride: (operationId: string, fieldKey: string) => void;
+    onOpenItemReview?: (operationId: string) => void;
   }
 
   let {
@@ -28,6 +29,7 @@
     onResetItemSelection,
     onSetFieldOverride,
     onResetFieldOverride,
+    onOpenItemReview = () => undefined,
   }: Props = $props();
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
@@ -47,6 +49,9 @@
         .filter((operation) => operation.enabled && !operation.blocked)
         .flatMap((operation) => operation.selectedAssetIds),
     ).size,
+  );
+  const primaryPhotoReviewItem = $derived(
+    group.operations.find((operation) => operation.review.selection.supportsItemSelection && operation.assetCount > 0),
   );
   const groupSelectionState = $derived({
     checked: enabledOperationCount === group.operations.length,
@@ -105,7 +110,7 @@
     </div>
   </div>
 
-  <AgentPlanThumbnailStrip {group} />
+  <AgentPlanPhotoStage {group} primaryItem={primaryPhotoReviewItem} {canChangeSelection} {onOpenItemReview} />
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}
