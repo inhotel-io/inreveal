@@ -34,6 +34,11 @@ class AgentToolName {
   static const readSpace = AgentToolName._(r'readSpace');
   static const searchUsers = AgentToolName._(r'searchUsers');
   static const proposeAlbumOperations = AgentToolName._(r'proposeAlbumOperations');
+  static const proposeAlbumFromSearch = AgentToolName._(r'proposeAlbumFromSearch');
+  static const proposeAddAssetsToAlbumFromSearch = AgentToolName._(r'proposeAddAssetsToAlbumFromSearch');
+  static const proposeSpaceFromSearch = AgentToolName._(r'proposeSpaceFromSearch');
+  static const proposeAddAssetsToSpaceFromSearch = AgentToolName._(r'proposeAddAssetsToSpaceFromSearch');
+  static const proposeAssetBatchFromSearch = AgentToolName._(r'proposeAssetBatchFromSearch');
   static const reviseProposedOperations = AgentToolName._(r'reviseProposedOperations');
   static const summarizePlan = AgentToolName._(r'summarizePlan');
 
@@ -50,6 +55,11 @@ class AgentToolName {
     readSpace,
     searchUsers,
     proposeAlbumOperations,
+    proposeAlbumFromSearch,
+    proposeAddAssetsToAlbumFromSearch,
+    proposeSpaceFromSearch,
+    proposeAddAssetsToSpaceFromSearch,
+    proposeAssetBatchFromSearch,
     reviseProposedOperations,
     summarizePlan,
   ];
@@ -101,6 +111,11 @@ class AgentToolNameTypeTransformer {
         case r'readSpace': return AgentToolName.readSpace;
         case r'searchUsers': return AgentToolName.searchUsers;
         case r'proposeAlbumOperations': return AgentToolName.proposeAlbumOperations;
+        case r'proposeAlbumFromSearch': return AgentToolName.proposeAlbumFromSearch;
+        case r'proposeAddAssetsToAlbumFromSearch': return AgentToolName.proposeAddAssetsToAlbumFromSearch;
+        case r'proposeSpaceFromSearch': return AgentToolName.proposeSpaceFromSearch;
+        case r'proposeAddAssetsToSpaceFromSearch': return AgentToolName.proposeAddAssetsToSpaceFromSearch;
+        case r'proposeAssetBatchFromSearch': return AgentToolName.proposeAssetBatchFromSearch;
         case r'reviseProposedOperations': return AgentToolName.reviseProposedOperations;
         case r'summarizePlan': return AgentToolName.summarizePlan;
         default:

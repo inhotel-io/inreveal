@@ -18,6 +18,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
     required this.targetKind,
     this.targetId,
     this.temporaryTargetId,
+    this.assetSource,
     this.assetIds = const [],
     this.assetSelectionHandleId,
     this.riskLevel,
@@ -46,6 +47,14 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   String? temporaryTargetId;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentOperationPlanningAssetSourceInput? assetSource;
 
   List<String> assetIds;
 
@@ -76,6 +85,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
     other.targetKind == targetKind &&
     other.targetId == targetId &&
     other.temporaryTargetId == temporaryTargetId &&
+    other.assetSource == assetSource &&
     _deepEquality.equals(other.assetIds, assetIds) &&
     other.assetSelectionHandleId == assetSelectionHandleId &&
     other.riskLevel == riskLevel &&
@@ -90,6 +100,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
     (targetKind.hashCode) +
     (targetId == null ? 0 : targetId!.hashCode) +
     (temporaryTargetId == null ? 0 : temporaryTargetId!.hashCode) +
+    (assetSource == null ? 0 : assetSource!.hashCode) +
     (assetIds.hashCode) +
     (assetSelectionHandleId == null ? 0 : assetSelectionHandleId!.hashCode) +
     (riskLevel == null ? 0 : riskLevel!.hashCode) +
@@ -97,7 +108,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
     (payload.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetIds=$assetIds, assetSelectionHandleId=$assetSelectionHandleId, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetSource=$assetSource, assetIds=$assetIds, assetSelectionHandleId=$assetSelectionHandleId, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -113,6 +124,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
       json[r'temporaryTargetId'] = this.temporaryTargetId;
     } else {
     //  json[r'temporaryTargetId'] = null;
+    }
+    if (this.assetSource != null) {
+      json[r'assetSource'] = this.assetSource;
+    } else {
+    //  json[r'assetSource'] = null;
     }
       json[r'assetIds'] = this.assetIds;
     if (this.assetSelectionHandleId != null) {
@@ -144,6 +160,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14 {
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
+        assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
