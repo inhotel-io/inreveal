@@ -68,7 +68,38 @@
   );
   const selectionPayload = $derived(model ? buildSelectionPayload(model) : null);
   const selectedOperationIds = $derived(selectionPayload?.operationIds ?? []);
-  const collapsedThumbnailGroup = $derived(model?.groups.find((group) => group.assetCount > 0) ?? null);
+  const collapsedThumbnailGroup = $derived(
+    (() => {
+      if (!model) {
+        return null;
+      }
+
+      for (const group of model.groups) {
+        const selectedAssetIds = [
+          ...new Set(
+            group.operations
+              .filter((operation) => operation.enabled && !operation.blocked)
+              .flatMap((operation) => operation.selectedAssetIds),
+          ),
+        ];
+
+        if (selectedAssetIds.length > 0) {
+          return {
+            ...group,
+            assetCount: selectedAssetIds.length,
+            thumbnailSummary: {
+              totalCount: selectedAssetIds.length,
+              representativeAssetIds: selectedAssetIds,
+              hasMore: false,
+            },
+            representativeAssetIds: selectedAssetIds,
+          };
+        }
+      }
+
+      return null;
+    })(),
+  );
   const canChangeSelection = $derived(
     model !== null && model.plan.status === AgentOperationPlanStatus.Proposed && !applying,
   );
