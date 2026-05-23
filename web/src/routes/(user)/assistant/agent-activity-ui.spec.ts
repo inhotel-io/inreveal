@@ -396,28 +396,28 @@ describe('agent activity UI helpers', () => {
     expect(
       afterPlan.verboseItems.map(({ id, title, summary, status, count }) => ({ id, title, summary, status, count })),
     ).toEqual([
-        {
-          id: 'tool-resolve-people',
-          title: 'Resolving filters',
-          summary: 'Resolved people: Pierre, Aurelia',
-          status: 'completed',
-          count: undefined,
-        },
-        {
-          id: 'tool-search-source',
-          title: 'Searching photos',
-          summary: 'Found 100 matching photos',
-          status: 'completed',
-          count: 100,
-        },
-        {
-          id: 'tool-prepare-album',
-          title: 'Preparing album plan',
-          summary: 'Prepared album plan with 100 photos',
-          status: 'completed',
-          count: 100,
-        },
-      ]);
+      {
+        id: 'tool-resolve-people',
+        title: 'Resolving filters',
+        summary: 'Resolved people: Pierre, Aurelia',
+        status: 'completed',
+        count: undefined,
+      },
+      {
+        id: 'tool-search-source',
+        title: 'Searching photos',
+        summary: 'Found 100 matching photos',
+        status: 'completed',
+        count: 100,
+      },
+      {
+        id: 'tool-prepare-album',
+        title: 'Preparing album plan',
+        summary: 'Prepared album plan with 100 photos',
+        status: 'completed',
+        count: 100,
+      },
+    ]);
     expect(beforePlan.items.map((item) => item.id)).toEqual(['tool-resolve-people', 'tool-search-source']);
     expect(afterPlan.items.map((item) => item.id)).toEqual([
       'tool-resolve-people',
