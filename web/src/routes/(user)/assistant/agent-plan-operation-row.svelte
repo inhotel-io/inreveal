@@ -48,7 +48,6 @@
 
     return { update };
   };
-
 </script>
 
 <div class="grid gap-3 py-4 sm:grid-cols-[auto_minmax(0,1fr)]">

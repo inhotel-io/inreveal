@@ -1162,7 +1162,9 @@
       {/if}
 
       {#if streamingText}
-        <article class="mr-auto max-w-[min(80%,48rem)] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100">
+        <article
+          class="mr-auto max-w-[min(80%,48rem)] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100"
+        >
           <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{$t('assistant_streaming_response')}</div>
           <div class="mt-1">{@render assistantMarkdown(parseAssistantMarkdown(streamingText))}</div>
         </article>
