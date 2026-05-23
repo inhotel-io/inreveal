@@ -520,7 +520,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 1' }));
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
@@ -546,7 +546,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
 
     await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
 
@@ -769,7 +769,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Exclude visible' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
@@ -801,7 +801,7 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     const changeSelection = await screen.findByRole('button', { name: 'Change selection' });
     await fireEvent.click(changeSelection);
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Exclude visible' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(changeSelection);
@@ -865,7 +865,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
     await fireEvent.input(within(dialog).getByRole('searchbox', { name: 'Filter photos' }), {
       target: { value: 'asset-2' },
     });
@@ -993,7 +993,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     await screen.findByRole('region', { name: 'Portugal' });
     await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
@@ -1259,7 +1259,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
-    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
     await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
