@@ -2,7 +2,6 @@
   import { t, type Translations } from 'svelte-i18n';
   import type { OperationReviewItem } from './agent-operation-plan-ui';
   import AgentPlanInlineFieldEditor from './agent-plan-inline-field-editor.svelte';
-  import AgentPlanItemReview from './agent-plan-item-review.svelte';
   import AgentPlanTechnicalDetails from './agent-plan-technical-details.svelte';
 
   interface Props {
@@ -15,8 +14,7 @@
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride?: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride?: (operationId: string, fieldKey: string) => void;
-    itemReviewOpen?: boolean;
-    onToggleItemReview?: (open: boolean) => void;
+    onOpenItemReview?: (operationId: string) => void;
   }
 
   let {
@@ -29,16 +27,16 @@
     onResetItemSelection,
     onSetFieldOverride = () => {},
     onResetFieldOverride = () => {},
-    itemReviewOpen,
-    onToggleItemReview,
+    onOpenItemReview = () => {},
   }: Props = $props();
-  let localItemReviewOpen = $state(false);
-  const effectiveItemReviewOpen = $derived(itemReviewOpen ?? localItemReviewOpen);
+  let technicalDetailsOpen = $state(false);
 
   const checkboxState = $derived({
     checked: item.enabled,
     mixed: item.mixed,
   });
+
+  const canOpenItemReview = $derived(item.review.selection.supportsItemSelection && item.assetCount > 0);
 
   const statusLabelKey = $derived.by(() => {
     if (item.applyState.kind === 'partial') {
@@ -59,19 +57,9 @@
     return { update };
   };
 
-  const toggleItemReview = () => {
-    const nextOpen = !effectiveItemReviewOpen;
-
-    if (onToggleItemReview) {
-      onToggleItemReview(nextOpen);
-      return;
-    }
-
-    localItemReviewOpen = nextOpen;
-  };
 </script>
 
-<div class="flex gap-3 py-3">
+<div class="grid gap-3 py-4 sm:grid-cols-[auto_minmax(0,1fr)]">
   <input
     class="mt-1 size-4 shrink-0"
     type="checkbox"
@@ -123,28 +111,28 @@
 
     <AgentPlanInlineFieldEditor {item} {canChangeSelection} {onSetFieldOverride} {onResetFieldOverride} />
 
-    <div class="mt-2">
+    <div class="mt-2 flex flex-wrap gap-2">
+      {#if canOpenItemReview}
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+          disabled={!canChangeSelection}
+          onclick={() => onOpenItemReview(item.id)}
+        >
+          {$t('assistant_operation_item_change_selection')}
+        </button>
+      {/if}
+
       <button
         type="button"
-        class="text-xs font-medium text-gray-600 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-immich-primary dark:text-gray-300"
-        aria-expanded={effectiveItemReviewOpen}
-        onclick={toggleItemReview}
+        class="inline-flex items-center justify-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-immich-primary dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+        aria-expanded={technicalDetailsOpen}
+        onclick={() => (technicalDetailsOpen = !technicalDetailsOpen)}
       >
-        {$t(effectiveItemReviewOpen ? 'assistant_operation_detail_hide' : 'assistant_operation_detail_show')}
+        {$t(technicalDetailsOpen ? 'assistant_operation_detail_hide' : 'assistant_operation_detail_show')}
       </button>
-
-      {#if effectiveItemReviewOpen}
-        <AgentPlanItemReview
-          {item}
-          {canChangeSelection}
-          {onToggleItem}
-          {onBulkSetItems}
-          {onSetOnlyItems}
-          onResetSelection={onResetItemSelection}
-        />
-      {/if}
     </div>
 
-    <AgentPlanTechnicalDetails {item} expanded={effectiveItemReviewOpen} showToggle={false} />
+    <AgentPlanTechnicalDetails {item} expanded={technicalDetailsOpen} showToggle={false} />
   </div>
 </div>

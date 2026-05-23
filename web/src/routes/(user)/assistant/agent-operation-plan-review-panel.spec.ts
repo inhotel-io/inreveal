@@ -51,6 +51,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
     assistant_operation_field_reset: 'Reset {field}',
     assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_item_change_selection: 'Change selection',
     assistant_operation_item_excluded_count: '{count} excluded',
     assistant_operation_item_exclude_videos: 'Exclude videos',
     assistant_operation_item_exclude_visible: 'Exclude visible',
@@ -518,10 +519,11 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
 
-    const detailsButtons = await screen.findAllByText('Details');
-    await fireEvent.click(detailsButtons[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 1' }));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 1' }));
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
 
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
     expect(screen.getByText('2 changes · 0 assets selected')).toBeInTheDocument();
@@ -543,9 +545,13 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
 
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
+
     const detailsButtons = screen.getAllByText('Details');
     await fireEvent.click(detailsButtons[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
 
     expect(screen.getByText(addId)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
@@ -762,9 +768,10 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    const detailsButtons = await screen.findAllByText('Details');
-    await fireEvent.click(detailsButtons[1]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
 
     const itemSelection =
@@ -775,7 +782,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(itemSelection?.itemIds?.length).toBeLessThan(80);
   });
 
-  it('preserves bulk item selection after closing and reopening row details', async () => {
+  it('preserves bulk item selection after closing and reopening photo review', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(
       plan([
         operation({
@@ -792,13 +799,14 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    const details = await screen.findByText('Details');
-    await fireEvent.click(details);
-    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
-    await fireEvent.click(details);
-    await fireEvent.click(details);
+    const changeSelection = await screen.findByRole('button', { name: 'Change selection' });
+    await fireEvent.click(changeSelection);
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
+    await fireEvent.click(changeSelection);
 
-    expect(screen.getByText('0 of 3 selected')).toBeInTheDocument();
+    expect(screen.getAllByText('0 of 3 selected').length).toBeGreaterThan(0);
   });
 
   it('reopens a collapsed large operation with sparse selection and a bounded virtual window', async () => {
@@ -819,21 +827,23 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session } });
 
-    const details = await screen.findByText('Details');
-    await fireEvent.click(details);
-    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+    const changeSelection = await screen.findByRole('button', { name: 'Change selection' });
+    await fireEvent.click(changeSelection);
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
+    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
 
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 1' }));
-    expect(screen.getByText('999 of 1000 selected')).toBeInTheDocument();
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 1' }));
+    expect(screen.getAllByText('999 of 1000 selected').length).toBeGreaterThan(0);
 
-    await fireEvent.click(details);
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     expect(screen.queryByTestId('agent-plan-item-review-grid')).not.toBeInTheDocument();
 
-    await fireEvent.click(details);
-    expect(screen.getByText('999 of 1000 selected')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: 'Include photo 1' })).not.toBeChecked();
-    expect(screen.getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
-    expect(screen.queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
+    await fireEvent.click(changeSelection);
+    dialog = screen.getByRole('dialog', { name: 'Review photos for Add 1000 photos' });
+    expect(screen.getAllByText('999 of 1000 selected').length).toBeGreaterThan(0);
+    expect(within(dialog).getByRole('checkbox', { name: 'Include photo 1' })).not.toBeChecked();
+    expect(within(dialog).getAllByTestId('agent-plan-item-thumbnail')).toHaveLength(42);
+    expect(within(dialog).queryByRole('checkbox', { name: 'Include photo 1000' })).not.toBeInTheDocument();
   });
 
   it('publishes only the filtered assets when selecting all filtered items', async () => {
@@ -854,11 +864,12 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
 
-    await fireEvent.click(await screen.findByText('Details'));
-    await fireEvent.input(screen.getByRole('searchbox', { name: 'Filter photos' }), {
+    await fireEvent.click(await screen.findByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+    await fireEvent.input(within(dialog).getByRole('searchbox', { name: 'Filter photos' }), {
       target: { value: 'asset-2' },
     });
-    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Select all filtered' }));
 
     expect(onSelectionChange).toHaveBeenLastCalledWith({
       planId,
@@ -981,8 +992,10 @@ describe('AgentOperationPlanReviewPanel', () => {
 
     await screen.findByRole('region', { name: 'Portugal' });
     await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
-    await fireEvent.click(screen.getAllByText('Details')[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 3 selected' }));
 
     expect(await screen.findByText('Applied 1 operations. 1 failed.')).toBeInTheDocument();
@@ -1245,8 +1258,10 @@ describe('AgentOperationPlanReviewPanel', () => {
     await screen.findByRole('region', { name: 'Portugal' });
     await fireEvent.input(screen.getAllByLabelText('Album name')[0], { target: { value: 'Madeira' } });
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Update album details' }));
-    await fireEvent.click(screen.getAllByText('Details')[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+    let dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to apply proposed operations');

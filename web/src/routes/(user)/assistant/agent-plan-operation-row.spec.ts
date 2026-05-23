@@ -9,7 +9,6 @@ import {
 } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { tick } from 'svelte';
 import { readable } from 'svelte/store';
 import {
   buildOperationReviewModel,
@@ -67,6 +66,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
+    assistant_operation_item_change_selection: 'Change selection',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
@@ -157,39 +157,6 @@ const model = (
     enabledByOperationId ?? { [createId]: true, [addId]: true },
     itemSelectionByOperationId ?? {},
   );
-
-const stubMeasuredGridWidth = () => {
-  let resize: ResizeObserverCallback | undefined;
-
-  vi.stubGlobal(
-    'ResizeObserver',
-    vi.fn(function (callback: ResizeObserverCallback) {
-      resize = callback;
-
-      return {
-        disconnect: vi.fn(),
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-      };
-    }),
-  );
-
-  return async (width: number) => {
-    if (!resize) {
-      throw new Error('ResizeObserver was not attached');
-    }
-
-    resize(
-      [
-        {
-          contentRect: { width },
-        } as ResizeObserverEntry,
-      ],
-      {} as ResizeObserver,
-    );
-    await tick();
-  };
-};
 
 describe('AgentPlanOperationRow', () => {
   afterEach(() => {
@@ -329,9 +296,8 @@ describe('AgentPlanOperationRow', () => {
     expect(screen.getByText('1 of 2 photos selected')).toBeInTheDocument();
   });
 
-  it('renders item review before technical details and threads item selection callbacks', async () => {
-    const onToggleItem = vi.fn();
-    const onResetItemSelection = vi.fn();
+  it('opens photo selection separately from technical details', async () => {
+    const onOpenItemReview = vi.fn();
     render(AgentPlanOperationRow, {
       props: {
         item: model(
@@ -340,95 +306,24 @@ describe('AgentPlanOperationRow', () => {
         ).operationsById.get(addId)!,
         canChangeSelection: true,
         onToggleOperation: vi.fn(),
-        onToggleItem,
-        onResetItemSelection,
-        onSetFieldOverride: vi.fn(),
-        onResetFieldOverride: vi.fn(),
-      },
-    });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
-
-    const itemReview = screen.getByRole('group', { name: 'Review photos for Add 2 photos' });
-    const technicalDetail = screen.getByText('Operation ID');
-    expect(itemReview.compareDocumentPosition(technicalDetail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
-
-    expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
-    expect(onResetItemSelection).toHaveBeenCalledWith(addId);
-  });
-
-  it('threads bulk item callbacks from the item review controls', async () => {
-    const onBulkSetItems = vi.fn();
-    const onSetOnlyItems = vi.fn();
-    render(AgentPlanOperationRow, {
-      props: {
-        item: model().operationsById.get(addId)!,
-        canChangeSelection: true,
-        onToggleOperation: vi.fn(),
         onToggleItem: vi.fn(),
-        onBulkSetItems,
-        onSetOnlyItems,
         onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
+        onOpenItemReview,
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
 
-    expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
-    expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);
-  });
-
-  it('uses the responsive item review column contract from the operation row path', async () => {
-    const setMeasuredWidth = stubMeasuredGridWidth();
-    const assetIds = Array.from(
-      { length: 100 },
-      (_, index) => `00000000-0000-4000-8000-${(300 + index).toString().padStart(12, '0')}`,
-    );
-    const item = buildOperationReviewModel(
-      plan([
-        operation({
-          id: addId,
-          type: AgentOperationType.AlbumAddAssets,
-          summary: 'Add many assets',
-          targetKind: AgentOperationTargetKind.NewAlbum,
-          temporaryTargetId: 'album-portugal',
-          assetIds,
-          payload: {},
-        }),
-      ]),
-      { [addId]: true },
-      {},
-    ).operationsById.get(addId)!;
-
-    render(AgentPlanOperationRow, {
-      props: {
-        item,
-        canChangeSelection: true,
-        onToggleOperation: vi.fn(),
-        onToggleItem: vi.fn(),
-        onBulkSetItems: vi.fn(),
-        onSetOnlyItems: vi.fn(),
-        onResetItemSelection: vi.fn(),
-        onSetFieldOverride: vi.fn(),
-        onResetFieldOverride: vi.fn(),
-      },
-    });
+    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
+    expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Operation ID')).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Show technical details' }));
-    await setMeasuredWidth(220);
 
-    expect(screen.getByTestId('agent-plan-item-review-tile-grid')).toHaveStyle({
-      'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
-    });
-    expect(screen.getAllByTestId('agent-plan-item-review-image')).toHaveLength(14);
-    expect(screen.getByText('Showing 14 of 100 photos')).toBeInTheDocument();
+    expect(screen.getByText('Operation ID')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
   });
 
   it('renders inline field editors above technical details and threads field callbacks', async () => {

@@ -59,6 +59,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_status_proposed: 'Proposed',
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_item_excluded_count: '{count} excluded',
+    assistant_operation_item_change_selection: 'Change selection',
     assistant_operation_item_exclude_videos: 'Exclude videos',
     assistant_operation_item_exclude_visible: 'Exclude visible',
     assistant_operation_item_filter_label: 'Filter photos',
@@ -383,9 +384,10 @@ describe('AgentPlanEvidenceLedger', () => {
     expect(screen.getByText('1 selected assets')).toBeInTheDocument();
     expect(screen.getByText('3 changes · 1 assets selected')).toBeInTheDocument();
 
-    await fireEvent.click(screen.getAllByRole('button', { name: 'Show technical details' })[1]);
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'Include photo 2' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Reset selection' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Keep original selection' }));
 
     expect(onToggleItem).toHaveBeenCalledWith(addId, assetB, true);
     expect(onResetItemSelection).toHaveBeenCalledWith(addId);
@@ -450,9 +452,10 @@ describe('AgentPlanEvidenceLedger', () => {
       },
     });
 
-    await fireEvent.click(screen.getAllByRole('button', { name: 'Show technical details' })[1]);
-    await fireEvent.click(screen.getByRole('button', { name: 'Exclude visible' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Select all filtered' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Change selection' }));
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Exclude visible' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Select all filtered' }));
 
     expect(onBulkSetItems).toHaveBeenCalledWith(addId, [assetA, assetB], false);
     expect(onSetOnlyItems).toHaveBeenCalledWith(addId, [assetA, assetB]);

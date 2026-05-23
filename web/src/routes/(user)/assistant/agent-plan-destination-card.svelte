@@ -15,6 +15,7 @@
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride: (operationId: string, fieldKey: string) => void;
+    onOpenItemReview?: (operationId: string) => void;
   }
 
   let {
@@ -28,8 +29,8 @@
     onResetItemSelection,
     onSetFieldOverride,
     onResetFieldOverride,
+    onOpenItemReview = () => {},
   }: Props = $props();
-  let openReviewOperationIds = $state(new Set<string>());
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
     if (reviewGroup.destination.id && reviewGroup.destination.name === `Existing album ${reviewGroup.destination.id}`) {
@@ -68,21 +69,6 @@
     return { update };
   };
 
-  const openItemReview = (operationId: string) => {
-    openReviewOperationIds = new Set(openReviewOperationIds).add(operationId);
-  };
-
-  const setItemReviewOpen = (operationId: string, open: boolean) => {
-    const nextOpenOperationIds = new Set(openReviewOperationIds);
-
-    if (open) {
-      nextOpenOperationIds.add(operationId);
-    } else {
-      nextOpenOperationIds.delete(operationId);
-    }
-
-    openReviewOperationIds = nextOpenOperationIds;
-  };
 </script>
 
 <div
@@ -125,7 +111,7 @@
     </div>
   </div>
 
-  <AgentPlanPhotoStage {group} primaryItem={primaryPhotoReviewItem} onOpenItemReview={openItemReview} />
+  <AgentPlanPhotoStage {group} primaryItem={primaryPhotoReviewItem} {onOpenItemReview} />
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}
@@ -139,8 +125,7 @@
         {onResetItemSelection}
         {onSetFieldOverride}
         {onResetFieldOverride}
-        itemReviewOpen={openReviewOperationIds.has(item.id)}
-        onToggleItemReview={(open) => setItemReviewOpen(item.id, open)}
+        {onOpenItemReview}
       />
     {/each}
   </div>
