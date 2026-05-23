@@ -147,6 +147,15 @@ export type AgentToolOperationPlanRequestMetadata = {
     declarativeFilters?: AgentDeclarativeAssetFilters;
     resolvedFilters?: AgentSearchAssetsFilters;
   }>;
+  sourceSummaries?: Array<{
+    sourceKind: 'selectionHandle' | 'previousSearch' | 'search';
+    selectionHandleId?: string;
+    sourceRef?: AgentSearchSourceRef;
+    assetCount: number;
+    sampleAssetCount: number;
+    filterKeys?: string[];
+    resolvedFilterKeys?: string[];
+  }>;
 };
 
 export type AgentSelectionHandleRecoveryHint = {

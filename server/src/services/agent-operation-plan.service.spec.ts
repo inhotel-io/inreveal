@@ -48,6 +48,7 @@ import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
+import { AgentToolOperationPlanRequestMetadata } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { newAccessRepositoryMock } from 'test/repositories/access.repository.mock';
 import { newAssetRepositoryMock } from 'test/repositories/asset.repository.mock';
@@ -545,6 +546,67 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  it('records completed plan activity with materialized asset counts', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: { country: 'South Africa' },
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AlbumCreate,
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-album-from-search',
+            payload: { albumName: 'South Africa', description: 'January trip.' },
+          }),
+          makeOperation({
+            type: AgentOperationType.AlbumAddAssets,
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'tmp-album-from-search',
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumFromSearch(auth, session.id, {
+      summary: 'Create South Africa album.',
+      albumName: 'South Africa',
+      description: 'January trip.',
+      assetSource: {
+        kind: 'search',
+        filters: { country: 'South Africa' },
+        materialization: 'all-matches-with-limit',
+      },
+    });
+
+    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+      kind: AgentSessionActivityEventKind.PlanComposing,
+      status: AgentSessionActivityEventStatus.Completed,
+      summary: 'Prepared plan',
+      counts: { total: assetIds.length },
+    });
+    for (const [, , event] of vi.mocked(activityEventService.createSystemEvent).mock.calls) {
+      expect(event).not.toHaveProperty('operationIds');
+      expect(event).not.toHaveProperty('assetIds');
+    }
+  });
+
   it('proposeAddAssetsToAlbumFromSearch resolves a unique visible album name before planning', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
@@ -618,6 +680,7 @@ describe(AgentOperationPlanService.name, () => {
         error: expect.stringContaining('Multiple visible albums named'),
       }),
     );
+    expect(activityEventService.createSystemEvent).not.toHaveBeenCalled();
   });
 
   it('proposeAddAssetsToAlbumFromSearch returns recoverable guidance when an album name has no visible match', async () => {
@@ -1787,6 +1850,8 @@ describe(AgentOperationPlanService.name, () => {
       }),
     );
     expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    const auditMetadata = toolCallRepository.create.mock.calls[0]?.[0]
+      .redactedRequestMetadata as AgentToolOperationPlanRequestMetadata;
     expect(toolCallRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         assetCount: assetIds.length,
@@ -1813,6 +1878,16 @@ describe(AgentOperationPlanService.name, () => {
         }),
       }),
     );
+    expect(auditMetadata?.sourceSummaries).toEqual([
+      {
+        sourceKind: 'search',
+        assetCount: assetIds.length,
+        sampleAssetCount: assetIds.length,
+        filterKeys: ['country', 'people', 'takenAfter', 'takenBefore'],
+        resolvedFilterKeys: ['country', 'personIds', 'personMatchAny', 'takenAfter', 'takenBefore'],
+      },
+    ]);
+    expect(JSON.stringify(auditMetadata?.sourceSummaries)).not.toContain(assetIds[0]);
   });
 
   it('does not create a search-source audit handle when later access validation denies the plan', async () => {
@@ -1900,6 +1975,35 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
+  it('records failed plan activity when source resolution is unrecovered', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
+
+    await expect(
+      sut.proposeAlbumFromSearch(auth, session.id, {
+        summary: 'Create empty album.',
+        albumName: 'Empty',
+        description: '',
+        assetSource: { kind: 'search', filters: { country: 'Nowhere' } },
+      }),
+    ).rejects.toThrow('Search source did not match any assets');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+      kind: AgentSessionActivityEventKind.PlanComposing,
+      status: AgentSessionActivityEventStatus.Failed,
+      summary: 'Plan preparation failed',
+    });
+  });
+
   it('does not create a plan when assetSource.search needs clarification', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
@@ -1911,8 +2015,8 @@ describe(AgentOperationPlanService.name, () => {
       message: 'Multiple visible person matches found',
     });
 
-    await expect(
-      sut.proposeAlbumOperations(auth, session.id, {
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
         summary: 'Ambiguous search',
         operations: [
           {
@@ -1926,11 +2030,24 @@ describe(AgentOperationPlanService.name, () => {
             enabled: true,
           },
         ],
-      }),
-    ).rejects.toThrow('Multiple visible person matches found');
+      })
+      .catch((error: unknown) => error);
 
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect(thrown).toMatchObject({
+      content: {
+        status: 'error',
+        retryable: true,
+        error: 'Multiple visible person matches found',
+        recovery: expect.objectContaining({
+          kind: 'asset_search_filters_need_clarification',
+          filterKeys: ['people'],
+        }),
+      },
+    });
     expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+    expect(activityEventService.createSystemEvent).not.toHaveBeenCalled();
   });
 
   it('does not create a plan when assetSource.search filter resolution is denied', async () => {
@@ -4238,6 +4355,7 @@ describe(AgentOperationPlanService.name, () => {
         error: null,
       }),
     );
+    expect(activityEventService.createSystemEvent).not.toHaveBeenCalled();
   });
 
   it('summarizes an already-applied current plan and writes a completed planning audit row', async () => {
