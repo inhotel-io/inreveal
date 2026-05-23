@@ -227,7 +227,7 @@ test.describe('Assistant album organizer', () => {
     const proposedCreateOperation = findOperation(currentPlan, AgentOperationType.AlbumCreate);
     expect(proposedAddOperation?.id).toEqual(expect.any(String));
     expect(proposedCreateOperation.id).toEqual(expect.any(String));
-    const excludedAssetId = proposedAddOperation!.assetIds[1];
+    const excludedAssetId = proposedAddOperation!.assetIds[0];
     expect(excludedAssetId).toEqual(expect.any(String));
 
     await portugalDestination.getByLabel('Description').fill('Curated favorites from the trip.');
@@ -241,7 +241,7 @@ test.describe('Assistant album organizer', () => {
 
     await renamedPortugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
     const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
-    await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
+    await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' }).uncheck();
     await photoReviewDialog.getByRole('button', { name: 'Done reviewing' }).click();
     await expect(renamedPortugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
     await page.getByLabel('Set cover photo').uncheck();
@@ -337,13 +337,13 @@ test.describe('Assistant album organizer', () => {
 
     const { session, currentPlan } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
     const addOperation = findOperation(currentPlan, AgentOperationType.AlbumAddAssets);
-    const excludedAssetId = addOperation.assetIds[1];
+    const excludedAssetId = addOperation.assetIds[0];
     const portugalDestination = getPortugalDestination(page);
 
     await portugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
     const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
-    await expect(photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' })).toBeVisible();
-    await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 2' }).uncheck();
+    await expect(photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' })).toBeVisible();
+    await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' }).uncheck();
     await photoReviewDialog.getByRole('button', { name: 'Done reviewing' }).click();
     await expect(portugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
     await page.getByLabel('Set cover photo').uncheck();
