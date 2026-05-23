@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { AgentChoiceRefSchema } from 'src/dtos/agent-asset-source.dto';
 import { AgentMessageRole } from 'src/enum';
 import { isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
@@ -8,11 +9,6 @@ const text = z.string().trim().min(1).max(8000);
 const label = z.string().trim().min(1).max(500).optional();
 const clarificationLabel = z.string().trim().min(1).max(500);
 const clarificationKinds = ['person', 'tag', 'album', 'space', 'cameraMake', 'cameraModel', 'lensModel'] as const;
-const choiceRef = z
-  .string()
-  .regex(/^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/, {
-    message: 'choiceRef must use the choice:<kind>:<token> format',
-  });
 const jsonByteLength = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
 
 const AgentMessageRoleSchema = z.enum(AgentMessageRole).meta({ id: 'AgentMessageRole' });
@@ -50,7 +46,7 @@ const AgentMessagePlanBlockSchema = z
 
 const AgentMessageClarificationChoiceSchema = z
   .strictObject({
-    choiceRef,
+    choiceRef: AgentChoiceRefSchema,
     label: clarificationLabel,
     description: clarificationLabel.optional(),
     thumbnailAssetId: z.uuidv4().nullable().optional(),

@@ -447,6 +447,34 @@ describe(AgentRunnerRepository.name, () => {
     ).rejects.toThrow('Agent runner returned an invalid stream event');
   });
 
+  it('throws when completed runner message content has a raw UUID clarification choice ref token', async () => {
+    const block = validClarificationBlock();
+    block.choices = [
+      {
+        choiceRef: 'choice:person:90c8090a-e461-4265-9bf0-7a8a191a6216',
+        label: 'Pierre',
+        thumbnailAssetId: null,
+      },
+    ];
+    const completedEvent = completedClarificationEvent(block);
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: sseBody(`data: ${JSON.stringify(completedEvent)}\n\n`),
+    });
+
+    await expect(
+      collectStream(
+        sut.streamMessage({
+          url: 'http://agent-runner:4477',
+          runnerSessionId: 'runner-session-1',
+          timeoutMs: 3000,
+          body: messageBody,
+        }),
+      ),
+    ).rejects.toThrow('Agent runner returned an invalid stream event');
+  });
+
   it.each([
     {
       name: 'invalid thumbnail UUID',
@@ -978,7 +1006,10 @@ describe(AgentRunnerRepository.name, () => {
     { name: 'blank text block', block: { type: 'text', text: '   ' } },
     { name: 'overlong text block', block: { type: 'text', text: 'x'.repeat(8001) } },
     { name: 'invalid asset UUID', block: { type: 'asset', assetId: 'asset-1' } },
-    { name: 'overlong asset label', block: { type: 'asset', assetId: '90c8090a-e461-4265-9bf0-7a8a191a6216', label: 'x'.repeat(501) } },
+    {
+      name: 'overlong asset label',
+      block: { type: 'asset', assetId: '90c8090a-e461-4265-9bf0-7a8a191a6216', label: 'x'.repeat(501) },
+    },
     { name: 'extra text block key', block: { type: 'text', text: 'Hello.', id: 'raw-id' } },
   ])('throws when assistant-message-completed message content has malformed legacy block: $name', async ({ block }) => {
     const completedEvent = {

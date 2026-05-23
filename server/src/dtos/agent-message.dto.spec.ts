@@ -195,6 +195,11 @@ describe('AgentMessage DTOs', () => {
         message: 'choiceRef must use the choice:<kind>:<token> format',
       },
       {
+        choice: { choiceRef: `choice:person:${factory.uuid()}`, label: 'Pierre', thumbnailAssetId: null },
+        path: 'choiceRef',
+        message: 'choiceRef token must not be a UUID',
+      },
+      {
         choice: { choiceRef: 'choice:person:abcDEF1234567890', id: factory.uuid(), label: 'Pierre' },
         path: undefined,
         message: 'Unrecognized key',

@@ -615,8 +615,9 @@ export type AgentMessagePlanBlock = {
   planId: string;
   type: AgentMessagePlanBlockType;
 };
+export type AgentChoiceRef = string;
 export type AgentMessageClarificationChoice = {
-  choiceRef: string;
+  choiceRef: AgentChoiceRef;
   description?: string;
   label: string;
   thumbnailAssetId?: string | null;
@@ -686,7 +687,6 @@ export type AgentOperationPlanResponseDto = {
   summary: string;
   updatedAt: string;
 };
-export type AgentChoiceRef = string;
 export type AgentDeclarativeNamedFilter = {
   choiceRefs?: AgentChoiceRef[];
   match: AgentDeclarativeNameMatch;
