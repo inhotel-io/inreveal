@@ -62,6 +62,7 @@ describe('Agent asset source DTOs', () => {
 
   it.each([
     ['raw uuid', [factory.uuid()]],
+    ['uuid token', [`choice:person:${factory.uuid()}`]],
     ['wrong kind', ['choice:user:abcDEF1234567890']],
     ['duplicate refs', ['choice:person:abcDEF1234567890', 'choice:person:abcDEF1234567890']],
   ])('rejects declarative named filter choice refs with %s', (_label, choiceRefs) => {
