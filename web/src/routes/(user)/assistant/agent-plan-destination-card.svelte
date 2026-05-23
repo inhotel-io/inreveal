@@ -15,7 +15,6 @@
     onResetItemSelection: (operationId: string) => void;
     onSetFieldOverride: (operationId: string, fieldKey: string, value: string | undefined) => void;
     onResetFieldOverride: (operationId: string, fieldKey: string) => void;
-    onOpenItemReview?: (operationId: string) => void;
   }
 
   let {
@@ -29,8 +28,8 @@
     onResetItemSelection,
     onSetFieldOverride,
     onResetFieldOverride,
-    onOpenItemReview = () => undefined,
   }: Props = $props();
+  let openReviewOperationId = $state<string | null>(null);
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
     if (reviewGroup.destination.id && reviewGroup.destination.name === `Existing album ${reviewGroup.destination.id}`) {
@@ -67,6 +66,14 @@
     update(state);
 
     return { update };
+  };
+
+  const openItemReview = (operationId: string) => {
+    openReviewOperationId = operationId;
+  };
+
+  const setItemReviewOpen = (operationId: string, open: boolean) => {
+    openReviewOperationId = open ? operationId : null;
   };
 </script>
 
@@ -110,7 +117,7 @@
     </div>
   </div>
 
-  <AgentPlanPhotoStage {group} primaryItem={primaryPhotoReviewItem} {canChangeSelection} {onOpenItemReview} />
+  <AgentPlanPhotoStage {group} primaryItem={primaryPhotoReviewItem} onOpenItemReview={openItemReview} />
 
   <div class="mt-3 flex flex-col divide-y divide-gray-200 dark:divide-gray-700">
     {#each group.operations as item (item.id)}
@@ -124,6 +131,8 @@
         {onResetItemSelection}
         {onSetFieldOverride}
         {onResetFieldOverride}
+        itemReviewOpen={openReviewOperationId === item.id}
+        onToggleItemReview={(open) => setItemReviewOpen(item.id, open)}
       />
     {/each}
   </div>

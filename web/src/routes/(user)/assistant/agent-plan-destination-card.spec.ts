@@ -86,6 +86,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{index}', String(options?.values?.index ?? ''))
         .replace('{field}', String(options?.values?.field ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
+        .replace('{summary}', String(options?.values?.summary ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
@@ -191,7 +192,6 @@ describe('AgentPlanDestinationCard', () => {
   });
 
   it('puts photo evidence before change rows for photo-affecting plans', async () => {
-    const onOpenItemReview = vi.fn();
     render(AgentPlanDestinationCard, {
       props: {
         group: group(),
@@ -204,7 +204,6 @@ describe('AgentPlanDestinationCard', () => {
         onResetItemSelection: vi.fn(),
         onSetFieldOverride: vi.fn(),
         onResetFieldOverride: vi.fn(),
-        onOpenItemReview,
       },
     });
 
@@ -216,7 +215,7 @@ describe('AgentPlanDestinationCard', () => {
 
     await fireEvent.click(within(stage).getByRole('button', { name: 'Review photos' }));
 
-    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
+    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
   });
 
   it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
