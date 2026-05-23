@@ -35,12 +35,36 @@ export const AgentSearchSourceRefSchema = z
   })
   .meta({ id: 'AgentSearchSourceRef' });
 
+export const AgentChoiceRefSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^choice:(person|tag|album|space|cameraMake|cameraModel|lensModel):[A-Za-z0-9_-]{8,120}$/, {
+    message: 'choiceRef must use the choice:<kind>:<token> format',
+  })
+  .meta({ id: 'AgentChoiceRef' });
+
+const uniqueChoiceRefs = z
+  .array(AgentChoiceRefSchema)
+  .max(20)
+  .superRefine((choiceRefs, ctx) => {
+    if (new Set(choiceRefs).size !== choiceRefs.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message: 'choiceRefs must be unique',
+      });
+    }
+  });
+
 export const AgentDeclarativeNameMatchSchema = z.enum(['any', 'all']).meta({ id: 'AgentDeclarativeNameMatch' });
 
 export const AgentDeclarativeNamedFilterSchema = z
   .strictObject({
     match: AgentDeclarativeNameMatchSchema,
     names: namedFilterNames,
+    choiceRefs: uniqueChoiceRefs.optional(),
   })
   .meta({ id: 'AgentDeclarativeNamedFilter' });
 
