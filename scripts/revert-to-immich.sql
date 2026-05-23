@@ -139,9 +139,10 @@ DROP TABLE IF EXISTS "classification_category" CASCADE;
 DROP TABLE IF EXISTS "storage_migration_log" CASCADE;
 DROP TABLE IF EXISTS "asset_duplicate_checksum" CASCADE;
 
--- Agent provider credentials, sessions, activity events, messages, tool calls, and operation plans
+-- Agent provider credentials, sessions, activity events, messages, tool calls, selection handles, and operation plans
 DROP TABLE IF EXISTS "agent_operation" CASCADE;
 DROP TABLE IF EXISTS "agent_operation_plan" CASCADE;
+DROP TABLE IF EXISTS "agent_selection_handle" CASCADE;
 DROP TABLE IF EXISTS "agent_tool_call" CASCADE;
 DROP TABLE IF EXISTS "agent_message" CASCADE;
 DROP TABLE IF EXISTS "agent_session_activity_event" CASCADE;
@@ -593,6 +594,7 @@ DELETE FROM "kysely_migrations"
    '1778920000000-AgentOperationPlan',
    '1778930000000-AgentSessionTitle',
    '1778940000000-AgentSessionActivityEvent',
+   '1778950000000-AgentSelectionHandle',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
@@ -645,6 +647,7 @@ BEGIN
       OR "name" LIKE '%AgentToolCall%'
       OR "name" LIKE '%AgentMessage%'
       OR "name" LIKE '%AgentOperation%'
+      OR "name" LIKE '%AgentSelectionHandle%'
       OR "name" LIKE '%AgentSession%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
@@ -665,7 +668,8 @@ BEGIN
        'classification_prompt_embedding', 'classification_category',
        'storage_migration_log', 'asset_duplicate_checksum',
        'agent_provider_credential', 'agent_session', 'agent_session_activity_event',
-       'agent_message', 'agent_tool_call', 'agent_operation_plan', 'agent_operation'
+       'agent_message', 'agent_tool_call', 'agent_selection_handle',
+       'agent_operation_plan', 'agent_operation'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;
