@@ -35,6 +35,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_apply_summary: '{changes} changes · {assets} assets selected',
     assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
+    assistant_operation_plan_collapse: 'Collapse plan',
+    assistant_operation_plan_collapsed: 'Plan collapsed',
+    assistant_operation_plan_expand: 'Expand plan',
     assistant_operation_destination_selected_summary: '{selected} of {total} changes selected',
     assistant_operation_destination_toggle: 'Select destination {name}',
     assistant_operation_detail_id: 'Operation ID',
@@ -475,7 +478,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(container.querySelector('.max-w-3xl')).not.toBeInTheDocument();
   });
 
-  it('collapses the plan card without losing the selected operations', async () => {
+  it('collapses the plan sheet to a compact thumbnail summary without losing selected operations', async () => {
     sdkMock.getCurrentOperationPlan.mockResolvedValue(samplePlan());
 
     render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
@@ -483,12 +486,20 @@ describe('AgentOperationPlanReviewPanel', () => {
     await fireEvent.click(await screen.findByRole('checkbox', { name: 'Update album details' }));
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse plan' }));
+
     expect(screen.queryByRole('checkbox', { name: 'Update album details' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Apply 2 selected' })).not.toBeInTheDocument();
-    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    expect(screen.getByText('Plan collapsed')).toBeInTheDocument();
+    expect(screen.getByText('2 selected changes')).toBeInTheDocument();
+    expect(screen.getByText('2 selected assets')).toBeInTheDocument();
+    expect(screen.getByText('No photos will be deleted')).toBeInTheDocument();
+    const collapsedSummary = screen.getByTestId('agent-operation-plan-collapsed-summary');
+    expect(collapsedSummary).toBeInTheDocument();
+    expect(within(collapsedSummary).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
 
-    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Expand plan' }));
+
     expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Apply 2 selected' })).toBeInTheDocument();
   });
@@ -510,10 +521,10 @@ describe('AgentOperationPlanReviewPanel', () => {
     expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
     expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
 
-    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse plan' }));
     expect(screen.queryByRole('checkbox', { name: 'Update album details' })).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Expand plan' }));
     expect(screen.getByRole('checkbox', { name: 'Update album details' })).not.toBeChecked();
     expect(screen.getByRole('region', { name: 'Madeira' })).toBeInTheDocument();
     expect(screen.getAllByText('1 of 2 photos selected')).toHaveLength(2);
@@ -543,7 +554,7 @@ describe('AgentOperationPlanReviewPanel', () => {
     render(AgentOperationPlanReviewPanel, { props: { session, variant: 'dock' } });
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Apply 3 selected' }));
-    await fireEvent.click(screen.getByText('Organize Portugal holiday'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Collapse plan' }));
     expect(screen.queryByRole('button', { name: 'Applying operations' })).not.toBeInTheDocument();
 
     rejectApply!(new Error('failed'));
