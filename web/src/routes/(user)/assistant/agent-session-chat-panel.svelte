@@ -985,8 +985,9 @@
           {#if hasRenderableMessageBlocks(message)}
             <article
               data-chat-item
+              data-testid="agent-session-message-bubble"
               class={[
-                'max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap',
+                'max-w-[min(80%,48rem)] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap',
                 message.role === AgentMessageRole.User
                   ? 'ml-auto bg-slate-100 text-slate-950 dark:bg-neutral-800 dark:text-neutral-50'
                   : 'mr-auto text-slate-950 dark:text-neutral-100',
@@ -1151,7 +1152,7 @@
 
       {#if showAssistantBusyIndicator}
         <article
-          class="mr-auto max-w-[80%] px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"
+          class="mr-auto max-w-[min(80%,48rem)] px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"
           role="status"
           aria-live="polite"
         >
@@ -1161,7 +1162,7 @@
       {/if}
 
       {#if streamingText}
-        <article class="mr-auto max-w-[80%] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100">
+        <article class="mr-auto max-w-[min(80%,48rem)] rounded-2xl px-4 py-3 text-sm text-slate-950 dark:text-neutral-100">
           <div class="text-xs font-medium text-gray-500 dark:text-gray-400">{$t('assistant_streaming_response')}</div>
           <div class="mt-1">{@render assistantMarkdown(parseAssistantMarkdown(streamingText))}</div>
         </article>
