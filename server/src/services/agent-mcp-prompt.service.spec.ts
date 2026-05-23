@@ -88,15 +88,15 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
-    expect(prompt.length).toBeLessThanOrEqual(3800);
+    expect(prompt.length).toBeLessThanOrEqual(4200);
     expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
     expect(prompt).toContain('R: Known ID filters');
-    expect(prompt).toContain('Write: album/space search use fromSearch tools first');
+    expect(prompt).toContain('Default write:');
+    expect(prompt).toContain('mcp_gallery_proposeAlbumFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToAlbumFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
-    expect(prompt).toContain('other plans use mcp_gallery_proposeAlbumOperations');
     expect(prompt).not.toContain('Tmcp_gallery');
     expect(prompt).not.toContain('RKnown');
     expect(prompt).not.toContain('Wcall');
@@ -105,6 +105,22 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_listSpaces');
     expect(prompt).toContain('mcp_gallery_readSpace');
     expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
+  });
+
+  it('teaches source-backed workflow tools as the default write path', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Default write:');
+    expect(prompt).toContain('mcp_gallery_proposeAlbumFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
+    expect(prompt).toContain('assetSource.search');
+    expect(prompt).toContain('previousSearch.sourceRef');
+    expect(prompt).toMatch(/explicit IDs only for small inspected sets/i);
+    expect(prompt).toContain('wrong_id_domain');
+    expect(prompt).toContain('needs_clarification');
+    expect(prompt).toContain('choiceRefs');
+    expect(prompt.length).toBeLessThanOrEqual(4200);
   });
 
   it('does not tell Pi deterministic people, space, or visibility filters are unavailable', () => {
@@ -138,21 +154,18 @@ describe(AgentMcpPromptService.name, () => {
     );
   });
 
-  it('shows an end-to-end people OR resolver-to-search sequence in the runner prompt', () => {
+  it('renders the South Africa Pierre Aurelia regression as an assetSource.search workflow', () => {
     const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toContain('People OR');
     expect(prompt).toContain('Pierre');
     expect(prompt).toContain('Aurelia');
-    expect(prompt).toContain('copy resolvedFilters into searchAssets.filters');
-    expect(prompt).toContain(
-      '"personIds":["<personIds value from resolveAssetSearchFilters>","<another-personIds value from resolveAssetSearchFilters>"]',
-    );
+    expect(prompt).toContain('mcp_gallery_proposeAlbumFromSearch');
+    expect(prompt).toContain('"assetSource":{"kind":"search"');
+    expect(prompt).toContain('"people":{"match":"any","names":["Pierre","Aurelia"]}');
     expect(prompt).toContain('"country":"South Africa"');
     expect(prompt).toContain('"takenAfter":"2026-01-01T00:00:00.000Z"');
-    expect(prompt).toContain('"takenBefore":"2026-01-31T23:59:59.999Z"');
-    expect(prompt).toContain('"limit":50');
-    expect(prompt).toContain('"createSelectionHandle":true');
+    expect(prompt).toContain('"takenBefore":"2026-02-01T00:00:00.000Z"');
+    expect(prompt).not.toContain('"personIds":["<personIds value from resolveAssetSearchFilters>"');
   });
 
   it('shows shared-space person resolver-to-search guidance with spaceId and spacePersonIds together', () => {
@@ -178,7 +191,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('OCR invoice');
     expect(prompt).toContain('mode ocr');
     expect(prompt).toContain('resolve names');
-    expect(prompt.length).toBeLessThanOrEqual(3800);
+    expect(prompt.length).toBeLessThanOrEqual(4200);
   });
 
   it('teaches progressive detail before broad metadata reads', () => {
@@ -190,7 +203,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('if truncated/hasMore, page or ask one narrowing question');
     expect(prompt).toContain('"detail":"ids"');
     expect(prompt).toContain('"fields":["dates","location"]');
-    expect(prompt.length).toBeLessThanOrEqual(3800);
+    expect(prompt.length).toBeLessThanOrEqual(4200);
   });
 
   it('renders large-selection handle guidance without encouraging pasted asset ids', () => {
@@ -392,7 +405,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('if corrected retry fails again, explain missing/blocked');
     expect(prompt).toContain('approval-required pauses');
     expect(prompt).not.toMatch(/denied .*recoverable/i);
-    expect(prompt.length).toBeLessThanOrEqual(3800);
+    expect(prompt.length).toBeLessThanOrEqual(4200);
   });
 
   it('renders model-facing prompt examples with semantic placeholders instead of fixture UUIDs', () => {
