@@ -379,6 +379,25 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.getAgentSessionMessages).toHaveBeenCalledWith({ id: session.id });
   });
 
+  it('renders multiple user text blocks as separate preserved blocks', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'First line'),
+        content: {
+          blocks: [
+            { type: AgentMessageTextBlockType.Text, text: 'First line' },
+            { type: AgentMessageTextBlockType.Text, text: 'Second line' },
+          ],
+        },
+      },
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+
+    expect((await screen.findByText('First line')).tagName).toBe('P');
+    expect(screen.getByText('Second line').tagName).toBe('P');
+  });
+
   it('renders assistant markdown emphasis and bullet lists as formatted content', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       makeMessage(
