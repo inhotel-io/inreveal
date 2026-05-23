@@ -218,6 +218,33 @@ describe('AgentPlanDestinationCard', () => {
     expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
   });
 
+  it('keeps another row open when the photo stage opens its matching item review', async () => {
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onBulkSetItems: vi.fn(),
+        onSetOnlyItems: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Details' })[0]);
+
+    expect(screen.getByText(createId)).toBeInTheDocument();
+
+    await fireEvent.click(within(screen.getByTestId('agent-plan-photo-stage')).getByRole('button', { name: 'Review photos' }));
+
+    expect(screen.getByText(createId)).toBeInTheDocument();
+    expect(screen.getByText(addId)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Review photos for Add 2 photos' })).toBeInTheDocument();
+  });
+
   it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
     const largeAssetIds = Array.from({ length: 1000 }, (_, index) => `large-asset-${index + 1}`);
     const largeGroup = buildOperationReviewModel(

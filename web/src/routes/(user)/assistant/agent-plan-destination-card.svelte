@@ -29,7 +29,7 @@
     onSetFieldOverride,
     onResetFieldOverride,
   }: Props = $props();
-  let openReviewOperationId = $state<string | null>(null);
+  let openReviewOperationIds = $state(new Set<string>());
 
   const getDestinationTitle = (reviewGroup: OperationReviewGroup) => {
     if (reviewGroup.destination.id && reviewGroup.destination.name === `Existing album ${reviewGroup.destination.id}`) {
@@ -69,11 +69,19 @@
   };
 
   const openItemReview = (operationId: string) => {
-    openReviewOperationId = operationId;
+    openReviewOperationIds = new Set(openReviewOperationIds).add(operationId);
   };
 
   const setItemReviewOpen = (operationId: string, open: boolean) => {
-    openReviewOperationId = open ? operationId : null;
+    const nextOpenOperationIds = new Set(openReviewOperationIds);
+
+    if (open) {
+      nextOpenOperationIds.add(operationId);
+    } else {
+      nextOpenOperationIds.delete(operationId);
+    }
+
+    openReviewOperationIds = nextOpenOperationIds;
   };
 </script>
 
@@ -131,7 +139,7 @@
         {onResetItemSelection}
         {onSetFieldOverride}
         {onResetFieldOverride}
-        itemReviewOpen={openReviewOperationId === item.id}
+        itemReviewOpen={openReviewOperationIds.has(item.id)}
         onToggleItemReview={(open) => setItemReviewOpen(item.id, open)}
       />
     {/each}
