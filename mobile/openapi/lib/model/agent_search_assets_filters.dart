@@ -14,6 +14,7 @@ class AgentSearchAssetsFilters {
   /// Returns a new [AgentSearchAssetsFilters] instance.
   AgentSearchAssetsFilters({
     this.albumIds = const [],
+    this.albumMatchAny,
     this.city,
     this.country,
     this.createdAfter,
@@ -24,11 +25,13 @@ class AgentSearchAssetsFilters {
     this.make,
     this.model,
     this.personIds = const [],
+    this.personMatchAny,
     this.rating,
     this.spaceId,
     this.spacePersonIds = const [],
     this.state,
     this.tagIds = const [],
+    this.tagMatchAny,
     this.takenAfter,
     this.takenBefore,
     this.type,
@@ -39,6 +42,14 @@ class AgentSearchAssetsFilters {
   });
 
   List<String> albumIds;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? albumMatchAny;
 
   String? city;
 
@@ -84,6 +95,14 @@ class AgentSearchAssetsFilters {
 
   List<String> personIds;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? personMatchAny;
+
   /// Minimum value: 1
   /// Maximum value: 5
   int? rating;
@@ -101,6 +120,14 @@ class AgentSearchAssetsFilters {
   String? state;
 
   List<String> tagIds;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? tagMatchAny;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -161,6 +188,7 @@ class AgentSearchAssetsFilters {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsFilters &&
     _deepEquality.equals(other.albumIds, albumIds) &&
+    other.albumMatchAny == albumMatchAny &&
     other.city == city &&
     other.country == country &&
     other.createdAfter == createdAfter &&
@@ -171,11 +199,13 @@ class AgentSearchAssetsFilters {
     other.make == make &&
     other.model == model &&
     _deepEquality.equals(other.personIds, personIds) &&
+    other.personMatchAny == personMatchAny &&
     other.rating == rating &&
     other.spaceId == spaceId &&
     _deepEquality.equals(other.spacePersonIds, spacePersonIds) &&
     other.state == state &&
     _deepEquality.equals(other.tagIds, tagIds) &&
+    other.tagMatchAny == tagMatchAny &&
     other.takenAfter == takenAfter &&
     other.takenBefore == takenBefore &&
     other.type == type &&
@@ -188,6 +218,7 @@ class AgentSearchAssetsFilters {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (albumIds.hashCode) +
+    (albumMatchAny == null ? 0 : albumMatchAny!.hashCode) +
     (city == null ? 0 : city!.hashCode) +
     (country == null ? 0 : country!.hashCode) +
     (createdAfter == null ? 0 : createdAfter!.hashCode) +
@@ -198,11 +229,13 @@ class AgentSearchAssetsFilters {
     (make == null ? 0 : make!.hashCode) +
     (model == null ? 0 : model!.hashCode) +
     (personIds.hashCode) +
+    (personMatchAny == null ? 0 : personMatchAny!.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
     (spaceId == null ? 0 : spaceId!.hashCode) +
     (spacePersonIds.hashCode) +
     (state == null ? 0 : state!.hashCode) +
     (tagIds.hashCode) +
+    (tagMatchAny == null ? 0 : tagMatchAny!.hashCode) +
     (takenAfter == null ? 0 : takenAfter!.hashCode) +
     (takenBefore == null ? 0 : takenBefore!.hashCode) +
     (type == null ? 0 : type!.hashCode) +
@@ -212,11 +245,16 @@ class AgentSearchAssetsFilters {
     (withSharedSpaces == null ? 0 : withSharedSpaces!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, model=$model, personIds=$personIds, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
+  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, albumMatchAny=$albumMatchAny, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, model=$model, personIds=$personIds, personMatchAny=$personMatchAny, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, tagMatchAny=$tagMatchAny, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'albumIds'] = this.albumIds;
+    if (this.albumMatchAny != null) {
+      json[r'albumMatchAny'] = this.albumMatchAny;
+    } else {
+    //  json[r'albumMatchAny'] = null;
+    }
     if (this.city != null) {
       json[r'city'] = this.city;
     } else {
@@ -267,6 +305,11 @@ class AgentSearchAssetsFilters {
     //  json[r'model'] = null;
     }
       json[r'personIds'] = this.personIds;
+    if (this.personMatchAny != null) {
+      json[r'personMatchAny'] = this.personMatchAny;
+    } else {
+    //  json[r'personMatchAny'] = null;
+    }
     if (this.rating != null) {
       json[r'rating'] = this.rating;
     } else {
@@ -284,6 +327,11 @@ class AgentSearchAssetsFilters {
     //  json[r'state'] = null;
     }
       json[r'tagIds'] = this.tagIds;
+    if (this.tagMatchAny != null) {
+      json[r'tagMatchAny'] = this.tagMatchAny;
+    } else {
+    //  json[r'tagMatchAny'] = null;
+    }
     if (this.takenAfter != null) {
       json[r'takenAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
         ? this.takenAfter!.millisecondsSinceEpoch
@@ -342,6 +390,7 @@ class AgentSearchAssetsFilters {
         albumIds: json[r'albumIds'] is Iterable
             ? (json[r'albumIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        albumMatchAny: mapValueOfType<bool>(json, r'albumMatchAny'),
         city: mapValueOfType<String>(json, r'city'),
         country: mapValueOfType<String>(json, r'country'),
         createdAfter: mapDateTime(json, r'createdAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
@@ -354,6 +403,7 @@ class AgentSearchAssetsFilters {
         personIds: json[r'personIds'] is Iterable
             ? (json[r'personIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        personMatchAny: mapValueOfType<bool>(json, r'personMatchAny'),
         rating: mapValueOfType<int>(json, r'rating'),
         spaceId: mapValueOfType<String>(json, r'spaceId'),
         spacePersonIds: json[r'spacePersonIds'] is Iterable
@@ -363,6 +413,7 @@ class AgentSearchAssetsFilters {
         tagIds: json[r'tagIds'] is Iterable
             ? (json[r'tagIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        tagMatchAny: mapValueOfType<bool>(json, r'tagMatchAny'),
         takenAfter: mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         takenBefore: mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         type: AssetTypeEnum.fromJson(json[r'type']),
