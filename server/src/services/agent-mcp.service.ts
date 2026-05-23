@@ -64,6 +64,7 @@ export class AgentMcpService {
     AgentToolName.ProposeAddAssetsToAlbumFromSearch,
     AgentToolName.ProposeSpaceFromSearch,
     AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+    AgentToolName.ProposeAssetBatchFromSearch,
     AgentToolName.ReviseProposedOperations,
     AgentToolName.SummarizePlan,
   ]);
@@ -226,6 +227,11 @@ export class AgentMcpService {
       case AgentToolName.ProposeAddAssetsToSpaceFromSearch: {
         return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
           this.operationPlanService.proposeAddAssetsToSpaceFromSearch(auth, sessionId, dto),
+        );
+      }
+      case AgentToolName.ProposeAssetBatchFromSearch: {
+        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+          this.operationPlanService.proposeAssetBatchFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {

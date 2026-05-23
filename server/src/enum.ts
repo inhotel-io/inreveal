@@ -117,6 +117,7 @@ export enum AgentToolName {
   ProposeAddAssetsToAlbumFromSearch = 'proposeAddAssetsToAlbumFromSearch',
   ProposeSpaceFromSearch = 'proposeSpaceFromSearch',
   ProposeAddAssetsToSpaceFromSearch = 'proposeAddAssetsToSpaceFromSearch',
+  ProposeAssetBatchFromSearch = 'proposeAssetBatchFromSearch',
   ReviseProposedOperations = 'reviseProposedOperations',
   SummarizePlan = 'summarizePlan',
 }

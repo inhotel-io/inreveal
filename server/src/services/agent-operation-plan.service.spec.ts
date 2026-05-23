@@ -1219,6 +1219,254 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      label: 'favorite',
+      action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+      expectedType: AgentOperationType.AssetSetFavorite,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { favorite: true },
+      expectedRiskLevel: AgentOperationRiskLevel.Low,
+      expectedSummary: 'Mark matching photos as favorites',
+    },
+    {
+      label: 'archive',
+      action: { type: AgentOperationType.AssetSetArchive, archived: true },
+      expectedType: AgentOperationType.AssetSetArchive,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { archived: true },
+      expectedRiskLevel: AgentOperationRiskLevel.High,
+      expectedSummary: 'Archive matching photos',
+    },
+    {
+      label: 'unarchive',
+      action: { type: AgentOperationType.AssetSetArchive, archived: false },
+      expectedType: AgentOperationType.AssetSetArchive,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { archived: false },
+      expectedRiskLevel: AgentOperationRiskLevel.High,
+      expectedSummary: 'Move matching photos back to timeline',
+    },
+    {
+      label: 'tag by name',
+      action: { type: AgentOperationType.AssetAddTag, tagName: 'Receipts' },
+      expectedType: AgentOperationType.AssetAddTag,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { tagName: 'Receipts' },
+      expectedRiskLevel: AgentOperationRiskLevel.Medium,
+      expectedSummary: 'Add tag "Receipts" to matching photos',
+    },
+    (() => {
+      const tagId = newUuid();
+      return {
+        label: 'tag by id',
+        action: { type: AgentOperationType.AssetAddTag, tagId },
+        expectedType: AgentOperationType.AssetAddTag,
+        expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+        expectedPayload: { tagId },
+        expectedRiskLevel: AgentOperationRiskLevel.Medium,
+        expectedSummary: 'Add selected tag to matching photos',
+      };
+    })(),
+    {
+      label: 'rotate',
+      action: { type: AgentOperationType.AssetRotate, angle: 90 },
+      expectedType: AgentOperationType.AssetRotate,
+      expectedTargetKind: AgentOperationTargetKind.ImageEditBatch,
+      expectedPayload: { angle: 90 },
+      expectedRiskLevel: AgentOperationRiskLevel.Medium,
+      expectedSummary: 'Rotate matching photos 90 degrees',
+    },
+  ])(
+    'proposeAssetBatchFromSearch creates a reviewable $label plan from a search source',
+    async ({ action, expectedType, expectedTargetKind, expectedPayload, expectedRiskLevel, expectedSummary }) => {
+      const auth = AuthFactory.create();
+      const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+      const assetIds = [newUuid(), newUuid()];
+      sessionRepository.getById.mockResolvedValue(session);
+      assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+        status: 'success',
+        filters: {},
+        results: [],
+      });
+      sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+      searchRepository.searchMetadata.mockResolvedValue({
+        items: assetIds.map((id) => ({ id })),
+        hasNextPage: false,
+      } as never);
+      accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+      accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+      if ('tagId' in action && action.tagId) {
+        accessRepository.tag.checkOwnerAccess.mockResolvedValue(new Set([action.tagId]));
+      }
+      assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+      planRepository.createReplacementRevision.mockResolvedValue(
+        makePlan({
+          sessionId: session.id,
+          operations: [
+            makeOperation({
+              type: expectedType,
+              targetKind: expectedTargetKind,
+              targetId: null,
+              temporaryTargetId: null,
+              assetIds,
+              payload: expectedPayload,
+              riskLevel: expectedRiskLevel,
+            }),
+          ],
+        }),
+      );
+
+      await (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+        action,
+        assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+      });
+
+      expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+        session.id,
+        expect.objectContaining({
+          plan: expect.objectContaining({ summary: expectedSummary }),
+          operations: [
+            expect.objectContaining({
+              type: expectedType,
+              summary: expectedSummary,
+              targetKind: expectedTargetKind,
+              targetId: undefined,
+              temporaryTargetId: undefined,
+              assetIds,
+              assetSource: undefined,
+              payload: expectedPayload,
+              riskLevel: expectedRiskLevel,
+              enabled: true,
+            }),
+          ],
+        }),
+      );
+      expect(assetService.updateAll).not.toHaveBeenCalled();
+      expect(tagService.addAssets).not.toHaveBeenCalled();
+      expect(assetService.editAsset).not.toHaveBeenCalled();
+      expect(toolCallRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ toolName: AgentToolName.ProposeAssetBatchFromSearch }),
+      );
+    },
+  );
+
+  it('proposeAssetBatchFromSearch materializes previousSearch without rerunning search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+      action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+      assetSource: { kind: 'previousSearch', sourceRef },
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(assetSearchFilterResolverService.resolveDeclarativeFilters).not.toHaveBeenCalled();
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [expect.objectContaining({ assetIds, assetSource: undefined, assetSelectionHandleId: undefined })],
+      }),
+    );
+  });
+
+  it.each([
+    ['favoriteAssets', AgentOperationType.AssetSetFavorite, { favoriteAssets: false }],
+    ['archiveAssets', AgentOperationType.AssetSetArchive, { archiveAssets: false }],
+    ['tagAssets', AgentOperationType.AssetAddTag, { tagAssets: false }],
+    ['editAssets', AgentOperationType.AssetRotate, { editAssets: false }],
+  ])('proposeAssetBatchFromSearch denies missing %s write scope before materializing', async (_field, type, override) => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, ...override },
+      },
+    });
+    const action =
+      type === AgentOperationType.AssetSetFavorite
+        ? { type, favorite: true }
+        : type === AgentOperationType.AssetSetArchive
+          ? { type, archived: true }
+          : type === AgentOperationType.AssetAddTag
+            ? { type, tagName: 'Receipts' }
+            : { type, angle: 90 };
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+        action,
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow');
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('proposeAssetBatchFromSearch rejects empty and over-broad search sources before persistence', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValueOnce({ items: [], hasNextPage: false } as never);
+
+    await expect(
+      (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('Search source did not match any assets');
+
+    const tooManyIds = Array.from({ length: AgentOperationPlanService.maxAssetSelectionHandleAssets + 1 }, () =>
+      newUuid(),
+    );
+    searchRepository.searchMetadata.mockResolvedValueOnce({
+      items: tooManyIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+
+    await expect(
+      (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+      }),
+    ).rejects.toThrow(`Search matched more than ${AgentOperationPlanService.maxAssetSelectionHandleAssets} assets`);
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
   it('proposeAddAssetsToSpaceFromSearch keeps existing membership semantics by preserving the full materialized asset set', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
