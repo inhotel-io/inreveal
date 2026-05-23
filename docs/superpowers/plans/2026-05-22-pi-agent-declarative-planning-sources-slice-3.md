@@ -135,13 +135,13 @@ Expected: FAIL because `AgentSearchAssetsSelectionHandleSchema` does not yet acc
 In `server/src/dtos/agent-asset-source.dto.ts`, change:
 
 ```ts
-const AgentSearchSourceRefSchema = z
+const AgentSearchSourceRefSchema = z;
 ```
 
 to:
 
 ```ts
-export const AgentSearchSourceRefSchema = z
+export const AgentSearchSourceRefSchema = z;
 ```
 
 - [ ] **Step 4: Add `sourceRef` to the search selection-handle type**
@@ -253,7 +253,10 @@ it('searchAssets summary detail preserves sourceRef when a selection handle is c
     updateId: newUuid(),
   };
   sessionRepository.getById.mockResolvedValue(session);
-  searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })) as never, hasNextPage: false });
+  searchRepository.searchMetadata.mockResolvedValue({
+    items: assetIds.map((id) => ({ id })) as never,
+    hasNextPage: false,
+  });
   accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
   assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
   selectionHandleRepository.create.mockResolvedValue(handle);
