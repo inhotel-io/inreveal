@@ -325,6 +325,158 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     );
   });
 
+  it('resolves a selected ambiguous person ref plus another exact person name', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstPierre = newUuid();
+    const secondPierre = newUuid();
+    const aureliaId = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+          { id: aureliaId, name: 'Aurelia' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const ambiguous = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+    const selected = ambiguous.results[0].choices[1];
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre', 'Aurelia'], choiceRefs: [selected.choiceRef!] },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.filters.personIds).toEqual([selected.id, aureliaId]);
+    expect(result.filters.personMatchAny).toBe(true);
+  });
+
+  it('resolves selected tag choice refs without blocking other exact tag names', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstTravel = newUuid();
+    const secondTravel = newUuid();
+    const familyId = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [],
+        tags: [
+          { id: firstTravel, value: 'Travel' },
+          { id: secondTravel, value: 'Travel' },
+          { id: familyId, value: 'Family' },
+        ],
+        cameraMakes: [],
+      }),
+    );
+
+    const ambiguous = await sut.resolveDeclarativeFilters(auth, session, {
+      tags: { match: 'any', names: ['Travel'] },
+    });
+    const selected = ambiguous.results[0].choices[0];
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      tags: { match: 'any', names: ['Travel', 'Family'], choiceRefs: [selected.choiceRef!] },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.filters.tagIds).toEqual([selected.id, familyId]);
+    expect(result.filters.tagMatchAny).toBe(true);
+  });
+
+  it('resolves selected choice refs generated from not found suggestions', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const pierreId = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [{ id: pierreId, name: 'Pierre' }],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const suggested = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pier'] },
+    });
+    const selected = suggested.results[0].choices[0];
+
+    const result = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pier'], choiceRefs: [selected.choiceRef!] },
+    });
+
+    expect(result.status).toBe('success');
+    expect(result.filters.personIds).toEqual([pierreId]);
+    expect(result.results[0]).toEqual(
+      expect.objectContaining({
+        kind: 'person',
+        query: 'Pier',
+        status: 'matched',
+        id: pierreId,
+      }),
+    );
+  });
+
+  it('generates deterministic choice refs for the same session, query, and candidates', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstPierre = newUuid();
+    const secondPierre = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const first = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+    const second = await sut.resolveDeclarativeFilters(auth, session, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+
+    expect(first.results[0].choices.map((choice) => choice.choiceRef)).toEqual(
+      second.results[0].choices.map((choice) => choice.choiceRef),
+    );
+  });
+
+  it('generates different choice refs for different sessions with the same query and candidate', async () => {
+    const auth = AuthFactory.create();
+    const firstSession = makeSession({ userId: auth.user.id });
+    const secondSession = makeSession({ userId: auth.user.id });
+    const firstPierre = newUuid();
+    const secondPierre = newUuid();
+    searchRepository.getFilterSuggestions.mockResolvedValue(
+      filterSuggestions({
+        people: [
+          { id: firstPierre, name: 'Pierre' },
+          { id: secondPierre, name: 'Pierre' },
+        ],
+        tags: [],
+        cameraMakes: [],
+      }),
+    );
+
+    const first = await sut.resolveDeclarativeFilters(auth, firstSession, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+    const second = await sut.resolveDeclarativeFilters(auth, secondSession, {
+      people: { match: 'any', names: ['Pierre'] },
+    });
+
+    expect(first.results[0].choices[0].choiceRef).not.toBe(second.results[0].choices[0].choiceRef);
+  });
+
   it('returns needs_clarification for stale selected people choice refs', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
