@@ -45,6 +45,36 @@ describe('Agent asset source DTOs', () => {
     expect(result.data.filters?.people?.names).toEqual(['Pierre', 'Aurelia']);
   });
 
+  it('accepts declarative named filters with safe choice refs', () => {
+    const result = AgentAssetSourceInputDto.schema.safeParse({
+      kind: 'search',
+      filters: {
+        people: {
+          match: 'any',
+          names: ['Pierre'],
+          choiceRefs: ['choice:person:abcDEF1234567890'],
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it.each([
+    ['raw uuid', [factory.uuid()]],
+    ['wrong kind', ['choice:user:abcDEF1234567890']],
+    ['duplicate refs', ['choice:person:abcDEF1234567890', 'choice:person:abcDEF1234567890']],
+  ])('rejects declarative named filter choice refs with %s', (_label, choiceRefs) => {
+    const result = AgentAssetSourceInputDto.schema.safeParse({
+      kind: 'search',
+      filters: {
+        people: { match: 'any', names: ['Pierre'], choiceRefs },
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('accepts a previous search source ref', () => {
     const result = AgentAssetSourceInputSchema.safeParse({
       kind: 'previousSearch',

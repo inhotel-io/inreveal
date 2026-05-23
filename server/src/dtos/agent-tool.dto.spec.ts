@@ -1172,7 +1172,11 @@ describe('Agent tool DTOs', () => {
       });
 
       expect(result.success).toBe(false);
-      expectIssue(result, ['selectionHandle', 'sourceRef'], 'sourceRef must use the asset-source:search:<token> format');
+      expectIssue(
+        result,
+        ['selectionHandle', 'sourceRef'],
+        'sourceRef must use the asset-source:search:<token> format',
+      );
     });
 
     it('encodes and parses search responses with result metadata', () => {
@@ -1322,6 +1326,7 @@ describe('Agent tool DTOs', () => {
             choices: [
               {
                 id: tagId,
+                choiceRef: 'choice:person:abcDEF1234567890',
                 value: 'Travel',
                 label: 'Travel',
                 searchFilter: { tagIds: [tagId], takenAfter: '2026-05-01T00:00:00.000Z' },
@@ -1350,6 +1355,38 @@ describe('Agent tool DTOs', () => {
           new Date('2026-05-01T00:00:00.000Z'),
         );
       }
+    });
+
+    it('rejects resolve filter choices with raw UUID choice refs', () => {
+      const tagId = factory.uuid();
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: { tagIds: [tagId] },
+        resultSize: makeResultSize({ returnedItems: 1 }),
+        results: [
+          {
+            kind: 'tag',
+            query: 'Travel',
+            status: 'matched',
+            id: tagId,
+            value: 'Travel',
+            searchFilter: { tagIds: [tagId] },
+            choices: [
+              {
+                id: tagId,
+                choiceRef: factory.uuid(),
+                value: 'Travel',
+                label: 'Travel',
+                searchFilter: { tagIds: [tagId] },
+              },
+            ],
+            message: 'Matched tag Travel.',
+          },
+        ],
+      });
+
+      expectIssue(result, ['results', 0, 'choices', 0, 'choiceRef'], 'choiceRef must use');
     });
 
     it('rejects resolve filter result search filters with spacePersonIds but no spaceId', () => {

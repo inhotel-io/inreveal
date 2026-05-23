@@ -20,6 +20,7 @@ export type AgentAssetSourceMaterialization = 'bounded-page' | 'all-matches-with
 export type AgentDeclarativeNamedFilter = {
   match: AgentDeclarativeNameMatch;
   names: string[];
+  choiceRefs?: string[];
 };
 
 export type AgentDeclarativeAssetFilters = {
