@@ -1326,7 +1326,7 @@ describe('Agent tool DTOs', () => {
             choices: [
               {
                 id: tagId,
-                choiceRef: 'choice:person:abcDEF1234567890',
+                choiceRef: 'choice:tag:abcDEF1234567890',
                 value: 'Travel',
                 label: 'Travel',
                 searchFilter: { tagIds: [tagId], takenAfter: '2026-05-01T00:00:00.000Z' },
@@ -1387,6 +1387,38 @@ describe('Agent tool DTOs', () => {
       });
 
       expectIssue(result, ['results', 0, 'choices', 0, 'choiceRef'], 'choiceRef must use');
+    });
+
+    it('rejects resolve filter choices with refs from a different result kind', () => {
+      const tagId = factory.uuid();
+      const result = AgentResolveAssetSearchFiltersToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        resolvedFilters: { tagIds: [tagId] },
+        resultSize: makeResultSize({ returnedItems: 1 }),
+        results: [
+          {
+            kind: 'tag',
+            query: 'Travel',
+            status: 'matched',
+            id: tagId,
+            value: 'Travel',
+            searchFilter: { tagIds: [tagId] },
+            choices: [
+              {
+                id: tagId,
+                choiceRef: 'choice:person:abcDEF1234567890',
+                value: 'Travel',
+                label: 'Travel',
+                searchFilter: { tagIds: [tagId] },
+              },
+            ],
+            message: 'Matched tag Travel.',
+          },
+        ],
+      });
+
+      expectIssue(result, ['results', 0, 'choices', 0, 'choiceRef'], 'choiceRef kind must match result kind');
     });
 
     it('rejects resolve filter result search filters with spacePersonIds but no spaceId', () => {
