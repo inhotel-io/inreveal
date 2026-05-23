@@ -52,6 +52,9 @@ export const AgentChoiceRefSchema = z
 export const getAgentChoiceRefKind = (choiceRef: string): string | null =>
   choiceRef.match(/^choice:([^:]+):/)?.[1] ?? null;
 
+export const isAgentChoiceRef = (value: unknown): value is string =>
+  typeof value === 'string' && AgentChoiceRefSchema.safeParse(value).success;
+
 const uniqueChoiceRefs = z
   .array(AgentChoiceRefSchema)
   .max(20)
