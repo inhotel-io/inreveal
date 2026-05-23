@@ -216,4 +216,17 @@ describe(AgentSessionHeader.name, () => {
 
     expect(onActivityVisibilityModeChange).toHaveBeenCalledWith('off');
   });
+
+  it('uses rounded pill buttons for header actions', () => {
+    renderHeader({
+      activityVisibilityMode: 'compact',
+      onActivityVisibilityModeChange: vi.fn(),
+      onCancel: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: 'Cancel' }).className).toContain('rounded-full');
+    expect(screen.getByRole('button', { name: 'Details' }).className).toContain('rounded-full');
+    expect(screen.getByRole('button', { name: 'New chat' }).className).toContain('rounded-full');
+    expect(screen.getByRole('button', { name: /Activity preview/i }).className).toContain('rounded-full');
+  });
 });

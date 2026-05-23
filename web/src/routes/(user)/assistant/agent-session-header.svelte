@@ -87,11 +87,11 @@
     </div>
   </div>
 
-  <div class="flex shrink-0 items-center gap-2">
+  <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
     {#if onCancel}
       <button
         type="button"
-        class="rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+        class="rounded-full border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
         disabled={cancelDisabled}
         onclick={onCancel}
       >
@@ -103,14 +103,14 @@
     {/if}
     <button
       type="button"
-      class="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+      class="rounded-full border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
       onclick={onOpenDetails}
     >
       {$t('assistant_details')}
     </button>
     <button
       type="button"
-      class="rounded-lg bg-immich-primary px-3 py-2 text-sm font-medium text-white hover:bg-immich-primary/90"
+      class="rounded-full bg-immich-primary px-3 py-2 text-sm font-medium text-white hover:bg-immich-primary/90"
       onclick={onNewChat}
     >
       {$t('assistant_new_chat')}
