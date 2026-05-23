@@ -96,6 +96,14 @@ describe('AgentMessage DTOs', () => {
       { type: 'asset', assetId: factory.uuid() },
       { type: 'tool-call', toolCallId: factory.uuid() },
       { type: 'plan', planId: factory.uuid() },
+      {
+        type: 'clarification',
+        kind: 'person',
+        query: 'Pierre',
+        summary: 'I found two people named Pierre.',
+        textFallback: 'Which Pierre should I use?',
+        choices: [{ choiceRef: 'choice:person:abcDEF1234567890', label: 'Pierre', thumbnailAssetId: null }],
+      },
     ])('rejects $type blocks from the public create DTO', (block) => {
       const result = parseCreate({ content: { blocks: [block] } as never });
 
@@ -125,6 +133,125 @@ describe('AgentMessage DTOs', () => {
       if (result.success) {
         expect(result.data.createdAt).toBe('2026-05-14T12:00:00.000Z');
       }
+    });
+
+    it('encodes persisted clarification response blocks with safe choice refs and optional thumbnails', () => {
+      const result = AgentMessageResponseDto.schema.safeEncode(
+        makeResponse({
+          content: {
+            blocks: [
+              {
+                type: 'clarification',
+                kind: 'person',
+                query: 'Pierre',
+                summary: 'I found two people named Pierre.',
+                textFallback: 'Which Pierre should I use?',
+                choices: [
+                  {
+                    choiceRef: 'choice:person:abcDEF1234567890',
+                    label: 'Pierre M.',
+                    description: '12 matching photos',
+                    thumbnailAssetId: factory.uuid(),
+                  },
+                  {
+                    choiceRef: 'choice:person:defABC1234567890',
+                    label: 'Pierre',
+                    thumbnailAssetId: null,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      { block: { type: 'text', text: 'Hello.', id: factory.uuid() }, path: ['content', 'blocks', 0] },
+      {
+        block: { type: 'tool-call', toolCallId: factory.uuid(), summary: 'Read matching assets.', id: factory.uuid() },
+        path: ['content', 'blocks', 0],
+      },
+      {
+        block: { type: 'asset', assetId: factory.uuid(), label: 'IMG_0001.jpg', searchFilter: { rating: 5 } },
+        path: ['content', 'blocks', 0],
+      },
+      {
+        block: { type: 'plan', planId: factory.uuid(), label: 'Portugal album plan', rawPlanId: factory.uuid() },
+        path: ['content', 'blocks', 0],
+      },
+    ])('rejects extra keys on persisted legacy $block.type blocks', ({ block, path }) => {
+      const result = AgentMessageResponseDto.schema.safeEncode(makeResponse({ content: { blocks: [block] } as never }));
+
+      expectIssue(result, path, 'Unrecognized key');
+    });
+
+    it.each([
+      {
+        choice: { choiceRef: factory.uuid(), label: 'Pierre', thumbnailAssetId: null },
+        path: 'choiceRef',
+        message: 'choiceRef must use the choice:<kind>:<token> format',
+      },
+      {
+        choice: { choiceRef: 'choice:person:abcDEF1234567890', id: factory.uuid(), label: 'Pierre' },
+        path: undefined,
+        message: 'Unrecognized key',
+      },
+      {
+        choice: {
+          choiceRef: 'choice:person:abcDEF1234567890',
+          label: 'Pierre',
+          searchFilter: { personIds: [factory.uuid()] },
+        },
+        path: undefined,
+        message: 'Unrecognized key',
+      },
+    ])('rejects unsafe persisted clarification choices', ({ choice, path, message }) => {
+      const result = AgentMessageResponseDto.schema.safeEncode(
+        makeResponse({
+          content: {
+            blocks: [
+              {
+                type: 'clarification',
+                kind: 'person',
+                query: 'Pierre',
+                summary: 'I found two people named Pierre.',
+                textFallback: 'Which Pierre should I use?',
+                choices: [choice],
+              },
+            ],
+          } as never,
+        }),
+      );
+
+      expectIssue(
+        result,
+        path === undefined ? ['content', 'blocks', 0, 'choices', 0] : ['content', 'blocks', 0, 'choices', 0, path],
+        message,
+      );
+    });
+
+    it('rejects persisted clarification choices whose choiceRef kind does not match the block kind', () => {
+      const result = AgentMessageResponseDto.schema.safeEncode(
+        makeResponse({
+          content: {
+            blocks: [
+              {
+                type: 'clarification',
+                kind: 'person',
+                query: 'Pierre',
+                summary: 'I found two people named Pierre.',
+                textFallback: 'Which Pierre should I use?',
+                choices: [{ choiceRef: 'choice:album:abcDEF1234567890', label: 'Pierre', thumbnailAssetId: null }],
+              },
+            ],
+          } as never,
+        }),
+      );
+
+      expectIssue(result, ['content', 'blocks', 0, 'choices'], 'choiceRef kind must match clarification kind');
     });
 
     it.each([
