@@ -362,6 +362,153 @@ describe('agent activity UI helpers', () => {
     });
   });
 
+  it('shows source-aware planning steps in expanded activity while compact rows stay stable', () => {
+    const toolCalls = [
+      makeToolCall({
+        id: 'resolve-people',
+        toolName: AgentToolName.ResolveAssetSearchFilters,
+        responseSummary: 'Resolved people: Pierre, Aurelia',
+        assetCount: 0,
+        startedAt: '2026-05-18T10:00:01.000Z',
+        completedAt: '2026-05-18T10:00:02.000Z',
+      }),
+      makeToolCall({
+        id: 'search-source',
+        toolName: AgentToolName.SearchAssets,
+        responseSummary: 'Found 100 matching photos',
+        assetCount: 100,
+        startedAt: '2026-05-18T10:00:03.000Z',
+        completedAt: '2026-05-18T10:00:04.000Z',
+      }),
+      makeToolCall({
+        id: 'prepare-album',
+        toolName: AgentToolName.ProposeAlbumFromSearch,
+        responseSummary: 'Prepared album plan with 100 photos',
+        assetCount: 100,
+        startedAt: '2026-05-18T10:00:05.000Z',
+        completedAt: '2026-05-18T10:00:06.000Z',
+      }),
+    ];
+
+    const beforePlan = buildModel({ toolCalls: toolCalls.slice(0, 2) });
+    const afterPlan = buildModel({ toolCalls });
+
+    expect(
+      afterPlan.verboseItems.map(({ id, title, summary, status, count }) => ({ id, title, summary, status, count })),
+    ).toEqual([
+        {
+          id: 'tool-resolve-people',
+          title: 'Resolving filters',
+          summary: 'Resolved people: Pierre, Aurelia',
+          status: 'completed',
+          count: undefined,
+        },
+        {
+          id: 'tool-search-source',
+          title: 'Searching photos',
+          summary: 'Found 100 matching photos',
+          status: 'completed',
+          count: 100,
+        },
+        {
+          id: 'tool-prepare-album',
+          title: 'Preparing album plan',
+          summary: 'Prepared album plan with 100 photos',
+          status: 'completed',
+          count: 100,
+        },
+      ]);
+    expect(beforePlan.items.map((item) => item.id)).toEqual(['tool-resolve-people', 'tool-search-source']);
+    expect(afterPlan.items.map((item) => item.id)).toEqual([
+      'tool-resolve-people',
+      'tool-search-source',
+      'tool-prepare-album',
+    ]);
+  });
+
+  it('keeps compact source workflow rows stable when repeated searches complete out of order', () => {
+    const running = buildModel({
+      toolCalls: [
+        makeToolCall({
+          id: 'search-page-1',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Executing,
+          responseSummary: null,
+          assetCount: 50,
+          startedAt: '2026-05-18T10:00:01.000Z',
+          completedAt: null,
+        }),
+        makeToolCall({
+          id: 'search-page-2',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Returned metadata for 50 assets',
+          assetCount: 50,
+          startedAt: '2026-05-18T10:00:03.000Z',
+          completedAt: '2026-05-18T10:00:04.000Z',
+        }),
+      ],
+    });
+    const completedOutOfOrder = buildModel({
+      toolCalls: [
+        makeToolCall({
+          id: 'search-page-2',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Returned metadata for 50 assets',
+          assetCount: 50,
+          startedAt: '2026-05-18T10:00:03.000Z',
+          completedAt: '2026-05-18T10:00:04.000Z',
+        }),
+        makeToolCall({
+          id: 'search-page-1',
+          toolName: AgentToolName.SearchAssets,
+          status: AgentToolCallStatus.Completed,
+          responseSummary: 'Returned metadata for 50 assets',
+          assetCount: 50,
+          startedAt: '2026-05-18T10:00:01.000Z',
+          completedAt: '2026-05-18T10:00:05.000Z',
+        }),
+      ],
+    });
+
+    expect(running.items).toHaveLength(1);
+    expect(completedOutOfOrder.items).toHaveLength(1);
+    expect(running.items[0].id).toBe('tool-search-search-assets');
+    expect(completedOutOfOrder.items[0]).toMatchObject({
+      id: 'tool-search-search-assets',
+      status: 'completed',
+      summary: 'Returned metadata for 100 assets',
+      count: 100,
+    });
+  });
+
+  it('shows failed source planning as a terminal plan row', () => {
+    const model = buildModel({
+      toolCalls: [
+        makeToolCall({
+          id: 'failed-plan',
+          toolName: AgentToolName.ProposeAlbumFromSearch,
+          status: AgentToolCallStatus.Failed,
+          responseSummary: null,
+          error: 'runner failed',
+          startedAt: '2026-05-18T10:00:05.000Z',
+          completedAt: '2026-05-18T10:00:06.000Z',
+        }),
+      ],
+    });
+
+    expect(model.items).toHaveLength(1);
+    expect(model.items[0]).toMatchObject({
+      kind: 'plan',
+      status: 'failed',
+      title: 'Preparing album plan',
+      summary: 'Plan preparation failed',
+      completedAt: '2026-05-18T10:00:06.000Z',
+    });
+    expect(model.activeItem).toBeNull();
+  });
+
   it('does not let secondary activity events remove expanded tool-call rows', () => {
     const model = buildModel({
       toolCalls: [
@@ -453,6 +600,11 @@ describe('agent activity UI helpers', () => {
     [AgentToolName.ProposeAlbumOperations, 'plan', 'Preparing a plan', 'Prepared a plan'],
     [AgentToolName.ReviseProposedOperations, 'plan', 'Revising the plan', 'Revised the plan'],
     [AgentToolName.SummarizePlan, 'plan', 'Summarizing the plan', 'Summarized the plan'],
+    [AgentToolName.ProposeAlbumFromSearch, 'plan', 'Preparing album plan', 'Prepared album plan'],
+    [AgentToolName.ProposeAddAssetsToAlbumFromSearch, 'plan', 'Preparing album plan', 'Prepared album plan'],
+    [AgentToolName.ProposeSpaceFromSearch, 'plan', 'Preparing space plan', 'Prepared space plan'],
+    [AgentToolName.ProposeAddAssetsToSpaceFromSearch, 'plan', 'Preparing space plan', 'Prepared space plan'],
+    [AgentToolName.ProposeAssetBatchFromSearch, 'plan', 'Preparing asset update plan', 'Prepared asset update plan'],
   ] as const)('maps %s to safe activity copy', (toolName, kind, title, summary) => {
     const model = buildModel({
       toolCalls: [makeToolCall({ toolName, status: AgentToolCallStatus.Completed, responseSummary: null })],
@@ -794,6 +946,7 @@ describe('agent activity UI helpers', () => {
           kind: 'plan-composing',
           status: 'completed',
           summary: 'system prompt: private provider instructions',
+          totalCount: 5,
           createdAt: '2026-05-18T10:00:02.000Z',
         }),
         makeActivityEvent({
@@ -837,6 +990,7 @@ describe('agent activity UI helpers', () => {
         status: 'completed',
         title: 'Preparing a plan',
         summary: 'Prepared a plan',
+        count: 5,
       }),
       expect.objectContaining({
         id: 'event-apply',
