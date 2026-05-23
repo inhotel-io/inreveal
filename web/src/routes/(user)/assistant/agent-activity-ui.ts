@@ -174,7 +174,47 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Summarized the plan',
     coalesceKey: 'summarize-plan',
   },
+  [AgentToolName.ProposeAlbumFromSearch]: {
+    kind: 'plan',
+    title: 'Preparing album plan',
+    completedSummary: 'Prepared album plan',
+    coalesceKey: 'propose-album-from-search',
+  },
+  [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: {
+    kind: 'plan',
+    title: 'Preparing album plan',
+    completedSummary: 'Prepared album plan',
+    coalesceKey: 'propose-add-assets-to-album-from-search',
+  },
+  [AgentToolName.ProposeSpaceFromSearch]: {
+    kind: 'plan',
+    title: 'Preparing space plan',
+    completedSummary: 'Prepared space plan',
+    coalesceKey: 'propose-space-from-search',
+  },
+  [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: {
+    kind: 'plan',
+    title: 'Preparing space plan',
+    completedSummary: 'Prepared space plan',
+    coalesceKey: 'propose-add-assets-to-space-from-search',
+  },
+  [AgentToolName.ProposeAssetBatchFromSearch]: {
+    kind: 'plan',
+    title: 'Preparing asset update plan',
+    completedSummary: 'Prepared asset update plan',
+    coalesceKey: 'propose-asset-batch-from-search',
+  },
 };
+
+const responseSummaryTools = new Set<AgentToolName>([
+  AgentToolName.ResolveAssetSearchFilters,
+  AgentToolName.SearchAssets,
+  AgentToolName.ProposeAlbumFromSearch,
+  AgentToolName.ProposeAddAssetsToAlbumFromSearch,
+  AgentToolName.ProposeSpaceFromSearch,
+  AgentToolName.ProposeAddAssetsToSpaceFromSearch,
+  AgentToolName.ProposeAssetBatchFromSearch,
+]);
 
 const statusPriority: Record<AgentActivityStatus, number> = {
   failed: 0,
@@ -390,7 +430,7 @@ const getSummaryForStatus = (
   responseSummary: string | null | undefined,
 ) => {
   if (status === 'failed') {
-    return 'Gallery step failed';
+    return definition.kind === 'plan' ? 'Plan preparation failed' : 'Gallery step failed';
   }
 
   if (status === 'running') {
@@ -401,7 +441,7 @@ const getSummaryForStatus = (
     return 'Skipped this step';
   }
 
-  return status === 'completed' && toolName === AgentToolName.SearchAssets
+  return status === 'completed' && responseSummaryTools.has(toolName)
     ? (optionalRedacted(responseSummary) ?? definition.completedSummary)
     : definition.completedSummary;
 };
@@ -634,6 +674,8 @@ const buildEventActivityItem = (event: AgentActivityEvent): AgentActivityItem =>
     }
 
     case 'plan-composing': {
+      const totalCount = event.counts?.total ?? 0;
+
       return {
         id: `event-${event.id}`,
         sessionId: event.sessionId,
@@ -646,10 +688,12 @@ const buildEventActivityItem = (event: AgentActivityEvent): AgentActivityItem =>
             : status === 'failed'
               ? 'Plan preparation failed'
               : 'Preparing the plan',
+        ...(totalCount > 0 ? { count: totalCount } : {}),
         startedAt,
         ...(terminal ? { completedAt: startedAt } : {}),
         technical: {
           requestSummary: safeSummary,
+          ...(totalCount > 0 ? { assetCount: totalCount } : {}),
           startedAt: event.createdAt,
           ...(terminal ? { completedAt: event.createdAt } : {}),
         },
