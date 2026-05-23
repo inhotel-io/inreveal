@@ -767,6 +767,13 @@ export class AgentOperationPlanService {
         error: null,
       });
 
+      if (toolName !== AgentToolName.SummarizePlan) {
+        await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Completed, {
+          summary: 'Prepared plan',
+          total: this.getPlanActivityCount(result.plan),
+        });
+      }
+
       return {
         status: 'success',
         plan: this.mapPlan(result.plan),
@@ -1284,7 +1291,7 @@ export class AgentOperationPlanService {
     }
 
     if (assetSource.kind === 'search') {
-      return this.resolveSearchAssetSourceAssetIds(auth, session, assetSource, operationType, selectionAudit);
+      return this.resolveSearchAssetSourceAssetIds(auth, session, toolName, assetSource, operationType, selectionAudit);
     }
 
     throw new BadRequestException('Only assetSource.search and assetSource.previousSearch are supported for operation planning');
@@ -1293,6 +1300,7 @@ export class AgentOperationPlanService {
   private async resolveSearchAssetSourceAssetIds(
     auth: AuthDto,
     session: AgentSession,
+    toolName: AgentToolName,
     assetSource: Extract<AgentAssetSourceInput, { kind: 'search' }>,
     operationType: AgentOperationType,
     selectionAudit: PlanningSelectionAudit,
@@ -1323,7 +1331,18 @@ export class AgentOperationPlanService {
     }
 
     if (resolution.status === 'needs_clarification') {
-      throw new BadRequestException(resolution.message);
+      throw new AgentMcpRecoverableToolError({
+        status: 'error',
+        error: resolution.message,
+        toolName,
+        retryable: true,
+        hint: 'Ask the user to clarify the search filters, then retry with a narrower assetSource.search.',
+        recovery: {
+          kind: 'asset_search_filters_need_clarification',
+          filterKeys: Object.keys(declarativeFilters).sort(),
+          instruction: 'Ask the user to clarify the search filters, then retry with a narrower assetSource.search.',
+        },
+      });
     }
 
     const cap = this.getSearchSourceMaterializationCap(operationType);
@@ -3000,6 +3019,29 @@ export class AgentOperationPlanService {
     }
   }
 
+  private async emitPlanningActivity(
+    session: AgentSession,
+    status: AgentSessionActivityEventStatus.Completed | AgentSessionActivityEventStatus.Failed,
+    options: { total?: number; summary: string },
+  ) {
+    const total = options.total === undefined ? undefined : Math.min(options.total, 10_000);
+    try {
+      await this.activityEventService?.createSystemEvent(session.userId, session.id, {
+        kind: AgentSessionActivityEventKind.PlanComposing,
+        status,
+        summary: options.summary,
+        ...(total !== undefined ? { counts: { total } } : {}),
+      });
+    } catch {
+      // Activity events are visibility hints and must not block planning.
+    }
+  }
+
+  private getPlanActivityCount(plan: AgentOperationPlanWithOperations) {
+    const assetIds = new Set(plan.operations.flatMap((operation) => operation.assetIds));
+    return assetIds.size > 0 ? assetIds.size : plan.operations.length;
+  }
+
   private async tryCreatePlanningPreparationDeniedAudit(
     session: AgentSession,
     toolName: AgentToolName,
@@ -3027,6 +3069,12 @@ export class AgentOperationPlanService {
       });
     } catch {
       // Preserve the original preparation error.
+    }
+
+    if (!isAgentMcpRecoverableToolError(error)) {
+      await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Failed, {
+        summary: 'Plan preparation failed',
+      });
     }
   }
 
@@ -3104,6 +3152,29 @@ export class AgentOperationPlanService {
     return null;
   }
 
+  private buildSourceSummaries(
+    selectionHandles: PlanningSelectionAudit | undefined,
+  ): AgentToolOperationPlanRequestMetadata['sourceSummaries'] {
+    if (!selectionHandles?.length) {
+      return undefined;
+    }
+
+    return selectionHandles.map((handle) => {
+      const filterKeys = handle.declarativeFilters ? Object.keys(handle.declarativeFilters).sort() : undefined;
+      const resolvedFilterKeys = handle.resolvedFilters ? Object.keys(handle.resolvedFilters).sort() : undefined;
+
+      return {
+        sourceKind: handle.sourceKind ?? 'selectionHandle',
+        ...(handle.id ? { selectionHandleId: handle.id } : {}),
+        ...(handle.sourceRef ? { sourceRef: handle.sourceRef } : {}),
+        assetCount: handle.assetCount,
+        sampleAssetCount: handle.sampleAssetIds.length,
+        ...(filterKeys?.length ? { filterKeys } : {}),
+        ...(resolvedFilterKeys?.length ? { resolvedFilterKeys } : {}),
+      };
+    });
+  }
+
   private redactRequestMetadata(
     _toolName: AgentToolName,
     request: PlanningRequest,
@@ -3134,6 +3205,7 @@ export class AgentOperationPlanService {
     if (handleDerived) {
       metadata.assetIdsSample = assetIdsForAudit;
       metadata.selectionHandles = request.selectionHandles;
+      metadata.sourceSummaries = this.buildSourceSummaries(request.selectionHandles);
     }
 
     if (ids.attemptedSelectionHandleIds.length > 0) {
