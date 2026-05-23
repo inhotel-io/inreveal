@@ -1573,6 +1573,26 @@ const revisePlanningCommonMistakes: AgentMcpCommonMistake[] = planningCommonMist
 
 const proposeAlbumFromSearchExamples: AgentMcpToolExample[] = [
   {
+    name: 'create-south-africa-pierre-aurelia-album',
+    description:
+      'Regression: create an album for South Africa in January 2026 with Pierre OR Aurelia using declarative people names.',
+    arguments: {
+      summary: 'Create South Africa January 2026 album for Pierre or Aurelia.',
+      albumName: 'South Africa with Pierre & Aurelia',
+      description: 'January 2026 South Africa photos featuring Pierre or Aurelia.',
+      assetSource: {
+        kind: 'search',
+        filters: {
+          country: 'South Africa',
+          takenAfter: '2026-01-01T00:00:00.000Z',
+          takenBefore: '2026-02-01T00:00:00.000Z',
+          people: { match: 'any', names: ['Pierre', 'Aurelia'] },
+        },
+        materialization: 'all-matches-with-limit',
+      },
+    },
+  },
+  {
     name: 'create-album-from-declarative-search',
     description: 'Create a new album directly from user-facing search filters.',
     arguments: {
@@ -1682,6 +1702,12 @@ const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = 
   ],
   examples: proposeAddAssetsToAlbumFromSearchExamples,
   commonMistakes: [
+    {
+      id: 'album-add-workflow-raw-asset-ids',
+      match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
+      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      exampleName: 'add-search-results-to-album-by-name',
+    },
     {
       id: 'album-workflow-missing-target',
       match: { messageIncludes: 'Provide exactly one of albumId or albumName' },
@@ -1805,6 +1831,12 @@ const proposeAddAssetsToSpaceFromSearchContract: AgentMcpPlanningToolContract = 
   ],
   examples: proposeAddAssetsToSpaceFromSearchExamples,
   commonMistakes: [
+    {
+      id: 'space-add-workflow-raw-asset-ids',
+      match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
+      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      exampleName: 'add-search-results-to-space-by-name',
+    },
     {
       id: 'space-workflow-missing-target',
       match: { messageIncludes: 'Provide exactly one of spaceId or spaceName' },
