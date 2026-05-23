@@ -2747,6 +2747,7 @@
   "timeline": "Timeline",
   "timeline_grouping_days": "Days",
   "timeline_grouping_months": "Months",
+  "timeline_overview_photo_count": "{count, plural, one {# photo} other {# photos}}",
   "timeline_grouping_selector": "Timeline grouping",
   "timeline_grouping_years": "Years",
   "timezone": "Timezone",
