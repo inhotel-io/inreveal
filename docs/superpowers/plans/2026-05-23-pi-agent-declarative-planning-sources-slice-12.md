@@ -31,6 +31,7 @@
 ### Task 1: Web Source-Aware Activity Rows
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-activity-ui.spec.ts`
 - Modify: `web/src/routes/(user)/assistant/agent-activity-ui.ts`
 
@@ -39,153 +40,159 @@
 Add these tests in `web/src/routes/(user)/assistant/agent-activity-ui.spec.ts` near the existing verbose/compact activity tests:
 
 ```ts
-  it('shows source-aware planning steps in expanded activity while compact rows stay stable', () => {
-    const sourceWorkflowCalls = [
+it('shows source-aware planning steps in expanded activity while compact rows stay stable', () => {
+  const sourceWorkflowCalls = [
+    makeToolCall({
+      id: 'resolve-people',
+      toolName: AgentToolName.ResolveAssetSearchFilters,
+      responseSummary: 'Resolved people: Pierre, Aurelia',
+      startedAt: '2026-05-18T10:00:01.000Z',
+      completedAt: '2026-05-18T10:00:02.000Z',
+    }),
+    makeToolCall({
+      id: 'search-source',
+      toolName: AgentToolName.SearchAssets,
+      responseSummary: 'Found 100 matching photos',
+      assetCount: 100,
+      startedAt: '2026-05-18T10:00:03.000Z',
+      completedAt: '2026-05-18T10:00:04.000Z',
+    }),
+    makeToolCall({
+      id: 'prepare-album',
+      toolName: AgentToolName.ProposeAlbumFromSearch,
+      responseSummary: 'Prepared album plan with 100 photos',
+      assetCount: 100,
+      startedAt: '2026-05-18T10:00:05.000Z',
+      completedAt: '2026-05-18T10:00:06.000Z',
+    }),
+  ];
+
+  const model = buildModel({ toolCalls: sourceWorkflowCalls });
+  const compactBeforePlan = buildModel({ toolCalls: sourceWorkflowCalls.slice(0, 2) });
+
+  expect(
+    model.verboseItems.map(({ id, title, summary, status, count }) => ({ id, title, summary, status, count })),
+  ).toEqual([
+    {
+      id: 'tool-resolve-people',
+      title: 'Resolving filters',
+      summary: 'Resolved people: Pierre, Aurelia',
+      status: 'completed',
+      count: undefined,
+    },
+    {
+      id: 'tool-search-source',
+      title: 'Searching photos',
+      summary: 'Found 100 matching photos',
+      status: 'completed',
+      count: 100,
+    },
+    {
+      id: 'tool-prepare-album',
+      title: 'Preparing album plan',
+      summary: 'Prepared album plan with 100 photos',
+      status: 'completed',
+      count: 100,
+    },
+  ]);
+  expect(model.items.map((item) => item.id)).toEqual([
+    'tool-resolve-people',
+    'tool-search-source',
+    'tool-prepare-album',
+  ]);
+  expect(compactBeforePlan.items.map((item) => item.id)).toEqual(['tool-resolve-people', 'tool-search-source']);
+  expect(model.items.find((item) => item.id === 'tool-search-source')).toMatchObject({
+    title: 'Searching photos',
+    summary: 'Found 100 matching photos',
+    count: 100,
+  });
+});
+
+it('keeps compact source workflow rows stable when repeated searches complete out of order', () => {
+  const runningModel = buildModel({
+    toolCalls: [
       makeToolCall({
-        id: 'resolve-people',
-        toolName: AgentToolName.ResolveAssetSearchFilters,
-        responseSummary: 'Resolved people: Pierre, Aurelia',
+        id: 'search-a',
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Executing,
+        responseSummary: null,
+        assetCount: 40,
         startedAt: '2026-05-18T10:00:01.000Z',
-        completedAt: '2026-05-18T10:00:02.000Z',
+        completedAt: null,
       }),
       makeToolCall({
-        id: 'search-source',
+        id: 'search-b',
         toolName: AgentToolName.SearchAssets,
-        responseSummary: 'Found 100 matching photos',
-        assetCount: 100,
-        startedAt: '2026-05-18T10:00:03.000Z',
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Found 60 matching photos',
+        assetCount: 60,
+        startedAt: '2026-05-18T10:00:02.000Z',
+        completedAt: '2026-05-18T10:00:04.000Z',
+      }),
+    ],
+  });
+  const completedModel = buildModel({
+    toolCalls: [
+      makeToolCall({
+        id: 'search-b',
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Found 60 matching photos',
+        assetCount: 60,
+        startedAt: '2026-05-18T10:00:02.000Z',
         completedAt: '2026-05-18T10:00:04.000Z',
       }),
       makeToolCall({
-        id: 'prepare-album',
-        toolName: AgentToolName.ProposeAlbumFromSearch,
-        responseSummary: 'Prepared album plan with 100 photos',
-        assetCount: 100,
-        startedAt: '2026-05-18T10:00:05.000Z',
-        completedAt: '2026-05-18T10:00:06.000Z',
+        id: 'search-a',
+        toolName: AgentToolName.SearchAssets,
+        status: AgentToolCallStatus.Completed,
+        responseSummary: 'Found 40 matching photos',
+        assetCount: 40,
+        startedAt: '2026-05-18T10:00:01.000Z',
+        completedAt: '2026-05-18T10:00:05.000Z',
       }),
-    ];
-
-    const model = buildModel({ toolCalls: sourceWorkflowCalls });
-    const compactBeforePlan = buildModel({ toolCalls: sourceWorkflowCalls.slice(0, 2) });
-
-    expect(model.verboseItems.map(({ id, title, summary, status, count }) => ({ id, title, summary, status, count }))).toEqual([
-      {
-        id: 'tool-resolve-people',
-        title: 'Resolving filters',
-        summary: 'Resolved people: Pierre, Aurelia',
-        status: 'completed',
-        count: undefined,
-      },
-      {
-        id: 'tool-search-source',
-        title: 'Searching photos',
-        summary: 'Found 100 matching photos',
-        status: 'completed',
-        count: 100,
-      },
-      {
-        id: 'tool-prepare-album',
-        title: 'Preparing album plan',
-        summary: 'Prepared album plan with 100 photos',
-        status: 'completed',
-        count: 100,
-      },
-    ]);
-    expect(model.items.map((item) => item.id)).toEqual(['tool-resolve-people', 'tool-search-source', 'tool-prepare-album']);
-    expect(compactBeforePlan.items.map((item) => item.id)).toEqual(['tool-resolve-people', 'tool-search-source']);
-    expect(model.items.find((item) => item.id === 'tool-search-source')).toMatchObject({
-      title: 'Searching photos',
-      summary: 'Found 100 matching photos',
-      count: 100,
-    });
+    ],
   });
 
-  it('keeps compact source workflow rows stable when repeated searches complete out of order', () => {
-    const runningModel = buildModel({
-      toolCalls: [
-        makeToolCall({
-          id: 'search-a',
-          toolName: AgentToolName.SearchAssets,
-          status: AgentToolCallStatus.Executing,
-          responseSummary: null,
-          assetCount: 40,
-          startedAt: '2026-05-18T10:00:01.000Z',
-          completedAt: null,
-        }),
-        makeToolCall({
-          id: 'search-b',
-          toolName: AgentToolName.SearchAssets,
-          status: AgentToolCallStatus.Completed,
-          responseSummary: 'Found 60 matching photos',
-          assetCount: 60,
-          startedAt: '2026-05-18T10:00:02.000Z',
-          completedAt: '2026-05-18T10:00:04.000Z',
-        }),
-      ],
-    });
-    const completedModel = buildModel({
-      toolCalls: [
-        makeToolCall({
-          id: 'search-b',
-          toolName: AgentToolName.SearchAssets,
-          status: AgentToolCallStatus.Completed,
-          responseSummary: 'Found 60 matching photos',
-          assetCount: 60,
-          startedAt: '2026-05-18T10:00:02.000Z',
-          completedAt: '2026-05-18T10:00:04.000Z',
-        }),
-        makeToolCall({
-          id: 'search-a',
-          toolName: AgentToolName.SearchAssets,
-          status: AgentToolCallStatus.Completed,
-          responseSummary: 'Found 40 matching photos',
-          assetCount: 40,
-          startedAt: '2026-05-18T10:00:01.000Z',
-          completedAt: '2026-05-18T10:00:05.000Z',
-        }),
-      ],
-    });
-
-    expect(runningModel.items).toHaveLength(1);
-    expect(completedModel.items).toHaveLength(1);
-    expect(runningModel.items[0].id).toBe('tool-search-search-assets');
-    expect(completedModel.items[0].id).toBe('tool-search-search-assets');
-    expect(completedModel.items[0]).toMatchObject({
-      kind: 'search',
-      status: 'completed',
-      summary: 'Returned metadata for 100 assets',
-      count: 100,
-    });
+  expect(runningModel.items).toHaveLength(1);
+  expect(completedModel.items).toHaveLength(1);
+  expect(runningModel.items[0].id).toBe('tool-search-search-assets');
+  expect(completedModel.items[0].id).toBe('tool-search-search-assets');
+  expect(completedModel.items[0]).toMatchObject({
+    kind: 'search',
+    status: 'completed',
+    summary: 'Returned metadata for 100 assets',
+    count: 100,
   });
+});
 
-  it('shows failed source planning as a terminal plan row', () => {
-    const model = buildModel({
-      toolCalls: [
-        makeToolCall({
-          id: 'failed-source-plan',
-          toolName: AgentToolName.ProposeAlbumFromSearch,
-          status: AgentToolCallStatus.Failed,
-          responseSummary: null,
-          error: 'Search source did not match any assets',
-          startedAt: '2026-05-18T10:00:01.000Z',
-          completedAt: '2026-05-18T10:00:02.000Z',
-        }),
-      ],
-    });
-
-    expect(model.items).toEqual([
-      expect.objectContaining({
-        id: 'tool-failed-source-plan',
-        kind: 'plan',
-        status: 'failed',
-        title: 'Preparing album plan',
-        summary: 'Plan preparation failed',
+it('shows failed source planning as a terminal plan row', () => {
+  const model = buildModel({
+    toolCalls: [
+      makeToolCall({
+        id: 'failed-source-plan',
+        toolName: AgentToolName.ProposeAlbumFromSearch,
+        status: AgentToolCallStatus.Failed,
+        responseSummary: null,
+        error: 'Search source did not match any assets',
+        startedAt: '2026-05-18T10:00:01.000Z',
         completedAt: '2026-05-18T10:00:02.000Z',
       }),
-    ]);
-    expect(model.activeItem).toBeNull();
+    ],
   });
+
+  expect(model.items).toEqual([
+    expect.objectContaining({
+      id: 'tool-failed-source-plan',
+      kind: 'plan',
+      status: 'failed',
+      title: 'Preparing album plan',
+      summary: 'Plan preparation failed',
+      completedAt: '2026-05-18T10:00:02.000Z',
+    }),
+  ]);
+  expect(model.activeItem).toBeNull();
+});
 ```
 
 Extend the existing `it.each([...])('maps %s to safe activity copy')` table with:
@@ -281,21 +288,21 @@ const responseSummaryTools = new Set<AgentToolName>([
 Update `getSummaryForStatus` so failed plan tools show terminal plan failure copy and completed source workflow rows can show safe response summaries:
 
 ```ts
-  if (status === 'failed') {
-    return definition.kind === 'plan' ? 'Plan preparation failed' : 'Gallery step failed';
-  }
+if (status === 'failed') {
+  return definition.kind === 'plan' ? 'Plan preparation failed' : 'Gallery step failed';
+}
 
-  if (status === 'running') {
-    return definition.runningSummary ?? definition.title;
-  }
+if (status === 'running') {
+  return definition.runningSummary ?? definition.title;
+}
 
-  if (status === 'skipped') {
-    return 'Skipped this step';
-  }
+if (status === 'skipped') {
+  return 'Skipped this step';
+}
 
-  return status === 'completed' && responseSummaryTools.has(toolName)
-    ? (optionalRedacted(responseSummary) ?? definition.completedSummary)
-    : definition.completedSummary;
+return status === 'completed' && responseSummaryTools.has(toolName)
+  ? (optionalRedacted(responseSummary) ?? definition.completedSummary)
+  : definition.completedSummary;
 ```
 
 Update the `plan-composing` branch in `buildEventActivityItem` to surface `counts.total` without exposing unsafe summaries:
@@ -352,6 +359,7 @@ git commit -m "feat(web): show source planning activity steps"
 ### Task 2: Server Planning Activity Events And Source Audit Summaries
 
 **Files:**
+
 - Modify: `server/src/services/agent-operation-plan.service.spec.ts`
 - Modify: `server/src/types/agent-tool.types.ts`
 - Modify: `server/src/services/agent-operation-plan.service.ts`
@@ -361,111 +369,121 @@ git commit -m "feat(web): show source planning activity steps"
 In `server/src/services/agent-operation-plan.service.spec.ts`, add this assertion to the existing `materializes assetSource.search server-side before storing a plan` test after the `toolCallRepository.create` expectation:
 
 ```ts
-    expect(toolCallRepository.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        redactedRequestMetadata: expect.objectContaining({
-          sourceSummaries: [
-            {
-              sourceKind: 'search',
-              assetCount: assetIds.length,
-              sampleAssetCount: assetIds.length,
-              filterKeys: ['country', 'people', 'takenAfter', 'takenBefore'],
-              resolvedFilterKeys: ['country', 'personIds', 'personMatchAny', 'takenAfter', 'takenBefore'],
-            },
-          ],
-        }),
-      }),
-    );
-    const auditMetadata = vi.mocked(toolCallRepository.create).mock.calls.at(-1)?.[0]
-      .redactedRequestMetadata as Record<string, unknown>;
-    expect(JSON.stringify(auditMetadata.sourceSummaries)).not.toContain(assetIds[0]);
+expect(toolCallRepository.create).toHaveBeenCalledWith(
+  expect.objectContaining({
+    redactedRequestMetadata: expect.objectContaining({
+      sourceSummaries: [
+        {
+          sourceKind: 'search',
+          assetCount: assetIds.length,
+          sampleAssetCount: assetIds.length,
+          filterKeys: ['country', 'people', 'takenAfter', 'takenBefore'],
+          resolvedFilterKeys: ['country', 'personIds', 'personMatchAny', 'takenAfter', 'takenBefore'],
+        },
+      ],
+    }),
+  }),
+);
+const auditMetadata = vi.mocked(toolCallRepository.create).mock.calls.at(-1)?.[0].redactedRequestMetadata as Record<
+  string,
+  unknown
+>;
+expect(JSON.stringify(auditMetadata.sourceSummaries)).not.toContain(assetIds[0]);
 ```
 
 Add a new test near the successful planning tests:
 
 ```ts
-  it('records completed plan activity with materialized asset counts', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id });
-    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
-    sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
-    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
-    searchRepository.searchMetadata.mockResolvedValue({
-      items: assetIds.map((id) => ({ id })),
-      hasNextPage: false,
-    } as never);
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
-    planRepository.createReplacementRevision.mockResolvedValue(
-      makePlan({
-        sessionId: session.id,
-        operations: [
-          makeOperation({
-            type: AgentOperationType.AlbumCreate,
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            temporaryTargetId: 'tmp-south-africa',
-            payload: { albumName: 'South Africa' },
-          }),
-          makeOperation({
-            type: AgentOperationType.AlbumAddAssets,
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            temporaryTargetId: 'tmp-south-africa',
-            targetId: null,
-            assetIds,
-            payload: {},
-          }),
-        ],
-      }),
-    );
-
-    await sut.proposeAlbumFromSearch(auth, session.id, {
-      albumName: 'South Africa',
-      assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
-    });
-
-    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
-      kind: AgentSessionActivityEventKind.PlanComposing,
-      status: AgentSessionActivityEventStatus.Completed,
-      summary: 'Prepared plan',
-      counts: { total: assetIds.length },
-    });
-    expect(activityEventService.createSystemEvent).not.toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        operationIds: expect.anything(),
-        assetIds: expect.anything(),
-      }),
-    );
+it('records completed plan activity with materialized asset counts', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id });
+  const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+  sessionRepository.getById.mockResolvedValue(session);
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
   });
+  sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+  searchRepository.searchMetadata.mockResolvedValue({
+    items: assetIds.map((id) => ({ id })),
+    hasNextPage: false,
+  } as never);
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+  planRepository.createReplacementRevision.mockResolvedValue(
+    makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AlbumCreate,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-south-africa',
+          payload: { albumName: 'South Africa' },
+        }),
+        makeOperation({
+          type: AgentOperationType.AlbumAddAssets,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-south-africa',
+          targetId: null,
+          assetIds,
+          payload: {},
+        }),
+      ],
+    }),
+  );
+
+  await sut.proposeAlbumFromSearch(auth, session.id, {
+    albumName: 'South Africa',
+    assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+  });
+
+  expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+    kind: AgentSessionActivityEventKind.PlanComposing,
+    status: AgentSessionActivityEventStatus.Completed,
+    summary: 'Prepared plan',
+    counts: { total: assetIds.length },
+  });
+  expect(activityEventService.createSystemEvent).not.toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+    expect.objectContaining({
+      operationIds: expect.anything(),
+      assetIds: expect.anything(),
+    }),
+  );
+});
 ```
 
 Add another test near the source search error tests:
 
 ```ts
-  it('records failed plan activity when source resolution is unrecovered', async () => {
-    const auth = AuthFactory.create();
-    const session = makeSession({ userId: auth.user.id });
-    sessionRepository.getById.mockResolvedValue(session);
-    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({ status: 'success', filters: {}, results: [] });
-    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
-    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
-
-    await expect(
-      sut.proposeAlbumFromSearch(auth, session.id, {
-        albumName: 'Empty source',
-        assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
-      }),
-    ).rejects.toThrow('Search source did not match any assets');
-
-    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
-    expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
-      kind: AgentSessionActivityEventKind.PlanComposing,
-      status: AgentSessionActivityEventStatus.Failed,
-      summary: 'Plan preparation failed',
-    });
+it('records failed plan activity when source resolution is unrecovered', async () => {
+  const auth = AuthFactory.create();
+  const session = makeSession({ userId: auth.user.id });
+  sessionRepository.getById.mockResolvedValue(session);
+  assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+    status: 'success',
+    filters: {},
+    results: [],
   });
+  sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+  searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false } as never);
+
+  await expect(
+    sut.proposeAlbumFromSearch(auth, session.id, {
+      albumName: 'Empty source',
+      assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+    }),
+  ).rejects.toThrow('Search source did not match any assets');
+
+  expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  expect(activityEventService.createSystemEvent).toHaveBeenCalledWith(auth.user.id, session.id, {
+    kind: AgentSessionActivityEventKind.PlanComposing,
+    status: AgentSessionActivityEventStatus.Failed,
+    summary: 'Plan preparation failed',
+  });
+});
 ```
 
 - [ ] **Step 2: Run server test to verify expected red failures**
@@ -526,20 +544,20 @@ In `server/src/services/agent-operation-plan.service.ts`, add helpers near the e
 In `runPlanningTool`, after the successful audit transition and before returning, emit completed activity for plan creation/revision tools but not `summarizePlan`:
 
 ```ts
-      if (toolName !== AgentToolName.SummarizePlan) {
-        await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Completed, {
-          summary: 'Prepared plan',
-          total: this.getPlanActivityCount(result.plan),
-        });
-      }
+if (toolName !== AgentToolName.SummarizePlan) {
+  await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Completed, {
+    summary: 'Prepared plan',
+    total: this.getPlanActivityCount(result.plan),
+  });
+}
 ```
 
 In `tryCreatePlanningPreparationDeniedAudit`, after the audit create attempt block, emit failed activity:
 
 ```ts
-    await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Failed, {
-      summary: 'Plan preparation failed',
-    });
+await this.emitPlanningActivity(session, AgentSessionActivityEventStatus.Failed, {
+  summary: 'Plan preparation failed',
+});
 ```
 
 Add this helper near `redactRequestMetadata`:
@@ -572,7 +590,7 @@ Add this helper near `redactRequestMetadata`:
 In `redactRequestMetadata`, inside `if (handleDerived)`, set:
 
 ```ts
-      metadata.sourceSummaries = this.buildSourceSummaries(request.selectionHandles);
+metadata.sourceSummaries = this.buildSourceSummaries(request.selectionHandles);
 ```
 
 Keep the existing sampled `assetIds`, `assetIdsSample`, and `selectionHandles` fields so existing audit consumers remain compatible; the new `sourceSummaries` is the compact, ID-light metadata field for activity/debug surfaces.
@@ -601,6 +619,7 @@ git commit -m "feat(server): record source planning activity"
 ### Task 3: Final Verification And Push
 
 **Files:**
+
 - No additional source edits expected.
 
 - [ ] **Step 1: Run focused web verification**
