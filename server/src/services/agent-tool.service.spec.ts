@@ -30,9 +30,9 @@ import { MachineLearningRepository } from 'src/repositories/machine-learning.rep
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
-import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -2914,11 +2914,16 @@ describe(AgentToolService.name, () => {
       updateId: newUuid(),
     };
     sessionRepository.getById.mockResolvedValue(session);
-    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })) as never, hasNextPage: false });
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
     selectionHandleRepository.create.mockResolvedValue(handle);
-    assetRepository.getAgentMetadataByIds.mockResolvedValue(assetIds.slice(0, 2).map((id) => makeMetadata(id)) as never);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(
+      assetIds.slice(0, 2).map((id) => makeMetadata(id)) as never,
+    );
 
     const result = await sut.searchAssets(auth, session.id, {
       filters: {},
@@ -2943,7 +2948,10 @@ describe(AgentToolService.name, () => {
     const assetIds = [newUuid(), newUuid()];
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
     sessionRepository.getById.mockResolvedValue(session);
-    searchRepository.searchMetadata.mockResolvedValue({ items: assetIds.map((id) => ({ id })) as never, hasNextPage: false });
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
 
