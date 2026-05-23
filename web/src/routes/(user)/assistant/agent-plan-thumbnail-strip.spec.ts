@@ -135,6 +135,22 @@ describe('AgentPlanThumbnailStrip', () => {
     expect(screen.queryByText('asset-005')).not.toBeInTheDocument();
   });
 
+  it('renders a mosaic variant with a larger first thumbnail and bounded overflow', () => {
+    render(AgentPlanThumbnailStrip, {
+      props: {
+        group: group(20),
+        variant: 'mosaic',
+        maxVisible: 7,
+      },
+    });
+
+    const strip = screen.getByTestId('agent-plan-thumbnail-strip');
+    const tiles = within(strip).getAllByTestId('agent-plan-thumbnail-tile');
+    expect(tiles).toHaveLength(7);
+    expect(tiles[0]).toHaveClass('sm:col-span-2', 'sm:row-span-2');
+    expect(within(strip).getByText('+13')).toBeInTheDocument();
+  });
+
   it('renders a compact no-preview fallback when affected assets have no representative thumbnail IDs', () => {
     render(AgentPlanThumbnailStrip, {
       props: {

@@ -40,6 +40,9 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_field_cover_thumbnail_alt: 'Cover photo option {index}',
     assistant_operation_field_reset: 'Reset {field}',
     assistant_operation_field_thumbnail_unavailable: 'Preview unavailable',
+    assistant_operation_photo_stage_title: 'Photos in this plan',
+    assistant_operation_photo_stage_review: 'Review photos',
+    assistant_operation_photo_stage_summary: '{count} selected trip photos',
     assistant_operation_thumbnail_alt: 'Photo preview {index} of {count}',
     assistant_operation_thumbnail_empty: '{count} photos without previews',
     assistant_operation_thumbnail_overflow: '+{count}',
@@ -187,6 +190,35 @@ describe('AgentPlanDestinationCard', () => {
     expect(screen.getByText('Add 2 photos')).toBeInTheDocument();
   });
 
+  it('puts photo evidence before change rows for photo-affecting plans', async () => {
+    const onOpenItemReview = vi.fn();
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: group(),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onToggleItem: vi.fn(),
+        onBulkSetItems: vi.fn(),
+        onSetOnlyItems: vi.fn(),
+        onResetItemSelection: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+        onOpenItemReview,
+      },
+    });
+
+    const stage = screen.getByTestId('agent-plan-photo-stage');
+    const addRow = screen.getByText('Add 2 photos');
+    expect(stage).toHaveTextContent('Photos in this plan');
+    expect(stage).toHaveTextContent('2 selected trip photos');
+    expect(stage.compareDocumentPosition(addRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await fireEvent.click(within(stage).getByRole('button', { name: 'Review photos' }));
+
+    expect(onOpenItemReview).toHaveBeenCalledWith(addId);
+  });
+
   it('renders bounded thumbnails for a destination with 1,000 affected photos', () => {
     const largeAssetIds = Array.from({ length: 1000 }, (_, index) => `large-asset-${index + 1}`);
     const largeGroup = buildOperationReviewModel(
@@ -216,9 +248,9 @@ describe('AgentPlanDestinationCard', () => {
     });
 
     const thumbnailStrip = screen.getByTestId('agent-plan-thumbnail-strip');
-    expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(6);
-    expect(within(thumbnailStrip).getByText('+994')).toBeInTheDocument();
-    expect(screen.queryByText('large-asset-7')).not.toBeInTheDocument();
+    expect(within(thumbnailStrip).getAllByTestId('agent-plan-thumbnail-image')).toHaveLength(7);
+    expect(within(thumbnailStrip).getByText('+993')).toBeInTheDocument();
+    expect(screen.queryByText('large-asset-8')).not.toBeInTheDocument();
     expect(screen.queryByText('large-asset-13')).not.toBeInTheDocument();
   });
 
