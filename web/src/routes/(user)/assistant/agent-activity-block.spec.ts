@@ -449,6 +449,11 @@ describe(AgentActivityBlock.name, () => {
     expect(block).toHaveTextContent('12 items');
     expect(block).not.toHaveTextContent('proposeAlbumOperations');
     expect(screen.getByRole('button', { name: 'Technical details' })).toBeInTheDocument();
+
+    const rail = block.querySelector('[data-activity-rail]');
+    const firstRow = block.querySelector('[data-activity-row]');
+    expect(rail).toBeInTheDocument();
+    expect(firstRow?.className).toContain('rounded-2xl');
   });
 
   it('keeps technical details hidden in compact mode even when rows have metadata', () => {
