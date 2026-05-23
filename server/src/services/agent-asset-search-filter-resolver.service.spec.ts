@@ -598,25 +598,27 @@ describe(AgentAssetSearchFilterResolverService.name, () => {
     const firstSpacePersonId = newUuid();
     const secondSpacePersonId = newUuid();
     sharedSpaceRepository.getAllByUserId.mockResolvedValue([{ id: spaceId, name: 'Family' }] as never);
-    searchRepository.getFilterSuggestions.mockImplementation(async (_userIds, scope) =>
-      scope?.spaceId === spaceId
-        ? filterSuggestions({
-            people: [
-              {
-                id: newUuid(),
-                name: 'Pierre',
-                primaryProfile: { type: 'space-person', id: firstSpacePersonId, spaceId },
-              },
-              {
-                id: newUuid(),
-                name: 'Pierre',
-                primaryProfile: { type: 'space-person', id: secondSpacePersonId, spaceId },
-              },
-            ],
-            tags: [],
-            cameraMakes: [],
-          })
-        : filterSuggestions({ people: [], tags: [], cameraMakes: [] }),
+    searchRepository.getFilterSuggestions.mockImplementation((_userIds, scope) =>
+      Promise.resolve(
+        scope?.spaceId === spaceId
+          ? filterSuggestions({
+              people: [
+                {
+                  id: newUuid(),
+                  name: 'Pierre',
+                  primaryProfile: { type: 'space-person', id: firstSpacePersonId, spaceId },
+                },
+                {
+                  id: newUuid(),
+                  name: 'Pierre',
+                  primaryProfile: { type: 'space-person', id: secondSpacePersonId, spaceId },
+                },
+              ],
+              tags: [],
+              cameraMakes: [],
+            })
+          : filterSuggestions({ people: [], tags: [], cameraMakes: [] }),
+      ),
     );
 
     const ambiguous = await sut.resolveDeclarativeFilters(auth, session, {

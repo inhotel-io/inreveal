@@ -733,7 +733,7 @@ export const AgentResolvedAssetSearchFilterResultSchema = z
     message: z.string(),
   })
   .superRefine((result, ctx) => {
-    result.choices.forEach((choice, index) => {
+    for (const [index, choice] of result.choices.entries()) {
       if (choice.choiceRef && getAgentChoiceRefKind(choice.choiceRef) !== result.kind) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -741,7 +741,7 @@ export const AgentResolvedAssetSearchFilterResultSchema = z
           message: 'choiceRef kind must match result kind',
         });
       }
-    });
+    }
   })
   .meta({ id: 'AgentResolvedAssetSearchFilterResult' });
 

@@ -1339,7 +1339,7 @@ export class AgentOperationPlanService {
         hint: 'Ask the user to clarify the search filters, then retry with a narrower assetSource.search.',
         recovery: {
           kind: 'asset_search_filters_need_clarification',
-          filterKeys: Object.keys(declarativeFilters).sort(),
+          filterKeys: Object.keys(declarativeFilters).toSorted(),
           instruction: 'Ask the user to clarify the search filters, then retry with a narrower assetSource.search.',
         },
       });
@@ -3030,7 +3030,7 @@ export class AgentOperationPlanService {
         kind: AgentSessionActivityEventKind.PlanComposing,
         status,
         summary: options.summary,
-        ...(total !== undefined ? { counts: { total } } : {}),
+        ...(total === undefined ? {} : { counts: { total } }),
       });
     } catch {
       // Activity events are visibility hints and must not block planning.
@@ -3160,8 +3160,8 @@ export class AgentOperationPlanService {
     }
 
     return selectionHandles.map((handle) => {
-      const filterKeys = handle.declarativeFilters ? Object.keys(handle.declarativeFilters).sort() : undefined;
-      const resolvedFilterKeys = handle.resolvedFilters ? Object.keys(handle.resolvedFilters).sort() : undefined;
+      const filterKeys = handle.declarativeFilters ? Object.keys(handle.declarativeFilters).toSorted() : undefined;
+      const resolvedFilterKeys = handle.resolvedFilters ? Object.keys(handle.resolvedFilters).toSorted() : undefined;
 
       return {
         sourceKind: handle.sourceKind ?? 'selectionHandle',

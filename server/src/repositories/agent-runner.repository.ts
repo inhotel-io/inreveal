@@ -142,7 +142,7 @@ const isMessageBlock = (value: unknown): boolean => {
       isBoundedTrimmedString(block.summary, 1, 1000) &&
       isBoundedTrimmedString(block.textFallback, 1, 1000) &&
       Array.isArray(block.choices) &&
-      block.choices.length >= 1 &&
+      block.choices.length > 0 &&
       block.choices.length <= 10 &&
       block.choices.every((choice) => {
         const normalizedChoice = objectRecord(choice);
@@ -168,7 +168,7 @@ const isMessageContent = (value: unknown): boolean => {
   const content = objectRecord(value);
   return (
     Array.isArray(content.blocks) &&
-    content.blocks.length >= 1 &&
+    content.blocks.length > 0 &&
     content.blocks.length <= 100 &&
     jsonByteLength(content) <= MAX_CONTENT_BYTES &&
     content.blocks.every((block) => isMessageBlock(block))
