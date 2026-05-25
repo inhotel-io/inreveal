@@ -67,6 +67,14 @@ const makeSpaceCreateOperation = (temporaryTargetId = 'tmp-family-space') => ({
   payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
 });
 
+const makeAssetUpdateMetadataOperation = (payload: Record<string, unknown>) => ({
+  type: AgentOperationType.AssetUpdateMetadata,
+  summary: 'Update selected photo metadata.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  payload,
+});
+
 const parsePlan = (input: unknown) => AgentProposeAlbumOperationsDto.schema.safeParse(input);
 
 describe('Agent operation DTOs', () => {
@@ -406,6 +414,13 @@ describe('Agent operation DTOs', () => {
           payload: { archived: true },
         },
         {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Update photo metadata.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [firstAssetId],
+          payload: { description: 'Berlin weekend', rating: 5 },
+        },
+        {
           type: AgentOperationType.AssetAddTag,
           summary: 'Add an existing tag.',
           targetKind: AgentOperationTargetKind.AssetBatch,
@@ -423,6 +438,121 @@ describe('Agent operation DTOs', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  describe('asset.updateMetadata planning operations', () => {
+    it.each([
+      ['description', { description: 'Berlin weekend' }],
+      ['clear description', { description: '' }],
+      ['rating', { rating: 5 }],
+      ['clear rating', { rating: null }],
+      ['absolute datetime', { dateTimeOriginal: '1998-06-01T12:00:00.000Z' }],
+      ['relative datetime minutes', { dateTimeRelative: 120 }],
+      ['timezone', { timeZone: 'Europe/Berlin' }],
+      ['explicit coordinates', { latitude: 48.8566, longitude: 2.3522 }],
+      [
+        'combined metadata fields',
+        {
+          description: 'Paris scan',
+          rating: 4,
+          dateTimeOriginal: '1998-06-01T12:00:00.000Z',
+          timeZone: 'Europe/Paris',
+          latitude: 48.8566,
+          longitude: 2.3522,
+        },
+      ],
+    ])('accepts asset.updateMetadata with %s payload', (_name, payload) => {
+      const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Update selected photo metadata.',
+        operations: [makeAssetUpdateMetadataOperation(payload)],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0]).toMatchObject({
+          type: AgentOperationType.AssetUpdateMetadata,
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          payload,
+        });
+      }
+    });
+
+    it('trims non-empty asset.updateMetadata descriptions', () => {
+      const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Update selected photo metadata.',
+        operations: [makeAssetUpdateMetadataOperation({ description: '  Berlin weekend  ' })],
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0].payload).toMatchObject({ description: 'Berlin weekend' });
+      }
+    });
+
+    it('requires asset.updateMetadata to use an asset_batch target and one asset source mechanism', () => {
+      expectIssue(
+        AgentProposeAlbumOperationsDto.schema.safeParse({
+          summary: 'Invalid metadata target.',
+          operations: [
+            {
+              ...makeAssetUpdateMetadataOperation({ rating: 5 }),
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+            },
+          ],
+        }),
+        ['operations', 0, 'targetKind'],
+        'asset.updateMetadata requires an asset_batch target',
+      );
+
+      expectIssue(
+        AgentProposeAlbumOperationsDto.schema.safeParse({
+          summary: 'Invalid metadata selection.',
+          operations: [{ ...makeAssetUpdateMetadataOperation({ rating: 5 }), assetIds: undefined }],
+        }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it.each([
+      { name: 'empty payload', payload: {}, path: ['operations', 0, 'payload'], message: 'Provide at least one metadata field to update' },
+      { name: 'unknown placeName field', payload: { placeName: 'Paris' }, path: ['operations', 0, 'payload'], message: 'Unrecognized key' },
+      { name: 'unknown city field', payload: { city: 'Paris' }, path: ['operations', 0, 'payload'], message: 'Unrecognized key' },
+      { name: 'unknown country field', payload: { country: 'France' }, path: ['operations', 0, 'payload'], message: 'Unrecognized key' },
+      { name: 'unknown title field', payload: { title: 'Paris scan' }, path: ['operations', 0, 'payload'], message: 'Unrecognized key' },
+      { name: 'overlong description', payload: { description: 'a'.repeat(1001) }, path: ['operations', 0, 'payload', 'description'], message: 'Too big' },
+      { name: 'rating zero', payload: { rating: 0 }, path: ['operations', 0, 'payload', 'rating'], message: 'Invalid input' },
+      { name: 'negative rating', payload: { rating: -1 }, path: ['operations', 0, 'payload', 'rating'], message: 'Invalid input' },
+      { name: 'rating above five', payload: { rating: 6 }, path: ['operations', 0, 'payload', 'rating'], message: 'Invalid input' },
+      { name: 'invalid datetime', payload: { dateTimeOriginal: 'June 1998' }, path: ['operations', 0, 'payload', 'dateTimeOriginal'], message: 'Invalid ISO datetime' },
+      {
+        name: 'absolute and relative datetime',
+        payload: { dateTimeOriginal: '1998-06-01T12:00:00.000Z', dateTimeRelative: 60 },
+        path: ['operations', 0, 'payload'],
+        message: 'Choose dateTimeOriginal or dateTimeRelative, not both',
+      },
+      { name: 'relative datetime zero alone', payload: { dateTimeRelative: 0 }, path: ['operations', 0, 'payload', 'dateTimeRelative'], message: 'dateTimeRelative: 0 is a no-op unless another metadata field changes' },
+      { name: 'relative datetime non-integer', payload: { dateTimeRelative: 1.5 }, path: ['operations', 0, 'payload', 'dateTimeRelative'], message: 'Invalid input' },
+      { name: 'blank timezone', payload: { timeZone: '   ' }, path: ['operations', 0, 'payload', 'timeZone'], message: 'Invalid IANA time zone' },
+      { name: 'invalid timezone', payload: { timeZone: 'Berlin' }, path: ['operations', 0, 'payload', 'timeZone'], message: 'Invalid IANA time zone' },
+      { name: 'latitude without longitude', payload: { latitude: 48.8566 }, path: ['operations', 0, 'payload'], message: 'Provide both latitude and longitude' },
+      { name: 'longitude without latitude', payload: { longitude: 2.3522 }, path: ['operations', 0, 'payload'], message: 'Provide both latitude and longitude' },
+      { name: 'null latitude', payload: { latitude: null, longitude: 2.3522 }, path: ['operations', 0, 'payload', 'latitude'], message: 'Invalid input' },
+      { name: 'null longitude', payload: { latitude: 48.8566, longitude: null }, path: ['operations', 0, 'payload', 'longitude'], message: 'Invalid input' },
+      { name: 'latitude above range', payload: { latitude: 91, longitude: 2.3522 }, path: ['operations', 0, 'payload', 'latitude'], message: 'Too big' },
+      { name: 'longitude above range', payload: { latitude: 48.8566, longitude: 181 }, path: ['operations', 0, 'payload', 'longitude'], message: 'Too big' },
+      { name: 'non-finite coordinate', payload: { latitude: Number.POSITIVE_INFINITY, longitude: 2.3522 }, path: ['operations', 0, 'payload', 'latitude'], message: 'Invalid input' },
+    ])('rejects asset.updateMetadata with $name', ({ payload, path, message }) => {
+      expectIssue(
+        AgentProposeAlbumOperationsDto.schema.safeParse({
+          summary: 'Update selected photo metadata.',
+          operations: [makeAssetUpdateMetadataOperation(payload)],
+        }),
+        path,
+        message,
+      );
+    });
   });
 
   it('accepts shared-space member management operations for existing spaces', () => {
