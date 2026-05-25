@@ -1971,6 +1971,23 @@ const proposeAssetBatchFromSearchExamples: AgentMcpToolExample[] = [
     },
   },
   {
+    name: 'metadata-search-results',
+    description: 'Update metadata for all photos matching a declarative search.',
+    arguments: {
+      summary: 'Update matching Berlin photo metadata.',
+      action: {
+        type: AgentOperationType.AssetUpdateMetadata,
+        description: 'Berlin weekend',
+        timeZone: 'Europe/Berlin',
+      },
+      assetSource: {
+        kind: 'search',
+        filters: { city: 'Berlin', country: 'Germany' },
+        materialization: 'all-matches-with-limit',
+      },
+    },
+  },
+  {
     name: 'rotate-previous-search-results',
     description: 'Rotate photos from a previous search source reference after review.',
     arguments: {
@@ -1988,16 +2005,16 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAssetBatchFromSearch,
   title: 'Propose asset batch from search',
   description:
-    'preferred tool for proposing favorite, archive, tag, or rotate actions from a declarative or previous search source.',
+    'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a declarative or previous search source.',
   usage:
-    'Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.',
+    'Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.',
   argumentModes: [
     {
       name: 'asset-batch-from-search',
       description: 'Propose one supported asset batch action for matching search results.',
       requiredFields: ['action', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId', 'targetKind'],
-      whenToUse: 'Use for favorite, archive, unarchive, add tag, or rotate requests over search results.',
+      whenToUse: 'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.',
     },
   ],
   examples: proposeAssetBatchFromSearchExamples,
@@ -2011,7 +2028,7 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-workflow-unsupported-action',
       match: { issuePath: 'action.type', requestShape: 'tool-arguments' },
-      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, or asset.rotate with this workflow tool.',
+      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.',
       exampleName: 'favorite-search-results',
     },
   ],
