@@ -25,6 +25,25 @@ const setup = (db?: Kysely<DB>) => {
   return { ctx, sut: ctx.get(AssetRepository) };
 };
 
+const createTimelineAssetWithPeople = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  ownerId: string,
+  personIds: string[],
+  localDateTime = new Date('2026-03-15T12:00:00.000Z'),
+) => {
+  const { asset } = await ctx.newAsset({
+    ownerId,
+    visibility: AssetVisibility.Timeline,
+    fileCreatedAt: localDateTime,
+    localDateTime,
+  });
+  await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
+  for (const personId of personIds) {
+    await ctx.newAssetFace({ assetId: asset.id, personId, isVisible: true });
+  }
+  return asset;
+};
+
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
@@ -497,6 +516,52 @@ describe(AssetRepository.name, () => {
           .where('assetId', '=', asset.id)
           .executeTakeFirstOrThrow(),
       ).resolves.toEqual({ lockedProperties: null });
+    });
+  });
+
+  describe('people filters use AND semantics', () => {
+    it('requires every selected person for time bucket assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+
+      await createTimelineAssetWithPeople(ctx, user.id, [alice.id]);
+      await createTimelineAssetWithPeople(ctx, user.id, [bob.id]);
+      const both = await createTimelineAssetWithPeople(ctx, user.id, [alice.id, bob.id]);
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          personIds: [alice.id, bob.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([both.id]);
+    });
+
+    it('requires every selected person when counting time buckets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+
+      await createTimelineAssetWithPeople(ctx, user.id, [alice.id]);
+      await createTimelineAssetWithPeople(ctx, user.id, [bob.id]);
+      await createTimelineAssetWithPeople(ctx, user.id, [alice.id, bob.id]);
+
+      await expect(
+        sut.getTimeBuckets({
+          userIds: [user.id],
+          personIds: [alice.id, bob.id],
+          visibility: AssetVisibility.Timeline,
+        }),
+      ).resolves.toEqual([{ count: 1, timeBucket: '2026-03-01' }]);
     });
   });
 

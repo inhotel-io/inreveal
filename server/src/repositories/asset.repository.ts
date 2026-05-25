@@ -29,8 +29,8 @@ import {
   anyUuid,
   asUuid,
   hasAnyFaceIdentity,
-  hasAnyPerson,
   hasAnySpacePerson,
+  hasPeople,
   isStaleAssetForeignKeyConstraint,
   removeUndefinedKeys,
   truncatedDate,
@@ -946,7 +946,7 @@ export class AssetRepository {
               ]),
             ),
           )
-          .$if(!!options.personIds?.length, (qb) => hasAnyPerson(qb, options.personIds!))
+          .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
           .$if(!!options.spacePersonIds?.length, (qb) => hasAnySpacePerson(qb, options.spacePersonIds!))
           .$if(!!options.identityIds?.length, (qb) => hasAnyFaceIdentity(qb, options.identityIds!))
           .$if(!!options.withStacked, (qb) =>
@@ -1086,7 +1086,7 @@ export class AssetRepository {
               ]),
             ),
           )
-          .$if(!!options.personIds?.length, (qb) => hasAnyPerson(qb, options.personIds!))
+          .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
           .$if(!!options.spacePersonIds?.length, (qb) => hasAnySpacePerson(qb, options.spacePersonIds!))
           .$if(!!options.identityIds?.length, (qb) => hasAnyFaceIdentity(qb, options.identityIds!))
           .$if(!!options.city, (qb) => qb.where('asset_exif.city', '=', options.city!))
