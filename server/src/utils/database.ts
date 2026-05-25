@@ -260,6 +260,28 @@ export function hasAnySpacePerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spa
   );
 }
 
+export function hasSpacePeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spacePersonIds: string[]) {
+  if (spacePersonIds.length === 0) {
+    return qb;
+  }
+
+  return qb.where((eb) =>
+    eb.and(
+      spacePersonIds.map((spacePersonId) =>
+        eb.exists(
+          eb
+            .selectFrom('shared_space_person_face')
+            .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+            .whereRef('asset_face.assetId', '=', 'asset.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where('shared_space_person_face.personId', '=', asUuid(spacePersonId)),
+        ),
+      ),
+    ),
+  );
+}
+
 export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
   return qb.innerJoin(
     (eb) =>

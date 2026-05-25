@@ -28,9 +28,9 @@ import { AssetTable } from 'src/schema/tables/asset.table';
 import {
   anyUuid,
   asUuid,
-  hasAnyFaceIdentity,
-  hasAnySpacePerson,
+  hasFaceIdentities,
   hasPeople,
+  hasSpacePeople,
   isStaleAssetForeignKeyConstraint,
   removeUndefinedKeys,
   truncatedDate,
@@ -947,8 +947,8 @@ export class AssetRepository {
             ),
           )
           .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-          .$if(!!options.spacePersonIds?.length, (qb) => hasAnySpacePerson(qb, options.spacePersonIds!))
-          .$if(!!options.identityIds?.length, (qb) => hasAnyFaceIdentity(qb, options.identityIds!))
+          .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+          .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
           .$if(!!options.withStacked, (qb) =>
             qb
               .leftJoin('stack', (join) =>
@@ -1087,8 +1087,8 @@ export class AssetRepository {
             ),
           )
           .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-          .$if(!!options.spacePersonIds?.length, (qb) => hasAnySpacePerson(qb, options.spacePersonIds!))
-          .$if(!!options.identityIds?.length, (qb) => hasAnyFaceIdentity(qb, options.identityIds!))
+          .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+          .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
           .$if(!!options.city, (qb) => qb.where('asset_exif.city', '=', options.city!))
           .$if(!!options.country, (qb) => qb.where('asset_exif.country', '=', options.country!))
           .$if(!!options.make, (qb) => qb.where('asset_exif.make', '=', options.make!))
