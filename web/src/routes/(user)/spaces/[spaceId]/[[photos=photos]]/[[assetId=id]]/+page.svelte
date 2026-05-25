@@ -65,7 +65,6 @@
   import { loadHeroCollapsed, persistHeroCollapsed } from '$lib/utils/space-hero-storage';
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
   import {
-    clearTimelineTemporalFilter,
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,

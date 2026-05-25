@@ -4,6 +4,7 @@ import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { albumFactory } from '@test-data/factories/album-factory';
+import { timelineAssetFactory } from '@test-data/factories/asset-factory';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import '@testing-library/jest-dom';
@@ -310,6 +311,19 @@ describe('album detail filter panel route', () => {
     expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
     expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
+  });
+
+  it('ignores album bucket activation while selection mode is active', async () => {
+    renderPage();
+    assetMultiSelectManager.selectAsset(timelineAssetFactory.build({ id: 'selected-asset' }));
+
+    await userEvent.setup().click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
 
   it('explicit album timeline filters still show chips and clear without changing grouping', async () => {
