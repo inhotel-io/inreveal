@@ -1481,7 +1481,7 @@ describe(AgentOperationPlanService.name, () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
     const assetIds = [newUuid(), newUuid()];
-    const payload = { description: 'Berlin weekend', rating: 5 };
+    const payload = { description: 'Berlin weekend', rating: 5 as const };
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
@@ -5354,6 +5354,416 @@ describe(AgentOperationPlanService.name, () => {
       session.id,
       expect.objectContaining({ status: AgentSessionStatus.Completed }),
     );
+  });
+
+  it('applies asset.updateMetadata through AssetService.updateAll', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetIds = [newUuid(), newUuid()];
+    const payload = {
+      description: 'Berlin weekend',
+      rating: 5,
+      dateTimeOriginal: '1998-06-01T12:00:00.000Z',
+      timeZone: 'Europe/Berlin',
+      latitude: 52.52,
+      longitude: 13.405,
+    };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds,
+      payload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(result.appliedOperationIds).toEqual([operation.id]);
+    expect(assetService.updateAll).toHaveBeenCalledWith(auth, {
+      ids: assetIds,
+      description: 'Berlin weekend',
+      rating: 5,
+      dateTimeOriginal: '1998-06-01T12:00:00.000Z',
+      timeZone: 'Europe/Berlin',
+      latitude: 52.52,
+      longitude: 13.405,
+    });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Applied,
+        result: { assetIds },
+        error: null,
+      }),
+    ]);
+  });
+
+  it('applies asset.updateMetadata clear values without dropping them', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetIds = [newUuid()];
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds,
+      payload: { description: '', rating: null },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(assetService.updateAll).toHaveBeenCalledWith(auth, {
+      ids: assetIds,
+      description: '',
+      rating: null,
+    });
+  });
+
+  it('fails asset.updateMetadata with an invalid stored payload before calling AssetService.updateAll', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { dateTimeOriginal: '1998-06-01T12:00:00.000Z', dateTimeRelative: 60 },
+      summary: 'Set description.',
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.updateAll).not.toHaveBeenCalled();
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        error: 'Invalid asset metadata payload for Set description.',
+      }),
+    ]);
+  });
+
+  it('fails asset.updateMetadata with an invalid stored ISO date before calling AssetService.updateAll', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { dateTimeOriginal: 'June 1st, 1998' },
+      summary: 'Set capture date.',
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.updateAll).not.toHaveBeenCalled();
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        error: 'Invalid asset metadata payload for Set capture date.',
+      }),
+    ]);
+  });
+
+  it('applies asset.updateMetadata only to selected assets', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const keptAssetId = newUuid();
+    const removedAssetId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [keptAssetId, removedAssetId],
+      payload: { description: 'Kept only' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([keptAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([keptAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([keptAssetId]));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+
+    await expect(
+      sut.applyApprovedOperations(auth, session.id, plan.id, {
+        operationIds: [operation.id],
+        itemSelections: {
+          [operation.id]: { itemKind: 'asset', mode: 'only', itemIds: [keptAssetId] },
+        },
+      }),
+    ).resolves.toMatchObject({ status: AgentOperationApplyStatus.Applied });
+
+    expect(assetService.updateAll).toHaveBeenCalledWith(auth, { ids: [keptAssetId], description: 'Kept only' });
+  });
+
+  it('fails asset.updateMetadata when apply-time asset access no longer passes', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { rating: 4 },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual([operation.id]);
+    expect(assetService.updateAll).not.toHaveBeenCalled();
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        error: 'One or more assets are not editable',
+      }),
+    ]);
+  });
+
+  it('marks asset.updateMetadata failed when the bulk metadata update path throws', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetIds = [newUuid()];
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds,
+      payload: { latitude: 52.52, longitude: 13.405 },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetService.updateAll.mockRejectedValue(new Error('reverse geocode failed'));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: null,
+        error: 'reverse geocode failed',
+      }),
+    ]);
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+      endedAt: null,
+    });
+  });
+
+  it('continues applying sibling operations after asset.updateMetadata fails', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const metadataAssetId = newUuid();
+    const favoriteAssetId = newUuid();
+    const metadataOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      position: 0,
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [metadataAssetId],
+      payload: { description: 'Needs sidecar' },
+    });
+    const favoriteOperation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      position: 1,
+      type: AgentOperationType.AssetSetFavorite,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [favoriteAssetId],
+      payload: { favorite: true },
+    });
+    const plan = makePlan({
+      id: 'plan-id',
+      sessionId: session.id,
+      operations: [metadataOperation, favoriteOperation],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([metadataAssetId, favoriteAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([metadataAssetId, favoriteAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([metadataAssetId, favoriteAssetId]));
+    assetService.updateAll
+      .mockRejectedValueOnce(new Error('sidecar write failed'))
+      .mockResolvedValueOnce(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [metadataOperation.id, favoriteOperation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.PartiallyApplied);
+    expect(result.failedOperationIds).toEqual([metadataOperation.id]);
+    expect(result.appliedOperationIds).toEqual([favoriteOperation.id]);
+    expect(assetService.updateAll).toHaveBeenNthCalledWith(1, auth, {
+      ids: [metadataAssetId],
+      description: 'Needs sidecar',
+    });
+    expect(assetService.updateAll).toHaveBeenNthCalledWith(2, auth, {
+      ids: [favoriteAssetId],
+      isFavorite: true,
+    });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: metadataOperation.id,
+        status: AgentOperationStatus.Failed,
+        result: null,
+        error: 'sidecar write failed',
+      }),
+      expect.objectContaining({
+        id: favoriteOperation.id,
+        status: AgentOperationStatus.Applied,
+        result: { assetIds: [favoriteAssetId] },
+        error: null,
+      }),
+    ]);
   });
 
   it('emits aggregate apply progress activity events without exposing operation or asset ids', async () => {
