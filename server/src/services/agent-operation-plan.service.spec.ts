@@ -90,6 +90,7 @@ const expandedWriteScope = {
   favoriteAssets: true,
   archiveAssets: true,
   tagAssets: true,
+  updateAssetMetadata: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -3808,6 +3809,13 @@ describe(AgentOperationPlanService.name, () => {
         ],
       }),
     ).rejects.toThrow('Agent permission policy does not allow removing assets from albums');
+    expect((sut as any).normalizePermissionPlanSnapshot(legacyPermissionPlan).writeScope).toMatchObject({
+      removeAssets: false,
+      addMembersToSpaces: false,
+      removeMembersFromSpaces: false,
+      updateSpaceMemberRoles: false,
+      updateAssetMetadata: false,
+    });
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
