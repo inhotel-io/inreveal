@@ -34,9 +34,9 @@
   } from '$lib/utils/actions';
   import { buildMapTimelineOptions } from '$lib/utils/map-filter-options';
   import {
-    activateTimelineBucket,
     clearTimelineTemporalFilter,
     type ActivatableTimelineBucket,
+    getTimelineBucketZoomTarget,
   } from '$lib/utils/timeline-filter-navigation';
   import { ActionButton, CloseButton, CommandPaletteDefaultProvider, Icon } from '@immich/ui';
   import { mdiDotsVertical, mdiImageMultiple } from '@mdi/js';
@@ -101,12 +101,15 @@
   };
 
   const handleTimelineBucketActivate = (bucket: ActivatableTimelineBucket) => {
-    const result = activateTimelineBucket(filters, bucket);
+    if (assetMultiSelectManager.selectionActive) {
+      return;
+    }
+
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    filters = result.filters;
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
   };

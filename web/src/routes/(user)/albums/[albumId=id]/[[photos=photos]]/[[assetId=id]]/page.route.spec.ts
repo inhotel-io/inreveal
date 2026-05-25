@@ -274,33 +274,67 @@ describe('album detail filter panel route', () => {
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
 
-  it('clicking album year and month buckets syncs the album FilterPanel temporal state', async () => {
+  it('clicking album year and month buckets zooms without temporal chips', async () => {
     renderPage();
     const user = userEvent.setup();
 
     await user.click(screen.getByTestId('activate-year-bucket'));
     await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
-    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"albumId"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
 
     await user.click(screen.getByTestId('activate-month-bucket'));
     await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"day"'));
-    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"albumId"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
   });
 
-  it('clears album temporal chips while preserving non-time album filters and grouping', async () => {
+  it('album bucket activation preserves non-time album filters without adding temporal chips', async () => {
     renderPage();
     const user = userEvent.setup();
 
     await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
     await user.click(screen.getByTestId('people-item-person-view'));
     await user.click(screen.getByTestId('activate-year-bucket'));
-    await user.click(screen.getByRole('button', { name: 'Remove 2015 filter' }));
 
     await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
     expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
     expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('2015');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"albumId"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
+  });
+
+  it('explicit album timeline filters still show chips and clear without changing grouping', async () => {
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByTestId('timeline-grouping-month'));
+    await user.click(await screen.findByTestId('year-btn-2024'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2024');
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"takenBefore":"2025-01-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Remove 2024 filter' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+      expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
   });
 
   it('does not render browse grouping controls in album select-assets or select-thumbnail modes', async () => {

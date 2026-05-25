@@ -66,10 +66,10 @@
   import { isAlbumsRoute, navigate, type AssetGridRouteSearchParams } from '$lib/utils/navigation';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import {
-    activateTimelineBucket,
     clearTimelineTemporalFilter,
-    getTimelineManagerTimeBuckets,
     type ActivatableTimelineBucket,
+    getTimelineBucketZoomTarget,
+    getTimelineManagerTimeBuckets,
   } from '$lib/utils/timeline-filter-navigation';
   import { AlbumUserRole, getAlbumInfo, updateAlbumInfo, type AlbumResponseDto } from '@immich/sdk';
   import {
@@ -392,16 +392,15 @@
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (!isBrowseTimeline) {
+    if (!isBrowseTimeline || assetMultiSelectManager.selectionActive) {
       return;
     }
 
-    const result = activateTimelineBucket(albumFilters, bucket);
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    albumFilters = result.filters;
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
   }

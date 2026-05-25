@@ -161,30 +161,66 @@ describe('MapTimelinePanel grouping', () => {
     });
   });
 
-  it('year bucket activation updates panel temporal filters and anchors the map panel', async () => {
+  it('year bucket activation keeps map filters and anchors without temporal filters', async () => {
     renderPanel(createFilterState());
 
     await fireEvent.click(screen.getByTestId('activate-year-bucket'));
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2016-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
     });
   });
 
-  it('month bucket activation switches to day grouping and uses an exclusive month range', async () => {
+  it('month bucket activation keeps map filters and anchors without temporal filters', async () => {
     renderPanel(createFilterState());
 
     await fireEvent.click(screen.getByTestId('activate-month-bucket'));
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-08-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2015-09-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
+    });
+  });
+
+  it('explicit map temporal filters still show chips and clear without changing grouping', async () => {
+    renderPanel({ ...createFilterState(), selectedYear: 2015 });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2016-01-01T00:00:00.000Z"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove 2015 filter' }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  it('ignores map bucket activation while selection mode is active', async () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+    renderPanel(createFilterState());
+
+    await fireEvent.click(screen.getByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
     });
   });
 

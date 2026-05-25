@@ -65,8 +65,9 @@
   import { loadHeroCollapsed, persistHeroCollapsed } from '$lib/utils/space-hero-storage';
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
   import {
-    activateTimelineBucket,
+    clearTimelineTemporalFilter,
     type ActivatableTimelineBucket,
+    getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,
   } from '$lib/utils/timeline-filter-navigation';
   import {
@@ -183,11 +184,19 @@
   const initialFilterState = getSearchablePageFilterState(page.url);
   let filters = $state<FilterState>({
     ...createFilterState(),
+    dateAfter: undefined,
+    dateBefore: undefined,
+    selectedYear: undefined,
+    selectedMonth: undefined,
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   });
   let filtersBeforePanelChange: FilterState = {
     ...createFilterState(),
+    dateAfter: undefined,
+    dateBefore: undefined,
+    selectedYear: undefined,
+    selectedMonth: undefined,
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   };
@@ -836,19 +845,17 @@
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (viewMode !== 'view') {
+    if (viewMode !== 'view' || assetMultiSelectManager.selectionActive) {
       return;
     }
 
-    const result = activateTimelineBucket(filters, bucket);
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    filters = result.filters;
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    syncFilterUrl(result.filters);
   }
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
