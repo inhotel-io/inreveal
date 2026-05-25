@@ -392,6 +392,8 @@ DELETE FROM "kysely_migrations"
    '1778900000000-AddPersonFaceSuggestion',
    '1779000000000-AddSharedSpaceAlbumUserTables',
    '1779000000000-AddSpacePersonFaceSuggestion',
+   '1779000000000-AddSpacePersonFaceSuggestion',
+   '1779100000000-AddFaceSuggestionIntentStatuses',
    '1779100000000-AddSharedSpaceAlbumCreateSideTriggers',
    '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
