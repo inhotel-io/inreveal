@@ -6618,6 +6618,30 @@ export function dismissPersonFaceSuggestion({ assetFaceId, id }: {
     }));
 }
 /**
+ * Ignore a face suggestion
+ */
+export function ignorePersonFaceSuggestion({ assetFaceId, id }: {
+    assetFaceId: string;
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Reject a face suggestion
+ */
+export function rejectPersonFaceSuggestion({ assetFaceId, id }: {
+    assetFaceId: string;
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
  * Get person faces
  */
 export function getPersonFaces({ id, page, size }: {
@@ -8145,6 +8169,32 @@ export function dismissSpacePersonFaceSuggestion({ assetFaceId, id, personId }: 
     personId: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/dismiss`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Ignore a face suggestion for a person in a shared space
+ */
+export function ignoreSpacePersonFaceSuggestion({ assetFaceId, id, personId }: {
+    assetFaceId: string;
+    id: string;
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Reject a face suggestion for a person in a shared space
+ */
+export function rejectSpacePersonFaceSuggestion({ assetFaceId, id, personId }: {
+    assetFaceId: string;
+    id: string;
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
         ...opts,
         method: "POST"
     }));
