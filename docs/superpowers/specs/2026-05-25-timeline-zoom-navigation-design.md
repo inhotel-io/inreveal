@@ -84,7 +84,7 @@ Web already has the key separation point:
 - `TimelineTemporalAnchor` identifies the target year/month to scroll to after a grouping change.
 - `FilterState` represents real filters.
 
-The shared activation helper should return only a zoom target:
+The target shared zoom activation helper should return only a zoom target:
 
 ```ts
 type TimelineZoomActivationResult = {
@@ -94,6 +94,8 @@ type TimelineZoomActivationResult = {
 ```
 
 It should not accept or return `FilterState`.
+
+During migration, the existing filter-drilldown helper may remain for routes that have not yet moved to the zoom model. Slice 1 must introduce the new zoom helper without converting every caller. Slices 2, 3, and 4 must replace route and GalleryViewer call sites with the zoom helper. After the final web caller is migrated, the legacy filter-drilldown activation helper must be removed or reduced to explicit temporal-filter utilities only.
 
 Route handlers should:
 
@@ -183,7 +185,7 @@ Each slice must be independently shippable, tested, and reviewable. Do not mix i
 
 ### Slice 1: Shared Web Zoom Helper
 
-Create or revise the shared web activation helper so it returns only grouping and anchor. Keep explicit temporal filter helpers separate.
+Create the shared web zoom activation helper so it returns only grouping and anchor. Keep explicit temporal filter helpers separate. Existing filter-drilldown call sites may remain until their route slice migrates them.
 
 Acceptance criteria:
 
@@ -191,7 +193,8 @@ Acceptance criteria:
 - Month activation returns day grouping and `{ year, month }` anchor.
 - Day activation returns no result.
 - Malformed month buckets return no result.
-- No helper API accepts or returns `FilterState`.
+- The new zoom helper API does not accept or return `FilterState`.
+- Existing filter-drilldown helper call sites are not expanded and receive no new callers.
 
 ### Slice 2: Web Main Photos
 
@@ -289,6 +292,7 @@ Acceptance criteria:
 - Existing filter-model documentation is updated or superseded.
 - Web and mobile tests cover the same product rule.
 - No remaining test names claim bucket activation applies temporal filters.
+- No legacy web filter-drilldown activation helper remains after the web route and GalleryViewer slices finish.
 - Manual QA checklist covers the full zoom path and explicit filter path.
 
 ## TDD Requirement
