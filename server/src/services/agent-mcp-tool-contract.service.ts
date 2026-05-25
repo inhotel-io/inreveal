@@ -1390,6 +1390,54 @@ const planningProposalExamples: AgentMcpToolExample[] = [
     },
   },
   {
+    name: 'update-asset-description',
+    description: 'Update selected asset descriptions.',
+    arguments: {
+      summary: 'Update selected photo descriptions.',
+      operations: [
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Update selected photo descriptions.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [exampleAssetId],
+          payload: { description: 'Berlin weekend' },
+        },
+      ],
+    },
+  },
+  {
+    name: 'set-asset-rating',
+    description: 'Set selected asset ratings.',
+    arguments: {
+      summary: 'Set selected photo ratings.',
+      operations: [
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set selected photo ratings.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [exampleAssetId],
+          payload: { rating: 5 },
+        },
+      ],
+    },
+  },
+  {
+    name: 'set-asset-coordinates',
+    description: 'Set selected asset coordinates with explicit latitude and longitude.',
+    arguments: {
+      summary: 'Set selected photo coordinates.',
+      operations: [
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set selected photo coordinates.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [exampleAssetId],
+          payload: { latitude: 52.52, longitude: 13.405 },
+        },
+      ],
+    },
+  },
+  {
     name: 'add-tag-to-assets',
     description: 'Add a tag to selected assets.',
     arguments: {
@@ -1496,6 +1544,36 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
     exampleName: 'rename-existing-space',
   },
   {
+    id: 'planning-asset-metadata-unsupported-placename',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'placeName' },
+    hint: 'asset.updateMetadata does not accept placeName. Use explicit latitude and longitude together, or omit location metadata.',
+    exampleName: 'set-asset-coordinates',
+  },
+  {
+    id: 'planning-asset-metadata-unsupported-city',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'city' },
+    hint: 'asset.updateMetadata does not accept city. Use explicit latitude and longitude together, or omit location metadata.',
+    exampleName: 'set-asset-coordinates',
+  },
+  {
+    id: 'planning-asset-metadata-unsupported-country',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'country' },
+    hint: 'asset.updateMetadata does not accept country. Use explicit latitude and longitude together, or omit location metadata.',
+    exampleName: 'set-asset-coordinates',
+  },
+  {
+    id: 'planning-asset-metadata-unsupported-title',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'title' },
+    hint: 'asset.updateMetadata does not accept title. Use description for asset descriptive text.',
+    exampleName: 'update-asset-description',
+  },
+  {
+    id: 'planning-asset-metadata-missing-coordinate',
+    match: { issuePath: 'operations.0.payload', messageIncludes: 'Provide both latitude and longitude' },
+    hint: 'Location metadata must include both latitude and longitude as explicit coordinates.',
+    exampleName: 'set-asset-coordinates',
+  },
+  {
     id: 'planning-space-update-unsupported-fields',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'Unrecognized key' },
     hint: 'space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.',
@@ -1520,7 +1598,7 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'planning-wrong-asset-batch-target-kind',
     match: { messageIncludes: 'requires an asset_batch target' },
-    hint: 'Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.',
+    hint: 'Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.',
     exampleName: 'favorite-assets',
   },
   {

@@ -174,6 +174,7 @@ export enum AgentOperationType {
   AssetRotate = 'asset.rotate',
   AssetSetFavorite = 'asset.setFavorite',
   AssetSetArchive = 'asset.setArchive',
+  AssetUpdateMetadata = 'asset.updateMetadata',
   AssetAddTag = 'asset.addTag',
   AssetRemoveTag = 'asset.removeTag',
 }

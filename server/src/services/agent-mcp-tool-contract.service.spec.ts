@@ -64,6 +64,7 @@ const expectedPlanningOperationTypes = [
   AgentOperationType.AssetRotate,
   AgentOperationType.AssetSetFavorite,
   AgentOperationType.AssetSetArchive,
+  AgentOperationType.AssetUpdateMetadata,
   AgentOperationType.AssetAddTag,
   AgentOperationType.AssetRemoveTag,
 ] as const;
@@ -855,6 +856,31 @@ describe(AgentMcpToolContractService.name, () => {
     }
   });
 
+  it('defines parseable asset.updateMetadata planning examples', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const expected = [
+      { name: 'update-asset-description', payload: { description: 'Berlin weekend' } },
+      { name: 'set-asset-rating', payload: { rating: 5 } },
+      { name: 'set-asset-coordinates', payload: { latitude: 52.52, longitude: 13.405 } },
+    ];
+
+    for (const expectation of expected) {
+      const example = contract?.examples.find((candidate) => candidate.name === expectation.name);
+
+      expect(example, expectation.name).toBeDefined();
+      const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
+        example?.arguments,
+      );
+      expect(parsed.operations).toHaveLength(1);
+      expect(parsed.operations[0]).toMatchObject({
+        type: AgentOperationType.AssetUpdateMetadata,
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: ['00000000-0000-4000-8000-000000000001'],
+        payload: expectation.payload,
+      });
+    }
+  });
+
   it('covers every supported planning operation type with proposal examples', () => {
     const proposal = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations)!;
     const serializedExamples = JSON.stringify(proposal.examples.map((example) => example.arguments));
@@ -1462,9 +1488,41 @@ describe(AgentMcpToolContractService.name, () => {
       expect(correction).toMatchObject({
         mistakeId: 'planning-wrong-asset-batch-target-kind',
         issuePath: 'operations.0.targetKind',
-        hint: expect.stringContaining('asset_batch'),
+        hint: expect.stringMatching(/metadata update.*asset_batch/i),
         exampleArguments: expect.objectContaining({
           operations: [expect.objectContaining({ targetKind: AgentOperationTargetKind.AssetBatch })],
+        }),
+      });
+    });
+
+    it('returns asset metadata corrections for unsupported fields and missing coordinate pairs', () => {
+      for (const fieldName of ['placeName', 'city', 'country', 'title']) {
+        const correction = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+          requestShape: 'tool-arguments',
+          issues: [{ path: 'operations.0.payload', message: `Unrecognized key: "${fieldName}"` }],
+        });
+
+        expect(correction).toMatchObject({
+          mistakeId: `planning-asset-metadata-unsupported-${fieldName.toLowerCase()}`,
+          issuePath: 'operations.0.payload',
+          hint: expect.stringContaining(fieldName),
+          exampleArguments: expect.objectContaining({
+            operations: [expect.objectContaining({ type: AgentOperationType.AssetUpdateMetadata })],
+          }),
+        });
+      }
+
+      const coordinateCorrection = sut.getPlanningToolValidationCorrection(AgentToolName.ProposeAlbumOperations, {
+        requestShape: 'tool-arguments',
+        issues: [{ path: 'operations.0.payload', message: 'Provide both latitude and longitude' }],
+      });
+
+      expect(coordinateCorrection).toMatchObject({
+        mistakeId: 'planning-asset-metadata-missing-coordinate',
+        issuePath: 'operations.0.payload',
+        hint: expect.stringContaining('both latitude and longitude'),
+        exampleArguments: expect.objectContaining({
+          operations: [expect.objectContaining({ type: AgentOperationType.AssetUpdateMetadata })],
         }),
       });
     });

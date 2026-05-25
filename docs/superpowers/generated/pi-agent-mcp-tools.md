@@ -1941,6 +1941,76 @@ Archive selected assets.
 }
 ```
 
+#### update-asset-description
+
+Update selected asset descriptions.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="update-asset-description" -->
+
+```json
+{
+  "summary": "Update selected photo descriptions.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Update selected photo descriptions.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "description": "Berlin weekend"
+      }
+    }
+  ]
+}
+```
+
+#### set-asset-rating
+
+Set selected asset ratings.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="set-asset-rating" -->
+
+```json
+{
+  "summary": "Set selected photo ratings.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Set selected photo ratings.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "rating": 5
+      }
+    }
+  ]
+}
+```
+
+#### set-asset-coordinates
+
+Set selected asset coordinates with explicit latitude and longitude.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="set-asset-coordinates" -->
+
+```json
+{
+  "summary": "Set selected photo coordinates.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Set selected photo coordinates.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "latitude": 52.52,
+        "longitude": 13.405
+      }
+    }
+  ]
+}
+```
+
 #### add-tag-to-assets
 
 Add a tag to selected assets.
@@ -2510,6 +2580,82 @@ Revise a plan to archive selected assets.
 }
 ```
 
+#### revise-update-asset-description
+
+Revise a plan to update selected asset descriptions.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-update-asset-description" -->
+
+```json
+{
+  "planId": "<plan.id from proposed plan>",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Update selected photo descriptions.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Update selected photo descriptions.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "description": "Berlin weekend"
+      }
+    }
+  ]
+}
+```
+
+#### revise-set-asset-rating
+
+Revise a plan to set selected asset ratings.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-set-asset-rating" -->
+
+```json
+{
+  "planId": "<plan.id from proposed plan>",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Set selected photo ratings.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Set selected photo ratings.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "rating": 5
+      }
+    }
+  ]
+}
+```
+
+#### revise-set-asset-coordinates
+
+Revise a plan to set selected asset coordinates with explicit latitude and longitude.
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-set-asset-coordinates" -->
+
+```json
+{
+  "planId": "<plan.id from proposed plan>",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Set selected photo coordinates.",
+  "operations": [
+    {
+      "type": "asset.updateMetadata",
+      "summary": "Set selected photo coordinates.",
+      "targetKind": "asset_batch",
+      "assetIds": ["<asset-id-from-searchAssets>"],
+      "payload": {
+        "latitude": 52.52,
+        "longitude": 13.405
+      }
+    }
+  ]
+}
+```
+
 #### revise-add-tag-to-assets
 
 Revise a plan to add a tag to selected assets.
@@ -2734,10 +2880,15 @@ Summarize plan risks and selected changes.
 - `planning-existing-space-missing-target-id`: Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.
 - `planning-existing-space-with-temporary-target`: Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.
 - `planning-space-update-empty-payload`: space.updateDetails payload must include at least one of spaceName, description, or color.
+- `planning-asset-metadata-unsupported-placename`: asset.updateMetadata does not accept placeName. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-city`: asset.updateMetadata does not accept city. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-country`: asset.updateMetadata does not accept country. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-title`: asset.updateMetadata does not accept title. Use description for asset descriptive text.
+- `planning-asset-metadata-missing-coordinate`: Location metadata must include both latitude and longitude as explicit coordinates.
 - `planning-space-update-unsupported-fields`: space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.
 - `planning-space-update-missing-target-id`: Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.
 - `planning-direct-space-mutation`: Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.
-- `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
+- `planning-wrong-asset-batch-target-kind`: Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
 - `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
@@ -2757,10 +2908,15 @@ Summarize plan risks and selected changes.
 - `planning-existing-space-missing-target-id`: Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.
 - `planning-existing-space-with-temporary-target`: Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.
 - `planning-space-update-empty-payload`: space.updateDetails payload must include at least one of spaceName, description, or color.
+- `planning-asset-metadata-unsupported-placename`: asset.updateMetadata does not accept placeName. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-city`: asset.updateMetadata does not accept city. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-country`: asset.updateMetadata does not accept country. Use explicit latitude and longitude together, or omit location metadata.
+- `planning-asset-metadata-unsupported-title`: asset.updateMetadata does not accept title. Use description for asset descriptive text.
+- `planning-asset-metadata-missing-coordinate`: Location metadata must include both latitude and longitude as explicit coordinates.
 - `planning-space-update-unsupported-fields`: space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.
 - `planning-space-update-missing-target-id`: Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.
 - `planning-direct-space-mutation`: Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.
-- `planning-wrong-asset-batch-target-kind`: Favorite, archive, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
+- `planning-wrong-asset-batch-target-kind`: Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
 - `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
