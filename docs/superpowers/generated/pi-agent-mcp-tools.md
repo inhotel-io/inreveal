@@ -1359,13 +1359,13 @@ Add matching photos to a uniquely named visible shared space.
 
 MCP tool name: `proposeAssetBatchFromSearch`
 
-preferred tool for proposing favorite, archive, tag, or rotate actions from a declarative or previous search source.
+preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a declarative or previous search source.
 
-Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.
+Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.
 
 Argument modes:
 
-- `asset-batch-from-search`: Use for favorite, archive, unarchive, add tag, or rotate requests over search results.
+- `asset-batch-from-search`: Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.
   Required fields: `action`, `assetSource`.
   Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`, `targetKind`.
 
@@ -1434,6 +1434,31 @@ Tag all photos matching a declarative search.
     "kind": "search",
     "mode": "ocr",
     "query": "receipt",
+    "materialization": "all-matches-with-limit"
+  }
+}
+```
+
+#### metadata-search-results
+
+Update metadata for all photos matching a declarative search.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSearch" example="metadata-search-results" -->
+
+```json
+{
+  "summary": "Update matching Berlin photo metadata.",
+  "action": {
+    "type": "asset.updateMetadata",
+    "description": "Berlin weekend",
+    "timeZone": "Europe/Berlin"
+  },
+  "assetSource": {
+    "kind": "search",
+    "filters": {
+      "city": "Berlin",
+      "country": "Germany"
+    },
     "materialization": "all-matches-with-limit"
   }
 }
@@ -2866,7 +2891,7 @@ Summarize plan risks and selected changes.
 ### Propose asset batch from search
 
 - `asset-batch-workflow-raw-asset-ids`: Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.
-- `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, or asset.rotate with this workflow tool.
+- `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.
 
 ### Propose album operations
 
