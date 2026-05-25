@@ -90,7 +90,7 @@ Expected: all selected medium specs pass before new tests are added.
 
 - [ ] **Step 1: Write the failing `getTimeBucket()` user-person test**
 
-In `server/test/medium/specs/repositories/asset.repository.spec.ts`, inside the top-level `describe(AssetRepository.name)` block, add this helper near `interface TimeBucketAssets`:
+In `server/test/medium/specs/repositories/asset.repository.spec.ts`, add this module-scope helper near `interface TimeBucketAssets` and `setup()`:
 
 ```ts
 const createTimelineAssetWithPeople = async (
@@ -489,9 +489,9 @@ Expected: commit succeeds.
 - Modify: `server/test/medium/specs/repositories/asset.repository.spec.ts`
 - Modify: `server/src/utils/database.ts`
 
-- [ ] **Step 1: Write duplicate-ID tests for every people filter ID type**
+- [ ] **Step 1: Write the failing duplicate user-person ID test**
 
-Add these tests in `people filters use AND semantics`:
+Add this test in `people filters use AND semantics`:
 
 ```ts
 it('treats duplicate selected person ids as one selected person', async () => {
@@ -514,7 +514,78 @@ it('treats duplicate selected person ids as one selected person', async () => {
   const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
   expect(assets.id).toEqual([asset.id]);
 });
+```
 
+- [ ] **Step 2: Run the duplicate user-person ID test**
+
+Run:
+
+```bash
+pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/repositories/asset.repository.spec.ts -t "treats duplicate selected person ids as one selected person"
+```
+
+Expected: FAIL after Tasks 1 and 2 because `hasPeople()` compares `count(distinct personId)` to the raw array length, so duplicate person IDs become impossible.
+
+- [ ] **Step 3: Normalize IDs in people helpers**
+
+In `server/src/utils/database.ts`, add this helper near `anyUuid`:
+
+```ts
+const uniqueTruthyIds = (ids: string[] = []) => [...new Set(ids.filter(Boolean))];
+```
+
+Update `hasPeople()`, `hasAnyPerson()`, `hasFaceIdentities()`, `hasAnyFaceIdentity()`, `hasSpacePeople()`, and `hasAnySpacePerson()` to normalize first. `hasPeople()` must have this final shape:
+
+```ts
+export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: string[]) {
+  const ids = uniqueTruthyIds(personIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
+  return qb.innerJoin(
+    (eb) =>
+      eb
+        .selectFrom('asset_face')
+        .select('assetId')
+        .where('personId', '=', anyUuid(ids))
+        .where('deletedAt', 'is', null)
+        .where('isVisible', 'is', true)
+        .groupBy('assetId')
+        .having((eb) => eb.fn.count('personId').distinct(), '=', ids.length)
+        .as('has_people'),
+    (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
+  );
+}
+```
+
+Make these exact edits in each remaining helper:
+
+1. In `hasAnyPerson()`, add `const ids = uniqueTruthyIds(personIds);` as the first statement.
+2. In `hasFaceIdentities()` and `hasAnyFaceIdentity()`, add `const ids = uniqueTruthyIds(identityIds);` as the first statement.
+3. In `hasSpacePeople()` and `hasAnySpacePerson()`, add `const ids = uniqueTruthyIds(spacePersonIds);` as the first statement.
+4. Add `if (ids.length === 0) { return qb; }` immediately after it.
+5. In `hasAnyPerson()`, replace `anyUuid(personIds)` with `anyUuid(ids)`.
+6. In `hasFaceIdentities()` and `hasAnyFaceIdentity()`, replace `anyUuid(identityIds)` with `anyUuid(ids)`.
+7. In `hasAnySpacePerson()`, replace `anyUuid(spacePersonIds)` with `anyUuid(ids)`.
+8. In `hasSpacePeople()`, iterate over `ids` instead of `spacePersonIds`.
+9. Replace the `hasFaceIdentities()` count comparison with `.having((eb) => eb.fn.count('face_identity_face.identityId').distinct(), '=', ids.length)`.
+
+- [ ] **Step 4: Run the duplicate user-person ID test again**
+
+Run:
+
+```bash
+pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/repositories/asset.repository.spec.ts -t "treats duplicate selected person ids as one selected person"
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Add identity and space-person duplicate-ID regression coverage**
+
+Add these tests in `people filters use AND semantics`:
+
+```ts
 it('treats duplicate selected identity ids as one selected identity', async () => {
   const { ctx, sut } = setup();
   const faceIdentityRepository = ctx.get(FaceIdentityRepository);
@@ -571,62 +642,7 @@ it('treats duplicate selected space person ids as one selected space person', as
 });
 ```
 
-- [ ] **Step 2: Run the duplicate-ID tests**
-
-Run:
-
-```bash
-pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs run test/medium/specs/repositories/asset.repository.spec.ts -t "treats duplicate selected .* ids as one selected"
-```
-
-Expected: FAIL after Tasks 1 and 2 because `hasPeople()` compares `count(distinct personId)` to the raw array length and `hasFaceIdentities()` compares `count(distinct identityId)` to the raw array length, so duplicate person and identity IDs become impossible. The space-person duplicate test may already pass because repeated `EXISTS` predicates are logically equivalent, but it remains required coverage.
-
-- [ ] **Step 3: Normalize IDs in people helpers**
-
-In `server/src/utils/database.ts`, add this helper near `anyUuid`:
-
-```ts
-const uniqueTruthyIds = (ids: string[] = []) => [...new Set(ids.filter(Boolean))];
-```
-
-Update `hasPeople()`, `hasAnyPerson()`, `hasFaceIdentities()`, `hasAnyFaceIdentity()`, `hasSpacePeople()`, and `hasAnySpacePerson()` to normalize first. `hasPeople()` must have this final shape:
-
-```ts
-export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: string[]) {
-  const ids = uniqueTruthyIds(personIds);
-  if (ids.length === 0) {
-    return qb;
-  }
-
-  return qb.innerJoin(
-    (eb) =>
-      eb
-        .selectFrom('asset_face')
-        .select('assetId')
-        .where('personId', '=', anyUuid(ids))
-        .where('deletedAt', 'is', null)
-        .where('isVisible', 'is', true)
-        .groupBy('assetId')
-        .having((eb) => eb.fn.count('personId').distinct(), '=', ids.length)
-        .as('has_people'),
-    (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
-  );
-}
-```
-
-Make these exact edits in each remaining helper:
-
-1. In `hasAnyPerson()`, add `const ids = uniqueTruthyIds(personIds);` as the first statement.
-2. In `hasFaceIdentities()` and `hasAnyFaceIdentity()`, add `const ids = uniqueTruthyIds(identityIds);` as the first statement.
-3. In `hasSpacePeople()` and `hasAnySpacePerson()`, add `const ids = uniqueTruthyIds(spacePersonIds);` as the first statement.
-4. Add `if (ids.length === 0) { return qb; }` immediately after it.
-5. In `hasAnyPerson()`, replace `anyUuid(personIds)` with `anyUuid(ids)`.
-6. In `hasFaceIdentities()` and `hasAnyFaceIdentity()`, replace `anyUuid(identityIds)` with `anyUuid(ids)`.
-7. In `hasAnySpacePerson()`, replace `anyUuid(spacePersonIds)` with `anyUuid(ids)`.
-8. In `hasSpacePeople()`, iterate over `ids` instead of `spacePersonIds`.
-9. Replace the `hasFaceIdentities()` count comparison with `.having((eb) => eb.fn.count('face_identity_face.identityId').distinct(), '=', ids.length)`.
-
-- [ ] **Step 4: Run duplicate-ID tests again**
+- [ ] **Step 6: Run duplicate-ID regression tests**
 
 Run:
 
@@ -636,7 +652,7 @@ pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs run test
 
 Expected: PASS.
 
-- [ ] **Step 5: Add multiple-faces-same-person coverage**
+- [ ] **Step 7: Add multiple-faces-same-person coverage**
 
 Add this test in `people filters use AND semantics`:
 
@@ -664,7 +680,7 @@ it('counts multiple visible faces for the same person as one selected person', a
 });
 ```
 
-- [ ] **Step 6: Run all Task 3 tests**
+- [ ] **Step 8: Run all Task 3 tests**
 
 Run:
 
@@ -674,7 +690,7 @@ pnpm --filter immich exec vitest --config test/vitest.config.medium.mjs run test
 
 Expected: PASS. If the multiple-face test passes immediately, keep it as edge coverage.
 
-- [ ] **Step 7: Commit Task 3**
+- [ ] **Step 9: Commit Task 3**
 
 Run:
 
@@ -695,9 +711,9 @@ Expected: commit succeeds.
 - Modify: `server/src/utils/database.ts`
 - Modify: `server/src/repositories/search.repository.ts`
 
-- [ ] **Step 1: Write failing SQL-shape tests for search and suggestion builders**
+- [ ] **Step 1: Write SQL-shape tests for search and suggestion builders one at a time**
 
-In `server/src/repositories/search.repository.spec.ts`, add these tests.
+In `server/src/repositories/search.repository.spec.ts`, use the tests below as a queue. Add only one test, run it by exact title, make the smallest corresponding production change from Steps 3-5, rerun that same title, and then move to the next test. Do not paste the whole queue before seeing the first failing test.
 
 In the existing `describe('smart facets query shape')` block:
 
@@ -805,15 +821,21 @@ it('keeps mixed people categories cumulative by default', () => {
 });
 ```
 
-- [ ] **Step 2: Run the failing SQL-shape tests**
+- [ ] **Step 2: Run each SQL-shape test at the red and green points**
 
-Run:
+Run each command when its matching test is added:
 
 ```bash
-pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "space person filters emit one EXISTS|global person suggestion filters require every selected person|space person suggestion filters require every selected space person|searchAssetBuilder people semantics|empty people arrays|mixed people categories"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "space person filters emit one EXISTS per selected space person for smart facet totals"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "global person suggestion filters require every selected person"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "space person suggestion filters require every selected space person"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "uses AND semantics for space person filters by default"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "keeps personMatchAny as OR for identity and space person filters"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "does not apply people predicates for empty people arrays"
+pnpm --filter immich exec vitest --config test/vitest.config.mjs run src/repositories/search.repository.spec.ts -t "keeps mixed people categories cumulative by default"
 ```
 
-Expected: FAIL because current builders use `any(uuid[])` for space-person suggestions/facets, global suggestions use OR-style `EXISTS`, and `personMatchAny` does not include identity filters in a shared OR predicate. The empty-array and mixed-category tests may already pass; keep them as edge coverage.
+Expected red points: the smart facet, global suggestion, space suggestion, default space-person builder, and `personMatchAny` tests fail against current behavior. The empty-array and mixed-category tests may already pass; add them after the builder semantics are green and keep them as edge coverage.
 
 - [ ] **Step 3: Add reusable AND/OR people filter helpers**
 
@@ -847,7 +869,7 @@ export function hasAnyPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, filters:
   }
 
   return qb.where((eb) => {
-    const predicates: ReturnType<typeof eb.exists>[] = [];
+    const predicates: Expression<SqlBool>[] = [];
 
     if (personIds.length > 0) {
       predicates.push(
@@ -1033,6 +1055,7 @@ In `server/src/services/search.service.spec.ts`, add this test in the `searchMet
 ```ts
 it('deduplicates resolved scoped person filters before repository search', async () => {
   const token = `person:${newUuid()}`;
+  mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
   mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
   (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
     identityIds: ['00000000-0000-4000-8000-000000000010', '00000000-0000-4000-8000-000000000010'],
