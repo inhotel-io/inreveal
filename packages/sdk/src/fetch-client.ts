@@ -3207,7 +3207,7 @@ export type UserGroupMemberResponseDto = {
 };
 export type UserGroupResponseDto = {
     /** Group color */
-    color?: Color | null;
+    color?: (UserAvatarColor) | null;
     /** Creation date */
     createdAt: string;
     /** Group ID */
@@ -9125,18 +9125,6 @@ export enum OAuthTokenEndpointAuthMethod {
 export enum AssetOrderBy {
     TakenAt = "takenAt",
     CreatedAt = "createdAt"
-}
-export enum Color {
-    Primary = "primary",
-    Pink = "pink",
-    Red = "red",
-    Yellow = "yellow",
-    Blue = "blue",
-    Green = "green",
-    Purple = "purple",
-    Orange = "orange",
-    Gray = "gray",
-    Amber = "amber"
 }
 export enum UserMetadataKey {
     Preferences = "preferences",
