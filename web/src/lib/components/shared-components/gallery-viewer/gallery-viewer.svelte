@@ -11,7 +11,12 @@
   import type { AssetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
-  import type { TimelineAsset, TimelineGrouping, Viewport } from '$lib/managers/timeline-manager/types';
+  import type {
+    TimelineAsset,
+    TimelineGrouping,
+    TimelineTemporalAnchor,
+    Viewport,
+  } from '$lib/managers/timeline-manager/types';
   import AssetDeleteConfirmModal from '$lib/modals/AssetDeleteConfirmModal.svelte';
   import ShortcutsModal from '$lib/modals/ShortcutsModal.svelte';
   import { Route } from '$lib/route';
@@ -20,7 +25,7 @@
   import { deleteAssets } from '$lib/utils/actions';
   import { archiveAssets, getNextAsset, getPreviousAsset, navigateToAsset } from '$lib/utils/asset-utils';
   import { moveFocus } from '$lib/utils/focus-util';
-  import { buildGalleryViewerBuckets } from '$lib/utils/gallery-viewer-grouping';
+  import { buildGalleryViewerBuckets, getGalleryViewerAssetDate } from '$lib/utils/gallery-viewer-grouping';
   import { handleError } from '$lib/utils/handle-error';
   import { getJustifiedLayoutFromAssets } from '$lib/utils/layout-utils';
   import { navigate } from '$lib/utils/navigation';
@@ -66,6 +71,8 @@
   }: Props = $props();
 
   let galleryGrouping = $state<TimelineGrouping>('day');
+  let galleryTemporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let galleryViewerElement: HTMLElement | undefined = $state();
   let galleryBuckets = $derived(galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(assets, galleryGrouping));
   let showRepresentativeBuckets = $derived(enableGrouping && galleryGrouping !== 'day' && assets.length > 0);
   let showGalleryGroupingControls = $derived(
@@ -346,6 +353,7 @@
 
   const handleGalleryGroupingChange = (grouping: TimelineGrouping) => {
     galleryGrouping = grouping;
+    galleryTemporalAnchor = undefined;
   };
 
   const handleGalleryBucketActivate = (bucket: ActivatableTimelineBucket) => {
@@ -359,7 +367,46 @@
     }
 
     galleryGrouping = result.grouping;
+    galleryTemporalAnchor = result.anchor;
   };
+
+  const isCurrentGalleryAnchor = (anchor: TimelineTemporalAnchor, grouping: TimelineGrouping) =>
+    galleryGrouping === grouping &&
+    galleryTemporalAnchor?.year === anchor.year &&
+    galleryTemporalAnchor?.month === anchor.month;
+
+  const getGalleryAnchorSelector = (anchor: TimelineTemporalAnchor, grouping: TimelineGrouping) => {
+    if (grouping === 'month' && anchor.month === undefined) {
+      return `[data-gallery-bucket-year="${anchor.year}"]`;
+    }
+
+    if (grouping === 'day' && anchor.month !== undefined) {
+      return `[data-gallery-asset-year="${anchor.year}"][data-gallery-asset-month="${anchor.month}"]`;
+    }
+  };
+
+  $effect(() => {
+    const anchor = galleryTemporalAnchor;
+    const grouping = galleryGrouping;
+    const container = galleryViewerElement;
+    if (!anchor || !container) {
+      return;
+    }
+
+    const selector = getGalleryAnchorSelector(anchor, grouping);
+    if (!selector) {
+      galleryTemporalAnchor = undefined;
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const target = container.querySelector<HTMLElement>(selector);
+      target?.scrollIntoView({ block: 'start', inline: 'nearest' });
+      if (isCurrentGalleryAnchor(anchor, grouping)) {
+        galleryTemporalAnchor = undefined;
+      }
+    });
+  });
 
   $effect(() => {
     if (!lastAssetMouseEvent) {
@@ -394,69 +441,85 @@
   onscroll={() => updateSlidingWindow()}
 />
 
-{#if enableGrouping && assets.length > 0}
-  <TimelineRouteGroupingBar
-    grouping={galleryGrouping}
-    hidden={!showGalleryGroupingControls}
-    onGroupingChange={handleGalleryGroupingChange}
-  />
-{/if}
+<div bind:this={galleryViewerElement} data-testid="gallery-viewer">
+  {#if enableGrouping && assets.length > 0}
+    <TimelineRouteGroupingBar
+      grouping={galleryGrouping}
+      hidden={!showGalleryGroupingControls}
+      onGroupingChange={handleGalleryGroupingChange}
+    />
+  {/if}
 
-{#if showRepresentativeBuckets}
-  <div
-    class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 px-4 py-4"
-    data-testid="gallery-viewer-representative-buckets"
-    data-grouping={galleryGrouping}
-  >
-    {#each galleryBuckets as bucket (bucket.viewId)}
-      <TimelineBucketCard
-        {bucket}
-        disabled={assetInteraction.selectionActive}
-        onActivate={handleGalleryBucketActivate}
-      />
-    {/each}
-  </div>
-{:else if assets.length > 0}
-  <div
-    style:position="relative"
-    style:height={geometry.containerHeight + 'px'}
-    style:width={geometry.containerWidth + 'px'}
-  >
-    {#each assets as asset, i (asset.id + '-' + i)}
-      {#if isIntersecting(i)}
-        {@const currentAsset = toTimelineAsset(asset)}
-        <div class="absolute" style:overflow="clip" style={getStyle(i)}>
-          <Thumbnail
-            readonly={disableAssetSelect}
-            onClick={() => {
-              if (assetInteraction.selectionActive) {
-                handleSelectAssets(currentAsset);
-                return;
-              }
-              void navigateToAsset(asset);
-            }}
-            onSelect={() => handleSelectAssets(currentAsset)}
-            onPreview={assetInteraction.selectionActive ? () => void navigateToAsset(asset) : undefined}
-            onMouseEvent={() => assetMouseEventHandler(currentAsset)}
-            {showArchiveIcon}
-            asset={currentAsset}
-            selected={assetInteraction.hasSelectedAsset(currentAsset.id)}
-            selectionCandidate={assetInteraction.hasSelectionCandidate(currentAsset.id)}
-            thumbnailWidth={geometry.getWidth(i)}
-            thumbnailHeight={geometry.getHeight(i)}
+  {#if showRepresentativeBuckets}
+    <div
+      class="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 px-4 py-4"
+      data-testid="gallery-viewer-representative-buckets"
+      data-grouping={galleryGrouping}
+    >
+      {#each galleryBuckets as bucket (bucket.viewId)}
+        <div
+          data-testid={`gallery-viewer-bucket-anchor-${bucket.viewId}`}
+          data-gallery-bucket-year={bucket.date.year}
+          data-gallery-bucket-month={bucket.date.month ?? null}
+        >
+          <TimelineBucketCard
+            {bucket}
+            disabled={assetInteraction.selectionActive}
+            onActivate={handleGalleryBucketActivate}
           />
-          {#if showAssetName && !isTimelineAsset(asset)}
-            <div
-              class="absolute text-center p-1 text-xs font-mono font-semibold w-full bottom-0 bg-linear-to-t bg-slate-50/75 dark:bg-slate-800/75 overflow-clip text-ellipsis whitespace-pre-wrap"
-            >
-              {asset.originalFileName}
-            </div>
-          {/if}
         </div>
-      {/if}
-    {/each}
-  </div>
-{/if}
+      {/each}
+    </div>
+  {:else if assets.length > 0}
+    <div
+      style:position="relative"
+      style:height={geometry.containerHeight + 'px'}
+      style:width={geometry.containerWidth + 'px'}
+    >
+      {#each assets as asset, i (asset.id + '-' + i)}
+        {#if isIntersecting(i)}
+          {@const currentAsset = toTimelineAsset(asset)}
+          {@const assetDate = getGalleryViewerAssetDate(asset)}
+          <div
+            class="absolute"
+            style:overflow="clip"
+            style={getStyle(i)}
+            data-testid={`gallery-viewer-asset-anchor-${asset.id}`}
+            data-gallery-asset-year={assetDate?.year ?? null}
+            data-gallery-asset-month={assetDate?.month ?? null}
+          >
+            <Thumbnail
+              readonly={disableAssetSelect}
+              onClick={() => {
+                if (assetInteraction.selectionActive) {
+                  handleSelectAssets(currentAsset);
+                  return;
+                }
+                void navigateToAsset(asset);
+              }}
+              onSelect={() => handleSelectAssets(currentAsset)}
+              onPreview={assetInteraction.selectionActive ? () => void navigateToAsset(asset) : undefined}
+              onMouseEvent={() => assetMouseEventHandler(currentAsset)}
+              {showArchiveIcon}
+              asset={currentAsset}
+              selected={assetInteraction.hasSelectedAsset(currentAsset.id)}
+              selectionCandidate={assetInteraction.hasSelectionCandidate(currentAsset.id)}
+              thumbnailWidth={geometry.getWidth(i)}
+              thumbnailHeight={geometry.getHeight(i)}
+            />
+            {#if showAssetName && !isTimelineAsset(asset)}
+              <div
+                class="absolute text-center p-1 text-xs font-mono font-semibold w-full bottom-0 bg-linear-to-t bg-slate-50/75 dark:bg-slate-800/75 overflow-clip text-ellipsis whitespace-pre-wrap"
+              >
+                {asset.originalFileName}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      {/each}
+    </div>
+  {/if}
+</div>
 
 <!-- Overlay Asset Viewer -->
 {#if assetViewerManager.isViewing}

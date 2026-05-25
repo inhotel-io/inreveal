@@ -154,6 +154,49 @@ function renderViewer({
   );
 }
 
+function createAnimationFrameQueue() {
+  const callbacks: FrameRequestCallback[] = [];
+  const originalRequestAnimationFrame = window.requestAnimationFrame;
+  const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    callbacks.push(callback);
+    return callbacks.length;
+  });
+  window.requestAnimationFrame = requestAnimationFrame;
+
+  return {
+    requestAnimationFrame,
+    async flush() {
+      while (callbacks.length > 0) {
+        callbacks.shift()?.(performance.now());
+        await Promise.resolve();
+      }
+    },
+    restore() {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+    },
+  };
+}
+
+function trackScrolledElement() {
+  let scrolledElement: Element | undefined;
+  const originalScrollIntoView = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
+    scrolledElement = this;
+  });
+
+  return {
+    get scrolledElement() {
+      return scrolledElement;
+    },
+    reset() {
+      scrolledElement = undefined;
+    },
+    restore() {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    },
+  };
+}
+
 function defaultAssets() {
   return [
     asset('asset-2016', '2016-01-02T00:00:00.000Z'),
@@ -231,6 +274,85 @@ describe('GalleryViewer grouping', () => {
     });
 
     expect(assets.map((asset) => asset.id)).toEqual(['asset-2016', 'asset-2015-aug', 'asset-2015-jan']);
+  });
+
+  it('anchors year and month zooms to the first matching local bucket or asset', async () => {
+    const frameQueue = createAnimationFrameQueue();
+    const scrollTracker = trackScrolledElement();
+
+    try {
+      renderViewer();
+
+      await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+      await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+
+      await waitFor(() => expect(frameQueue.requestAnimationFrame).toHaveBeenCalled());
+      await frameQueue.flush();
+
+      await waitFor(() => {
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-bucket-year', '2015');
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-bucket-month', '8');
+        expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      frameQueue.requestAnimationFrame.mockClear();
+      scrollTracker.reset();
+
+      await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
+
+      await waitFor(() => expect(frameQueue.requestAnimationFrame).toHaveBeenCalled());
+      await frameQueue.flush();
+
+      await waitFor(() => {
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-year', '2015');
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-month', '8');
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-testid', 'gallery-viewer-asset-anchor-asset-2015-aug');
+        expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+      });
+    } finally {
+      frameQueue.restore();
+      scrollTracker.restore();
+    }
+  });
+
+  it('keeps remaining local assets available when the tapped period disappears before anchor resolution', async () => {
+    const frameQueue = createAnimationFrameQueue();
+    const scrollTracker = trackScrolledElement();
+    const assets = defaultAssets();
+
+    try {
+      const view = renderViewer({ assets });
+
+      await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+      await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+
+      await waitFor(() => {
+        expect(frameQueue.requestAnimationFrame).toHaveBeenCalled();
+        expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      await view.rerender({
+        component: GalleryViewer,
+        componentProps: {
+          assets: [assets[0]],
+          assetInteraction: mockAssetInteraction,
+          viewport: { width: 900, height: 700 },
+          enableGrouping: true,
+        },
+      });
+      await frameQueue.flush();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+        expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getAllByTestId('timeline-bucket-card')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: /Jan 2016, 1 photo/i })).toBeInTheDocument();
+      });
+      expect(scrollTracker.scrolledElement).toBeUndefined();
+    } finally {
+      frameQueue.restore();
+      scrollTracker.restore();
+    }
   });
 
   it('keeps single-asset GalleryViewer grids in normal day mode', () => {
