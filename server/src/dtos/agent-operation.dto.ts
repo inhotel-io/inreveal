@@ -14,7 +14,7 @@ import {
 } from 'src/enum';
 import type { AgentAssetSourceInput } from 'src/types/agent-asset-source.types';
 import { validateAgentAssetSourceMechanismCount } from 'src/types/agent-asset-source.types';
-import { isoDatetimeToDate } from 'src/validation';
+import { isoDatetimeToDate, latitudeSchema, longitudeSchema } from 'src/validation';
 import z from 'zod';
 
 const uuid = z.uuidv4();
@@ -413,6 +413,76 @@ const assetSetFavoritePayloadSchema = z.strictObject({ favorite: z.boolean() });
 
 const assetSetArchivePayloadSchema = z.strictObject({ archived: z.boolean() });
 
+const ianaTimeZoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (timeZone) => {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Invalid IANA time zone' },
+  );
+
+const assetUpdateMetadataPayloadSchema = z
+  .strictObject({
+    description: z
+      .string()
+      .trim()
+      .max(1000)
+      .optional()
+      .describe('Asset description. Use an empty string to clear the description.'),
+    rating: z
+      .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.null()])
+      .optional()
+      .describe('Asset star rating from 1 to 5. Use null to clear the rating.'),
+    dateTimeOriginal: z.iso.datetime().optional().describe('Absolute original capture date/time as an ISO datetime.'),
+    dateTimeRelative: z
+      .number()
+      .int()
+      .optional()
+      .describe('Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.'),
+    timeZone: ianaTimeZoneSchema.optional().describe('IANA time zone such as Europe/Berlin.'),
+    latitude: latitudeSchema.optional().describe('Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
+    longitude: longitudeSchema.optional().describe('Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
+  })
+  .superRefine((payload, ctx) => {
+    const hasMetadataField = Object.values(payload).some((value) => value !== undefined);
+    if (!hasMetadataField) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one metadata field to update',
+      });
+    }
+
+    if (payload.dateTimeOriginal !== undefined && payload.dateTimeRelative !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Choose dateTimeOriginal or dateTimeRelative, not both',
+      });
+    }
+
+    if (payload.dateTimeRelative === 0 && Object.values(payload).filter((value) => value !== undefined).length === 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dateTimeRelative'],
+        message: 'dateTimeRelative: 0 is a no-op unless another metadata field changes',
+      });
+    }
+
+    if (Number(payload.latitude !== undefined) + Number(payload.longitude !== undefined) === 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide both latitude and longitude',
+      });
+    }
+  });
+
 const assetAddTagPayloadSchema = z
   .strictObject({
     tagId: uuid.optional(),
@@ -453,6 +523,22 @@ const setArchiveOperationSchema = z
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetArchive);
+  });
+
+const updateMetadataOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetUpdateMetadata).meta({ id: 'AgentAssetUpdateMetadataOperationType' }),
+    ...assetBatchBase,
+    targetKind: z
+      .literal(AgentOperationTargetKind.AssetBatch, {
+        error: 'asset.updateMetadata requires an asset_batch target',
+      })
+      .meta({ id: 'AgentAssetUpdateMetadataTargetKind' }),
+    payload: assetUpdateMetadataPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetUpdateMetadata);
   });
 
 const addTagOperationSchema = z
@@ -506,6 +592,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   rotateOperationSchema,
   setFavoriteOperationSchema,
   setArchiveOperationSchema,
+  updateMetadataOperationSchema,
   addTagOperationSchema,
   removeTagOperationSchema,
 ]);

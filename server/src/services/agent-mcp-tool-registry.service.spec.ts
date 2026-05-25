@@ -101,6 +101,62 @@ const getSchemaDefinition = (schema: Record<string, unknown>, name: string) => {
   return definitions?.[name];
 };
 
+const resolveJsonSchemaRef = (root: unknown, ref: string): unknown => {
+  if (!ref.startsWith('#/$defs/') || !root || typeof root !== 'object') {
+    return undefined;
+  }
+
+  const definitions = (root as Record<string, unknown>).$defs as Record<string, unknown> | undefined;
+  return definitions?.[ref.replace('#/$defs/', '')];
+};
+
+const findOperationSchema = (
+  value: unknown,
+  operationType: AgentOperationType,
+  root: unknown = value,
+  seenRefs = new Set<string>(),
+): Record<string, unknown> | undefined => {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const match = findOperationSchema(item, operationType, root, seenRefs);
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.$ref === 'string' && !seenRefs.has(record.$ref)) {
+    seenRefs.add(record.$ref);
+    return findOperationSchema(resolveJsonSchemaRef(root, record.$ref), operationType, root, seenRefs);
+  }
+
+  const properties = record.properties as Record<string, unknown> | undefined;
+  const type = properties?.type as Record<string, unknown> | undefined;
+  const resolvedType =
+    typeof type?.$ref === 'string' ? (resolveJsonSchemaRef(root, type.$ref) as Record<string, unknown> | undefined) : type;
+  if (
+    resolvedType?.const === operationType ||
+    (Array.isArray(resolvedType?.enum) && resolvedType.enum.includes(operationType))
+  ) {
+    return record;
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    const match = findOperationSchema(nestedValue, operationType, root, seenRefs);
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+};
+
 describe(AgentMcpToolRegistryService.name, () => {
   let contractService: AgentMcpToolContractService;
   let sut: AgentMcpToolRegistryService;
@@ -656,12 +712,59 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(planningSchemaJson).toContain(AgentOperationType.AssetRotate);
     expect(planningSchemaJson).toContain(AgentOperationType.AssetSetFavorite);
     expect(planningSchemaJson).toContain(AgentOperationType.AssetSetArchive);
+    expect(planningSchemaJson).toContain(AgentOperationType.AssetUpdateMetadata);
     expect(planningSchemaJson).toContain(AgentOperationType.AssetAddTag);
     expect(planningSchemaJson).toContain(AgentOperationType.AssetRemoveTag);
+    expect(planningSchemaJson).toContain('dateTimeRelative');
+    expect(planningSchemaJson).toContain('integer minute offset');
+    expect(planningSchemaJson).toContain('place names are not accepted');
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.NewSpace);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ExistingSpace);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.AssetBatch);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ImageEditBatch);
+  });
+
+  it('publishes a closed-world asset.updateMetadata payload schema with only supported metadata fields', () => {
+    const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+    const operationSchema = findOperationSchema(proposal?.inputSchema, AgentOperationType.AssetUpdateMetadata);
+    const payloadSchema = (operationSchema?.properties as Record<string, unknown> | undefined)?.payload as
+      | Record<string, unknown>
+      | undefined;
+    const payloadProperties = payloadSchema?.properties as Record<string, unknown> | undefined;
+    const rawTargetKindSchema = (operationSchema?.properties as Record<string, unknown> | undefined)?.targetKind as
+      | Record<string, unknown>
+      | undefined;
+    const targetKindSchema =
+      typeof rawTargetKindSchema?.$ref === 'string'
+        ? (resolveJsonSchemaRef(proposal?.inputSchema, rawTargetKindSchema.$ref) as Record<string, unknown> | undefined)
+        : rawTargetKindSchema;
+
+    expect(operationSchema).toBeDefined();
+    expect(targetKindSchema).toEqual(
+      expect.objectContaining({
+        const: AgentOperationTargetKind.AssetBatch,
+      }),
+    );
+    expect(payloadSchema).toMatchObject({ additionalProperties: false });
+    expect(payloadProperties).toEqual(
+      expect.objectContaining({
+        description: expect.any(Object),
+        rating: expect.any(Object),
+        dateTimeOriginal: expect.any(Object),
+        dateTimeRelative: expect.any(Object),
+        timeZone: expect.any(Object),
+        latitude: expect.any(Object),
+        longitude: expect.any(Object),
+      }),
+    );
+    expect(payloadProperties).not.toEqual(
+      expect.objectContaining({
+        placeName: expect.anything(),
+        city: expect.anything(),
+        country: expect.anything(),
+        title: expect.anything(),
+      }),
+    );
   });
 
   it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
