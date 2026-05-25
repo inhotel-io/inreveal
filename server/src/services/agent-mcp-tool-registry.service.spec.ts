@@ -767,6 +767,21 @@ describe(AgentMcpToolRegistryService.name, () => {
     );
   });
 
+  it('advertises asset.updateMetadata in the high-level asset batch workflow schema', () => {
+    const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAssetBatchFromSearch);
+    const schemaJson = JSON.stringify(proposal?.inputSchema);
+
+    expect(schemaJson).toContain(AgentOperationType.AssetUpdateMetadata);
+    expect(schemaJson).toContain('description');
+    expect(schemaJson).toContain('rating');
+    expect(schemaJson).toContain('dateTimeOriginal');
+    expect(schemaJson).toContain('dateTimeRelative');
+    expect(schemaJson).toContain('timeZone');
+    expect(schemaJson).toContain('latitude');
+    expect(schemaJson).toContain('longitude');
+    expect(schemaJson).toContain('place names are not accepted');
+  });
+
   it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
     const serialized = JSON.stringify(sut.listTools());
 
