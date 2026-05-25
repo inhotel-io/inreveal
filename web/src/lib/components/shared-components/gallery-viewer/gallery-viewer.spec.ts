@@ -315,6 +315,35 @@ describe('GalleryViewer grouping', () => {
     }
   });
 
+  it('does not run a stale anchor scroll after manual grouping clears the pending anchor', async () => {
+    const frameQueue = createAnimationFrameQueue();
+    const scrollTracker = trackScrolledElement();
+
+    try {
+      renderViewer();
+
+      await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+      await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+
+      await waitFor(() => {
+        expect(frameQueue.requestAnimationFrame).toHaveBeenCalled();
+        expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+      await waitFor(() =>
+        expect(screen.getByTestId('timeline-grouping-year')).toHaveAttribute('aria-pressed', 'true'),
+      );
+
+      await frameQueue.flush();
+
+      expect(scrollTracker.scrolledElement).toBeUndefined();
+    } finally {
+      frameQueue.restore();
+      scrollTracker.restore();
+    }
+  });
+
   it('keeps remaining local assets available when the tapped period disappears before anchor resolution', async () => {
     const frameQueue = createAnimationFrameQueue();
     const scrollTracker = trackScrolledElement();

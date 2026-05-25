@@ -400,11 +400,13 @@
     }
 
     requestAnimationFrame(() => {
+      if (!isCurrentGalleryAnchor(anchor, grouping)) {
+        return;
+      }
+
       const target = container.querySelector<HTMLElement>(selector);
       target?.scrollIntoView({ block: 'start', inline: 'nearest' });
-      if (isCurrentGalleryAnchor(anchor, grouping)) {
-        galleryTemporalAnchor = undefined;
-      }
+      galleryTemporalAnchor = undefined;
     });
   });
 
