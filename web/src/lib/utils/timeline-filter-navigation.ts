@@ -10,12 +10,6 @@ export type ActivatableTimelineBucket = {
   };
 };
 
-type TimelineBucketActivationResult = {
-  filters: FilterState;
-  grouping: TimelineGrouping;
-  anchor: TimelineTemporalAnchor;
-};
-
 export type TimelineZoomActivationResult = {
   grouping: TimelineGrouping;
   anchor: TimelineTemporalAnchor;
@@ -52,40 +46,6 @@ export function getTimelineBucketZoomTarget(
     }
 
     return {
-      grouping: 'day',
-      anchor: { year: bucket.date.year, month: bucket.date.month },
-    };
-  }
-}
-
-export function activateTimelineBucket(
-  filters: FilterState,
-  bucket: ActivatableTimelineBucket,
-): TimelineBucketActivationResult | undefined {
-  if (bucket.grouping === 'year') {
-    const nextFilters = clearTimelineTemporalFilter(filters);
-    return {
-      filters: {
-        ...nextFilters,
-        selectedYear: bucket.date.year,
-      },
-      grouping: 'month',
-      anchor: { year: bucket.date.year },
-    };
-  }
-
-  if (bucket.grouping === 'month') {
-    if (bucket.date.month === undefined) {
-      return;
-    }
-
-    const nextFilters = clearTimelineTemporalFilter(filters);
-    return {
-      filters: {
-        ...nextFilters,
-        selectedYear: bucket.date.year,
-        selectedMonth: bucket.date.month,
-      },
       grouping: 'day',
       anchor: { year: bucket.date.year, month: bucket.date.month },
     };

@@ -1,7 +1,6 @@
 import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 
 import {
-  activateTimelineBucket,
   clearTimelineTemporalFilter,
   getTimelineBucketZoomTarget,
   getTimelineManagerTimeBuckets,
@@ -49,82 +48,6 @@ describe('timeline filter navigation helpers', () => {
       }),
     ).toBeUndefined();
   });
-
-  it('selects a year bucket, clears custom dates, preserves non-time filters, and switches to month grouping', () => {
-    const filters = {
-      ...createFilterState(),
-      personIds: ['person-1'],
-      tagIds: ['tag-1'],
-      dateAfter: '2020-01-01',
-      dateBefore: '2020-12-31',
-      sortOrder: 'asc' as const,
-    };
-
-    const result = activateTimelineBucket(filters, {
-      grouping: 'year',
-      date: { year: 2015 },
-    });
-
-    expect(result).toEqual({
-      filters: {
-        ...filters,
-        dateAfter: undefined,
-        dateBefore: undefined,
-        selectedYear: 2015,
-        selectedMonth: undefined,
-      },
-      grouping: 'month',
-      anchor: { year: 2015 },
-    });
-  });
-
-  it('selects a month bucket and switches to detailed day grouping', () => {
-    const filters = {
-      ...createFilterState(),
-      personIds: ['person-1'],
-      selectedYear: 2015,
-    };
-
-    const result = activateTimelineBucket(filters, {
-      grouping: 'month',
-      date: { year: 2015, month: 8 },
-    });
-
-    expect(result).toEqual({
-      filters: {
-        ...filters,
-        dateAfter: undefined,
-        dateBefore: undefined,
-        selectedYear: 2015,
-        selectedMonth: 8,
-      },
-      grouping: 'day',
-      anchor: { year: 2015, month: 8 },
-    });
-  });
-
-  it('does not turn day buckets into another drill-down mode', () => {
-    const filters = createFilterState();
-
-    expect(
-      activateTimelineBucket(filters, {
-        grouping: 'day',
-        date: { year: 2015, month: 8, day: 23 },
-      }),
-    ).toBeUndefined();
-  });
-
-  it('does not activate a malformed month bucket without a month number', () => {
-    const filters = createFilterState();
-
-    expect(
-      activateTimelineBucket(filters, {
-        grouping: 'month',
-        date: { year: 2015 },
-      }),
-    ).toBeUndefined();
-  });
-
   it('clears only temporal filter state', () => {
     const filters = {
       ...createFilterState(),

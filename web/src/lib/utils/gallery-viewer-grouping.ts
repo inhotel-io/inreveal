@@ -2,11 +2,6 @@ import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
 import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
 import type { AssetResponseDto } from '@immich/sdk';
 
-export type GalleryViewerTemporalState = {
-  selectedYear?: number;
-  selectedMonth?: number;
-};
-
 export type GalleryViewerBucket = ActivatableTimelineBucket & {
   viewId: string;
   timeBucket: string;
@@ -45,27 +40,6 @@ export function getGalleryViewerAssetDate(asset: AssetResponseDto): GalleryViewe
   }
 
   return { year, month, day };
-}
-
-export function filterGalleryViewerAssetsByTemporalState(
-  assets: AssetResponseDto[],
-  temporalState: GalleryViewerTemporalState,
-) {
-  if (!temporalState.selectedYear) {
-    return assets;
-  }
-
-  return assets.filter((asset) => {
-    const date = getGalleryViewerAssetDate(asset);
-    if (!date) {
-      return false;
-    }
-
-    return (
-      date.year === temporalState.selectedYear &&
-      (temporalState.selectedMonth === undefined || date.month === temporalState.selectedMonth)
-    );
-  });
 }
 
 export function buildGalleryViewerBuckets(

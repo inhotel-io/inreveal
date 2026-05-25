@@ -2,7 +2,6 @@ import { AssetTypeEnum, AssetVisibility, type AssetResponseDto } from '@immich/s
 
 import {
   buildGalleryViewerBuckets,
-  filterGalleryViewerAssetsByTemporalState,
   getGalleryViewerAssetDate,
 } from '../gallery-viewer-grouping';
 
@@ -113,30 +112,5 @@ describe('gallery viewer grouping helpers', () => {
     expect(buckets.map((bucket) => [bucket.viewId, bucket.count, bucket.representativeAssetId])).toEqual([
       ['month:2024-02', 1, 'valid'],
     ]);
-  });
-
-  it('filters loaded assets by selected year and month without mutating the input list', () => {
-    const assets = [
-      asset('aug-a', '2015-08-03T00:00:00.000Z'),
-      asset('jan-a', '2015-01-01T00:00:00.000Z'),
-      asset('other', '2016-08-03T00:00:00.000Z'),
-    ];
-
-    expect(filterGalleryViewerAssetsByTemporalState(assets, { selectedYear: 2015 }).map((asset) => asset.id)).toEqual([
-      'aug-a',
-      'jan-a',
-    ]);
-    expect(
-      filterGalleryViewerAssetsByTemporalState(assets, { selectedYear: 2015, selectedMonth: 8 }).map(
-        (asset) => asset.id,
-      ),
-    ).toEqual(['aug-a']);
-    expect(assets.map((asset) => asset.id)).toEqual(['aug-a', 'jan-a', 'other']);
-  });
-
-  it('keeps all assets when no temporal state is active', () => {
-    const assets = [asset('asset-1', '2015-08-03T00:00:00.000Z')];
-
-    expect(filterGalleryViewerAssetsByTemporalState(assets, {})).toBe(assets);
   });
 });
