@@ -205,6 +205,16 @@ function defaultAssets() {
   ];
 }
 
+function assetsWithOffscreenAugustTarget() {
+  return [
+    ...Array.from({ length: 20 }, (_, index) =>
+      asset(`asset-2016-${index}`, `2016-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`),
+    ),
+    asset('asset-2015-aug-offscreen', '2015-08-03T00:00:00.000Z'),
+    asset('asset-2015-jan', '2015-01-01T00:00:00.000Z'),
+  ];
+}
+
 describe('GalleryViewer grouping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -338,6 +348,40 @@ describe('GalleryViewer grouping', () => {
       await frameQueue.flush();
 
       expect(scrollTracker.scrolledElement).toBeUndefined();
+    } finally {
+      frameQueue.restore();
+      scrollTracker.restore();
+    }
+  });
+
+  it('anchors month zooms to an offscreen local asset by scrolling the virtualized grid first', async () => {
+    const frameQueue = createAnimationFrameQueue();
+    const scrollTracker = trackScrolledElement();
+    const assets = assetsWithOffscreenAugustTarget();
+
+    try {
+      renderViewer({ assets });
+
+      await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
+      await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
+      await waitFor(() => expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true'));
+
+      frameQueue.requestAnimationFrame.mockClear();
+      scrollTracker.reset();
+
+      await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
+
+      await waitFor(() => expect(frameQueue.requestAnimationFrame).toHaveBeenCalled());
+      await frameQueue.flush();
+
+      await waitFor(() => {
+        expect(scrollTracker.scrolledElement).toHaveAttribute(
+          'data-testid',
+          'gallery-viewer-asset-anchor-asset-2015-aug-offscreen',
+        );
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-year', '2015');
+        expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-month', '8');
+      });
     } finally {
       frameQueue.restore();
       scrollTracker.restore();

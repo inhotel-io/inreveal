@@ -385,6 +385,18 @@
     }
   };
 
+  const getFirstGalleryAssetIndexForAnchor = (anchor: TimelineTemporalAnchor) =>
+    assets.findIndex((asset) => {
+      const date = getGalleryViewerAssetDate(asset);
+      return date?.year === anchor.year && date.month === anchor.month;
+    });
+
+  const scrollToGalleryAssetIndex = (index: number) => {
+    const top = geometry.getTop(index);
+    scrollTop = top;
+    document.scrollingElement?.scrollTo?.({ top });
+  };
+
   $effect(() => {
     const anchor = galleryTemporalAnchor;
     const grouping = galleryGrouping;
@@ -405,7 +417,28 @@
       }
 
       const target = container.querySelector<HTMLElement>(selector);
-      target?.scrollIntoView({ block: 'start', inline: 'nearest' });
+      if (target) {
+        target.scrollIntoView({ block: 'start', inline: 'nearest' });
+        galleryTemporalAnchor = undefined;
+        return;
+      }
+
+      if (grouping === 'day' && anchor.month !== undefined) {
+        const targetIndex = getFirstGalleryAssetIndexForAnchor(anchor);
+        if (targetIndex !== -1) {
+          scrollToGalleryAssetIndex(targetIndex);
+          requestAnimationFrame(() => {
+            if (!isCurrentGalleryAnchor(anchor, grouping)) {
+              return;
+            }
+
+            container.querySelector<HTMLElement>(selector)?.scrollIntoView({ block: 'start', inline: 'nearest' });
+            galleryTemporalAnchor = undefined;
+          });
+          return;
+        }
+      }
+
       galleryTemporalAnchor = undefined;
     });
   });
