@@ -33,6 +33,7 @@ const carefulWriteScope = {
   favoriteAssets: true,
   archiveAssets: false,
   tagAssets: true,
+  updateAssetMetadata: false,
 };
 const expandedWriteScope = {
   createAlbum: true,
@@ -51,6 +52,7 @@ const expandedWriteScope = {
   favoriteAssets: true,
   archiveAssets: true,
   tagAssets: true,
+  updateAssetMetadata: true,
 };
 
 const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
@@ -342,11 +344,20 @@ describe(AgentSessionService.name, () => {
 
   it('preset permission snapshots include the expanded write-scope decisions', () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope).toEqual(carefulWriteScope);
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.updateAssetMetadata).toBe(
+      false,
+    );
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope).toEqual(
       expandedWriteScope,
     );
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.updateAssetMetadata,
+    ).toBe(true);
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope).toEqual(
       expandedWriteScope,
+    );
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata).toBe(
+      true,
     );
   });
 
@@ -452,6 +463,7 @@ describe(AgentSessionService.name, () => {
         favoriteAssets: false,
         archiveAssets: false,
         tagAssets: false,
+        updateAssetMetadata: false,
       },
     };
     const dto = makeCreateDto({
@@ -1024,6 +1036,7 @@ describe(AgentSessionService.name, () => {
       favoriteAssets: false,
       archiveAssets: false,
       tagAssets: false,
+      updateAssetMetadata: false,
     });
   });
 
