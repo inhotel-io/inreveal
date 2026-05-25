@@ -4,7 +4,6 @@
   import type { Action } from '$lib/components/asset-viewer/actions/action';
   import type { AssetCursor } from '$lib/components/asset-viewer/asset-viewer.svelte';
   import Thumbnail from '$lib/components/assets/thumbnail/thumbnail.svelte';
-  import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
   import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
   import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
   import { AssetAction } from '$lib/constants';
@@ -21,19 +20,11 @@
   import { deleteAssets } from '$lib/utils/actions';
   import { archiveAssets, getNextAsset, getPreviousAsset, navigateToAsset } from '$lib/utils/asset-utils';
   import { moveFocus } from '$lib/utils/focus-util';
-  import {
-    buildGalleryViewerBuckets,
-    filterGalleryViewerAssetsByTemporalState,
-    type GalleryViewerTemporalState,
-  } from '$lib/utils/gallery-viewer-grouping';
+  import { buildGalleryViewerBuckets } from '$lib/utils/gallery-viewer-grouping';
   import { handleError } from '$lib/utils/handle-error';
   import { getJustifiedLayoutFromAssets } from '$lib/utils/layout-utils';
   import { navigate } from '$lib/utils/navigation';
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
   import { isTimelineAsset, toTimelineAsset } from '$lib/utils/timeline-util';
   import { AssetVisibility, type AssetResponseDto } from '@immich/sdk';
   import { modalManager } from '@immich/ui';
@@ -75,32 +66,16 @@
   }: Props = $props();
 
   let galleryGrouping = $state<TimelineGrouping>('day');
-  let galleryTemporalFilters = $state<FilterState>(createFilterState());
-  let galleryTemporalState = $derived<GalleryViewerTemporalState>({
-    selectedYear: galleryTemporalFilters.selectedYear,
-    selectedMonth: galleryTemporalFilters.selectedMonth,
-  });
-  let hasGalleryTemporalFilter = $derived(
-    galleryTemporalFilters.selectedYear !== undefined || galleryTemporalFilters.selectedMonth !== undefined,
-  );
-  let visibleAssets = $derived(filterGalleryViewerAssetsByTemporalState(assets, galleryTemporalState));
-  let galleryBuckets = $derived(
-    galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(visibleAssets, galleryGrouping),
-  );
-  let showRepresentativeBuckets = $derived(enableGrouping && galleryGrouping !== 'day' && visibleAssets.length > 0);
+  let galleryBuckets = $derived(galleryGrouping === 'day' ? [] : buildGalleryViewerBuckets(assets, galleryGrouping));
+  let showRepresentativeBuckets = $derived(enableGrouping && galleryGrouping !== 'day' && assets.length > 0);
   let showGalleryGroupingControls = $derived(
     enableGrouping && assets.length > 0 && !assetInteraction.selectionActive && !assetViewerManager.isViewing,
   );
 
-  const navigationBaseAssets = $derived(viewerAssets ?? visibleAssets);
-  const navigationAssets = $derived(
-    enableGrouping && hasGalleryTemporalFilter
-      ? filterGalleryViewerAssetsByTemporalState(navigationBaseAssets, galleryTemporalState)
-      : navigationBaseAssets,
-  );
+  const navigationAssets = $derived(viewerAssets ?? assets);
 
   const geometry = $derived(
-    getJustifiedLayoutFromAssets(visibleAssets, {
+    getJustifiedLayoutFromAssets(assets, {
       spacing: 2,
       heightTolerance: 0.5,
       rowHeight: Math.floor(viewport.width) < 850 ? 100 : 235,
@@ -143,7 +118,7 @@
 
   let lastIntersectedHeight = 0;
   $effect(() => {
-    if (enableGrouping && (showRepresentativeBuckets || hasGalleryTemporalFilter)) {
+    if (enableGrouping && showRepresentativeBuckets) {
       return;
     }
 
@@ -159,7 +134,7 @@
   });
 
   const selectAllAssets = () => {
-    assetInteraction.selectAssets(visibleAssets.map((a) => toTimelineAsset(a)));
+    assetInteraction.selectAssets(assets.map((a) => toTimelineAsset(a)));
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -217,8 +192,8 @@
       return;
     }
 
-    let start = visibleAssets.findIndex((a) => a.id === startAsset.id);
-    let end = visibleAssets.findIndex((a) => a.id === endAsset.id);
+    let start = assets.findIndex((a) => a.id === startAsset.id);
+    let end = assets.findIndex((a) => a.id === endAsset.id);
 
     if (start === -1 || end === -1) {
       return;
@@ -228,7 +203,7 @@
       [start, end] = [end, start];
     }
 
-    assetInteraction.setAssetSelectionCandidates(visibleAssets.slice(start, end + 1).map((a) => toTimelineAsset(a)));
+    assetInteraction.setAssetSelectionCandidates(assets.slice(start, end + 1).map((a) => toTimelineAsset(a)));
   };
 
   const onSelectStart = (event: Event) => {
@@ -378,17 +353,12 @@
       return;
     }
 
-    const result = activateTimelineBucket(galleryTemporalFilters, bucket);
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    galleryTemporalFilters = result.filters;
     galleryGrouping = result.grouping;
-  };
-
-  const clearGalleryTemporalFilter = () => {
-    galleryTemporalFilters = clearTimelineTemporalFilter(galleryTemporalFilters);
   };
 
   $effect(() => {
@@ -427,11 +397,8 @@
 {#if enableGrouping && assets.length > 0}
   <TimelineRouteGroupingBar
     grouping={galleryGrouping}
-    filters={galleryTemporalFilters}
-    resultCount={visibleAssets.length}
     hidden={!showGalleryGroupingControls}
     onGroupingChange={handleGalleryGroupingChange}
-    onClearTemporalFilter={clearGalleryTemporalFilter}
   />
 {/if}
 
@@ -449,13 +416,13 @@
       />
     {/each}
   </div>
-{:else if visibleAssets.length > 0}
+{:else if assets.length > 0}
   <div
     style:position="relative"
     style:height={geometry.containerHeight + 'px'}
     style:width={geometry.containerWidth + 'px'}
   >
-    {#each visibleAssets as asset, i (asset.id + '-' + i)}
+    {#each assets as asset, i (asset.id + '-' + i)}
       {#if isIntersecting(i)}
         {@const currentAsset = toTimelineAsset(asset)}
         <div class="absolute" style:overflow="clip" style={getStyle(i)}>

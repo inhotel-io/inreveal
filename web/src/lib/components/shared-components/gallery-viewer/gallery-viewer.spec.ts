@@ -204,7 +204,7 @@ describe('GalleryViewer grouping', () => {
     });
   });
 
-  it('clicking a year then month card narrows loaded assets and exposes a clearable temporal chip', async () => {
+  it('zooms from year to month to detailed mode without narrowing the local asset array', async () => {
     const assets = defaultAssets();
     renderViewer({ assets });
 
@@ -212,29 +212,24 @@ describe('GalleryViewer grouping', () => {
     await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getAllByTestId('timeline-bucket-card')).toHaveLength(2);
+      expect(screen.getAllByTestId('timeline-bucket-card')).toHaveLength(3);
+      expect(screen.getByRole('button', { name: /Jan 2016, 1 photo/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Aug 2015, 1 photo/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Jan 2015, 1 photo/i })).toBeInTheDocument();
     });
 
     await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
-      expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
-      expect(screen.queryByTestId('thumbnail-asset-2015-jan')).not.toBeInTheDocument();
-    });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove Aug 2015 filter' }));
-
-    await waitFor(() => {
       expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByTestId('thumbnail-asset-2016')).toBeInTheDocument();
       expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
       expect(screen.getByTestId('thumbnail-asset-2015-jan')).toBeInTheDocument();
-      expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
     });
+
     expect(assets.map((asset) => asset.id)).toEqual(['asset-2016', 'asset-2015-aug', 'asset-2015-jan']);
   });
 
@@ -258,44 +253,7 @@ describe('GalleryViewer grouping', () => {
     expect(onIntersected).not.toHaveBeenCalled();
   });
 
-  it('does not request more assets while a local temporal chip narrows the day grid', async () => {
-    const onIntersected = vi.fn();
-    const assets = defaultAssets();
-    const view = renderViewer({ assets, onIntersected });
-
-    await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
-    await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
-    onIntersected.mockClear();
-    await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
-      expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
-      expect(screen.queryByTestId('thumbnail-asset-2015-jan')).not.toBeInTheDocument();
-    });
-
-    onIntersected.mockClear();
-    const expandedAssets = [
-      ...assets,
-      asset('asset-2015-aug-extra-1', '2015-08-04T00:00:00.000Z'),
-      asset('asset-2015-aug-extra-2', '2015-08-05T00:00:00.000Z'),
-    ];
-    await view.rerender({
-      component: GalleryViewer,
-      componentProps: {
-        assets: expandedAssets,
-        assetInteraction: mockAssetInteraction,
-        viewport: { width: 900, height: 700 },
-        enableGrouping: true,
-        onIntersected,
-      },
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onIntersected).not.toHaveBeenCalled();
-  });
-
-  it('filters viewer asset navigation while a local temporal chip narrows the day grid', async () => {
+  it('keeps asset viewer navigation on the full viewer asset list after zoom activation', async () => {
     const assets = defaultAssets();
     const widerViewerAssets = [
       asset('asset-2015-aug', '2015-08-03T00:00:00.000Z'),
@@ -310,9 +268,10 @@ describe('GalleryViewer grouping', () => {
     await fireEvent.click(screen.getByRole('button', { name: /Aug 2015, 1 photo/i }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('thumbnail-asset-2016')).toBeInTheDocument();
       expect(screen.getByTestId('thumbnail-asset-2015-aug')).toBeInTheDocument();
-      expect(screen.queryByTestId('thumbnail-asset-2015-jan')).not.toBeInTheDocument();
+      expect(screen.getByTestId('thumbnail-asset-2015-jan')).toBeInTheDocument();
     });
 
     assetViewerPropsCalls.length = 0;
@@ -333,17 +292,17 @@ describe('GalleryViewer grouping', () => {
       const latestAssetViewerProps = assetViewerPropsCalls.at(-1) as {
         cursor: { nextAsset?: AssetResponseDto };
       };
-      expect(latestAssetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-aug-extra');
+      expect(latestAssetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-jan');
     });
     const assetViewerProps = assetViewerPropsCalls.at(-1) as {
       cursor: { nextAsset?: AssetResponseDto; previousAsset?: AssetResponseDto };
       onRandom: () => Promise<{ id: string } | undefined>;
     };
-    expect(assetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-aug-extra');
+    expect(assetViewerProps.cursor.nextAsset?.id).toBe('asset-2015-jan');
     expect(assetViewerProps.cursor.previousAsset).toBeUndefined();
 
     const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.99);
-    await expect(assetViewerProps.onRandom()).resolves.toMatchObject({ id: 'asset-2015-aug-extra' });
+    await expect(assetViewerProps.onRandom()).resolves.toMatchObject({ id: 'asset-2016' });
     randomSpy.mockRestore();
   });
 
