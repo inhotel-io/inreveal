@@ -28,6 +28,7 @@ const fullWriteScope = {
   favoriteAssets: true,
   archiveAssets: true,
   tagAssets: true,
+  updateAssetMetadata: true,
   addMembersToSpaces: true,
   removeMembersFromSpaces: true,
   updateSpaceMemberRoles: true,
@@ -42,6 +43,7 @@ const expandedWriteScopeKeys = [
   'favoriteAssets',
   'archiveAssets',
   'tagAssets',
+  'updateAssetMetadata',
   'addMembersToSpaces',
   'removeMembersFromSpaces',
   'updateSpaceMemberRoles',
@@ -121,10 +123,10 @@ const expectIssue = (input: AgentSessionCreateInput, path: (string | number)[], 
 };
 
 describe('AgentPermissionPlanSchema', () => {
-  it('requires custom permission plans to include every write-scope key', () => {
-    const missingArchiveAssets = {
+  it('requires custom permission plans to include updateAssetMetadata', () => {
+    const missingUpdateAssetMetadata = {
       ...fullWriteScope,
-      archiveAssets: undefined,
+      updateAssetMetadata: undefined,
     };
 
     const result = AgentPermissionPlanSchema.safeParse({
@@ -136,7 +138,7 @@ describe('AgentPermissionPlanSchema', () => {
         allowOriginalsForExternalProviders: false,
       },
       assetScope: { owned: true, sharedSpaces: true, locked: false },
-      writeScope: missingArchiveAssets,
+      writeScope: missingUpdateAssetMetadata,
       limits: {
         maxAssetsPerToolCall: 500,
         maxAssetsPerSession: 5000,
@@ -151,7 +153,7 @@ describe('AgentPermissionPlanSchema', () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues).toEqual([
       expect.objectContaining({
-        path: ['writeScope', 'archiveAssets'],
+        path: ['writeScope', 'updateAssetMetadata'],
         message: 'Invalid input: expected boolean, received undefined',
       }),
     ]);
@@ -409,6 +411,7 @@ describe('AgentSessionResponseDto', () => {
       favoriteAssets: false,
       archiveAssets: false,
       tagAssets: false,
+      updateAssetMetadata: false,
       addMembersToSpaces: false,
       removeMembersFromSpaces: false,
       updateSpaceMemberRoles: false,
