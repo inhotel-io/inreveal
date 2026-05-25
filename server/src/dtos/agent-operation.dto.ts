@@ -429,59 +429,79 @@ const ianaTimeZoneSchema = z
     { message: 'Invalid IANA time zone' },
   );
 
+const assetUpdateMetadataPayloadFieldNames = [
+  'description',
+  'rating',
+  'dateTimeOriginal',
+  'dateTimeRelative',
+  'timeZone',
+  'latitude',
+  'longitude',
+] as const;
+
+const assetUpdateMetadataPayloadShape = {
+  description: z
+    .string()
+    .trim()
+    .max(1000)
+    .optional()
+    .describe('Asset description. Use an empty string to clear the description.'),
+  rating: z
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.null()])
+    .optional()
+    .describe('Asset star rating from 1 to 5. Use null to clear the rating.'),
+  dateTimeOriginal: z.iso.datetime().optional().describe('Absolute original capture date/time as an ISO datetime.'),
+  dateTimeRelative: z
+    .number()
+    .int()
+    .optional()
+    .describe('Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.'),
+  timeZone: ianaTimeZoneSchema.optional().describe('IANA time zone such as Europe/Berlin.'),
+  latitude: latitudeSchema
+    .optional()
+    .describe('Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
+  longitude: longitudeSchema
+    .optional()
+    .describe('Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
+};
+
+type AssetUpdateMetadataPayloadLike = Partial<Record<(typeof assetUpdateMetadataPayloadFieldNames)[number], unknown>>;
+
+const validateAssetUpdateMetadataPayload = (payload: AssetUpdateMetadataPayloadLike, ctx: z.RefinementCtx) => {
+  const suppliedFieldCount = assetUpdateMetadataPayloadFieldNames.filter((field) => payload[field] !== undefined).length;
+  if (suppliedFieldCount === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide at least one metadata field to update',
+    });
+  }
+
+  if (payload.dateTimeOriginal !== undefined && payload.dateTimeRelative !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Choose dateTimeOriginal or dateTimeRelative, not both',
+    });
+  }
+
+  if (payload.dateTimeRelative === 0 && suppliedFieldCount === 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dateTimeRelative'],
+      message: 'dateTimeRelative: 0 is a no-op unless another metadata field changes',
+    });
+  }
+
+  if (Number(payload.latitude !== undefined) + Number(payload.longitude !== undefined) === 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide both latitude and longitude',
+    });
+  }
+};
+
 const assetUpdateMetadataPayloadSchema = z
-  .strictObject({
-    description: z
-      .string()
-      .trim()
-      .max(1000)
-      .optional()
-      .describe('Asset description. Use an empty string to clear the description.'),
-    rating: z
-      .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.null()])
-      .optional()
-      .describe('Asset star rating from 1 to 5. Use null to clear the rating.'),
-    dateTimeOriginal: z.iso.datetime().optional().describe('Absolute original capture date/time as an ISO datetime.'),
-    dateTimeRelative: z
-      .number()
-      .int()
-      .optional()
-      .describe('Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.'),
-    timeZone: ianaTimeZoneSchema.optional().describe('IANA time zone such as Europe/Berlin.'),
-    latitude: latitudeSchema.optional().describe('Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
-    longitude: longitudeSchema.optional().describe('Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.'),
-  })
-  .superRefine((payload, ctx) => {
-    const hasMetadataField = Object.values(payload).some((value) => value !== undefined);
-    if (!hasMetadataField) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide at least one metadata field to update',
-      });
-    }
-
-    if (payload.dateTimeOriginal !== undefined && payload.dateTimeRelative !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Choose dateTimeOriginal or dateTimeRelative, not both',
-      });
-    }
-
-    if (payload.dateTimeRelative === 0 && Object.values(payload).filter((value) => value !== undefined).length === 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['dateTimeRelative'],
-        message: 'dateTimeRelative: 0 is a no-op unless another metadata field changes',
-      });
-    }
-
-    if (Number(payload.latitude !== undefined) + Number(payload.longitude !== undefined) === 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide both latitude and longitude',
-      });
-    }
-  });
+  .strictObject(assetUpdateMetadataPayloadShape)
+  .superRefine(validateAssetUpdateMetadataPayload);
 
 const assetAddTagPayloadSchema = z
   .strictObject({
@@ -689,6 +709,12 @@ const AgentAssetBatchWorkflowActionSchema = z
     assetRotatePayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetRotate),
     }),
+    z
+      .strictObject({
+        type: z.literal(AgentOperationType.AssetUpdateMetadata),
+        ...assetUpdateMetadataPayloadShape,
+      })
+      .superRefine(validateAssetUpdateMetadataPayload),
   ])
   .meta({ id: 'AgentAssetBatchWorkflowAction' });
 
