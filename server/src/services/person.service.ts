@@ -710,7 +710,7 @@ export class PersonService extends BaseService {
     continuationCount,
   }: JobOf<JobName.FaceIdentityBackfill>): Promise<JobStatus> {
     const affectedSpaceAssets: SharedSpaceFaceMatchBackfillTarget[] = [];
-    this.logger.log(
+    this.logger.debug(
       `FaceIdentityBackfill peopleBackfill start stage=${stage} cursor=${cursor ?? 'none'} continuation=${continuationId ?? 'none'}`,
     );
 
@@ -720,12 +720,12 @@ export class PersonService extends BaseService {
         limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
       });
       affectedSpaceAssets.push(...this.getAffectedSpaceAssets(result));
-      this.logger.log(
+      this.logger.debug(
         `FaceIdentityBackfill peopleBackfill personal page processed=${result.processed} nextCursor=${result.nextCursor ?? 'none'} affectedSpaceAssets=${affectedSpaceAssets.length}`,
       );
 
       if (result.nextCursor) {
-        this.logger.log(`FaceIdentityBackfill peopleBackfill queue next stage=person cursor=${result.nextCursor}`);
+        this.logger.debug(`FaceIdentityBackfill peopleBackfill queue next stage=person cursor=${result.nextCursor}`);
         await this.jobRepository.queue({
           name: JobName.FaceIdentityBackfill,
           data: { stage: 'person', cursor: result.nextCursor, continuationCount },
@@ -739,7 +739,7 @@ export class PersonService extends BaseService {
       limit: FACE_IDENTITY_BACKFILL_CHUNK_SIZE,
     });
     affectedSpaceAssets.push(...this.getAffectedSpaceAssets(result));
-    this.logger.log(
+    this.logger.debug(
       `FaceIdentityBackfill peopleBackfill space-person page processed=${result.processed} nextCursor=${result.nextCursor ?? 'none'} conflicts=${result.conflictCount} affectedSpaceAssets=${affectedSpaceAssets.length}`,
     );
 
@@ -748,7 +748,9 @@ export class PersonService extends BaseService {
     }
 
     if (result.nextCursor) {
-      this.logger.log(`FaceIdentityBackfill peopleBackfill queue next stage=space-person cursor=${result.nextCursor}`);
+      this.logger.debug(
+        `FaceIdentityBackfill peopleBackfill queue next stage=space-person cursor=${result.nextCursor}`,
+      );
       await this.jobRepository.queue({
         name: JobName.FaceIdentityBackfill,
         data: { stage: 'space-person', cursor: result.nextCursor, continuationCount },
@@ -757,7 +759,7 @@ export class PersonService extends BaseService {
     }
 
     const work = await this.faceIdentityRepository.getBackfillWork();
-    this.logger.log(
+    this.logger.debug(
       `FaceIdentityBackfill peopleBackfill remaining work personal=${work.hasPersonalIdentityWork} spacePerson=${work.hasSpacePersonIdentityWork} projection=${work.hasSharedSpaceProjectionWork}`,
     );
 
@@ -770,7 +772,7 @@ export class PersonService extends BaseService {
         return JobStatus.Success;
       }
       const nextContinuationId = this.getNextFaceIdentityBackfillContinuationId(continuationId);
-      this.logger.log(`FaceIdentityBackfill peopleBackfill queue continuation=${nextContinuationId}`);
+      this.logger.debug(`FaceIdentityBackfill peopleBackfill queue continuation=${nextContinuationId}`);
       await this.jobRepository.queue({
         name: JobName.FaceIdentityBackfill,
         data: {
@@ -782,13 +784,13 @@ export class PersonService extends BaseService {
     }
 
     const pendingTargets = await this.faceIdentityRepository.getPendingSharedSpaceFaceMatchBackfillTargets();
-    this.logger.log(
+    this.logger.debug(
       `FaceIdentityBackfill peopleBackfill finalizing pendingTargets=${pendingTargets.length} affectedSpaceAssets=${affectedSpaceAssets.length}`,
     );
 
     if (work.hasSharedSpaceProjectionWork) {
       const projectionTargets = await this.faceIdentityRepository.getSharedSpaceFaceMatchBackfillTargets();
-      this.logger.log(`FaceIdentityBackfill peopleBackfill projectionTargets=${projectionTargets.length}`);
+      this.logger.debug(`FaceIdentityBackfill peopleBackfill projectionTargets=${projectionTargets.length}`);
       if (projectionTargets.length === 0) {
         this.logger.warn('Face identity projection backfill work was reported but no targets were found');
       }
@@ -796,11 +798,11 @@ export class PersonService extends BaseService {
     }
 
     const queuedTargets = await this.queueSharedSpaceFaceMatchTargets([...pendingTargets, ...affectedSpaceAssets]);
-    this.logger.log(`FaceIdentityBackfill peopleBackfill queued face-match targets=${queuedTargets.length}`);
+    this.logger.debug(`FaceIdentityBackfill peopleBackfill queued face-match targets=${queuedTargets.length}`);
     await this.faceIdentityRepository.deletePendingSharedSpaceFaceMatchBackfillTargets(pendingTargets);
     if (queuedTargets.length === 0) {
       await this.queueSpacePersonMetadataBackfill();
-      this.logger.log('FaceIdentityBackfill peopleBackfill complete; queuedSpacePersonMetadataBackfill=true');
+      this.logger.debug('FaceIdentityBackfill peopleBackfill complete; queuedSpacePersonMetadataBackfill=true');
 
       const { machineLearning } = await this.getConfig({ withCache: true });
       const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
