@@ -620,16 +620,17 @@ describe('Photos page search URL state', () => {
     });
   });
 
-  it('clicking a photos year bucket sets temporal filter state, switches to month grouping, and keeps non-time filters', async () => {
+  it('clicking a photos year bucket zooms to month grouping without mutating filters', async () => {
     mockPage.url = new URL('https://gallery.test/photos?people=person-1&city=Berlin');
 
     renderPage();
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
@@ -637,57 +638,88 @@ describe('Photos page search URL state', () => {
       expect.objectContaining({
         personIds: ['person-1'],
         city: 'Berlin',
-        selectedYear: 2015,
+        selectedYear: undefined,
         selectedMonth: undefined,
+        dateAfter: undefined,
+        dateBefore: undefined,
       }),
     );
+    expect(goto).not.toHaveBeenCalled();
   });
 
-  it('clicking a photos month bucket sets month temporal state and switches to day grouping', async () => {
+  it('clicking a photos month bucket zooms to day grouping without mutating filters', async () => {
     mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
     renderPage();
     await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '8');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '8');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
     });
     expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({
         personIds: ['person-1'],
-        selectedYear: 2015,
-        selectedMonth: 8,
+        selectedYear: undefined,
+        selectedMonth: undefined,
+        dateAfter: undefined,
+        dateBefore: undefined,
       }),
     );
+    expect(goto).not.toHaveBeenCalled();
   });
 
-  it('keeps photos temporal state transient across URL sync for non-time filter changes', async () => {
+  it('does not show active filter chips when a photos bucket is activated without filters', async () => {
     mockPage.url = new URL('https://gallery.test/photos');
 
     renderPage();
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+    expect(screen.queryByTestId('active-filters-bar-stub')).not.toBeInTheDocument();
+    expect(goto).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicit photos temporal filters transient across URL sync for non-time filter changes', async () => {
+    mockPage.url = new URL('https://gallery.test/photos');
+
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
+    });
 
     await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
 
     await waitFor(() => {
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
     });
-    expect(goto).toHaveBeenCalledWith('/photos?country=Germany', {
+    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        country: 'Germany',
+        selectedYear: 2015,
+        selectedMonth: undefined,
+      }),
+    );
+    expect(goto).toHaveBeenLastCalledWith('/photos?country=Germany', {
       replaceState: true,
       keepFocus: true,
       noScroll: true,
     });
   });
 
-  it('lets custom photos date range override selected timeline year state', async () => {
+  it('lets an explicit custom photos date range filter apply and clear a pending zoom anchor', async () => {
     mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
     renderPage();
@@ -702,6 +734,7 @@ describe('Photos page search URL state', () => {
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
       expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-before', '2024-12-31');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
     });
     expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
@@ -713,13 +746,19 @@ describe('Photos page search URL state', () => {
         selectedMonth: undefined,
       }),
     );
+    expect(goto).toHaveBeenLastCalledWith('/photos?people=person-1&from=2024-01-01&to=2024-12-31', {
+      replaceState: true,
+      keepFocus: true,
+      noScroll: true,
+    });
   });
 
-  it('clearing the photos temporal chip keeps non-time filters and the current grouping', async () => {
+  it('clearing an explicit photos temporal chip keeps non-time filters and the current grouping', async () => {
     mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
     renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+    await fireEvent.click(await screen.findByTestId('timeline-grouping-month'));
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
     await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
 
     await waitFor(() => {
@@ -737,25 +776,30 @@ describe('Photos page search URL state', () => {
     );
   });
 
-  it('clicking a photos bucket clears custom date state before applying selected year', async () => {
+  it('clicking a photos bucket preserves an existing explicit custom date filter', async () => {
     mockPage.url = new URL('https://gallery.test/photos?from=2024-01-01&to=2024-12-31&tags=tag-1');
 
     renderPage();
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
     expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
       expect.objectContaining({
         tagIds: ['tag-1'],
-        dateAfter: undefined,
-        dateBefore: undefined,
-        selectedYear: 2015,
+        dateAfter: '2024-01-01',
+        dateBefore: '2024-12-31',
+        selectedYear: undefined,
+        selectedMonth: undefined,
       }),
     );
+    expect(goto).not.toHaveBeenCalled();
   });
 
   it('renders a desktop grouping control on the photos browse timeline', async () => {
@@ -828,6 +872,21 @@ describe('Photos page search URL state', () => {
     renderPage();
 
     expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('ignores photos bucket activation while selection mode is active', async () => {
+    mockPage.url = new URL('https://gallery.test/photos');
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    });
+    expect(goto).not.toHaveBeenCalled();
   });
 
   it('passes grouping state and change handler into the photos Timeline for mobile placement', async () => {

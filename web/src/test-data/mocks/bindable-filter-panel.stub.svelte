@@ -153,6 +153,40 @@
   </button>
   <button
     type="button"
+    data-testid="filter-panel-set-year"
+    onclick={() => {
+      if (filters) {
+        updateFilters({
+          ...filters,
+          dateAfter: undefined,
+          dateBefore: undefined,
+          selectedYear: 2015,
+          selectedMonth: undefined,
+        });
+      }
+    }}
+  >
+    Set year
+  </button>
+  <button
+    type="button"
+    data-testid="filter-panel-set-month"
+    onclick={() => {
+      if (filters) {
+        updateFilters({
+          ...filters,
+          dateAfter: undefined,
+          dateBefore: undefined,
+          selectedYear: 2015,
+          selectedMonth: 8,
+        });
+      }
+    }}
+  >
+    Set month
+  </button>
+  <button
+    type="button"
     data-testid="filter-panel-set-custom-range"
     onclick={() => {
       if (filters) {

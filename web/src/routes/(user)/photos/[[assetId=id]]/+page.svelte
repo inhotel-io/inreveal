@@ -74,7 +74,7 @@
   } from '$lib/utils/space-search';
   import { getAltText } from '$lib/utils/thumbnail-util';
   import {
-    activateTimelineBucket,
+    getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
     getTimelineManagerTimeBuckets,
   } from '$lib/utils/timeline-filter-navigation';
@@ -100,11 +100,19 @@
   const initialFilterState = getSearchablePageFilterState(page.url);
   let filters = $state<FilterState>({
     ...createFilterState(),
+    dateAfter: undefined,
+    dateBefore: undefined,
+    selectedYear: undefined,
+    selectedMonth: undefined,
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   });
   let filtersBeforePanelChange: FilterState = {
     ...createFilterState(),
+    dateAfter: undefined,
+    dateBefore: undefined,
+    selectedYear: undefined,
+    selectedMonth: undefined,
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   };
@@ -430,15 +438,17 @@
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(filters, bucket);
+    if (assetMultiSelectManager.selectionActive) {
+      return;
+    }
+
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    filters = result.filters;
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    syncFilterUrl(result.filters);
   }
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
