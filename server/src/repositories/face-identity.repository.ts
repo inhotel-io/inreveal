@@ -2462,8 +2462,10 @@ export class FaceIdentityRepository {
       }
 
       const currentPerson = { ...person, identityId: identity.id };
-      affectedSpaceAssets.push(...(await this.repairPersonalIdentityAssignments(currentPerson)));
-      affectedSpaceAssets.push(...(await this.repairRemainingPersonalIdentityFaceLinks(currentPerson)));
+      affectedSpaceAssets.push(
+        ...(await this.repairPersonalIdentityAssignments(currentPerson)),
+        ...(await this.repairRemainingPersonalIdentityFaceLinks(currentPerson)),
+      );
     }
 
     return {
