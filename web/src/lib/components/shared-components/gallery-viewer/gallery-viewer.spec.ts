@@ -316,7 +316,10 @@ describe('GalleryViewer grouping', () => {
       await waitFor(() => {
         expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-year', '2015');
         expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-month', '8');
-        expect(scrollTracker.scrolledElement).toHaveAttribute('data-testid', 'gallery-viewer-asset-anchor-asset-2015-aug');
+        expect(scrollTracker.scrolledElement).toHaveAttribute(
+          'data-testid',
+          'gallery-viewer-asset-anchor-asset-2015-aug',
+        );
         expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
       });
     } finally {
@@ -341,9 +344,7 @@ describe('GalleryViewer grouping', () => {
       });
 
       await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
-      await waitFor(() =>
-        expect(screen.getByTestId('timeline-grouping-year')).toHaveAttribute('aria-pressed', 'true'),
-      );
+      await waitFor(() => expect(screen.getByTestId('timeline-grouping-year')).toHaveAttribute('aria-pressed', 'true'));
 
       await frameQueue.flush();
 
@@ -364,7 +365,9 @@ describe('GalleryViewer grouping', () => {
 
       await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
       await fireEvent.click(screen.getByRole('button', { name: /2015, 2 photos/i }));
-      await waitFor(() => expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true'));
+      await waitFor(() =>
+        expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true'),
+      );
 
       frameQueue.requestAnimationFrame.mockClear();
       scrollTracker.reset();

@@ -1,9 +1,6 @@
 import { AssetTypeEnum, AssetVisibility, type AssetResponseDto } from '@immich/sdk';
 
-import {
-  buildGalleryViewerBuckets,
-  getGalleryViewerAssetDate,
-} from '../gallery-viewer-grouping';
+import { buildGalleryViewerBuckets, getGalleryViewerAssetDate } from '../gallery-viewer-grouping';
 
 function asset(id: string, localDateTime: string, overrides: Partial<AssetResponseDto> = {}): AssetResponseDto {
   return {
