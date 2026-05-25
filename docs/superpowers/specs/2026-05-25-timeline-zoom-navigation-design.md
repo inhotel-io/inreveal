@@ -125,6 +125,12 @@ The zoom model applies to:
 
 GalleryViewer is asset-array based rather than timeline-query based. Its slice must preserve the full asset array and use local grouping plus local scroll/anchor behavior. It must not use local temporal filter state to hide assets after card activation.
 
+GalleryViewer anchors should resolve against the local asset array:
+
+- Year activation should render month cards for the full local asset array and scroll to the first matching month bucket for the tapped year.
+- Month activation should render the detailed local asset grid and scroll to the first matching asset group for the tapped month.
+- If the tapped period no longer has a matching asset by the time the view changes, the grouping change should remain, but no filter should be created and no unrelated period should be selected.
+
 ## Mobile Architecture
 
 Mobile currently has a route-local `TimelineTemporalScope` model used by card drilldown. That model should no longer be the card-activation mechanism.
@@ -221,6 +227,8 @@ Acceptance criteria:
 - Manual grouping changes still show representative year/month cards.
 - Year card activation switches to month grouping without hiding assets outside the year.
 - Month card activation switches to detailed grouping without hiding assets outside the month.
+- Year card activation anchors the month-card view to the tapped year when local assets still contain that year.
+- Month card activation anchors the detailed grid to the tapped month when local assets still contain that month.
 - Asset viewer next/previous navigation continues across year/month boundaries after zoom activation.
 - Infinite/intersection loading is not triggered by representative-card views unless it was already required for the visible detailed grid.
 - Selection mode hides or disables grouping activation as before.
@@ -345,12 +353,28 @@ Route-specific assertions:
 - Partners preserve partner user id.
 - Map panel preserves bbox and selected cluster filters.
 
+### Web Anchor Tests
+
+- Anchor resolution scrolls to the matching year bucket in year grouping.
+- Anchor resolution scrolls to the matching month bucket in month grouping.
+- Anchor resolution scrolls to the matching month section in detailed day grouping.
+- Anchor resolution waits for timeline manager initialization before scrolling.
+- Anchor resolution clears the pending anchor only after a matching target is found and scrolled to.
+- Anchor resolution keeps the pending anchor when the target is absent because data is still loading.
+- Anchor resolution drops or ignores stale anchors when route options or grouping changes make the target invalid.
+- Anchor resolution does not scroll to a nearest unrelated year/month when the exact target is absent.
+- Repeated activation of the same bucket is idempotent.
+- Rapid year-to-month-to-day activation resolves only the latest anchor.
+
 ### Web GalleryViewer Tests
 
 - Grouping controls render for grouped asset arrays and hide for empty arrays.
 - Manual year grouping renders representative year cards without temporal chips.
 - Year activation renders month cards while the backing asset list remains complete.
 - Month activation renders detailed assets while assets outside that month remain reachable.
+- Year activation scrolls to the first local month bucket in the tapped year.
+- Month activation scrolls to the first local detailed group or asset in the tapped month.
+- If assets for the tapped period disappear before anchor resolution, no filter chip appears and the full remaining local asset list remains available.
 - Viewer next/previous navigation is not restricted to the activated year/month.
 - Selection mode disables representative bucket activation.
 - Single-asset viewers keep detailed behavior.
@@ -414,6 +438,44 @@ For every adopted route:
 - Asset viewer open/close does not reset grouping unexpectedly.
 - Selection mode entering/exiting does not create filters or anchors.
 - App/page reload may preserve persisted grouping where existing behavior does, but must not persist bucket-activation anchors as filters.
+
+### Browser And Integration Tests
+
+At least one browser-level web flow must cover the complete zoom model:
+
+- Photos: `Years -> tap year -> Months -> tap month -> All/detailed`.
+- Assert no temporal chip appears after bucket activation.
+- Assert the URL does not gain temporal filter params after bucket activation.
+- Assert the user can scroll beyond the tapped year/month without clearing filters.
+- Assert explicit date filters still narrow the same timeline and still show clearable chips.
+
+At least one non-Photos browser-level web flow must cover route-owned constraints:
+
+- Use a route such as Albums or Spaces.
+- Activate a year and month bucket.
+- Assert the route-owned constraint remains in the timeline request/options.
+- Assert no temporal chip appears from bucket activation.
+- Assert adjacent years/months remain scrollable when assets exist.
+
+At least one GalleryViewer-level browser or component integration flow must cover local-array behavior:
+
+- Render a local asset array spanning multiple years and months.
+- Activate a year bucket and then a month bucket.
+- Assert assets outside the activated year/month remain available for detailed browsing and viewer navigation.
+
+At least one mobile widget or integration flow must cover:
+
+- Photos: `Years -> tap year -> Months -> tap month -> All/detailed`.
+- Assert no temporal chip appears after bucket activation.
+- Assert existing filters remain active.
+- Assert adjacent years/months remain reachable.
+
+At least one mobile shared-route widget or integration flow must cover:
+
+- A route such as album, space, or person detail.
+- Activate a year and month bucket.
+- Assert route-owned constraints remain in the route service.
+- Assert no route-local temporal chip appears from bucket activation.
 
 ## Manual QA Matrix
 
