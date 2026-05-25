@@ -65,7 +65,11 @@ descriptive EXIF/user metadata only.
   be controlled independently from image edits.
 - Keep provider exposure safe: before-values shown to the user in Gallery must
   not be leaked to the model unless the session allows metadata exposure.
-- Cover the new operation with unit, DTO, UI, and assistant-flow regressions.
+- Implement in TDD slices: each slice starts with a failing test, verifies the
+  expected red failure, implements the smallest useful change, then verifies
+  green before continuing.
+- Cover the new operation with unit, DTO, UI, assistant-flow, and docs
+  regressions.
 
 ## Non-Goals
 
@@ -145,16 +149,22 @@ type AgentAssetMetadataUpdatePayload = {
 Validation rules:
 
 - At least one payload field is required.
+- `description` may be an empty string to clear the description, but non-empty
+  descriptions are trimmed and capped at 1000 characters.
 - `dateTimeOriginal` must be an ISO datetime string.
 - `dateTimeRelative` is an integer minute offset, matching the existing bulk
   date-shift UI and service behavior.
+- `dateTimeRelative: 0` is rejected when it is the only effective payload field.
 - `dateTimeOriginal` and `dateTimeRelative` are mutually exclusive, matching
   `AssetBulkUpdateDto`.
-- `timeZone` may be supplied alone or with either time mode.
+- `timeZone` may be supplied alone or with either time mode. It must be a
+  non-empty IANA timezone string accepted by the server runtime.
 - `latitude` and `longitude` must be supplied together.
 - `latitude` must be within `[-90, 90]`.
 - `longitude` must be within `[-180, 180]`.
-- `description` may be an empty string to clear the description.
+- `latitude: null` and `longitude: null` are rejected. Clearing location is not
+  part of v1 because the existing bulk update DTO does not expose nullable
+  coordinate updates.
 - `rating: null` clears the rating.
 - `rating: 0` and `rating: -1` should be rejected in the agent operation even
   though legacy asset DTOs still tolerate older rating shapes.
@@ -207,6 +217,11 @@ allows it.
 8. Existing asset update behavior queues sidecar writes and reverse-geocodes
    coordinates.
 
+`asset.updateMetadata` is operation-level atomic from the agent plan
+perspective. `AssetService.updateAll` returns no per-asset result list, so a
+metadata operation is either marked applied or failed as a whole. Other enabled
+operations in the same plan may still apply if the plan apply flow reaches them.
+
 ## Plan Review UI
 
 The existing asset operation review can be reused, but metadata edits need a
@@ -250,9 +265,65 @@ Recoverable errors should include model-facing correction hints:
   user to narrow the target."
 - Write scope disabled: "This session is not allowed to update asset metadata."
 
-Apply-time partial failure should use the existing applied-plan card behavior:
-successful operations remain visible, failed operations show a concise error,
-and the chat remains usable.
+Apply-time failure should use the existing applied-plan card behavior:
+successful operations remain visible, failed metadata operations show a concise
+operation-level error, and the chat remains usable.
+
+## TDD Implementation Slices
+
+Each slice must follow red-green-refactor:
+
+1. Add or update the failing test first.
+2. Run the targeted test and confirm it fails for the expected reason.
+3. Implement the smallest production change.
+4. Re-run the targeted test and confirm it passes.
+5. Run the relevant surrounding suite before moving to the next slice.
+
+Suggested slices:
+
+1. DTO/schema contract: add `asset.updateMetadata`, payload validation, generated
+   MCP schema coverage, and unknown-field correction coverage.
+2. Permission model: add `updateAssetMetadata` to permission snapshots, presets,
+   legacy backfill, OpenAPI required fields, and custom-plan validation.
+3. Plan creation/materialization: validate write scope and asset access,
+   materialize explicit/search-backed asset sources, and persist review metadata.
+4. Apply path: delegate to `assetService.updateAll`, preserve all-or-failed
+   operation status, and surface reverse-geocode or sidecar-write failures.
+5. UI review and activity: render operation copy, before/after fields, empty
+   clears, coordinate warnings, and photo-review selection edits.
+6. Assistant flow: prove prompt-to-plan behavior, plan apply continuation, and
+   the place-name-without-coordinates clarification path.
+7. Docs/capability matrix: update the matrix and add a regression that prevents
+   this capability from drifting back into `Needs new tool`.
+
+## Edge Case Matrix
+
+| Edge case | Required behavior | Coverage |
+| --- | --- | --- |
+| Empty payload | Reject before plan creation. | DTO and MCP contract tests |
+| Unknown payload field | Reject with correction hint; do not silently drop it. | DTO and MCP contract tests |
+| `description: ""` | Clear the description and show "clear description" in review. | DTO, apply, UI tests |
+| Overlong description | Reject before plan creation. | DTO tests |
+| `rating: null` | Clear rating and show "unrated" in review. | DTO, apply, UI tests |
+| `rating: 0`, `-1`, or `6` | Reject even though legacy asset DTOs are looser. | DTO tests |
+| Invalid ISO datetime | Reject before plan creation. | DTO tests |
+| `dateTimeOriginal` plus `dateTimeRelative` | Reject before plan creation. | DTO tests |
+| `dateTimeRelative: 0` alone | Reject as a no-op. | DTO tests |
+| Non-integer relative time | Reject before plan creation. | DTO tests |
+| Invalid or blank timezone | Reject before plan creation. | DTO tests |
+| Place name without coordinates | Ask for latitude/longitude; no plan is created. | Assistant-flow tests |
+| Latitude without longitude | Reject before plan creation. | DTO tests |
+| Null or out-of-range coordinates | Reject before plan creation. | DTO tests |
+| Reverse geocode returns no labels | Apply coordinates and show blank city/state/country safely. | Service tests |
+| Reverse geocode throws | Mark operation failed and keep chat usable. | Apply tests |
+| Search source returns no assets | Return a recoverable no-match response instead of an empty plan. | Service and assistant-flow tests |
+| Search source exceeds caps | Materialize within existing caps or ask user to narrow. | Service tests |
+| Expired selection handle | Return recoverable handle guidance. | Service tests |
+| Shared-space asset outside write access | Reject inaccessible assets. | Permission tests |
+| Locked asset outside session scope | Reject inaccessible assets. | Permission tests |
+| Metadata read disabled but write enabled | Do not leak before-values to the model; UI review may still show user-visible plan details. | Service tests |
+| Apply after asset becomes inaccessible | Mark metadata operation failed with concise error. | Apply tests |
+| Revision changes metadata payload | Revalidate the replacement payload before storing. | Service tests |
 
 ## Testing Plan
 
@@ -262,23 +333,41 @@ and the chat remains usable.
 - Accept `description: ""`.
 - Accept `rating: null`.
 - Reject `rating: 0`, `rating: -1`, and values outside 1-5.
+- Reject invalid ISO date strings.
+- Reject non-integer `dateTimeRelative`.
+- Reject `dateTimeRelative: 0` when it is the only effective field.
 - Reject `dateTimeOriginal` with `dateTimeRelative`.
+- Accept a valid IANA `timeZone`.
+- Reject blank or invalid `timeZone`.
 - Reject latitude without longitude and longitude without latitude.
+- Reject null, out-of-range, and non-finite coordinates.
 - Reject unknown fields such as `placeName`, `city`, and `title`.
 - Verify the generated MCP tool schema exposes `asset.updateMetadata`.
+- Verify schema descriptions state that `dateTimeRelative` is an integer minute
+  offset.
 
 ### Service Tests
 
 - Plan creation validates `writeScope.updateAssetMetadata`.
 - Legacy permission snapshots backfill `updateAssetMetadata: false`.
+- Permission presets set `updateAssetMetadata` to `false`, `true`, and `true`
+  for Careful, VisualOrganizer, and LocalPowerUser respectively.
+- OpenAPI schema marks `updateAssetMetadata` as required for non-legacy custom
+  permission plans.
 - Search-backed metadata plans materialize asset sources at creation time.
+- No-match sources return a recoverable response and do not create an empty
+  plan.
+- Expired or cross-session selection handles return recoverable guidance.
 - Apply delegates to `assetService.updateAll` with the selected asset IDs and
   expected DTO fields.
 - Coordinate updates call the existing bulk update path so reverse geocoding
   remains centralized.
+- Reverse-geocode failure marks the operation failed without ending the chat
+  session.
 - Provider-facing responses omit before-values unless metadata exposure allows
   them.
 - Revised plans preserve metadata payload validation.
+- Applying after an asset becomes inaccessible fails the operation cleanly.
 
 ### UI Tests
 
@@ -286,6 +375,10 @@ and the chat remains usable.
 - Plan review shows before/after metadata for representative sample assets.
 - Empty descriptions and cleared ratings are displayed clearly.
 - Coordinate updates display latitude and longitude together.
+- Coordinate updates show a multi-asset warning when more than one asset is
+  selected.
+- Operation-level apply failure renders as failed without removing successful
+  sibling operation cards.
 - Photo review item selection changes update the operation asset set.
 - Unknown future metadata operation fields do not break the panel.
 
@@ -299,9 +392,14 @@ Acceptance prompts:
 4. "Shift these scanned photos forward by 2 hours."
 5. "Set these photos to latitude 48.8566 and longitude 2.3522."
 6. "Set these photos to Paris."
+7. "Set the date on these photos to yesterday and the timezone to Europe/Berlin."
+8. "Set these photos to latitude 48.8566."
 
 Expected behavior for prompt 6: Pi asks for coordinates instead of creating a
 plan.
+
+Expected behavior for prompt 8: Pi asks for the missing longitude instead of
+creating a plan.
 
 ## Capability Matrix Update
 
