@@ -673,9 +673,21 @@ describe(AssetRepository.name, () => {
         identityId: aliceIdentity.id,
         source: 'manual',
       });
-      await faceIdentityRepository.linkFace({ assetFaceId: bobOnlyFace.id, identityId: bobIdentity.id, source: 'manual' });
-      await faceIdentityRepository.linkFace({ assetFaceId: bothAliceFace.id, identityId: aliceIdentity.id, source: 'manual' });
-      await faceIdentityRepository.linkFace({ assetFaceId: bothBobFace.id, identityId: bobIdentity.id, source: 'manual' });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: bobOnlyFace.id,
+        identityId: bobIdentity.id,
+        source: 'manual',
+      });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: bothAliceFace.id,
+        identityId: aliceIdentity.id,
+        source: 'manual',
+      });
+      await faceIdentityRepository.linkFace({
+        assetFaceId: bothBobFace.id,
+        identityId: bobIdentity.id,
+        source: 'manual',
+      });
 
       const bucket = await sut.getTimeBucket(
         '2026-03-01',
