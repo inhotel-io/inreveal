@@ -793,6 +793,7 @@ describe('Spaces person detail page', () => {
       sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({ total: 0, items: [] });
       sdkMock.confirmSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
       sdkMock.dismissSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
+      sdkMock.ignoreSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
     });
 
     it('renders the reused banner for editors and uses the space-person thumbnail URL', async () => {
@@ -870,6 +871,7 @@ describe('Spaces person detail page', () => {
         loadPage: (request: { page: number; size: number }) => Promise<PersonFaceSuggestionPageResponseDto>;
         confirm: (assetFaceId: string) => Promise<void>;
         dismiss: (assetFaceId: string) => Promise<void>;
+        ignore: (assetFaceId: string) => Promise<void>;
       };
 
       expect(modalProps.referenceThumbnailUrl).toContain('/shared-spaces/space-1/people/person-1/thumbnail');
@@ -894,6 +896,13 @@ describe('Spaces person detail page', () => {
         id: 'space-1',
         personId: 'person-1',
         assetFaceId: 'face-2',
+      });
+
+      await modalProps.ignore('face-3');
+      expect(sdkMock.ignoreSpacePersonFaceSuggestion).toHaveBeenCalledWith({
+        id: 'space-1',
+        personId: 'person-1',
+        assetFaceId: 'face-3',
       });
 
       closeModal({ confirmed: 1 });
@@ -934,6 +943,7 @@ describe('Spaces person detail page', () => {
         loadPage: (request: { page: number; size: number }) => Promise<PersonFaceSuggestionPageResponseDto>;
         confirm: (assetFaceId: string) => Promise<void>;
         dismiss: (assetFaceId: string) => Promise<void>;
+        ignore: (assetFaceId: string) => Promise<void>;
       };
 
       await view.rerender({
@@ -963,6 +973,7 @@ describe('Spaces person detail page', () => {
       await modalProps.loadPage({ page: 2, size: 50 });
       await modalProps.confirm('face-1');
       await modalProps.dismiss('face-2');
+      await modalProps.ignore('face-3');
 
       expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenLastCalledWith({
         id: 'space-1',
@@ -979,6 +990,11 @@ describe('Spaces person detail page', () => {
         id: 'space-1',
         personId: 'person-1',
         assetFaceId: 'face-2',
+      });
+      expect(sdkMock.ignoreSpacePersonFaceSuggestion).toHaveBeenCalledWith({
+        id: 'space-1',
+        personId: 'person-1',
+        assetFaceId: 'face-3',
       });
 
       closeModal({ confirmed: 1 });
