@@ -157,7 +157,7 @@ describe('Archive page timeline grouping', () => {
     expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
   });
 
-  it('year and month buckets keep archive options and show temporal chips', async () => {
+  it('year and month buckets keep archive options without temporal chips', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
@@ -165,25 +165,35 @@ describe('Archive page timeline grouping', () => {
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
 
     await fireEvent.click(screen.getByTestId('activate-month-bucket'));
 
     await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
     });
   });
 
-  it('singular temporal result count shows 1 result', async () => {
+  it('bucket activation does not render a temporal result count chip', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    expect(await screen.findByTestId('result-count')).toHaveTextContent('1 result');
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+    expect(screen.queryByTestId('result-count')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
 
   it('manual grouping changes do not create temporal chips', async () => {
@@ -204,6 +214,19 @@ describe('Archive page timeline grouping', () => {
     renderPage();
 
     expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('ignores bucket activation while selection mode is active', async () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
 
   it('unfiltered empty placeholder does not render orphaned grouping controls', async () => {

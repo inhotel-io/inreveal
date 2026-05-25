@@ -250,7 +250,7 @@ describe('Tags page timeline grouping', () => {
     );
   });
 
-  it('year bucket activation keeps tag scope, switches grouping to month, and shows clearable temporal chip', async () => {
+  it('year bucket activation keeps tag scope and zooms without temporal chips', async () => {
     renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
@@ -258,23 +258,37 @@ describe('Tags page timeline grouping', () => {
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
   });
 
-  it('clearing temporal chip preserves grouping and removes ActiveFiltersBar', async () => {
+  it('bucket activation keeps tag scope without rendering ActiveFiltersBar', async () => {
     renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await fireEvent.click(await screen.findByRole('button', { name: 'Remove 2015 filter' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
+    });
+  });
+
+  it('ignores bucket activation while selection mode is active', async () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
     });
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
 
   it('selected tag with only child tags does not render orphaned grouping controls', () => {
