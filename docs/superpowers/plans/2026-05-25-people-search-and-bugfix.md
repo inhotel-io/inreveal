@@ -419,7 +419,11 @@ it('requires every selected identity for time bucket assets', async () => {
     source: 'manual',
   });
   await faceIdentityRepository.linkFace({ assetFaceId: bobOnlyFace.id, identityId: bobIdentity.id, source: 'manual' });
-  await faceIdentityRepository.linkFace({ assetFaceId: bothAliceFace.id, identityId: aliceIdentity.id, source: 'manual' });
+  await faceIdentityRepository.linkFace({
+    assetFaceId: bothAliceFace.id,
+    identityId: aliceIdentity.id,
+    source: 'manual',
+  });
   await faceIdentityRepository.linkFace({ assetFaceId: bothBobFace.id, identityId: bobIdentity.id, source: 'manual' });
 
   const bucket = await sut.getTimeBucket(
@@ -721,10 +725,7 @@ In the existing `describe('smart facets query shape')` block:
 it('space person filters emit one EXISTS per selected space person for smart facet totals', () => {
   const sql = buildFacetFilteredIdsSql(sut, {
     ...baseOptions,
-    spacePersonIds: [
-      '00000000-0000-0000-0000-000000000001',
-      '00000000-0000-0000-0000-000000000002',
-    ],
+    spacePersonIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
   });
 
   expect(countMatches(sql, /exists\s*\(select\b[\s\S]+?from\s+"shared_space_person_face"/gi)).toBe(2);
@@ -737,10 +738,7 @@ In the existing `describe('filter suggestions query shape')` block:
 ```ts
 it('global person suggestion filters require every selected person', () => {
   const sql = compileFilteredAssetIds(sut, {
-    personIds: [
-      '00000000-0000-0000-0000-000000000001',
-      '00000000-0000-0000-0000-000000000002',
-    ],
+    personIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
   });
 
   expect(sql).toContain('"has_people"');
@@ -750,10 +748,7 @@ it('global person suggestion filters require every selected person', () => {
 it('space person suggestion filters require every selected space person', () => {
   const sql = compileFilteredAssetIds(sut, {
     spaceId: '11111111-1111-1111-1111-111111111111',
-    personIds: [
-      '00000000-0000-0000-0000-000000000001',
-      '00000000-0000-0000-0000-000000000002',
-    ],
+    personIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
   });
 
   expect(countMatches(sql, /exists\s*\(select\b[\s\S]+?from\s+"shared_space_person_face"/gi)).toBe(2);
@@ -767,10 +762,7 @@ In a new `describe('searchAssetBuilder people semantics')` block:
 it('uses AND semantics for space person filters by default', () => {
   const sql = buildAssetSearchSql({
     userIds: ['00000000-0000-0000-0000-000000000000'],
-    spacePersonIds: [
-      '00000000-0000-0000-0000-000000000001',
-      '00000000-0000-0000-0000-000000000002',
-    ],
+    spacePersonIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
   });
 
   expect(countMatches(sql, /exists\s*\(select\b[\s\S]+?from\s+"shared_space_person_face"/gi)).toBe(2);

@@ -120,18 +120,18 @@ Add focused tests in this order:
 
 Coverage must include these edge cases:
 
-| Edge Case | Expected Behavior |
-| --- | --- |
-| Empty or undefined people arrays | No people filter is applied. |
-| Single selected person | Same results as today for visible, non-deleted faces. |
-| Duplicate selected IDs | Deduplicate before applying AND. |
-| Multiple visible faces for the same person on one asset | Counts as satisfying that one selected person once. |
-| Hidden or deleted faces | Do not satisfy any people filter. |
-| One selected person has no visible matching face | Result set is empty unless another OR path was explicitly requested. |
-| Mixed `personIds`, `identityIds`, and `spacePersonIds` | Asset must satisfy every non-empty category by default. |
-| `personMatchAny: true` | Preserve intentional OR behavior for every people-related ID category in `searchAssetBuilder()` callers. |
-| Shared-space timeline opt-out or inaccessible token | Existing access filtering and `forceEmptyResult` behavior wins. |
-| Pagination, ordering, and bucket grouping | Existing order and grouping behavior stays unchanged after the narrower filter is applied. |
+| Edge Case                                               | Expected Behavior                                                                                        |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Empty or undefined people arrays                        | No people filter is applied.                                                                             |
+| Single selected person                                  | Same results as today for visible, non-deleted faces.                                                    |
+| Duplicate selected IDs                                  | Deduplicate before applying AND.                                                                         |
+| Multiple visible faces for the same person on one asset | Counts as satisfying that one selected person once.                                                      |
+| Hidden or deleted faces                                 | Do not satisfy any people filter.                                                                        |
+| One selected person has no visible matching face        | Result set is empty unless another OR path was explicitly requested.                                     |
+| Mixed `personIds`, `identityIds`, and `spacePersonIds`  | Asset must satisfy every non-empty category by default.                                                  |
+| `personMatchAny: true`                                  | Preserve intentional OR behavior for every people-related ID category in `searchAssetBuilder()` callers. |
+| Shared-space timeline opt-out or inaccessible token     | Existing access filtering and `forceEmptyResult` behavior wins.                                          |
+| Pagination, ordering, and bucket grouping               | Existing order and grouping behavior stays unchanged after the narrower filter is applied.               |
 
 Suggested verification commands:
 
