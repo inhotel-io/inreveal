@@ -91,6 +91,15 @@ import z from 'zod';
 
 const selectionHandleRecoveryLimit = 5;
 const searchSourceRefPrefix = 'asset-source:search:';
+const assetUpdateMetadataWorkflowPayloadKeys = [
+  'description',
+  'rating',
+  'dateTimeOriginal',
+  'dateTimeRelative',
+  'timeZone',
+  'latitude',
+  'longitude',
+] as const;
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 const knownAgentIdDomains = new Set<AgentIdDomain>([
   'asset',
@@ -418,6 +427,9 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetRotate: {
         return `Rotate matching photos ${dto.angle} degrees`;
       }
+      case AgentOperationType.AssetUpdateMetadata: {
+        return 'Update matching photo metadata';
+      }
     }
   }
 
@@ -445,7 +457,25 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetRotate: {
         return { angle: dto.angle };
       }
+      case AgentOperationType.AssetUpdateMetadata: {
+        return this.getAssetUpdateMetadataWorkflowPayload(dto);
+      }
     }
+  }
+
+  private getAssetUpdateMetadataWorkflowPayload(
+    dto: Extract<
+      AgentProposeAssetBatchFromSearchToolRequestDto['action'],
+      { type: AgentOperationType.AssetUpdateMetadata }
+    >,
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+    for (const key of assetUpdateMetadataWorkflowPayloadKeys) {
+      if (dto[key] !== undefined) {
+        payload[key] = dto[key];
+      }
+    }
+    return payload;
   }
 
   private getAssetBatchWorkflowRiskLevel(
@@ -458,6 +488,7 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetSetArchive: {
         return AgentOperationRiskLevel.High;
       }
+      case AgentOperationType.AssetUpdateMetadata:
       case AgentOperationType.AssetAddTag:
       case AgentOperationType.AssetRotate: {
         return AgentOperationRiskLevel.Medium;
@@ -961,6 +992,7 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetRotate,
       AgentOperationType.AssetSetFavorite,
       AgentOperationType.AssetSetArchive,
+      AgentOperationType.AssetUpdateMetadata,
       AgentOperationType.AssetAddTag,
       AgentOperationType.AssetRemoveTag,
     ].includes(type);
@@ -1285,6 +1317,7 @@ export class AgentOperationPlanService {
       type === AgentOperationType.AssetRotate ||
       type === AgentOperationType.AssetSetFavorite ||
       type === AgentOperationType.AssetSetArchive ||
+      type === AgentOperationType.AssetUpdateMetadata ||
       type === AgentOperationType.AssetAddTag ||
       type === AgentOperationType.AssetRemoveTag
     );
@@ -1761,6 +1794,10 @@ export class AgentOperationPlanService {
 
     if (type === AgentOperationType.AssetSetArchive && !writeScope.archiveAssets) {
       throw new BadRequestException('Agent permission policy does not allow archiving assets');
+    }
+
+    if (type === AgentOperationType.AssetUpdateMetadata && !writeScope.updateAssetMetadata) {
+      throw new BadRequestException('This session is not allowed to update asset metadata');
     }
 
     if (

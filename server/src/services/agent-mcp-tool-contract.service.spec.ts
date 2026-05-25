@@ -148,6 +148,7 @@ describe(AgentMcpToolContractService.name, () => {
       'favorite-search-results',
       'archive-search-results',
       'tag-search-results',
+      'metadata-search-results',
       'rotate-previous-search-results',
     ]);
 
@@ -158,6 +159,15 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(result.success, example.name).toBe(true);
     }
+
+    const metadataExample = contract?.examples.find((example) => example.name === 'metadata-search-results');
+    const parsedMetadata = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].parse(
+      metadataExample?.arguments,
+    );
+    expect(parsedMetadata.action).toMatchObject({
+      type: AgentOperationType.AssetUpdateMetadata,
+      description: 'Berlin weekend',
+    });
   });
 
   it('documents asset batch workflow mistakes for raw asset ids and unsupported actions', () => {
@@ -176,7 +186,7 @@ describe(AgentMcpToolContractService.name, () => {
         }),
         expect.objectContaining({
           id: 'asset-batch-workflow-unsupported-action',
-          hint: expect.stringMatching(/asset\.setFavorite.*asset\.setArchive.*asset\.addTag.*asset\.rotate/i),
+          hint: expect.stringMatching(/asset\.setFavorite.*asset\.setArchive.*asset\.addTag.*asset\.updateMetadata.*asset\.rotate/i),
           exampleName: 'favorite-search-results',
         }),
       ]),

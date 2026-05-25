@@ -1936,6 +1936,18 @@ describe('Agent operation DTOs', () => {
         },
       ],
       [
+        'metadata update',
+        {
+          action: {
+            type: AgentOperationType.AssetUpdateMetadata,
+            description: 'Berlin weekend',
+            rating: 5,
+            timeZone: 'Europe/Berlin',
+          },
+          assetSource: { kind: 'search', filters: { city: 'Berlin' } },
+        },
+      ],
+      [
         'previous search',
         {
           action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
@@ -1986,6 +1998,50 @@ describe('Agent operation DTOs', () => {
       });
 
       expect(result.success).toBe(false);
+    });
+
+    it.each([
+      [
+        'empty metadata action',
+        { type: AgentOperationType.AssetUpdateMetadata },
+        ['action'],
+        'Provide at least one metadata field to update',
+      ],
+      [
+        'zero relative time as only metadata field',
+        { type: AgentOperationType.AssetUpdateMetadata, dateTimeRelative: 0 },
+        ['action', 'dateTimeRelative'],
+        'dateTimeRelative: 0 is a no-op unless another metadata field changes',
+      ],
+      [
+        'absolute and relative dates together',
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          dateTimeOriginal: '1998-06-01T12:00:00.000Z',
+          dateTimeRelative: 120,
+        },
+        ['action'],
+        'Choose dateTimeOriginal or dateTimeRelative, not both',
+      ],
+      [
+        'latitude without longitude',
+        { type: AgentOperationType.AssetUpdateMetadata, latitude: 48.8566 },
+        ['action'],
+        'Provide both latitude and longitude',
+      ],
+      [
+        'place name field',
+        { type: AgentOperationType.AssetUpdateMetadata, placeName: 'Paris' },
+        ['action'],
+        'Unrecognized key',
+      ],
+    ])('rejects proposeAssetBatchFromSearch metadata action with %s', (_label, action, path, message) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action,
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expectIssue(result, path, message);
     });
 
     it('rejects proposeAssetBatchFromSearch raw id and selection-handle sources', () => {

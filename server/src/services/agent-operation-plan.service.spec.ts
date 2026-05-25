@@ -1390,6 +1390,19 @@ describe(AgentOperationPlanService.name, () => {
       expectedRiskLevel: AgentOperationRiskLevel.Medium,
       expectedSummary: 'Rotate matching photos 90 degrees',
     },
+    {
+      label: 'metadata',
+      action: {
+        type: AgentOperationType.AssetUpdateMetadata,
+        description: 'Berlin weekend',
+        timeZone: 'Europe/Berlin',
+      },
+      expectedType: AgentOperationType.AssetUpdateMetadata,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { description: 'Berlin weekend', timeZone: 'Europe/Berlin' },
+      expectedRiskLevel: AgentOperationRiskLevel.Medium,
+      expectedSummary: 'Update matching photo metadata',
+    },
   ])(
     'proposeAssetBatchFromSearch creates a reviewable $label plan from a search source',
     async ({ action, expectedType, expectedTargetKind, expectedPayload, expectedRiskLevel, expectedSummary }) => {
@@ -1464,6 +1477,61 @@ describe(AgentOperationPlanService.name, () => {
     },
   );
 
+  it('creates a reviewable asset.updateMetadata plan for explicit asset ids', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const assetIds = [newUuid(), newUuid()];
+    const payload = { description: 'Berlin weekend', rating: 5 };
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetUpdateMetadata,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            payload,
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Update selected photo metadata.',
+      operations: [
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set description and rating.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          payload,
+          enabled: true,
+          riskLevel: AgentOperationRiskLevel.Medium,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.AssetUpdateMetadata,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+            payload,
+          }),
+        ],
+      }),
+    );
+    expect(assetService.updateAll).not.toHaveBeenCalled();
+  });
+
   it('proposeAssetBatchFromSearch materializes previousSearch without rerunning search', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
@@ -1508,6 +1576,57 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  it('materializes asset.updateMetadata previousSearch before storing the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const sourceRef = `asset-source:search:${selectionHandleId}` as const;
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+      action: { type: AgentOperationType.AssetUpdateMetadata, rating: null },
+      assetSource: { kind: 'previousSearch', sourceRef },
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.AssetUpdateMetadata,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+            payload: { rating: null },
+          }),
+        ],
+      }),
+    );
+  });
+
   it.each([
     ['favoriteAssets', AgentOperationType.AssetSetFavorite, { favoriteAssets: false }],
     ['archiveAssets', AgentOperationType.AssetSetArchive, { archiveAssets: false }],
@@ -1545,6 +1664,111 @@ describe(AgentOperationPlanService.name, () => {
       expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
     },
   );
+
+  it('denies asset.updateMetadata planning when metadata write scope is disabled before materializing search', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, updateAssetMetadata: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+        action: { type: AgentOperationType.AssetUpdateMetadata, description: 'Berlin weekend' },
+        assetSource: { kind: 'search', filters: {} },
+      }),
+    ).rejects.toThrow('This session is not allowed to update asset metadata');
+
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('rejects asset.updateMetadata when selected assets are outside writable access', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const assetIds = [newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentLockedIds.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Update inaccessible metadata.',
+        operations: [
+          {
+            type: AgentOperationType.AssetUpdateMetadata,
+            summary: 'Set description.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            payload: { description: 'Hidden' },
+            enabled: true,
+            riskLevel: AgentOperationRiskLevel.Medium,
+          },
+        ],
+      }),
+    ).rejects.toThrow('One or more assets are not editable');
+
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('materializes asset.updateMetadata selection handles before storing the plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(makePlan({ sessionId: session.id, operations: [] }));
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Clear selected ratings.',
+      operations: [
+        {
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Clear ratings.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetSelectionHandleId: selectionHandleId,
+          payload: { rating: null },
+          enabled: true,
+          riskLevel: AgentOperationRiskLevel.Medium,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+            payload: { rating: null },
+          }),
+        ],
+      }),
+    );
+  });
 
   it('proposeAssetBatchFromSearch rejects empty and over-broad search sources before persistence', async () => {
     const auth = AuthFactory.create();
