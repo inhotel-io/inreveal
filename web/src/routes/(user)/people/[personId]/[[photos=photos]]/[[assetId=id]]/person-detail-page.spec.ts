@@ -329,14 +329,16 @@ describe('Person detail page', () => {
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
 
-  it('activating person year and month buckets preserves person scope and sets temporal chips and anchors', async () => {
+  it('activating person year and month buckets preserves person scope without temporal chips', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
 
@@ -344,23 +346,24 @@ describe('Person detail page', () => {
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Aug 2015');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
     });
   });
 
-  it('clearing the person temporal chip preserves person scope and current grouping', async () => {
+  it('person bucket activation keeps scope without rendering ActiveFiltersBar', async () => {
     renderPage();
 
     await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await fireEvent.click(await screen.findByRole('button', { name: 'Remove 2015 filter' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withSharedSpaces":true');
       expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
   });
 
@@ -370,6 +373,19 @@ describe('Person detail page', () => {
     renderPage();
 
     expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('ignores person bucket activation while selection mode is active', async () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+
+    renderPage();
+    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
 
   it('uses the shared-space thumbnail for a space-primary identity-wide person page', () => {

@@ -34,8 +34,8 @@
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { toScopedPersonRef as toPersonScopedRef } from '$lib/utils/scoped-person-ref';
   import {
-    activateTimelineBucket,
     clearTimelineTemporalFilter,
+    getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
   } from '$lib/utils/timeline-filter-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
@@ -347,12 +347,15 @@
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    const result = activateTimelineBucket(timelineFilters, bucket);
+    if (assetMultiSelectManager.selectionActive) {
+      return;
+    }
+
+    const result = getTimelineBucketZoomTarget(bucket);
     if (!result) {
       return;
     }
 
-    timelineFilters = result.filters;
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
   }
