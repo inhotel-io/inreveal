@@ -1,6 +1,6 @@
 # People Search AND Bugfix Design
 
-Status: pending written-spec review
+Status: reviewed for TDD implementation planning; pending user approval
 Date: 2026-05-25
 Worktree: `/Users/pierre/dev/gallery/.worktrees/issue-628-people-search-and`
 Branch: `fix/issue-628-people-search-and`
@@ -36,9 +36,9 @@ The search repository already has both semantics:
 - `searchAssetBuilder()` uses `personMatchAny` to choose OR, otherwise it uses AND for normal `personIds`.
 - Smart search also defaults to one visible-face `EXISTS` predicate per selected person unless `personMatchAny` is set.
 
-The inconsistent path is timeline browsing. `AssetRepository.getTimeBuckets()` and `AssetRepository.getTimeBucket()` currently use the OR helpers for `personIds`, `identityIds`, and `spacePersonIds`. That means URLs such as `/photos?people=a,b` can show timeline results containing either person.
+The inconsistent result path is timeline browsing. `AssetRepository.getTimeBuckets()` and `AssetRepository.getTimeBucket()` currently use the OR helpers for `personIds`, `identityIds`, and `spacePersonIds`. That means URLs such as `/photos?people=a,b` can show timeline results containing either person.
 
-Shared-space person filters are also OR-only in the shared helper `hasAnySpacePerson()`, and `searchAssetBuilder()` currently applies that helper whenever `spacePersonIds` are present.
+Shared-space person filters are also OR-only in the shared helper `hasAnySpacePerson()`. `searchAssetBuilder()` and smart-search facet filtering currently apply that helper whenever `spacePersonIds` are present. Search/filter suggestion queries have their own filtered-asset builder and also need the same default semantics so counts and suggestions do not describe an OR-filtered result set.
 
 ## Design
 
@@ -50,11 +50,14 @@ Default people filters should be AND:
 - `identityIds`: use `hasFaceIdentities()`.
 - `spacePersonIds`: add and use a new `hasSpacePeople()` helper.
 
+Each people-related ID list should be normalized to unique, truthy IDs before applying AND helpers. This avoids the existing `count(distinct ...) = ids.length` pattern turning duplicate URL or typed-search IDs into an impossible filter.
+
 `hasSpacePeople()` should mirror the existing `hasSpacePerson()` predicate for each selected shared-space person and combine those predicates with `AND`. This avoids relying on grouping across `shared_space_person_face` joins and keeps the intended semantics easy to read.
 
 Explicit OR should remain possible only through existing OR-specific helpers:
 
-- `personMatchAny` continues to select `hasAnyPerson()` in `searchAssetBuilder()`.
+- `personMatchAny` continues to select OR matching in `searchAssetBuilder()`.
+- When `personMatchAny` is set, `personIds`, `identityIds`, and `spacePersonIds` should all use their OR helpers.
 - Existing callers that intentionally pass `personMatchAny: true` keep their behavior.
 
 There is no new public API flag.
@@ -63,11 +66,13 @@ There is no new public API flag.
 
 Update these paths to use default AND semantics:
 
-- `searchAssetBuilder()` for `spacePersonIds`.
+- `searchAssetBuilder()` for `spacePersonIds`, while preserving `personMatchAny` OR behavior for all people-related filters.
+- `SearchRepository.buildSmartFacetFilteredAssetIds()` for `spacePersonIds`.
+- `SearchRepository.buildFilteredAssetIds()` for filter/search suggestion queries that apply `personIds` in either global or space scope.
 - `AssetRepository.getTimeBuckets()` for `personIds`, `spacePersonIds`, and `identityIds`.
 - `AssetRepository.getTimeBucket()` for `personIds`, `spacePersonIds`, and `identityIds`.
 
-Metadata search and smart search already use AND for normal `personIds` and `identityIds`; they should be covered by regression tests, not redesigned.
+Metadata search and smart search already use AND for normal `personIds` and `identityIds`; they should be covered by regression tests and duplicate-ID normalization, not redesigned.
 
 ### Data Flow
 
@@ -79,30 +84,75 @@ The frontend continues to serialize selected people as it does today:
 
 After resolution reaches repositories, each selected people-related ID narrows the candidate asset set.
 
+Mixed resolved categories are cumulative. If a request resolves to `personIds`, `identityIds`, and `spacePersonIds`, an asset must satisfy every non-empty category unless the repository path was explicitly called with `personMatchAny`.
+
 ### Error Handling
 
 No new error cases are introduced. Existing invalid-token, inaccessible-token, and empty-result behavior remains unchanged.
 
 If a selected scoped person token resolves to an inaccessible person, existing `forceEmptyResult` behavior still applies.
 
+## TDD Requirements
+
+Implementation must follow red-green-refactor.
+
+1. Write one failing test for the next behavior.
+2. Run the narrow test command and confirm it fails for the expected OR-vs-AND reason.
+3. Implement the smallest production change that makes that test pass.
+4. Re-run the narrow test and keep it green.
+5. Repeat for the next edge case.
+
+Do not write production code for this bugfix before a failing test demonstrates the bug. Tests written after implementation are acceptable only as additional regression coverage, not as the first proof for a changed behavior.
+
 ### Testing
 
-Add focused tests that prove multi-person filters are AND:
+Add focused tests in this order:
 
-- Repository-level SQL shape tests for `getTimeBuckets()` and `getTimeBucket()` should no longer use `hasAnyPerson()`/`hasAnyFaceIdentity()` for default people filters.
-- Unit or medium tests should cover timeline filtering with two people where only assets containing both are returned.
-- Shared-space person filters should cover two selected space people and require both.
-- Existing tests for `personMatchAny` should continue proving explicit OR behavior.
-- Existing search repository tests for smart search and metadata search should continue passing.
+1. `AssetRepository.getTimeBucket()` with three assets: person A only, person B only, and A+B. Filtering by `[A, B]` must return only A+B. This should fail against the current OR implementation.
+2. `AssetRepository.getTimeBuckets()` with the same shape, using different bucket dates where useful, must count only assets that contain every selected person.
+3. `AssetRepository.getTimeBucket()` with two selected `spacePersonIds` must return only assets containing both space people.
+4. `AssetRepository.getTimeBucket()` with two selected `identityIds` must return only assets linked to both identities.
+5. `SearchRepository.buildSmartFacetFilteredAssetIds()` through `searchSmartFacets()` must apply selected `spacePersonIds` as AND so facet totals match result semantics.
+6. `SearchRepository.buildFilteredAssetIds()` through search/filter suggestion endpoints must apply selected people as AND in both global and space-scoped requests.
+7. Duplicate IDs such as `[A, A]` must behave like `[A]`, not as an impossible two-person filter.
+8. Existing explicit OR paths using `personMatchAny: true` must still return assets matching any selected `personIds`, `identityIds`, or `spacePersonIds`.
+9. Existing inaccessible scoped-token tests must continue returning empty results through `forceEmptyResult`.
+
+Coverage must include these edge cases:
+
+| Edge Case | Expected Behavior |
+| --- | --- |
+| Empty or undefined people arrays | No people filter is applied. |
+| Single selected person | Same results as today for visible, non-deleted faces. |
+| Duplicate selected IDs | Deduplicate before applying AND. |
+| Multiple visible faces for the same person on one asset | Counts as satisfying that one selected person once. |
+| Hidden or deleted faces | Do not satisfy any people filter. |
+| One selected person has no visible matching face | Result set is empty unless another OR path was explicitly requested. |
+| Mixed `personIds`, `identityIds`, and `spacePersonIds` | Asset must satisfy every non-empty category by default. |
+| `personMatchAny: true` | Preserve intentional OR behavior for every people-related ID category in `searchAssetBuilder()` callers. |
+| Shared-space timeline opt-out or inaccessible token | Existing access filtering and `forceEmptyResult` behavior wins. |
+| Pagination, ordering, and bucket grouping | Existing order and grouping behavior stays unchanged after the narrower filter is applied. |
+
+Suggested verification commands:
+
+```bash
+pnpm --filter immich test:medium -- asset.repository.spec.ts search.service.spec.ts people-identity-rbac.spec.ts
+pnpm --filter immich test -- search.repository.spec.ts timeline.service.spec.ts shared-space.service.spec.ts search.service.spec.ts
+```
+
+The exact narrow commands can be adjusted to match Vitest file filtering, but every new failing test must be run alone or in a small focused group before production code changes.
 
 ## Implementation Notes
 
 The likely implementation is small:
 
 1. Add `hasSpacePeople()` in `server/src/utils/database.ts`.
-2. Replace default timeline `hasAnyPerson()` calls with `hasPeople()`.
-3. Replace default timeline `hasAnyFaceIdentity()` calls with `hasFaceIdentities()`.
-4. Replace default `spacePersonIds` filters with `hasSpacePeople()`.
-5. Add tests around the changed paths.
+2. Normalize people-related ID arrays before count-based AND comparisons.
+3. Replace default timeline `hasAnyPerson()` calls with `hasPeople()`.
+4. Replace default timeline `hasAnyFaceIdentity()` calls with `hasFaceIdentities()`.
+5. Replace default `spacePersonIds` filters with `hasSpacePeople()`.
+6. Teach `searchAssetBuilder()` to honor `personMatchAny` for `identityIds` and `spacePersonIds`, preserving internal OR callers.
+7. Update smart-facet and suggestion filtering to use default AND semantics.
+8. Add the red-first tests listed above.
 
 No generated OpenAPI or SDK updates are expected.
