@@ -3,10 +3,53 @@ import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 import {
   activateTimelineBucket,
   clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
   getTimelineManagerTimeBuckets,
 } from '../timeline-filter-navigation';
 
 describe('timeline filter navigation helpers', () => {
+  it('zooms a year bucket to month grouping without requiring filters', () => {
+    expect(
+      getTimelineBucketZoomTarget({
+        grouping: 'year',
+        date: { year: 2015 },
+      }),
+    ).toEqual({
+      grouping: 'month',
+      anchor: { year: 2015 },
+    });
+  });
+
+  it('zooms a month bucket to detailed day grouping without requiring filters', () => {
+    expect(
+      getTimelineBucketZoomTarget({
+        grouping: 'month',
+        date: { year: 2015, month: 8 },
+      }),
+    ).toEqual({
+      grouping: 'day',
+      anchor: { year: 2015, month: 8 },
+    });
+  });
+
+  it('does not zoom day buckets', () => {
+    expect(
+      getTimelineBucketZoomTarget({
+        grouping: 'day',
+        date: { year: 2015, month: 8, day: 23 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('does not zoom malformed month buckets without a month number', () => {
+    expect(
+      getTimelineBucketZoomTarget({
+        grouping: 'month',
+        date: { year: 2015 },
+      }),
+    ).toBeUndefined();
+  });
+
   it('selects a year bucket, clears custom dates, preserves non-time filters, and switches to month grouping', () => {
     const filters = {
       ...createFilterState(),

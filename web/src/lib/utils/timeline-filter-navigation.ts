@@ -16,6 +16,11 @@ type TimelineBucketActivationResult = {
   anchor: TimelineTemporalAnchor;
 };
 
+export type TimelineZoomActivationResult = {
+  grouping: TimelineGrouping;
+  anchor: TimelineTemporalAnchor;
+};
+
 type TemporalBucketSource = {
   timelineBuckets?: Array<{ timeBucket: string; count: number }>;
   months?: Array<{ yearMonth: { year: number; month: number }; assetsCount: number }>;
@@ -29,6 +34,28 @@ export function clearTimelineTemporalFilter(filters: FilterState): FilterState {
     selectedYear: undefined,
     selectedMonth: undefined,
   };
+}
+
+export function getTimelineBucketZoomTarget(
+  bucket: ActivatableTimelineBucket,
+): TimelineZoomActivationResult | undefined {
+  if (bucket.grouping === 'year') {
+    return {
+      grouping: 'month',
+      anchor: { year: bucket.date.year },
+    };
+  }
+
+  if (bucket.grouping === 'month') {
+    if (bucket.date.month === undefined) {
+      return;
+    }
+
+    return {
+      grouping: 'day',
+      anchor: { year: bucket.date.year, month: bucket.date.month },
+    };
+  }
 }
 
 export function activateTimelineBucket(
