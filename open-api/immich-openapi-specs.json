@@ -22426,6 +22426,18 @@
           }
         ]
       },
+      "AgentAssetUpdateMetadataOperationType": {
+        "enum": [
+          "asset.updateMetadata"
+        ],
+        "type": "string"
+      },
+      "AgentAssetUpdateMetadataTargetKind": {
+        "enum": [
+          "asset_batch"
+        ],
+        "type": "string"
+      },
       "AgentAssignableSharedSpaceMemberRole": {
         "enum": [
           "editor",
@@ -23693,6 +23705,7 @@
           "asset.rotate",
           "asset.setFavorite",
           "asset.setArchive",
+          "asset.updateMetadata",
           "asset.addTag",
           "asset.removeTag"
         ],
@@ -23850,6 +23863,9 @@
               "tagAssets": {
                 "type": "boolean"
               },
+              "updateAssetMetadata": {
+                "type": "boolean"
+              },
               "updateDetails": {
                 "type": "boolean"
               },
@@ -23876,7 +23892,8 @@
               "editAssets",
               "favoriteAssets",
               "archiveAssets",
-              "tagAssets"
+              "tagAssets",
+              "updateAssetMetadata"
             ],
             "type": "object"
           }
@@ -24876,6 +24893,142 @@
                       "required": [
                         "archived"
                       ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetUpdateMetadataOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentAssetUpdateMetadataTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "description": "Asset description. Use an empty string to clear the description.",
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "rating": {
+                          "description": "Asset star rating from 1 to 5. Use null to clear the rating.",
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                5
+                              ]
+                            }
+                          ],
+                          "nullable": true
+                        },
+                        "dateTimeOriginal": {
+                          "description": "Absolute original capture date/time as an ISO datetime.",
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "dateTimeRelative": {
+                          "description": "Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.",
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "timeZone": {
+                          "description": "IANA time zone such as Europe/Berlin.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "latitude": {
+                          "description": "Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.",
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "longitude": {
+                          "description": "Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.",
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        }
+                      },
                       "additionalProperties": false
                     }
                   },
@@ -26703,6 +26856,142 @@
                       "required": [
                         "archived"
                       ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetUpdateMetadataOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentAssetUpdateMetadataTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "description": "Asset description. Use an empty string to clear the description.",
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "rating": {
+                          "description": "Asset star rating from 1 to 5. Use null to clear the rating.",
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "enum": [
+                                1
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                2
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                3
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                4
+                              ]
+                            },
+                            {
+                              "type": "number",
+                              "enum": [
+                                5
+                              ]
+                            }
+                          ],
+                          "nullable": true
+                        },
+                        "dateTimeOriginal": {
+                          "description": "Absolute original capture date/time as an ISO datetime.",
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "dateTimeRelative": {
+                          "description": "Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.",
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "timeZone": {
+                          "description": "IANA time zone such as Europe/Berlin.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "latitude": {
+                          "description": "Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.",
+                          "type": "number",
+                          "minimum": -90,
+                          "maximum": 90
+                        },
+                        "longitude": {
+                          "description": "Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.",
+                          "type": "number",
+                          "minimum": -180,
+                          "maximum": 180
+                        }
+                      },
                       "additionalProperties": false
                     }
                   },

@@ -547,6 +547,7 @@ export type AgentPermissionPlan = {
         removeMembersFromSpaces: boolean;
         setCover: boolean;
         tagAssets: boolean;
+        updateAssetMetadata: boolean;
         updateDetails: boolean;
         updateSpaceDetails: boolean;
         updateSpaceMemberRoles: boolean;
@@ -930,6 +931,33 @@ export type AgentProposeAlbumOperationsDto = {
             archived: boolean;
         };
     } | {
+        "type": AgentAssetUpdateMetadataOperationType;
+        summary: string;
+        targetKind: AgentAssetUpdateMetadataTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            /** Asset description. Use an empty string to clear the description. */
+            description?: string;
+            /** Asset star rating from 1 to 5. Use null to clear the rating. */
+            rating?: (1 | 2 | 3 | 4 | 5) | null;
+            /** Absolute original capture date/time as an ISO datetime. */
+            dateTimeOriginal?: string;
+            /** Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal. */
+            dateTimeRelative?: number;
+            /** IANA time zone such as Europe/Berlin. */
+            timeZone?: string;
+            /** Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted. */
+            latitude?: number;
+            /** Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted. */
+            longitude?: number;
+        };
+    } | {
         "type": AgentAssetAddTagOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
@@ -1215,6 +1243,33 @@ export type AgentReviseAlbumOperationsDto = {
         enabled?: boolean;
         payload: {
             archived: boolean;
+        };
+    } | {
+        "type": AgentAssetUpdateMetadataOperationType;
+        summary: string;
+        targetKind: AgentAssetUpdateMetadataTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            /** Asset description. Use an empty string to clear the description. */
+            description?: string;
+            /** Asset star rating from 1 to 5. Use null to clear the rating. */
+            rating?: (1 | 2 | 3 | 4 | 5) | null;
+            /** Absolute original capture date/time as an ISO datetime. */
+            dateTimeOriginal?: string;
+            /** Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal. */
+            dateTimeRelative?: number;
+            /** IANA time zone such as Europe/Berlin. */
+            timeZone?: string;
+            /** Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted. */
+            latitude?: number;
+            /** Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted. */
+            longitude?: number;
         };
     } | {
         "type": AgentAssetAddTagOperationType;
@@ -10259,6 +10314,7 @@ export enum AgentOperationType {
     AssetRotate = "asset.rotate",
     AssetSetFavorite = "asset.setFavorite",
     AssetSetArchive = "asset.setArchive",
+    AssetUpdateMetadata = "asset.updateMetadata",
     AssetAddTag = "asset.addTag",
     AssetRemoveTag = "asset.removeTag"
 }
@@ -10366,6 +10422,12 @@ export enum AgentAssetSetFavoriteOperationType {
 }
 export enum AgentAssetSetArchiveOperationType {
     AssetSetArchive = "asset.setArchive"
+}
+export enum AgentAssetUpdateMetadataOperationType {
+    AssetUpdateMetadata = "asset.updateMetadata"
+}
+export enum AgentAssetUpdateMetadataTargetKind {
+    AssetBatch = "asset_batch"
 }
 export enum AgentAssetAddTagOperationType {
     AssetAddTag = "asset.addTag"

@@ -175,10 +175,14 @@ export class AgentOperationPlanService {
     addAssetsToSpaces: false,
     removeAssetsFromSpaces: false,
     updateSpaceDetails: false,
+    addMembersToSpaces: false,
+    removeMembersFromSpaces: false,
+    updateSpaceMemberRoles: false,
     editAssets: false,
     favoriteAssets: false,
     archiveAssets: false,
     tagAssets: false,
+    updateAssetMetadata: false,
   };
 
   private static readonly activeStatuses = [
