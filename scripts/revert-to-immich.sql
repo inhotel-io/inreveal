@@ -392,6 +392,7 @@ DELETE FROM "kysely_migrations"
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
    '1779000000000-AddSpacePersonFaceSuggestion',
+   '1779100000000-AddFaceSuggestionIntentStatuses',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
