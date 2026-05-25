@@ -7305,7 +7305,7 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
-  describe('dismissSpacePersonFaceSuggestion', () => {
+  describe('rejectSpacePersonFaceSuggestion, ignoreSpacePersonFaceSuggestion, dismissSpacePersonFaceSuggestion', () => {
     const enabled = {
       machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
     };
@@ -7322,10 +7322,11 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
 
       await expect(
-        sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markDismissedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
@@ -7335,11 +7336,12 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(void 0);
 
       await expect(
-        sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.sharedSpace.getPersonById).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markDismissedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
@@ -7352,10 +7354,11 @@ describe(SharedSpaceService.name, () => {
       );
 
       await expect(
-        sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+        sut.ignoreSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).rejects.toThrow(new BadRequestException('Person not found'));
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markDismissedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
@@ -7366,7 +7369,7 @@ describe(SharedSpaceService.name, () => {
       mocks.personFaceSuggestion.hasPendingForSpacePerson.mockResolvedValue(false);
 
       await expect(
-        sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).resolves.toBeUndefined();
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).toHaveBeenCalledWith(
         'space-1',
@@ -7377,20 +7380,50 @@ describe(SharedSpaceService.name, () => {
           suggestionMaxDistance: 0.8,
         },
       );
-      expect(mocks.personFaceSuggestion.markDismissedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });
 
-    it('marks the candidate dismissed without touching identity links or other suggestions', async () => {
+    it('reject marks only the target suggestion without touching identity links or other suggestions', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.personFaceSuggestion.markDismissedForSpacePerson.mockResolvedValue(1);
+      mocks.personFaceSuggestion.markRejectedForSpacePerson.mockResolvedValue(1);
+
+      await expect(
+        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+      ).resolves.toBeUndefined();
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
+    });
+
+    it('ignore marks only the target suggestion without touching identity links or other suggestions', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.personFaceSuggestion.markIgnoredForSpacePerson.mockResolvedValue(1);
+
+      await expect(
+        sut.ignoreSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+      ).resolves.toBeUndefined();
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
+    });
+
+    it('dismiss wraps reject for compatibility', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.personFaceSuggestion.markRejectedForSpacePerson.mockResolvedValue(1);
 
       await expect(
         sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).resolves.toBeUndefined();
-      expect(mocks.personFaceSuggestion.markDismissedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.markIgnoredForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
