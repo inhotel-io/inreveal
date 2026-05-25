@@ -15,6 +15,7 @@ import {
   AgentReviseAlbumOperationsDto,
 } from 'src/dtos/agent-operation.dto';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
+import type { AssetBulkUpdateDto } from 'src/dtos/asset.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
 import {
@@ -100,6 +101,20 @@ const assetUpdateMetadataWorkflowPayloadKeys = [
   'latitude',
   'longitude',
 ] as const;
+type AssetUpdateMetadataApplyPayload = Pick<
+  AssetBulkUpdateDto,
+  'description' | 'rating' | 'dateTimeOriginal' | 'dateTimeRelative' | 'timeZone' | 'latitude' | 'longitude'
+>;
+const assetUpdateMetadataApplyPayloadKeys = [
+  'description',
+  'rating',
+  'dateTimeOriginal',
+  'dateTimeRelative',
+  'timeZone',
+  'latitude',
+  'longitude',
+] as const satisfies readonly (keyof AssetUpdateMetadataApplyPayload)[];
+const assetUpdateMetadataDateTimeOriginal = z.iso.datetime();
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 const knownAgentIdDomains = new Set<AgentIdDomain>([
   'asset',
@@ -2600,6 +2615,12 @@ export class AgentOperationPlanService {
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 
+      case AgentOperationType.AssetUpdateMetadata: {
+        const payload = this.requireAssetUpdateMetadataPayload(operation.payload, operation.summary);
+        await this.assetService.updateAll(auth, { ids: operation.assetIds, ...payload });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+      }
+
       case AgentOperationType.AssetAddTag: {
         const payload = this.requireTagPayload(operation.payload);
         const tagId = payload.tagId ?? (await this.upsertTag(auth, payload.tagName));
@@ -2945,6 +2966,100 @@ export class AgentOperationPlanService {
     }
 
     return angle;
+  }
+
+  private requireAssetUpdateMetadataPayload(payload: unknown, summary: string): AssetUpdateMetadataApplyPayload {
+    const objectPayload = this.requireObjectPayload(payload);
+    const supportedKeys = new Set<string>(assetUpdateMetadataApplyPayloadKeys);
+    const suppliedKeys = Object.keys(objectPayload).filter((key) => objectPayload[key] !== undefined);
+    const invalidPayloadError = () => new BadRequestException(`Invalid asset metadata payload for ${summary}`);
+
+    if (Object.keys(objectPayload).some((key) => !supportedKeys.has(key))) {
+      throw invalidPayloadError();
+    }
+
+    if (suppliedKeys.length === 0) {
+      throw invalidPayloadError();
+    }
+
+    if (objectPayload.dateTimeOriginal !== undefined && objectPayload.dateTimeRelative !== undefined) {
+      throw invalidPayloadError();
+    }
+
+    if (suppliedKeys.length === 1 && objectPayload.dateTimeRelative === 0) {
+      throw invalidPayloadError();
+    }
+
+    if ((objectPayload.latitude === undefined) !== (objectPayload.longitude === undefined)) {
+      throw invalidPayloadError();
+    }
+
+    const updatePayload: AssetUpdateMetadataApplyPayload = {};
+    for (const key of assetUpdateMetadataApplyPayloadKeys) {
+      const value = objectPayload[key];
+      if (value === undefined) {
+        continue;
+      }
+
+      switch (key) {
+        case 'description': {
+          if (typeof value !== 'string' || value.length > 1000) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'rating': {
+          if (value !== null && (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 5)) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'dateTimeOriginal': {
+          if (typeof value !== 'string' || !assetUpdateMetadataDateTimeOriginal.safeParse(value).success) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'dateTimeRelative': {
+          if (typeof value !== 'number' || !Number.isInteger(value)) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'timeZone': {
+          if (typeof value !== 'string' || value.length === 0) {
+            throw invalidPayloadError();
+          }
+          try {
+            new Intl.DateTimeFormat(undefined, { timeZone: value });
+          } catch {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'latitude': {
+          if (typeof value !== 'number' || !Number.isFinite(value) || value < -90 || value > 90) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+        case 'longitude': {
+          if (typeof value !== 'number' || !Number.isFinite(value) || value < -180 || value > 180) {
+            throw invalidPayloadError();
+          }
+          updatePayload[key] = value;
+          break;
+        }
+      }
+    }
+
+    return updatePayload;
   }
 
   private mergeRotationEdits(edits: AssetEditActionItem[], relativeAngle: 90 | 180 | 270): AssetEditActionItem[] {
