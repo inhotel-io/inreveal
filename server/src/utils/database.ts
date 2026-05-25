@@ -310,6 +310,72 @@ export function hasSpacePeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spaceP
   );
 }
 
+type PeopleFilterIds = { personIds?: string[]; identityIds?: string[]; spacePersonIds?: string[] };
+
+export function hasAllPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, filters: PeopleFilterIds) {
+  return hasSpacePeople(
+    hasFaceIdentities(hasPeople(qb, filters.personIds ?? []), filters.identityIds ?? []),
+    filters.spacePersonIds ?? [],
+  );
+}
+
+export function hasAnyPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, filters: PeopleFilterIds) {
+  const personIds = uniqueTruthyIds(filters.personIds);
+  const identityIds = uniqueTruthyIds(filters.identityIds);
+  const spacePersonIds = uniqueTruthyIds(filters.spacePersonIds);
+
+  if (personIds.length === 0 && identityIds.length === 0 && spacePersonIds.length === 0) {
+    return qb;
+  }
+
+  return qb.where((eb) => {
+    const predicates: Expression<SqlBool>[] = [];
+
+    if (personIds.length > 0) {
+      predicates.push(
+        eb.exists(
+          eb
+            .selectFrom('asset_face')
+            .whereRef('asset_face.assetId', '=', 'asset.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where('asset_face.personId', '=', anyUuid(personIds)),
+        ),
+      );
+    }
+
+    if (identityIds.length > 0) {
+      predicates.push(
+        eb.exists(
+          eb
+            .selectFrom('asset_face')
+            .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+            .whereRef('asset_face.assetId', '=', 'asset.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where('face_identity_face.identityId', '=', anyUuid(identityIds)),
+        ),
+      );
+    }
+
+    if (spacePersonIds.length > 0) {
+      predicates.push(
+        eb.exists(
+          eb
+            .selectFrom('shared_space_person_face')
+            .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+            .whereRef('asset_face.assetId', '=', 'asset.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where('shared_space_person_face.personId', '=', anyUuid(spacePersonIds)),
+        ),
+      );
+    }
+
+    return eb.or(predicates);
+  });
+}
+
 export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -492,17 +558,15 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         ]),
       ),
     )
-    .$if(!!options.spacePersonIds?.length, (qb) => hasAnySpacePerson(qb, options.spacePersonIds!))
+    .$if(!!(options.personIds?.length || options.identityIds?.length || options.spacePersonIds?.length), (qb) =>
+      options.personMatchAny ? hasAnyPeople(qb, options) : hasAllPeople(qb, options),
+    )
     .$if(!!options.tagIds && options.tagIds.length > 0, (qb) =>
       options.tagMatchAny ? withAnyTagId(qb, options.tagIds!) : hasTags(qb, options.tagIds!),
     )
     .$if(options.tagIds === null, (qb) =>
       qb.where((eb) => eb.not(eb.exists((eb) => eb.selectFrom('tag_asset').whereRef('assetId', '=', 'asset.id')))),
     )
-    .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
-      options.personMatchAny ? hasAnyPerson(qb, options.personIds!) : hasPeople(qb, options.personIds!),
-    )
-    .$if(!!options.identityIds && options.identityIds.length > 0, (qb) => hasFaceIdentities(qb, options.identityIds!))
     .$if(!!options.createdBefore, (qb) => qb.where('asset.createdAt', '<=', options.createdBefore!))
     .$if(!!options.createdAfter, (qb) => qb.where('asset.createdAt', '>=', options.createdAfter!))
     .$if(!!options.updatedBefore, (qb) => qb.where('asset.updatedAt', '<=', options.updatedBefore!))
