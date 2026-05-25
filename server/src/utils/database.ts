@@ -57,6 +57,8 @@ export const asUuid = (id: string | Expression<string>) => sql<string>`${id}::uu
 
 export const anyUuid = (ids: string[]) => sql<string>`any(${`{${ids}}`}::uuid[])`;
 
+const uniqueTruthyIds = (ids: string[] = []) => [...new Set(ids.filter(Boolean))];
+
 export const asVector = (embedding: number[]) => sql<string>`${`[${embedding}]`}::vector`;
 
 export const unnest = (array: string[]) => sql<Record<string, string>>`unnest(array[${sql.join(array)}]::text[])`;
@@ -169,28 +171,38 @@ export function withFacesAndPeople(
 }
 
 export function hasPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: string[]) {
+  const ids = uniqueTruthyIds(personIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
   return qb.innerJoin(
     (eb) =>
       eb
         .selectFrom('asset_face')
         .select('assetId')
-        .where('personId', '=', anyUuid(personIds!))
+        .where('personId', '=', anyUuid(ids))
         .where('deletedAt', 'is', null)
         .where('isVisible', 'is', true)
         .groupBy('assetId')
-        .having((eb) => eb.fn.count('personId').distinct(), '=', personIds.length)
+        .having((eb) => eb.fn.count('personId').distinct(), '=', ids.length)
         .as('has_people'),
     (join) => join.onRef('has_people.assetId', '=', 'asset.id'),
   );
 }
 
 export function hasAnyPerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personIds: string[]) {
+  const ids = uniqueTruthyIds(personIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
   return qb.innerJoin(
     (eb) =>
       eb
         .selectFrom('asset_face')
         .select('assetId')
-        .where('personId', '=', anyUuid(personIds))
+        .where('personId', '=', anyUuid(ids))
         .where('deletedAt', 'is', null)
         .where('isVisible', 'is', true)
         .groupBy('assetId')
@@ -200,30 +212,40 @@ export function hasAnyPerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, personId
 }
 
 export function hasFaceIdentities<O>(qb: SelectQueryBuilder<DB, 'asset', O>, identityIds: string[]) {
+  const ids = uniqueTruthyIds(identityIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
   return qb.innerJoin(
     (eb) =>
       eb
         .selectFrom('asset_face')
         .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
         .select('asset_face.assetId')
-        .where('face_identity_face.identityId', '=', anyUuid(identityIds))
+        .where('face_identity_face.identityId', '=', anyUuid(ids))
         .where('asset_face.deletedAt', 'is', null)
         .where('asset_face.isVisible', 'is', true)
         .groupBy('asset_face.assetId')
-        .having((eb) => eb.fn.count('face_identity_face.identityId').distinct(), '=', identityIds.length)
+        .having((eb) => eb.fn.count('face_identity_face.identityId').distinct(), '=', ids.length)
         .as('has_face_identities'),
     (join) => join.onRef('has_face_identities.assetId', '=', 'asset.id'),
   );
 }
 
 export function hasAnyFaceIdentity<O>(qb: SelectQueryBuilder<DB, 'asset', O>, identityIds: string[]) {
+  const ids = uniqueTruthyIds(identityIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
   return qb.innerJoin(
     (eb) =>
       eb
         .selectFrom('asset_face')
         .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
         .select('asset_face.assetId')
-        .where('face_identity_face.identityId', '=', anyUuid(identityIds))
+        .where('face_identity_face.identityId', '=', anyUuid(ids))
         .where('asset_face.deletedAt', 'is', null)
         .where('asset_face.isVisible', 'is', true)
         .groupBy('asset_face.assetId')
@@ -247,6 +269,11 @@ export function hasSpacePerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spaceP
 }
 
 export function hasAnySpacePerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spacePersonIds: string[]) {
+  const ids = uniqueTruthyIds(spacePersonIds);
+  if (ids.length === 0) {
+    return qb;
+  }
+
   return qb.where((eb) =>
     eb.exists(
       eb
@@ -255,19 +282,20 @@ export function hasAnySpacePerson<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spa
         .whereRef('asset_face.assetId', '=', 'asset.id')
         .where('asset_face.deletedAt', 'is', null)
         .where('asset_face.isVisible', 'is', true)
-        .where('shared_space_person_face.personId', '=', anyUuid(spacePersonIds)),
+        .where('shared_space_person_face.personId', '=', anyUuid(ids)),
     ),
   );
 }
 
 export function hasSpacePeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, spacePersonIds: string[]) {
-  if (spacePersonIds.length === 0) {
+  const ids = uniqueTruthyIds(spacePersonIds);
+  if (ids.length === 0) {
     return qb;
   }
 
   return qb.where((eb) =>
     eb.and(
-      spacePersonIds.map((spacePersonId) =>
+      ids.map((spacePersonId) =>
         eb.exists(
           eb
             .selectFrom('shared_space_person_face')

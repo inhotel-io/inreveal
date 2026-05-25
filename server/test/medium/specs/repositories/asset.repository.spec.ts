@@ -545,6 +545,27 @@ describe(AssetRepository.name, () => {
       expect(assets.id).toEqual([both.id]);
     });
 
+    it('treats duplicate selected person ids as one selected person', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const asset = await createTimelineAssetWithPeople(ctx, user.id, [alice.id]);
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          personIds: [alice.id, alice.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([asset.id]);
+    });
+
     it('requires every selected space person for time bucket assets', async () => {
       const { ctx, sut } = setup();
       const sharedSpaceRepo = ctx.get(SharedSpaceRepository);
@@ -598,6 +619,36 @@ describe(AssetRepository.name, () => {
       expect(assets.id).toEqual([both.id]);
     });
 
+    it('treats duplicate selected space person ids as one selected space person', async () => {
+      const { ctx, sut } = setup();
+      const sharedSpaceRepo = ctx.get(SharedSpaceRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const asset = await createTimelineAssetWithPeople(ctx, user.id, []);
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, isVisible: true });
+      const alice = await sharedSpaceRepo.createPerson({
+        spaceId: space.id,
+        name: 'Alice',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+      });
+      await sharedSpaceRepo.addPersonFaces([{ personId: alice.id, assetFaceId: assetFace.id }], { skipRecount: true });
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          spacePersonIds: [alice.id, alice.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([asset.id]);
+    });
+
     it('requires every selected identity for time bucket assets', async () => {
       const { ctx, sut } = setup();
       const faceIdentityRepository = ctx.get(FaceIdentityRepository);
@@ -638,6 +689,53 @@ describe(AssetRepository.name, () => {
 
       const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
       expect(assets.id).toEqual([both.id]);
+    });
+
+    it('treats duplicate selected identity ids as one selected identity', async () => {
+      const { ctx, sut } = setup();
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(alice.id);
+      const asset = await createTimelineAssetWithPeople(ctx, user.id, []);
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alice.id, isVisible: true });
+      await faceIdentityRepository.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'manual' });
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          identityIds: [identity.id, identity.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([asset.id]);
+    });
+
+    it('counts multiple visible faces for the same person as one selected person', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user: { id: user.id } });
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+      const asset = await createTimelineAssetWithPeople(ctx, user.id, [alice.id, alice.id, bob.id]);
+
+      const bucket = await sut.getTimeBucket(
+        '2026-03-01',
+        {
+          userIds: [user.id],
+          personIds: [alice.id, bob.id],
+          visibility: AssetVisibility.Timeline,
+        },
+        auth,
+      );
+
+      const assets = JSON.parse(bucket.assets) as TimeBucketAssets;
+      expect(assets.id).toEqual([asset.id]);
     });
 
     it('requires every selected person when counting time buckets', async () => {
