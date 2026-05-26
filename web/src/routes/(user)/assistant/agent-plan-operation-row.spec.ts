@@ -68,6 +68,25 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_deselect_all_filtered: 'Deselect all filtered',
     assistant_operation_item_change_selection: 'Change selection',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
+    assistant_operation_metadata_column_current: 'Current',
+    assistant_operation_metadata_column_field: 'Field',
+    assistant_operation_metadata_column_proposed: 'Proposed',
+    assistant_operation_metadata_field_date_shift: 'Date shift',
+    assistant_operation_metadata_field_date_taken: 'Date taken',
+    assistant_operation_metadata_field_description: 'Description',
+    assistant_operation_metadata_field_location: 'Location',
+    assistant_operation_metadata_field_rating: 'Rating',
+    assistant_operation_metadata_field_time_zone: 'Time zone',
+    assistant_operation_metadata_field_unknown: 'Unknown field',
+    assistant_operation_metadata_value_clear: 'Clear',
+    assistant_operation_metadata_value_clear_rating: 'Clear rating',
+    assistant_operation_metadata_value_empty: 'Empty',
+    assistant_operation_metadata_value_rating: '{rating} stars',
+    assistant_operation_metadata_value_shift_capture_time: 'Shift capture time',
+    assistant_operation_metadata_value_shift_minutes: 'Shift {minutes} minutes',
+    assistant_operation_metadata_value_unavailable: 'Unavailable',
+    assistant_operation_metadata_value_unrated: 'Unrated',
+    assistant_operation_metadata_warning_coordinates_multi: 'Coordinates will be applied to {count} photos.',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_album_set_cover: 'Set cover',
@@ -87,7 +106,9 @@ vi.mock('svelte-i18n', () => {
         .replace('{applied}', String(options?.values?.applied ?? ''))
         .replace('{failed}', String(options?.values?.failed ?? ''))
         .replace('{reason}', String(options?.values?.reason ?? ''))
-        .replace('{field}', String(options?.values?.field ?? '')),
+        .replace('{field}', String(options?.values?.field ?? ''))
+        .replace('{rating}', String(options?.values?.rating ?? ''))
+        .replace('{minutes}', String(options?.values?.minutes ?? '')),
     ),
   };
 });
@@ -95,6 +116,7 @@ vi.mock('svelte-i18n', () => {
 const planId = '00000000-0000-4000-8000-000000000100';
 const createId = '00000000-0000-4000-8000-000000000101';
 const addId = '00000000-0000-4000-8000-000000000102';
+const metadataId = '00000000-0000-4000-8000-000000000103';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
 
@@ -155,6 +177,51 @@ const model = (
       }),
     ]),
     enabledByOperationId ?? { [createId]: true, [addId]: true },
+    itemSelectionByOperationId ?? {},
+  );
+
+const metadataModel = (itemSelectionByOperationId?: OperationItemSelectionState) =>
+  buildOperationReviewModel(
+    plan([
+      operation({
+        id: metadataId,
+        type: AgentOperationType.AssetUpdateMetadata,
+        summary: 'Set metadata',
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: [assetA, assetB],
+        payload: { description: '', rating: null, latitude: 52.52, longitude: 13.405 },
+        reviewMetadata: {
+          assetMetadata: {
+            fields: [
+              {
+                key: 'description',
+                label: 'Description',
+                previousValues: [{ assetId: assetA, value: 'Old caption', valueKind: 'known' }],
+                proposedValue: null,
+                proposedValueKind: 'clear',
+              },
+              {
+                key: 'rating',
+                label: 'Rating',
+                previousValues: [{ assetId: assetA, value: 4, valueKind: 'known' }],
+                proposedValue: null,
+                proposedValueKind: 'clear',
+              },
+              {
+                key: 'location',
+                label: 'Location',
+                previousValues: [{ assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' }],
+                proposedValue: '52.52, 13.405',
+                proposedValueKind: 'known',
+              },
+            ],
+            sampleAssetIds: [assetA],
+            warnings: [],
+          },
+        },
+      } as any),
+    ]),
+    { [metadataId]: true },
     itemSelectionByOperationId ?? {},
   );
 
@@ -240,6 +307,53 @@ describe('AgentPlanOperationRow', () => {
     });
 
     expect(screen.getByText('Proposed')).toBeInTheDocument();
+  });
+
+  it('renders metadata field review before selection controls and technical details', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: metadataModel().operationsById.get(metadataId)!,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Update metadata for 2 photos')).toBeInTheDocument();
+    expect(screen.getByText('Description')).toBeInTheDocument();
+    expect(screen.getByText('Old caption')).toBeInTheDocument();
+    expect(screen.getByText('Clear')).toBeInTheDocument();
+    expect(screen.getByText('Rating')).toBeInTheDocument();
+    expect(screen.getByText('4 stars')).toBeInTheDocument();
+    expect(screen.getByText('Clear rating')).toBeInTheDocument();
+    expect(screen.getByText('Location')).toBeInTheDocument();
+    expect(screen.getByText('52.52, 13.405')).toBeInTheDocument();
+    expect(screen.getByText('Coordinates will be applied to 2 photos.')).toBeInTheDocument();
+    expect(
+      screen
+        .getByText('Description')
+        .compareDocumentPosition(screen.getByRole('button', { name: 'Change selection' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText('Operation ID')).not.toBeInTheDocument();
+  });
+
+  it('updates metadata coordinate warnings after item selection changes', () => {
+    render(AgentPlanOperationRow, {
+      props: {
+        item: metadataModel({
+          [metadataId]: { itemKind: 'asset', mode: 'only', itemIds: [assetA] },
+        }).operationsById.get(metadataId)!,
+        canChangeSelection: true,
+        onToggleOperation: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('1 of 2 photos selected')).toBeInTheDocument();
+    expect(screen.queryByText('Coordinates will be applied to 2 photos.')).not.toBeInTheDocument();
   });
 
   it('keeps technical operation details hidden until the user expands details', async () => {

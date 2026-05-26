@@ -71,6 +71,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
       setCover: true,
       tagAssets: true,
       updateDetails: true,
+      updateAssetMetadata: true,
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
     },
@@ -619,6 +620,40 @@ describe('agent activity UI helpers', () => {
     });
     expect(`${model.items[0].title} ${model.items[0].summary}`).not.toContain(toolName);
     expect(model.items[0].technical?.toolName).toBe(toolName);
+  });
+
+  it('uses metadata-specific activity copy only for metadata asset batch plans', () => {
+    const metadataModel = buildModel({
+      toolCalls: [
+        makeToolCall({
+          toolName: AgentToolName.ProposeAssetBatchFromSearch,
+          status: AgentToolCallStatus.Completed,
+          requestSummary: 'Store 1 proposed metadata operation(s)',
+          responseSummary: null,
+        }),
+      ],
+    });
+    const genericModel = buildModel({
+      toolCalls: [
+        makeToolCall({
+          toolName: AgentToolName.ProposeAssetBatchFromSearch,
+          status: AgentToolCallStatus.Completed,
+          requestSummary: 'Store 1 proposed album operation(s)',
+          responseSummary: null,
+        }),
+      ],
+    });
+
+    expect(metadataModel.items[0]).toMatchObject({
+      kind: 'plan',
+      title: 'Preparing metadata update plan',
+      summary: 'Prepared metadata update plan',
+    });
+    expect(genericModel.items[0]).toMatchObject({
+      kind: 'plan',
+      title: 'Preparing asset update plan',
+      summary: 'Prepared asset update plan',
+    });
   });
 
   it('summarizes search acceptance activity without raw request payloads by default', () => {
