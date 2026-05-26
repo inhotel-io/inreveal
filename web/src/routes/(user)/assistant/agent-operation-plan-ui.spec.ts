@@ -257,7 +257,7 @@ describe('agent operation plan UI helpers', () => {
                   key: 'rating',
                   label: translatedText('assistant_operation_metadata_field_rating'),
                   previousValues: [
-                    { assetId: assetA, value: 4, valueKind: 'known' },
+                    { assetId: assetA, value: '4', valueKind: 'known' },
                     { assetId: assetB, value: null, valueKind: 'empty' },
                   ],
                   proposedValue: null,
@@ -278,7 +278,7 @@ describe('agent operation plan UI helpers', () => {
               warnings: [],
             },
           },
-        } as any),
+        }),
       ]),
       { [metadataId]: true },
     );
@@ -358,7 +358,7 @@ describe('agent operation plan UI helpers', () => {
               warnings: [],
             },
           },
-        } as any),
+        }),
       ]),
       { [metadataId]: true },
     );
@@ -401,7 +401,7 @@ describe('agent operation plan UI helpers', () => {
               warnings: ['Coordinates will be applied to multiple photos.'],
             },
           },
-        } as any),
+        }),
       ]),
       { [metadataId]: true },
       { [metadataId]: { itemKind: 'asset', mode: 'only', itemIds: [assetA] } },
@@ -451,7 +451,7 @@ describe('agent operation plan UI helpers', () => {
               warnings: [],
             },
           },
-        } as any),
+        }),
       ]),
       { [metadataId]: true },
     );

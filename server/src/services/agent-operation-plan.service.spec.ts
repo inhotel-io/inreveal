@@ -4601,7 +4601,7 @@ describe(AgentOperationPlanService.name, () => {
           proposedValue: null,
           proposedValueKind: 'clear',
           previousValues: [
-            { assetId: firstAssetId, value: 4, valueKind: 'known' },
+            { assetId: firstAssetId, value: '4', valueKind: 'known' },
             { assetId: secondAssetId, value: null, valueKind: 'unknown' },
           ],
         }),
@@ -4663,7 +4663,7 @@ describe(AgentOperationPlanService.name, () => {
         key: 'dateTimeRelative',
         label: 'Date shift',
         previousValues: [{ assetId, value: '1997-01-01T08:00:00.000Z', valueKind: 'known' }],
-        proposedValue: 90,
+        proposedValue: '90',
         proposedValueKind: 'relative',
       }),
     ]);

@@ -26,7 +26,7 @@ class AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInner {
 
   List<AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner> previousValues;
 
-  AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue? proposedValue;
+  String? proposedValue;
 
   AgentOperationReviewMetadataValueKind proposedValueKind;
 
@@ -76,7 +76,7 @@ class AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInner {
         key: mapValueOfType<String>(json, r'key')!,
         label: mapValueOfType<String>(json, r'label')!,
         previousValues: AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner.listFromJson(json[r'previousValues']),
-        proposedValue: AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue.fromJson(json[r'proposedValue']),
+        proposedValue: mapValueOfType<String>(json, r'proposedValue'),
         proposedValueKind: AgentOperationReviewMetadataValueKind.fromJson(json[r'proposedValueKind'])!,
       );
     }
