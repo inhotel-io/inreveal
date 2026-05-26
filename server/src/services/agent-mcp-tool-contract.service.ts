@@ -2014,7 +2014,8 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
       description: 'Propose one supported asset batch action for matching search results.',
       requiredFields: ['action', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId', 'targetKind'],
-      whenToUse: 'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.',
+      whenToUse:
+        'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.',
     },
   ],
   examples: proposeAssetBatchFromSearchExamples,
