@@ -135,6 +135,34 @@ describe('TimelineBucketCard component', () => {
     expect(screen.getByText('1 photo')).toBeInTheDocument();
   });
 
+  it('announces representative bucket activation as timeline zoom navigation, not filtering', async () => {
+    const { rerender } = render(TimelineBucketCard, {
+      bucket: makeBucket(),
+      onActivate: vi.fn(),
+    });
+
+    const yearCard = screen.getByRole('button', { name: '2015, 438 photos, show months' });
+    expect(yearCard).toBeInTheDocument();
+    expect(yearCard).not.toHaveAccessibleName(/filter/i);
+
+    await rerender({
+      bucket: makeBucket({
+        grouping: 'month',
+        date: { year: 2015, month: 8 },
+        timeBucket: '2015-08-01T00:00:00.000Z',
+        count: 23,
+      }),
+      locale: 'en-US',
+      onActivate: vi.fn(),
+    });
+
+    const monthCard = screen.getByRole('button', {
+      name: 'Aug 2015, 23 photos, show all photos from this point',
+    });
+    expect(monthCard).toBeInTheDocument();
+    expect(monthCard).not.toHaveAccessibleName(/filter/i);
+  });
+
   it('activates by click, Enter, and Space with the bucket grouping and date', async () => {
     const user = userEvent.setup();
     const onActivate = vi.fn();
@@ -187,6 +215,26 @@ describe('TimelineBucketCard component', () => {
     expect(screen.getByTestId('timeline-bucket-card-fallback')).toHaveTextContent('2015');
     expect(screen.queryByTestId('timeline-bucket-card-image')).not.toBeInTheDocument();
     expect(utilsMock.getAssetMediaUrl).not.toHaveBeenCalled();
+  });
+
+  it('keeps the zoom label and activation when a representative image fails', async () => {
+    const user = userEvent.setup();
+    const onActivate = vi.fn();
+
+    render(TimelineBucketCard, {
+      bucket: makeBucket(),
+      onActivate,
+    });
+
+    await fireEvent.error(screen.getByTestId('timeline-bucket-card-image'));
+    await tick();
+
+    const card = screen.getByRole('button', { name: '2015, 438 photos, show months' });
+    expect(card).toHaveAttribute('data-state', 'fallback');
+
+    await user.click(card);
+
+    expect(onActivate).toHaveBeenCalledWith({ grouping: 'year', date: { year: 2015 } });
   });
 
   it('renders the loading fallback without requesting a representative image URL', () => {

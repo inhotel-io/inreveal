@@ -43,6 +43,18 @@
     return `${count} ${bucket.count === 1 ? 'photo' : 'photos'}`;
   });
 
+  let actionLabel = $derived.by(() => {
+    if (bucket.grouping === 'year') {
+      return 'show months';
+    }
+
+    if (bucket.grouping === 'month') {
+      return 'show all photos from this point';
+    }
+  });
+
+  let accessibleLabel = $derived(`${title}, ${countLabel}${actionLabel ? `, ${actionLabel}` : ''}`);
+
   let hasImage: boolean = $derived(Boolean(bucket.representativeAssetId) && !loading && !imageFailed);
   let imageUrl = $derived.by(() => {
     if (!hasImage || !bucket.representativeAssetId) {
@@ -85,7 +97,7 @@
 <button
   type="button"
   class="group relative block h-full min-h-56 w-full overflow-hidden rounded-lg border border-gray-200 bg-gray-200 text-left text-white shadow-sm transition hover:border-gray-300 hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-immich-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
-  aria-label={`${title}, ${countLabel}`}
+  aria-label={accessibleLabel}
   {disabled}
   data-state={renderState}
   data-testid="timeline-bucket-card"
