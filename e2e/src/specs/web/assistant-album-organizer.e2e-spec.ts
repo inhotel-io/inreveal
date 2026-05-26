@@ -27,7 +27,7 @@ import {
   type AgentOperationPlanResponseDto,
   type LoginResponseDto,
 } from '@immich/sdk';
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { asBearerAuth, utils } from 'src/utils';
 
 const credentialLabel = 'E2E deterministic runner';
@@ -129,6 +129,11 @@ const startPortugalPlan = async (page: Page, accessToken: string, providerCreden
 
 const getPortugalDestination = (page: Page, name = 'Portugal Trip') =>
   page.getByTestId('agent-session-chat-transcript').getByRole('region', { name });
+
+const openAddPhotosReviewDialog = async (page: Page, destination: Locator) => {
+  await destination.getByRole('button', { name: 'Review photos' }).click();
+  return page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+};
 
 const findOperation = (plan: AgentOperationPlanResponseDto, type: AgentOperationType) => {
   const operation = plan.operations.find((operation) => operation.type === type);
@@ -239,8 +244,7 @@ test.describe('Assistant album organizer', () => {
     await renamedPortugalDestination.getByRole('button', { name: 'Show technical details' }).nth(1).click();
     await expect(page.getByText(proposedAddOperation!.id)).toBeVisible();
 
-    await renamedPortugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
-    const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const photoReviewDialog = await openAddPhotosReviewDialog(page, renamedPortugalDestination);
     await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' }).uncheck();
     await photoReviewDialog.getByRole('button', { name: 'Done reviewing' }).click();
     await expect(renamedPortugalDestination.getByText('1 of 2 photos selected')).toHaveCount(2);
@@ -340,8 +344,7 @@ test.describe('Assistant album organizer', () => {
     const excludedAssetId = addOperation.assetIds[0];
     const portugalDestination = getPortugalDestination(page);
 
-    await portugalDestination.getByRole('button', { name: 'Change selection' }).nth(1).click();
-    const photoReviewDialog = page.getByRole('dialog', { name: 'Review photos for Add 2 photos' });
+    const photoReviewDialog = await openAddPhotosReviewDialog(page, portugalDestination);
     await expect(photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' })).toBeVisible();
     await photoReviewDialog.getByRole('checkbox', { name: 'Include photo 1' }).uncheck();
     await photoReviewDialog.getByRole('button', { name: 'Done reviewing' }).click();

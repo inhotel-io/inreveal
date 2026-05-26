@@ -3522,10 +3522,10 @@ export class AgentOperationPlanService {
         key: 'rating',
         label: 'Rating',
         previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
-          value: exifInfo.rating,
+          value: exifInfo.rating === null ? null : String(exifInfo.rating),
           valueKind: exifInfo.rating === null ? 'empty' : 'known',
         })),
-        proposedValue: payload.rating,
+        proposedValue: payload.rating === null ? null : String(payload.rating),
         proposedValueKind: payload.rating === null ? 'clear' : 'known',
       });
     }
@@ -3551,7 +3551,7 @@ export class AgentOperationPlanService {
           value: this.formatMetadataDate(exifInfo.dateTimeOriginal),
           valueKind: exifInfo.dateTimeOriginal ? 'known' : 'empty',
         })),
-        proposedValue: payload.dateTimeRelative,
+        proposedValue: String(payload.dateTimeRelative),
         proposedValueKind: 'relative',
       });
     }
@@ -3606,7 +3606,7 @@ export class AgentOperationPlanService {
     assetIds: string[],
     metadataByAssetId: Map<string, AgentAssetMetadataReviewRow>,
     getValue: (exifInfo: NonNullable<AgentAssetMetadataReviewRow['exifInfo']>) => {
-      value: string | number | null;
+      value: string | null;
       valueKind: AgentOperationReviewMetadataValueKind;
     },
   ) {
