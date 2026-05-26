@@ -21,10 +21,7 @@
   import { Route } from '$lib/route';
   import { getUserActions } from '$lib/services/user.service';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import {
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { AssetVisibility } from '@immich/sdk';
   import { mdiDotsVertical } from '@mdi/js';

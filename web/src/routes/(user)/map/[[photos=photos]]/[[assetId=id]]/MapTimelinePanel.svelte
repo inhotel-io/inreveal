@@ -34,10 +34,7 @@
     type OnUnlink,
   } from '$lib/utils/actions';
   import { buildMapTimelineOptions } from '$lib/utils/map-filter-options';
-  import {
-    type ActivatableTimelineBucket,
-    getTimelineBucketZoomTarget,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { type ActivatableTimelineBucket, getTimelineBucketZoomTarget } from '$lib/utils/timeline-zoom-navigation';
   import { ActionButton, CloseButton, CommandPaletteDefaultProvider, Icon } from '@immich/ui';
   import { mdiDotsVertical, mdiImageMultiple } from '@mdi/js';
   import { ceil, floor } from 'lodash-es';

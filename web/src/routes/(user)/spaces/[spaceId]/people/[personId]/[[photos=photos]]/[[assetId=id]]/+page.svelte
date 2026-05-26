@@ -34,10 +34,7 @@
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { toScopedPersonRef as toPersonScopedRef } from '$lib/utils/scoped-person-ref';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import {
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import {
     detachScopedPerson,

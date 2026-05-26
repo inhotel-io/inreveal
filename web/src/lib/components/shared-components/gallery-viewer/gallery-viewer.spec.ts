@@ -156,12 +156,12 @@ function renderViewer({
 
 function createAnimationFrameQueue() {
   const callbacks: FrameRequestCallback[] = [];
-  const originalRequestAnimationFrame = window.requestAnimationFrame;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
     callbacks.push(callback);
     return callbacks.length;
   });
-  window.requestAnimationFrame = requestAnimationFrame;
+  globalThis.requestAnimationFrame = requestAnimationFrame;
 
   return {
     requestAnimationFrame,
@@ -172,16 +172,41 @@ function createAnimationFrameQueue() {
       }
     },
     restore() {
-      window.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
     },
   };
+}
+
+function getScrolledElementSelector(element: Element) {
+  if (!(element instanceof HTMLElement)) {
+    return undefined;
+  }
+
+  const testId = element.dataset.testid;
+  if (testId) {
+    return `[data-testid="${testId}"]`;
+  }
+
+  const assetId = element.dataset.galleryAssetId;
+  if (assetId) {
+    return `[data-gallery-asset-id="${assetId}"]`;
+  }
+
+  const bucketYear = element.dataset.galleryBucketYear;
+  const bucketMonth = element.dataset.galleryBucketMonth;
+  if (bucketYear && bucketMonth) {
+    return `[data-gallery-bucket-year="${bucketYear}"][data-gallery-bucket-month="${bucketMonth}"]`;
+  }
+
+  return undefined;
 }
 
 function trackScrolledElement() {
   let scrolledElement: Element | undefined;
   const originalScrollIntoView = Element.prototype.scrollIntoView;
   Element.prototype.scrollIntoView = vi.fn(function (this: Element) {
-    scrolledElement = this;
+    const selector = getScrolledElementSelector(this);
+    scrolledElement = selector ? (globalThis.document.querySelector(selector) ?? undefined) : undefined;
   });
 
   return {

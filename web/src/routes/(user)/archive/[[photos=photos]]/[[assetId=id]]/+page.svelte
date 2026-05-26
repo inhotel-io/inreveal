@@ -22,10 +22,7 @@
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import {
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { AssetVisibility } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';

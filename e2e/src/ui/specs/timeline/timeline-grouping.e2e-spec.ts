@@ -38,7 +38,7 @@ test.describe('Timeline grouping UI', () => {
     await setupTimelineMockApiRoutes(context, timelineRestData, changes, testContext);
   });
 
-  test('drills from years to months to days and clears the temporal chip on Photos', async ({ page }) => {
+  test('zooms from years to months to days without temporal chips on Photos', async ({ page }) => {
     await page.goto('/photos');
     await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
 
@@ -48,8 +48,9 @@ test.describe('Timeline grouping UI', () => {
     await expect(firstYearCard).toBeVisible();
     await firstYearCard.click();
 
-    await expect(page.getByTestId('active-filters-bar')).toContainText(/\d{4}/);
     await expect(page.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('active-filters-bar')).not.toBeVisible();
+    expect(page.url()).not.toContain('selectedYear');
 
     const firstMonthCard = page.getByTestId('timeline-bucket-card').first();
     await expect(firstMonthCard).toBeVisible();
@@ -57,9 +58,8 @@ test.describe('Timeline grouping UI', () => {
 
     await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('[data-thumbnail-focus-container]').first()).toBeVisible();
-
-    await page.getByTestId('chip-close').click();
     await expect(page.getByTestId('active-filters-bar')).not.toBeVisible();
+    expect(page.url()).not.toContain('selectedMonth');
   });
 
   test('shows the floating grouping control on mobile browse and hides it under the asset viewer', async ({ page }) => {
