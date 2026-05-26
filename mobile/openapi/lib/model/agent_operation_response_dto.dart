@@ -22,6 +22,7 @@ class AgentOperationResponseDto {
     this.payload = const {},
     required this.planId,
     this.result = const {},
+    this.reviewMetadata,
     required this.riskLevel,
     required this.status,
     required this.summary,
@@ -50,6 +51,14 @@ class AgentOperationResponseDto {
 
   Map<String, Object>? result;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  AgentOperationResponseDtoReviewMetadata? reviewMetadata;
+
   AgentOperationRiskLevel riskLevel;
 
   AgentOperationStatus status;
@@ -77,6 +86,7 @@ class AgentOperationResponseDto {
     _deepEquality.equals(other.payload, payload) &&
     other.planId == planId &&
     _deepEquality.equals(other.result, result) &&
+    other.reviewMetadata == reviewMetadata &&
     other.riskLevel == riskLevel &&
     other.status == status &&
     other.summary == summary &&
@@ -98,6 +108,7 @@ class AgentOperationResponseDto {
     (payload.hashCode) +
     (planId.hashCode) +
     (result == null ? 0 : result!.hashCode) +
+    (reviewMetadata == null ? 0 : reviewMetadata!.hashCode) +
     (riskLevel.hashCode) +
     (status.hashCode) +
     (summary.hashCode) +
@@ -108,7 +119,7 @@ class AgentOperationResponseDto {
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'AgentOperationResponseDto[assetIds=$assetIds, createdAt=$createdAt, dependencyIds=$dependencyIds, enabled=$enabled, error=$error, id=$id, payload=$payload, planId=$planId, result=$result, riskLevel=$riskLevel, status=$status, summary=$summary, targetId=$targetId, targetKind=$targetKind, temporaryTargetId=$temporaryTargetId, type=$type, updatedAt=$updatedAt]';
+  String toString() => 'AgentOperationResponseDto[assetIds=$assetIds, createdAt=$createdAt, dependencyIds=$dependencyIds, enabled=$enabled, error=$error, id=$id, payload=$payload, planId=$planId, result=$result, reviewMetadata=$reviewMetadata, riskLevel=$riskLevel, status=$status, summary=$summary, targetId=$targetId, targetKind=$targetKind, temporaryTargetId=$temporaryTargetId, type=$type, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -130,6 +141,11 @@ class AgentOperationResponseDto {
       json[r'result'] = this.result;
     } else {
     //  json[r'result'] = null;
+    }
+    if (this.reviewMetadata != null) {
+      json[r'reviewMetadata'] = this.reviewMetadata;
+    } else {
+    //  json[r'reviewMetadata'] = null;
     }
       json[r'riskLevel'] = this.riskLevel;
       json[r'status'] = this.status;
@@ -174,6 +190,7 @@ class AgentOperationResponseDto {
         payload: mapCastOfType<String, Object>(json, r'payload')!,
         planId: mapValueOfType<String>(json, r'planId')!,
         result: mapCastOfType<String, Object>(json, r'result'),
+        reviewMetadata: AgentOperationResponseDtoReviewMetadata.fromJson(json[r'reviewMetadata']),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel'])!,
         status: AgentOperationStatus.fromJson(json[r'status'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
