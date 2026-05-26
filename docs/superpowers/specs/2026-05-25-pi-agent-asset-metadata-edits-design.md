@@ -298,32 +298,32 @@ Suggested slices:
 
 ## Edge Case Matrix
 
-| Edge case | Required behavior | Coverage |
-| --- | --- | --- |
-| Empty payload | Reject before plan creation. | DTO and MCP contract tests |
-| Unknown payload field | Reject with correction hint; do not silently drop it. | DTO and MCP contract tests |
-| `description: ""` | Clear the description and show "clear description" in review. | DTO, apply, UI tests |
-| Overlong description | Reject before plan creation. | DTO tests |
-| `rating: null` | Clear rating and show "unrated" in review. | DTO, apply, UI tests |
-| `rating: 0`, `-1`, or `6` | Reject even though legacy asset DTOs are looser. | DTO tests |
-| Invalid ISO datetime | Reject before plan creation. | DTO tests |
-| `dateTimeOriginal` plus `dateTimeRelative` | Reject before plan creation. | DTO tests |
-| `dateTimeRelative: 0` alone | Reject as a no-op. | DTO tests |
-| Non-integer relative time | Reject before plan creation. | DTO tests |
-| Invalid or blank timezone | Reject before plan creation. | DTO tests |
-| Place name without coordinates | Ask for latitude/longitude; no plan is created. | Assistant-flow tests |
-| Latitude without longitude | Reject before plan creation. | DTO tests |
-| Null or out-of-range coordinates | Reject before plan creation. | DTO tests |
-| Reverse geocode returns no labels | Apply coordinates and show blank city/state/country safely. | Service tests |
-| Reverse geocode throws | Mark operation failed and keep chat usable. | Apply tests |
-| Search source returns no assets | Return a recoverable no-match response instead of an empty plan. | Service and assistant-flow tests |
-| Search source exceeds caps | Materialize within existing caps or ask user to narrow. | Service tests |
-| Expired selection handle | Return recoverable handle guidance. | Service tests |
-| Shared-space asset outside write access | Reject inaccessible assets. | Permission tests |
-| Locked asset outside session scope | Reject inaccessible assets. | Permission tests |
-| Metadata read disabled but write enabled | Do not leak before-values to the model; UI review may still show user-visible plan details. | Service tests |
-| Apply after asset becomes inaccessible | Mark metadata operation failed with concise error. | Apply tests |
-| Revision changes metadata payload | Revalidate the replacement payload before storing. | Service tests |
+| Edge case                                  | Required behavior                                                                           | Coverage                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------- |
+| Empty payload                              | Reject before plan creation.                                                                | DTO and MCP contract tests       |
+| Unknown payload field                      | Reject with correction hint; do not silently drop it.                                       | DTO and MCP contract tests       |
+| `description: ""`                          | Clear the description and show "clear description" in review.                               | DTO, apply, UI tests             |
+| Overlong description                       | Reject before plan creation.                                                                | DTO tests                        |
+| `rating: null`                             | Clear rating and show "unrated" in review.                                                  | DTO, apply, UI tests             |
+| `rating: 0`, `-1`, or `6`                  | Reject even though legacy asset DTOs are looser.                                            | DTO tests                        |
+| Invalid ISO datetime                       | Reject before plan creation.                                                                | DTO tests                        |
+| `dateTimeOriginal` plus `dateTimeRelative` | Reject before plan creation.                                                                | DTO tests                        |
+| `dateTimeRelative: 0` alone                | Reject as a no-op.                                                                          | DTO tests                        |
+| Non-integer relative time                  | Reject before plan creation.                                                                | DTO tests                        |
+| Invalid or blank timezone                  | Reject before plan creation.                                                                | DTO tests                        |
+| Place name without coordinates             | Ask for latitude/longitude; no plan is created.                                             | Assistant-flow tests             |
+| Latitude without longitude                 | Reject before plan creation.                                                                | DTO tests                        |
+| Null or out-of-range coordinates           | Reject before plan creation.                                                                | DTO tests                        |
+| Reverse geocode returns no labels          | Apply coordinates and show blank city/state/country safely.                                 | Service tests                    |
+| Reverse geocode throws                     | Mark operation failed and keep chat usable.                                                 | Apply tests                      |
+| Search source returns no assets            | Return a recoverable no-match response instead of an empty plan.                            | Service and assistant-flow tests |
+| Search source exceeds caps                 | Materialize within existing caps or ask user to narrow.                                     | Service tests                    |
+| Expired selection handle                   | Return recoverable handle guidance.                                                         | Service tests                    |
+| Shared-space asset outside write access    | Reject inaccessible assets.                                                                 | Permission tests                 |
+| Locked asset outside session scope         | Reject inaccessible assets.                                                                 | Permission tests                 |
+| Metadata read disabled but write enabled   | Do not leak before-values to the model; UI review may still show user-visible plan details. | Service tests                    |
+| Apply after asset becomes inaccessible     | Mark metadata operation failed with concise error.                                          | Apply tests                      |
+| Revision changes metadata payload          | Revalidate the replacement payload before storing.                                          | Service tests                    |
 
 ## Testing Plan
 
