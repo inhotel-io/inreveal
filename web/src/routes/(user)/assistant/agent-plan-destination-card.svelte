@@ -83,6 +83,14 @@
         {#if destinationSubtitle}
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{destinationSubtitle}</p>
         {/if}
+        {#if group.curationCriteria}
+          <p
+            class="mt-2 break-words text-sm text-gray-600 dark:text-gray-300"
+            data-testid="agent-plan-curation-criteria"
+          >
+            {$t('assistant_operation_curation_criteria', { values: { criteria: group.curationCriteria } })}
+          </p>
+        {/if}
       </div>
     </div>
 
