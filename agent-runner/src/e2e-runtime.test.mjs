@@ -74,7 +74,7 @@ const createFetch = (handlers) => {
 const successHandlers = () => [
   {
     name: 'searchAssets',
-    handle: (_args, request) => ({
+    handle: (args, request) => ({
       body: {
         jsonrpc: '2.0',
         id: request.id,
@@ -86,6 +86,17 @@ const successHandlers = () => [
               { id: '00000000-0000-4000-8000-000000000202' },
               { id: '00000000-0000-4000-8000-000000000203' },
             ],
+            selectionHandle: args.createSelectionHandle
+              ? {
+                  id: '00000000-0000-4000-8000-000000000333',
+                  sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
+                  assetCount: 3,
+                  sampleAssetIds: [
+                    '00000000-0000-4000-8000-000000000201',
+                    '00000000-0000-4000-8000-000000000202',
+                  ],
+                }
+              : undefined,
           },
         },
       },
@@ -110,6 +121,23 @@ const successHandlers = () => [
               }),
             },
           ],
+        },
+      },
+    }),
+  },
+  {
+    name: 'proposeAssetBatchFromSearch',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'success',
+            summary: 'Stored 1 proposed metadata operation.',
+            plan: { id: '00000000-0000-4000-8000-000000000302' },
+            received: args,
+          },
         },
       },
     }),
@@ -202,6 +230,74 @@ describe('e2e runtime', () => {
     assert.deepEqual(calls[1].body.params.arguments.operations[2].assetIds, ['00000000-0000-4000-8000-000000000211']);
     assert.equal(events.at(-1).type, 'assistant-message-completed');
     assert.match(events.at(-1).content.blocks[0].text, /I proposed a Portugal Trip album/);
+  });
+
+  it('proposes a metadata description plan from a newest-photos prompt', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Set the description on the 5 newest photos to Test batch.');
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments, {
+      filters: {},
+      order: 'desc',
+      limit: 5,
+      detail: 'ids',
+      createSelectionHandle: true,
+      sampleSize: 2,
+    });
+    assert.equal(calls[1].body.params.name, 'proposeAssetBatchFromSearch');
+    assert.deepEqual(calls[1].body.params.arguments.action, {
+      type: 'asset.updateMetadata',
+      description: 'Test batch',
+    });
+    assert.deepEqual(calls[1].body.params.arguments.assetSource, {
+      kind: 'previousSearch',
+      sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
+    });
+    assert.match(events.at(-1).content.blocks[0].text, /metadata/i);
+  });
+
+  it('proposes a metadata coordinate plan only when latitude and longitude are present', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Set these photos to latitude 48.8566 and longitude 2.3522.');
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].body.params.name, 'proposeAssetBatchFromSearch');
+    assert.deepEqual(calls[1].body.params.arguments.action, {
+      type: 'asset.updateMetadata',
+      latitude: 48.8566,
+      longitude: 2.3522,
+    });
+    assert.match(events.at(-1).content.blocks[0].text, /coordinates/i);
+  });
+
+  it('asks for coordinates instead of planning a place-name metadata edit', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Set these photos to Paris.');
+
+    assert.equal(calls.length, 0);
+    assert.match(events.at(-1).content.blocks[0].text, /latitude and longitude/i);
+  });
+
+  it('asks for longitude instead of planning an incomplete coordinate edit', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Set these photos to latitude 48.8566.');
+
+    assert.equal(calls.length, 0);
+    assert.match(events.at(-1).content.blocks[0].text, /longitude/i);
   });
 
   it('reports a denied proposal without leaking the gateway token', async () => {
