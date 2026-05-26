@@ -374,13 +374,11 @@ const assetUpdateMetadataPayloadSchema = z
       .optional()
       .describe('Star rating 1-5, or null to clear the rating.'),
     dateTimeOriginal: z.iso.datetime().optional().describe('Absolute asset capture date/time as an ISO datetime.'),
-    dateTimeRelative: z
-      .number()
-      .int()
-      .optional()
-      .describe('Relative time offset in integer minutes.'),
+    dateTimeRelative: z.number().int().optional().describe('Relative time offset in integer minutes.'),
     timeZone: ianaTimeZoneSchema.optional().describe('IANA time zone, for example Europe/Berlin.'),
-    latitude: latitudeSchema.optional().describe('Explicit GPS latitude. Provide longitude too; place names are not accepted.'),
+    latitude: latitudeSchema
+      .optional()
+      .describe('Explicit GPS latitude. Provide longitude too; place names are not accepted.'),
     longitude: longitudeSchema
       .optional()
       .describe('Explicit GPS longitude. Provide latitude too; place names are not accepted.'),
@@ -505,16 +503,16 @@ it('documents asset metadata update planning examples', () => {
   const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
   const exampleNames = contract?.examples.map((example) => example.name);
 
-  expect(exampleNames).toEqual(expect.arrayContaining([
-    'update-asset-description',
-    'set-asset-rating',
-    'set-asset-coordinates',
-  ]));
+  expect(exampleNames).toEqual(
+    expect.arrayContaining(['update-asset-description', 'set-asset-rating', 'set-asset-coordinates']),
+  );
 
   for (const name of ['update-asset-description', 'set-asset-rating', 'set-asset-coordinates']) {
     const example = contract?.examples.find((candidate) => candidate.name === name);
     expect(example).toBeDefined();
-    expect(AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(example?.arguments).success).toBe(true);
+    expect(
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(example?.arguments).success,
+    ).toBe(true);
   }
 });
 ```
