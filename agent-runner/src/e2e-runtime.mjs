@@ -297,6 +297,75 @@ const parseMetadataPrompt = (prompt) => {
   return null;
 };
 
+const defaultHighlightCount = 10;
+const metadataHighlightCandidateLimit = 500;
+
+const parseHighlightPrompt = (prompt) => {
+  if (!/\b(best|highlights?)\b/i.test(prompt)) {
+    return null;
+  }
+
+  const countMatch =
+    prompt.match(/(?:^|\s)(-?\d+)\s+(?:best\s+)?(?:highlights?|photos?)\b/i) ??
+    prompt.match(/\b(?:best|top|pick|choose|suggest)\s+(-?\d+)\s+(?:highlights?|photos?)\b/i);
+  const requestedCount = countMatch ? Number(countMatch[1]) : null;
+  const unbounded = /\b(my|entire|whole)?\s*library\b/i.test(prompt) || /\b(all photos|everything)\b/i.test(prompt);
+  const bounded =
+    !unbounded &&
+    /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt);
+  const filters = /\b(last weekend|weekend)\b/i.test(prompt)
+    ? {
+        takenAfter: '2026-05-23T00:00:00.000Z',
+        takenBefore: '2026-05-24T23:59:59.999Z',
+      }
+    : null;
+
+  return {
+    bounded,
+    filters,
+    requestedCount,
+    effectiveCount: requestedCount ?? defaultHighlightCount,
+    usedDefaultCount: requestedCount === null,
+  };
+};
+
+const highlightCandidateCount = (result, assetIds) => {
+  if (typeof result.totalCount === 'number') {
+    return result.totalCount;
+  }
+
+  if (typeof result.approximateTotal === 'number') {
+    return result.approximateTotal;
+  }
+
+  if (typeof result.selectionHandle?.assetCount === 'number') {
+    return result.selectionHandle.assetCount;
+  }
+
+  if (typeof result.returnedCount === 'number') {
+    return result.returnedCount;
+  }
+
+  return assetIds.length;
+};
+
+const readHighlightCandidates = async (client, highlightPrompt) => {
+  const result = await client.call('searchAssets', {
+    filters: highlightPrompt.filters,
+    detail: 'ids',
+    limit: highlightPrompt.effectiveCount,
+  });
+  if (result.status !== 'success') {
+    throw new Error(`Asset search did not complete successfully: ${result.status}`);
+  }
+
+  const assetIds = compactAssetIdsFromResult(result);
+  return {
+    assetIds,
+    candidateCount: highlightCandidateCount(result, assetIds),
+  };
+};
+
 export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) => {
   const sessions = new Map();
 
@@ -353,6 +422,83 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           text: 'Please provide the longitude before I propose a coordinate metadata update.',
         });
         return;
+      }
+
+      const highlightPrompt = parseHighlightPrompt(prompt);
+      if (highlightPrompt) {
+        if (!highlightPrompt.bounded) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'I can suggest highlights when you give me a bounded source, such as an album, shared space, date range, search/filter, or selected photos. Which set should I use?',
+          });
+          return;
+        }
+
+        if (highlightPrompt.requestedCount !== null && highlightPrompt.requestedCount <= 0) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'Please choose a positive count before I suggest highlights.',
+          });
+          return;
+        }
+
+        if (highlightPrompt.effectiveCount > metadataHighlightCandidateLimit) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'Please choose 500 or fewer highlights, or narrow the source before curation.',
+          });
+          return;
+        }
+
+        if (!highlightPrompt.filters) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'I need a concrete searchable source for this read-only highlight check, such as a date range, search/filter, or selected photos. Which set should I use?',
+          });
+          return;
+        }
+
+        try {
+          const { candidateCount } = await readHighlightCandidates(client, highlightPrompt);
+          if (candidateCount === 0) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: 'I found no matching candidates in that bounded source, so I did not create a plan.',
+            });
+            return;
+          }
+
+          if (candidateCount > metadataHighlightCandidateLimit) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: 'That source has too many candidate assets for this read-only highlight pass. Please narrow the album, space, date range, search/filter, or selected photos.',
+            });
+            return;
+          }
+
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: highlightPrompt.usedDefaultCount
+              ? `I found ${candidateCount} candidate assets. I would use the default count of 10 for suggested highlights from this bounded source. I did not create a plan.`
+              : `I found ${candidateCount} candidate assets for ${highlightPrompt.effectiveCount} suggested highlights. I did not create a plan.`,
+          });
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: `Gallery could not inspect highlight candidates: ${redactGatewayToken(message, gateway)}`,
+          });
+          return;
+        }
       }
 
       yield deltaEvent({

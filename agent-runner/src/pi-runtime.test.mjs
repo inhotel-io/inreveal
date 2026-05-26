@@ -563,6 +563,18 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Best/highlights require bounded source'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('default to 10 only when the source is bounded'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('zero, negative, or above 500'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('known count or total is above 500'), true);
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes('No matching highlight candidates: answer directly and do not create a plan'),
+      true,
+    );
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes('Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet'),
+      true,
+    );
+    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);

@@ -6,6 +6,10 @@ const gallerySessionId = '00000000-0000-4000-8000-000000000100';
 const runnerSessionId = `e2e-${gallerySessionId}`;
 const token = 'gateway-token-secret';
 const gateway = { url: 'http://gallery.example.test/api/agent/mcp/sessions/00000000-0000-4000-8000-000000000100', token };
+const lastWeekendHighlightFilters = {
+  takenAfter: '2026-05-23T00:00:00.000Z',
+  takenBefore: '2026-05-24T23:59:59.999Z',
+};
 
 const createSessionBody = (overrides = {}) => ({
   gallerySessionId,
@@ -298,6 +302,221 @@ describe('e2e runtime', () => {
 
     assert.equal(calls.length, 0);
     assert.match(events.at(-1).content.blocks[0].text, /longitude/i);
+  });
+
+  it('asks for a bounded source before curating best photos from the whole library', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Pick the best photos from my library.');
+
+    assert.equal(calls.length, 0);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(events.at(-1).content.blocks[0].text, /bounded source/i);
+    assert.match(events.at(-1).content.blocks[0].text, /which .*source|which .*set/i);
+    assert.match(events.at(-1).content.blocks[0].text, /\?/);
+    assert.match(events.at(-1).content.blocks[0].text, /album|shared space|date range|selected photos/i);
+  });
+
+  it('uses a default count of 10 for bounded highlight prompts without creating a plan', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest highlights from last weekend.');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments, {
+      filters: lastWeekendHighlightFilters,
+      detail: 'ids',
+      limit: 10,
+    });
+    assert.match(events.at(-1).content.blocks[0].text, /default/i);
+    assert.match(events.at(-1).content.blocks[0].text, /\b10\b/);
+    assert.match(events.at(-1).content.blocks[0].text, /3 candidate/i);
+  });
+
+  it('asks for a concrete searchable source instead of searching all assets for unresolved album highlights', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 10 highlights from this album.');
+
+    assert.equal(calls.length, 0);
+    assert.match(events.at(-1).content.blocks[0].text, /concrete searchable source/i);
+    assert.match(events.at(-1).content.blocks[0].text, /\?/);
+  });
+
+  it('asks for a positive highlight count for zero or negative requests without creating a plan', async () => {
+    for (const prompt of ['Suggest 0 highlights from this album.', 'Pick -3 best photos from this album.']) {
+      const { calls, fetchImplementation } = createFetch(successHandlers());
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody());
+
+      const events = await collectEvents(runtime, prompt);
+
+      assert.equal(calls.length, 0);
+      assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
+    }
+  });
+
+  it('asks to narrow oversized highlight requests without creating a plan', async () => {
+    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 501 highlights from this album.');
+
+    assert.equal(calls.length, 0);
+    assert.match(events.at(-1).content.blocks[0].text, /500 or fewer/i);
+    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+  });
+
+  it('asks to narrow oversized bounded candidate sets without creating a plan', async () => {
+    const { calls, fetchImplementation } = createFetch([
+      {
+        name: 'searchAssets',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                assetIds: ['00000000-0000-4000-8000-000000000201'],
+                returnedCount: 501,
+                hasMore: true,
+              },
+            },
+          },
+        }),
+      },
+      successHandlers()[1],
+      successHandlers()[2],
+    ]);
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments.filters, lastWeekendHighlightFilters);
+    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+  });
+
+  it('asks to narrow when Gallery reports a known highlight total above the candidate limit', async () => {
+    const { calls, fetchImplementation } = createFetch([
+      {
+        name: 'searchAssets',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                assetIds: [
+                  '00000000-0000-4000-8000-000000000201',
+                  '00000000-0000-4000-8000-000000000202',
+                ],
+                returnedCount: 10,
+                totalCount: 501,
+                hasMore: true,
+              },
+            },
+          },
+        }),
+      },
+      successHandlers()[1],
+      successHandlers()[2],
+    ]);
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments.filters, lastWeekendHighlightFilters);
+    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+  });
+
+  it('does not treat ordinary pagination as an oversized highlight candidate set', async () => {
+    const { calls, fetchImplementation } = createFetch([
+      {
+        name: 'searchAssets',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                assetIds: [
+                  '00000000-0000-4000-8000-000000000201',
+                  '00000000-0000-4000-8000-000000000202',
+                ],
+                returnedCount: 10,
+                hasMore: true,
+              },
+            },
+          },
+        }),
+      },
+      successHandlers()[1],
+      successHandlers()[2],
+    ]);
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments.filters, lastWeekendHighlightFilters);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /too many/i);
+    assert.match(events.at(-1).content.blocks[0].text, /10 candidate/i);
+    assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+  });
+
+  it('answers directly when a bounded highlight source has no candidates without creating a plan', async () => {
+    const { calls, fetchImplementation } = createFetch([
+      {
+        name: 'searchAssets',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                assetIds: [],
+                returnedCount: 0,
+                hasMore: false,
+              },
+            },
+          },
+        }),
+      },
+      successHandlers()[1],
+      successHandlers()[2],
+    ]);
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.params.name, 'searchAssets');
+    assert.deepEqual(calls[0].body.params.arguments.filters, lastWeekendHighlightFilters);
+    assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
+    assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
   });
 
   it('reports a denied proposal without leaking the gateway token', async () => {
