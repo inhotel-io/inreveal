@@ -108,9 +108,15 @@ describe('highlight curation acceptance smoke', () => {
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
 
-    const events = await collectEvents(runtime, 'Suggest 5 highlights from this album and make an album called Highlights.');
+    const events = await collectEvents(
+      runtime,
+      'Suggest 5 highlights from this album and make an album called Highlights.',
+    );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(
+      calls.map((call) => call.body.params.name).join(','),
+      'readAlbum,readAssetMetadata,proposeAlbumOperations',
+    );
     assert.deepEqual(calls[0].body.params.arguments, { albumId: familyAlbumId });
     const plan = calls.at(-1).body.params.arguments;
     assert.equal(JSON.stringify(plan).includes('assetSource'), false);
@@ -133,7 +139,10 @@ describe('highlight curation acceptance smoke', () => {
 
     const events = await collectEvents(runtime, 'Favorite the best 3 photos from last weekend.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(
+      calls.map((call) => call.body.params.name).join(','),
+      'searchAssets,readAssetMetadata,proposeAlbumOperations',
+    );
     const plan = calls.at(-1).body.params.arguments;
     assert.deepEqual(plan.operations, [
       {
@@ -210,9 +219,15 @@ describe('highlight curation acceptance smoke', () => {
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
 
-    const events = await collectEvents(runtime, 'Suggest 20 highlights from this album and make an album called Highlights.');
+    const events = await collectEvents(
+      runtime,
+      'Suggest 20 highlights from this album and make an album called Highlights.',
+    );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(
+      calls.map((call) => call.body.params.name).join(','),
+      'readAlbum,readAssetMetadata,proposeAlbumOperations',
+    );
     const plan = calls.at(-1).body.params.arguments;
     assert.equal(plan.operations[1].assetIds.length, 7);
     assert.match(events.at(-1).content.blocks[0].text, /Only 7 eligible candidates/i);
@@ -280,13 +295,13 @@ In `createE2eRuntime().createSession`, change the session object to include:
 The resulting object should keep the existing `supportsImageInput` field:
 
 ```js
-      sessions.set(runnerSessionId, {
-        gallerySessionId: body.gallerySessionId,
-        model: body.model,
-        mcpGateway: body.mcpGateway,
-        supportsImageInput: sessionSupportsImageInput(body),
-        initialContext: body.initialContext ?? {},
-      });
+sessions.set(runnerSessionId, {
+  gallerySessionId: body.gallerySessionId,
+  model: body.model,
+  mcpGateway: body.mcpGateway,
+  supportsImageInput: sessionSupportsImageInput(body),
+  initialContext: body.initialContext ?? {},
+});
 ```
 
 - [ ] **Step 2: Add current-album helpers**
@@ -388,11 +403,11 @@ Then change the existing check to:
 Inside the highlight `try` block, replace the single `readHighlightCandidates(...)` call with source-aware logic:
 
 ```js
-          const sourceAlbumAssetIds = Array.isArray(sourceAlbum?.assetIds) ? sourceAlbum.assetIds : null;
-          const candidateResult = sourceAlbumAssetIds
-            ? { assetIds: sourceAlbumAssetIds, candidateCount: sourceAlbumAssetIds.length }
-            : await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
-          const { assetIds, candidateCount } = candidateResult;
+const sourceAlbumAssetIds = Array.isArray(sourceAlbum?.assetIds) ? sourceAlbum.assetIds : null;
+const candidateResult = sourceAlbumAssetIds
+  ? { assetIds: sourceAlbumAssetIds, candidateCount: sourceAlbumAssetIds.length }
+  : await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
+const { assetIds, candidateCount } = candidateResult;
 ```
 
 The rest of the highlight branch should keep using `assetIds` for metadata reads, candidate-limit checks, selection, and write plans.
@@ -420,41 +435,41 @@ Expected: PASS. The exact Slice 6 acceptance prompts and existing e2e-runtime te
 In `server/src/services/agent-capability-matrix.spec.ts`, replace the current highlight matrix test with:
 
 ```ts
-  it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
-    const markdown = readMatrix();
+it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
+  const markdown = readMatrix();
 
-    const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
+  const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
 
-    expect(bestPhotosRow).toBeDefined();
-    expect(bestPhotosRow).toContain('Solid now for bounded sources');
-    expect(bestPhotosRow).toMatch(/bounded candidates/i);
-    expect(bestPhotosRow).toMatch(/ratings|favorites|metadata|previews/i);
-    expect(bestPhotosRow).toMatch(/not quality scoring|not objective/i);
-    expect(bestPhotosRow).not.toContain('planned implementation');
+  expect(bestPhotosRow).toBeDefined();
+  expect(bestPhotosRow).toContain('Solid now for bounded sources');
+  expect(bestPhotosRow).toMatch(/bounded candidates/i);
+  expect(bestPhotosRow).toMatch(/ratings|favorites|metadata|previews/i);
+  expect(bestPhotosRow).toMatch(/not quality scoring|not objective/i);
+  expect(bestPhotosRow).not.toContain('planned implementation');
 
-    const visualCleanupRow = markdown.split('\n').find((line) => line.includes('Visual cleanup'));
-    expect(visualCleanupRow).toBeDefined();
-    expect(visualCleanupRow).toContain('Constrained now');
+  const visualCleanupRow = markdown.split('\n').find((line) => line.includes('Visual cleanup'));
+  expect(visualCleanupRow).toBeDefined();
+  expect(visualCleanupRow).toContain('Constrained now');
 
-    for (const prompt of [
-      'Suggest 5 highlights from this album and make an album called Highlights.',
-      'Favorite the best 3 photos from last weekend.',
-      'Pick a cover from this album.',
-      'Pick the best photos from my library.',
-      'Suggest 20 highlights from this album.',
-      'Suggest highlights from last weekend.',
-    ]) {
-      expect(markdown).toContain(prompt);
-    }
+  for (const prompt of [
+    'Suggest 5 highlights from this album and make an album called Highlights.',
+    'Favorite the best 3 photos from last weekend.',
+    'Pick a cover from this album.',
+    'Pick the best photos from my library.',
+    'Suggest 20 highlights from this album.',
+    'Suggest highlights from last weekend.',
+  ]) {
+    expect(markdown).toContain(prompt);
+  }
 
-    const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
-    expect(needsNewToolHeadingIndex).not.toBe(-1);
+  const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
+  expect(needsNewToolHeadingIndex).not.toBe(-1);
 
-    const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
-    expect(needsNewToolSection).toContain('Image quality scoring');
-    expect(needsNewToolSection).toContain('analyzeAssetQuality');
-    expect(needsNewToolSection).toMatch(/quality scoring/i);
-  });
+  const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
+  expect(needsNewToolSection).toContain('Image quality scoring');
+  expect(needsNewToolSection).toContain('analyzeAssetQuality');
+  expect(needsNewToolSection).toMatch(/quality scoring/i);
+});
 ```
 
 - [ ] **Step 2: Run the capability matrix test and verify red**
@@ -472,13 +487,13 @@ Expected: FAIL because the markdown still says highlight curation is behind plan
 In `docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md`, update the high-value constrained capability row from:
 
 ```markdown
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Constrained now and behind planned implementation; works only across bounded candidates using ratings, favorites, metadata, and previews, not quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
+| “Best photos” curation | Users want the assistant to pick highlights. | Constrained now and behind planned implementation; works only across bounded candidates using ratings, favorites, metadata, and previews, not quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
 ```
 
 to:
 
 ```markdown
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, and previews across bounded candidates; suggested highlights are not objective quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
+| “Best photos” curation | Users want the assistant to pick highlights. | Solid now for bounded sources using ratings, favorites, metadata, and previews across bounded candidates; suggested highlights are not objective quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
 ```
 
 Keep the `Visual cleanup` row as `Constrained now`.

@@ -74,39 +74,39 @@ The missing user-facing behavior is criteria visibility for highlight plans. The
 In `agent-operation-plan-ui.spec.ts`, add this test near the other `buildOperationReviewModel` summary tests:
 
 ```ts
-  it('extracts highlight curation criteria from suggested-highlight plan summaries', () => {
-    const model = buildOperationReviewModel(
-      {
-        ...plan([
-          operation({
-            id: createId,
-            type: AgentOperationType.AlbumCreate,
-            summary: 'Create Highlights',
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            temporaryTargetId: 'album-highlights',
-            payload: { albumName: 'Highlights' },
-          }),
-          operation({
-            id: addId,
-            type: AgentOperationType.AlbumAddAssets,
-            summary: 'Add 2 preview-assisted suggested highlights to Highlights.',
-            targetKind: AgentOperationTargetKind.NewAlbum,
-            temporaryTargetId: 'album-highlights',
-            assetIds: [assetA, assetB],
-            dependencyIds: [createId],
-            payload: {},
-          }),
-        ]),
-        summary:
-          'Create Highlights with 2 preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
-      },
-      { [createId]: true, [addId]: true },
-    );
+it('extracts highlight curation criteria from suggested-highlight plan summaries', () => {
+  const model = buildOperationReviewModel(
+    {
+      ...plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Highlights',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-highlights',
+          payload: { albumName: 'Highlights' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add 2 preview-assisted suggested highlights to Highlights.',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-highlights',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+      summary:
+        'Create Highlights with 2 preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
+    },
+    { [createId]: true, [addId]: true },
+  );
 
-    expect(model.groups[0].curationCriteria).toBe(
-      'Preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
-    );
-  });
+  expect(model.groups[0].curationCriteria).toBe(
+    'Preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
+  );
+});
 ```
 
 - [ ] **Step 2: Add the destination card visible criteria test**
@@ -155,25 +155,27 @@ const highlightGroup = () =>
 Add this test:
 
 ```ts
-  it('shows highlight curation criteria with selected count and thumbnails', () => {
-    render(AgentPlanDestinationCard, {
-      props: {
-        group: highlightGroup(),
-        canChangeSelection: true,
-        onToggleGroup: vi.fn(),
-        onToggleOperation: vi.fn(),
-        onSetFieldOverride: vi.fn(),
-        onResetFieldOverride: vi.fn(),
-      },
-    });
-
-    const destinationRegion = screen.getByRole('region', { name: 'Highlights' });
-    expect(within(destinationRegion).getByText(/Criteria: Metadata-only suggested highlights prioritized/i)).toBeInTheDocument();
-    expect(within(destinationRegion).getByText(/no previews were inspected/i)).toBeInTheDocument();
-    expect(within(destinationRegion).getByText('2 selected trip photos')).toBeInTheDocument();
-    expect(within(destinationRegion).getByRole('button', { name: 'Review photos' })).toBeInTheDocument();
-    expect(within(destinationRegion).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
+it('shows highlight curation criteria with selected count and thumbnails', () => {
+  render(AgentPlanDestinationCard, {
+    props: {
+      group: highlightGroup(),
+      canChangeSelection: true,
+      onToggleGroup: vi.fn(),
+      onToggleOperation: vi.fn(),
+      onSetFieldOverride: vi.fn(),
+      onResetFieldOverride: vi.fn(),
+    },
   });
+
+  const destinationRegion = screen.getByRole('region', { name: 'Highlights' });
+  expect(
+    within(destinationRegion).getByText(/Criteria: Metadata-only suggested highlights prioritized/i),
+  ).toBeInTheDocument();
+  expect(within(destinationRegion).getByText(/no previews were inspected/i)).toBeInTheDocument();
+  expect(within(destinationRegion).getByText('2 selected trip photos')).toBeInTheDocument();
+  expect(within(destinationRegion).getByRole('button', { name: 'Review photos' })).toBeInTheDocument();
+  expect(within(destinationRegion).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 3: Add the i18n key assertion**
@@ -181,13 +183,13 @@ Add this test:
 In `agent-operation-plan-i18n.spec.ts`, add a dedicated plan-review copy test near the other operation-plan i18n tests:
 
 ```ts
-  it('defines curation criteria English copy for highlight plan review', () => {
-    expect(en).toEqual(
-      expect.objectContaining({
-        assistant_operation_curation_criteria: 'Criteria: {criteria}',
-      }),
-    );
-  });
+it('defines curation criteria English copy for highlight plan review', () => {
+  expect(en).toEqual(
+    expect.objectContaining({
+      assistant_operation_curation_criteria: 'Criteria: {criteria}',
+    }),
+  );
+});
 ```
 
 - [ ] **Step 4: Run the focused tests and verify red**
@@ -246,25 +248,25 @@ const groupHasSuggestedHighlights = (operations: OperationReviewItem[]) =>
 Inside the `for (const item of items)` grouping loop, after:
 
 ```ts
-    const operations = [...group.operations, item];
+const operations = [...group.operations, item];
 ```
 
 add:
 
 ```ts
-    const curationCriteria = groupHasSuggestedHighlights(operations)
-      ? (group.curationCriteria ??
-        getHighlightCurationCriteria([model.plan.summary, ...operations.map(({ operation }) => operation.summary)]))
-      : undefined;
+const curationCriteria = groupHasSuggestedHighlights(operations)
+  ? (group.curationCriteria ??
+    getHighlightCurationCriteria([model.plan.summary, ...operations.map(({ operation }) => operation.summary)]))
+  : undefined;
 ```
 
 Because this code is inside `buildOperationReviewModel`, use `plan.summary`, not `model.plan.summary`:
 
 ```ts
-    const curationCriteria = groupHasSuggestedHighlights(operations)
-      ? (group.curationCriteria ??
-        getHighlightCurationCriteria([plan.summary, ...operations.map(({ operation }) => operation.summary)]))
-      : undefined;
+const curationCriteria = groupHasSuggestedHighlights(operations)
+  ? (group.curationCriteria ??
+    getHighlightCurationCriteria([plan.summary, ...operations.map(({ operation }) => operation.summary)]))
+  : undefined;
 ```
 
 Add `curationCriteria` to the object passed to `groupsById.set()`:
@@ -417,46 +419,46 @@ to the formatter chain.
 Add this test near the existing sparse item selection tests:
 
 ```ts
-  it('applies sparse user exclusions to a suggested highlight album plan', async () => {
-    sdkMock.getCurrentOperationPlan.mockResolvedValue(highlightPlan());
-    sdkMock.applyApprovedOperations.mockResolvedValue({
-      status: AgentOperationApplyStatus.Applied,
-      plan: appliedPlan(),
-      appliedOperationIds: [createId, addId],
-      skippedOperationIds: [],
-      failedOperationIds: [],
-      summary: 'Applied 2 operation(s), skipped 0, failed 0.',
-    });
-
-    render(AgentOperationPlanReviewPanel, { props: { session } });
-
-    const region = await screen.findByRole('region', { name: 'Plan review' });
-    expect(within(region).getByText(/Criteria: Metadata-only suggested highlights prioritized/i)).toBeInTheDocument();
-    expect(within(region).getByText('3 selected trip photos')).toBeInTheDocument();
-    expect(within(region).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
-
-    await fireEvent.click(within(region).getByRole('button', { name: 'Review photos' }));
-    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
-    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
-    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
-
-    expect(screen.getAllByText('2 of 3 photos selected')).toHaveLength(2);
-    expect(screen.getByText('2 changes · 2 assets selected')).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
-
-    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
-      id: session.id,
-      planId,
-      agentOperationPlanApplyRequestDto: {
-        operationIds: [createId, addId],
-        itemSelections: {
-          [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
-        },
-        planRevision: 1,
-      },
-    });
+it('applies sparse user exclusions to a suggested highlight album plan', async () => {
+  sdkMock.getCurrentOperationPlan.mockResolvedValue(highlightPlan());
+  sdkMock.applyApprovedOperations.mockResolvedValue({
+    status: AgentOperationApplyStatus.Applied,
+    plan: appliedPlan(),
+    appliedOperationIds: [createId, addId],
+    skippedOperationIds: [],
+    failedOperationIds: [],
+    summary: 'Applied 2 operation(s), skipped 0, failed 0.',
   });
+
+  render(AgentOperationPlanReviewPanel, { props: { session } });
+
+  const region = await screen.findByRole('region', { name: 'Plan review' });
+  expect(within(region).getByText(/Criteria: Metadata-only suggested highlights prioritized/i)).toBeInTheDocument();
+  expect(within(region).getByText('3 selected trip photos')).toBeInTheDocument();
+  expect(within(region).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
+
+  await fireEvent.click(within(region).getByRole('button', { name: 'Review photos' }));
+  const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+  await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+  await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
+
+  expect(screen.getAllByText('2 of 3 photos selected')).toHaveLength(2);
+  expect(screen.getByText('2 changes · 2 assets selected')).toBeInTheDocument();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
+
+  expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+    id: session.id,
+    planId,
+    agentOperationPlanApplyRequestDto: {
+      operationIds: [createId, addId],
+      itemSelections: {
+        [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+      planRevision: 1,
+    },
+  });
+});
 ```
 
 - [ ] **Step 5: Run the review panel test**
