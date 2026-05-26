@@ -37,6 +37,8 @@ const testState = vi.hoisted(() => ({
   assetCount: 1,
   months: [] as unknown[],
   keepStaleGroupingOnUpdate: false,
+  viewportHeight: 600,
+  viewportWidth: 390,
 }));
 
 vi.mock('$app/navigation', () => ({
@@ -113,8 +115,21 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     bodySectionHeight = 296;
     bottomSectionHeight = 0;
     totalViewerHeight = 296;
-    viewportHeight = 600;
-    viewportWidth = 390;
+    get viewportHeight() {
+      return testState.viewportHeight;
+    }
+    set viewportHeight(value: number) {
+      testState.viewportHeight = value;
+    }
+    get viewportWidth() {
+      return testState.viewportWidth;
+    }
+    set viewportWidth(value: number) {
+      testState.viewportWidth = value;
+    }
+    get hasEmptyViewport() {
+      return testState.viewportHeight === 0 || testState.viewportWidth === 0;
+    }
     showAssetOwners = false;
     albumAssets = new Set<string>();
     suspendTransitions = false;
@@ -181,6 +196,8 @@ describe('Timeline representative grouping integration', () => {
     testState.assetCount = 1;
     testState.months = [];
     testState.keepStaleGroupingOnUpdate = false;
+    testState.viewportHeight = 600;
+    testState.viewportWidth = 390;
     testState.representativeBucket = {
       grouping: 'year',
       timeBucket: '2015-01-01',
@@ -260,6 +277,23 @@ describe('Timeline representative grouping integration', () => {
       representativeThumbhash: null,
       representativeRatio: null,
     };
+
+    renderTimeline({
+      options: { grouping: 'day' },
+      grouping: 'day',
+      temporalAnchor: { year: 2015, month: 8 },
+      onTemporalAnchorResolved,
+    });
+
+    expect(onTemporalAnchorResolved).not.toHaveBeenCalled();
+  });
+
+  it('waits for viewport geometry before resolving a day-mode temporal anchor', () => {
+    const onTemporalAnchorResolved = vi.fn();
+    testState.grouping = 'day';
+    testState.viewportHeight = 0;
+    testState.viewportWidth = 0;
+    testState.months = [{ yearMonth: { year: 2015, month: 8 }, top: 0 }] as unknown[];
 
     renderTimeline({
       options: { grouping: 'day' },

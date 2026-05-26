@@ -153,7 +153,12 @@
   });
 
   $effect(() => {
-    if (!temporalAnchor || !timelineManager.isInitialized || timelineManager.grouping !== activeGrouping) {
+    if (
+      !temporalAnchor ||
+      !timelineManager.isInitialized ||
+      timelineManager.grouping !== activeGrouping ||
+      timelineManager.hasEmptyViewport
+    ) {
       return;
     }
 
