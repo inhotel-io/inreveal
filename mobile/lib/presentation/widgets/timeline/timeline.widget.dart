@@ -12,6 +12,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/events.model.dart';
 import 'package:immich_mobile/domain/models/setting.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/utils/event_stream.dart';
 import 'package:immich_mobile/extensions/asyncvalue_extensions.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
@@ -29,6 +30,7 @@ import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.da
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
+import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_loading_indicator.dart';
 import 'package:immich_mobile/widgets/common/immich_sliver_app_bar.dart';
 import 'package:immich_mobile/widgets/common/mesmerizing_sliver_app_bar.dart';
@@ -162,6 +164,8 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
   double _scaleFactor = 3.0;
   double _baseScaleFactor = 3.0;
   int? _restoreAssetIndex;
+  TimelineZoomAnchor? _scheduledZoomAnchor;
+  TimelineZoomAnchor? _resolvingZoomAnchor;
 
   @override
   void initState() {
@@ -343,6 +347,71 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
         .whenComplete(() => ref.read(timelineStateProvider.notifier).setScrubbing(false));
   }
 
+  void _scheduleZoomAnchorResolution({
+    required TimelineZoomAnchor anchor,
+    required GroupAssetsBy groupBy,
+    required List<Segment> segments,
+  }) {
+    if (anchor.isEmpty || _scheduledZoomAnchor == anchor || _resolvingZoomAnchor == anchor) {
+      return;
+    }
+
+    _scheduledZoomAnchor = anchor;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _scheduledZoomAnchor = null;
+      _resolveZoomAnchor(anchor: anchor, groupBy: groupBy, segments: segments);
+    });
+  }
+
+  void _resolveZoomAnchor({
+    required TimelineZoomAnchor anchor,
+    required GroupAssetsBy groupBy,
+    required List<Segment> segments,
+  }) {
+    if (ref.read(timelineZoomAnchorProvider) != anchor || !_scrollController.hasClients) {
+      return;
+    }
+
+    final activeGroupBy =
+        ref.read(timelineArgsProvider).groupBy ??
+        GroupAssetsBy.values[ref.read(settingsProvider).get(Setting.groupAssetsBy)];
+    if (activeGroupBy != groupBy) {
+      return;
+    }
+
+    final targetSegment = findTimelineZoomAnchorSegment(segments, anchor, groupBy);
+    if (targetSegment == null) {
+      return;
+    }
+
+    final targetOffset = targetSegment.startOffset - 50;
+    _resolvingZoomAnchor = anchor;
+    ref.read(timelineStateProvider.notifier).setScrubbing(true);
+    _scrollController
+        .animateTo(
+          targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        )
+        .whenComplete(() {
+          if (!mounted) {
+            return;
+          }
+
+          if (ref.read(timelineZoomAnchorProvider) == anchor) {
+            ref.read(timelineZoomAnchorProvider.notifier).clear();
+          }
+          if (_resolvingZoomAnchor == anchor) {
+            _resolvingZoomAnchor = null;
+          }
+          ref.read(timelineStateProvider.notifier).setScrubbing(false);
+        });
+  }
+
   // Drag selection methods
   void _setDragStartIndex(TimelineAssetIndex index) {
     setState(() {
@@ -436,6 +505,11 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
               ],
             ),
         onData: (segments) {
+          final activeGroupBy =
+              ref.watch(timelineArgsProvider).groupBy ??
+              GroupAssetsBy.values[ref.watch(settingsProvider).get(Setting.groupAssetsBy)];
+          final zoomAnchor = ref.watch(timelineZoomAnchorProvider);
+          _scheduleZoomAnchorResolution(anchor: zoomAnchor, groupBy: activeGroupBy, segments: segments);
           final childCount = (segments.lastOrNull?.lastIndex ?? -1) + 1;
           final double appBarExpandedHeight = widget.appBar != null && widget.appBar is MesmerizingSliverAppBar
               ? 200
@@ -476,9 +550,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
           if (widget.withScrubber) {
             timeline = Scrubber(
               snapToMonth: widget.snapToMonth,
-              groupBy:
-                  ref.watch(timelineArgsProvider).groupBy ??
-                  GroupAssetsBy.values[ref.watch(settingsProvider).get(Setting.groupAssetsBy)],
+              groupBy: activeGroupBy,
               layoutSegments: segments,
               timelineHeight: maxHeight,
               topPadding: topPadding,
