@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { createRawSnippet, tick } from 'svelte';
 
 import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
@@ -41,6 +41,9 @@ const testState = vi.hoisted(() => ({
   viewportWidth: 390,
   hasScrollableElement: true,
   scrollCalls: [] as number[],
+  scrollTop: 0,
+  maxScroll: 1,
+  scrollToUpdatesAfterCalls: 1,
 }));
 
 vi.mock('$app/navigation', () => ({
@@ -121,13 +124,17 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
       return testState.viewportHeight;
     }
     set viewportHeight(value: number) {
-      testState.viewportHeight = value;
+      if (value !== 0) {
+        testState.viewportHeight = value;
+      }
     }
     get viewportWidth() {
       return testState.viewportWidth;
     }
     set viewportWidth(value: number) {
-      testState.viewportWidth = value;
+      if (value !== 0) {
+        testState.viewportWidth = value;
+      }
     }
     get hasEmptyViewport() {
       return testState.viewportHeight === 0 || testState.viewportWidth === 0;
@@ -136,8 +143,13 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     albumAssets = new Set<string>();
     suspendTransitions = false;
     limitedScroll = false;
-    maxScroll = 1;
+    get maxScroll() {
+      return testState.maxScroll;
+    }
     maxScrollPercent = 1;
+    get scrollTop() {
+      return testState.scrollTop;
+    }
     get scrollableElement() {
       return testState.hasScrollableElement ? ({} as HTMLElement) : undefined;
     }
@@ -155,6 +167,9 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     updateSlidingWindow = vi.fn();
     scrollTo = vi.fn((top: number) => {
       testState.scrollCalls.push(top);
+      if (testState.scrollCalls.length >= testState.scrollToUpdatesAfterCalls) {
+        testState.scrollTop = top;
+      }
     });
     loadTimelineMonth = vi.fn();
     getTimelineMonthByAssetId = vi.fn();
@@ -209,6 +224,9 @@ describe('Timeline representative grouping integration', () => {
     testState.viewportWidth = 390;
     testState.hasScrollableElement = true;
     testState.scrollCalls = [];
+    testState.scrollTop = 0;
+    testState.maxScroll = 1;
+    testState.scrollToUpdatesAfterCalls = 1;
     testState.representativeBucket = {
       grouping: 'year',
       timeBucket: '2015-01-01',
@@ -330,6 +348,39 @@ describe('Timeline representative grouping integration', () => {
     });
 
     expect(onTemporalAnchorResolved).not.toHaveBeenCalled();
+  });
+
+  it('retries a day-mode temporal anchor until the scroll position reaches the target', async () => {
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = (callback: FrameRequestCallback) =>
+      setTimeout(() => {
+        testState.viewportHeight = 600;
+        testState.viewportWidth = 390;
+        callback(performance.now());
+      }, 0) as unknown as number;
+    globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
+
+    try {
+      const onTemporalAnchorResolved = vi.fn();
+      testState.grouping = 'day';
+      testState.maxScroll = 2000;
+      testState.scrollToUpdatesAfterCalls = 2;
+      testState.months = [{ yearMonth: { year: 2015, month: 8 }, top: 1200, height: 240 }] as unknown[];
+
+      renderTimeline({
+        options: { grouping: 'day' },
+        grouping: 'day',
+        temporalAnchor: { year: 2015, month: 8 },
+        onTemporalAnchorResolved,
+      });
+
+      await waitFor(() => expect(onTemporalAnchorResolved).toHaveBeenCalledOnce());
+      expect(testState.scrollCalls).toEqual([1200, 1200]);
+    } finally {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
   });
 
   it('does not run the routing scroll-to-top fallback while a temporal anchor is pending', async () => {

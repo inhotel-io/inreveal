@@ -162,16 +162,42 @@
       return;
     }
 
+    let frame: number | undefined;
+    let cancelled = false;
+    let attempts = 0;
     const anchor = temporalAnchor;
-    void tick().then(() => {
-      if (temporalAnchor !== anchor || !timelineManager.isInitialized || timelineManager.grouping !== activeGrouping) {
-        return;
-      }
 
-      if (scrollTimelineToTemporalAnchor(timelineManager, anchor)) {
-        onTemporalAnchorResolved?.();
+    const attemptScroll = () => {
+      void tick().then(() => {
+        if (
+          cancelled ||
+          temporalAnchor !== anchor ||
+          !timelineManager.isInitialized ||
+          timelineManager.grouping !== activeGrouping ||
+          timelineManager.hasEmptyViewport
+        ) {
+          return;
+        }
+
+        if (scrollTimelineToTemporalAnchor(timelineManager, anchor)) {
+          onTemporalAnchorResolved?.();
+          return;
+        }
+
+        if (attempts++ < 120) {
+          frame = requestAnimationFrame(attemptScroll);
+        }
+      });
+    };
+
+    frame = requestAnimationFrame(attemptScroll);
+
+    return () => {
+      cancelled = true;
+      if (frame !== undefined) {
+        cancelAnimationFrame(frame);
       }
-    });
+    };
   });
 
   $effect(() => {

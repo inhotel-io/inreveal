@@ -81,6 +81,10 @@ test.describe('Timeline grouping UI', () => {
     await targetYearCard.click();
 
     await expect(page.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+    await timelineUtils.locator(page).evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
     await page.getByTestId('timeline-bucket-card').filter({ hasText: 'Dec 2000' }).click();
 
     await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
