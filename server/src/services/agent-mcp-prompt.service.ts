@@ -39,7 +39,7 @@ const promptExampleSelections = [
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-description' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'clear-existing-space-description' },
   { toolName: AgentToolName.ProposeAlbumOperations, exampleName: 'update-existing-space-color' },
-  { toolName: AgentToolName.ProposeAssetBatchFromSearch, exampleName: 'favorite-search-results' },
+  { toolName: AgentToolName.ProposeAssetBatchFromSearch, exampleName: 'metadata-search-results' },
 ] as const;
 
 @Injectable()
@@ -50,11 +50,6 @@ export class AgentMcpPromptService {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
     const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
-    const resolveFilters = this.getPromptExample(
-      examples,
-      AgentToolName.ResolveAssetSearchFilters,
-      'resolve-named-filters',
-    );
     const albumSourceSearch = this.getPromptExample(
       examples,
       AgentToolName.ProposeAlbumFromSearch,
@@ -75,9 +70,11 @@ export class AgentMcpPromptService {
       AgentToolName.ProposeAssetBatchFromSearch,
       'favorite-search-results',
     );
-    const sampleSearch = this.getPromptExample(examples, AgentToolName.SearchAssets, 'summary-sample-search');
-    const listSpaces = this.getPromptExample(examples, AgentToolName.ListSpaces, 'list-visible-spaces');
-    const readSpace = this.getPromptExample(examples, AgentToolName.ReadSpace, 'read-space-details');
+    const metadataBatch = this.getPromptExample(
+      examples,
+      AgentToolName.ProposeAssetBatchFromSearch,
+      'metadata-search-results',
+    );
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
     const planContract = this.getContract(AgentToolName.ProposeAlbumOperations);
     const retryMode = metadataContract.argumentModes.find((mode) => mode.name === 'approved-retry');
@@ -91,24 +88,23 @@ export class AgentMcpPromptService {
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
         `Default write: ${albumSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToAlbumFromSearch)},${spaceSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToSpaceFromSearch)},${batchSourceSearch.piToolName}.`,
+        `Metadata edits reviewable: asset.updateMetadata via ${metadataBatch.piToolName}; coordinates need latitude+longitude; place names/one coordinate: ask.`,
         `assetSource.search: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
         `previousSearch.sourceRef after inspect: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
         `Recoverable: wrong_id_domain->assetSource.search/right; needs_clarification->ask, use choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
-        'Progressive: resolve names -> search detail ids {"detail":"ids"} -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
+        'Progressive: resolve names -> search detail ids {"detail":"ids","fields":["dates","location"]} -> readAssetMetadata fields for selected ids. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.',
         'Large: createSelectionHandle -> assetSelectionHandleId. Do not paste hundreds of assetIds.',
-        `Resolve names before searchAssets ${resolveFilters.piToolName} {"tags":["Travel"]}`,
+        'Resolve names before searchAssets {"tags":["Travel"]}',
         'Resolver fidelity: copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying.',
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
-        `Sample: ${sampleSearch.piToolName} {"fields":["dates","location"]}`,
         'Visual curation: search ids first, then previews for shortlisted assetIds only.',
         'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename.',
-        `Space lookup: ${listSpaces.piToolName}->${readSpace.piToolName}:`,
-        `${this.formatJson(listSpaces.arguments)} -> ${this.formatJson(readSpace.arguments)}`,
+        `Space lookup: ${this.toPiToolName(AgentToolName.ListSpaces)}->${this.toPiToolName(AgentToolName.ReadSpace)}.`,
         'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
         'Details: space.updateDetails spaceName, description, color. Same name/description/color: no-op. Never update thumbnails, pets, faces, linked libraries, or delete spaces.',
-        `Low-level explicit IDs only for small inspected sets: ${this.toPiToolName(AgentToolName.ProposeAlbumOperations)} album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}`,
+        `Low-level explicit IDs only for small inspected sets: album.create temporaryTargetId; album.addAssets; space.addAssets/space.removeAssets {"targetKind":"existing_space","targetId":"<target-id>","assetIds":["<asset-id-from-searchAssets>"]}`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
