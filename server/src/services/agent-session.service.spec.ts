@@ -356,9 +356,9 @@ describe(AgentSessionService.name, () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope).toEqual(
       expandedWriteScope,
     );
-    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata).toBe(
-      true,
-    );
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata,
+    ).toBe(true);
   });
 
   it('dangerously-skip-permissions approval mode is accepted and forwarded to the runner', async () => {

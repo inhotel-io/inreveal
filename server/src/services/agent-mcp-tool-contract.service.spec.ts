@@ -186,7 +186,9 @@ describe(AgentMcpToolContractService.name, () => {
         }),
         expect.objectContaining({
           id: 'asset-batch-workflow-unsupported-action',
-          hint: expect.stringMatching(/asset\.setFavorite.*asset\.setArchive.*asset\.addTag.*asset\.updateMetadata.*asset\.rotate/i),
+          hint: expect.stringMatching(
+            /asset\.setFavorite.*asset\.setArchive.*asset\.addTag.*asset\.updateMetadata.*asset\.rotate/i,
+          ),
           exampleName: 'favorite-search-results',
         }),
       ]),
