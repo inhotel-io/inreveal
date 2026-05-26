@@ -1,5 +1,6 @@
 import {
   AgentOperationPlanStatus,
+  AgentOperationReviewMetadataValueKind,
   AgentOperationRiskLevel,
   AgentOperationStatus,
   AgentOperationTargetKind,
@@ -245,33 +246,37 @@ describe('agent operation plan UI helpers', () => {
               fields: [
                 {
                   key: 'description',
-                  label: translatedText('assistant_operation_metadata_field_description'),
+                  label: 'Description',
                   previousValues: [
-                    { assetId: assetA, value: 'Old caption', valueKind: 'known' },
-                    { assetId: assetB, value: null, valueKind: 'empty' },
+                    { assetId: assetA, value: 'Old caption', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                    { assetId: assetB, value: null, valueKind: AgentOperationReviewMetadataValueKind.Empty },
                   ],
                   proposedValue: null,
-                  proposedValueKind: 'clear',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Clear,
                 },
                 {
                   key: 'rating',
-                  label: translatedText('assistant_operation_metadata_field_rating'),
+                  label: 'Rating',
                   previousValues: [
-                    { assetId: assetA, value: '4', valueKind: 'known' },
-                    { assetId: assetB, value: null, valueKind: 'empty' },
+                    { assetId: assetA, value: '4', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                    { assetId: assetB, value: null, valueKind: AgentOperationReviewMetadataValueKind.Empty },
                   ],
                   proposedValue: null,
-                  proposedValueKind: 'clear',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Clear,
                 },
                 {
                   key: 'location',
-                  label: translatedText('assistant_operation_metadata_field_location'),
+                  label: 'Location',
                   previousValues: [
-                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
-                    { assetId: assetB, value: null, valueKind: 'unknown' },
+                    {
+                      assetId: assetA,
+                      value: '48.8566, 2.3522',
+                      valueKind: AgentOperationReviewMetadataValueKind.Known,
+                    },
+                    { assetId: assetB, value: null, valueKind: AgentOperationReviewMetadataValueKind.Unknown },
                   ],
                   proposedValue: '52.52, 13.405',
-                  proposedValueKind: 'known',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
                 },
               ],
               sampleAssetIds: [assetA, assetB],
@@ -349,9 +354,11 @@ describe('agent operation plan UI helpers', () => {
                 {
                   key: 'futureField',
                   label: 'Future field',
-                  previousValues: [{ assetId: assetA, value: 'Before', valueKind: 'known' }],
+                  previousValues: [
+                    { assetId: assetA, value: 'Before', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                  ],
                   proposedValue: 'After',
-                  proposedValueKind: 'known',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
                 },
               ],
               sampleAssetIds: [assetA],
@@ -388,13 +395,21 @@ describe('agent operation plan UI helpers', () => {
               fields: [
                 {
                   key: 'location',
-                  label: translatedText('assistant_operation_metadata_field_location'),
+                  label: 'Location',
                   previousValues: [
-                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
-                    { assetId: assetB, value: '40.7128, -74.006', valueKind: 'known' },
+                    {
+                      assetId: assetA,
+                      value: '48.8566, 2.3522',
+                      valueKind: AgentOperationReviewMetadataValueKind.Known,
+                    },
+                    {
+                      assetId: assetB,
+                      value: '40.7128, -74.006',
+                      valueKind: AgentOperationReviewMetadataValueKind.Known,
+                    },
                   ],
                   proposedValue: '52.52, 13.405',
-                  proposedValueKind: 'known',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
                 },
               ],
               sampleAssetIds: [assetA, assetB],
@@ -438,13 +453,21 @@ describe('agent operation plan UI helpers', () => {
               fields: [
                 {
                   key: 'location',
-                  label: translatedText('assistant_operation_metadata_field_location'),
+                  label: 'Location',
                   previousValues: [
-                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
-                    { assetId: assetB, value: '40.7128, -74.006', valueKind: 'known' },
+                    {
+                      assetId: assetA,
+                      value: '48.8566, 2.3522',
+                      valueKind: AgentOperationReviewMetadataValueKind.Known,
+                    },
+                    {
+                      assetId: assetB,
+                      value: '40.7128, -74.006',
+                      valueKind: AgentOperationReviewMetadataValueKind.Known,
+                    },
                   ],
                   proposedValue: '52.52, 13.405',
-                  proposedValueKind: 'known',
+                  proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
                 },
               ],
               sampleAssetIds: [assetA],
