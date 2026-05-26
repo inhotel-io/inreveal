@@ -36,6 +36,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_apply_summary: '{changes} changes · {assets} assets selected',
     assistant_operation_apply_success: 'Applied {applied} operations. {failed} failed.',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
+    assistant_operation_curation_criteria: 'Criteria: {criteria}',
     assistant_operation_plan_collapse: 'Collapse plan',
     assistant_operation_plan_collapsed: 'Plan collapsed',
     assistant_operation_plan_expand: 'Expand plan',
@@ -141,6 +142,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{assets}', String(options?.values?.assets ?? ''))
         .replace('{changes}', String(options?.values?.changes ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
+        .replace('{criteria}', String(options?.values?.criteria ?? ''))
         .replace('{selected}', String(options?.values?.selected ?? ''))
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{summary}', String(options?.values?.summary ?? ''))
@@ -214,6 +216,7 @@ const existingId = '00000000-0000-4000-8000-000000000103';
 const metadataId = '00000000-0000-4000-8000-000000000104';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
+const assetC = '00000000-0000-4000-8000-000000000203';
 
 const baseOperation = {
   planId,
@@ -238,12 +241,16 @@ const operation = (
   ...operation,
 });
 
-const plan = (operations: AgentOperationResponseDto[], revision = 1): AgentOperationPlanResponseDto => ({
+const plan = (
+  operations: AgentOperationResponseDto[],
+  revision = 1,
+  summary = 'Organize Portugal holiday',
+): AgentOperationPlanResponseDto => ({
   id: planId,
   sessionId: session.id,
   revision,
   status: AgentOperationPlanStatus.Proposed,
-  summary: 'Organize Portugal holiday',
+  summary,
   operations,
   createdAt: '2026-05-15T00:00:00.000Z',
   updatedAt: '2026-05-15T00:00:00.000Z',
@@ -279,6 +286,32 @@ const samplePlan = () =>
       payload: { description: 'Better description' },
     }),
   ]);
+
+const highlightPlan = () =>
+  plan(
+    [
+      operation({
+        id: createId,
+        type: AgentOperationType.AlbumCreate,
+        summary: 'Create Highlights',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'album-highlights',
+        payload: { albumName: 'Highlights', description: 'Suggested highlights selected from metadata signals.' },
+      }),
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add 3 metadata-only suggested highlights to Highlights.',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'album-highlights',
+        assetIds: [assetA, assetB, assetC],
+        dependencyIds: [createId],
+        payload: {},
+      }),
+    ],
+    1,
+    'Create Highlights with 3 metadata-only suggested highlights prioritized existing favorites, ratings, dates, tags, and location; no previews were inspected.',
+  );
 
 const appliedPlan = (): AgentOperationPlanResponseDto => ({
   ...samplePlan(),
@@ -787,6 +820,47 @@ describe('AgentOperationPlanReviewPanel', () => {
       planId,
       agentOperationPlanApplyRequestDto: {
         operationIds: [createId, addId, existingId],
+        itemSelections: {
+          [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+        },
+        planRevision: 1,
+      },
+    });
+  });
+
+  it('applies sparse user exclusions to a suggested highlight album plan', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(highlightPlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: appliedPlan(),
+      appliedOperationIds: [createId, addId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 2 operation(s), skipped 0, failed 0.',
+    });
+
+    render(AgentOperationPlanReviewPanel, { props: { session } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).getByText(/Criteria: Metadata-only suggested highlights prioritized/i)).toBeInTheDocument();
+    expect(within(region).getByText('3 selected trip photos')).toBeInTheDocument();
+    expect(within(region).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
+
+    await fireEvent.click(within(region).getByRole('button', { name: 'Review photos' }));
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Add 3 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
+
+    expect(screen.getAllByText('2 of 3 photos selected')).toHaveLength(2);
+    expect(screen.getByText('2 changes · 2 assets selected')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 2 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: {
+        operationIds: [createId, addId],
         itemSelections: {
           [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
         },

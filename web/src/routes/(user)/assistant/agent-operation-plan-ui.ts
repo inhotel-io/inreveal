@@ -190,6 +190,7 @@ export type OperationReviewGroup = {
   id: string;
   title: string;
   subtitle: string;
+  curationCriteria?: string;
   destination: OperationReviewDestination;
   assetCount: number;
   thumbnailSummary: AgentReviewThumbnailSummary;
@@ -701,6 +702,7 @@ export const buildOperationReviewModel = (
       id: groupId,
       title: getReviewGroupTitle(item),
       subtitle: '',
+      curationCriteria: undefined,
       destination: getDestination(item.operation, operationById, '', item.review.destination.name),
       assetCount: 0,
       thumbnailSummary: { totalCount: 0, representativeAssetIds: [], hasMore: false },
@@ -709,11 +711,16 @@ export const buildOperationReviewModel = (
     };
 
     const operations = [...group.operations, item];
+    const curationCriteria = groupHasSuggestedHighlights(operations)
+      ? (group.curationCriteria ??
+        getHighlightCurationCriteria([plan.summary, ...operations.map(({ operation }) => operation.summary)]))
+      : undefined;
     const subtitle = `${operations.length} ${operations.length === 1 ? 'operation' : 'operations'}`;
     const thumbnailSummary = getThumbnailSummary(operations.map(({ operation }) => operation));
     groupsById.set(groupId, {
       ...group,
       subtitle,
+      curationCriteria,
       destination: {
         ...group.destination,
         name: item.review.destination.name,
@@ -1537,6 +1544,26 @@ const getGroupTitle = (operation: AgentOperationResponseDto) => {
 
   return operation.summary;
 };
+
+const highlightCriteriaPattern =
+  /\b((?:metadata-only|preview-assisted) suggested highlights? (?:prioritized|prioritizing|considered) [^.]+)(?:\.|$)/i;
+
+const normalizeCriteriaSentence = (criteria: string) => {
+  const normalized = criteria.trim().replace(/\s+/g, ' ');
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1).replace(/\.$/, '')}.`;
+};
+
+const getHighlightCurationCriteria = (summaries: string[]) => {
+  for (const summary of summaries) {
+    const match = summary.match(highlightCriteriaPattern);
+    if (match?.[1]) {
+      return normalizeCriteriaSentence(match[1]);
+    }
+  }
+};
+
+const groupHasSuggestedHighlights = (operations: OperationReviewItem[]) =>
+  operations.some(({ operation }) => /\bsuggested highlights?\b/i.test(operation.summary));
 
 const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
   switch (operation.type) {

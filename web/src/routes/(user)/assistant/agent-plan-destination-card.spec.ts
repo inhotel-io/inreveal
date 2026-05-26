@@ -27,6 +27,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_asset_count: '{count} assets',
     assistant_operation_asset_selection_summary: '{selected} of {total} photos selected',
     assistant_operation_blocked_by: 'Blocked by {dependencies}',
+    assistant_operation_curation_criteria: 'Criteria: {criteria}',
     assistant_operation_destination_selected_summary: '{selected} of {total} changes selected',
     assistant_operation_destination_toggle: 'Select destination {name}',
     assistant_operation_detail_id: 'Operation ID',
@@ -91,6 +92,7 @@ vi.mock('svelte-i18n', () => {
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? ''))
         .replace('{name}', String(options?.values?.name ?? ''))
+        .replace('{criteria}', String(options?.values?.criteria ?? ''))
         .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
     ),
   };
@@ -164,6 +166,35 @@ const group = (
     fieldOverrideByOperationId ?? {},
   ).groups[0];
 
+const highlightGroup = () =>
+  buildOperationReviewModel(
+    {
+      ...plan([
+        operation({
+          id: createId,
+          type: AgentOperationType.AlbumCreate,
+          summary: 'Create Highlights',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-highlights',
+          payload: { albumName: 'Highlights' },
+        }),
+        operation({
+          id: addId,
+          type: AgentOperationType.AlbumAddAssets,
+          summary: 'Add 2 metadata-only suggested highlights to Highlights.',
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'album-highlights',
+          assetIds: [assetA, assetB],
+          dependencyIds: [createId],
+          payload: {},
+        }),
+      ]),
+      summary:
+        'Create Highlights with 2 metadata-only suggested highlights prioritized existing favorites, ratings, dates, tags, and location; no previews were inspected.',
+    },
+    { [createId]: true, [addId]: true },
+  ).groups[0];
+
 describe('AgentPlanDestinationCard', () => {
   it('renders destination evidence with compact operation and asset counts', () => {
     render(AgentPlanDestinationCard, {
@@ -214,6 +245,28 @@ describe('AgentPlanDestinationCard', () => {
 
     expect(onOpenItemReview).toHaveBeenCalledWith(addId);
     expect(screen.queryByRole('group', { name: 'Review photos for Add 2 photos' })).not.toBeInTheDocument();
+  });
+
+  it('shows highlight curation criteria with selected count and thumbnails', () => {
+    render(AgentPlanDestinationCard, {
+      props: {
+        group: highlightGroup(),
+        canChangeSelection: true,
+        onToggleGroup: vi.fn(),
+        onToggleOperation: vi.fn(),
+        onSetFieldOverride: vi.fn(),
+        onResetFieldOverride: vi.fn(),
+      },
+    });
+
+    const destinationRegion = screen.getByRole('region', { name: 'Highlights' });
+    expect(
+      within(destinationRegion).getByText(/Criteria: Metadata-only suggested highlights prioritized/i),
+    ).toBeInTheDocument();
+    expect(within(destinationRegion).getByText(/no previews were inspected/i)).toBeInTheDocument();
+    expect(within(destinationRegion).getByText('2 selected trip photos')).toBeInTheDocument();
+    expect(within(destinationRegion).getByRole('button', { name: 'Review photos' })).toBeInTheDocument();
+    expect(within(destinationRegion).getByTestId('agent-plan-thumbnail-strip')).toBeInTheDocument();
   });
 
   it('shows only selected thumbnails in the photo stage after item exclusions', () => {
