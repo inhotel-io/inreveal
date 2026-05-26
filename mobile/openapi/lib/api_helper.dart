@@ -94,6 +94,12 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetSetFavoriteOperationType) {
     return AgentAssetSetFavoriteOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetUpdateMetadataOperationType) {
+    return AgentAssetUpdateMetadataOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetUpdateMetadataTargetKind) {
+    return AgentAssetUpdateMetadataTargetKindTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssignableSharedSpaceMemberRole) {
     return AgentAssignableSharedSpaceMemberRoleTypeTransformer().encode(value).toString();
   }
@@ -138,6 +144,9 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentOperationPlanStatus) {
     return AgentOperationPlanStatusTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentOperationReviewMetadataValueKind) {
+    return AgentOperationReviewMetadataValueKindTypeTransformer().encode(value).toString();
   }
   if (value is AgentOperationRiskLevel) {
     return AgentOperationRiskLevelTypeTransformer().encode(value).toString();
