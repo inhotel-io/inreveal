@@ -139,7 +139,9 @@ const findOperationSchema = (
   const properties = record.properties as Record<string, unknown> | undefined;
   const type = properties?.type as Record<string, unknown> | undefined;
   const resolvedType =
-    typeof type?.$ref === 'string' ? (resolveJsonSchemaRef(root, type.$ref) as Record<string, unknown> | undefined) : type;
+    typeof type?.$ref === 'string'
+      ? (resolveJsonSchemaRef(root, type.$ref) as Record<string, unknown> | undefined)
+      : type;
   if (
     resolvedType?.const === operationType ||
     (Array.isArray(resolvedType?.enum) && resolvedType.enum.includes(operationType))
