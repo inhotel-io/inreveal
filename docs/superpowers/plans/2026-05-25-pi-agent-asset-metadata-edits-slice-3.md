@@ -215,7 +215,9 @@ const assetUpdateMetadataPayloadShape = {
 type AssetUpdateMetadataPayloadLike = Partial<Record<(typeof assetUpdateMetadataPayloadFieldNames)[number], unknown>>;
 
 const validateAssetUpdateMetadataPayload = (payload: AssetUpdateMetadataPayloadLike, ctx: z.RefinementCtx) => {
-  const suppliedFieldCount = assetUpdateMetadataPayloadFieldNames.filter((field) => payload[field] !== undefined).length;
+  const suppliedFieldCount = assetUpdateMetadataPayloadFieldNames.filter(
+    (field) => payload[field] !== undefined,
+  ).length;
   if (suppliedFieldCount === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -654,9 +656,9 @@ in both `isAssetBearingOperation()` and `requiresWritableAssets()`.
 Add a write-scope check:
 
 ```ts
-    if (type === AgentOperationType.AssetUpdateMetadata && !writeScope.updateAssetMetadata) {
-      throw new BadRequestException('This session is not allowed to update asset metadata');
-    }
+if (type === AgentOperationType.AssetUpdateMetadata && !writeScope.updateAssetMetadata) {
+  throw new BadRequestException('This session is not allowed to update asset metadata');
+}
 ```
 
 - [ ] **Step 4: Run planning service tests again**
