@@ -231,6 +231,31 @@ const makeToolCall = (overrides: Partial<AgentToolCall> = {}): AgentToolCall => 
   ...overrides,
 });
 
+const makeMetadataReviewRow = (
+  id: string,
+  exifInfo: {
+    description?: string | null;
+    rating?: number | null;
+    dateTimeOriginal?: Date | null;
+    timeZone?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  } | null,
+) => ({
+  id,
+  exifInfo:
+    exifInfo === null
+      ? null
+      : {
+          description: exifInfo.description ?? null,
+          rating: exifInfo.rating ?? null,
+          dateTimeOriginal: exifInfo.dateTimeOriginal ?? null,
+          timeZone: exifInfo.timeZone ?? null,
+          latitude: exifInfo.latitude ?? null,
+          longitude: exifInfo.longitude ?? null,
+        },
+});
+
 describe(AgentOperationPlanService.name, () => {
   let sut: AgentOperationPlanService;
   let accessRepository: ReturnType<typeof newAccessRepositoryMock>;
@@ -1530,6 +1555,58 @@ describe(AgentOperationPlanService.name, () => {
       }),
     );
     expect(assetService.updateAll).not.toHaveBeenCalled();
+  });
+
+  it('audits metadata planning with metadata wording without exposing review metadata to tool responses', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const assetIds = [newUuid(), newUuid()];
+    const plannedOperation = makeOperation({
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds,
+      payload: { description: 'Berlin weekend' },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetSearchFilterResolverService.resolveDeclarativeFilters.mockResolvedValue({
+      status: 'success',
+      filters: {},
+      results: [],
+    });
+    sharedSpaceRepository.getSpaceIdsForTimeline.mockResolvedValue([]);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })),
+      hasNextPage: false,
+    } as never);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({ sessionId: session.id, operations: [plannedOperation] }),
+    );
+
+    const result = await (sut as any).proposeAssetBatchFromSearch(auth, session.id, {
+      action: { type: AgentOperationType.AssetUpdateMetadata, description: 'Berlin weekend' },
+      assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+    });
+
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAssetBatchFromSearch,
+        requestSummary: 'Store 1 proposed metadata operation(s)',
+      }),
+    );
+    expect((result.plan.operations[0] as any).reviewMetadata).toBeUndefined();
+    expect(toolCallRepository.transition).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        responseSummary: 'Plan revision 1: 1 metadata update operation(s).',
+      }),
+    );
   });
 
   it('proposeAssetBatchFromSearch materializes previousSearch without rerunning search', async () => {
@@ -4466,6 +4543,157 @@ describe(AgentOperationPlanService.name, () => {
     await expect(sut.getCurrentPlan(auth, session.id)).resolves.toBeNull();
   });
 
+  it('enriches current asset.updateMetadata plans with representative before and proposed metadata', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const firstAssetId = newUuid();
+    const secondAssetId = newUuid();
+    const operation = makeOperation({
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [firstAssetId, secondAssetId],
+      payload: {
+        description: '',
+        rating: null,
+        dateTimeOriginal: '1998-06-01T12:00:00.000Z',
+        timeZone: 'Europe/Berlin',
+        latitude: 52.52,
+        longitude: 13.405,
+      },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    (assetRepository as any).getAgentMetadataReviewByIds = vi.fn().mockResolvedValue([
+      makeMetadataReviewRow(firstAssetId, {
+        description: 'Old caption',
+        rating: 4,
+        dateTimeOriginal: new Date('1997-01-01T08:00:00.000Z'),
+        timeZone: 'UTC',
+        latitude: 48.8566,
+        longitude: 2.3522,
+      }),
+      makeMetadataReviewRow(secondAssetId, null),
+    ]);
+
+    const result = await sut.getCurrentPlan(auth, session.id);
+    const reviewMetadata = (result?.operations[0] as any).reviewMetadata.assetMetadata;
+
+    expect((assetRepository as any).getAgentMetadataReviewByIds).toHaveBeenCalledWith([firstAssetId, secondAssetId]);
+    expect(reviewMetadata.sampleAssetIds).toEqual([firstAssetId, secondAssetId]);
+    expect(reviewMetadata.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'description',
+          label: 'Description',
+          proposedValue: null,
+          proposedValueKind: 'clear',
+          previousValues: [
+            { assetId: firstAssetId, value: 'Old caption', valueKind: 'known' },
+            { assetId: secondAssetId, value: null, valueKind: 'unknown' },
+          ],
+        }),
+        expect.objectContaining({
+          key: 'rating',
+          label: 'Rating',
+          proposedValue: null,
+          proposedValueKind: 'clear',
+          previousValues: [
+            { assetId: firstAssetId, value: 4, valueKind: 'known' },
+            { assetId: secondAssetId, value: null, valueKind: 'unknown' },
+          ],
+        }),
+        expect.objectContaining({
+          key: 'dateTimeOriginal',
+          label: 'Date taken',
+          proposedValue: '1998-06-01T12:00:00.000Z',
+          proposedValueKind: 'known',
+          previousValues: [
+            { assetId: firstAssetId, value: '1997-01-01T08:00:00.000Z', valueKind: 'known' },
+            { assetId: secondAssetId, value: null, valueKind: 'unknown' },
+          ],
+        }),
+        expect.objectContaining({
+          key: 'timeZone',
+          label: 'Time zone',
+          proposedValue: 'Europe/Berlin',
+          proposedValueKind: 'known',
+        }),
+        expect.objectContaining({
+          key: 'location',
+          label: 'Location',
+          proposedValue: '52.52, 13.405',
+          proposedValueKind: 'known',
+          previousValues: [
+            { assetId: firstAssetId, value: '48.8566, 2.3522', valueKind: 'known' },
+            { assetId: secondAssetId, value: null, valueKind: 'unknown' },
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it('represents relative date shifts as metadata review fields', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { dateTimeRelative: 90 },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    (assetRepository as any).getAgentMetadataReviewByIds = vi.fn().mockResolvedValue([
+      makeMetadataReviewRow(assetId, {
+        dateTimeOriginal: new Date('1997-01-01T08:00:00.000Z'),
+      }),
+    ]);
+
+    const result = await sut.getCurrentPlan(auth, session.id);
+
+    expect((result?.operations[0] as any).reviewMetadata.assetMetadata.fields).toEqual([
+      expect.objectContaining({
+        key: 'dateTimeRelative',
+        label: 'Date shift',
+        previousValues: [{ assetId, value: '1997-01-01T08:00:00.000Z', valueKind: 'known' }],
+        proposedValue: 90,
+        proposedValueKind: 'relative',
+      }),
+    ]);
+  });
+
+  it('ignores unsupported fields on already-stored asset.updateMetadata operations during review enrichment', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { placeName: 'Paris' },
+    } as any);
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    (assetRepository as any).getAgentMetadataReviewByIds = vi
+      .fn()
+      .mockResolvedValue([makeMetadataReviewRow(assetId, { description: 'Current caption' })]);
+
+    const result = await sut.getCurrentPlan(auth, session.id);
+
+    expect(result?.operations[0].type).toBe(AgentOperationType.AssetUpdateMetadata);
+    expect((result?.operations[0] as any).reviewMetadata).toBeUndefined();
+  });
+
   it('returns applied plans through history while current plan remains proposed-only', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
@@ -4482,6 +4710,53 @@ describe(AgentOperationPlanService.name, () => {
     await expect(sut.getAppliedPlans(auth, session.id)).resolves.toEqual([
       expect.objectContaining({ id: appliedPlan.id, status: AgentOperationPlanStatus.Applied }),
     ]);
+  });
+
+  it('hydrates applied asset.updateMetadata history from the persisted pre-apply review snapshot', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const assetId = newUuid();
+    const reviewMetadata = {
+      assetMetadata: {
+        fields: [
+          {
+            key: 'description',
+            label: 'Description',
+            previousValues: [{ assetId, value: 'Before apply', valueKind: 'known' }],
+            proposedValue: 'After apply',
+            proposedValueKind: 'known',
+          },
+        ],
+        sampleAssetIds: [assetId],
+        warnings: [],
+      },
+    };
+    const appliedPlan = makePlan({
+      sessionId: session.id,
+      status: AgentOperationPlanStatus.Applied,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AssetUpdateMetadata,
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          targetId: null,
+          temporaryTargetId: null,
+          assetIds: [assetId],
+          payload: { description: 'After apply' },
+          status: AgentOperationStatus.Applied,
+          result: { assetIds: [assetId], reviewMetadata } as any,
+        }),
+      ],
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getAppliedBySessionId.mockResolvedValue([appliedPlan]);
+    (assetRepository as any).getAgentMetadataReviewByIds = vi
+      .fn()
+      .mockResolvedValue([makeMetadataReviewRow(assetId, { description: 'Current value' })]);
+
+    const result = await sut.getAppliedPlans(auth, session.id);
+
+    expect((result[0].operations[0] as any).reviewMetadata).toEqual(reviewMetadata);
+    expect((assetRepository as any).getAgentMetadataReviewByIds).not.toHaveBeenCalled();
   });
 
   it('throws not found for sessions not owned by the user', async () => {
@@ -5412,10 +5687,73 @@ describe(AgentOperationPlanService.name, () => {
       expect.objectContaining({
         id: operation.id,
         status: AgentOperationStatus.Applied,
-        result: { assetIds },
+        result: expect.objectContaining({ assetIds }),
         error: null,
       }),
     ]);
+  });
+
+  it('returns and persists pre-apply metadata review snapshots when applying metadata updates', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds: [assetId],
+      payload: { description: 'After apply' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+    (assetRepository as any).getAgentMetadataReviewByIds = vi.fn().mockImplementation(() =>
+      Promise.resolve([
+        makeMetadataReviewRow(assetId, {
+          description: assetService.updateAll.mock.calls.length > 0 ? 'After apply' : 'Before apply',
+        }),
+      ]),
+    );
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+    const reviewMetadata = (result.plan.operations[0] as any).reviewMetadata;
+
+    expect(reviewMetadata.assetMetadata.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'description',
+          previousValues: [{ assetId, value: 'Before apply', valueKind: 'known' }],
+          proposedValue: 'After apply',
+          proposedValueKind: 'known',
+        }),
+      ]),
+    );
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        result: expect.objectContaining({
+          assetIds: [assetId],
+          reviewMetadata,
+        }),
+      }),
+    ]);
+    expect((assetRepository as any).getAgentMetadataReviewByIds).toHaveBeenCalledTimes(1);
   });
 
   it('applies asset.updateMetadata clear values without dropping them', async () => {
@@ -5675,7 +6013,7 @@ describe(AgentOperationPlanService.name, () => {
       expect.objectContaining({
         id: operation.id,
         status: AgentOperationStatus.Failed,
-        result: null,
+        result: expect.objectContaining({ reviewMetadata: expect.any(Object) }),
         error: 'reverse geocode failed',
       }),
     ]);
@@ -5754,7 +6092,7 @@ describe(AgentOperationPlanService.name, () => {
       expect.objectContaining({
         id: metadataOperation.id,
         status: AgentOperationStatus.Failed,
-        result: null,
+        result: expect.objectContaining({ reviewMetadata: expect.any(Object) }),
         error: 'sidecar write failed',
       }),
       expect.objectContaining({

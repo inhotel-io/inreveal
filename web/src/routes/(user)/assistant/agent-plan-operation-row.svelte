@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t, type Translations } from 'svelte-i18n';
-  import type { OperationReviewItem } from './agent-operation-plan-ui';
+  import type { AgentOperationMetadataDisplayText, OperationReviewItem } from './agent-operation-plan-ui';
   import AgentPlanInlineFieldEditor from './agent-plan-inline-field-editor.svelte';
   import AgentPlanTechnicalDetails from './agent-plan-technical-details.svelte';
 
@@ -29,6 +29,9 @@
   });
 
   const canOpenItemReview = $derived(item.review.selection.supportsItemSelection && item.assetCount > 0);
+
+  const formatMetadataText = (text: AgentOperationMetadataDisplayText) =>
+    text.kind === 'translation' ? $t(text.key, text.values ? { values: text.values } : undefined) : text.text;
 
   const statusLabelKey = $derived.by(() => {
     if (item.applyState.kind === 'partial') {
@@ -98,6 +101,53 @@
       <span class="mt-1 block text-sm text-amber-700 dark:text-amber-300">
         {$t('assistant_operation_blocked_by', { values: { dependencies: item.blockedBy.join(', ') } })}
       </span>
+    {/if}
+
+    {#if item.metadataReview}
+      <div class="mt-3 overflow-x-auto">
+        <table class="w-full min-w-96 border-separate border-spacing-0 text-left text-sm">
+          <thead class="text-xs uppercase text-gray-500 dark:text-gray-400">
+            <tr>
+              <th class="border-b border-gray-200 py-1.5 pr-3 font-semibold dark:border-neutral-700">
+                {$t('assistant_operation_metadata_column_field')}
+              </th>
+              <th class="border-b border-gray-200 px-3 py-1.5 font-semibold dark:border-neutral-700">
+                {$t('assistant_operation_metadata_column_current')}
+              </th>
+              <th class="border-b border-gray-200 py-1.5 pl-3 font-semibold dark:border-neutral-700">
+                {$t('assistant_operation_metadata_column_proposed')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each item.metadataReview.fields as field}
+              <tr>
+                <th class="border-b border-gray-100 py-2 pr-3 align-top font-medium dark:border-neutral-800">
+                  {formatMetadataText(field.label)}
+                </th>
+                <td
+                  class="border-b border-gray-100 px-3 py-2 align-top text-gray-600 dark:border-neutral-800 dark:text-gray-300"
+                >
+                  <div class="flex flex-col gap-0.5">
+                    {#each field.currentValues as currentValue}
+                      <span>{formatMetadataText(currentValue.text)}</span>
+                    {/each}
+                  </div>
+                </td>
+                <td
+                  class="border-b border-gray-100 py-2 pl-3 align-top text-gray-900 dark:border-neutral-800 dark:text-gray-100"
+                >
+                  {formatMetadataText(field.proposedText)}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+
+        {#each item.metadataReview.warnings as warning}
+          <p class="mt-2 text-sm text-amber-700 dark:text-amber-300">{formatMetadataText(warning)}</p>
+        {/each}
+      </div>
     {/if}
 
     <AgentPlanInlineFieldEditor {item} {canChangeSelection} {onSetFieldOverride} {onResetFieldOverride} />

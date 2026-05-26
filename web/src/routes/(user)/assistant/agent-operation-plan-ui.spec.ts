@@ -30,6 +30,13 @@ import {
   type OperationFieldOverrideState,
 } from './agent-operation-plan-ui';
 
+const rawText = (text: string) => ({ kind: 'raw' as const, text });
+const translatedText = (key: string, values?: Record<string, string | number>) => ({
+  kind: 'translation' as const,
+  key,
+  ...(values ? { values } : {}),
+});
+
 const planId = '00000000-0000-4000-8000-000000000100';
 const createId = '00000000-0000-4000-8000-000000000101';
 const addId = '00000000-0000-4000-8000-000000000102';
@@ -38,6 +45,7 @@ const updateId = '00000000-0000-4000-8000-000000000104';
 const spaceAddId = '00000000-0000-4000-8000-000000000105';
 const spaceRemoveId = '00000000-0000-4000-8000-000000000106';
 const spaceUpdateId = '00000000-0000-4000-8000-000000000107';
+const metadataId = '00000000-0000-4000-8000-000000000108';
 const albumId = '00000000-0000-4000-8000-000000000301';
 const spaceId = '00000000-0000-4000-8000-000000000401';
 const assetA = '00000000-0000-4000-8000-000000000201';
@@ -220,6 +228,248 @@ describe('agent operation plan UI helpers', () => {
     expect(model.operationsById.get(addId)?.review.summary).toBe('Add 1 photo');
     expect(model.operationsById.get(coverId)?.review.summary).toBe('Set cover photo');
     expect(model.operationsById.get(updateId)?.review.summary).toBe('Rename album to "Portugal Archive"');
+  });
+
+  it('derives metadata summaries, labels, field reviews, clears, and coordinate warnings', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: metadataId,
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set photo metadata',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [assetA, assetB],
+          payload: { description: '', rating: null, latitude: 52.52, longitude: 13.405 },
+          reviewMetadata: {
+            assetMetadata: {
+              fields: [
+                {
+                  key: 'description',
+                  label: translatedText('assistant_operation_metadata_field_description'),
+                  previousValues: [
+                    { assetId: assetA, value: 'Old caption', valueKind: 'known' },
+                    { assetId: assetB, value: null, valueKind: 'empty' },
+                  ],
+                  proposedValue: null,
+                  proposedValueKind: 'clear',
+                },
+                {
+                  key: 'rating',
+                  label: translatedText('assistant_operation_metadata_field_rating'),
+                  previousValues: [
+                    { assetId: assetA, value: 4, valueKind: 'known' },
+                    { assetId: assetB, value: null, valueKind: 'empty' },
+                  ],
+                  proposedValue: null,
+                  proposedValueKind: 'clear',
+                },
+                {
+                  key: 'location',
+                  label: translatedText('assistant_operation_metadata_field_location'),
+                  previousValues: [
+                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
+                    { assetId: assetB, value: null, valueKind: 'unknown' },
+                  ],
+                  proposedValue: '52.52, 13.405',
+                  proposedValueKind: 'known',
+                },
+              ],
+              sampleAssetIds: [assetA, assetB],
+              warnings: [],
+            },
+          },
+        } as any),
+      ]),
+      { [metadataId]: true },
+    );
+
+    const item = model.operationsById.get(metadataId);
+
+    expect(item?.typeLabelKey).toBe('assistant_operation_type_asset_update_metadata');
+    expect(item?.review.summary).toBe('Update metadata for 2 photos');
+    expect(item?.metadataReview).toEqual({
+      fields: [
+        {
+          key: 'description',
+          label: translatedText('assistant_operation_metadata_field_description'),
+          currentValues: [
+            { assetId: assetA, text: rawText('Old caption'), kind: 'known' },
+            { assetId: assetB, text: translatedText('assistant_operation_metadata_value_empty'), kind: 'empty' },
+          ],
+          proposedText: translatedText('assistant_operation_metadata_value_clear'),
+          proposedKind: 'clear',
+        },
+        {
+          key: 'rating',
+          label: translatedText('assistant_operation_metadata_field_rating'),
+          currentValues: [
+            {
+              assetId: assetA,
+              text: translatedText('assistant_operation_metadata_value_rating', { rating: 4 }),
+              kind: 'known',
+            },
+            { assetId: assetB, text: translatedText('assistant_operation_metadata_value_unrated'), kind: 'empty' },
+          ],
+          proposedText: translatedText('assistant_operation_metadata_value_clear_rating'),
+          proposedKind: 'clear',
+        },
+        {
+          key: 'location',
+          label: translatedText('assistant_operation_metadata_field_location'),
+          currentValues: [
+            { assetId: assetA, text: rawText('48.8566, 2.3522'), kind: 'known' },
+            {
+              assetId: assetB,
+              text: translatedText('assistant_operation_metadata_value_unavailable'),
+              kind: 'unknown',
+            },
+          ],
+          proposedText: rawText('52.52, 13.405'),
+          proposedKind: 'known',
+        },
+      ],
+      warnings: [translatedText('assistant_operation_metadata_warning_coordinates_multi', { count: 2 })],
+    });
+  });
+
+  it('uses applied metadata summary copy and tolerates unknown future metadata fields', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: metadataId,
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Future metadata',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [assetA],
+          payload: { placeName: 'Paris' },
+          status: AgentOperationStatus.Applied,
+          reviewMetadata: {
+            assetMetadata: {
+              fields: [
+                {
+                  key: 'futureField',
+                  label: 'Future field',
+                  previousValues: [{ assetId: assetA, value: 'Before', valueKind: 'known' }],
+                  proposedValue: 'After',
+                  proposedValueKind: 'known',
+                },
+              ],
+              sampleAssetIds: [assetA],
+              warnings: [],
+            },
+          },
+        } as any),
+      ]),
+      { [metadataId]: true },
+    );
+
+    expect(model.operationsById.get(metadataId)?.review.summary).toBe('Updated metadata for 1 photo');
+    expect(model.operationsById.get(metadataId)?.metadataReview?.fields[0]).toEqual(
+      expect.objectContaining({
+        key: 'futureField',
+        label: translatedText('assistant_operation_metadata_field_unknown'),
+        proposedText: rawText('After'),
+      }),
+    );
+  });
+
+  it('updates metadata review samples and coordinate warnings from item selections', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: metadataId,
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set location',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [assetA, assetB],
+          payload: { latitude: 52.52, longitude: 13.405 },
+          reviewMetadata: {
+            assetMetadata: {
+              fields: [
+                {
+                  key: 'location',
+                  label: translatedText('assistant_operation_metadata_field_location'),
+                  previousValues: [
+                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
+                    { assetId: assetB, value: '40.7128, -74.006', valueKind: 'known' },
+                  ],
+                  proposedValue: '52.52, 13.405',
+                  proposedValueKind: 'known',
+                },
+              ],
+              sampleAssetIds: [assetA, assetB],
+              warnings: ['Coordinates will be applied to multiple photos.'],
+            },
+          },
+        } as any),
+      ]),
+      { [metadataId]: true },
+      { [metadataId]: { itemKind: 'asset', mode: 'only', itemIds: [assetA] } },
+    );
+
+    expect(model.operationsById.get(metadataId)?.metadataReview).toEqual({
+      fields: [
+        {
+          key: 'location',
+          label: translatedText('assistant_operation_metadata_field_location'),
+          currentValues: [{ assetId: assetA, text: rawText('48.8566, 2.3522'), kind: 'known' }],
+          proposedText: rawText('52.52, 13.405'),
+          proposedKind: 'known',
+        },
+      ],
+      warnings: [],
+    });
+  });
+
+  it('uses applied metadata result asset ids for history counts and warnings', () => {
+    const model = buildOperationReviewModel(
+      plan([
+        operation({
+          id: metadataId,
+          type: AgentOperationType.AssetUpdateMetadata,
+          summary: 'Set location',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds: [assetA, assetB],
+          payload: { latitude: 52.52, longitude: 13.405 },
+          status: AgentOperationStatus.Applied,
+          result: { assetIds: [assetA] },
+          reviewMetadata: {
+            assetMetadata: {
+              fields: [
+                {
+                  key: 'location',
+                  label: translatedText('assistant_operation_metadata_field_location'),
+                  previousValues: [
+                    { assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' },
+                    { assetId: assetB, value: '40.7128, -74.006', valueKind: 'known' },
+                  ],
+                  proposedValue: '52.52, 13.405',
+                  proposedValueKind: 'known',
+                },
+              ],
+              sampleAssetIds: [assetA],
+              warnings: [],
+            },
+          },
+        } as any),
+      ]),
+      { [metadataId]: true },
+    );
+
+    expect(model.operationsById.get(metadataId)?.review.summary).toBe('Updated metadata for 1 photo');
+    expect(model.operationsById.get(metadataId)?.selectedAssetIds).toEqual([assetA]);
+    expect(model.operationsById.get(metadataId)?.metadataReview).toEqual({
+      fields: [
+        {
+          key: 'location',
+          label: translatedText('assistant_operation_metadata_field_location'),
+          currentValues: [{ assetId: assetA, text: rawText('48.8566, 2.3522'), kind: 'known' }],
+          proposedText: rawText('52.52, 13.405'),
+          proposedKind: 'known',
+        },
+      ],
+      warnings: [],
+    });
   });
 
   it('maps future target kinds into stable review destination kinds without throwing', () => {

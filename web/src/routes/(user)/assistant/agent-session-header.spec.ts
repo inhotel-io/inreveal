@@ -72,6 +72,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
       setCover: true,
       tagAssets: true,
       updateDetails: true,
+      updateAssetMetadata: true,
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
     },

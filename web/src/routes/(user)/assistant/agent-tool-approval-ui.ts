@@ -100,6 +100,12 @@ const completedActionText: Partial<Record<AgentToolName, string>> = {
 
 const pluralize = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`;
 
+const isMetadataAssetBatchPlanningToolCall = (toolCall: AgentToolCallResponseDto) =>
+  toolCall.toolName === AgentToolName.ProposeAssetBatchFromSearch &&
+  [toolCall.requestSummary, toolCall.responseSummary].some(
+    (summary) => typeof summary === 'string' && /metadata/i.test(summary),
+  );
+
 export const getAgentToolCallScopeText = (toolCall: AgentToolCallResponseDto) => {
   const parts = [
     toolCall.assetCount > 0 ? pluralize(toolCall.assetCount, 'photo', 'photos') : null,
@@ -114,10 +120,14 @@ export const getAgentToolCallScopeText = (toolCall: AgentToolCallResponseDto) =>
 };
 
 export const getAgentToolCallPendingText = (toolCall: AgentToolCallResponseDto) =>
-  pendingActionText[toolCall.toolName] ?? 'Pi wants to use your gallery.';
+  isMetadataAssetBatchPlanningToolCall(toolCall)
+    ? 'Pi wants to draft metadata changes.'
+    : (pendingActionText[toolCall.toolName] ?? 'Pi wants to use your gallery.');
 
 export const getAgentToolCallCompletedText = (toolCall: AgentToolCallResponseDto) =>
-  completedActionText[toolCall.toolName] ?? 'Pi used your gallery.';
+  isMetadataAssetBatchPlanningToolCall(toolCall)
+    ? 'Pi drafted metadata changes.'
+    : (completedActionText[toolCall.toolName] ?? 'Pi used your gallery.');
 
 export const getPendingToolCalls = (toolCalls: AgentToolCallResponseDto[]) =>
   toolCalls

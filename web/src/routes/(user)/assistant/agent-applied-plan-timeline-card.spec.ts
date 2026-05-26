@@ -26,6 +26,7 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_status_skipped: 'Skipped',
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
+    assistant_operation_type_asset_update_metadata: 'Update metadata',
     assistant_operation_type_space_add_assets: 'Add to space',
     assistant_operation_type_space_remove_assets: 'Remove from space',
     assistant_operation_type_space_update_details: 'Update space details',
@@ -191,5 +192,45 @@ describe(AgentAppliedPlanTimelineCard.name, () => {
     expect(group).toHaveTextContent('Renamed to "Family 2026"; Cleared description; Changed color to blue');
     expect(group).toHaveTextContent('Update space details');
     expect(group).not.toHaveTextContent('space-1');
+  });
+
+  it('renders applied and failed metadata operations without hiding successful sibling cards', () => {
+    render(AgentAppliedPlanTimelineCard, {
+      props: {
+        plan: makePlan({
+          operations: [
+            makeOperation({
+              id: 'operation-metadata-applied',
+              type: AgentOperationType.AssetUpdateMetadata,
+              summary: 'Update metadata',
+              targetKind: AgentOperationTargetKind.AssetBatch,
+              temporaryTargetId: null,
+              assetIds: ['asset-1', 'asset-2'],
+              payload: { description: 'Berlin weekend' },
+              result: { assetIds: ['asset-1', 'asset-2'] },
+            }),
+            makeOperation({
+              id: 'operation-metadata-failed',
+              type: AgentOperationType.AssetUpdateMetadata,
+              summary: 'Update failed metadata',
+              targetKind: AgentOperationTargetKind.AssetBatch,
+              temporaryTargetId: null,
+              assetIds: ['asset-3'],
+              payload: { rating: 5 },
+              status: AgentOperationStatus.Failed,
+              result: null,
+              error: 'Asset permissions changed before apply',
+            }),
+          ],
+        }),
+      },
+    });
+
+    const card = screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' });
+    expect(card).toHaveTextContent('Updated metadata for 2 photos');
+    expect(card).toHaveTextContent('Update metadata for 1 photo');
+    expect(card).toHaveTextContent('Applied');
+    expect(card).toHaveTextContent('Failed');
+    expect(card).toHaveTextContent('Asset permissions changed before apply');
   });
 });
