@@ -69,7 +69,7 @@ Selection order:
 Metadata reads must request:
 
 ```js
-fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']
+fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
 ```
 
 Plan summaries and assistant text must say metadata-only / no previews, and must not claim objective quality scoring.
@@ -215,74 +215,89 @@ const metadataHighlightHandlers = ({
 Add this test after the existing read-only highlight guardrail tests:
 
 ```js
-  it('proposes a metadata-only highlights album with selected asset ids only', async () => {
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('proposes a metadata-only highlights album with selected asset ids only', async () => {
+  const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.');
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    assert.deepEqual(calls[0].body.params.arguments, {
-      filters: lastWeekendHighlightFilters,
-      detail: 'ids',
-      limit: 500,
-    });
-    assert.deepEqual(calls[1].body.params.arguments, {
-      assetIds: highlightAssetIds,
-      fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'],
-    });
-
-    const plan = calls[2].body.params.arguments;
-    assert.match(plan.summary, /metadata-only/i);
-    assert.match(plan.summary, /ratings|favorites/i);
-    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
-    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
-    assert.deepEqual(
-      plan.operations.map((operation) => operation.type),
-      ['album.create', 'album.addAssets'],
-    );
-    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
-    assert.equal(plan.operations[1].targetKind, 'new_album');
-    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
-    assert.deepEqual(plan.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000402',
-      '00000000-0000-4000-8000-000000000403',
-    ]);
-    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
-    assert.match(events.at(-1).content.blocks[0].text, /2 suggested highlights/i);
-    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.deepEqual(calls[0].body.params.arguments, {
+    filters: lastWeekendHighlightFilters,
+    detail: 'ids',
+    limit: 500,
+  });
+  assert.deepEqual(calls[1].body.params.arguments, {
+    assetIds: highlightAssetIds,
+    fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'],
   });
 
-  it('keeps favorite in a requested album name from becoming a favorite operation', async () => {
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+  const plan = calls[2].body.params.arguments;
+  assert.match(plan.summary, /metadata-only/i);
+  assert.match(plan.summary, /ratings|favorites/i);
+  assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+  assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+  assert.deepEqual(
+    plan.operations.map((operation) => operation.type),
+    ['album.create', 'album.addAssets'],
+  );
+  assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
+  assert.equal(plan.operations[1].targetKind, 'new_album');
+  assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
+  assert.deepEqual(plan.operations[1].assetIds, [
+    '00000000-0000-4000-8000-000000000402',
+    '00000000-0000-4000-8000-000000000403',
+  ]);
+  assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+  assert.match(events.at(-1).content.blocks[0].text, /2 suggested highlights/i);
+  assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+});
 
-    await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Favorite Highlights.');
+it('keeps favorite in a requested album name from becoming a favorite operation', async () => {
+  const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    const plan = calls[2].body.params.arguments;
-    assert.deepEqual(
-      plan.operations.map((operation) => operation.type),
-      ['album.create', 'album.addAssets'],
-    );
-    assert.equal(plan.operations[0].payload.albumName, 'Favorite Highlights');
-    assert.equal(plan.operations[1].temporaryTargetId, 'favorite-highlights');
-  });
+  await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Favorite Highlights.',
+  );
 
-  it('parses album names before trailing source phrases in highlight album requests', async () => {
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  const plan = calls[2].body.params.arguments;
+  assert.deepEqual(
+    plan.operations.map((operation) => operation.type),
+    ['album.create', 'album.addAssets'],
+  );
+  assert.equal(plan.operations[0].payload.albumName, 'Favorite Highlights');
+  assert.equal(plan.operations[1].temporaryTargetId, 'favorite-highlights');
+});
 
-    await collectEvents(runtime, 'Pick the best 2 photos and make an album called Weekend Highlights from last weekend.');
+it('parses album names before trailing source phrases in highlight album requests', async () => {
+  const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    const plan = calls[2].body.params.arguments;
-    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
-    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
-  });
+  await collectEvents(runtime, 'Pick the best 2 photos and make an album called Weekend Highlights from last weekend.');
+
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  const plan = calls[2].body.params.arguments;
+  assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
+  assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
+});
 ```
 
 This expected selection proves curation uses the bounded candidate set, not just the requested output count: asset `402` is favorite with rating `1`, so it comes before higher-rated non-favorites, and asset `403` with rating `5` beats asset `401` with rating `3`.
@@ -292,63 +307,62 @@ This expected selection proves curation uses the bounded candidate set, not just
 Add:
 
 ```js
-  it('adds metadata highlights to an existing album while excluding assets already in the album', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers({
+it('adds metadata highlights to an existing album while excluding assets already in the album', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch(
+    metadataHighlightHandlers({
       albums,
       albumAssetIds: ['00000000-0000-4000-8000-000000000402'],
-    }));
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Add 2 highlights from last weekend to Family.');
+  const events = await collectEvents(runtime, 'Add 2 highlights from last weekend to Family.');
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
-    );
-    assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
-    assert.equal(calls[2].body.params.arguments.limit, 500);
-    const plan = calls.at(-1).body.params.arguments;
-    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
-    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
-    assert.deepEqual(plan.operations, [
-      {
-        type: 'album.addAssets',
-        summary: 'Add 2 metadata-only suggested highlights to Family.',
-        targetKind: 'existing_album',
-        targetId: familyAlbumId,
-        assetIds: [
-          '00000000-0000-4000-8000-000000000403',
-          '00000000-0000-4000-8000-000000000401',
-        ],
-        riskLevel: 'medium',
-        enabled: true,
-        payload: {},
-      },
-    ]);
-    assert.match(events.at(-1).content.blocks[0].text, /excluded 1 already in Family/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
+  assert.equal(calls[2].body.params.arguments.limit, 500);
+  const plan = calls.at(-1).body.params.arguments;
+  assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+  assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+  assert.deepEqual(plan.operations, [
+    {
+      type: 'album.addAssets',
+      summary: 'Add 2 metadata-only suggested highlights to Family.',
+      targetKind: 'existing_album',
+      targetId: familyAlbumId,
+      assetIds: ['00000000-0000-4000-8000-000000000403', '00000000-0000-4000-8000-000000000401'],
+      riskLevel: 'medium',
+      enabled: true,
+      payload: {},
+    },
+  ]);
+  assert.match(events.at(-1).content.blocks[0].text, /excluded 1 already in Family/i);
+});
 
-  it('parses existing-album names before trailing source phrases in add-highlight requests', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch(
-      metadataHighlightHandlers({
-        albums,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('parses existing-album names before trailing source phrases in add-highlight requests', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch(
+    metadataHighlightHandlers({
+      albums,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    await collectEvents(runtime, 'Add 2 highlights to Family from last weekend.');
+  await collectEvents(runtime, 'Add 2 highlights to Family from last weekend.');
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
-    );
-    assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
-    assert.equal(calls.at(-1).body.params.arguments.operations[0].targetId, familyAlbumId);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
+  assert.equal(calls.at(-1).body.params.arguments.operations[0].targetId, familyAlbumId);
+});
 ```
 
 - [ ] **Step 4: Add a favorite-highlights test**
@@ -356,34 +370,34 @@ Add:
 Add:
 
 ```js
-  it('proposes favorite operations for metadata-only highlight selections', async () => {
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('proposes favorite operations for metadata-only highlight selections', async () => {
+  const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Favorite the best 2 photos from last weekend.');
+  const events = await collectEvents(runtime, 'Favorite the best 2 photos from last weekend.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    const plan = calls[2].body.params.arguments;
-    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
-    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
-    assert.deepEqual(plan.operations, [
-      {
-        type: 'asset.setFavorite',
-        summary: 'Favorite 2 metadata-only suggested highlights.',
-        targetKind: 'asset_batch',
-        assetIds: [
-          '00000000-0000-4000-8000-000000000402',
-          '00000000-0000-4000-8000-000000000403',
-        ],
-        riskLevel: 'low',
-        enabled: true,
-        payload: { favorite: true },
-      },
-    ]);
-    assert.match(events.at(-1).content.blocks[0].text, /favorite/i);
-    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  const plan = calls[2].body.params.arguments;
+  assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+  assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+  assert.deepEqual(plan.operations, [
+    {
+      type: 'asset.setFavorite',
+      summary: 'Favorite 2 metadata-only suggested highlights.',
+      targetKind: 'asset_batch',
+      assetIds: ['00000000-0000-4000-8000-000000000402', '00000000-0000-4000-8000-000000000403'],
+      riskLevel: 'low',
+      enabled: true,
+      payload: { favorite: true },
+    },
+  ]);
+  assert.match(events.at(-1).content.blocks[0].text, /favorite/i);
+  assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+});
 ```
 
 - [ ] **Step 5: Add a fewer-candidates-than-requested test**
@@ -391,51 +405,59 @@ Add:
 Add:
 
 ```js
-  it('plans available metadata highlights when fewer candidates than requested exist', async () => {
-    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers({
+it('plans available metadata highlights when fewer candidates than requested exist', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    metadataHighlightHandlers({
       assetIds: highlightAssetIds.slice(0, 2),
       metadataAssets: defaultHighlightMetadataAssets().slice(0, 2),
-    }));
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Pick the best 5 photos from last weekend and make an album called Weekend Highlights.');
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 5 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    assert.equal(calls[0].body.params.arguments.limit, 500);
-    assert.deepEqual(calls[2].body.params.arguments.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000402',
-      '00000000-0000-4000-8000-000000000401',
-    ]);
-    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetSource'), false);
-    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('previousSearch'), false);
-    assert.match(events.at(-1).content.blocks[0].text, /only 2 eligible/i);
-    assert.match(events.at(-1).content.blocks[0].text, /requested 5/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.equal(calls[0].body.params.arguments.limit, 500);
+  assert.deepEqual(calls[2].body.params.arguments.operations[1].assetIds, [
+    '00000000-0000-4000-8000-000000000402',
+    '00000000-0000-4000-8000-000000000401',
+  ]);
+  assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetSource'), false);
+  assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('previousSearch'), false);
+  assert.match(events.at(-1).content.blocks[0].text, /only 2 eligible/i);
+  assert.match(events.at(-1).content.blocks[0].text, /requested 5/i);
+});
 
-  it('asks to narrow metadata highlight plans when the bounded source exceeds the metadata candidate limit', async () => {
-    const oversizedAssetIds = Array.from(
-      { length: 501 },
-      (_value, index) => `00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
-    );
-    const { calls, fetchImplementation } = createFetch(
-      metadataHighlightHandlers({
-        assetIds: oversizedAssetIds,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('asks to narrow metadata highlight plans when the bounded source exceeds the metadata candidate limit', async () => {
+  const oversizedAssetIds = Array.from(
+    { length: 501 },
+    (_value, index) => `00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
+  );
+  const { calls, fetchImplementation } = createFetch(
+    metadataHighlightHandlers({
+      assetIds: oversizedAssetIds,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(
-      runtime,
-      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
-    assert.equal(calls[0].body.params.arguments.limit, 500);
-    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
+  assert.equal(calls[0].body.params.arguments.limit, 500);
+  assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 ```
 
 - [ ] **Step 6: Run agent-runner tests and verify red**
@@ -476,23 +498,23 @@ const assertMcpResultSuccess = (result, label) => {
 Also update `highlightCandidateCount()` so a full metadata-limit page with `hasMore: true` is treated as above the limit, while ordinary pagination below the cap still is not oversized:
 
 ```js
-  if (result.hasMore === true && (result.returnedCount ?? assetIds.length) >= metadataHighlightCandidateLimit) {
-    return metadataHighlightCandidateLimit + 1;
-  }
+if (result.hasMore === true && (result.returnedCount ?? assetIds.length) >= metadataHighlightCandidateLimit) {
+  return metadataHighlightCandidateLimit + 1;
+}
 ```
 
 Then update `readHighlightCandidates()` from:
 
 ```js
-  if (result.status !== 'success') {
-    throw new Error(`Asset search did not complete successfully: ${result.status}`);
-  }
+if (result.status !== 'success') {
+  throw new Error(`Asset search did not complete successfully: ${result.status}`);
+}
 ```
 
 to:
 
 ```js
-  assertMcpResultSuccess(result, 'Asset search');
+assertMcpResultSuccess(result, 'Asset search');
 ```
 
 This preserves existing mocked `status: "success"` compatibility while accepting real Gallery MCP read results that omit a `status` field on success.
@@ -662,20 +684,20 @@ const proposeMetadataHighlightAlbum = async (client, intent, selectedAssetIds) =
 In the highlight branch, after the unresolved-source check and before `try {`, add:
 
 ```js
-        const planIntent = parseHighlightPlanIntent(prompt);
-        const planCandidateLimit = planIntent ? metadataHighlightCandidateLimit : highlightPrompt.effectiveCount;
+const planIntent = parseHighlightPlanIntent(prompt);
+const planCandidateLimit = planIntent ? metadataHighlightCandidateLimit : highlightPrompt.effectiveCount;
 ```
 
 Inside the `try` block, replace the existing candidate read:
 
 ```js
-          const { candidateCount } = await readHighlightCandidates(client, highlightPrompt);
+const { candidateCount } = await readHighlightCandidates(client, highlightPrompt);
 ```
 
 with:
 
 ```js
-          const { assetIds, candidateCount } = await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
+const { assetIds, candidateCount } = await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
 ```
 
 - [ ] **Step 6: Use metadata planning for create-album highlight prompts**
@@ -771,7 +793,7 @@ const proposeMetadataHighlightAlbumAdd = async (client, album, selectedAssetIds)
 Resolve the target album before `readHighlightCandidates()` so ambiguous or missing target albums fail before source reads, and so duplicate IDs are available for selection. Replace the candidate-read line added in Task 2:
 
 ```js
-          const { assetIds, candidateCount } = await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
+const { assetIds, candidateCount } = await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
 ```
 
 with:
@@ -918,23 +940,28 @@ Expected: all e2e metadata-only highlight planning tests pass.
 In `it('constructs the Pi resource loader with concrete runtime paths', ...)`, replace the Slice 2 read-only assertion:
 
 ```js
-    assert.equal(
-      calls.loaders[0].systemPrompt.includes('Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet'),
-      true,
-    );
-    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes(
+    'Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet',
+  ),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
 ```
 
 with:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only suggested highlights'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('prioritize existing favorites and ratings'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('do not use broad assetSource'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('No previews are required for metadata-only highlight plans'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Slice 2 is read-only'), false);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
+assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only suggested highlights'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('prioritize existing favorites and ratings'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('do not use broad assetSource'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('No previews are required for metadata-only highlight plans'),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('Slice 2 is read-only'), false);
+assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
 ```
 
 - [ ] **Step 2: Run prompt test and verify red**

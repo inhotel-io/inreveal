@@ -87,217 +87,211 @@ The e2e runner response order for highlight prompts:
 Add these tests after `it('asks for longitude instead of planning an incomplete coordinate edit', ...)`:
 
 ```js
-  it('asks for a bounded source before curating best photos from the whole library', async () => {
+it('asks for a bounded source before curating best photos from the whole library', async () => {
+  const { calls, fetchImplementation } = createFetch(successHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
+
+  const events = await collectEvents(runtime, 'Pick the best photos from my library.');
+
+  assert.equal(calls.length, 0);
+  assert.equal(events.at(-1).type, 'assistant-message-completed');
+  assert.match(events.at(-1).content.blocks[0].text, /bounded source/i);
+  assert.match(events.at(-1).content.blocks[0].text, /album|shared space|date range|selected photos/i);
+});
+
+it('uses a default count of 10 for bounded highlight prompts without creating a plan', async () => {
+  const { calls, fetchImplementation } = createFetch(successHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
+
+  const events = await collectEvents(runtime, 'Suggest highlights from last weekend.');
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.params.name, 'searchAssets');
+  assert.deepEqual(calls[0].body.params.arguments, {
+    filters: {
+      takenAfter: '2026-05-23T00:00:00.000Z',
+      takenBefore: '2026-05-24T23:59:59.999Z',
+    },
+    detail: 'ids',
+    limit: 10,
+  });
+  assert.match(events.at(-1).content.blocks[0].text, /default/i);
+  assert.match(events.at(-1).content.blocks[0].text, /\b10\b/);
+  assert.match(events.at(-1).content.blocks[0].text, /3 candidate/i);
+});
+
+it('asks for a concrete searchable source instead of searching all assets for unresolved album highlights', async () => {
+  const { calls, fetchImplementation } = createFetch(successHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
+
+  const events = await collectEvents(runtime, 'Suggest 10 highlights from this album.');
+
+  assert.equal(calls.length, 0);
+  assert.match(events.at(-1).content.blocks[0].text, /concrete searchable source/i);
+  assert.match(events.at(-1).content.blocks[0].text, /\?/);
+});
+
+it('asks for a positive highlight count for zero or negative requests without creating a plan', async () => {
+  for (const prompt of ['Suggest 0 highlights from this album.', 'Pick -3 best photos from this album.']) {
     const { calls, fetchImplementation } = createFetch(successHandlers());
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Pick the best photos from my library.');
+    const events = await collectEvents(runtime, prompt);
 
     assert.equal(calls.length, 0);
-    assert.equal(events.at(-1).type, 'assistant-message-completed');
-    assert.match(events.at(-1).content.blocks[0].text, /bounded source/i);
-    assert.match(events.at(-1).content.blocks[0].text, /album|shared space|date range|selected photos/i);
-  });
+    assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
+  }
+});
 
-  it('uses a default count of 10 for bounded highlight prompts without creating a plan', async () => {
-    const { calls, fetchImplementation } = createFetch(successHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('asks to narrow oversized highlight requests without creating a plan', async () => {
+  const { calls, fetchImplementation } = createFetch(successHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest highlights from last weekend.');
+  const events = await collectEvents(runtime, 'Suggest 501 highlights from this album.');
 
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.deepEqual(calls[0].body.params.arguments, {
-      filters: {
-        takenAfter: '2026-05-23T00:00:00.000Z',
-        takenBefore: '2026-05-24T23:59:59.999Z',
-      },
-      detail: 'ids',
-      limit: 10,
-    });
-    assert.match(events.at(-1).content.blocks[0].text, /default/i);
-    assert.match(events.at(-1).content.blocks[0].text, /\b10\b/);
-    assert.match(events.at(-1).content.blocks[0].text, /3 candidate/i);
-  });
+  assert.equal(calls.length, 0);
+  assert.match(events.at(-1).content.blocks[0].text, /500 or fewer/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 
-  it('asks for a concrete searchable source instead of searching all assets for unresolved album highlights', async () => {
-    const { calls, fetchImplementation } = createFetch(successHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
-
-    const events = await collectEvents(runtime, 'Suggest 10 highlights from this album.');
-
-    assert.equal(calls.length, 0);
-    assert.match(events.at(-1).content.blocks[0].text, /concrete searchable source/i);
-    assert.match(events.at(-1).content.blocks[0].text, /\?/);
-  });
-
-  it('asks for a positive highlight count for zero or negative requests without creating a plan', async () => {
-    for (const prompt of ['Suggest 0 highlights from this album.', 'Pick -3 best photos from this album.']) {
-      const { calls, fetchImplementation } = createFetch(successHandlers());
-      const runtime = createE2eRuntime({ fetch: fetchImplementation });
-      await runtime.createSession(createSessionBody());
-
-      const events = await collectEvents(runtime, prompt);
-
-      assert.equal(calls.length, 0);
-      assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
-    }
-  });
-
-  it('asks to narrow oversized highlight requests without creating a plan', async () => {
-    const { calls, fetchImplementation } = createFetch(successHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
-
-    const events = await collectEvents(runtime, 'Suggest 501 highlights from this album.');
-
-    assert.equal(calls.length, 0);
-    assert.match(events.at(-1).content.blocks[0].text, /500 or fewer/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
-
-  it('asks to narrow oversized bounded candidate sets without creating a plan', async () => {
-    const { calls, fetchImplementation } = createFetch([
-      {
-        name: 'searchAssets',
-        handle: (_args, request) => ({
-          body: {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              structuredContent: {
-                status: 'success',
-                assetIds: ['00000000-0000-4000-8000-000000000201'],
-                returnedCount: 501,
-                hasMore: true,
-              },
+it('asks to narrow oversized bounded candidate sets without creating a plan', async () => {
+  const { calls, fetchImplementation } = createFetch([
+    {
+      name: 'searchAssets',
+      handle: (_args, request) => ({
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              assetIds: ['00000000-0000-4000-8000-000000000201'],
+              returnedCount: 501,
+              hasMore: true,
             },
           },
-        }),
-      },
-      successHandlers()[1],
-      successHandlers()[2],
-    ]);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+        },
+      }),
+    },
+    successHandlers()[1],
+    successHandlers()[2],
+  ]);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+  const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
 
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.params.name, 'searchAssets');
+  assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 
-  it('asks to narrow when Gallery reports a known highlight total above the candidate limit', async () => {
-    const { calls, fetchImplementation } = createFetch([
-      {
-        name: 'searchAssets',
-        handle: (_args, request) => ({
-          body: {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              structuredContent: {
-                status: 'success',
-                assetIds: [
-                  '00000000-0000-4000-8000-000000000201',
-                  '00000000-0000-4000-8000-000000000202',
-                ],
-                returnedCount: 10,
-                totalCount: 501,
-                hasMore: true,
-              },
+it('asks to narrow when Gallery reports a known highlight total above the candidate limit', async () => {
+  const { calls, fetchImplementation } = createFetch([
+    {
+      name: 'searchAssets',
+      handle: (_args, request) => ({
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              assetIds: ['00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000202'],
+              returnedCount: 10,
+              totalCount: 501,
+              hasMore: true,
             },
           },
-        }),
-      },
-      successHandlers()[1],
-      successHandlers()[2],
-    ]);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+        },
+      }),
+    },
+    successHandlers()[1],
+    successHandlers()[2],
+  ]);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+  const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
 
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.params.name, 'searchAssets');
+  assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 
-  it('does not treat ordinary pagination as an oversized highlight candidate set', async () => {
-    const { calls, fetchImplementation } = createFetch([
-      {
-        name: 'searchAssets',
-        handle: (_args, request) => ({
-          body: {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              structuredContent: {
-                status: 'success',
-                assetIds: [
-                  '00000000-0000-4000-8000-000000000201',
-                  '00000000-0000-4000-8000-000000000202',
-                ],
-                returnedCount: 10,
-                hasMore: true,
-              },
+it('does not treat ordinary pagination as an oversized highlight candidate set', async () => {
+  const { calls, fetchImplementation } = createFetch([
+    {
+      name: 'searchAssets',
+      handle: (_args, request) => ({
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              assetIds: ['00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000202'],
+              returnedCount: 10,
+              hasMore: true,
             },
           },
-        }),
-      },
-      successHandlers()[1],
-      successHandlers()[2],
-    ]);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+        },
+      }),
+    },
+    successHandlers()[1],
+    successHandlers()[2],
+  ]);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+  const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
 
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /too many/i);
-    assert.match(events.at(-1).content.blocks[0].text, /10 candidate/i);
-    assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
-  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.params.name, 'searchAssets');
+  assert.doesNotMatch(events.at(-1).content.blocks[0].text, /too many/i);
+  assert.match(events.at(-1).content.blocks[0].text, /10 candidate/i);
+  assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+});
 
-  it('answers directly when a bounded highlight source has no candidates without creating a plan', async () => {
-    const { calls, fetchImplementation } = createFetch([
-      {
-        name: 'searchAssets',
-        handle: (_args, request) => ({
-          body: {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              structuredContent: {
-                status: 'success',
-                assetIds: [],
-                returnedCount: 0,
-                hasMore: false,
-              },
+it('answers directly when a bounded highlight source has no candidates without creating a plan', async () => {
+  const { calls, fetchImplementation } = createFetch([
+    {
+      name: 'searchAssets',
+      handle: (_args, request) => ({
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              assetIds: [],
+              returnedCount: 0,
+              hasMore: false,
             },
           },
-        }),
-      },
-      successHandlers()[1],
-      successHandlers()[2],
-    ]);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+        },
+      }),
+    },
+    successHandlers()[1],
+    successHandlers()[2],
+  ]);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
+  const events = await collectEvents(runtime, 'Suggest 10 highlights from last weekend.');
 
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
-    assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
-  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.params.name, 'searchAssets');
+  assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
+  assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+});
 ```
 
 - [ ] **Step 2: Run the e2e runtime tests and verify red**
@@ -336,8 +330,7 @@ const parseHighlightPrompt = (prompt) => {
   const requestedCount = countMatch ? Number(countMatch[1]) : null;
   const unbounded = /\b(my|entire|whole)?\s*library\b/i.test(prompt) || /\b(all photos|everything)\b/i.test(prompt);
   const bounded =
-    !unbounded &&
-    /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt);
+    !unbounded && /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt);
   const filters = /\b(last weekend|weekend)\b/i.test(prompt)
     ? {
         takenAfter: '2026-05-23T00:00:00.000Z',
@@ -499,15 +492,20 @@ Expected: PASS for all agent-runner tests.
 In `it('constructs the Pi resource loader with concrete runtime paths', ...)`, after the existing assertion for `Best/highlights require bounded source`, add:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('default to 10 only when the source is bounded'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('zero, negative, or above 500'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('known count or total is above 500'), true);
-    assert.equal(
-      calls.loaders[0].systemPrompt.includes('Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet'),
-      true,
-    );
-    assert.equal(calls.loaders[0].systemPrompt.includes('No matching highlight candidates: answer directly and do not create a plan'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('default to 10 only when the source is bounded'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('zero, negative, or above 500'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('known count or total is above 500'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes(
+    'Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet',
+  ),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('No matching highlight candidates: answer directly and do not create a plan'),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
 ```
 
 - [ ] **Step 2: Run agent-runner tests and verify red**

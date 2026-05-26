@@ -47,7 +47,7 @@ Out of scope:
 Preview-assisted e2e behavior is opt-in. `createSessionBody()` defaults to no image input support. Tests that need preview assistance pass:
 
 ```js
-createSessionBody({ initialContext: { providerSupportsImages: true } })
+createSessionBody({ initialContext: { providerSupportsImages: true } });
 ```
 
 The e2e runtime stores:
@@ -137,31 +137,31 @@ const previewHighlightHandlers = (options = {}) => {
 Add after the existing metadata-only highlight album tests:
 
 ```js
-  it('reads previews after bounded candidates for preview-assisted highlight album planning', async () => {
-    const { calls, fetchImplementation } = createFetch(previewHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('reads previews after bounded candidates for preview-assisted highlight album planning', async () => {
+  const { calls, fetchImplementation } = createFetch(previewHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(
-      runtime,
-      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'searchAssets,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
-    );
-    assert.equal(calls[0].body.params.arguments.limit, 250);
-    assert.deepEqual(calls[2].body.params.arguments, { assetIds: highlightAssetIds });
-    const plan = calls[3].body.params.arguments;
-    assert.match(plan.summary, /preview-assisted/i);
-    assert.equal(JSON.stringify(plan).includes('readAssetOriginals'), false);
-    assert.deepEqual(plan.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000402',
-      '00000000-0000-4000-8000-000000000403',
-    ]);
-    assert.match(events.at(-1).content.blocks[0].text, /preview-assisted/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
+  );
+  assert.equal(calls[0].body.params.arguments.limit, 250);
+  assert.deepEqual(calls[2].body.params.arguments, { assetIds: highlightAssetIds });
+  const plan = calls[3].body.params.arguments;
+  assert.match(plan.summary, /preview-assisted/i);
+  assert.equal(JSON.stringify(plan).includes('readAssetOriginals'), false);
+  assert.deepEqual(plan.operations[1].assetIds, [
+    '00000000-0000-4000-8000-000000000402',
+    '00000000-0000-4000-8000-000000000403',
+  ]);
+  assert.match(events.at(-1).content.blocks[0].text, /preview-assisted/i);
+});
 ```
 
 - [ ] **Step 3: Add preview limit narrowing test**
@@ -169,25 +169,25 @@ Add after the existing metadata-only highlight album tests:
 Add:
 
 ```js
-  it('asks to narrow before preview-assisted highlight planning above the preview limit', async () => {
-    const oversizedAssetIds = Array.from(
-      { length: 251 },
-      (_value, index) => `00000000-0000-4000-8000-${String(2000 + index).padStart(12, '0')}`,
-    );
-    const { calls, fetchImplementation } = createFetch(previewHighlightHandlers({ assetIds: oversizedAssetIds }));
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('asks to narrow before preview-assisted highlight planning above the preview limit', async () => {
+  const oversizedAssetIds = Array.from(
+    { length: 251 },
+    (_value, index) => `00000000-0000-4000-8000-${String(2000 + index).padStart(12, '0')}`,
+  );
+  const { calls, fetchImplementation } = createFetch(previewHighlightHandlers({ assetIds: oversizedAssetIds }));
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(
-      runtime,
-      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
-    assert.equal(calls[0].body.params.arguments.limit, 250);
-    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
+  assert.equal(calls[0].body.params.arguments.limit, 250);
+  assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 ```
 
 - [ ] **Step 4: Add preview-denied fallback test**
@@ -195,39 +195,39 @@ Add:
 Add:
 
 ```js
-  it('falls back to metadata-only highlights when preview reads are denied', async () => {
-    const handlers = previewHighlightHandlers();
-    handlers[2] = {
-      name: 'readAssetPreviews',
-      handle: (_args, request) => ({
-        body: {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            structuredContent: {
-              status: 'denied',
-              summary: 'Preview reads are denied in this session',
-            },
+it('falls back to metadata-only highlights when preview reads are denied', async () => {
+  const handlers = previewHighlightHandlers();
+  handlers[2] = {
+    name: 'readAssetPreviews',
+    handle: (_args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'denied',
+            summary: 'Preview reads are denied in this session',
           },
         },
-      }),
-    };
-    const { calls, fetchImplementation } = createFetch(handlers);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+      },
+    }),
+  };
+  const { calls, fetchImplementation } = createFetch(handlers);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(
-      runtime,
-      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'searchAssets,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
-    );
-    assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
-    assert.match(events.at(-1).content.blocks[0].text, /previews were unavailable/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
+  );
+  assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
+  assert.match(events.at(-1).content.blocks[0].text, /previews were unavailable/i);
+});
 ```
 
 - [ ] **Step 5: Add provider-without-image-input fallback test**
@@ -235,20 +235,23 @@ Add:
 Add:
 
 ```js
-  it('keeps provider-without-image-input highlight planning metadata-only without preview reads', async () => {
-    const { calls, fetchImplementation } = createFetch(previewHighlightHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: false } }));
+it('keeps provider-without-image-input highlight planning metadata-only without preview reads', async () => {
+  const { calls, fetchImplementation } = createFetch(previewHighlightHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: false } }));
 
-    const events = await collectEvents(
-      runtime,
-      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
-    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
+  assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+});
 ```
 
 - [ ] **Step 6: Add cover suggestion test**
@@ -256,41 +259,41 @@ Add:
 Add:
 
 ```js
-  it('proposes exactly one preview-assisted album cover operation from a named album', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch(
-      previewHighlightHandlers({
-        albums,
-        albumAssetIds: highlightAssetIds,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('proposes exactly one preview-assisted album cover operation from a named album', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch(
+    previewHighlightHandlers({
+      albums,
+      albumAssetIds: highlightAssetIds,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(runtime, 'Pick a better cover for Family.');
+  const events = await collectEvents(runtime, 'Pick a better cover for Family.');
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'listAlbums,readAlbum,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
-    );
-    const plan = calls.at(-1).body.params.arguments;
-    assert.match(plan.summary, /cover/i);
-    assert.match(plan.summary, /preview-assisted/i);
-    assert.deepEqual(plan.operations, [
-      {
-        type: 'album.setCover',
-        summary: 'Set Family cover to a suggested highlight.',
-        targetKind: 'existing_album',
-        targetId: familyAlbumId,
-        assetIds: ['00000000-0000-4000-8000-000000000402'],
-        riskLevel: 'low',
-        enabled: true,
-        payload: {},
-      },
-    ]);
-    assert.match(events.at(-1).content.blocks[0].text, /cover/i);
-    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'listAlbums,readAlbum,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
+  );
+  const plan = calls.at(-1).body.params.arguments;
+  assert.match(plan.summary, /cover/i);
+  assert.match(plan.summary, /preview-assisted/i);
+  assert.deepEqual(plan.operations, [
+    {
+      type: 'album.setCover',
+      summary: 'Set Family cover to a suggested highlight.',
+      targetKind: 'existing_album',
+      targetId: familyAlbumId,
+      assetIds: ['00000000-0000-4000-8000-000000000402'],
+      riskLevel: 'low',
+      enabled: true,
+      payload: {},
+    },
+  ]);
+  assert.match(events.at(-1).content.blocks[0].text, /cover/i);
+  assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+});
 ```
 
 This expected cover ID uses the same deterministic ranker: favorite asset `402` wins.
@@ -300,26 +303,26 @@ This expected cover ID uses the same deterministic ranker: favorite asset `402` 
 Add:
 
 ```js
-  it('supports simple named album cover prompts', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch(
-      previewHighlightHandlers({
-        albums,
-        albumAssetIds: highlightAssetIds,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('supports simple named album cover prompts', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch(
+    previewHighlightHandlers({
+      albums,
+      albumAssetIds: highlightAssetIds,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    await collectEvents(runtime, 'Pick a cover for Family.');
+  await collectEvents(runtime, 'Pick a cover for Family.');
 
-    const plan = calls.at(-1).body.params.arguments;
-    assert.deepEqual(
-      plan.operations.map((operation) => operation.type),
-      ['album.setCover'],
-    );
-    assert.deepEqual(plan.operations[0].assetIds, ['00000000-0000-4000-8000-000000000402']);
-  });
+  const plan = calls.at(-1).body.params.arguments;
+  assert.deepEqual(
+    plan.operations.map((operation) => operation.type),
+    ['album.setCover'],
+  );
+  assert.deepEqual(plan.operations[0].assetIds, ['00000000-0000-4000-8000-000000000402']);
+});
 ```
 
 - [ ] **Step 8: Add cover preview-denied fallback test**
@@ -327,37 +330,37 @@ Add:
 Add:
 
 ```js
-  it('falls back to metadata-only cover selection when preview reads are denied', async () => {
-    const albums = [familyAlbumSummary()];
-    const handlers = previewHighlightHandlers({ albums, albumAssetIds: highlightAssetIds });
-    handlers[2] = {
-      name: 'readAssetPreviews',
-      handle: (_args, request) => ({
-        body: {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            structuredContent: {
-              status: 'denied',
-              summary: 'Preview reads are denied in this session',
-            },
+it('falls back to metadata-only cover selection when preview reads are denied', async () => {
+  const albums = [familyAlbumSummary()];
+  const handlers = previewHighlightHandlers({ albums, albumAssetIds: highlightAssetIds });
+  handlers[2] = {
+    name: 'readAssetPreviews',
+    handle: (_args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'denied',
+            summary: 'Preview reads are denied in this session',
           },
         },
-      }),
-    };
-    const { calls, fetchImplementation } = createFetch(handlers);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+      },
+    }),
+  };
+  const { calls, fetchImplementation } = createFetch(handlers);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(runtime, 'Pick a better cover for Family.');
+  const events = await collectEvents(runtime, 'Pick a better cover for Family.');
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'listAlbums,readAlbum,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
-    );
-    assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
-    assert.match(events.at(-1).content.blocks[0].text, /Previews were unavailable/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'listAlbums,readAlbum,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
+  );
+  assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
+  assert.match(events.at(-1).content.blocks[0].text, /Previews were unavailable/i);
+});
 ```
 
 - [ ] **Step 9: Add provider-without-image-input cover fallback test**
@@ -365,26 +368,26 @@ Add:
 Add:
 
 ```js
-  it('keeps provider-without-image-input cover selection metadata-only without preview reads', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch(
-      previewHighlightHandlers({
-        albums,
-        albumAssetIds: highlightAssetIds,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: false } }));
+it('keeps provider-without-image-input cover selection metadata-only without preview reads', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch(
+    previewHighlightHandlers({
+      albums,
+      albumAssetIds: highlightAssetIds,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: false } }));
 
-    const events = await collectEvents(runtime, 'Pick a better cover for Family.');
+  const events = await collectEvents(runtime, 'Pick a better cover for Family.');
 
-    assert.equal(
-      calls.map((call) => call.body.params.name).join(','),
-      'listAlbums,readAlbum,readAssetMetadata,proposeAlbumOperations',
-    );
-    assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
-    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'listAlbums,readAlbum,readAssetMetadata,proposeAlbumOperations',
+  );
+  assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
+  assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+});
 ```
 
 - [ ] **Step 10: Add cover preview limit narrowing test**
@@ -392,27 +395,27 @@ Add:
 Add:
 
 ```js
-  it('asks to narrow cover selection when a preview-capable album exceeds the preview limit', async () => {
-    const albums = [familyAlbumSummary()];
-    const oversizedAssetIds = Array.from(
-      { length: 251 },
-      (_value, index) => `00000000-0000-4000-8000-${String(3000 + index).padStart(12, '0')}`,
-    );
-    const { calls, fetchImplementation } = createFetch(
-      previewHighlightHandlers({
-        albums,
-        albumAssetIds: oversizedAssetIds,
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('asks to narrow cover selection when a preview-capable album exceeds the preview limit', async () => {
+  const albums = [familyAlbumSummary()];
+  const oversizedAssetIds = Array.from(
+    { length: 251 },
+    (_value, index) => `00000000-0000-4000-8000-${String(3000 + index).padStart(12, '0')}`,
+  );
+  const { calls, fetchImplementation } = createFetch(
+    previewHighlightHandlers({
+      albums,
+      albumAssetIds: oversizedAssetIds,
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    const events = await collectEvents(runtime, 'Pick a better cover for Family.');
+  const events = await collectEvents(runtime, 'Pick a better cover for Family.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'listAlbums,readAlbum');
-    assert.match(events.at(-1).content.blocks[0].text, /too many assets/i);
-    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'listAlbums,readAlbum');
+  assert.match(events.at(-1).content.blocks[0].text, /too many assets/i);
+  assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
+});
 ```
 
 - [ ] **Step 11: Add no-originals guard test**
@@ -420,29 +423,32 @@ Add:
 Add:
 
 ```js
-  it('never reads originals for highlight or cover curation', async () => {
-    const albums = [familyAlbumSummary()];
-    const { calls, fetchImplementation } = createFetch([
-      ...previewHighlightHandlers({ albums, albumAssetIds: highlightAssetIds }),
-      {
-        name: 'readAssetOriginals',
-        handle: (_args, request) => ({
-          body: {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: { structuredContent: { originals: [] } },
-          },
-        }),
-      },
-    ]);
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
+it('never reads originals for highlight or cover curation', async () => {
+  const albums = [familyAlbumSummary()];
+  const { calls, fetchImplementation } = createFetch([
+    ...previewHighlightHandlers({ albums, albumAssetIds: highlightAssetIds }),
+    {
+      name: 'readAssetOriginals',
+      handle: (_args, request) => ({
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: { structuredContent: { originals: [] } },
+        },
+      }),
+    },
+  ]);
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ initialContext: { providerSupportsImages: true } }));
 
-    await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.');
-    await collectEvents(runtime, 'Pick a better cover for Family.');
+  await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.');
+  await collectEvents(runtime, 'Pick a better cover for Family.');
 
-    assert.equal(calls.some((call) => call.body.params.name === 'readAssetOriginals'), false);
-  });
+  assert.equal(
+    calls.some((call) => call.body.params.name === 'readAssetOriginals'),
+    false,
+  );
+});
 ```
 
 - [ ] **Step 12: Run agent-runner tests and verify red**
@@ -496,13 +502,13 @@ const highlightCandidateCount = (result, assetIds, candidateLimit = metadataHigh
 Change the full-page `hasMore` guard:
 
 ```js
-  if (
-    result.hasMore === true &&
-    candidateLimit >= previewHighlightCandidateLimit &&
-    (result.returnedCount ?? assetIds.length) >= candidateLimit
-  ) {
-    return candidateLimit + 1;
-  }
+if (
+  result.hasMore === true &&
+  candidateLimit >= previewHighlightCandidateLimit &&
+  (result.returnedCount ?? assetIds.length) >= candidateLimit
+) {
+  return candidateLimit + 1;
+}
 ```
 
 Change `readHighlightCandidates()` return:
@@ -597,7 +603,9 @@ const planCandidateLimit = planIntent
     ? previewHighlightCandidateLimit
     : metadataHighlightCandidateLimit
   : highlightPrompt.effectiveCount;
-const activeCandidateLimit = usePreviewAssistedCuration ? previewHighlightCandidateLimit : metadataHighlightCandidateLimit;
+const activeCandidateLimit = usePreviewAssistedCuration
+  ? previewHighlightCandidateLimit
+  : metadataHighlightCandidateLimit;
 ```
 
 Change the candidate limit check:
@@ -836,11 +844,25 @@ Expected: PASS.
 In `it('constructs the Pi resource loader with concrete runtime paths', ...)`, after the existing assertion for `No previews are required for metadata-only highlight plans`, add:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('Preview-assisted highlight requests use mcp_gallery_readAssetPreviews only after bounded candidate ids are known'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('above 250 preview candidates'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If previews are denied or the provider cannot inspect images'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Cover suggestions use album.setCover with exactly one selected assetId'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Never call mcp_gallery_readAssetOriginals for highlight or cover curation'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes(
+    'Preview-assisted highlight requests use mcp_gallery_readAssetPreviews only after bounded candidate ids are known',
+  ),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('above 250 preview candidates'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('If previews are denied or the provider cannot inspect images'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('Cover suggestions use album.setCover with exactly one selected assetId'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('Never call mcp_gallery_readAssetOriginals for highlight or cover curation'),
+  true,
+);
 ```
 
 - [ ] **Step 2: Run prompt test and verify red**

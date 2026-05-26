@@ -312,7 +312,7 @@ TDD coverage:
 - Regression guard: prompt-service tests assert `analyzeAssetQuality` is absent
   from available tool guidance.
 - Regression guard: capability matrix keeps quality scoring in `Needs new MCP
-  Tool` and keeps bounded highlight curation out of `Solid now` until
+Tool` and keeps bounded highlight curation out of `Solid now` until
   implementation is complete.
 
 Exit criteria:
@@ -526,21 +526,21 @@ Expected behavior for prompt 7: Pi reports no matches and creates no plan.
 
 ## Edge Case Coverage Checklist
 
-| Edge case                         | Required behavior                                                                 |
-| --------------------------------- | --------------------------------------------------------------------------------- |
-| No source scope                   | Ask one narrowing question; create no plan.                                       |
-| Ambiguous album/person/space/tag  | Ask for clarification or present choices.                                         |
-| No matching candidates            | Answer directly; create no plan.                                                  |
-| Fewer candidates than requested   | Propose available candidates and state the actual count.                          |
-| Candidate set above limits        | Ask to narrow or explicitly disclose metadata-only sampling.                      |
-| Missing requested count           | Use a conservative default only for a bounded source; otherwise ask.              |
-| Invalid requested count           | Ask for a positive count; create no plan.                                         |
-| Preview permission denied         | Use metadata-only criteria only with disclosure or clarification.                 |
-| Provider cannot inspect images    | Treat previews as unavailable and use metadata-only criteria.                     |
-| Curated subset from broad search  | Write plan uses selected IDs only, never the original broad source.               |
-| Already-in-target album assets    | Exclude or avoid duplicate add operations where possible.                         |
-| User removes suggested assets     | Apply payload preserves the sparse user selection.                                |
-| Stale assets or partial apply     | Existing plan apply failure and partial success reporting remains visible.        |
+| Edge case                        | Required behavior                                                          |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| No source scope                  | Ask one narrowing question; create no plan.                                |
+| Ambiguous album/person/space/tag | Ask for clarification or present choices.                                  |
+| No matching candidates           | Answer directly; create no plan.                                           |
+| Fewer candidates than requested  | Propose available candidates and state the actual count.                   |
+| Candidate set above limits       | Ask to narrow or explicitly disclose metadata-only sampling.               |
+| Missing requested count          | Use a conservative default only for a bounded source; otherwise ask.       |
+| Invalid requested count          | Ask for a positive count; create no plan.                                  |
+| Preview permission denied        | Use metadata-only criteria only with disclosure or clarification.          |
+| Provider cannot inspect images   | Treat previews as unavailable and use metadata-only criteria.              |
+| Curated subset from broad search | Write plan uses selected IDs only, never the original broad source.        |
+| Already-in-target album assets   | Exclude or avoid duplicate add operations where possible.                  |
+| User removes suggested assets    | Apply payload preserves the sparse user selection.                         |
+| Stale assets or partial apply    | Existing plan apply failure and partial success reporting remains visible. |
 
 ## Capability Matrix Update
 

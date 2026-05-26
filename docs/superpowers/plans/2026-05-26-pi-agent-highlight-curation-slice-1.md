@@ -58,23 +58,23 @@ Out of scope:
 Near the top of `describe(AgentMcpPromptService.name, () => {`, add a shared prompt length ceiling:
 
 ```ts
-  const maxPromptLength = 4300;
+const maxPromptLength = 4300;
 ```
 
 Add this test after `it('includes compact visual and technical metadata guidance without direct writes', ...)` in `server/src/services/agent-mcp-prompt.service.spec.ts`:
 
 ```ts
-  it('teaches highlight curation as bounded suggestions without quality scoring', () => {
-    const prompt = sut.generatePromptCheatSheet();
+it('teaches highlight curation as bounded suggestions without quality scoring', () => {
+  const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toMatch(/highlights?.*bounded source/i);
-    expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
-    expect(prompt).toMatch(/suggested|recommend/i);
-    expect(prompt).toMatch(/not objective|no objective|not .*quality scoring/i);
-    expect(prompt).toMatch(/selected assetIds only|selected ids only/i);
-    expect(prompt).not.toContain('analyzeAssetQuality');
-    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
-  });
+  expect(prompt).toMatch(/highlights?.*bounded source/i);
+  expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
+  expect(prompt).toMatch(/suggested|recommend/i);
+  expect(prompt).toMatch(/not objective|no objective|not .*quality scoring/i);
+  expect(prompt).toMatch(/selected assetIds only|selected ids only/i);
+  expect(prompt).not.toContain('analyzeAssetQuality');
+  expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
+});
 ```
 
 Also replace the existing `expect(prompt.length).toBeLessThanOrEqual(4200);` prompt-size assertions in this file with `expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);` so all compactness checks share the same final ceiling. The added highlight contract increases the prompt slightly; keep unrelated prompt guidance intact and cap the final generated prompt at 4300 characters.
@@ -84,30 +84,30 @@ Also replace the existing `expect(prompt.length).toBeLessThanOrEqual(4200);` pro
 Add this test immediately after the bounded-highlight prompt test:
 
 ```ts
-  it('selects existing search metadata preview and plan examples for highlight curation', () => {
-    const examples = sut.listPromptExamples();
+it('selects existing search metadata preview and plan examples for highlight curation', () => {
+  const examples = sut.listPromptExamples();
 
-    expect(examples).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          toolName: AgentToolName.SearchAssets,
-          exampleName: 'visual-curation-candidate-search',
-        }),
-        expect.objectContaining({
-          toolName: AgentToolName.ReadAssetMetadata,
-          exampleName: 'read-technical-fields-for-selected-assets',
-        }),
-        expect.objectContaining({
-          toolName: AgentToolName.ReadAssetPreviews,
-          exampleName: 'read-selected-assets',
-        }),
-        expect.objectContaining({
-          toolName: AgentToolName.ProposeAlbumOperations,
-          exampleName: 'create-album-and-add-assets',
-        }),
-      ]),
-    );
-  });
+  expect(examples).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        toolName: AgentToolName.SearchAssets,
+        exampleName: 'visual-curation-candidate-search',
+      }),
+      expect.objectContaining({
+        toolName: AgentToolName.ReadAssetMetadata,
+        exampleName: 'read-technical-fields-for-selected-assets',
+      }),
+      expect.objectContaining({
+        toolName: AgentToolName.ReadAssetPreviews,
+        exampleName: 'read-selected-assets',
+      }),
+      expect.objectContaining({
+        toolName: AgentToolName.ProposeAlbumOperations,
+        exampleName: 'create-album-and-add-assets',
+      }),
+    ]),
+  );
+});
 ```
 
 - [ ] **Step 3: Run the prompt test file and verify the intended red failures**
@@ -234,24 +234,24 @@ Expected: PASS.
 Append this test inside `describe('Pi agent capability matrix', () => { ... })`:
 
 ```ts
-  it('keeps bounded highlight curation planned while quality scoring remains a new-tool gap', () => {
-    const markdown = readMatrix();
+it('keeps bounded highlight curation planned while quality scoring remains a new-tool gap', () => {
+  const markdown = readMatrix();
 
-    const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
+  const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
 
-    expect(bestPhotosRow).toBeDefined();
-    expect(bestPhotosRow).toContain('planned implementation');
-    expect(bestPhotosRow).toMatch(/Constrained now|behind implementation|not solid/i);
-    expect(bestPhotosRow).not.toContain('Solid now');
+  expect(bestPhotosRow).toBeDefined();
+  expect(bestPhotosRow).toContain('planned implementation');
+  expect(bestPhotosRow).toMatch(/Constrained now|behind implementation|not solid/i);
+  expect(bestPhotosRow).not.toContain('Solid now');
 
-    const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
-    expect(needsNewToolHeadingIndex).not.toBe(-1);
+  const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
+  expect(needsNewToolHeadingIndex).not.toBe(-1);
 
-    const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
-    expect(needsNewToolSection).toContain('Image quality scoring');
-    expect(needsNewToolSection).toContain('analyzeAssetQuality');
-    expect(needsNewToolSection).toMatch(/quality scoring/i);
-  });
+  const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
+  expect(needsNewToolSection).toContain('Image quality scoring');
+  expect(needsNewToolSection).toContain('analyzeAssetQuality');
+  expect(needsNewToolSection).toMatch(/quality scoring/i);
+});
 ```
 
 - [ ] **Step 2: Run the capability matrix test and verify red**
@@ -276,13 +276,13 @@ Expected: FAIL because the “Best photos” row does not yet say `planned imple
 In the `## High-Value Constrained Capabilities` table, replace the “Best photos” curation row:
 
 ```md
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Works only across bounded candidates using ratings, favorites, metadata, and previews.         | Ask for a scope when broad: album, date range, place, or max count.    |
+| “Best photos” curation | Users want the assistant to pick highlights. | Works only across bounded candidates using ratings, favorites, metadata, and previews. | Ask for a scope when broad: album, date range, place, or max count. |
 ```
 
 with:
 
 ```md
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Constrained now and behind planned implementation; works only across bounded candidates using ratings, favorites, metadata, and previews, not quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
+| “Best photos” curation | Users want the assistant to pick highlights. | Constrained now and behind planned implementation; works only across bounded candidates using ratings, favorites, metadata, and previews, not quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
 ```
 
 Do not move this row into the `Solid now` core matrix in this slice.
