@@ -67,15 +67,32 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).toMatch(/forward geocoder|geocod/i);
   });
 
-  it('keeps bounded highlight curation planned while quality scoring remains a new-tool gap', () => {
+  it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
     const markdown = readMatrix();
 
     const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
 
     expect(bestPhotosRow).toBeDefined();
-    expect(bestPhotosRow).toContain('planned implementation');
-    expect(bestPhotosRow).toMatch(/Constrained now|behind implementation|not solid/i);
-    expect(bestPhotosRow).not.toContain('Solid now');
+    expect(bestPhotosRow).toContain('Solid now for bounded sources');
+    expect(bestPhotosRow).toMatch(/bounded candidates/i);
+    expect(bestPhotosRow).toMatch(/ratings|favorites|metadata|previews/i);
+    expect(bestPhotosRow).toMatch(/not quality scoring|not objective/i);
+    expect(bestPhotosRow).not.toContain('planned implementation');
+
+    const visualCleanupRow = markdown.split('\n').find((line) => line.includes('Visual cleanup'));
+    expect(visualCleanupRow).toBeDefined();
+    expect(visualCleanupRow).toContain('Constrained now');
+
+    for (const prompt of [
+      'Suggest 5 highlights from this album and make an album called Highlights.',
+      'Favorite the best 3 photos from last weekend.',
+      'Pick a cover from this album.',
+      'Pick the best photos from my library.',
+      'Suggest 20 highlights from this album.',
+      'Suggest highlights from last weekend.',
+    ]) {
+      expect(markdown).toContain(prompt);
+    }
 
     const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
     expect(needsNewToolHeadingIndex).not.toBe(-1);
