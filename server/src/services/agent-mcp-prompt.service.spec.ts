@@ -76,6 +76,7 @@ describe('agent MCP prompt placeholders', () => {
 });
 
 describe(AgentMcpPromptService.name, () => {
+  const maxPromptLength = 4300;
   let contractService: AgentMcpToolContractService;
   let sut: AgentMcpPromptService;
 
@@ -88,7 +89,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
     expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
     expect(prompt).toContain('R: Known ID filters');
     expect(prompt).toContain('Default write:');
@@ -123,7 +124,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('wrong_id_domain');
     expect(prompt).toContain('needs_clarification');
     expect(prompt).toContain('choiceRefs');
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
   it('teaches metadata edits as reviewable search-backed plans with explicit coordinates only', () => {
@@ -149,7 +150,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toMatch(/coordinates?.*latitude.*longitude/i);
     expect(prompt).toMatch(/place names?.*ask/i);
     expect(prompt).not.toContain('placeName');
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
   it('renders schema-valid source-backed prompt snippets with required workflow fields', () => {
@@ -249,7 +250,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('OCR invoice');
     expect(prompt).toContain('mode ocr');
     expect(prompt).toContain('resolve names');
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
   it('teaches progressive detail before broad metadata reads', () => {
@@ -261,7 +262,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('if truncated/hasMore, page or ask one narrowing question');
     expect(prompt).toContain('"detail":"ids"');
     expect(prompt).toContain('"fields":["dates","location"]');
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
   it('renders large-selection handle guidance without encouraging pasted asset ids', () => {
@@ -278,12 +279,51 @@ describe(AgentMcpPromptService.name, () => {
   it('includes compact visual and technical metadata guidance without direct writes', () => {
     const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toContain('Visual curation: search ids first, then previews for shortlisted assetIds only');
+    expect(prompt).toContain(
+      'Best/highlights require bounded source album/space/date/search/selection; suggested not objective quality scoring; search ids->metadata->preview if allowed; write selected assetIds only.',
+    );
     expect(prompt).toContain(
       'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename',
     );
     expect(prompt).not.toContain('"limit":1000');
     expect(prompt).not.toContain('mcp_gallery_apply');
+  });
+
+  it('teaches highlight curation as bounded suggestions without quality scoring', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toMatch(/highlights?.*bounded source/i);
+    expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
+    expect(prompt).toMatch(/suggested|recommend/i);
+    expect(prompt).toMatch(/not objective|no objective|not .*quality scoring/i);
+    expect(prompt).toMatch(/selected assetIds only|selected ids only/i);
+    expect(prompt).not.toContain('analyzeAssetQuality');
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
+  });
+
+  it('selects existing search metadata preview and plan examples for highlight curation', () => {
+    const examples = sut.listPromptExamples();
+
+    expect(examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          toolName: AgentToolName.SearchAssets,
+          exampleName: 'visual-curation-candidate-search',
+        }),
+        expect.objectContaining({
+          toolName: AgentToolName.ReadAssetMetadata,
+          exampleName: 'read-technical-fields-for-selected-assets',
+        }),
+        expect.objectContaining({
+          toolName: AgentToolName.ReadAssetPreviews,
+          exampleName: 'read-selected-assets',
+        }),
+        expect.objectContaining({
+          toolName: AgentToolName.ProposeAlbumOperations,
+          exampleName: 'create-album-and-add-assets',
+        }),
+      ]),
+    );
   });
 
   it('teaches people organization as resolve, search, then propose plan', () => {
@@ -453,6 +493,7 @@ describe(AgentMcpPromptService.name, () => {
 
     expect(prompt).toContain('exampleArguments');
     expect(prompt).toMatch(/retry once .*correction is obvious/is);
+    expect(prompt).toMatch(/params\.arguments.*MCP tools\/call request/i);
     expect(prompt).toContain(mistake?.hint);
   });
 
@@ -466,7 +507,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('if corrected retry fails again, explain missing/blocked');
     expect(prompt).toContain('approval-required pauses');
     expect(prompt).not.toMatch(/denied .*recoverable/i);
-    expect(prompt.length).toBeLessThanOrEqual(4200);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
   it('renders model-facing prompt examples with semantic placeholders instead of fixture UUIDs', () => {
