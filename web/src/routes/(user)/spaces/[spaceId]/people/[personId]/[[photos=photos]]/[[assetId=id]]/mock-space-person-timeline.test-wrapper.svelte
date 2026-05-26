@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import type { Snippet } from 'svelte';
 
   interface Props {

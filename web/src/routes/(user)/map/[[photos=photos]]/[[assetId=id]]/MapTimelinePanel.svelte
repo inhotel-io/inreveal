@@ -26,6 +26,7 @@
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
   import { mapSettings } from '$lib/stores/preferences.store';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
     updateStackedAssetInTimeline,
     updateUnstackedAssetInTimeline,
@@ -34,10 +35,9 @@
   } from '$lib/utils/actions';
   import { buildMapTimelineOptions } from '$lib/utils/map-filter-options';
   import {
-    clearTimelineTemporalFilter,
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { ActionButton, CloseButton, CommandPaletteDefaultProvider, Icon } from '@immich/ui';
   import { mdiDotsVertical, mdiImageMultiple } from '@mdi/js';
   import { ceil, floor } from 'lodash-es';

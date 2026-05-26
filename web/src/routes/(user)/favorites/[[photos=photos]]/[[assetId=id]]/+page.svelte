@@ -23,11 +23,11 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAssetBulkActions } from '$lib/services/asset.service';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
-    clearTimelineTemporalFilter,
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';

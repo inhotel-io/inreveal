@@ -1,7 +1,7 @@
 <script lang="ts">
   import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
   import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
 
   const OVERSCAN_PX = 900;
 

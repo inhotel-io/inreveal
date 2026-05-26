@@ -1,12 +1,6 @@
-import { createFilterState } from '$lib/components/filter-panel/filter-panel';
+import { getTimelineBucketZoomTarget, getTimelineManagerTimeBuckets } from '../timeline-zoom-navigation';
 
-import {
-  clearTimelineTemporalFilter,
-  getTimelineBucketZoomTarget,
-  getTimelineManagerTimeBuckets,
-} from '../timeline-filter-navigation';
-
-describe('timeline filter navigation helpers', () => {
+describe('timeline zoom navigation helpers', () => {
   it('zooms a year bucket to month grouping without requiring filters', () => {
     expect(
       getTimelineBucketZoomTarget({
@@ -48,28 +42,6 @@ describe('timeline filter navigation helpers', () => {
       }),
     ).toBeUndefined();
   });
-  it('clears only temporal filter state', () => {
-    const filters = {
-      ...createFilterState(),
-      personIds: ['person-1'],
-      tagIds: ['tag-1'],
-      rating: 4,
-      dateAfter: '2024-01-01',
-      dateBefore: '2024-12-31',
-      selectedYear: 2015,
-      selectedMonth: 8,
-      sortOrder: 'asc' as const,
-    };
-
-    expect(clearTimelineTemporalFilter(filters)).toEqual({
-      ...filters,
-      dateAfter: undefined,
-      dateBefore: undefined,
-      selectedYear: undefined,
-      selectedMonth: undefined,
-    });
-  });
-
   it('uses generic timeline buckets for temporal picker buckets before falling back to month buckets', () => {
     const manager = {
       timelineBuckets: [

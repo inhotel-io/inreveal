@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import type { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
 
   interface Props {
     timelineManager?: TimelineManager | Record<string, unknown>;

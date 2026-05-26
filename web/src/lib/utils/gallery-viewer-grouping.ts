@@ -1,5 +1,5 @@
 import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
-import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
 import type { AssetResponseDto } from '@immich/sdk';
 
 export type GalleryViewerBucket = ActivatableTimelineBucket & {

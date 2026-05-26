@@ -18,11 +18,11 @@
   import { getTrashActions } from '$lib/services/trash.service';
   import { handlePromiseError } from '$lib/utils';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
-    clearTimelineTemporalFilter,
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';

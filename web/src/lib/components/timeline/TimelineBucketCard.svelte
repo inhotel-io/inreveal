@@ -1,7 +1,7 @@
 <script lang="ts">
   import Thumbhash from '$lib/components/Thumbhash.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { AssetMediaSize } from '@immich/sdk';
 
   type TimelineBucketCardBucket = ActivatableTimelineBucket & {

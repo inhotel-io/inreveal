@@ -1,5 +1,5 @@
 import TimelineBucketCard from '$lib/components/timeline/TimelineBucketCard.svelte';
-import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
 import { AssetMediaSize } from '@immich/sdk';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';

@@ -77,7 +77,7 @@
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
     getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
   import {
     AssetTypeEnum,

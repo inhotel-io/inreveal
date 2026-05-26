@@ -1,7 +1,7 @@
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 import { buildFilterContext } from '$lib/components/filter-panel/filter-panel';
 import { createUrl } from '$lib/utils';
-import { clearTimelineTemporalFilter } from '$lib/utils/timeline-filter-navigation';
+import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
 import { AssetOrder, AssetTypeEnum, AssetVisibility, type FilterSuggestionsPersonDto } from '@immich/sdk';
 
 type PhotosPersonFilterReference = {

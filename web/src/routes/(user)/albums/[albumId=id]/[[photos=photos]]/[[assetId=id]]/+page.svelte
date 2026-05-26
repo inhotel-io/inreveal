@@ -9,6 +9,7 @@
   import ActivityViewer from '$lib/components/asset-viewer/activity-viewer.svelte';
   import ActiveFiltersBar from '$lib/components/filter-panel/active-filters-bar.svelte';
   import FilterPanel from '$lib/components/filter-panel/filter-panel.svelte';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
     clearFilters,
     createFilterState,
@@ -66,11 +67,10 @@
   import { isAlbumsRoute, navigate, type AssetGridRouteSearchParams } from '$lib/utils/navigation';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import {
-    clearTimelineTemporalFilter,
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { AlbumUserRole, getAlbumInfo, updateAlbumInfo, type AlbumResponseDto } from '@immich/sdk';
   import {
     ActionButton,

@@ -1,5 +1,5 @@
 import { buildFilterContext, type FilterState } from '$lib/components/filter-panel/filter-panel';
-import { clearTimelineTemporalFilter } from '$lib/utils/timeline-filter-navigation';
+import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
 import { AssetOrder, AssetTypeEnum } from '@immich/sdk';
 
 export function buildSpaceTimelineOptions(spaceId: string, filters: FilterState): Record<string, unknown> {

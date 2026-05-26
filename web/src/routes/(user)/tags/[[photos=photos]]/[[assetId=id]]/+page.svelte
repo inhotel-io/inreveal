@@ -33,11 +33,11 @@
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { getTagActions } from '$lib/services/tag.service';
   import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
-    clearTimelineTemporalFilter,
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import { joinPaths, TreeNode } from '$lib/utils/tree-utils';
   import { AssetVisibility, getAllTags, type TagResponseDto } from '@immich/sdk';

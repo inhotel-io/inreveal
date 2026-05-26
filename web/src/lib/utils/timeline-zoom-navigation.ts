@@ -1,4 +1,3 @@
-import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
 
 export type ActivatableTimelineBucket = {
@@ -19,16 +18,6 @@ type TemporalBucketSource = {
   timelineBuckets?: Array<{ timeBucket: string; count: number }>;
   months?: Array<{ yearMonth: { year: number; month: number }; assetsCount: number }>;
 };
-
-export function clearTimelineTemporalFilter(filters: FilterState): FilterState {
-  return {
-    ...filters,
-    dateAfter: undefined,
-    dateBefore: undefined,
-    selectedYear: undefined,
-    selectedMonth: undefined,
-  };
-}
 
 export function getTimelineBucketZoomTarget(
   bucket: ActivatableTimelineBucket,

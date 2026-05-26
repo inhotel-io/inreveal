@@ -31,7 +31,7 @@
   import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
   import { lang } from '$lib/stores/preferences.store';
   import { isAssetViewerRoute, navigate } from '$lib/utils/navigation';
-  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-filter-navigation';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { getTimes, type ScrubberListener } from '$lib/utils/timeline-util';
   import { type AlbumResponseDto, type PersonResponseDto, type UserResponseDto } from '@immich/sdk';
   import { DateTime } from 'luxon';

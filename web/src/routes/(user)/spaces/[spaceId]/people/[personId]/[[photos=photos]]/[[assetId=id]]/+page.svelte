@@ -33,11 +33,11 @@
   import { locale } from '$lib/stores/preferences.store';
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { toScopedPersonRef as toPersonScopedRef } from '$lib/utils/scoped-person-ref';
+  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
-    clearTimelineTemporalFilter,
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+  } from '$lib/utils/timeline-zoom-navigation';
   import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
   import {
     detachScopedPerson,
