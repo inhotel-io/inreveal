@@ -562,7 +562,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Visual curation: search ids first'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Best/highlights require bounded source'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
