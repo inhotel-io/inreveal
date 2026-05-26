@@ -51,6 +51,26 @@ describe('agent tool approval UI helpers', () => {
     expect(getAgentToolCallCompletedText(readSpace)).toBe('Pi inspected a space.');
   });
 
+  it('uses metadata-specific approval copy only for metadata asset batch plans', () => {
+    const metadataPlan = toolCall({
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      requestSummary: 'Store 1 proposed metadata operation(s)',
+      status: AgentToolCallStatus.PendingApproval,
+    });
+    const genericAssetPlan = toolCall({
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      requestSummary: 'Store 1 proposed album operation(s)',
+      status: AgentToolCallStatus.Completed,
+    });
+
+    expect(getAgentToolCallPendingText(metadataPlan)).toBe('Pi wants to draft metadata changes.');
+    expect(getAgentToolCallCompletedText({ ...metadataPlan, status: AgentToolCallStatus.Completed })).toBe(
+      'Pi drafted metadata changes.',
+    );
+    expect(getAgentToolCallPendingText(genericAssetPlan)).toBe('Pi wants to draft photo changes from a search.');
+    expect(getAgentToolCallCompletedText(genericAssetPlan)).toBe('Pi drafted photo changes from a search.');
+  });
+
   it('maps every current data class to a label key', () => {
     for (const dataClass of Object.values(AgentToolDataClass)) {
       expect(getAgentToolDataClassLabelKey(dataClass)).toBe(`assistant_agent_tool_data_class_${dataClass}`);

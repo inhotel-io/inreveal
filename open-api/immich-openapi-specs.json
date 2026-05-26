@@ -23602,6 +23602,102 @@
             "nullable": true,
             "type": "object"
           },
+          "reviewMetadata": {
+            "properties": {
+              "assetMetadata": {
+                "properties": {
+                  "fields": {
+                    "items": {
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "previousValues": {
+                          "items": {
+                            "properties": {
+                              "assetId": {
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                                "type": "string"
+                              },
+                              "value": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ],
+                                "nullable": true
+                              },
+                              "valueKind": {
+                                "$ref": "#/components/schemas/AgentOperationReviewMetadataValueKind"
+                              }
+                            },
+                            "required": [
+                              "assetId",
+                              "value",
+                              "valueKind"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "proposedValue": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "nullable": true
+                        },
+                        "proposedValueKind": {
+                          "$ref": "#/components/schemas/AgentOperationReviewMetadataValueKind"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "label",
+                        "previousValues",
+                        "proposedValue",
+                        "proposedValueKind"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "sampleAssetIds": {
+                    "items": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "warnings": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "fields",
+                  "sampleAssetIds",
+                  "warnings"
+                ],
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
           "riskLevel": {
             "$ref": "#/components/schemas/AgentOperationRiskLevel"
           },
@@ -23659,6 +23755,16 @@
           "updatedAt"
         ],
         "type": "object"
+      },
+      "AgentOperationReviewMetadataValueKind": {
+        "enum": [
+          "known",
+          "empty",
+          "clear",
+          "relative",
+          "unknown"
+        ],
+        "type": "string"
       },
       "AgentOperationRiskLevel": {
         "enum": [

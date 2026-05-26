@@ -669,6 +669,23 @@ export type AgentOperationResponseDto = {
     result: {
         [key: string]: any;
     } | null;
+    reviewMetadata?: {
+        assetMetadata?: {
+            fields: {
+                key: string;
+                label: string;
+                previousValues: {
+                    assetId: string;
+                    value: (string | number) | null;
+                    valueKind: AgentOperationReviewMetadataValueKind;
+                }[];
+                proposedValue: (string | number) | null;
+                proposedValueKind: AgentOperationReviewMetadataValueKind;
+            }[];
+            sampleAssetIds: string[];
+            warnings: string[];
+        };
+    };
     riskLevel: AgentOperationRiskLevel;
     status: AgentOperationStatus;
     summary: string;
@@ -10278,6 +10295,13 @@ export enum AgentMessageRole {
     Assistant = "assistant",
     System = "system",
     Tool = "tool"
+}
+export enum AgentOperationReviewMetadataValueKind {
+    Known = "known",
+    Empty = "empty",
+    Clear = "clear",
+    Relative = "relative",
+    Unknown = "unknown"
 }
 export enum AgentOperationRiskLevel {
     Low = "low",

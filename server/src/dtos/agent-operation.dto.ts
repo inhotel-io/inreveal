@@ -468,7 +468,9 @@ const assetUpdateMetadataPayloadShape = {
 type AssetUpdateMetadataPayloadLike = Partial<Record<(typeof assetUpdateMetadataPayloadFieldNames)[number], unknown>>;
 
 const validateAssetUpdateMetadataPayload = (payload: AssetUpdateMetadataPayloadLike, ctx: z.RefinementCtx) => {
-  const suppliedFieldCount = assetUpdateMetadataPayloadFieldNames.filter((field) => payload[field] !== undefined).length;
+  const suppliedFieldCount = assetUpdateMetadataPayloadFieldNames.filter(
+    (field) => payload[field] !== undefined,
+  ).length;
   if (suppliedFieldCount === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -558,7 +560,12 @@ const updateMetadataOperationSchema = z
   })
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetUpdateMetadata);
+    validateStandaloneTarget(
+      operation,
+      ctx,
+      AgentOperationTargetKind.AssetBatch,
+      AgentOperationType.AssetUpdateMetadata,
+    );
   });
 
 const addTagOperationSchema = z
@@ -763,6 +770,31 @@ export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
 
+const AgentOperationReviewMetadataValueKindSchema = z
+  .enum(['known', 'empty', 'clear', 'relative', 'unknown'])
+  .meta({ id: 'AgentOperationReviewMetadataValueKind' });
+const AgentOperationReviewMetadataValueSchema = z.object({
+  assetId: uuid,
+  value: z.union([z.string(), z.number(), z.null()]),
+  valueKind: AgentOperationReviewMetadataValueKindSchema,
+});
+const AgentOperationReviewMetadataFieldSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  previousValues: z.array(AgentOperationReviewMetadataValueSchema),
+  proposedValue: z.union([z.string(), z.number(), z.null()]),
+  proposedValueKind: AgentOperationReviewMetadataValueKindSchema,
+});
+const AgentOperationReviewMetadataSchema = z.object({
+  assetMetadata: z
+    .object({
+      fields: z.array(AgentOperationReviewMetadataFieldSchema),
+      sampleAssetIds: z.array(uuid),
+      warnings: z.array(z.string()),
+    })
+    .optional(),
+});
+
 const AgentOperationResponseSchema = z
   .object({
     id: uuid,
@@ -779,6 +811,7 @@ const AgentOperationResponseSchema = z
     enabled: z.boolean(),
     status: AgentOperationStatusSchema,
     result: z.record(z.string(), z.unknown()).nullable(),
+    reviewMetadata: AgentOperationReviewMetadataSchema.optional(),
     error: z.string().nullable(),
     createdAt: isoDatetimeToDate,
     updatedAt: isoDatetimeToDate,

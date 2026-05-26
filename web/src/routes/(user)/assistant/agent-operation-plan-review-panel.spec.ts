@@ -75,6 +75,25 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_item_thumbnail_unavailable: 'Preview unavailable',
     assistant_operation_item_toggle: 'Include photo {index}',
     assistant_operation_item_virtual_summary: 'Showing {visible} of {total} photos',
+    assistant_operation_metadata_column_current: 'Current',
+    assistant_operation_metadata_column_field: 'Field',
+    assistant_operation_metadata_column_proposed: 'Proposed',
+    assistant_operation_metadata_field_date_shift: 'Date shift',
+    assistant_operation_metadata_field_date_taken: 'Date taken',
+    assistant_operation_metadata_field_description: 'Description',
+    assistant_operation_metadata_field_location: 'Location',
+    assistant_operation_metadata_field_rating: 'Rating',
+    assistant_operation_metadata_field_time_zone: 'Time zone',
+    assistant_operation_metadata_field_unknown: 'Unknown field',
+    assistant_operation_metadata_value_clear: 'Clear',
+    assistant_operation_metadata_value_clear_rating: 'Clear rating',
+    assistant_operation_metadata_value_empty: 'Empty',
+    assistant_operation_metadata_value_rating: '{rating} stars',
+    assistant_operation_metadata_value_shift_capture_time: 'Shift capture time',
+    assistant_operation_metadata_value_shift_minutes: 'Shift {minutes} minutes',
+    assistant_operation_metadata_value_unavailable: 'Unavailable',
+    assistant_operation_metadata_value_unrated: 'Unrated',
+    assistant_operation_metadata_warning_coordinates_multi: 'Coordinates will be applied to {count} photos.',
     assistant_operation_plan_empty: 'No proposed album plan yet.',
     assistant_operation_plan_error: 'Unable to load proposed album plan',
     assistant_operation_plan_loading: 'Loading proposed album plan',
@@ -125,7 +144,9 @@ vi.mock('svelte-i18n', () => {
         .replace('{total}', String(options?.values?.total ?? ''))
         .replace('{summary}', String(options?.values?.summary ?? ''))
         .replace('{visible}', String(options?.values?.visible ?? ''))
-        .replace('{index}', String(options?.values?.index ?? '')),
+        .replace('{index}', String(options?.values?.index ?? ''))
+        .replace('{rating}', String(options?.values?.rating ?? ''))
+        .replace('{minutes}', String(options?.values?.minutes ?? '')),
     ),
   };
 });
@@ -170,6 +191,7 @@ const session: AgentSessionResponseDto = {
       setCover: true,
       tagAssets: true,
       updateDetails: true,
+      updateAssetMetadata: true,
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
     },
@@ -188,6 +210,7 @@ const planId = '00000000-0000-4000-8000-000000000100';
 const createId = '00000000-0000-4000-8000-000000000101';
 const addId = '00000000-0000-4000-8000-000000000102';
 const existingId = '00000000-0000-4000-8000-000000000103';
+const metadataId = '00000000-0000-4000-8000-000000000104';
 const assetA = '00000000-0000-4000-8000-000000000201';
 const assetB = '00000000-0000-4000-8000-000000000202';
 
@@ -297,6 +320,40 @@ const partiallyAppliedPlan = (): AgentOperationPlanResponseDto => ({
     error: index === 2 ? 'Album owner changed before apply' : null,
   })),
 });
+
+const metadataPlan = () =>
+  plan([
+    operation({
+      id: metadataId,
+      type: AgentOperationType.AssetUpdateMetadata,
+      summary: 'Set metadata',
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds: [assetA, assetB],
+      payload: { description: 'Berlin weekend', latitude: 52.52, longitude: 13.405 },
+      reviewMetadata: {
+        assetMetadata: {
+          fields: [
+            {
+              key: 'description',
+              label: 'Description',
+              previousValues: [{ assetId: assetA, value: 'Old caption', valueKind: 'known' }],
+              proposedValue: 'Berlin weekend',
+              proposedValueKind: 'known',
+            },
+            {
+              key: 'location',
+              label: 'Location',
+              previousValues: [{ assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' }],
+              proposedValue: '52.52, 13.405',
+              proposedValueKind: 'known',
+            },
+          ],
+          sampleAssetIds: [assetA],
+          warnings: [],
+        },
+      },
+    } as any),
+  ]);
 
 const httpError = (statusCode: number, message: string) =>
   ({
@@ -727,6 +784,62 @@ describe('AgentOperationPlanReviewPanel', () => {
         operationIds: [createId, addId, existingId],
         itemSelections: {
           [addId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+        },
+        planRevision: 1,
+      },
+    });
+  });
+
+  it('publishes and applies sparse item selections for metadata updates', async () => {
+    sdkMock.getCurrentOperationPlan.mockResolvedValue(metadataPlan());
+    sdkMock.applyApprovedOperations.mockResolvedValue({
+      status: AgentOperationApplyStatus.Applied,
+      plan: {
+        ...metadataPlan(),
+        status: AgentOperationPlanStatus.Applied,
+        operations: metadataPlan().operations.map((operation) => ({
+          ...operation,
+          status: AgentOperationStatus.Applied,
+          result: { assetIds: [assetA] },
+        })),
+      },
+      appliedOperationIds: [metadataId],
+      skippedOperationIds: [],
+      failedOperationIds: [],
+      summary: 'Applied 1 operation(s), skipped 0, failed 0.',
+    });
+    const onSelectionChange = vi.fn();
+
+    render(AgentOperationPlanReviewPanel, { props: { session, onSelectionChange } });
+
+    const region = await screen.findByRole('region', { name: 'Plan review' });
+    expect(within(region).getByText('Description')).toBeInTheDocument();
+    expect(within(region).getByText('Coordinates will be applied to 2 photos.')).toBeInTheDocument();
+
+    await fireEvent.click(within(region).getByRole('button', { name: 'Change selection' }));
+    const dialog = screen.getByRole('dialog', { name: 'Review photos for Update metadata for 2 photos' });
+    await fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Include photo 2' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Done reviewing' }));
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      planId,
+      planRevision: 1,
+      operationIds: [metadataId],
+      itemSelections: {
+        [metadataId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
+      },
+    });
+    expect(screen.queryByText('Coordinates will be applied to 2 photos.')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply 1 selected' }));
+
+    expect(sdkMock.applyApprovedOperations).toHaveBeenCalledWith({
+      id: session.id,
+      planId,
+      agentOperationPlanApplyRequestDto: {
+        operationIds: [metadataId],
+        itemSelections: {
+          [metadataId]: { itemKind: 'asset', mode: 'allExcept', itemIds: [assetB] },
         },
         planRevision: 1,
       },

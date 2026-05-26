@@ -161,6 +161,18 @@ interface GetByIdsRelations {
   edits?: boolean;
 }
 
+export interface AgentAssetMetadataReviewRow {
+  id: string;
+  exifInfo: {
+    description: string | null;
+    dateTimeOriginal: Date | null;
+    timeZone: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    rating: number | null;
+  } | null;
+}
+
 const distinctLocked = <T extends LockableProperty[] | null>(eb: ExpressionBuilder<DB, 'asset_exif'>, columns: T) =>
   sql<T>`nullif(array(select distinct unnest(${eb.ref('asset_exif.lockedProperties')} || ${columns})), '{}')`;
 
@@ -691,6 +703,34 @@ export class AssetRepository {
       .where('asset.isOffline', '=', false)
       .where('asset.visibility', 'in', agentDirectReadVisibilities)
       .execute();
+  }
+
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  @ChunkedArray()
+  getAgentMetadataReviewByIds(ids: string[]): Promise<AgentAssetMetadataReviewRow[]> {
+    return this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .select((eb) =>
+        jsonObjectFrom(
+          eb
+            .selectFrom('asset_exif')
+            .select([
+              'asset_exif.description',
+              'asset_exif.dateTimeOriginal',
+              'asset_exif.timeZone',
+              'asset_exif.latitude',
+              'asset_exif.longitude',
+              'asset_exif.rating',
+            ])
+            .whereRef('asset_exif.assetId', '=', 'asset.id'),
+        ).as('exifInfo'),
+      )
+      .where('asset.id', '=', anyUuid(ids))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', agentDirectReadVisibilities)
+      .execute() as Promise<AgentAssetMetadataReviewRow[]>;
   }
 
   @GenerateSql({

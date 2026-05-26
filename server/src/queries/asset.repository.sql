@@ -399,6 +399,35 @@ where
   and "asset"."isOffline" = $2
   and "asset"."visibility" in ($3, $4, $5)
 
+-- AssetRepository.getAgentMetadataReviewByIds
+select
+  "asset"."id",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_exif"."description",
+          "asset_exif"."dateTimeOriginal",
+          "asset_exif"."timeZone",
+          "asset_exif"."latitude",
+          "asset_exif"."longitude",
+          "asset_exif"."rating"
+        from
+          "asset_exif"
+        where
+          "asset_exif"."assetId" = "asset"."id"
+      ) as obj
+  ) as "exifInfo"
+from
+  "asset"
+where
+  "asset"."id" = any ($1::uuid[])
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" = $2
+  and "asset"."visibility" in ($3, $4, $5)
+
 -- AssetRepository.searchAgentMetadata
 select
   "asset"."id",

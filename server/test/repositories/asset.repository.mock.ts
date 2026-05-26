@@ -21,6 +21,7 @@ export const newAssetRepositoryMock = (): Mocked<RepositoryInterface<AssetReposi
     getAgentLockedIds: vitest.fn().mockResolvedValue(new Set()),
     getAgentReadableIds: vitest.fn().mockImplementation((ids: Set<string>) => Promise.resolve(new Set(ids))),
     getAgentMetadataByIds: vitest.fn().mockResolvedValue([]),
+    getAgentMetadataReviewByIds: vitest.fn().mockResolvedValue([]),
     searchAgentMetadata: vitest.fn().mockResolvedValue({ assets: [], nextPage: null }),
     getAgentPreviewReferencesByIds: vitest.fn().mockResolvedValue([]),
     getAgentOriginalReferencesByIds: vitest.fn().mockResolvedValue([]),

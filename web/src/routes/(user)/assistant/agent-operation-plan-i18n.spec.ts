@@ -55,4 +55,32 @@ describe('agent operation plan i18n', () => {
       }),
     );
   });
+
+  it('defines operation type labels used by metadata plans', () => {
+    expect(en).toEqual(
+      expect.objectContaining({
+        assistant_operation_metadata_column_current: 'Current',
+        assistant_operation_metadata_column_field: 'Field',
+        assistant_operation_metadata_column_proposed: 'Proposed',
+        assistant_operation_metadata_field_date_shift: 'Date shift',
+        assistant_operation_metadata_field_date_taken: 'Date taken',
+        assistant_operation_metadata_field_description: 'Description',
+        assistant_operation_metadata_field_location: 'Location',
+        assistant_operation_metadata_field_rating: 'Rating',
+        assistant_operation_metadata_field_time_zone: 'Time zone',
+        assistant_operation_metadata_field_unknown: 'Unknown field',
+        assistant_operation_metadata_value_clear: 'Clear',
+        assistant_operation_metadata_value_clear_rating: 'Clear rating',
+        assistant_operation_metadata_value_empty: 'Empty',
+        assistant_operation_metadata_value_rating: '{rating, plural, one {# star} other {# stars}}',
+        assistant_operation_metadata_value_shift_capture_time: 'Shift capture time',
+        assistant_operation_metadata_value_shift_minutes: 'Shift {minutes, plural, one {# minute} other {# minutes}}',
+        assistant_operation_metadata_value_unavailable: 'Unavailable',
+        assistant_operation_metadata_value_unrated: 'Unrated',
+        assistant_operation_metadata_warning_coordinates_multi:
+          'Coordinates will be applied to {count, plural, one {# photo} other {# photos}}.',
+        assistant_operation_type_asset_update_metadata: 'Update metadata',
+      }),
+    );
+  });
 });
