@@ -63,7 +63,6 @@ Add service tests proving:
 
 3. Keep the value type intentionally JSON-simple. Dates can be ISO strings, coordinates can be formatted as a single field value such as `"52.52, 13.405"`, and clears use `null` with a clear/empty kind.
 4. Add an async `mapPlanForUserReview()` path used by:
-
    - `getCurrentPlan()`
    - `getAppliedPlans()`
    - `applyApprovedOperations()`
@@ -72,7 +71,6 @@ Add service tests proving:
 6. Add a bounded metadata sample size, using the same representative assets already used by the UI where possible. Five assets is enough for before/after review and limits query size.
 7. Fetch only needed review fields for sampled assets via a new narrow repository helper or a direct existing repository helper if available. Prefer a narrow helper so adding `description` and `timeZone` does not broaden MCP read-tool metadata exposure.
 8. Review field mapping:
-
    - `description`: previous `asset_exif.description`; empty string/null are shown as empty.
    - `rating`: previous `asset_exif.rating`; `null` proposed value is a clear.
    - `dateTimeOriginal`: previous `asset_exif.dateTimeOriginal`; proposed ISO string is known.
@@ -84,9 +82,10 @@ Add service tests proving:
 10. Persist the pre-apply review snapshot in each applied metadata operation result, for example as `result.reviewMetadata`, so `getAppliedPlans()` can render history without re-reading current metadata.
 11. Add server-side metadata planning summary support:
 
-   - `createPlanningAudit()` should produce request summaries such as `Store 1 proposed metadata operation(s)` when all operations are `asset.updateMetadata`.
-   - Mixed or non-metadata asset batch plans should keep generic/non-metadata wording.
-   - This gives the web activity/approval detection a reliable production signal instead of relying only on test fixture text.
+- `createPlanningAudit()` should produce request summaries such as `Store 1 proposed metadata operation(s)` when all operations are `asset.updateMetadata`.
+- Mixed or non-metadata asset batch plans should keep generic/non-metadata wording.
+- This gives the web activity/approval detection a reliable production signal instead of relying only on test fixture text.
+
 12. Server may include a general coordinate warning marker, but the final visible warning is computed in the web model from current selected asset count so it updates after user deselection.
 
 ## Phase 2: Web Model Formatting
@@ -116,7 +115,6 @@ Add service tests proving:
 4. Add payload-only fallback for changed field names if a test fixture or older server response lacks `reviewMetadata`; previous values should be displayed as unavailable rather than crashing.
 5. Add type label key `assistant_operation_type_asset_update_metadata`.
 6. Add metadata-specific summaries:
-
    - proposed/pending: `Update metadata for N photos`
    - applied: `Updated metadata for N photos`
 
@@ -146,7 +144,6 @@ Add service tests proving:
 1. In `agent-plan-operation-row.svelte`, render a metadata review block when `item.metadataReview` exists.
 2. Place the metadata changed-field block immediately after status/errors/blocked messages and before inline field editors, selection controls, and technical details. The changed fields are the primary review content for this operation type.
 3. Use a compact table/list:
-
    - field label
    - current value sample
    - proposed value
