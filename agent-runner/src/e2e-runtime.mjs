@@ -333,6 +333,7 @@ const parseHighlightPrompt = (prompt) => {
     requestedCount,
     effectiveCount: requestedCount ?? defaultHighlightCount,
     usedDefaultCount: requestedCount === null,
+    usesCurrentAlbum: /\bthis album\b/i.test(prompt),
   };
 };
 
@@ -400,12 +401,13 @@ const parseCoverPrompt = (prompt) => {
     return null;
   }
 
+  const usesCurrentAlbum = /\bthis album\b/i.test(prompt);
   const namedAlbum = prompt.match(/\bcover\s+(?:for|from)\s+([A-Za-z][A-Za-z0-9 '&-]*?)\.?$/i);
-  if (namedAlbum) {
-    return { targetAlbumName: stripTrailingSourcePhrase(namedAlbum[1]) };
+  if (namedAlbum && !usesCurrentAlbum) {
+    return { targetAlbumName: stripTrailingSourcePhrase(namedAlbum[1]), usesCurrentAlbum };
   }
 
-  return { targetAlbumName: null };
+  return { targetAlbumName: null, usesCurrentAlbum };
 };
 
 const highlightCandidateCount = (result, assetIds, candidateLimit = metadataHighlightCandidateLimit) => {
@@ -572,6 +574,17 @@ const resolveExistingAlbum = async (client, targetAlbumName) => {
   return { status: 'resolved', album: albumResult.album };
 };
 
+const currentAlbumIdFromContext = (entry) => {
+  const albumId = entry.initialContext?.albumId;
+  return typeof albumId === 'string' && albumId.trim() ? albumId : null;
+};
+
+const readAlbumById = async (client, albumId) => {
+  const albumResult = await client.call('readAlbum', { albumId });
+  assertMcpResultSuccess(albumResult, 'Album read');
+  return { status: 'resolved', album: albumResult.album };
+};
+
 const proposeMetadataHighlightAlbumAdd = async (client, album, selectedAssetIds, criteriaMode = 'metadata-only') => {
   const criteriaSummary = highlightCriteriaSummary(criteriaMode);
   const operationLabel = highlightOperationLabel(criteriaMode);
@@ -645,6 +658,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         model: body.model,
         mcpGateway: body.mcpGateway,
         supportsImageInput: sessionSupportsImageInput(body),
+        initialContext: body.initialContext ?? {},
       });
 
       return {
@@ -691,7 +705,8 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
 
       const coverPrompt = parseCoverPrompt(prompt);
       if (coverPrompt) {
-        if (!coverPrompt.targetAlbumName) {
+        const contextAlbumId = currentAlbumIdFromContext(entry);
+        if (!coverPrompt.targetAlbumName && !(coverPrompt.usesCurrentAlbum && contextAlbumId)) {
           yield completedEvent({
             gallerySessionId,
             runnerSessionId,
@@ -701,7 +716,9 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         }
 
         try {
-          const resolution = await resolveExistingAlbum(client, coverPrompt.targetAlbumName);
+          const resolution = coverPrompt.usesCurrentAlbum
+            ? await readAlbumById(client, contextAlbumId)
+            : await resolveExistingAlbum(client, coverPrompt.targetAlbumName);
           if (resolution.status !== 'resolved') {
             yield completedEvent({
               gallerySessionId,
@@ -803,7 +820,19 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           return;
         }
 
-        if (!highlightPrompt.filters) {
+        const contextAlbumId = currentAlbumIdFromContext(entry);
+        if (highlightPrompt.usesCurrentAlbum) {
+          if (!contextAlbumId) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: 'I need the current album context before I suggest highlights from this album.',
+            });
+            return;
+          }
+        }
+
+        if (!highlightPrompt.filters && !highlightPrompt.usesCurrentAlbum) {
           yield completedEvent({
             gallerySessionId,
             runnerSessionId,
@@ -826,6 +855,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         try {
           let targetAlbum = null;
           let existingIds = new Set();
+          let sourceAlbumAssetIds = null;
 
           if (planIntent?.kind === 'add-to-album') {
             const resolution = await resolveExistingAlbum(client, planIntent.targetAlbumName);
@@ -842,7 +872,15 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
             existingIds = new Set(Array.isArray(targetAlbum.assetIds) ? targetAlbum.assetIds : []);
           }
 
-          const { assetIds, candidateCount } = await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
+          if (highlightPrompt.usesCurrentAlbum) {
+            const resolution = await readAlbumById(client, contextAlbumId);
+            sourceAlbumAssetIds = Array.isArray(resolution.album?.assetIds) ? resolution.album.assetIds : [];
+          }
+
+          const candidateResult = sourceAlbumAssetIds
+            ? { assetIds: sourceAlbumAssetIds, candidateCount: sourceAlbumAssetIds.length }
+            : await readHighlightCandidates(client, highlightPrompt, planCandidateLimit);
+          const { assetIds, candidateCount } = candidateResult;
           if (candidateCount === 0) {
             yield completedEvent({
               gallerySessionId,
