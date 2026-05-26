@@ -24,6 +24,7 @@
 ## Task 1: Capability Matrix Regression
 
 **Files:**
+
 - Modify: `server/src/services/agent-capability-matrix.spec.ts`
 
 - [ ] **Step 1: Write the failing docs regression**
@@ -34,9 +35,7 @@ Add this test inside `describe('Pi agent capability matrix', ...)`:
 it('documents explicit batch asset metadata edits as solid while place-name geocoding remains missing', () => {
   const markdown = readMatrix();
 
-  const metadataEditRow = markdown
-    .split('\n')
-    .find((line) => line.includes('Batch asset metadata edits'));
+  const metadataEditRow = markdown.split('\n').find((line) => line.includes('Batch asset metadata edits'));
   expect(metadataEditRow).toBeDefined();
   expect(metadataEditRow).toContain('Solid now');
   expect(metadataEditRow).toContain('asset.updateMetadata');
@@ -79,6 +78,7 @@ Expected: FAIL because the matrix still has no `Batch asset metadata edits` row 
 ## Task 2: Matrix Update
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md`
 
 - [ ] **Step 1: Update the current capability surface**
@@ -102,7 +102,7 @@ In **Current reviewable operation types**, replace the asset line with:
 Add this row after `Add or remove tags`:
 
 ```md
-| Batch asset metadata edits       | “Set the description on the 5 newest photos to Test batch.”                 | Solid now for explicit supported fields   | Search or inspect the target set, then propose `asset.updateMetadata` through `proposeAssetBatchFromSearch` or `proposeAlbumOperations`. Supports description, rating, date/time, timezone, and explicit latitude/longitude. | Shows field-level before/after metadata, selected count, representative assets, and coordinate warnings before apply; asks for coordinates instead of guessing place names. | Description update; clear rating; absolute date/time; relative timestamp shift; timezone update; explicit coordinates; place name asks for coordinates; latitude without longitude asks for longitude; apply keeps chat open. |
+| Batch asset metadata edits | “Set the description on the 5 newest photos to Test batch.” | Solid now for explicit supported fields | Search or inspect the target set, then propose `asset.updateMetadata` through `proposeAssetBatchFromSearch` or `proposeAlbumOperations`. Supports description, rating, date/time, timezone, and explicit latitude/longitude. | Shows field-level before/after metadata, selected count, representative assets, and coordinate warnings before apply; asks for coordinates instead of guessing place names. | Description update; clear rating; absolute date/time; relative timestamp shift; timezone update; explicit coordinates; place name asks for coordinates; latitude without longitude asks for longitude; apply keeps chat open. |
 ```
 
 - [ ] **Step 3: Update the missing-tool section**
@@ -110,7 +110,7 @@ Add this row after `Add or remove tags`:
 In **Needs New MCP Tool**, replace:
 
 ```md
-| Metadata edits                    | No date/time/location/title/description edit operations.           | `asset.updateMetadata` with field-level preview and validation.                |
+| Metadata edits | No date/time/location/title/description edit operations. | `asset.updateMetadata` with field-level preview and validation. |
 ```
 
 with:
@@ -134,6 +134,7 @@ Append these items to **Recommended Product Smoke Prompts** after item 17:
 ## Task 3: Verification And Commit
 
 **Files:**
+
 - Modified test and matrix docs from Tasks 1-2.
 
 - [ ] **Step 1: Run focused docs regression**

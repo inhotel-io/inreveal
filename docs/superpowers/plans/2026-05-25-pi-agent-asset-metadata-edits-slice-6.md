@@ -31,6 +31,7 @@
 ## Task 1: Prompt Guidance
 
 **Files:**
+
 - Modify: `server/src/services/agent-mcp-prompt.service.spec.ts`
 - Modify: `server/src/services/agent-mcp-prompt.service.ts`
 - Modify: `agent-runner/src/generated/gallery-mcp-prompt-cheat-sheet.mjs`
@@ -127,6 +128,7 @@ Expected: PASS. The generated `agent-runner/src/generated/gallery-mcp-prompt-che
 ## Task 2: Deterministic E2E Runtime Metadata Prompts
 
 **Files:**
+
 - Modify: `agent-runner/src/e2e-runtime.test.mjs`
 - Modify: `agent-runner/src/e2e-runtime.mjs`
 
@@ -297,7 +299,10 @@ const parseMetadataPrompt = (prompt) => {
   }
 
   if (/latitude\s+-?\d+(?:\.\d+)?/i.test(prompt) && !/longitude\s+-?\d+(?:\.\d+)?/i.test(prompt)) {
-    return { kind: 'clarify', text: 'Please provide longitude too. Location metadata needs both latitude and longitude.' };
+    return {
+      kind: 'clarify',
+      text: 'Please provide longitude too. Location metadata needs both latitude and longitude.',
+    };
   }
 
   if (/set these photos to\s+[a-z][a-z\s.'-]*\.?$/i.test(prompt)) {
@@ -326,6 +331,7 @@ Expected: PASS.
 ## Task 3: Real Server Assistant Flow
 
 **Files:**
+
 - Modify: `server/src/services/agent-runner-flow.integration.spec.ts`
 
 - [ ] **Step 1: Write failing integration tests**
@@ -344,9 +350,9 @@ Add two tests inside `describe('Pi agent runner flow harness', ...)`:
 }
 ```
 
-   - Assert session reaches `WaitingForPlanReview`.
-   - Assert one proposed operation exists with type `asset.updateMetadata`, payload `{ description: 'Test batch' }`, `targetKind: asset_batch`, and the materialized asset ids.
-   - Set asset access mocks before appending the prompt:
+- Assert session reaches `WaitingForPlanReview`.
+- Assert one proposed operation exists with type `asset.updateMetadata`, payload `{ description: 'Test batch' }`, `targetKind: asset_batch`, and the materialized asset ids.
+- Set asset access mocks before appending the prompt:
 
 ```ts
 harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
@@ -355,8 +361,8 @@ harness.accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set())
 harness.assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
 ```
 
-   - Apply the plan with `operationPlanService.applyApprovedOperations(...)`.
-   - Assert `assetService.updateAll` was called with ids and description, the session is back to `Running`, and a follow-up user message can be appended and answered.
+- Apply the plan with `operationPlanService.applyApprovedOperations(...)`.
+- Assert `assetService.updateAll` was called with ids and description, the session is back to `Running`, and a follow-up user message can be appended and answered.
 
 2. `asks for coordinates for a place-name metadata prompt without creating a plan`
    - Configure runner to complete with the expected coordinate clarification text and not call MCP.
@@ -396,23 +402,28 @@ claimCurrentForApply = vi.fn((sessionId: string, planId: string) => {
   return Promise.resolve(plan);
 });
 
-completeApply = vi.fn((planId: string, updates: Array<{ id: string; status: AgentOperationStatus; result: unknown; error: string | null }>) => {
-  const plan = this.plans.find((candidate) => candidate.id === planId);
-  if (!plan) {
-    throw new Error(`Missing plan ${planId}`);
-  }
-  for (const update of updates) {
-    const operation = plan.operations.find((candidate) => candidate.id === update.id);
-    if (operation) {
-      operation.status = update.status;
-      operation.result = update.result as never;
-      operation.error = update.error;
-      operation.updatedAt = now();
+completeApply = vi.fn(
+  (
+    planId: string,
+    updates: Array<{ id: string; status: AgentOperationStatus; result: unknown; error: string | null }>,
+  ) => {
+    const plan = this.plans.find((candidate) => candidate.id === planId);
+    if (!plan) {
+      throw new Error(`Missing plan ${planId}`);
     }
-  }
-  plan.updatedAt = now();
-  return Promise.resolve(plan);
-});
+    for (const update of updates) {
+      const operation = plan.operations.find((candidate) => candidate.id === update.id);
+      if (operation) {
+        operation.status = update.status;
+        operation.result = update.result as never;
+        operation.error = update.error;
+        operation.updatedAt = now();
+      }
+    }
+    plan.updatedAt = now();
+    return Promise.resolve(plan);
+  },
+);
 ```
 
 In `setup()`:
@@ -456,6 +467,7 @@ Expected: PASS.
 ## Task 4: Full Verification And Commit
 
 **Files:**
+
 - All files modified in Tasks 1-3.
 
 - [ ] **Step 1: Run targeted suites**
