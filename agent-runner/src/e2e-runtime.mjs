@@ -299,7 +299,13 @@ const parseMetadataPrompt = (prompt) => {
 
 const defaultHighlightCount = 10;
 const metadataHighlightCandidateLimit = 500;
+const previewHighlightCandidateLimit = 250;
 const highlightMetadataFields = ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
+
+const sessionSupportsImageInput = (body) =>
+  body.initialContext?.providerSupportsImages === true ||
+  body.credential?.supportsImageInput === true ||
+  body.credential?.capabilities?.imageInput === true;
 
 const parseHighlightPrompt = (prompt) => {
   if (!/\b(best|highlights?)\b/i.test(prompt)) {
@@ -389,7 +395,20 @@ const parseHighlightPlanIntent = (prompt) => {
   return null;
 };
 
-const highlightCandidateCount = (result, assetIds) => {
+const parseCoverPrompt = (prompt) => {
+  if (!/\bcover\b/i.test(prompt)) {
+    return null;
+  }
+
+  const namedAlbum = prompt.match(/\bcover\s+(?:for|from)\s+([A-Za-z][A-Za-z0-9 '&-]*?)\.?$/i);
+  if (namedAlbum) {
+    return { targetAlbumName: stripTrailingSourcePhrase(namedAlbum[1]) };
+  }
+
+  return { targetAlbumName: null };
+};
+
+const highlightCandidateCount = (result, assetIds, candidateLimit = metadataHighlightCandidateLimit) => {
   if (typeof result.totalCount === 'number') {
     return result.totalCount;
   }
@@ -402,8 +421,12 @@ const highlightCandidateCount = (result, assetIds) => {
     return result.selectionHandle.assetCount;
   }
 
-  if (result.hasMore === true && (result.returnedCount ?? assetIds.length) >= metadataHighlightCandidateLimit) {
-    return metadataHighlightCandidateLimit + 1;
+  if (
+    result.hasMore === true &&
+    candidateLimit >= previewHighlightCandidateLimit &&
+    (result.returnedCount ?? assetIds.length) >= candidateLimit
+  ) {
+    return candidateLimit + 1;
   }
 
   if (typeof result.returnedCount === 'number') {
@@ -430,7 +453,7 @@ const readHighlightCandidates = async (client, highlightPrompt, limit = highligh
   const assetIds = compactAssetIdsFromResult(result);
   return {
     assetIds,
-    candidateCount: highlightCandidateCount(result, assetIds),
+    candidateCount: highlightCandidateCount(result, assetIds, limit),
   };
 };
 
@@ -446,6 +469,21 @@ const readHighlightMetadata = async (client, assetIds) => {
   }
 
   return result.assets;
+};
+
+const readHighlightPreviews = async (client, assetIds) => {
+  const result = await client.call('readAssetPreviews', { assetIds });
+  if (result.status === 'denied' || result.status === 'unavailable') {
+    return { status: 'unavailable', reason: result.status };
+  }
+
+  assertMcpResultSuccess(result, 'Asset preview read');
+
+  if (!Array.isArray(result.previews)) {
+    throw new Error('Asset preview read did not return previews');
+  }
+
+  return { status: 'available', previews: result.previews };
 };
 
 const assetRating = (asset) => {
@@ -473,12 +511,24 @@ const selectMetadataHighlights = (assets, requestedCount, excludedAssetIds = new
     .slice(0, requestedCount)
     .map(({ asset }) => asset.id);
 
-const metadataCriteriaSummary =
-  'metadata-only suggested highlights prioritized existing favorites, ratings, dates, tags, and location; no previews were inspected';
+const highlightCriteriaSummary = (mode) =>
+  mode === 'preview-assisted'
+    ? 'preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location'
+    : 'metadata-only suggested highlights prioritized existing favorites, ratings, dates, tags, and location; no previews were inspected';
 
-const proposeMetadataHighlightAlbum = async (client, intent, selectedAssetIds) => {
+const highlightOperationLabel = (mode) =>
+  mode === 'preview-assisted' ? 'preview-assisted suggested highlights' : 'metadata-only suggested highlights';
+
+const highlightAlbumDescription = (mode) =>
+  mode === 'preview-assisted'
+    ? 'Suggested highlights selected from preview and metadata signals.'
+    : 'Suggested highlights selected from metadata signals. No previews were inspected.';
+
+const proposeMetadataHighlightAlbum = async (client, intent, selectedAssetIds, criteriaMode = 'metadata-only') => {
+  const criteriaSummary = highlightCriteriaSummary(criteriaMode);
+  const operationLabel = highlightOperationLabel(criteriaMode);
   await client.call('proposeAlbumOperations', {
-    summary: `Create ${intent.albumName} with ${selectedAssetIds.length} ${metadataCriteriaSummary}.`,
+    summary: `Create ${intent.albumName} with ${selectedAssetIds.length} ${criteriaSummary}.`,
     operations: [
       {
         type: 'album.create',
@@ -489,12 +539,12 @@ const proposeMetadataHighlightAlbum = async (client, intent, selectedAssetIds) =
         enabled: true,
         payload: {
           albumName: intent.albumName,
-          description: 'Suggested highlights selected from metadata signals. No previews were inspected.',
+          description: highlightAlbumDescription(criteriaMode),
         },
       },
       {
         type: 'album.addAssets',
-        summary: `Add ${selectedAssetIds.length} metadata-only suggested highlights to ${intent.albumName}.`,
+        summary: `Add ${selectedAssetIds.length} ${operationLabel} to ${intent.albumName}.`,
         targetKind: 'new_album',
         temporaryTargetId: intent.temporaryTargetId,
         assetIds: selectedAssetIds,
@@ -522,13 +572,15 @@ const resolveExistingAlbum = async (client, targetAlbumName) => {
   return { status: 'resolved', album: albumResult.album };
 };
 
-const proposeMetadataHighlightAlbumAdd = async (client, album, selectedAssetIds) => {
+const proposeMetadataHighlightAlbumAdd = async (client, album, selectedAssetIds, criteriaMode = 'metadata-only') => {
+  const criteriaSummary = highlightCriteriaSummary(criteriaMode);
+  const operationLabel = highlightOperationLabel(criteriaMode);
   await client.call('proposeAlbumOperations', {
-    summary: `Add ${selectedAssetIds.length} ${metadataCriteriaSummary} to ${album.albumName}.`,
+    summary: `Add ${selectedAssetIds.length} ${criteriaSummary} to ${album.albumName}.`,
     operations: [
       {
         type: 'album.addAssets',
-        summary: `Add ${selectedAssetIds.length} metadata-only suggested highlights to ${album.albumName}.`,
+        summary: `Add ${selectedAssetIds.length} ${operationLabel} to ${album.albumName}.`,
         targetKind: 'existing_album',
         targetId: album.id,
         assetIds: selectedAssetIds,
@@ -540,18 +592,39 @@ const proposeMetadataHighlightAlbumAdd = async (client, album, selectedAssetIds)
   });
 };
 
-const proposeMetadataHighlightFavorites = async (client, selectedAssetIds) => {
+const proposeMetadataHighlightFavorites = async (client, selectedAssetIds, criteriaMode = 'metadata-only') => {
+  const criteriaSummary = highlightCriteriaSummary(criteriaMode);
+  const operationLabel = highlightOperationLabel(criteriaMode);
   await client.call('proposeAlbumOperations', {
-    summary: `Favorite ${selectedAssetIds.length} ${metadataCriteriaSummary}.`,
+    summary: `Favorite ${selectedAssetIds.length} ${criteriaSummary}.`,
     operations: [
       {
         type: 'asset.setFavorite',
-        summary: `Favorite ${selectedAssetIds.length} metadata-only suggested highlights.`,
+        summary: `Favorite ${selectedAssetIds.length} ${operationLabel}.`,
         targetKind: 'asset_batch',
         assetIds: selectedAssetIds,
         riskLevel: 'low',
         enabled: true,
         payload: { favorite: true },
+      },
+    ],
+  });
+};
+
+const proposeAlbumCover = async (client, album, assetId, criteriaMode) => {
+  const criteriaSummary = highlightCriteriaSummary(criteriaMode);
+  await client.call('proposeAlbumOperations', {
+    summary: `Set ${album.albumName} cover using one ${criteriaSummary}.`,
+    operations: [
+      {
+        type: 'album.setCover',
+        summary: `Set ${album.albumName} cover to a suggested highlight.`,
+        targetKind: 'existing_album',
+        targetId: album.id,
+        assetIds: [assetId],
+        riskLevel: 'low',
+        enabled: true,
+        payload: {},
       },
     ],
   });
@@ -571,6 +644,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         gallerySessionId: body.gallerySessionId,
         model: body.model,
         mcpGateway: body.mcpGateway,
+        supportsImageInput: sessionSupportsImageInput(body),
       });
 
       return {
@@ -615,6 +689,91 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         return;
       }
 
+      const coverPrompt = parseCoverPrompt(prompt);
+      if (coverPrompt) {
+        if (!coverPrompt.targetAlbumName) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'Please name the album before I suggest a cover.',
+          });
+          return;
+        }
+
+        try {
+          const resolution = await resolveExistingAlbum(client, coverPrompt.targetAlbumName);
+          if (resolution.status !== 'resolved') {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: `I need one matching album named ${coverPrompt.targetAlbumName} before suggesting a cover. Which album should I use?`,
+            });
+            return;
+          }
+
+          const albumAssetIds = Array.isArray(resolution.album.assetIds) ? resolution.album.assetIds : [];
+          if (albumAssetIds.length === 0) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: `I found no assets in ${resolution.album.albumName}, so I did not create a cover plan.`,
+            });
+            return;
+          }
+
+          const usePreviewAssistedCover = entry.supportsImageInput;
+          if (usePreviewAssistedCover && albumAssetIds.length > previewHighlightCandidateLimit) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: 'That album has too many assets for preview-assisted cover selection. Please narrow the source or choose a smaller album.',
+            });
+            return;
+          }
+
+          const metadataAssets = await readHighlightMetadata(client, albumAssetIds);
+          let criteriaMode = 'metadata-only';
+          let previewUnavailable = false;
+          if (usePreviewAssistedCover) {
+            const previewResult = await readHighlightPreviews(client, albumAssetIds);
+            if (previewResult.status === 'available') {
+              criteriaMode = 'preview-assisted';
+            } else {
+              previewUnavailable = true;
+            }
+          }
+
+          const [selectedCoverId] = selectMetadataHighlights(metadataAssets, 1);
+          if (!selectedCoverId) {
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: `I found no eligible assets in ${resolution.album.albumName}, so I did not create a cover plan.`,
+            });
+            return;
+          }
+
+          await proposeAlbumCover(client, resolution.album, selectedCoverId, criteriaMode);
+          const previewFallbackText = previewUnavailable
+            ? ' Previews were unavailable, so I used metadata-only criteria.'
+            : '';
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: `I proposed a ${criteriaMode} cover suggestion for ${resolution.album.albumName}.${previewFallbackText} Review the plan before applying it.`,
+          });
+          return;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: `Gallery could not inspect cover candidates: ${redactGatewayToken(message, gateway)}`,
+          });
+          return;
+        }
+      }
+
       const highlightPrompt = parseHighlightPrompt(prompt);
       if (highlightPrompt) {
         if (!highlightPrompt.bounded) {
@@ -654,7 +813,15 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         }
 
         const planIntent = parseHighlightPlanIntent(prompt);
-        const planCandidateLimit = planIntent ? metadataHighlightCandidateLimit : highlightPrompt.effectiveCount;
+        const usePreviewAssistedCuration = Boolean(planIntent && entry.supportsImageInput);
+        const planCandidateLimit = planIntent
+          ? usePreviewAssistedCuration
+            ? previewHighlightCandidateLimit
+            : metadataHighlightCandidateLimit
+          : highlightPrompt.effectiveCount;
+        const activeCandidateLimit = usePreviewAssistedCuration
+          ? previewHighlightCandidateLimit
+          : metadataHighlightCandidateLimit;
 
         try {
           let targetAlbum = null;
@@ -685,17 +852,33 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
             return;
           }
 
-          if (candidateCount > metadataHighlightCandidateLimit) {
+          if (candidateCount > activeCandidateLimit) {
             yield completedEvent({
               gallerySessionId,
               runnerSessionId,
-              text: 'That source has too many candidate assets for this read-only highlight pass. Please narrow the album, space, date range, search/filter, or selected photos.',
+              text: usePreviewAssistedCuration
+                ? 'That source has too many candidate assets for preview-assisted curation. Please narrow the album, space, date range, search/filter, or selected photos.'
+                : 'That source has too many candidate assets for this metadata-only highlight pass. Please narrow the album, space, date range, search/filter, or selected photos.',
             });
             return;
           }
 
-          if (planIntent?.kind === 'add-to-album') {
+          const readCurationContext = async () => {
             const metadataAssets = await readHighlightMetadata(client, assetIds);
+            if (!usePreviewAssistedCuration) {
+              return { metadataAssets, criteriaMode: 'metadata-only', previewUnavailable: false };
+            }
+
+            const previewResult = await readHighlightPreviews(client, assetIds);
+            if (previewResult.status !== 'available') {
+              return { metadataAssets, criteriaMode: 'metadata-only', previewUnavailable: true };
+            }
+
+            return { metadataAssets, criteriaMode: 'preview-assisted', previewUnavailable: false };
+          };
+
+          if (planIntent?.kind === 'add-to-album') {
+            const { metadataAssets, criteriaMode, previewUnavailable } = await readCurationContext();
             const selectedAssetIds = selectMetadataHighlights(metadataAssets, highlightPrompt.effectiveCount, existingIds);
             if (selectedAssetIds.length === 0) {
               yield completedEvent({
@@ -706,20 +889,23 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
               return;
             }
 
-            await proposeMetadataHighlightAlbumAdd(client, targetAlbum, selectedAssetIds);
+            await proposeMetadataHighlightAlbumAdd(client, targetAlbum, selectedAssetIds, criteriaMode);
             const excludedCount = assetIds.filter((id) => existingIds.has(id)).length;
             const excludedText =
               excludedCount > 0 ? ` I excluded ${excludedCount} already in ${targetAlbum.albumName}.` : '';
+            const previewFallbackText = previewUnavailable
+              ? ' Previews were unavailable, so I used metadata-only criteria.'
+              : '';
             yield completedEvent({
               gallerySessionId,
               runnerSessionId,
-              text: `I proposed ${selectedAssetIds.length} metadata-only suggested highlights for ${targetAlbum.albumName}.${excludedText} Review the plan before applying it.`,
+              text: `I proposed ${selectedAssetIds.length} ${criteriaMode} suggested highlights for ${targetAlbum.albumName}.${excludedText}${previewFallbackText} Review the plan before applying it.`,
             });
             return;
           }
 
           if (planIntent?.kind === 'favorite') {
-            const metadataAssets = await readHighlightMetadata(client, assetIds);
+            const { metadataAssets, criteriaMode, previewUnavailable } = await readCurationContext();
             const selectedAssetIds = selectMetadataHighlights(metadataAssets, highlightPrompt.effectiveCount);
             if (selectedAssetIds.length === 0) {
               yield completedEvent({
@@ -730,17 +916,20 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
               return;
             }
 
-            await proposeMetadataHighlightFavorites(client, selectedAssetIds);
+            await proposeMetadataHighlightFavorites(client, selectedAssetIds, criteriaMode);
+            const previewFallbackText = previewUnavailable
+              ? ' Previews were unavailable, so I used metadata-only criteria.'
+              : '';
             yield completedEvent({
               gallerySessionId,
               runnerSessionId,
-              text: `I proposed favorite operations for ${selectedAssetIds.length} metadata-only suggested highlights. Review the plan before applying it.`,
+              text: `I proposed favorite operations for ${selectedAssetIds.length} ${criteriaMode} suggested highlights.${previewFallbackText} Review the plan before applying it.`,
             });
             return;
           }
 
           if (planIntent?.kind === 'create-album') {
-            const metadataAssets = await readHighlightMetadata(client, assetIds);
+            const { metadataAssets, criteriaMode, previewUnavailable } = await readCurationContext();
             const selectedAssetIds = selectMetadataHighlights(metadataAssets, highlightPrompt.effectiveCount);
             if (selectedAssetIds.length === 0) {
               yield completedEvent({
@@ -751,15 +940,18 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
               return;
             }
 
-            await proposeMetadataHighlightAlbum(client, planIntent, selectedAssetIds);
+            await proposeMetadataHighlightAlbum(client, planIntent, selectedAssetIds, criteriaMode);
             const shortage =
               selectedAssetIds.length < highlightPrompt.effectiveCount
                 ? ` Only ${selectedAssetIds.length} eligible candidates were available, though you requested ${highlightPrompt.effectiveCount}.`
                 : '';
+            const previewFallbackText = previewUnavailable
+              ? ' Previews were unavailable, so I used metadata-only criteria.'
+              : '';
             yield completedEvent({
               gallerySessionId,
               runnerSessionId,
-              text: `I proposed ${selectedAssetIds.length} suggested highlights using metadata-only criteria. Review the plan before applying it.${shortage}`,
+              text: `I proposed ${selectedAssetIds.length} suggested highlights using ${criteriaMode} criteria. Review the plan before applying it.${shortage}${previewFallbackText}`,
             });
             return;
           }
