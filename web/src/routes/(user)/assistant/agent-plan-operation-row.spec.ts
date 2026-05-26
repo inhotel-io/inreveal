@@ -1,5 +1,6 @@
 import {
   AgentOperationPlanStatus,
+  AgentOperationReviewMetadataValueKind,
   AgentOperationRiskLevel,
   AgentOperationStatus,
   AgentOperationTargetKind,
@@ -196,23 +197,29 @@ const metadataModel = (itemSelectionByOperationId?: OperationItemSelectionState)
               {
                 key: 'description',
                 label: 'Description',
-                previousValues: [{ assetId: assetA, value: 'Old caption', valueKind: 'known' }],
+                previousValues: [
+                  { assetId: assetA, value: 'Old caption', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                ],
                 proposedValue: null,
-                proposedValueKind: 'clear',
+                proposedValueKind: AgentOperationReviewMetadataValueKind.Clear,
               },
               {
                 key: 'rating',
                 label: 'Rating',
-                previousValues: [{ assetId: assetA, value: '4', valueKind: 'known' }],
+                previousValues: [
+                  { assetId: assetA, value: '4', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                ],
                 proposedValue: null,
-                proposedValueKind: 'clear',
+                proposedValueKind: AgentOperationReviewMetadataValueKind.Clear,
               },
               {
                 key: 'location',
                 label: 'Location',
-                previousValues: [{ assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' }],
+                previousValues: [
+                  { assetId: assetA, value: '48.8566, 2.3522', valueKind: AgentOperationReviewMetadataValueKind.Known },
+                ],
                 proposedValue: '52.52, 13.405',
-                proposedValueKind: 'known',
+                proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
               },
             ],
             sampleAssetIds: [assetA],
