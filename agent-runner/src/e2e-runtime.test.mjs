@@ -10,6 +10,46 @@ const lastWeekendHighlightFilters = {
   takenAfter: '2026-05-23T00:00:00.000Z',
   takenBefore: '2026-05-24T23:59:59.999Z',
 };
+const highlightAssetIds = [
+  '00000000-0000-4000-8000-000000000401',
+  '00000000-0000-4000-8000-000000000402',
+  '00000000-0000-4000-8000-000000000403',
+  '00000000-0000-4000-8000-000000000404',
+];
+const familyAlbumId = '00000000-0000-4000-8000-000000000501';
+const familyOwnerId = '00000000-0000-4000-8000-000000000601';
+
+const highlightMetadataAsset = (id, overrides = {}) => ({
+  id,
+  type: 'IMAGE',
+  localDateTime: '2026-05-23T12:00:00.000Z',
+  originalFileName: `${id.slice(-4)}.jpg`,
+  isFavorite: false,
+  exifInfo: { rating: 0, city: 'Porto', country: 'Portugal' },
+  tags: [{ id: '00000000-0000-4000-8000-000000000701', value: 'Trip', color: 'blue' }],
+  ...overrides,
+});
+
+const defaultHighlightMetadataAssets = () => [
+  highlightMetadataAsset(highlightAssetIds[0], { exifInfo: { rating: 3, city: 'Porto', country: 'Portugal' } }),
+  highlightMetadataAsset(highlightAssetIds[1], {
+    isFavorite: true,
+    exifInfo: { rating: 1, city: 'Porto', country: 'Portugal' },
+  }),
+  highlightMetadataAsset(highlightAssetIds[2], { exifInfo: { rating: 5, city: 'Lisbon', country: 'Portugal' } }),
+  highlightMetadataAsset(highlightAssetIds[3], { exifInfo: { rating: 2, city: 'Lisbon', country: 'Portugal' } }),
+];
+
+const familyAlbumSummary = () => ({
+  id: familyAlbumId,
+  albumName: 'Family',
+  description: 'Family album',
+  ownerId: familyOwnerId,
+  assetCount: 1,
+  startDate: '2026-05-20T00:00:00.000Z',
+  endDate: '2026-05-25T00:00:00.000Z',
+  albumThumbnailAssetId: null,
+});
 
 const createSessionBody = (overrides = {}) => ({
   gallerySessionId,
@@ -146,6 +186,88 @@ const successHandlers = () => [
       },
     }),
   },
+];
+
+const metadataHighlightHandlers = ({
+  assetIds = highlightAssetIds,
+  metadataAssets = defaultHighlightMetadataAssets(),
+  totalCount,
+  albums = [],
+  albumAssetIds = [],
+} = {}) => [
+  {
+    name: 'searchAssets',
+    handle: (args, request) => {
+      const returnedAssetIds = assetIds.slice(0, args.limit ?? assetIds.length);
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              summary: `Returned ${returnedAssetIds.length} highlight candidate(s).`,
+              detail: 'ids',
+              assetIds: returnedAssetIds,
+              returnedCount: returnedAssetIds.length,
+              hasMore: assetIds.length > returnedAssetIds.length,
+              nextPage: assetIds.length > returnedAssetIds.length ? '2' : null,
+              ...(totalCount === undefined ? {} : { totalCount }),
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    name: 'readAssetMetadata',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            summary: `Returned metadata for ${args.assetIds.length} asset(s).`,
+            fields: args.fields,
+            assets: args.assetIds.map((id) => metadataAssets.find((asset) => asset.id === id)).filter(Boolean),
+          },
+        },
+      },
+    }),
+  },
+  {
+    name: 'listAlbums',
+    handle: (_args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: { albums },
+        },
+      },
+    }),
+  },
+  {
+    name: 'readAlbum',
+    handle: (args, request) => {
+      const album = albums.find((candidate) => candidate.id === args.albumId);
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              album: {
+                ...album,
+                assetCount: albumAssetIds.length,
+                assetIds: albumAssetIds,
+              },
+            },
+          },
+        },
+      };
+    },
+  },
+  successHandlers()[1],
 ];
 
 describe('e2e runtime', () => {
@@ -317,6 +439,218 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /which .*source|which .*set/i);
     assert.match(events.at(-1).content.blocks[0].text, /\?/);
     assert.match(events.at(-1).content.blocks[0].text, /album|shared space|date range|selected photos/i);
+  });
+
+  it('proposes a metadata-only highlights album with selected asset ids only', async () => {
+    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.deepEqual(calls[0].body.params.arguments, {
+      filters: lastWeekendHighlightFilters,
+      detail: 'ids',
+      limit: 500,
+    });
+    assert.deepEqual(calls[1].body.params.arguments, {
+      assetIds: highlightAssetIds,
+      fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'],
+    });
+
+    const plan = calls[2].body.params.arguments;
+    assert.match(plan.summary, /metadata-only/i);
+    assert.match(plan.summary, /ratings|favorites/i);
+    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+    assert.deepEqual(
+      plan.operations.map((operation) => operation.type),
+      ['album.create', 'album.addAssets'],
+    );
+    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
+    assert.equal(plan.operations[1].targetKind, 'new_album');
+    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
+    assert.deepEqual(plan.operations[1].assetIds, [
+      '00000000-0000-4000-8000-000000000402',
+      '00000000-0000-4000-8000-000000000403',
+    ]);
+    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+    assert.match(events.at(-1).content.blocks[0].text, /2 suggested highlights/i);
+    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('keeps favorite in a requested album name from becoming a favorite operation', async () => {
+    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Favorite Highlights.');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    const plan = calls[2].body.params.arguments;
+    assert.deepEqual(
+      plan.operations.map((operation) => operation.type),
+      ['album.create', 'album.addAssets'],
+    );
+    assert.equal(plan.operations[0].payload.albumName, 'Favorite Highlights');
+    assert.equal(plan.operations[1].temporaryTargetId, 'favorite-highlights');
+  });
+
+  it('parses album names before trailing source phrases in highlight album requests', async () => {
+    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Pick the best 2 photos and make an album called Weekend Highlights from last weekend.');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    const plan = calls[2].body.params.arguments;
+    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
+    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
+  });
+
+  it('adds metadata highlights to an existing album while excluding assets already in the album', async () => {
+    const albums = [familyAlbumSummary()];
+    const { calls, fetchImplementation } = createFetch(
+      metadataHighlightHandlers({
+        albums,
+        albumAssetIds: ['00000000-0000-4000-8000-000000000402'],
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Add 2 highlights from last weekend to Family.');
+
+    assert.equal(
+      calls.map((call) => call.body.params.name).join(','),
+      'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
+    );
+    assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
+    assert.equal(calls[2].body.params.arguments.limit, 500);
+    const plan = calls.at(-1).body.params.arguments;
+    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+    assert.deepEqual(plan.operations, [
+      {
+        type: 'album.addAssets',
+        summary: 'Add 2 metadata-only suggested highlights to Family.',
+        targetKind: 'existing_album',
+        targetId: familyAlbumId,
+        assetIds: [
+          '00000000-0000-4000-8000-000000000403',
+          '00000000-0000-4000-8000-000000000401',
+        ],
+        riskLevel: 'medium',
+        enabled: true,
+        payload: {},
+      },
+    ]);
+    assert.match(events.at(-1).content.blocks[0].text, /excluded 1 already in Family/i);
+  });
+
+  it('parses existing-album names before trailing source phrases in add-highlight requests', async () => {
+    const albums = [familyAlbumSummary()];
+    const { calls, fetchImplementation } = createFetch(
+      metadataHighlightHandlers({
+        albums,
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Add 2 highlights to Family from last weekend.');
+
+    assert.equal(
+      calls.map((call) => call.body.params.name).join(','),
+      'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
+    );
+    assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
+    assert.equal(calls.at(-1).body.params.arguments.operations[0].targetId, familyAlbumId);
+  });
+
+  it('proposes favorite operations for metadata-only highlight selections', async () => {
+    const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Favorite the best 2 photos from last weekend.');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    const plan = calls[2].body.params.arguments;
+    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+    assert.deepEqual(plan.operations, [
+      {
+        type: 'asset.setFavorite',
+        summary: 'Favorite 2 metadata-only suggested highlights.',
+        targetKind: 'asset_batch',
+        assetIds: [
+          '00000000-0000-4000-8000-000000000402',
+          '00000000-0000-4000-8000-000000000403',
+        ],
+        riskLevel: 'low',
+        enabled: true,
+        payload: { favorite: true },
+      },
+    ]);
+    assert.match(events.at(-1).content.blocks[0].text, /favorite/i);
+    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+  });
+
+  it('plans available metadata highlights when fewer candidates than requested exist', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      metadataHighlightHandlers({
+        assetIds: highlightAssetIds.slice(0, 2),
+        metadataAssets: defaultHighlightMetadataAssets().slice(0, 2),
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Pick the best 5 photos from last weekend and make an album called Weekend Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls[0].body.params.arguments.limit, 500);
+    assert.deepEqual(calls[2].body.params.arguments.operations[1].assetIds, [
+      '00000000-0000-4000-8000-000000000402',
+      '00000000-0000-4000-8000-000000000401',
+    ]);
+    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetSource'), false);
+    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('previousSearch'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /only 2 eligible/i);
+    assert.match(events.at(-1).content.blocks[0].text, /requested 5/i);
+  });
+
+  it('asks to narrow metadata highlight plans when the bounded source exceeds the metadata candidate limit', async () => {
+    const oversizedAssetIds = Array.from(
+      { length: 501 },
+      (_value, index) => `00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
+    );
+    const { calls, fetchImplementation } = createFetch(
+      metadataHighlightHandlers({
+        assetIds: oversizedAssetIds,
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
+    assert.equal(calls[0].body.params.arguments.limit, 500);
+    assert.match(events.at(-1).content.blocks[0].text, /too many/i);
+    assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
   });
 
   it('uses a default count of 10 for bounded highlight prompts without creating a plan', async () => {

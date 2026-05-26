@@ -570,11 +570,13 @@ describe('pi runtime adapter', () => {
       calls.loaders[0].systemPrompt.includes('No matching highlight candidates: answer directly and do not create a plan'),
       true,
     );
-    assert.equal(
-      calls.loaders[0].systemPrompt.includes('Slice 2 is read-only: do not create album, favorite, or cover plans for highlight requests yet'),
-      true,
-    );
-    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only suggested highlights'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('prioritize existing favorites and ratings'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('do not use broad assetSource'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('No previews are required for metadata-only highlight plans'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Slice 2 is read-only'), false);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
