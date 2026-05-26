@@ -231,6 +231,40 @@ describe('agent operation plan UI helpers', () => {
     expect(model.operationsById.get(updateId)?.review.summary).toBe('Rename album to "Portugal Archive"');
   });
 
+  it('extracts highlight curation criteria from suggested-highlight plan summaries', () => {
+    const model = buildOperationReviewModel(
+      {
+        ...plan([
+          operation({
+            id: createId,
+            type: AgentOperationType.AlbumCreate,
+            summary: 'Create Highlights',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'album-highlights',
+            payload: { albumName: 'Highlights' },
+          }),
+          operation({
+            id: addId,
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add 2 preview-assisted suggested highlights to Highlights.',
+            targetKind: AgentOperationTargetKind.NewAlbum,
+            temporaryTargetId: 'album-highlights',
+            assetIds: [assetA, assetB],
+            dependencyIds: [createId],
+            payload: {},
+          }),
+        ]),
+        summary:
+          'Create Highlights with 2 preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
+      },
+      { [createId]: true, [addId]: true },
+    );
+
+    expect(model.groups[0].curationCriteria).toBe(
+      'Preview-assisted suggested highlights considered previews, existing favorites, ratings, dates, tags, and location.',
+    );
+  });
+
   it('derives metadata summaries, labels, field reviews, clears, and coordinate warnings', () => {
     const model = buildOperationReviewModel(
       plan([

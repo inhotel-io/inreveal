@@ -38,6 +38,14 @@ describe('agent operation plan i18n', () => {
     );
   });
 
+  it('defines curation criteria English copy for highlight plan review', () => {
+    expect(en).toEqual(
+      expect.objectContaining({
+        assistant_operation_curation_criteria: 'Criteria: {criteria}',
+      }),
+    );
+  });
+
   it('defines partial apply and technical detail English strings', () => {
     expect(en).toEqual(
       expect.objectContaining({
