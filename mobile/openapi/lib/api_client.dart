@@ -232,6 +232,10 @@ class ApiClient {
           return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSourceInput':
           return AgentAssetSourceInput.fromJson(value);
+        case 'AgentAssetUpdateMetadataOperationType':
+          return AgentAssetUpdateMetadataOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetUpdateMetadataTargetKind':
+          return AgentAssetUpdateMetadataTargetKindTypeTransformer().decode(value);
         case 'AgentAssignableSharedSpaceMemberRole':
           return AgentAssignableSharedSpaceMemberRoleTypeTransformer().decode(value);
         case 'AgentCredentialSnapshot':
@@ -340,6 +344,18 @@ class ApiClient {
           return AgentOperationPlanningAssetSourceInput.fromJson(value);
         case 'AgentOperationResponseDto':
           return AgentOperationResponseDto.fromJson(value);
+        case 'AgentOperationResponseDtoReviewMetadata':
+          return AgentOperationResponseDtoReviewMetadata.fromJson(value);
+        case 'AgentOperationResponseDtoReviewMetadataAssetMetadata':
+          return AgentOperationResponseDtoReviewMetadataAssetMetadata.fromJson(value);
+        case 'AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInner':
+          return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInner.fromJson(value);
+        case 'AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner':
+          return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner.fromJson(value);
+        case 'AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue':
+          return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue.fromJson(value);
+        case 'AgentOperationReviewMetadataValueKind':
+          return AgentOperationReviewMetadataValueKindTypeTransformer().decode(value);
         case 'AgentOperationRiskLevel':
           return AgentOperationRiskLevelTypeTransformer().decode(value);
         case 'AgentOperationStatus':
@@ -396,10 +412,16 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf17':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
