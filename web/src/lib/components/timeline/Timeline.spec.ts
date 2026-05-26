@@ -17,6 +17,18 @@ const testState = vi.hoisted(() => ({
     representativeAssetId: null,
     representativeThumbhash: null,
     representativeRatio: null,
+  } as {
+    grouping: 'year' | 'month' | 'day';
+    timeBucket: string;
+    viewId: string;
+    date: { year: number; month?: number; day?: number };
+    count: number;
+    top: number;
+    height: number;
+    isLoaded: boolean;
+    representativeAssetId: string | null;
+    representativeThumbhash: string | null;
+    representativeRatio: number | null;
   },
   grouping: 'day' as 'year' | 'month' | 'day',
   maxMd: false,
@@ -24,6 +36,7 @@ const testState = vi.hoisted(() => ({
   isViewing: false,
   assetCount: 1,
   months: [] as unknown[],
+  keepStaleGroupingOnUpdate: false,
 }));
 
 vi.mock('$app/navigation', () => ({
@@ -112,7 +125,9 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     scrolling = false;
     destroy = vi.fn();
     updateOptions = vi.fn((options?: { grouping?: 'year' | 'month' | 'day' }) => {
-      this.grouping = options?.grouping ?? 'day';
+      if (!testState.keepStaleGroupingOnUpdate) {
+        this.grouping = options?.grouping ?? 'day';
+      }
     });
     setLayoutOptions = vi.fn();
     updateSlidingWindow = vi.fn();
@@ -165,6 +180,20 @@ describe('Timeline representative grouping integration', () => {
     testState.isViewing = false;
     testState.assetCount = 1;
     testState.months = [];
+    testState.keepStaleGroupingOnUpdate = false;
+    testState.representativeBucket = {
+      grouping: 'year',
+      timeBucket: '2015-01-01',
+      viewId: 'year:2015-01-01',
+      date: { year: 2015 },
+      count: 1,
+      top: 0,
+      height: 296,
+      isLoaded: true,
+      representativeAssetId: null,
+      representativeThumbhash: null,
+      representativeRatio: null,
+    };
   });
 
   it('renders representative buckets instead of month groups in year mode', async () => {
@@ -212,6 +241,34 @@ describe('Timeline representative grouping integration', () => {
     expect(await screen.findByTestId('timeline-representative-buckets')).toHaveAttribute('data-grouping', 'month');
     expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('waits for the manager grouping to match options before resolving a temporal anchor', () => {
+    const onTemporalAnchorResolved = vi.fn();
+    testState.grouping = 'month';
+    testState.keepStaleGroupingOnUpdate = true;
+    testState.representativeBucket = {
+      grouping: 'month',
+      timeBucket: '2015-08-01',
+      viewId: 'month:2015-08-01',
+      date: { year: 2015, month: 8 },
+      count: 1,
+      top: 240,
+      height: 296,
+      isLoaded: true,
+      representativeAssetId: null,
+      representativeThumbhash: null,
+      representativeRatio: null,
+    };
+
+    renderTimeline({
+      options: { grouping: 'day' },
+      grouping: 'day',
+      temporalAnchor: { year: 2015, month: 8 },
+      onTemporalAnchorResolved,
+    });
+
+    expect(onTemporalAnchorResolved).not.toHaveBeenCalled();
   });
 
   it('uses the All label in the mobile grouping control on coarse-pointer web devices', async () => {

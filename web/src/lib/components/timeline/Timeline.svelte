@@ -153,7 +153,7 @@
   });
 
   $effect(() => {
-    if (!temporalAnchor || !timelineManager.isInitialized) {
+    if (!temporalAnchor || !timelineManager.isInitialized || timelineManager.grouping !== activeGrouping) {
       return;
     }
 
