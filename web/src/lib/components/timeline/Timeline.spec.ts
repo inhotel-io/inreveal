@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
-import { createRawSnippet } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 
 import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
 import Timeline from './Timeline.svelte';
@@ -39,6 +39,8 @@ const testState = vi.hoisted(() => ({
   keepStaleGroupingOnUpdate: false,
   viewportHeight: 600,
   viewportWidth: 390,
+  hasScrollableElement: true,
+  scrollCalls: [] as number[],
 }));
 
 vi.mock('$app/navigation', () => ({
@@ -136,7 +138,12 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     limitedScroll = false;
     maxScroll = 1;
     maxScrollPercent = 1;
-    scrollableElement?: HTMLElement;
+    get scrollableElement() {
+      return testState.hasScrollableElement ? ({} as HTMLElement) : undefined;
+    }
+    set scrollableElement(value: HTMLElement | undefined) {
+      testState.hasScrollableElement = Boolean(value);
+    }
     scrolling = false;
     destroy = vi.fn();
     updateOptions = vi.fn((options?: { grouping?: 'year' | 'month' | 'day' }) => {
@@ -146,7 +153,9 @@ vi.mock('$lib/managers/timeline-manager/timeline-manager.svelte', () => ({
     });
     setLayoutOptions = vi.fn();
     updateSlidingWindow = vi.fn();
-    scrollTo = vi.fn();
+    scrollTo = vi.fn((top: number) => {
+      testState.scrollCalls.push(top);
+    });
     loadTimelineMonth = vi.fn();
     getTimelineMonthByAssetId = vi.fn();
     findTimelineMonthForAsset = vi.fn();
@@ -198,6 +207,8 @@ describe('Timeline representative grouping integration', () => {
     testState.keepStaleGroupingOnUpdate = false;
     testState.viewportHeight = 600;
     testState.viewportWidth = 390;
+    testState.hasScrollableElement = true;
+    testState.scrollCalls = [];
     testState.representativeBucket = {
       grouping: 'year',
       timeBucket: '2015-01-01',
@@ -303,6 +314,38 @@ describe('Timeline representative grouping integration', () => {
     });
 
     expect(onTemporalAnchorResolved).not.toHaveBeenCalled();
+  });
+
+  it('waits for the scroll container before resolving a day-mode temporal anchor', () => {
+    const onTemporalAnchorResolved = vi.fn();
+    testState.grouping = 'day';
+    testState.hasScrollableElement = false;
+    testState.months = [{ yearMonth: { year: 2015, month: 8 }, top: 480 }] as unknown[];
+
+    renderTimeline({
+      options: { grouping: 'day' },
+      grouping: 'day',
+      temporalAnchor: { year: 2015, month: 8 },
+      onTemporalAnchorResolved,
+    });
+
+    expect(onTemporalAnchorResolved).not.toHaveBeenCalled();
+  });
+
+  it('does not run the routing scroll-to-top fallback while a temporal anchor is pending', async () => {
+    testState.grouping = 'day';
+    testState.months = [];
+
+    renderTimeline({
+      enableRouting: true,
+      options: { grouping: 'day' },
+      grouping: 'day',
+      temporalAnchor: { year: 2015, month: 8 },
+    });
+
+    await tick();
+
+    expect(testState.scrollCalls).not.toContain(0);
   });
 
   it('uses the All label in the mobile grouping control on coarse-pointer web devices', async () => {

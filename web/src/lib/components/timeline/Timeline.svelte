@@ -262,7 +262,7 @@
     if (scrollTarget) {
       scrolled = await scrollAndLoadAsset(scrollTarget);
     }
-    if (!scrolled) {
+    if (!scrolled && !temporalAnchor) {
       // if the asset is not found, scroll to the top
       timelineManager.scrollTo(0);
     } else if (scrollTarget) {
