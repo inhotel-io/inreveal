@@ -208,6 +208,7 @@ const createdSession: AgentSessionResponseDto = {
       setCover: true,
       tagAssets: true,
       updateDetails: true,
+      updateAssetMetadata: true,
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
     },
