@@ -13,51 +13,142 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload({
-    this.tagId,
-    this.tagName,
+    this.description,
+    this.rating,
+    this.dateTimeOriginal,
+    this.dateTimeRelative,
+    this.timeZone,
+    this.latitude,
+    this.longitude,
   });
 
+  /// Asset description. Use an empty string to clear the description.
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? tagId;
+  String? description;
 
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating? rating;
+
+  /// Absolute original capture date/time as an ISO datetime.
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? tagName;
+  DateTime? dateTimeOriginal;
+
+  /// Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.
+  ///
+  /// Minimum value: -9007199254740991
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? dateTimeRelative;
+
+  /// IANA time zone such as Europe/Berlin.
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? timeZone;
+
+  /// Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.
+  ///
+  /// Minimum value: -90
+  /// Maximum value: 90
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? latitude;
+
+  /// Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.
+  ///
+  /// Minimum value: -180
+  /// Maximum value: 180
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  num? longitude;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload &&
-    other.tagId == tagId &&
-    other.tagName == tagName;
+    other.description == description &&
+    other.rating == rating &&
+    other.dateTimeOriginal == dateTimeOriginal &&
+    other.dateTimeRelative == dateTimeRelative &&
+    other.timeZone == timeZone &&
+    other.latitude == latitude &&
+    other.longitude == longitude;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (tagId == null ? 0 : tagId!.hashCode) +
-    (tagName == null ? 0 : tagName!.hashCode);
+    (description == null ? 0 : description!.hashCode) +
+    (rating == null ? 0 : rating!.hashCode) +
+    (dateTimeOriginal == null ? 0 : dateTimeOriginal!.hashCode) +
+    (dateTimeRelative == null ? 0 : dateTimeRelative!.hashCode) +
+    (timeZone == null ? 0 : timeZone!.hashCode) +
+    (latitude == null ? 0 : latitude!.hashCode) +
+    (longitude == null ? 0 : longitude!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload[tagId=$tagId, tagName=$tagName]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload[description=$description, rating=$rating, dateTimeOriginal=$dateTimeOriginal, dateTimeRelative=$dateTimeRelative, timeZone=$timeZone, latitude=$latitude, longitude=$longitude]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.tagId != null) {
-      json[r'tagId'] = this.tagId;
+    if (this.description != null) {
+      json[r'description'] = this.description;
     } else {
-    //  json[r'tagId'] = null;
+    //  json[r'description'] = null;
     }
-    if (this.tagName != null) {
-      json[r'tagName'] = this.tagName;
+    if (this.rating != null) {
+      json[r'rating'] = this.rating;
     } else {
-    //  json[r'tagName'] = null;
+    //  json[r'rating'] = null;
+    }
+    if (this.dateTimeOriginal != null) {
+      json[r'dateTimeOriginal'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? this.dateTimeOriginal!.millisecondsSinceEpoch
+        : this.dateTimeOriginal!.toUtc().toIso8601String();
+    } else {
+    //  json[r'dateTimeOriginal'] = null;
+    }
+    if (this.dateTimeRelative != null) {
+      json[r'dateTimeRelative'] = this.dateTimeRelative;
+    } else {
+    //  json[r'dateTimeRelative'] = null;
+    }
+    if (this.timeZone != null) {
+      json[r'timeZone'] = this.timeZone;
+    } else {
+    //  json[r'timeZone'] = null;
+    }
+    if (this.latitude != null) {
+      json[r'latitude'] = this.latitude;
+    } else {
+    //  json[r'latitude'] = null;
+    }
+    if (this.longitude != null) {
+      json[r'longitude'] = this.longitude;
+    } else {
+    //  json[r'longitude'] = null;
     }
     return json;
   }
@@ -71,8 +162,17 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload(
-        tagId: mapValueOfType<String>(json, r'tagId'),
-        tagName: mapValueOfType<String>(json, r'tagName'),
+        description: mapValueOfType<String>(json, r'description'),
+        rating: AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating.fromJson(json[r'rating']),
+        dateTimeOriginal: mapDateTime(json, r'dateTimeOriginal', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
+        dateTimeRelative: mapValueOfType<int>(json, r'dateTimeRelative'),
+        timeZone: mapValueOfType<String>(json, r'timeZone'),
+        latitude: json[r'latitude'] == null
+            ? null
+            : num.parse('${json[r'latitude']}'),
+        longitude: json[r'longitude'] == null
+            ? null
+            : num.parse('${json[r'longitude']}'),
       );
     }
     return null;
