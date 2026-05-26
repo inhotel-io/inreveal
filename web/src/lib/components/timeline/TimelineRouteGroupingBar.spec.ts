@@ -16,6 +16,8 @@ describe('TimelineRouteGroupingBar', () => {
     expect(screen.getByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
     expect(screen.getByTestId('timeline-grouping-control')).toHaveAttribute('data-variant', 'inline');
     expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveTextContent('All');
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('keeps the route grouping surface transparent instead of drawing a full-width toolbar', () => {

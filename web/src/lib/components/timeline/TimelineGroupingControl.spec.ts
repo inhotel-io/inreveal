@@ -4,7 +4,7 @@ import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
 import TimelineGroupingControl from './TimelineGroupingControl.svelte';
 
 describe('TimelineGroupingControl', () => {
-  it('renders the three grouping modes with the active mode pressed', () => {
+  it('renders Years, Months, and All with the active mode pressed', () => {
     render(TimelineGroupingControl, {
       props: {
         grouping: 'month',
@@ -15,7 +15,9 @@ describe('TimelineGroupingControl', () => {
     expect(screen.getByTestId('timeline-grouping-control')).toHaveAttribute('data-variant', 'inline');
     expect(screen.getByTestId('timeline-grouping-year')).toHaveTextContent('Years');
     expect(screen.getByTestId('timeline-grouping-month')).toHaveTextContent('Months');
-    expect(screen.getByTestId('timeline-grouping-day')).toHaveTextContent('Days');
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveTextContent('All');
+    expect(screen.getByRole('group', { name: 'Timeline grouping' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('timeline-grouping-year')).toHaveAttribute('aria-pressed', 'false');
   });
@@ -32,6 +34,21 @@ describe('TimelineGroupingControl', () => {
     await fireEvent.click(screen.getByTestId('timeline-grouping-year'));
 
     expect(changes).toEqual(['year']);
+  });
+
+  it('keeps the internal day grouping value when the All button is selected', async () => {
+    const changes: TimelineGrouping[] = [];
+    render(TimelineGroupingControl, {
+      props: {
+        grouping: 'month',
+        onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'All' }));
+
+    expect(screen.getByTestId('timeline-grouping-day')).toHaveTextContent('All');
+    expect(changes).toEqual(['day']);
   });
 
   it('does not emit when clicking the already active mode', async () => {

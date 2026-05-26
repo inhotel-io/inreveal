@@ -1,6 +1,7 @@
-import { cleanup, render, screen } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 
+import type { TimelineGrouping } from '$lib/managers/timeline-manager/types';
 import Timeline from './Timeline.svelte';
 
 const testState = vi.hoisted(() => ({
@@ -211,6 +212,25 @@ describe('Timeline representative grouping integration', () => {
     expect(await screen.findByTestId('timeline-representative-buckets')).toHaveAttribute('data-grouping', 'month');
     expect(screen.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('uses the All label in the mobile grouping control on coarse-pointer web devices', async () => {
+    const changes: TimelineGrouping[] = [];
+    testState.grouping = 'day';
+    testState.maxMd = false;
+    testState.pointerCoarse = true;
+
+    renderTimeline({
+      onGroupingChange: (grouping: TimelineGrouping) => changes.push(grouping),
+    });
+
+    const shell = await screen.findByTestId('timeline-mobile-grouping-control-shell');
+    expect(within(shell).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(shell).getByTestId('timeline-grouping-day')).toHaveTextContent('All');
+
+    await fireEvent.click(within(shell).getByRole('button', { name: 'Years' }));
+
+    expect(changes).toEqual(['year']);
   });
 
   it('renders the empty snippet when the initialized timeline has zero assets', () => {

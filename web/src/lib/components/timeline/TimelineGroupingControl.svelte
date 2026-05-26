@@ -15,7 +15,7 @@
   const modes: { grouping: TimelineGrouping; label: string }[] = [
     { grouping: 'year', label: 'Years' },
     { grouping: 'month', label: 'Months' },
-    { grouping: 'day', label: 'Days' },
+    { grouping: 'day', label: 'All' },
   ];
 
   let { grouping, variant = 'inline', disabled = false, class: className = '', onGroupingChange }: Props = $props();
