@@ -575,6 +575,16 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('do not use broad assetSource'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('No previews are required for metadata-only highlight plans'), true);
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes(
+        'Preview-assisted highlight requests use mcp_gallery_readAssetPreviews only after bounded candidate ids are known',
+      ),
+      true,
+    );
+    assert.equal(calls.loaders[0].systemPrompt.includes('above 250 preview candidates'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('If previews are denied or unavailable'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Cover suggestions use album.setCover with exactly one selected assetId'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Never call mcp_gallery_readAssetOriginals for highlight or cover curation'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Slice 2 is read-only'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
