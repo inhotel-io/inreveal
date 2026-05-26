@@ -1,7 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/setting.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
+import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
@@ -26,6 +28,7 @@ class TimelineRouteScope extends StatelessWidget {
         if (timelineServiceBuilder != null)
           timelineServiceProvider.overrideWith((ref) {
             final temporalScope = ref.watch(timelineTemporalScopeProvider);
+            final _ = ref.watch(settingsProvider.select((settings) => settings.get(Setting.groupAssetsBy)));
             final service = timelineServiceBuilder!(ref, temporalScope);
             ref.onDispose(service.dispose);
             return service;

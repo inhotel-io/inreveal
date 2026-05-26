@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -6,8 +8,12 @@ import 'package:immich_mobile/domain/models/search_result.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/domain/services/search.service.dart';
+import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/domain/services/user.service.dart';
+import 'package:immich_mobile/entities/store.entity.dart';
+import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/providers/infrastructure/search.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -64,12 +70,26 @@ ProviderContainer _container({required TimelineFactory factory, required SearchS
 }
 
 void main() {
-  setUpAll(() {
+  late Drift db;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
     registerFallbackValue(_FakeFilter());
     registerFallbackValue(TimelineOrigin.main);
     registerFallbackValue(const TimelineTemporalScope.none());
     registerFallbackValue(() => const <BaseAsset>[]);
     registerFallbackValue(const Stream<int>.empty());
+    db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
+    await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
+  });
+
+  setUp(() async {
+    await Store.clear();
+  });
+
+  tearDownAll(() async {
+    await Store.clear();
+    await db.close();
   });
 
   group('photosTimelineQueryProvider', () {
