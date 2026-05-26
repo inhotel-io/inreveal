@@ -152,29 +152,35 @@ void main() {
     expect(routeHandler, same(sharedHandler));
   });
 
-  testWidgets('overview drilldown updates only the invoking route scope', (tester) async {
+  testWidgets('overview drilldown updates only the invoking route zoom anchor', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: Row(
             children: [
-              TimelineRouteScope(
-                child: Consumer(
-                  builder: (context, ref, child) => TextButton(
-                    key: const Key('left-drilldown'),
-                    onPressed: () {
-                      final handler = ref.read(timelineOverviewDrilldownProvider);
-                      handler?.call(TimeBucket(date: DateTime(2025), assetCount: 4), GroupAssetsBy.year);
-                    },
-                    child: Text('left:${ref.watch(timelineTemporalScopeProvider).kind.name}'),
+              Expanded(
+                child: TimelineRouteScope(
+                  child: Consumer(
+                    builder: (context, ref, child) => TextButton(
+                      key: const Key('left-drilldown'),
+                      onPressed: () {
+                        final handler = ref.read(timelineOverviewDrilldownProvider);
+                        handler?.call(TimeBucket(date: DateTime(2025), assetCount: 4), GroupAssetsBy.year);
+                      },
+                      child: Text(
+                        'left:${ref.watch(timelineTemporalScopeProvider).kind.name}:${_anchorLabel(ref.watch(timelineZoomAnchorProvider))}',
+                      ),
+                    ),
                   ),
                 ),
               ),
-              TimelineRouteScope(
-                child: Consumer(
-                  builder: (context, ref, child) => Text(
-                    'right:${ref.watch(timelineTemporalScopeProvider).kind.name}',
-                    key: const Key('right-drilldown'),
+              Expanded(
+                child: TimelineRouteScope(
+                  child: Consumer(
+                    builder: (context, ref, child) => Text(
+                      'right:${ref.watch(timelineTemporalScopeProvider).kind.name}:${_anchorLabel(ref.watch(timelineZoomAnchorProvider))}',
+                      key: const Key('right-drilldown'),
+                    ),
                   ),
                 ),
               ),
@@ -184,14 +190,14 @@ void main() {
       ),
     );
 
-    expect(find.text('left:none'), findsOneWidget);
-    expect(find.text('right:none'), findsOneWidget);
+    expect(find.text('left:none:none'), findsOneWidget);
+    expect(find.text('right:none:none'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('left-drilldown')));
     await tester.pumpAndSettle();
 
-    expect(find.text('left:year'), findsOneWidget);
-    expect(find.text('right:none'), findsOneWidget);
+    expect(find.text('left:none:year:2025'), findsOneWidget);
+    expect(find.text('right:none:none'), findsOneWidget);
     expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
   });
 

@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
+import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -29,6 +30,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_se
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
+import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
 
 void main() {
@@ -50,7 +52,9 @@ void main() {
     await db.close();
   });
 
-  testWidgets('non-Photos route scope renders selector and rebuilds service with drilldown scope', (tester) async {
+  testWidgets('non-Photos route scope renders selector and keeps temporal scope unchanged after zoom activation', (
+    tester,
+  ) async {
     final seenScopes = <TimelineTemporalScope>[];
 
     await tester.pumpWidget(
@@ -78,16 +82,16 @@ void main() {
     expect(seenScopes.last, const TimelineTemporalScope.none());
 
     await tester.runAsync(
-      () => ref.read(sharedTimelineOverviewDrilldownProvider)(
-        TimeBucket(date: DateTime(2025), assetCount: 3),
-        GroupAssetsBy.year,
-      ),
+      () async => ref
+          .read(timelineOverviewDrilldownProvider)
+          ?.call(TimeBucket(date: DateTime(2025), assetCount: 3), GroupAssetsBy.year),
     );
     ref.invalidate(timelineServiceProvider);
     ref.read(timelineServiceProvider);
     await tester.pump();
 
-    expect(seenScopes.last, const TimelineTemporalScope.year(2025));
+    expect(seenScopes.last, const TimelineTemporalScope.none());
+    expect(ref.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
   });
 
   group('adopted timeline route contracts', () {
