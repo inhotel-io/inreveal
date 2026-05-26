@@ -34,4 +34,36 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).not.toContain('Large-library pagination');
     expect(markdown).toContain('semantic duplicate cleanup or quality scoring');
   });
+
+  it('documents explicit batch asset metadata edits as solid while place-name geocoding remains missing', () => {
+    const markdown = readMatrix();
+
+    const metadataEditRow = markdown.split('\n').find((line) => line.includes('Batch asset metadata edits'));
+    expect(metadataEditRow).toBeDefined();
+    expect(metadataEditRow).toContain('Solid now');
+    expect(metadataEditRow).toContain('asset.updateMetadata');
+    expect(metadataEditRow).toContain('description');
+    expect(metadataEditRow).toContain('rating');
+    expect(metadataEditRow).toContain('date/time');
+    expect(metadataEditRow).toContain('timezone');
+    expect(metadataEditRow).toContain('latitude/longitude');
+    expect(metadataEditRow).toMatch(/ask.*coordinates|coordinates.*ask/i);
+
+    for (const prompt of [
+      'Set the description on the 5 newest photos to Test batch.',
+      'Clear the rating from this album.',
+      'Shift these scanned photos forward by 2 hours.',
+      'Set these photos to latitude 48.8566 and longitude 2.3522.',
+      'Set these photos to Paris.',
+    ]) {
+      expect(markdown).toContain(prompt);
+    }
+
+    const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
+    expect(needsNewToolHeadingIndex).not.toBe(-1);
+    const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
+    expect(needsNewToolSection).not.toContain('| Metadata edits ');
+    expect(needsNewToolSection).toContain('Place-name-to-coordinate metadata edits');
+    expect(needsNewToolSection).toMatch(/forward geocoder|geocod/i);
+  });
 });

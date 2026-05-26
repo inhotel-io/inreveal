@@ -44,6 +44,8 @@ Current planning tools:
 - `proposeAlbumOperations`: creates a reviewable plan.
 - `reviseProposedOperations`: replaces an existing plan after user feedback.
 - `summarizePlan`: summarizes an existing plan.
+- `proposeAssetBatchFromSearch`: proposes reviewable favorite, archive, tag,
+  metadata, or rotate operations from a declarative or previous search source.
 
 Current reviewable operation types:
 
@@ -53,7 +55,7 @@ Current reviewable operation types:
   `space.updateDetails`, `space.addMembers`, `space.removeMembers`,
   `space.updateMemberRole`.
 - Assets: `asset.rotate`, `asset.setFavorite`, `asset.setArchive`,
-  `asset.addTag`, `asset.removeTag`.
+  `asset.addTag`, `asset.removeTag`, `asset.updateMetadata`.
 
 Safety invariant: MCP tools do not directly mutate the gallery. Writes must be
 represented as operation plans and applied by Gallery after user review.
@@ -86,6 +88,7 @@ represented as operation plans and applied by Gallery after user review.
 | Mark favorites                   | “Favorite the best photos from Portugal.”                                   | Constrained now                           | Search by metadata and/or previews, propose `asset.setFavorite`.                                                                                                                      | If “best” is subjective, activity preview should show inspection and the plan should be easy to review visually.                              | Metadata-only favorite request; preview-based curation; permission denied for previews; large candidate set.                                        |
 | Archive assets                   | “Archive old screenshots from 2024.”                                        | Solid now for metadata-identifiable cases | Search date/media/tag metadata, propose `asset.setArchive`.                                                                                                                           | States that assets move to archive, not trash/delete, and shows affected count.                                                               | Exact metadata filters; no matches; mixed photos/videos; user revises plan to exclude items.                                                        |
 | Add or remove tags               | “Tag these Berlin photos as Travel.”                                        | Solid now                                 | Search/read metadata, propose `asset.addTag` or `asset.removeTag`.                                                                                                                    | Shows tag name or existing tag id resolution and selected assets.                                                                             | New tag by name; existing tag removal; ambiguous tag names if exposed; invalid payload with both tag id and name rejected.                          |
+| Batch asset metadata edits       | “Set the description on the 5 newest photos to Test batch.”                 | Solid now for explicit supported fields   | Search or inspect the target set, then propose `asset.updateMetadata` through `proposeAssetBatchFromSearch` or `proposeAlbumOperations`. Supports description, rating, date/time, timezone, and explicit latitude/longitude. | Shows field-level before/after metadata, selected count, representative assets, and coordinate warnings before apply; asks for coordinates instead of guessing place names. | Description update; clear rating; absolute date/time; relative timestamp shift; timezone update; explicit coordinates; place name asks for coordinates; latitude without longitude asks for longitude; apply keeps chat open. |
 | Rotate images                    | “Rotate the sideways photos clockwise.”                                     | Constrained now                           | Read previews/originals if allowed, propose `asset.rotate`.                                                                                                                           | Shows thumbnails and rotation direction; only supports valid rotation angles.                                                                 | Valid 90/180/270 angle; unsupported angle rejected; non-image assets excluded; preview permission denied.                                           |
 | Answer album/library questions   | “How many photos are in this album?”                                        | Solid now                                 | `listAlbums`, `readAlbum`, optionally `readAssetMetadata`.                                                                                                                            | Gives a direct answer and cites the album or search scope in plain language.                                                                  | Album count; album date range; no album found; ambiguous album name.                                                                                |
 | Summarize a proposed plan        | “What exactly will this plan change?”                                       | Solid now                                 | `summarizePlan`.                                                                                                                                                                      | Produces a concise human summary without raw operation ids unless details are requested.                                                      | Whole-plan summary; risk-focused summary; summary after revision; missing plan id validation.                                                       |
@@ -114,7 +117,7 @@ Next expansion candidates: semantic duplicate cleanup or quality scoring.
 | Duplicate/similar-photo cleanup   | No duplicate cluster or perceptual similarity surface.             | `findSimilarAssets` or `listDuplicateGroups`.                                  |
 | Image quality scoring             | No blur/exposure/aesthetic score tool.                             | `analyzeAssetQuality` or precomputed quality metadata in search/read metadata. |
 | Trash/delete                      | Operation plans support archive, not delete/trash.                 | Product decision first; then `asset.trash` operation with stricter risk UI.    |
-| Metadata edits                    | No date/time/location/title/description edit operations.           | `asset.updateMetadata` with field-level preview and validation.                |
+| Place-name-to-coordinate metadata edits | No forward geocoder for turning names such as “Paris” into coordinates. | Forward-geocoding resolver with ambiguity handling before `asset.updateMetadata`. |
 | Edits beyond rotation             | No crop, enhance, or batch adjustments.                            | Separate image-edit operation family with preview artifacts.                   |
 | Sharing/export/download workflows | No direct operation plan for sharing links, exports, or downloads. | Sharing/export tools with explicit privacy review.                             |
 
@@ -164,6 +167,11 @@ Use these prompts as manual and automated acceptance scenarios:
 15. “Find screenshots from 2024 that mention invoices.”
 16. “Add beach sunset photos from the Family space to a new album.”
 17. “Find photos taken with my Sony camera in May.”
+18. “Set the description on the 5 newest photos to Test batch.”
+19. “Clear the rating from this album.”
+20. “Shift these scanned photos forward by 2 hours.”
+21. “Set these photos to latitude 48.8566 and longitude 2.3522.”
+22. “Set these photos to Paris.”
 
 ## Next Steps
 
