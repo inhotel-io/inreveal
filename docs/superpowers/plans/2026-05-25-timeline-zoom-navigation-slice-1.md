@@ -33,47 +33,47 @@ import {
 Add these tests near the top of `describe('timeline filter navigation helpers', () => {`, before the legacy filter-drilldown tests:
 
 ```ts
-  it('zooms a year bucket to month grouping without requiring filters', () => {
-    expect(
-      getTimelineBucketZoomTarget({
-        grouping: 'year',
-        date: { year: 2015 },
-      }),
-    ).toEqual({
+it('zooms a year bucket to month grouping without requiring filters', () => {
+  expect(
+    getTimelineBucketZoomTarget({
+      grouping: 'year',
+      date: { year: 2015 },
+    }),
+  ).toEqual({
+    grouping: 'month',
+    anchor: { year: 2015 },
+  });
+});
+
+it('zooms a month bucket to detailed day grouping without requiring filters', () => {
+  expect(
+    getTimelineBucketZoomTarget({
       grouping: 'month',
-      anchor: { year: 2015 },
-    });
+      date: { year: 2015, month: 8 },
+    }),
+  ).toEqual({
+    grouping: 'day',
+    anchor: { year: 2015, month: 8 },
   });
+});
 
-  it('zooms a month bucket to detailed day grouping without requiring filters', () => {
-    expect(
-      getTimelineBucketZoomTarget({
-        grouping: 'month',
-        date: { year: 2015, month: 8 },
-      }),
-    ).toEqual({
+it('does not zoom day buckets', () => {
+  expect(
+    getTimelineBucketZoomTarget({
       grouping: 'day',
-      anchor: { year: 2015, month: 8 },
-    });
-  });
+      date: { year: 2015, month: 8, day: 23 },
+    }),
+  ).toBeUndefined();
+});
 
-  it('does not zoom day buckets', () => {
-    expect(
-      getTimelineBucketZoomTarget({
-        grouping: 'day',
-        date: { year: 2015, month: 8, day: 23 },
-      }),
-    ).toBeUndefined();
-  });
-
-  it('does not zoom malformed month buckets without a month number', () => {
-    expect(
-      getTimelineBucketZoomTarget({
-        grouping: 'month',
-        date: { year: 2015 },
-      }),
-    ).toBeUndefined();
-  });
+it('does not zoom malformed month buckets without a month number', () => {
+  expect(
+    getTimelineBucketZoomTarget({
+      grouping: 'month',
+      date: { year: 2015 },
+    }),
+  ).toBeUndefined();
+});
 ```
 
 Keep the existing `activateTimelineBucket()` tests unchanged in this slice. They document legacy behavior for routes that have not migrated yet.

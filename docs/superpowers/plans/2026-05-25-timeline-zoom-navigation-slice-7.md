@@ -40,6 +40,7 @@ Slice 6 intentionally moved the shared mobile activation path to zoom anchors, a
 ## Task 1: Photos Overview Activation Provider Contract
 
 **Files:**
+
 - Create: `mobile/test/providers/timeline/photos_overview_zoom_provider_test.dart`
 - Modify only if the tests fail for a real product gap: `mobile/lib/providers/timeline/overview_drilldown.provider.dart`
 
@@ -184,6 +185,7 @@ git commit -m "feat(mobile): apply photos overview zoom provider contract"
 ## Task 2: Guard Photos Filter Subheader Against Card-Activation Chips
 
 **Files:**
+
 - Modify: `mobile/test/presentation/widgets/photos_filter/filter_subheader_test.dart`
 - Modify only if tests fail for a real product gap: `mobile/lib/presentation/widgets/photos_filter/filter_subheader.widget.dart` or Photos filter helpers.
 
@@ -306,6 +308,7 @@ git commit -m "feat(mobile): keep photos zoom activation out of filter chips"
 ## Task 3: Main Photos Route Card-Tap Zoom Flow
 
 **Files:**
+
 - Create: `mobile/test/presentation/pages/dev/main_timeline_zoom_test.dart`
 - Modify only if tests fail for a real product gap: `mobile/lib/presentation/pages/dev/main_timeline.page.dart`, `mobile/lib/providers/photos_filter/timeline_query.provider.dart`, or shared timeline zoom files.
 

@@ -34,74 +34,74 @@ Update each route's bucket activation test so it asserts route-owned constraints
 In `favorites-page.spec.ts`, replace `year and month buckets keep favorite options and show temporal chips` with:
 
 ```ts
-  it('year and month buckets keep favorite options without temporal chips', async () => {
-    renderPage();
+it('year and month buckets keep favorite options without temporal chips', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isFavorite":true');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-
-    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isFavorite":true');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isFavorite":true');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+
+  await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isFavorite":true');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+  });
+});
 ```
 
 In `archive-page.spec.ts`, replace `year and month buckets keep archive options and show temporal chips` with the same structure, using these route-owned assertions:
 
 ```ts
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
+expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"archive"');
 ```
 
 In `locked-page.spec.ts`, replace `year and month buckets keep locked options and show temporal chips` with the same structure, using:
 
 ```ts
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"locked"');
+expect(screen.getByTestId('timeline-options')).toHaveTextContent('"visibility":"locked"');
 ```
 
 In `trash-page.spec.ts`, replace `year and month buckets keep trash options and show temporal chips` with the same structure, using:
 
 ```ts
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isTrashed":true');
+expect(screen.getByTestId('timeline-options')).toHaveTextContent('"isTrashed":true');
 ```
 
 In `partner-page.spec.ts`, replace `year and month buckets keep partner options and show temporal chips` with the same structure, using:
 
 ```ts
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"userId":"partner-user-id"');
+expect(screen.getByTestId('timeline-options')).toHaveTextContent('"userId":"partner-user-id"');
 ```
 
 In `tags-page.spec.ts`, replace `year bucket activation keeps tag scope, switches grouping to month, and shows clearable temporal chip` with:
 
 ```ts
-  it('year bucket activation keeps tag scope and zooms without temporal chips', async () => {
-    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+it('year bucket activation keeps tag scope and zooms without temporal chips', async () => {
+  renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+});
 ```
 
 - [ ] **Step 2: Replace result-count and clear-chip tests that depended on bucket-created temporal filters**
@@ -109,35 +109,35 @@ In `tags-page.spec.ts`, replace `year bucket activation keeps tag scope, switche
 For `favorites-page.spec.ts`, `archive-page.spec.ts`, `locked-page.spec.ts`, `trash-page.spec.ts`, and `partner-page.spec.ts`, replace `singular temporal result count shows 1 result` with:
 
 ```ts
-  it('bucket activation does not render a temporal result count chip', async () => {
-    renderPage();
+it('bucket activation does not render a temporal result count chip', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-    expect(screen.queryByTestId('result-count')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+  expect(screen.queryByTestId('result-count')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+});
 ```
 
 In `tags-page.spec.ts`, replace `clearing temporal chip preserves grouping and removes ActiveFiltersBar` with:
 
 ```ts
-  it('bucket activation keeps tag scope without rendering ActiveFiltersBar', async () => {
-    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+it('bucket activation keeps tag scope without rendering ActiveFiltersBar', async () => {
+  renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+});
 ```
 
 - [ ] **Step 3: Add selection-mode bucket guard tests**
@@ -145,24 +145,24 @@ In `tags-page.spec.ts`, replace `clearing temporal chip preserves grouping and r
 Add this test near each existing selection-mode grouping-control test in `favorites-page.spec.ts`, `archive-page.spec.ts`, `locked-page.spec.ts`, `trash-page.spec.ts`, `partner-page.spec.ts`, and `tags-page.spec.ts`:
 
 ```ts
-  it('ignores bucket activation while selection mode is active', async () => {
-    mockAssetMultiSelectManager.selectionActive = true;
+it('ignores bucket activation while selection mode is active', async () => {
+  mockAssetMultiSelectManager.selectionActive = true;
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+});
 ```
 
 For `tags-page.spec.ts`, call:
 
 ```ts
-    renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
+renderPage({ tags: [makeTag({ id: 'tag-with-assets', value: 'Trips' })] });
 ```
 
 instead of bare `renderPage()`.
@@ -199,39 +199,39 @@ web/src/routes/(user)/tags/[[photos=photos]]/[[assetId=id]]/+page.svelte
 replace the timeline helper import:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    clearTimelineTemporalFilter,
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Replace each simple route `handleTimelineBucketActivate()` with:
 
 ```ts
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (assetMultiSelectManager.selectionActive) {
-      return;
-    }
-
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
-
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (assetMultiSelectManager.selectionActive) {
+    return;
   }
+
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
+
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 ```
 
 Do not assign `timelineFilters` in bucket activation. Do not remove `clearRouteTemporalFilter()`; it remains the explicit temporal-filter clearing path for temporal filters set outside bucket activation.
@@ -279,132 +279,132 @@ Expected: one commit scoped to simple query routes and their tests.
 In `person-detail-page.spec.ts`, replace `activating person year and month buckets preserves person scope and sets temporal chips and anchors` with:
 
 ```ts
-  it('activating person year and month buckets preserves person scope without temporal chips', async () => {
-    renderPage();
+it('activating person year and month buckets preserves person scope without temporal chips', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-
-    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
-    });
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+
+  await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+  });
+});
 ```
 
 Replace `clearing the person temporal chip preserves person scope and current grouping` with:
 
 ```ts
-  it('person bucket activation keeps scope without rendering ActiveFiltersBar', async () => {
-    renderPage();
+it('person bucket activation keeps scope without rendering ActiveFiltersBar', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withSharedSpaces":true');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"personIds":["person-1"]');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withSharedSpaces":true');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+});
 ```
 
 Add this test near the existing selection-mode grouping-control test:
 
 ```ts
-  it('ignores person bucket activation while selection mode is active', async () => {
-    mockAssetMultiSelectManager.selectionActive = true;
+it('ignores person bucket activation while selection mode is active', async () => {
+  mockAssetMultiSelectManager.selectionActive = true;
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+});
 ```
 
 In `space-person-detail-page.spec.ts`, replace `activating space person year and month buckets preserves scope and sets temporal chips and anchors` with:
 
 ```ts
-  it('activating space person year and month buckets preserves scope without temporal chips', async () => {
-    renderPage();
+it('activating space person year and month buckets preserves scope without temporal chips', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-
-    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
-    });
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+
+  await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
+  });
+});
 ```
 
 Replace `clearing the space person temporal chip preserves scope and current grouping` with:
 
 ```ts
-  it('space person bucket activation keeps scope without rendering ActiveFiltersBar', async () => {
-    renderPage();
+it('space person bucket activation keeps scope without rendering ActiveFiltersBar', async () => {
+  renderPage();
 
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+});
 ```
 
 Add this test near the existing selection-mode grouping-control test:
 
 ```ts
-  it('ignores space person bucket activation while selection mode is active', async () => {
-    mockAssetMultiSelectManager.selectionActive = true;
+it('ignores space person bucket activation while selection mode is active', async () => {
+  mockAssetMultiSelectManager.selectionActive = true;
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 2: Run focused person-route tests and verify RED**
@@ -424,39 +424,39 @@ Expected: FAIL because bucket activation still creates temporal filters/chips an
 In both person route files, replace:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    clearTimelineTemporalFilter,
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Replace `handleTimelineBucketActivate()` in both files with:
 
 ```ts
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (assetMultiSelectManager.selectionActive) {
-      return;
-    }
-
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
-
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (assetMultiSelectManager.selectionActive) {
+    return;
   }
+
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
+
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 ```
 
 Do not assign `timelineFilters` in bucket activation. Keep `clearPersonTemporalFilter()` and `clearSpacePersonTemporalFilter()` unchanged for explicit temporal filters.
@@ -498,76 +498,76 @@ Expected: one commit scoped to person query routes and tests.
 In `page.route.spec.ts`, replace `clicking album year and month buckets syncs the album FilterPanel temporal state` with:
 
 ```ts
-  it('clicking album year and month buckets zooms without temporal chips', async () => {
-    renderPage();
-    const user = userEvent.setup();
+it('clicking album year and month buckets zooms without temporal chips', async () => {
+  renderPage();
+  const user = userEvent.setup();
 
-    await user.click(screen.getByTestId('activate-year-bucket'));
-    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
-    expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
+  await user.click(screen.getByTestId('activate-year-bucket'));
+  await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
+  expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
 
-    await user.click(screen.getByTestId('activate-month-bucket'));
-    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"day"'));
-    expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
-    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
-  });
+  await user.click(screen.getByTestId('activate-month-bucket'));
+  await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"day"'));
+  expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+  expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
+});
 ```
 
 Replace `clears album temporal chips while preserving non-time album filters and grouping` with:
 
 ```ts
-  it('album bucket activation preserves non-time album filters without adding temporal chips', async () => {
-    renderPage();
-    const user = userEvent.setup();
+it('album bucket activation preserves non-time album filters without adding temporal chips', async () => {
+  renderPage();
+  const user = userEvent.setup();
 
-    await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
-    await user.click(screen.getByTestId('people-item-person-view'));
-    await user.click(screen.getByTestId('activate-year-bucket'));
+  await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
+  await user.click(screen.getByTestId('people-item-person-view'));
+  await user.click(screen.getByTestId('activate-year-bucket'));
 
-    await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
-    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
-    expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('2015');
-    expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
-    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
-  });
+  await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
+  expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
+  expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('2015');
+  expect(screen.getByTestId('timeline-options').textContent).toContain('"timelineAlbumId"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+  expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+  expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
+});
 ```
 
 Add this explicit temporal filter regression after the bucket activation tests:
 
 ```ts
-  it('explicit album timeline filters still show chips and clear without changing grouping', async () => {
-    renderPage();
-    const user = userEvent.setup();
+it('explicit album timeline filters still show chips and clear without changing grouping', async () => {
+  renderPage();
+  const user = userEvent.setup();
 
-    await user.click(await screen.findByTestId('timeline-grouping-month'));
-    await user.click(await screen.findByTestId('year-btn-2024'));
+  await user.click(await screen.findByTestId('timeline-grouping-month'));
+  await user.click(await screen.findByTestId('year-btn-2024'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2024');
-      expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options').textContent).toContain('"takenBefore":"2025-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Remove 2024 filter' }));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-      expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
-      expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2024');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenBefore":"2025-01-01T00:00:00.000Z"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
   });
+
+  await user.click(screen.getByRole('button', { name: 'Remove 2024 filter' }));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
+    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+});
 ```
 
 If `year-btn-2024` is not initially rendered because the timeline section is collapsed in this test environment, click `section-toggle-timeline` before clicking `year-btn-2024`.
@@ -577,158 +577,158 @@ If `year-btn-2024` is not initially rendered because the timeline section is col
 In `spaces-page.spec.ts`, replace the two bucket tests with:
 
 ```ts
-  it('clicking a space year bucket zooms without mutating filters or URL state', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=person-1');
+it('clicking a space year bucket zooms without mutating filters or URL state', async () => {
+  mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=person-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-    expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
-      'space-1',
-      expect.objectContaining({
-        personIds: ['person-1'],
-        selectedYear: undefined,
-        selectedMonth: undefined,
-        dateAfter: undefined,
-        dateBefore: undefined,
-      }),
-    );
-    expect(gotoMock).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+  expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
+    'space-1',
+    expect.objectContaining({
+      personIds: ['person-1'],
+      selectedYear: undefined,
+      selectedMonth: undefined,
+      dateAfter: undefined,
+      dateBefore: undefined,
+    }),
+  );
+  expect(gotoMock).not.toHaveBeenCalled();
+});
 
-  it('clicking a space month bucket zooms without mutating filters or URL state', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=person-1');
+it('clicking a space month bucket zooms without mutating filters or URL state', async () => {
+  mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=person-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
-    });
-    expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
-      'space-1',
-      expect.objectContaining({
-        personIds: ['person-1'],
-        selectedYear: undefined,
-        selectedMonth: undefined,
-        dateAfter: undefined,
-        dateBefore: undefined,
-      }),
-    );
-    expect(gotoMock).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
   });
+  expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
+    'space-1',
+    expect.objectContaining({
+      personIds: ['person-1'],
+      selectedYear: undefined,
+      selectedMonth: undefined,
+      dateAfter: undefined,
+      dateBefore: undefined,
+    }),
+  );
+  expect(gotoMock).not.toHaveBeenCalled();
+});
 ```
 
 Replace `keeps space temporal state transient across URL sync for non-time filter changes` with:
 
 ```ts
-  it('keeps explicit space temporal filters transient across URL sync for non-time filter changes', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+it('keeps explicit space temporal filters transient across URL sync for non-time filter changes', async () => {
+  mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
-    renderPage();
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
-    });
-
-    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(gotoMock).toHaveBeenLastCalledWith('/spaces/space-1/photos?country=Germany', {
-      replaceState: true,
-      keepFocus: true,
-      noScroll: true,
-    });
+  renderPage();
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
   });
+
+  await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+  expect(gotoMock).toHaveBeenLastCalledWith('/spaces/space-1/photos?country=Germany', {
+    replaceState: true,
+    keepFocus: true,
+    noScroll: true,
+  });
+});
 ```
 
 Replace `lets custom space date range override selected timeline year state` with:
 
 ```ts
-  it('lets explicit custom space date filters apply and clear a pending zoom anchor', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+it('lets explicit custom space date filters apply and clear a pending zoom anchor', async () => {
+  mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
 
-    await fireEvent.click(screen.getByTestId('filter-panel-set-custom-range'));
+  await fireEvent.click(screen.getByTestId('filter-panel-set-custom-range'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
-      'space-1',
-      expect.objectContaining({
-        dateAfter: '2024-01-01',
-        dateBefore: '2024-12-31',
-        selectedYear: undefined,
-        selectedMonth: undefined,
-      }),
-    );
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(buildSpaceTimelineOptions).toHaveBeenLastCalledWith(
+    'space-1',
+    expect.objectContaining({
+      dateAfter: '2024-01-01',
+      dateBefore: '2024-12-31',
+      selectedYear: undefined,
+      selectedMonth: undefined,
+    }),
+  );
+});
 ```
 
 Replace `clearing the space temporal chip keeps the current grouping and clears the anchor` with:
 
 ```ts
-  it('clearing an explicit space temporal chip keeps the current grouping and clears the anchor', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+it('clearing an explicit space temporal chip keeps the current grouping and clears the anchor', async () => {
+  mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('timeline-grouping-month'));
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('timeline-grouping-month'));
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+  await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+});
 ```
 
 Add this test near the existing select-assets mode test:
 
 ```ts
-  it('ignores space bucket activation outside view mode', async () => {
-    renderPage();
+it('ignores space bucket activation outside view mode', async () => {
+  renderPage();
 
-    await fireEvent.click(screen.getByLabelText('add_photos'));
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await fireEvent.click(screen.getByLabelText('add_photos'));
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      const optionsText = screen.getByTestId('timeline-options').textContent ?? '';
-      expect(optionsText).not.toContain('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
+  await waitFor(() => {
+    const optionsText = screen.getByTestId('timeline-options').textContent ?? '';
+    expect(optionsText).not.toContain('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+});
 ```
 
 - [ ] **Step 3: Write failing Map panel tests**
@@ -736,80 +736,80 @@ Add this test near the existing select-assets mode test:
 In `map-timeline-panel.spec.ts`, replace `year bucket activation updates panel temporal filters and anchors the map panel` with:
 
 ```ts
-  it('year bucket activation keeps map filters and anchors without temporal filters', async () => {
-    renderPanel(createFilterState());
+it('year bucket activation keeps map filters and anchors without temporal filters', async () => {
+  renderPanel(createFilterState());
 
-    await fireEvent.click(screen.getByTestId('activate-year-bucket'));
+  await fireEvent.click(screen.getByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
   });
+});
 ```
 
 Replace `month bucket activation switches to day grouping and uses an exclusive month range` with:
 
 ```ts
-  it('month bucket activation keeps map filters and anchors without temporal filters', async () => {
-    renderPanel(createFilterState());
+it('month bucket activation keeps map filters and anchors without temporal filters', async () => {
+  renderPanel(createFilterState());
 
-    await fireEvent.click(screen.getByTestId('activate-month-bucket'));
+  await fireEvent.click(screen.getByTestId('activate-month-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"assetFilter":{}');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015, month: 8 }));
   });
+});
 ```
 
 Add this explicit temporal filter regression after those tests:
 
 ```ts
-  it('explicit map temporal filters still show chips and clear without changing grouping', async () => {
-    renderPanel({ ...createFilterState(), selectedYear: 2015 });
+it('explicit map temporal filters still show chips and clear without changing grouping', async () => {
+  renderPanel({ ...createFilterState(), selectedYear: 2015 });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2016-01-01T00:00:00.000Z"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-    });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Remove 2015 filter' }));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01T00:00:00.000Z"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2016-01-01T00:00:00.000Z"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
   });
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Remove 2015 filter' }));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+    expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+});
 ```
 
 Add this selection-mode guard test:
 
 ```ts
-  it('ignores map bucket activation while selection mode is active', async () => {
-    mockAssetMultiSelectManager.selectionActive = true;
-    renderPanel(createFilterState());
+it('ignores map bucket activation while selection mode is active', async () => {
+  mockAssetMultiSelectManager.selectionActive = true;
+  renderPanel(createFilterState());
 
-    await fireEvent.click(screen.getByTestId('activate-year-bucket'));
+  await fireEvent.click(screen.getByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+});
 ```
 
 - [ ] **Step 4: Run focused album/space/map tests and verify RED**
@@ -830,41 +830,41 @@ Expected: FAIL because album/space/map bucket activation still writes temporal f
 In `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte`, replace:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    clearTimelineTemporalFilter,
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Replace `handleTimelineBucketActivate()` with:
 
 ```ts
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (!isBrowseTimeline || assetMultiSelectManager.selectionActive) {
-      return;
-    }
-
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
-
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (!isBrowseTimeline || assetMultiSelectManager.selectionActive) {
+    return;
   }
+
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
+
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 ```
 
 Do not assign `albumFilters` in bucket activation.
@@ -874,64 +874,64 @@ Do not assign `albumFilters` in bucket activation.
 In `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte`, replace the timeline helper import:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    clearTimelineTemporalFilter,
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Normalize optional temporal keys in the initial space filter state, matching the Photos route pattern from Slice 2:
 
 ```ts
-  let filters = $state<FilterState>({
-    ...createFilterState(),
-    dateAfter: undefined,
-    dateBefore: undefined,
-    selectedYear: undefined,
-    selectedMonth: undefined,
-    ...initialFilterState,
-    sortOrder: initialSearchState.sortOrder,
-  });
-  let filtersBeforePanelChange: FilterState = {
-    ...createFilterState(),
-    dateAfter: undefined,
-    dateBefore: undefined,
-    selectedYear: undefined,
-    selectedMonth: undefined,
-    ...initialFilterState,
-    sortOrder: initialSearchState.sortOrder,
-  };
+let filters = $state<FilterState>({
+  ...createFilterState(),
+  dateAfter: undefined,
+  dateBefore: undefined,
+  selectedYear: undefined,
+  selectedMonth: undefined,
+  ...initialFilterState,
+  sortOrder: initialSearchState.sortOrder,
+});
+let filtersBeforePanelChange: FilterState = {
+  ...createFilterState(),
+  dateAfter: undefined,
+  dateBefore: undefined,
+  selectedYear: undefined,
+  selectedMonth: undefined,
+  ...initialFilterState,
+  sortOrder: initialSearchState.sortOrder,
+};
 ```
 
 Replace `handleTimelineBucketActivate()` with:
 
 ```ts
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (viewMode !== 'view' || assetMultiSelectManager.selectionActive) {
-      return;
-    }
-
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
-
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (viewMode !== 'view' || assetMultiSelectManager.selectionActive) {
+    return;
   }
+
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
+
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 ```
 
 Do not assign `filters` and do not call `syncFilterUrl()` in bucket activation.
@@ -941,39 +941,39 @@ Do not assign `filters` and do not call `syncFilterUrl()` in bucket activation.
 In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/MapTimelinePanel.svelte`, replace:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    clearTimelineTemporalFilter,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  clearTimelineTemporalFilter,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    clearTimelineTemporalFilter,
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 Replace `handleTimelineBucketActivate` with:
 
 ```ts
-  const handleTimelineBucketActivate = (bucket: ActivatableTimelineBucket) => {
-    if (assetMultiSelectManager.selectionActive) {
-      return;
-    }
+const handleTimelineBucketActivate = (bucket: ActivatableTimelineBucket) => {
+  if (assetMultiSelectManager.selectionActive) {
+    return;
+  }
 
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
 
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
-  };
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+};
 ```
 
 Do not assign `filters` in bucket activation.

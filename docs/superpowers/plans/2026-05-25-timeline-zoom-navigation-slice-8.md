@@ -50,6 +50,7 @@ The implementation may already pass because Slice 6 migrated routes to `Timeline
 ## Task 1: Shared Route Family Matrix
 
 **Files:**
+
 - Modify: `mobile/test/presentation/pages/timeline_route_adoption_test.dart`
 - Modify only on test failure: `mobile/lib/presentation/widgets/timeline/timeline_route_scope.dart` or the specific missing route page.
 
@@ -207,6 +208,7 @@ Expected result on the current Slice 7 baseline:
 ## Task 2: Selection And Read-Only Regression Guard
 
 **Files:**
+
 - No new production files expected.
 - Existing tests:
   - `mobile/test/presentation/pages/drift_asset_selection_timeline_page_test.dart`

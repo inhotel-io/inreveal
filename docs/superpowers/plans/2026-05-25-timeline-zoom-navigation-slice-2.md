@@ -65,32 +65,32 @@ These buttons model explicit filter-panel timeline selection. They are test supp
 In `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts`, replace the test named `clicking a photos year bucket sets temporal filter state, switches to month grouping, and keeps non-time filters` with:
 
 ```ts
-  it('clicking a photos year bucket zooms to month grouping without mutating filters', async () => {
-    mockPage.url = new URL('https://gallery.test/photos?people=person-1&city=Berlin');
+it('clicking a photos year bucket zooms to month grouping without mutating filters', async () => {
+  mockPage.url = new URL('https://gallery.test/photos?people=person-1&city=Berlin');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        personIds: ['person-1'],
-        city: 'Berlin',
-        selectedYear: undefined,
-        selectedMonth: undefined,
-        dateAfter: undefined,
-        dateBefore: undefined,
-      }),
-    );
-    expect(goto).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      personIds: ['person-1'],
+      city: 'Berlin',
+      selectedYear: undefined,
+      selectedMonth: undefined,
+      dateAfter: undefined,
+      dateBefore: undefined,
+    }),
+  );
+  expect(goto).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 3: Replace the Photos month bucket test with zoom-only expectations**
@@ -98,31 +98,31 @@ In `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts`, replace th
 Replace the test named `clicking a photos month bucket sets month temporal state and switches to day grouping` with:
 
 ```ts
-  it('clicking a photos month bucket zooms to day grouping without mutating filters', async () => {
-    mockPage.url = new URL('https://gallery.test/photos?people=person-1');
+it('clicking a photos month bucket zooms to day grouping without mutating filters', async () => {
+  mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-month-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        personIds: ['person-1'],
-        selectedYear: undefined,
-        selectedMonth: undefined,
-        dateAfter: undefined,
-        dateBefore: undefined,
-      }),
-    );
-    expect(goto).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
   });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      personIds: ['person-1'],
+      selectedYear: undefined,
+      selectedMonth: undefined,
+      dateAfter: undefined,
+      dateBefore: undefined,
+    }),
+  );
+  expect(goto).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 4: Replace the transient temporal URL sync test with explicit filter-panel temporal state**
@@ -130,37 +130,37 @@ Replace the test named `clicking a photos month bucket sets month temporal state
 Replace the test named `keeps photos temporal state transient across URL sync for non-time filter changes` with:
 
 ```ts
-  it('keeps explicit photos temporal filters transient across URL sync for non-time filter changes', async () => {
-    mockPage.url = new URL('https://gallery.test/photos');
+it('keeps explicit photos temporal filters transient across URL sync for non-time filter changes', async () => {
+  mockPage.url = new URL('https://gallery.test/photos');
 
-    renderPage();
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
-    });
-
-    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        country: 'Germany',
-        selectedYear: 2015,
-        selectedMonth: undefined,
-      }),
-    );
-    expect(goto).toHaveBeenLastCalledWith('/photos?country=Germany', {
-      replaceState: true,
-      keepFocus: true,
-      noScroll: true,
-    });
+  renderPage();
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2015');
   });
+
+  await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+  });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      country: 'Germany',
+      selectedYear: 2015,
+      selectedMonth: undefined,
+    }),
+  );
+  expect(goto).toHaveBeenLastCalledWith('/photos?country=Germany', {
+    replaceState: true,
+    keepFocus: true,
+    noScroll: true,
+  });
+});
 ```
 
 - [ ] **Step 5: Replace the custom date override test with explicit date-filter regression coverage**
@@ -168,39 +168,39 @@ Replace the test named `keeps photos temporal state transient across URL sync fo
 Replace the test named `lets custom photos date range override selected timeline year state` with:
 
 ```ts
-  it('lets an explicit custom photos date range filter apply and clear a pending zoom anchor', async () => {
-    mockPage.url = new URL('https://gallery.test/photos?people=person-1');
+it('lets an explicit custom photos date range filter apply and clear a pending zoom anchor', async () => {
+  mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
-    await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  await waitFor(() => expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}'));
 
-    await fireEvent.click(screen.getByTestId('filter-panel-set-custom-range'));
+  await fireEvent.click(screen.getByTestId('filter-panel-set-custom-range'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-before', '2024-12-31');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        personIds: ['person-1'],
-        dateAfter: '2024-01-01',
-        dateBefore: '2024-12-31',
-        selectedYear: undefined,
-        selectedMonth: undefined,
-      }),
-    );
-    expect(goto).toHaveBeenLastCalledWith('/photos?people=person-1&from=2024-01-01&to=2024-12-31', {
-      replaceState: true,
-      keepFocus: true,
-      noScroll: true,
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      personIds: ['person-1'],
+      dateAfter: '2024-01-01',
+      dateBefore: '2024-12-31',
+      selectedYear: undefined,
+      selectedMonth: undefined,
+    }),
+  );
+  expect(goto).toHaveBeenLastCalledWith('/photos?people=person-1&from=2024-01-01&to=2024-12-31', {
+    replaceState: true,
+    keepFocus: true,
+    noScroll: true,
+  });
+});
 ```
 
 - [ ] **Step 6: Replace the temporal chip clearing test so it uses an explicit filter**
@@ -208,28 +208,28 @@ Replace the test named `lets custom photos date range override selected timeline
 Replace the test named `clearing the photos temporal chip keeps non-time filters and the current grouping` with:
 
 ```ts
-  it('clearing an explicit photos temporal chip keeps non-time filters and the current grouping', async () => {
-    mockPage.url = new URL('https://gallery.test/photos?people=person-1');
+it('clearing an explicit photos temporal chip keeps non-time filters and the current grouping', async () => {
+  mockPage.url = new URL('https://gallery.test/photos?people=person-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('timeline-grouping-month'));
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('timeline-grouping-month'));
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+  await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        personIds: ['person-1'],
-        selectedYear: undefined,
-        selectedMonth: undefined,
-      }),
-    );
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
   });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      personIds: ['person-1'],
+      selectedYear: undefined,
+      selectedMonth: undefined,
+    }),
+  );
+});
 ```
 
 - [ ] **Step 7: Replace the custom date bucket test so bucket activation preserves explicit date filters**
@@ -237,31 +237,31 @@ Replace the test named `clearing the photos temporal chip keeps non-time filters
 Replace the test named `clicking a photos bucket clears custom date state before applying selected year` with:
 
 ```ts
-  it('clicking a photos bucket preserves an existing explicit custom date filter', async () => {
-    mockPage.url = new URL('https://gallery.test/photos?from=2024-01-01&to=2024-12-31&tags=tag-1');
+it('clicking a photos bucket preserves an existing explicit custom date filter', async () => {
+  mockPage.url = new URL('https://gallery.test/photos?from=2024-01-01&to=2024-12-31&tags=tag-1');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-    expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        tagIds: ['tag-1'],
-        dateAfter: '2024-01-01',
-        dateBefore: '2024-12-31',
-        selectedYear: undefined,
-        selectedMonth: undefined,
-      }),
-    );
-    expect(goto).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-date-before', '2024-12-31');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-date-after', '2024-01-01');
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+  expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      tagIds: ['tag-1'],
+      dateAfter: '2024-01-01',
+      dateBefore: '2024-12-31',
+      selectedYear: undefined,
+      selectedMonth: undefined,
+    }),
+  );
+  expect(goto).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 8: Add coverage that bucket activation creates no active filter bar by itself**
@@ -269,19 +269,19 @@ Replace the test named `clicking a photos bucket clears custom date state before
 Add this test after the month bucket test:
 
 ```ts
-  it('does not show active filter chips when a photos bucket is activated without filters', async () => {
-    mockPage.url = new URL('https://gallery.test/photos');
+it('does not show active filter chips when a photos bucket is activated without filters', async () => {
+  mockPage.url = new URL('https://gallery.test/photos');
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
-    });
-    expect(screen.queryByTestId('active-filters-bar-stub')).not.toBeInTheDocument();
-    expect(goto).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
   });
+  expect(screen.queryByTestId('active-filters-bar-stub')).not.toBeInTheDocument();
+  expect(goto).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 9: Add coverage that Photos ignores bucket activation in selection mode**
@@ -289,20 +289,20 @@ Add this test after the month bucket test:
 Add this test near the existing selection-mode grouping-control test:
 
 ```ts
-  it('ignores photos bucket activation while selection mode is active', async () => {
-    mockPage.url = new URL('https://gallery.test/photos');
-    mockAssetMultiSelectManager.selectionActive = true;
+it('ignores photos bucket activation while selection mode is active', async () => {
+  mockPage.url = new URL('https://gallery.test/photos');
+  mockAssetMultiSelectManager.selectionActive = true;
 
-    renderPage();
-    await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
+  renderPage();
+  await fireEvent.click(await screen.findByTestId('activate-year-bucket'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
-      expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-    });
-    expect(goto).not.toHaveBeenCalled();
+  await waitFor(() => {
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+    expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
   });
+  expect(goto).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 10: Run the focused Photos test and verify RED**
@@ -343,21 +343,21 @@ The explicit filter-panel tests may already pass before production changes. The 
 In `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`, replace this import:
 
 ```ts
-  import {
-    activateTimelineBucket,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  activateTimelineBucket,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 with:
 
 ```ts
-  import {
-    getTimelineBucketZoomTarget,
-    type ActivatableTimelineBucket,
-    getTimelineManagerTimeBuckets,
-  } from '$lib/utils/timeline-filter-navigation';
+import {
+  getTimelineBucketZoomTarget,
+  type ActivatableTimelineBucket,
+  getTimelineManagerTimeBuckets,
+} from '$lib/utils/timeline-filter-navigation';
 ```
 
 - [ ] **Step 2: Make the handler mutate grouping and anchor only**
@@ -365,19 +365,19 @@ with:
 Replace `handleTimelineBucketActivate()` with:
 
 ```ts
-  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
-    if (assetMultiSelectManager.selectionActive) {
-      return;
-    }
-
-    const result = getTimelineBucketZoomTarget(bucket);
-    if (!result) {
-      return;
-    }
-
-    timelineGrouping = result.grouping;
-    temporalAnchor = result.anchor;
+function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+  if (assetMultiSelectManager.selectionActive) {
+    return;
   }
+
+  const result = getTimelineBucketZoomTarget(bucket);
+  if (!result) {
+    return;
+  }
+
+  timelineGrouping = result.grouping;
+  temporalAnchor = result.anchor;
+}
 ```
 
 Do not assign `filters` in this handler. Do not call `syncFilterUrl()` in this handler. Do not remove `syncFilterUrl()` or `pendingFilterUrlSync`; explicit filter-panel temporal selections still use that path.

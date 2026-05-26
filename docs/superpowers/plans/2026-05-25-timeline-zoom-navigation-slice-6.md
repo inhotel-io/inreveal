@@ -51,6 +51,7 @@
 ## Task 1: Add Route-Local Zoom Anchor Model And Provider
 
 **Files:**
+
 - Create: `mobile/test/domain/models/timeline_zoom_anchor_test.dart`
 - Create: `mobile/test/providers/timeline/zoom_anchor_provider_test.dart`
 - Modify: `mobile/test/presentation/widgets/timeline/timeline_route_scope_test.dart`
@@ -359,6 +360,7 @@ git commit -m "feat(mobile): add route-local timeline zoom anchors"
 ## Task 2: Change Shared Overview Activation To Store Zoom Anchors
 
 **Files:**
+
 - Modify: `mobile/test/providers/timeline/overview_drilldown_provider_test.dart`
 - Modify: `mobile/test/presentation/widgets/timeline/timeline_route_scope_test.dart`
 - Modify: `mobile/test/presentation/pages/timeline_route_adoption_test.dart`
@@ -605,6 +607,7 @@ git commit -m "feat(mobile): zoom timeline overview cards without temporal scope
 ## Task 3: Resolve Zoom Anchors In The Timeline After Segment Rebuilds
 
 **Files:**
+
 - Modify: `mobile/test/presentation/widgets/timeline/timeline_scroll_target_test.dart`
 - Create: `mobile/test/presentation/widgets/timeline/timeline_zoom_anchor_resolution_test.dart`
 - Modify: `mobile/lib/presentation/widgets/timeline/timeline_scroll_target.dart`

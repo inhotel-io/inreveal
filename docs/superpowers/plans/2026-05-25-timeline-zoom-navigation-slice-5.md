@@ -46,6 +46,7 @@
 ## Task 1: Rename Detailed Grouping Label To All Across Web Controls
 
 **Files:**
+
 - Modify: `web/src/lib/components/timeline/TimelineGroupingControl.spec.ts`
 - Modify: `web/src/lib/components/timeline/Timeline.spec.ts`
 - Modify: `web/src/lib/components/timeline/TimelineRouteGroupingBar.spec.ts`
@@ -220,6 +221,7 @@ git commit -m "feat(web): label detailed timeline grouping as all"
 ## Task 2: Add Zoom-Oriented Representative Card Accessibility Copy
 
 **Files:**
+
 - Modify: `web/src/lib/components/timeline/TimelineBucketCard.spec.ts`
 - Modify: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.spec.ts`
 - Modify: `web/src/lib/components/timeline/TimelineBucketCard.svelte`
@@ -293,7 +295,9 @@ expect(screen.getByRole('button', { name: /2016, .+ photos, show months/i })).to
 Add this assertion to `passes locale through to month bucket cards`:
 
 ```ts
-expect(screen.getByRole('button', { name: /Aug\\. 2015, 80 photos, show all photos from this point/i })).toBeInTheDocument();
+expect(
+  screen.getByRole('button', { name: /Aug\\. 2015, 80 photos, show all photos from this point/i }),
+).toBeInTheDocument();
 ```
 
 - [ ] **Step 2: Run tests and verify the accessibility failures are red**
@@ -382,6 +386,7 @@ git commit -m "feat(web): announce timeline bucket zoom actions"
 ## Task 3: Guard Explicit Filter Chip Copy And Run Slice Verification
 
 **Files:**
+
 - Modify: `web/src/lib/components/filter-panel/__tests__/active-filters-bar.spec.ts`
 - Verify: `web/src/lib/components/timeline/TimelineGroupingControl.svelte`
 - Verify: `web/src/lib/components/timeline/TimelineBucketCard.svelte`

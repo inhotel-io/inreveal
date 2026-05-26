@@ -47,6 +47,7 @@
 ## Task 1: Migrate GalleryViewer From Local Temporal Filtering To Zoom
 
 **Files:**
+
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.spec.ts`
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.svelte`
 
@@ -424,6 +425,7 @@ git commit -m "feat(web): zoom gallery viewer buckets without filtering"
 ## Task 2: Add GalleryViewer Local Anchor Resolution
 
 **Files:**
+
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.spec.ts`
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/gallery-viewer.svelte`
 
@@ -511,7 +513,10 @@ it('anchors year and month zooms to the first matching local bucket or asset', a
     await waitFor(() => {
       expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-year', '2015');
       expect(scrollTracker.scrolledElement).toHaveAttribute('data-gallery-asset-month', '8');
-      expect(scrollTracker.scrolledElement).toHaveAttribute('data-testid', 'gallery-viewer-asset-anchor-asset-2015-aug');
+      expect(scrollTracker.scrolledElement).toHaveAttribute(
+        'data-testid',
+        'gallery-viewer-asset-anchor-asset-2015-aug',
+      );
       expect(screen.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
     });
   } finally {
@@ -798,6 +803,7 @@ git commit -m "feat(web): anchor gallery viewer zoom targets"
 ## Task 3: Remove Obsolete GalleryViewer Temporal Filtering And Legacy Activation Helper
 
 **Files:**
+
 - Modify: `web/src/lib/utils/gallery-viewer-grouping.ts`
 - Modify: `web/src/lib/utils/__tests__/gallery-viewer-grouping.spec.ts`
 - Modify: `web/src/lib/utils/timeline-filter-navigation.ts`
@@ -898,7 +904,11 @@ import {
 with:
 
 ```ts
-import { clearTimelineTemporalFilter, getTimelineBucketZoomTarget, getTimelineManagerTimeBuckets } from '../timeline-filter-navigation';
+import {
+  clearTimelineTemporalFilter,
+  getTimelineBucketZoomTarget,
+  getTimelineManagerTimeBuckets,
+} from '../timeline-filter-navigation';
 ```
 
 Delete these tests:

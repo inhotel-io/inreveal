@@ -54,6 +54,7 @@
 ## Task 1: Map Page Regression Tests
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`
 - Modify: `web/src/test-data/mocks/map-timeline-panel-grouping.stub.svelte`
 
@@ -62,21 +63,21 @@
 In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`, replace the first panel-written temporal test with:
 
 ```ts
-  it('keeps map FilterPanel temporal state untouched when the timeline panel activates a bucket', async () => {
-    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
+it('keeps map FilterPanel temporal state untouched when the timeline panel activates a bucket', async () => {
+  sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
 
-    renderPage();
-    await flushQueryDebounce();
-    await flushMapLoad();
-    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
-    await fireEvent.click(screen.getByTestId('map-panel-activate-year'));
+  renderPage();
+  await flushQueryDebounce();
+  await flushMapLoad();
+  await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
+  await fireEvent.click(screen.getByTestId('map-panel-activate-year'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute('data-bucket-activations', '1');
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute('data-bucket-activations', '1');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
+});
 ```
 
 - [ ] **Step 2: Rename the two explicit-filter map tests**
@@ -84,35 +85,35 @@ In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`
 In the same file, change the remaining two tests so they exercise the real `FilterPanel` date filter path instead of the mocked bucket activation path:
 
 ```ts
-  it('keeps explicit map temporal filters synchronized with the FilterPanel and chips', async () => {
-    renderPage();
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+it('keeps explicit map temporal filters synchronized with the FilterPanel and chips', async () => {
+  renderPage();
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
-      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2015');
   });
+});
 
-  it('clears explicit map temporal filter state from map chips and the FilterPanel', async () => {
-    renderPage();
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await fireEvent.click(screen.getByTestId('clear-all-btn'));
+it('clears explicit map temporal filter state from map chips and the FilterPanel', async () => {
+  renderPage();
+  await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+  await fireEvent.click(screen.getByTestId('clear-all-btn'));
 
-    await waitFor(() => {
-      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
-      expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
-    });
+  await waitFor(() => {
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
+});
 ```
 
 Rename the mobile overlay test to `does not leave explicit temporal state in the mobile filter overlay after clearing map chips` and set up state with `filter-panel-set-year`:
 
 ```ts
-    renderPage();
-    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
-    await fireEvent.click(screen.getByTestId('clear-all-btn'));
-    await fireEvent.click(screen.getByTestId('map-mobile-filter-toggle'));
+renderPage();
+await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+await fireEvent.click(screen.getByTestId('clear-all-btn'));
+await fireEvent.click(screen.getByTestId('map-mobile-filter-toggle'));
 ```
 
 - [ ] **Step 3: Run the focused red test**
@@ -168,6 +169,7 @@ git commit -m "test(web): align map timeline zoom regression coverage"
 ## Task 2: Split Web Zoom And Explicit Temporal-Filter Helpers
 
 **Files:**
+
 - Rename: `web/src/lib/utils/timeline-filter-navigation.ts` -> `web/src/lib/utils/timeline-zoom-navigation.ts`
 - Create: `web/src/lib/utils/timeline-temporal-filters.ts`
 - Rename: `web/src/lib/utils/__tests__/timeline-filter-navigation.spec.ts` -> `web/src/lib/utils/__tests__/timeline-zoom-navigation.spec.ts`
@@ -325,6 +327,7 @@ git commit -m "refactor(web): split timeline zoom and temporal filter helpers"
 ## Task 3: Supersede Filter-Drilldown Documentation
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-05-19-timeline-grouping-design.md`
 - Modify: `docs/superpowers/specs/2026-05-22-mobile-timeline-overview-design.md`
 - Modify: `docs/superpowers/specs/2026-05-25-timeline-zoom-navigation-design.md`
@@ -418,6 +421,7 @@ git commit -m "docs: supersede timeline filter drilldown language"
 ## Task 4: Cross-Platform Verification And Push
 
 **Files:**
+
 - No new file changes expected unless verification exposes a real gap.
 
 - [ ] **Step 1: Run final audits**
