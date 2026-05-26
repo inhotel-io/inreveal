@@ -447,7 +447,11 @@ const assetUpdateMetadataPayloadShape = {
     .optional()
     .describe('Asset description. Use an empty string to clear the description.'),
   rating: z
-    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5), z.null()])
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .nullable()
     .optional()
     .describe('Asset star rating from 1 to 5. Use null to clear the rating.'),
   dateTimeOriginal: z.iso.datetime().optional().describe('Absolute original capture date/time as an ISO datetime.'),
@@ -775,14 +779,14 @@ const AgentOperationReviewMetadataValueKindSchema = z
   .meta({ id: 'AgentOperationReviewMetadataValueKind' });
 const AgentOperationReviewMetadataValueSchema = z.object({
   assetId: uuid,
-  value: z.union([z.string(), z.number(), z.null()]),
+  value: z.string().nullable(),
   valueKind: AgentOperationReviewMetadataValueKindSchema,
 });
 const AgentOperationReviewMetadataFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
   previousValues: z.array(AgentOperationReviewMetadataValueSchema),
-  proposedValue: z.union([z.string(), z.number(), z.null()]),
+  proposedValue: z.string().nullable(),
   proposedValueKind: AgentOperationReviewMetadataValueKindSchema,
 });
 const AgentOperationReviewMetadataSchema = z.object({

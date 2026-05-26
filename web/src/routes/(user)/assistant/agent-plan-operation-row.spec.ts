@@ -203,7 +203,7 @@ const metadataModel = (itemSelectionByOperationId?: OperationItemSelectionState)
               {
                 key: 'rating',
                 label: 'Rating',
-                previousValues: [{ assetId: assetA, value: 4, valueKind: 'known' }],
+                previousValues: [{ assetId: assetA, value: '4', valueKind: 'known' }],
                 proposedValue: null,
                 proposedValueKind: 'clear',
               },
@@ -219,7 +219,7 @@ const metadataModel = (itemSelectionByOperationId?: OperationItemSelectionState)
             warnings: [],
           },
         },
-      } as any),
+      }),
     ]),
     { [metadataId]: true },
     itemSelectionByOperationId ?? {},

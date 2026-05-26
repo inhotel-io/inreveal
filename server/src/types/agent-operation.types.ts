@@ -25,10 +25,10 @@ export type AgentOperationReviewMetadata = {
       label: string;
       previousValues: Array<{
         assetId: string;
-        value: string | number | null;
+        value: string | null;
         valueKind: AgentOperationReviewMetadataValueKind;
       }>;
-      proposedValue: string | number | null;
+      proposedValue: string | null;
       proposedValueKind: AgentOperationReviewMetadataValueKind;
     }>;
     sampleAssetIds: string[];

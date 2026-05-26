@@ -23624,15 +23624,8 @@
                                 "type": "string"
                               },
                               "value": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ],
-                                "nullable": true
+                                "nullable": true,
+                                "type": "string"
                               },
                               "valueKind": {
                                 "$ref": "#/components/schemas/AgentOperationReviewMetadataValueKind"
@@ -23648,15 +23641,8 @@
                           "type": "array"
                         },
                         "proposedValue": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            }
-                          ],
-                          "nullable": true
+                          "nullable": true,
+                          "type": "string"
                         },
                         "proposedValueKind": {
                           "$ref": "#/components/schemas/AgentOperationReviewMetadataValueKind"
@@ -25070,39 +25056,10 @@
                           "maxLength": 1000
                         },
                         "rating": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5,
                           "description": "Asset star rating from 1 to 5. Use null to clear the rating.",
-                          "anyOf": [
-                            {
-                              "type": "number",
-                              "enum": [
-                                1
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                2
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                3
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                4
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                5
-                              ]
-                            }
-                          ],
                           "nullable": true
                         },
                         "dateTimeOriginal": {
@@ -27033,39 +26990,10 @@
                           "maxLength": 1000
                         },
                         "rating": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 5,
                           "description": "Asset star rating from 1 to 5. Use null to clear the rating.",
-                          "anyOf": [
-                            {
-                              "type": "number",
-                              "enum": [
-                                1
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                2
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                3
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                4
-                              ]
-                            },
-                            {
-                              "type": "number",
-                              "enum": [
-                                5
-                              ]
-                            }
-                          ],
                           "nullable": true
                         },
                         "dateTimeOriginal": {

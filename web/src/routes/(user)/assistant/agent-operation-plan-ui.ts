@@ -1169,9 +1169,10 @@ const formatMetadataValue = (key: string, value: unknown, kind: AgentOperationMe
   }
 
   if (key === 'rating') {
-    return typeof value === 'number'
-      ? translatedMetadataText('assistant_operation_metadata_value_rating' as Translations, { rating: value })
-      : translatedMetadataText('assistant_operation_metadata_value_unrated' as Translations);
+    const rating = parseMetadataNumber(value);
+    return rating === undefined
+      ? translatedMetadataText('assistant_operation_metadata_value_unrated' as Translations)
+      : translatedMetadataText('assistant_operation_metadata_value_rating' as Translations, { rating });
   }
 
   if (kind === 'empty' || value === null || value === undefined || value === '') {
@@ -1191,12 +1192,24 @@ const formatProposedMetadataValue = (key: string, value: unknown, kind: AgentOpe
   }
 
   if (kind === 'relative') {
-    return typeof value === 'number'
-      ? translatedMetadataText('assistant_operation_metadata_value_shift_minutes' as Translations, { minutes: value })
-      : translatedMetadataText('assistant_operation_metadata_value_shift_capture_time' as Translations);
+    const minutes = parseMetadataNumber(value);
+    return minutes === undefined
+      ? translatedMetadataText('assistant_operation_metadata_value_shift_capture_time' as Translations)
+      : translatedMetadataText('assistant_operation_metadata_value_shift_minutes' as Translations, { minutes });
   }
 
   return formatMetadataValue(key, value, kind);
+};
+
+const parseMetadataNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
 };
 
 const getStringArray = (value: unknown) =>
