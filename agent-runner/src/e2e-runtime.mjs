@@ -167,6 +167,31 @@ const requireSearchAssets = async (client) => {
   return assetIds.slice(0, 2);
 };
 
+const searchSelectionSourceRef = async (client, args) => {
+  const result = await client.call('searchAssets', args);
+  if (result.status !== 'success') {
+    throw new Error(`Asset search did not complete successfully: ${result.status}`);
+  }
+
+  const sourceRef = result.selectionHandle?.sourceRef;
+  if (typeof sourceRef !== 'string' || sourceRef.length === 0) {
+    throw new Error('Asset search did not return a selection handle source reference');
+  }
+
+  return sourceRef;
+};
+
+const proposeMetadataBatchFromSearch = async (client, { searchArgs, action }) => {
+  const sourceRef = await searchSelectionSourceRef(client, searchArgs);
+  await client.call('proposeAssetBatchFromSearch', {
+    action,
+    assetSource: {
+      kind: 'previousSearch',
+      sourceRef,
+    },
+  });
+};
+
 const proposePortugalTrip = async (client) => {
   const assetIds = await requireSearchAssets(client);
   const [coverAssetId] = assetIds;
@@ -239,6 +264,39 @@ const proposeDeniedTrip = async (client) => {
   });
 };
 
+const parseMetadataPrompt = (prompt) => {
+  const descriptionMatch = prompt.match(
+    /^set the description on the (\d+) newest photos to\s+(.+?)\.?$/i,
+  );
+  if (descriptionMatch) {
+    return {
+      kind: 'description',
+      limit: Number(descriptionMatch[1]),
+      description: descriptionMatch[2],
+    };
+  }
+
+  const latitudeMatch = prompt.match(/\blatitude\s+(-?\d+(?:\.\d+)?)/i);
+  const longitudeMatch = prompt.match(/\blongitude\s+(-?\d+(?:\.\d+)?)/i);
+  if (latitudeMatch && longitudeMatch) {
+    return {
+      kind: 'coordinates',
+      latitude: Number(latitudeMatch[1]),
+      longitude: Number(longitudeMatch[1]),
+    };
+  }
+
+  if (latitudeMatch) {
+    return { kind: 'missing-longitude' };
+  }
+
+  if (/^set these photos to\s+.+\.?$/i.test(prompt)) {
+    return { kind: 'place-name' };
+  }
+
+  return null;
+};
+
 export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) => {
   const sessions = new Map();
 
@@ -277,15 +335,63 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         fetch: fetchImplementation,
       });
       const prompt = getPromptText(content);
+      const metadataPrompt = parseMetadataPrompt(prompt);
+
+      if (metadataPrompt?.kind === 'place-name') {
+        yield completedEvent({
+          gallerySessionId,
+          runnerSessionId,
+          text: 'Please provide explicit latitude and longitude before I propose a location metadata update.',
+        });
+        return;
+      }
+
+      if (metadataPrompt?.kind === 'missing-longitude') {
+        yield completedEvent({
+          gallerySessionId,
+          runnerSessionId,
+          text: 'Please provide the longitude before I propose a coordinate metadata update.',
+        });
+        return;
+      }
 
       yield deltaEvent({
         gallerySessionId,
         runnerSessionId,
-        text: 'Drafting an album plan.',
+        text: metadataPrompt ? 'Drafting a metadata plan.' : 'Drafting an album plan.',
       });
 
       try {
-        if (/\bdenied\b|\binaccessible\b/i.test(prompt)) {
+        if (metadataPrompt?.kind === 'description') {
+          await proposeMetadataBatchFromSearch(client, {
+            searchArgs: {
+              filters: {},
+              order: 'desc',
+              limit: metadataPrompt.limit,
+              detail: 'ids',
+              createSelectionHandle: true,
+              sampleSize: 2,
+            },
+            action: {
+              type: 'asset.updateMetadata',
+              description: metadataPrompt.description,
+            },
+          });
+        } else if (metadataPrompt?.kind === 'coordinates') {
+          await proposeMetadataBatchFromSearch(client, {
+            searchArgs: {
+              filters: {},
+              detail: 'ids',
+              createSelectionHandle: true,
+              sampleSize: 2,
+            },
+            action: {
+              type: 'asset.updateMetadata',
+              latitude: metadataPrompt.latitude,
+              longitude: metadataPrompt.longitude,
+            },
+          });
+        } else if (/\bdenied\b|\binaccessible\b/i.test(prompt)) {
           await proposeDeniedTrip(client);
         } else {
           await proposePortugalTrip(client);
@@ -294,7 +400,11 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
         yield completedEvent({
           gallerySessionId,
           runnerSessionId,
-          text: 'I proposed a Portugal Trip album. Review the operations before applying them.',
+          text: metadataPrompt?.kind === 'coordinates'
+            ? 'I proposed a coordinates metadata update. Review the operation before applying it.'
+            : metadataPrompt?.kind === 'description'
+              ? 'I proposed a metadata description update. Review the operation before applying it.'
+              : 'I proposed a Portugal Trip album. Review the operations before applying them.',
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
