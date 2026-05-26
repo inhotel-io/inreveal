@@ -3,6 +3,7 @@ import {
   AgentApprovalMode,
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
+  AgentOperationReviewMetadataValueKind,
   AgentOperationRiskLevel,
   AgentOperationStatus,
   AgentOperationTargetKind,
@@ -336,16 +337,20 @@ const metadataPlan = () =>
             {
               key: 'description',
               label: 'Description',
-              previousValues: [{ assetId: assetA, value: 'Old caption', valueKind: 'known' }],
+              previousValues: [
+                { assetId: assetA, value: 'Old caption', valueKind: AgentOperationReviewMetadataValueKind.Known },
+              ],
               proposedValue: 'Berlin weekend',
-              proposedValueKind: 'known',
+              proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
             },
             {
               key: 'location',
               label: 'Location',
-              previousValues: [{ assetId: assetA, value: '48.8566, 2.3522', valueKind: 'known' }],
+              previousValues: [
+                { assetId: assetA, value: '48.8566, 2.3522', valueKind: AgentOperationReviewMetadataValueKind.Known },
+              ],
               proposedValue: '52.52, 13.405',
-              proposedValueKind: 'known',
+              proposedValueKind: AgentOperationReviewMetadataValueKind.Known,
             },
           ],
           sampleAssetIds: [assetA],
