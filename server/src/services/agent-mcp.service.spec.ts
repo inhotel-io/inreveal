@@ -1331,7 +1331,7 @@ describe(AgentMcpService.name, () => {
     expectEnrichedToolValidationError(response, {
       toolName: AgentToolName.ProposeAssetBatchFromSearch,
       path: 'action.type',
-      hintIncludes: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, or asset.rotate',
+      hintIncludes: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate',
     });
     expect(operationPlanService.proposeAssetBatchFromSearch).not.toHaveBeenCalled();
   });
