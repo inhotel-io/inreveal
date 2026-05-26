@@ -7,6 +7,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
+import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -16,6 +17,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
+import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 
 TimelineService _emptyService(TimelineOrigin origin) {
   return TimelineService((
@@ -23,6 +25,14 @@ TimelineService _emptyService(TimelineOrigin origin) {
     assetSource: (offset, count) async => const <BaseAsset>[],
     origin: origin,
   ));
+}
+
+String _anchorLabel(TimelineZoomAnchor anchor) {
+  return switch (anchor) {
+    TimelineZoomAnchorNone() => 'none',
+    TimelineZoomYearAnchor(:final year) => 'year:$year',
+    TimelineZoomMonthAnchor(:final year, :final month) => 'month:$year-$month',
+  };
 }
 
 void main() {
@@ -78,6 +88,45 @@ void main() {
     await tester.pump();
 
     expect(find.text('left:year'), findsOneWidget);
+    expect(find.text('right:none'), findsOneWidget);
+  });
+
+  testWidgets('isolates zoom anchors across sibling route subtrees', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Row(
+            children: [
+              TimelineRouteScope(
+                child: Consumer(
+                  builder: (context, ref, child) => TextButton(
+                    key: const Key('left-anchor'),
+                    onPressed: () => ref.read(timelineZoomAnchorProvider.notifier).setYear(2025),
+                    child: Text('left:${_anchorLabel(ref.watch(timelineZoomAnchorProvider))}'),
+                  ),
+                ),
+              ),
+              TimelineRouteScope(
+                child: Consumer(
+                  builder: (context, ref, child) => Text(
+                    'right:${_anchorLabel(ref.watch(timelineZoomAnchorProvider))}',
+                    key: const Key('right-anchor'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('left:none'), findsOneWidget);
+    expect(find.text('right:none'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('left-anchor')));
+    await tester.pump();
+
+    expect(find.text('left:year:2025'), findsOneWidget);
     expect(find.text('right:none'), findsOneWidget);
   });
 
