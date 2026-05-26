@@ -66,4 +66,23 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).toContain('Place-name-to-coordinate metadata edits');
     expect(needsNewToolSection).toMatch(/forward geocoder|geocod/i);
   });
+
+  it('keeps bounded highlight curation planned while quality scoring remains a new-tool gap', () => {
+    const markdown = readMatrix();
+
+    const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
+
+    expect(bestPhotosRow).toBeDefined();
+    expect(bestPhotosRow).toContain('planned implementation');
+    expect(bestPhotosRow).toMatch(/Constrained now|behind implementation|not solid/i);
+    expect(bestPhotosRow).not.toContain('Solid now');
+
+    const needsNewToolHeadingIndex = markdown.indexOf('## Needs New MCP Tool');
+    expect(needsNewToolHeadingIndex).not.toBe(-1);
+
+    const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
+    expect(needsNewToolSection).toContain('Image quality scoring');
+    expect(needsNewToolSection).toContain('analyzeAssetQuality');
+    expect(needsNewToolSection).toMatch(/quality scoring/i);
+  });
 });
