@@ -352,7 +352,7 @@ const metadataPlan = () =>
           warnings: [],
         },
       },
-    } as any),
+    }),
   ]);
 
 const httpError = (statusCode: number, message: string) =>

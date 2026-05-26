@@ -556,19 +556,19 @@ describe('Agent operation DTOs', () => {
         name: 'rating zero',
         payload: { rating: 0 },
         path: ['operations', 0, 'payload', 'rating'],
-        message: 'Invalid input',
+        message: 'Too small',
       },
       {
         name: 'negative rating',
         payload: { rating: -1 },
         path: ['operations', 0, 'payload', 'rating'],
-        message: 'Invalid input',
+        message: 'Too small',
       },
       {
         name: 'rating above five',
         payload: { rating: 6 },
         path: ['operations', 0, 'payload', 'rating'],
-        message: 'Invalid input',
+        message: 'Too big',
       },
       {
         name: 'invalid datetime',

@@ -120,7 +120,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each item.metadataReview.fields as field}
+            {#each item.metadataReview.fields as field (field.key)}
               <tr>
                 <th class="border-b border-gray-100 py-2 pr-3 align-top font-medium dark:border-neutral-800">
                   {formatMetadataText(field.label)}
@@ -129,7 +129,7 @@
                   class="border-b border-gray-100 px-3 py-2 align-top text-gray-600 dark:border-neutral-800 dark:text-gray-300"
                 >
                   <div class="flex flex-col gap-0.5">
-                    {#each field.currentValues as currentValue}
+                    {#each field.currentValues as currentValue (currentValue.assetId)}
                       <span>{formatMetadataText(currentValue.text)}</span>
                     {/each}
                   </div>
@@ -144,7 +144,7 @@
           </tbody>
         </table>
 
-        {#each item.metadataReview.warnings as warning}
+        {#each item.metadataReview.warnings as warning (formatMetadataText(warning))}
           <p class="mt-2 text-sm text-amber-700 dark:text-amber-300">{formatMetadataText(warning)}</p>
         {/each}
       </div>

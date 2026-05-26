@@ -676,10 +676,10 @@ export type AgentOperationResponseDto = {
                 label: string;
                 previousValues: {
                     assetId: string;
-                    value: (string | number) | null;
+                    value: string | null;
                     valueKind: AgentOperationReviewMetadataValueKind;
                 }[];
-                proposedValue: (string | number) | null;
+                proposedValue: string | null;
                 proposedValueKind: AgentOperationReviewMetadataValueKind;
             }[];
             sampleAssetIds: string[];
@@ -962,7 +962,7 @@ export type AgentProposeAlbumOperationsDto = {
             /** Asset description. Use an empty string to clear the description. */
             description?: string;
             /** Asset star rating from 1 to 5. Use null to clear the rating. */
-            rating?: (1 | 2 | 3 | 4 | 5) | null;
+            rating?: number | null;
             /** Absolute original capture date/time as an ISO datetime. */
             dateTimeOriginal?: string;
             /** Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal. */
@@ -1276,7 +1276,7 @@ export type AgentReviseAlbumOperationsDto = {
             /** Asset description. Use an empty string to clear the description. */
             description?: string;
             /** Asset star rating from 1 to 5. Use null to clear the rating. */
-            rating?: (1 | 2 | 3 | 4 | 5) | null;
+            rating?: number | null;
             /** Absolute original capture date/time as an ISO datetime. */
             dateTimeOriginal?: string;
             /** Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal. */

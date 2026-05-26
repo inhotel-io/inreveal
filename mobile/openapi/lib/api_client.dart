@@ -352,8 +352,6 @@ class ApiClient {
           return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInner.fromJson(value);
         case 'AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner':
           return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner.fromJson(value);
-        case 'AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue':
-          return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue.fromJson(value);
         case 'AgentOperationReviewMetadataValueKind':
           return AgentOperationReviewMetadataValueKindTypeTransformer().decode(value);
         case 'AgentOperationRiskLevel':
@@ -412,8 +410,6 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15Payload.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf15PayloadRating.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload':
