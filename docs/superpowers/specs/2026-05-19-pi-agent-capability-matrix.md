@@ -102,8 +102,8 @@ semantic search.
 
 | Capability                  | Why users want it                                             | Current feasibility                                                                            | Guardrail                                                              |
 | --------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Constrained now and behind planned implementation; works only across bounded candidates using ratings, favorites, metadata, and previews, not quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
-| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Partially possible with previews, but not robust for hundreds/thousands without scoring tools. | Treat as suggestions; show thumbnails; avoid auto-apply.               |
+| “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, and previews across bounded candidates; suggested highlights are not objective quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
+| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Constrained now with previews, but not robust for hundreds/thousands without scoring tools. | Treat as suggestions; show thumbnails; avoid auto-apply.               |
 | Recent upload organization  | “Organize everything I uploaded today.”                       | Works if search can bound by time and result limit.                                            | Chunk large result sets and explain any limit.                         |
 | Screenshot/document cleanup | Archive screenshots or documents.                             | Works if media metadata or tags identify them; weak if detection requires image understanding. | Prefer metadata filters; ask for confirmation on visual-only matches.  |
 | Story/memory albums         | “Make a birthday highlights album.”                           | Works when date/location/album context is known; weak for people/event recognition.            | Ask for date/person/album context if semantic cues are not searchable. |
@@ -172,6 +172,12 @@ Use these prompts as manual and automated acceptance scenarios:
 20. “Shift these scanned photos forward by 2 hours.”
 21. “Set these photos to latitude 48.8566 and longitude 2.3522.”
 22. “Set these photos to Paris.”
+23. “Suggest 5 highlights from this album and make an album called Highlights.”
+24. “Favorite the best 3 photos from last weekend.”
+25. “Pick a cover from this album.”
+26. “Pick the best photos from my library.”
+27. “Suggest 20 highlights from this album.”
+28. “Suggest highlights from last weekend.”
 
 ## Next Steps
 

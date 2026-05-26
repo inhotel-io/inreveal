@@ -40,6 +40,27 @@ const defaultHighlightMetadataAssets = () => [
   highlightMetadataAsset(highlightAssetIds[3], { exifInfo: { rating: 2, city: 'Lisbon', country: 'Portugal' } }),
 ];
 
+const currentAlbumAssetIds = Array.from(
+  { length: 8 },
+  (_value, index) => `00000000-0000-4000-8000-${String(800 + index).padStart(12, '0')}`,
+);
+
+const currentAlbumMetadataAssets = () =>
+  currentAlbumAssetIds.map((id, index) =>
+    highlightMetadataAsset(id, {
+      isFavorite: index === 1 || index === 4,
+      exifInfo: {
+        rating: [1, 5, 3, 2, 4, 0, 2, 1][index],
+        city: index % 2 === 0 ? 'Porto' : 'Lisbon',
+        country: 'Portugal',
+      },
+    }),
+  );
+
+const currentAlbumSessionContext = () => ({
+  albumId: familyAlbumId,
+});
+
 const familyAlbumSummary = () => ({
   id: familyAlbumId,
   albumName: 'Family',
@@ -967,8 +988,7 @@ describe('e2e runtime', () => {
     const events = await collectEvents(runtime, 'Suggest 10 highlights from this album.');
 
     assert.equal(calls.length, 0);
-    assert.match(events.at(-1).content.blocks[0].text, /concrete searchable source/i);
-    assert.match(events.at(-1).content.blocks[0].text, /\?/);
+    assert.match(events.at(-1).content.blocks[0].text, /current album context/i);
   });
 
   it('asks for a positive highlight count for zero or negative requests without creating a plan', async () => {
@@ -1138,6 +1158,236 @@ describe('e2e runtime', () => {
     assert.deepEqual(calls[0].body.params.arguments.filters, lastWeekendHighlightFilters);
     assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
     assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+  });
+
+  describe('highlight curation acceptance smoke', () => {
+    it('creates a highlights album from the current album context', async () => {
+      const albums = [familyAlbumSummary()];
+      const { calls, fetchImplementation } = createFetch(
+        metadataHighlightHandlers({
+          albums,
+          albumAssetIds: currentAlbumAssetIds,
+          metadataAssets: currentAlbumMetadataAssets(),
+        }),
+      );
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
+
+      const events = await collectEvents(
+        runtime,
+        'Suggest 5 highlights from this album and make an album called Highlights.',
+      );
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum,readAssetMetadata,proposeAlbumOperations');
+      assert.deepEqual(calls[0].body.params.arguments, { albumId: familyAlbumId });
+      const plan = calls.at(-1).body.params.arguments;
+      assert.equal(JSON.stringify(plan).includes('assetSource'), false);
+      assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
+      assert.equal(plan.operations[0].payload.albumName, 'Highlights');
+      assert.deepEqual(
+        plan.operations.map((operation) => operation.type),
+        ['album.create', 'album.addAssets'],
+      );
+      assert.equal(plan.operations[1].assetIds.length, 5);
+      assert.match(plan.summary, /metadata-only/i);
+      assert.match(events.at(-1).content.blocks[0].text, /5 suggested highlights|5 .*highlights/i);
+      assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+    });
+
+    it('favorites the best 3 photos from last weekend', async () => {
+      const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody());
+
+      const events = await collectEvents(runtime, 'Favorite the best 3 photos from last weekend.');
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+      const plan = calls.at(-1).body.params.arguments;
+      assert.deepEqual(plan.operations, [
+        {
+          type: 'asset.setFavorite',
+          summary: 'Favorite 3 metadata-only suggested highlights.',
+          targetKind: 'asset_batch',
+          assetIds: [
+            '00000000-0000-4000-8000-000000000402',
+            '00000000-0000-4000-8000-000000000403',
+            '00000000-0000-4000-8000-000000000401',
+          ],
+          riskLevel: 'low',
+          enabled: true,
+          payload: { favorite: true },
+        },
+      ]);
+      assert.match(events.at(-1).content.blocks[0].text, /3 metadata-only suggested highlights/i);
+    });
+
+    it('picks a cover from the current album context', async () => {
+      const albums = [familyAlbumSummary()];
+      const { calls, fetchImplementation } = createFetch(
+        previewHighlightHandlers({
+          albums,
+          albumAssetIds: currentAlbumAssetIds,
+          metadataAssets: currentAlbumMetadataAssets(),
+        }),
+      );
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(
+        createSessionBody({ initialContext: { ...currentAlbumSessionContext(), providerSupportsImages: true } }),
+      );
+
+      const events = await collectEvents(runtime, 'Pick a cover from this album.');
+
+      assert.equal(
+        calls.map((call) => call.body.params.name).join(','),
+        'readAlbum,readAssetMetadata,readAssetPreviews,proposeAlbumOperations',
+      );
+      assert.deepEqual(calls[0].body.params.arguments, { albumId: familyAlbumId });
+      const plan = calls.at(-1).body.params.arguments;
+      assert.deepEqual(
+        plan.operations.map((operation) => operation.type),
+        ['album.setCover'],
+      );
+      assert.equal(plan.operations[0].assetIds.length, 1);
+      assert.match(plan.summary, /cover/i);
+      assert.match(events.at(-1).content.blocks[0].text, /cover/i);
+      assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+    });
+
+    it('asks for scope and creates no plan for best photos from the library', async () => {
+      const { calls, fetchImplementation } = createFetch(successHandlers());
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody());
+
+      const events = await collectEvents(runtime, 'Pick the best photos from my library.');
+
+      assert.equal(calls.length, 0);
+      assert.match(events.at(-1).content.blocks[0].text, /bounded source/i);
+      assert.match(events.at(-1).content.blocks[0].text, /\?/);
+    });
+
+    it('proposes the 7 eligible current-album assets when 20 are requested', async () => {
+      const sevenAssetIds = currentAlbumAssetIds.slice(0, 7);
+      const albums = [familyAlbumSummary()];
+      const { calls, fetchImplementation } = createFetch(
+        metadataHighlightHandlers({
+          albums,
+          albumAssetIds: sevenAssetIds,
+          metadataAssets: currentAlbumMetadataAssets().slice(0, 7),
+        }),
+      );
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
+
+      const events = await collectEvents(
+        runtime,
+        'Suggest 20 highlights from this album and make an album called Highlights.',
+      );
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum,readAssetMetadata,proposeAlbumOperations');
+      const plan = calls.at(-1).body.params.arguments;
+      assert.equal(plan.operations[1].assetIds.length, 7);
+      assert.match(events.at(-1).content.blocks[0].text, /Only 7 eligible candidates/i);
+      assert.match(events.at(-1).content.blocks[0].text, /requested 20/i);
+    });
+
+    it('reports no matches and creates no plan for an empty bounded source', async () => {
+      const { calls, fetchImplementation } = createFetch([
+        {
+          name: 'searchAssets',
+          handle: (_args, request) => ({
+            body: {
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                structuredContent: {
+                  status: 'success',
+                  assetIds: [],
+                  returnedCount: 0,
+                  hasMore: false,
+                },
+              },
+            },
+          }),
+        },
+        successHandlers()[1],
+      ]);
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody());
+
+      const events = await collectEvents(runtime, 'Suggest highlights from last weekend.');
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
+      assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
+      assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+    });
+
+    it('does not fall back to broad search when current album asset ids are unavailable', async () => {
+      const { calls, fetchImplementation } = createFetch([
+        {
+          name: 'readAlbum',
+          handle: (_args, request) => ({
+            body: {
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                structuredContent: {
+                  album: familyAlbumSummary(),
+                },
+              },
+            },
+          }),
+        },
+        {
+          name: 'searchAssets',
+          handle: (_args, request) => ({
+            body: {
+              jsonrpc: '2.0',
+              id: request.id,
+              error: { code: -32000, message: 'current album highlight curation must not search broadly' },
+            },
+          }),
+        },
+        successHandlers()[1],
+      ]);
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
+
+      const events = await collectEvents(
+        runtime,
+        'Suggest 5 highlights from this album and make an album called Highlights.',
+      );
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum');
+      assert.match(events.at(-1).content.blocks[0].text, /no matching/i);
+      assert.match(events.at(-1).content.blocks[0].text, /did not create a plan/i);
+    });
+
+    it('reports current album read failures instead of throwing out of highlight curation', async () => {
+      const { calls, fetchImplementation } = createFetch([
+        {
+          name: 'readAlbum',
+          handle: (_args, request) => ({
+            body: {
+              jsonrpc: '2.0',
+              id: request.id,
+              error: { code: -32000, message: `album lookup denied with ${token}` },
+            },
+          }),
+        },
+        successHandlers()[1],
+      ]);
+      const runtime = createE2eRuntime({ fetch: fetchImplementation });
+      await runtime.createSession(createSessionBody({ initialContext: currentAlbumSessionContext() }));
+
+      const events = await collectEvents(
+        runtime,
+        'Suggest 5 highlights from this album and make an album called Highlights.',
+      );
+
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'readAlbum');
+      assert.match(events.at(-1).content.blocks[0].text, /could not inspect highlight candidates/i);
+      assert.equal(events.at(-1).content.blocks[0].text.includes(token), false);
+    });
   });
 
   it('reports a denied proposal without leaking the gateway token', async () => {
