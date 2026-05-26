@@ -186,8 +186,8 @@ In `server/src/types/agent-session.types.ts`, extend the legacy and normalized w
 ```
 
 ```ts
-    tagAssets: boolean;
-    updateAssetMetadata: boolean;
+tagAssets: boolean;
+updateAssetMetadata: boolean;
 ```
 
 In `server/src/dtos/agent-session.dto.ts`, extend both write-scope maps:
@@ -237,8 +237,12 @@ Update the existing preset assertion for `AgentSessionService.permissionPresets`
 
 ```ts
 expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.updateAssetMetadata).toBe(false);
-expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.updateAssetMetadata).toBe(true);
-expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata).toBe(true);
+expect(
+  AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.updateAssetMetadata,
+).toBe(true);
+expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata).toBe(
+  true,
+);
 ```
 
 Update the legacy custom-plan runner handoff expected object to include:
