@@ -20,7 +20,7 @@ class AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousVal
 
   String assetId;
 
-  AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue? value;
+  String? value;
 
   AgentOperationReviewMetadataValueKind valueKind;
 
@@ -62,7 +62,7 @@ class AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousVal
 
       return AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInner(
         assetId: mapValueOfType<String>(json, r'assetId')!,
-        value: AgentOperationResponseDtoReviewMetadataAssetMetadataFieldsInnerPreviousValuesInnerValue.fromJson(json[r'value']),
+        value: mapValueOfType<String>(json, r'value'),
         valueKind: AgentOperationReviewMetadataValueKind.fromJson(json[r'valueKind'])!,
       );
     }
