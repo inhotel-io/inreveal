@@ -212,7 +212,7 @@ describe('Map page query intersection', () => {
     expect(contentColumn?.className).toContain('relative');
   });
 
-  it('lets the map timeline panel write temporal filters back to the map FilterPanel and chips', async () => {
+  it('keeps map FilterPanel temporal state untouched when the timeline panel activates a bucket', async () => {
     sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
 
     renderPage();
@@ -220,6 +220,15 @@ describe('Map page query intersection', () => {
     await flushMapLoad();
     await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
     await fireEvent.click(screen.getByTestId('map-panel-activate-year'));
+
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '');
+    expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute('data-bucket-activations', '1');
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  });
+
+  it('keeps explicit map temporal filters synchronized with the FilterPanel and chips', async () => {
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
 
     await waitFor(() => {
       expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
@@ -227,14 +236,9 @@ describe('Map page query intersection', () => {
     });
   });
 
-  it('clears panel-written temporal state from map chips and the FilterPanel', async () => {
-    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
-
+  it('clears explicit map temporal filter state from map chips and the FilterPanel', async () => {
     renderPage();
-    await flushQueryDebounce();
-    await flushMapLoad();
-    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
-    await fireEvent.click(screen.getByTestId('map-panel-activate-year'));
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
     await fireEvent.click(screen.getByTestId('clear-all-btn'));
 
     await waitFor(() => {
@@ -243,16 +247,13 @@ describe('Map page query intersection', () => {
     });
   });
 
-  it('does not leave panel-written temporal state in the mobile filter overlay after clearing map chips', async () => {
+  it('does not leave explicit temporal state in the mobile filter overlay after clearing map chips', async () => {
     Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 390 });
-    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
 
     renderPage();
-    await flushQueryDebounce();
-    await flushMapLoad();
-    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
-    await fireEvent.click(screen.getByTestId('map-panel-activate-year'));
-    await fireEvent.click(screen.getByTestId('map-panel-close'));
+    await fireEvent.click(screen.getByTestId('map-mobile-filter-toggle'));
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+    await fireEvent.click(screen.getByLabelText('Close filters'));
     await fireEvent.click(screen.getByTestId('clear-all-btn'));
     await fireEvent.click(screen.getByTestId('map-mobile-filter-toggle'));
 

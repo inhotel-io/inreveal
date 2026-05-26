@@ -8,13 +8,19 @@
   }
 
   let { filters = $bindable(createFilterState()), onClose, ...rest }: Props = $props();
+  let bucketActivations = $state(0);
 
   function activateYear() {
-    filters = { ...filters, selectedYear: 2015 };
+    bucketActivations += 1;
   }
 </script>
 
-<div {...rest} data-testid="map-timeline-panel-stub" data-selected-year={filters?.selectedYear ?? ''}>
+<div
+  {...rest}
+  data-testid="map-timeline-panel-stub"
+  data-selected-year={filters?.selectedYear ?? ''}
+  data-bucket-activations={bucketActivations}
+>
   <button type="button" data-testid="map-panel-activate-year" onclick={activateYear}>Activate year</button>
   <button type="button" data-testid="map-panel-close" onclick={() => onClose?.()}>Close</button>
 </div>
