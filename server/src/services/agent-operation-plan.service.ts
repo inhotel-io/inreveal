@@ -3657,7 +3657,7 @@ export class AgentOperationPlanService {
       return {
         ...update,
         result: {
-          ...(update.result ?? {}),
+          ...update.result,
           reviewMetadata,
         },
       };
