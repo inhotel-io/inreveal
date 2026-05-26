@@ -162,9 +162,16 @@
       return;
     }
 
-    if (scrollTimelineToTemporalAnchor(timelineManager, temporalAnchor)) {
-      onTemporalAnchorResolved?.();
-    }
+    const anchor = temporalAnchor;
+    void tick().then(() => {
+      if (temporalAnchor !== anchor || !timelineManager.isInitialized || timelineManager.grouping !== activeGrouping) {
+        return;
+      }
+
+      if (scrollTimelineToTemporalAnchor(timelineManager, anchor)) {
+        onTemporalAnchorResolved?.();
+      }
+    });
   });
 
   $effect(() => {

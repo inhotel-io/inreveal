@@ -9,6 +9,7 @@ import {
 } from 'src/ui/generators/timeline';
 import { setupBaseMockApiRoutes } from 'src/ui/mock-network/base-network';
 import { setupTimelineMockApiRoutes, TimelineTestContext } from 'src/ui/mock-network/timeline-network';
+import { thumbnailUtils, timelineUtils } from 'src/ui/specs/timeline/utils';
 import { utils } from 'src/utils';
 
 test.describe('Timeline grouping UI', () => {
@@ -60,6 +61,34 @@ test.describe('Timeline grouping UI', () => {
     await expect(page.locator('[data-thumbnail-focus-container]').first()).toBeVisible();
     await expect(page.getByTestId('active-filters-bar')).not.toBeVisible();
     expect(page.url()).not.toContain('selectedMonth');
+  });
+
+  test('zooms an old month into the full timeline at that month instead of staying at the top', async ({ page }) => {
+    const targetMonth = '2000-12';
+    const targetAsset = [...timelineRestData.buckets.get(`${targetMonth}-01`)!].at(0)!;
+
+    await page.goto('/photos');
+    await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('timeline-grouping-year').click();
+    await timelineUtils.locator(page).evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    const targetYearCard = page.getByTestId('timeline-bucket-card').filter({ hasText: '2000' });
+    await expect(targetYearCard).toBeVisible();
+    await targetYearCard.click();
+
+    await expect(page.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('timeline-bucket-card').filter({ hasText: 'Dec 2000' }).click();
+
+    await expect(page.getByTestId('timeline-grouping-day')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('active-filters-bar')).not.toBeVisible();
+    expect(page.url()).not.toContain('selectedYear');
+    expect(page.url()).not.toContain('selectedMonth');
+    await expect.poll(() => timelineUtils.locator(page).evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await thumbnailUtils.expectInViewport(page, targetAsset.id);
   });
 
   test('shows the floating grouping control on mobile browse and hides it under the asset viewer', async ({ page }) => {
