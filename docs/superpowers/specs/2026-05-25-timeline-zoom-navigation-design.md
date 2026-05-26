@@ -483,7 +483,12 @@ At least one mobile shared-route widget or integration flow must cover:
 
 ## Manual QA Matrix
 
-Each platform should be checked with:
+For each platform and scenario, run both paths:
+
+1. Bucket zoom path: start in `Years`, activate a year, verify `Months` stays scrollable beyond that year with no temporal chip or temporal URL param, activate a month, verify detailed mode stays scrollable beyond that month, then manually switch back to `Years`.
+2. Explicit filter path: set an explicit year/month/date-range filter through the route's filter UI, verify buckets and detailed assets are narrowed, verify the temporal chip and URL/filter state appear where that route supports them, clear the temporal chip, and verify non-time filters remain.
+
+Scenarios:
 
 - No filters active.
 - Explicit year filter active.

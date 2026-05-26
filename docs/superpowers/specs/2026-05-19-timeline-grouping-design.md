@@ -1,5 +1,7 @@
 # Timeline Grouping Design
 
+> Update: The zoom-navigation follow-up spec from 2026-05-25 supersedes this document's original date-filter activation model. Bucket card activation now changes display grouping and scroll anchor only; explicit date filters remain the only source of temporal narrowing and temporal chips.
+
 ## Problem
 
 Large photo timelines are hard to scan when every surface starts near the detailed thumbnail level. A person, tag, album, space, or filtered library can contain tens of thousands of assets, forcing users to scroll through dense day groups to reach an older year or month.
@@ -14,7 +16,7 @@ Add a shared timeline grouping mode:
 - `month` shows one representative photo card per matching month.
 - `day` shows the current detailed thumbnail timeline with day headers.
 
-The grouping mode is a display density. It is not itself a filter. However, clicking a specific year or month card is a temporal navigation shortcut that updates the same temporal filter state used by the FilterPanel.
+The grouping mode is a display density. It is not itself a filter. Clicking a specific year or month card is zoom navigation: it changes grouping resolution and requests a scroll anchor without changing temporal filter state.
 
 The first implementation slice covers web `Timeline`-based surfaces:
 
@@ -49,13 +51,13 @@ Year and month modes render representative photo cards:
 
 Day mode preserves the current detailed thumbnail timeline behavior: day headers, justified thumbnails, scrubber behavior, selection, asset viewer navigation, and keyboard navigation should continue to work.
 
-Card clicks move the user to the next grouping density and update temporal filter state:
+Card clicks move the user to the next grouping density without updating temporal filter state:
 
-- Clicking `2015` in `Years` sets the temporal filter to year `2015`, switches grouping to `Months`, and anchors to that year.
-- Clicking `Aug. 2015` in `Months` sets the temporal filter to August 2015, switches grouping to `Days`, and anchors to that month.
-- Clearing the temporal filter removes the year/month narrowing and reloads buckets for the remaining active filters.
+- Clicking `2015` in `Years` switches grouping to `Months` and anchors to that year.
+- Clicking `Aug. 2015` in `Months` switches grouping to `Days` and anchors to that month.
+- No temporal chip is created. Clearing explicit temporal filters remains available only for date filters the user set through filter UI.
 
-In day mode, day headers keep their current selection behavior. Clicking a day does not introduce another drill-down mode.
+In day mode, day headers keep their current selection behavior. Clicking a day does not introduce another detail mode.
 
 ## FilterPanel Behavior
 
@@ -66,9 +68,9 @@ Filters and grouping are separate axes:
 
 Filter changes flow into timeline bucket requests. For example, selecting a person changes the bucket request to include `personIds`, so the timeline only shows years, months, or days containing that person.
 
-Timeline card clicks flow back into temporal filter state. On pages with a FilterPanel, the selected year/month must appear in that panel and in active filter chips. On pages without a full FilterPanel, the same reusable temporal state should still surface as a clearable active chip near the timeline controls.
+Timeline card clicks leave temporal filter state untouched. On pages with a FilterPanel, the selected year/month fields remain unchanged after bucket activation. On pages without a full FilterPanel, bucket activation still must not surface a clearable temporal chip.
 
-The FilterPanel remains the visible source of truth for temporal narrowing. The grouping control does not replace the temporal filter UI; it provides a faster visual way to set it.
+The FilterPanel remains the visible source of truth for explicit temporal narrowing. The grouping control does not replace the temporal filter UI; it provides a faster visual way to change display resolution and scroll position.
 
 ## Server API
 
@@ -150,16 +152,16 @@ Pages that already share `TimelineManager` should not each invent their own grou
 
 - passing grouping-aware options
 - placing the desktop control in the local toolbar/header
-- exposing active temporal chips where the page does not have a FilterPanel
+- preserving explicit temporal chips where the page does not have a FilterPanel
 - handling route-specific empty states and selection bars
 
-Photos and Spaces must sync with the existing FilterPanel. Albums, People, Tags, Archive, Favorites, Trash, Locked, and Map timeline panel should use the same underlying temporal filter state even where a full filter panel is not present.
+Photos and Spaces must keep the existing FilterPanel synchronized for explicit date filters. Albums, People, Tags, Archive, Favorites, Trash, Locked, and Map timeline panel should use explicit temporal filter state only when the user sets a date filter; bucket activation remains grouping-and-anchor navigation.
 
 ## Performance
 
 The first slice must use server-side bucket granularity. Client-side merging of month buckets into years is not enough because it keeps large timelines coupled to month-level data and weakens representative card selection.
 
-Year and month views should request bucket metadata only, not all assets. Switching from year to month or month to day should issue new bucket requests with narrower temporal filters.
+Year and month views should request bucket metadata only, not all assets. Switching from year to month or month to day should issue new bucket requests at the new grouping resolution while preserving the same explicit filters and route constraints.
 
 Representative asset lookup should be included in the bucket query or resolved in a bounded follow-up path. It must not issue one unbounded asset query per bucket.
 
@@ -206,12 +208,12 @@ Web manager tests:
 
 - Updating grouping requests the correct bucket size.
 - Selecting a person/tag/filter reloads only matching buckets.
-- Clicking a year card sets year temporal state, switches to month grouping, and anchors.
-- Clicking a month card sets month temporal state, switches to day grouping, and anchors.
-- Clearing temporal state reloads broader buckets without losing non-time filters.
+- Clicking a year card switches to month grouping and anchors without writing temporal filter state.
+- Clicking a month card switches to day grouping and anchors without writing temporal filter state.
+- Clearing explicit temporal filters reloads broader buckets without losing non-time filters.
 - Rapid grouping/filter changes cancel or ignore stale bucket responses.
 - Grouping preference initializes consistently on first load and after component remount.
-- Browser navigation or route changes do not restore stale temporal anchors after filters are cleared.
+- Browser navigation or route changes do not restore stale temporal anchors as filters.
 - Empty bucket lists show the route's existing empty state instead of a blank timeline.
 - Representative bucket cards do not load all bucket assets.
 - Day mode preserves current detailed timeline behavior.
@@ -228,10 +230,10 @@ Component and route tests:
 - Representative card labels and counts fit on narrow mobile widths and large desktop widths.
 - Missing thumbhash, missing representative ratio, failed thumbnail load, and video thumbnails degrade gracefully.
 - The grouping control remains usable with reduced motion, coarse pointer, and keyboard-only navigation.
-- Photos and Spaces FilterPanel stay synchronized with timeline card clicks.
-- Active temporal chips appear and clear correctly on pages without a full FilterPanel.
+- Photos and Spaces FilterPanel stay synchronized for explicit date filter changes and remain unchanged after timeline card clicks.
+- Active temporal chips appear and clear correctly only for explicit temporal filters on pages without a full FilterPanel.
 - Timeline-based routes can mount with each grouping mode.
-- Main Photos and Spaces flows have browser-level coverage for `Years -> click year -> Months -> click month -> Days -> clear temporal filter`.
+- Main Photos and Spaces flows have browser-level coverage for `Years -> click year -> Months -> click month -> Days` with no activation-created temporal chip, plus separate explicit temporal filter clearing coverage.
 
 ## Edge Cases
 
@@ -252,7 +254,7 @@ The implementation plan should explicitly account for these edge cases:
 - Selection mode active when the grouping control or representative cards would otherwise be clickable.
 - Asset viewer open while grouping state changes elsewhere.
 - In-flight bucket requests resolving after the user changes grouping, filters, route, or auth context.
-- Routes without a full FilterPanel still exposing clearable temporal state.
+- Routes without a full FilterPanel still exposing clearable explicit temporal filter state.
 - Mobile floating control overlapping bottom navigation, safe-area insets, scrubber, upload banners, or selection bars.
 - Desktop control coexisting with long filter-chip rows and narrow sidebars.
 - Localized month names and long labels fitting in cards and controls.
@@ -279,9 +281,9 @@ Slice 2: Web timeline model
 
 Slice 3: Filter and navigation integration
 
-- Wire year/month card clicks to temporal filter state.
-- Keep FilterPanel and active chips synchronized.
-- Add clear behavior.
+- Wire year/month card clicks to grouping changes and scroll anchors only.
+- Keep FilterPanel and active chips synchronized for explicit temporal filters.
+- Keep explicit temporal clear behavior separate from bucket activation.
 
 Slice 4: UI controls and cards
 
@@ -305,8 +307,8 @@ Slice 6: Later grid parity
   - individual shared-link gallery views
 - `GalleryViewer` grouping is a client-side display density over the assets already supplied to the component. This keeps it compatible with flat grids that do not use `TimelineManager` or server bucket APIs yet.
 - `year` and `month` modes render representative cards derived from the loaded assets. The representative card uses the first asset in that bucket and must not fetch all additional assets or call route pagination callbacks by itself.
-- Clicking a year card narrows the visible GalleryViewer assets to that year, switches grouping to `month`, and exposes a clearable temporal chip. Clicking a month card narrows to that month and switches grouping to `day`.
-- Clearing the temporal chip restores the original asset list while preserving any route-owned query, folder, memory, shared-link, or permission scope.
+- Clicking a year card switches GalleryViewer grouping to `month` and anchors to the first matching local month bucket without hiding assets outside that year. Clicking a month card switches grouping to `day` and anchors to the first matching local asset or group without hiding assets outside that month.
+- Clearing explicit temporal chips remains route-owned behavior and is not created by GalleryViewer bucket activation.
 - Manual grouping changes do not create temporal chips and do not mutate route state.
 - Selection mode hides the desktop grouping control and disables representative card activation.
 - Empty or single-asset grids keep their route-specific empty/asset viewer behavior; grouping controls must not render as orphaned UI when there are no grid assets.
@@ -335,7 +337,7 @@ Slice 7: Mobile parity
   - segment/header tests for `HeaderType.year`, month/day compatibility, empty buckets, and `none`
   - scrubber tests for year labels, year matching, empty/non-time segments, and unchanged month snapping
 
-Mobile Slice 7 does not introduce web-style representative cards or card-driven temporal filter drill-down. The current mobile `Timeline` renders detailed asset grids per bucket and does not yet have route-scoped temporal filter state for every timeline origin. A later mobile interaction slice can add compressed representative cards and year/month drill-down after mobile temporal narrowing is defined across main timeline, spaces, albums, people, tags, search, and route-specific timelines.
+Mobile Slice 7 does not introduce web-style representative cards or card-driven temporal filtering. The current mobile `Timeline` renders detailed asset grids per bucket. A later mobile interaction slice can add compressed representative cards and zoom anchors across main timeline, spaces, albums, people, tags, search, and route-specific timelines without turning bucket activation into temporal filtering.
 
 ## Out of Scope
 

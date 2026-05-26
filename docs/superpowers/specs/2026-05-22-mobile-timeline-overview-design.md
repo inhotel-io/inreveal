@@ -1,5 +1,7 @@
 # Mobile Timeline Overview Design
 
+> Update: The zoom-navigation follow-up spec from 2026-05-25 supersedes this document's original temporal-scope activation model. Bucket card activation now updates grouping and a route-local zoom anchor only; `TimelineTemporalScope` is reserved for explicit temporal filters where a route exposes them.
+
 ## Problem
 
 The Flutter app already has the foundation for timeline grouping through `GroupAssetsBy`, including a recently planned `year` grouping mode. That foundation makes the timeline bucketable by year, month, or day, but it does not yet provide the mobile equivalent of the web timeline overview experience from discussion #387.
@@ -11,9 +13,9 @@ The native mobile UI needs a photo-first way to skim a large library by year or 
 - Add a mobile timeline display mode selector with `Years`, `Months`, and `Days`.
 - Use compact representative overview cards for `Years` and `Months`.
 - Preserve the existing detailed mobile photo timeline for `Days`.
-- Make year and month cards drill down through temporal scope:
-  - Tap a year card to switch to `Months` scoped to that year.
-  - Tap a month card to switch to `Days` scoped to that month.
+- Make year and month cards zoom through grouping resolution:
+  - Tap a year card to switch to `Months` anchored to that year.
+  - Tap a month card to switch to `Days` anchored to that month.
 - Keep grouping state aligned with the existing `Setting.groupAssetsBy` preference.
 - Apply the experience through the shared Flutter `Timeline` surface wherever photos are displayed, with route-specific behavior only where needed.
 - Keep active filters/search/person/album/space constraints in effect so overview cards only represent matching assets.
@@ -77,11 +79,11 @@ The representative card should be selected from assets that are already eligible
 
 Tapping a year:
 
-- Sets temporal scope to that year.
 - Switches grouping to `Months`.
-- Reloads buckets under the existing non-time filters.
-- Scrolls to the top of the scoped month overview.
-- Shows a clearable temporal chip or subheader state for the selected year.
+- Stores a route-local year zoom anchor.
+- Reloads buckets under the existing route constraints and explicit filters.
+- Scrolls to the matching year in the month overview while keeping adjacent years reachable.
+- Does not create a temporal chip or narrow the route by year.
 
 ### Months
 
@@ -89,11 +91,11 @@ Tapping a year:
 
 Tapping a month:
 
-- Sets temporal scope to that month.
 - Switches grouping to `Days`.
-- Reloads day buckets under the existing non-time filters.
-- Scrolls to the top of the scoped detailed timeline.
-- Shows a clearable temporal chip or subheader state for the selected month.
+- Stores a route-local month zoom anchor.
+- Reloads day buckets under the existing route constraints and explicit filters.
+- Scrolls to the matching month in the detailed timeline while keeping adjacent months reachable.
+- Does not create a temporal chip or narrow the route by month.
 
 ### Days
 
@@ -105,29 +107,29 @@ Tapping a month:
 - Existing multi-select and asset viewer navigation.
 - Existing scroll-to-date support.
 
-If the user manually switches from `Years` or `Months` back to `Days` without tapping a card, the app should show the detailed timeline for the current temporal scope. If no temporal scope is active, it shows the full detailed timeline for the active non-time filters.
+If the user manually switches from `Years` or `Months` back to `Days` without tapping a card, the app should show the detailed timeline for the current route constraints and explicit filters. Manual grouping changes do not create or preserve a bucket-activation date scope.
 
 Overview modes should keep the existing timeline scrubber only when it can use grouping-aware labels and remain clear of overview cards, the bottom navigation, and filter sheet states. If the scrubber would overlap cards or selection affordances in a specific route, hide or disable it for that state rather than adding another control.
 
-## Temporal Scope And Filters
+## Zoom Anchors And Explicit Filters
 
-Grouping is a display mode. Temporal scope is a filter-like narrowing created by tapping an overview card.
+Grouping is a display mode. Bucket activation is zoom navigation: it changes grouping and stores a route-local scroll anchor.
 
-The implementation should introduce a reusable mobile temporal scope model:
+The implementation should use a reusable mobile zoom anchor model:
 
 - None
-- Year scope
-- Month scope
+- Year anchor
+- Month anchor
 
-Temporal scope must compose with existing filters, route constraints, and search text. It must not clear people, places, tags, favorites, albums, spaces, archive/trash/locked constraints, or ownership constraints.
+Zoom anchors must compose with existing filters, route constraints, and search text. They must not clear people, places, tags, favorites, albums, spaces, archive/trash/locked constraints, ownership constraints, or explicit temporal filters.
 
-Clearing the temporal scope:
+Resolving a zoom anchor:
 
-- Removes only the year/month narrowing.
-- Keeps all non-time filters intact.
-- Reloads the current grouping mode with broader buckets.
+- Scrolls to the matching year or month if present.
+- Leaves all route constraints and explicit filters intact.
+- Clears only the pending anchor after a successful scroll.
 
-On Photos, temporal scope should appear through the same active-filter subheader language used by current filters. On routes without `PhotosFilterSubheader`, use a route-local clearable chip or compact subheader near the timeline so users can tell why the view is narrowed.
+Explicit temporal filters remain separate. On Photos, explicit temporal filters should appear through the same active-filter subheader language used by current filters. On routes without `PhotosFilterSubheader`, use a route-local clearable chip or compact subheader only for explicit temporal filters, never for bucket activation.
 
 ## State And Persistence
 
@@ -137,14 +139,14 @@ The selector should update the existing grouping setting immediately:
 - `Months` writes `GroupAssetsBy.month`.
 - `Days` writes `GroupAssetsBy.day`.
 
-Card drilldown changes the grouping mode too, so it must update the same setting:
+Card zoom changes the grouping mode too, so it must update the same setting:
 
 - Tapping a year writes `GroupAssetsBy.month`.
 - Tapping a month writes `GroupAssetsBy.day`.
 
-The Settings grouping picker, in-timeline selector, and drilldown transitions must remain in sync.
+The Settings grouping picker, in-timeline selector, and zoom transitions must remain in sync.
 
-Temporal scope is navigation state, not a global preference. It should not be persisted across cold app launches. Route restoration may preserve it only when it is already consistent with the current route and filters.
+Zoom anchors are navigation state, not a global preference. They should not be persisted across cold app launches. Route restoration may preserve grouping where existing behavior already does, but must not restore bucket-activation anchors as filters.
 
 When a route opens in a context where overview modes would break selection semantics, such as choosing a cover photo, the route should force `Days` for that session or hide the selector. This matches the web fix where cover-photo selection must operate on selectable assets, not overview cards.
 
@@ -162,8 +164,8 @@ Add a small set of mobile-specific units:
 - A reusable `TimelineGroupingSelector` widget.
 - A `TimelineOverviewCard` widget for year/month buckets.
 - A testable overview segment builder or layout adapter that maps year/month buckets to one-card rows.
-- A temporal scope provider/model that can be overridden by route.
-- A route adapter that connects Photos temporal scope to active filter chips and filter query state.
+- A route-local zoom anchor provider/model that can be overridden by route.
+- Explicit temporal filter adapters only where a route exposes real date filters.
 
 The overview-card path should not ask the timeline service to load every asset in a year/month bucket. It needs one representative asset and a count. If the current mobile repository can only provide bucket counts, add a bounded representative-asset lookup per visible bucket or per prefetched viewport window. Avoid unbounded one-query-per-bucket behavior for very large libraries.
 
@@ -207,7 +209,7 @@ Representative-card failure:
 
 - Keep the date label and count visible.
 - Use a neutral fallback background.
-- Still allow drilldown if the bucket count is non-zero.
+- Still allow zoom activation if the bucket count is non-zero.
 
 If a representative asset is removed or no longer matches filters, reload the representative metadata for that bucket. If none is available but the bucket still has assets, keep the fallback card.
 
@@ -225,9 +227,9 @@ Cards must work with large text, reduced motion, dark mode, light mode, and high
 Slice 6 acceptance criteria:
 
 - Selector semantics identify one container, three reachable mode buttons, and the selected mode. Disabled or hidden selector states must not leave stale actionable semantics behind.
-- Overview-card semantics are localized, include the period label, pluralized count, and action, and are exposed only when the card can be activated. Fallback and failed-thumbnail cards still announce the period and count when drilldown is available.
-- Temporal scope chips expose a remove/clear action that is distinguishable from normal filter-chip copy and only clears the temporal scope.
-- Focus traversal reads the selector before route-local temporal chips and reads overview cards in visual order.
+- Overview-card semantics are localized, include the period label, pluralized count, and action, and are exposed only when the card can be activated. Fallback and failed-thumbnail cards still announce the period and count when zoom activation is available.
+- Explicit temporal filter chips expose a remove/clear action that is distinguishable from normal filter-chip copy and clears only the explicit date filter.
+- Focus traversal reads the selector before any explicit route-local temporal chips and reads overview cards in visual order.
 - The selector and cards keep at least Material minimum interactive target sizes where they are actionable.
 - RTL locales mirror layout without reversing the persisted grouping model: the visual order follows directional UI expectations, semantics remain understandable, and card labels anchor to the directional start edge.
 - Reduced-motion mode disables nonessential selector/card transitions; state changes still happen immediately.
@@ -248,13 +250,13 @@ Implementation must use test-driven development. Each implementation slice shoul
 Recommended slice order:
 
 1. Selector state and setting sync.
-2. Temporal scope model and filter/query composition.
+2. Zoom anchor model and route/filter composition.
 3. Overview bucket/card data path with representative assets.
-4. Photos route integration: app-bar replacement, active temporal chip, and drilldown.
+4. Photos route integration: app-bar replacement, zoom activation, and explicit temporal filter preservation.
 5. Shared route adoption and cover-photo/day-mode guardrails.
 6. Accessibility, localization, and responsive polish.
 
-Do not rely on screenshots alone. Use widget tests for state and semantics, repository/provider tests for filtering, and integration tests for the Photos drilldown flow.
+Do not rely on screenshots alone. Use widget tests for state and semantics, repository/provider tests for filtering, and integration tests for the Photos zoom flow.
 
 Slice 6 must also follow TDD. Start with failing semantics, localization, and responsive widget tests before changing selector/card APIs. Each responsive rule must be testable: narrow widths and large text keep content inside bounds; landscape/tablet widths do not add extra controls; RTL mirrors alignment without breaking tap behavior.
 
@@ -266,8 +268,8 @@ Selector and setting tests:
 - Selecting each mode writes the correct `GroupAssetsBy` value.
 - The selector initializes from `Setting.groupAssetsBy`.
 - Settings picker changes update the timeline selector.
-- Tapping a year writes `GroupAssetsBy.month` because the drilldown switches to `Months`.
-- Tapping a month writes `GroupAssetsBy.day` because the drilldown switches to `Days`.
+- Tapping a year writes `GroupAssetsBy.month` because zoom activation switches to `Months`.
+- Tapping a month writes `GroupAssetsBy.day` because zoom activation switches to `Days`.
 - Existing enum indexes remain unchanged.
 - Very narrow width or large text does not overflow the app bar.
 - Selection mode and asset viewer overlays hide or disable the selector where needed.
@@ -285,22 +287,22 @@ Overview card tests:
 - Video-only buckets render a usable thumbnail or fallback.
 - Labels remain legible in dark and light themes.
 - Accessibility labels include date, count, and action.
-- Accessibility labels use localized month names, ICU plural counts, and the correct drilldown action.
+- Accessibility labels use localized month names, ICU plural counts, and the correct zoom action.
 - Non-actionable zero-count or no-handler cards do not expose button semantics.
 - RTL cards anchor label and count to the directional start edge.
 - Long localized month labels and large text remain within the card instead of overflowing.
 - High-contrast fallback cards preserve visible label and count contrast.
 
-Temporal drilldown tests:
+Zoom activation tests:
 
 - Tapping a year switches to `Months`.
-- Tapping a year applies year temporal scope without clearing non-time filters.
+- Tapping a year stores a year zoom anchor without clearing filters or route constraints.
 - Tapping a month switches to `Days`.
-- Tapping a month applies month temporal scope without clearing non-time filters.
-- Clearing temporal scope keeps person, tag, place, favorite, album, space, archive, trash, locked, and text-search constraints.
-- Manually switching modes preserves the current temporal scope unless the user clears it.
-- Temporal scope does not persist across cold app launch.
-- Route changes do not leak stale temporal scope into unrelated timelines.
+- Tapping a month stores a month zoom anchor without clearing filters or route constraints.
+- Resolving a zoom anchor keeps person, tag, place, favorite, album, space, archive, trash, locked, and text-search constraints.
+- Manually switching modes clears pending zoom anchors unless the route explicitly preserves them for a matching target.
+- Zoom anchors do not persist across cold app launch.
+- Route changes do not leak stale zoom anchors into unrelated timelines.
 
 Photos route tests:
 
@@ -308,12 +310,12 @@ Photos route tests:
 - The bottom search entry still opens the search/filter sheet.
 - Browsing filter categories remains reachable after `FilterIconButton` is removed.
 - Active filters remain visible in `PhotosFilterSubheader`.
-- A temporal year chip appears after year drilldown.
-- A temporal month chip appears after month drilldown.
-- Clearing a temporal chip reloads broader buckets.
+- No temporal chip appears after year zoom activation.
+- No temporal chip appears after month zoom activation.
+- Clearing an explicit temporal chip reloads broader buckets.
 - Active non-time filters reduce the years/months shown.
 - Empty filtered results show the existing empty state.
-- Full flow coverage: `Years -> tap year -> Months -> tap month -> Days -> clear temporal chip`.
+- Full flow coverage: `Years -> tap year -> Months -> tap month -> Days`, plus a separate explicit temporal filter chip clear path.
 
 Route adoption tests:
 
@@ -342,18 +344,18 @@ Repository/provider tests:
 - No assets after filters are applied.
 - A single year, month, or day bucket.
 - A year/month bucket whose representative asset is deleted while visible.
-- Active text search plus a year/month drilldown.
-- Active person/place/tag filters plus a year/month drilldown.
-- Switching from scoped `Months` back to `Years`.
+- Active text search plus year/month zoom activation.
+- Active person/place/tag filters plus year/month zoom activation.
+- Switching from anchored `Months` back to `Years`.
 - Clearing scope while scrolled deep in the timeline.
-- App relaunch preserves the last grouping mode but drops the temporal scope.
+- App relaunch preserves the last grouping mode where existing behavior does but drops pending zoom anchors.
 - Large text causing segmented labels to crowd.
 - Long localized month labels and singular/plural photo counts.
 - Landscape phones and tablets.
 - Foldables or unusually narrow app widths.
 - RTL locales and mixed-direction month labels.
 - Multi-select mode entered from day mode after visiting overview modes.
-- Asset viewer opened from scoped day mode and then closed.
+- Asset viewer opened from day mode after zoom activation and then closed.
 - Filter sheet open while grouping changes through Settings.
 - Bottom navigation hidden while filter sheet is open.
 - Offline or slow thumbnail loading.
@@ -365,5 +367,5 @@ Repository/provider tests:
 - Search remains available through the existing bottom search affordance.
 - Years and Months use compact overview cards.
 - Days remains the existing detailed timeline.
-- Temporal drilldown matches the web model.
+- Zoom activation matches the web model.
 - The design applies through the shared mobile `Timeline`, with cover-photo and picker flows guarded to day mode.
