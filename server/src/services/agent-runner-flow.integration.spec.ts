@@ -3,6 +3,7 @@ import { AgentMessage, AgentSession, AgentSessionActivityEvent, AgentToolCall } 
 import {
   AgentApprovalMode,
   AgentMessageRole,
+  AgentOperationApplyStatus,
   AgentOperationPlanStatus,
   AgentOperationRiskLevel,
   AgentOperationStatus,
@@ -560,6 +561,53 @@ class InMemoryAgentOperationPlanRepository {
       this.plans.filter((plan) => plan.sessionId === sessionId && plan.status === AgentOperationPlanStatus.Applied),
     ),
   );
+
+  claimCurrentForApply = vi.fn((sessionId: string, planId: string) => {
+    const session = this.sessions.sessions.get(sessionId);
+    const plan = this.plans.find(
+      (candidate) =>
+        candidate.sessionId === sessionId &&
+        candidate.id === planId &&
+        candidate.status === AgentOperationPlanStatus.Proposed,
+    );
+    if (!session || session.status !== AgentSessionStatus.WaitingForPlanReview || !plan) {
+      return Promise.resolve(undefined);
+    }
+
+    session.status = AgentSessionStatus.Applying;
+    session.updatedAt = now();
+    session.updateId = newUuid();
+    plan.status = AgentOperationPlanStatus.Applied;
+    plan.updatedAt = now();
+    return Promise.resolve(plan);
+  });
+
+  completeApply = vi.fn(
+    (
+      planId: string,
+      updates: Array<{ id: string; status: AgentOperationStatus; result: unknown; error: string | null }>,
+    ) => {
+      const plan = this.plans.find((candidate) => candidate.id === planId);
+      if (!plan) {
+        throw new Error(`Missing plan ${planId}`);
+      }
+
+      for (const update of updates) {
+        const operation = plan.operations.find((candidate) => candidate.id === update.id);
+        if (!operation) {
+          continue;
+        }
+
+        operation.status = update.status;
+        operation.result = update.result as never;
+        operation.error = update.error;
+        operation.updatedAt = now();
+      }
+
+      plan.updatedAt = now();
+      return Promise.resolve(plan);
+    },
+  );
 }
 
 const setup = () => {
@@ -718,10 +766,26 @@ const setup = () => {
     getRecentAssets: vi.fn(() => Promise.resolve([])),
   };
   const accessRepository = newAccessRepositoryMock();
+  const assetService = { updateAll: vi.fn(() => Promise.resolve()) };
   const assetRepository = {
     getAgentReadableIds: vi.fn((assetIds: Set<string>) => Promise.resolve(new Set(assetIds))),
     getAgentLockedIds: vi.fn(() => Promise.resolve(new Set())),
     getAgentMetadataByIds: vi.fn((assetIds: string[]) => Promise.resolve(assetIds.map((assetId) => metadata(assetId)))),
+    getAgentMetadataReviewByIds: vi.fn((assetIds: string[]) =>
+      Promise.resolve(
+        assetIds.map((assetId) => ({
+          id: assetId,
+          exifInfo: {
+            description: 'Old description',
+            rating: null,
+            dateTimeOriginal: new Date('2026-05-01T10:00:00.000Z'),
+            timeZone: 'UTC',
+            latitude: null,
+            longitude: null,
+          },
+        })),
+      ),
+    ),
   };
   const searchRepository = {
     searchMetadata: vi.fn((_pagination?: unknown, _options?: unknown) =>
@@ -793,7 +857,7 @@ const setup = () => {
     toolCalls as unknown as AgentToolCallRepository,
     websocketRepository as unknown as WebsocketRepository,
     {} as never,
-    {} as never,
+    assetService as never,
     {} as never,
     activityService as never,
   );
@@ -819,6 +883,7 @@ const setup = () => {
       runnerMessageHandler = handler;
     },
     accessRepository,
+    assetService,
     assetRepository,
     machineLearningRepository,
     searchRepository,
@@ -1048,6 +1113,201 @@ describe('Pi agent runner flow harness', () => {
     expect(proposeToolCalls.filter((toolCall) => toolCall.status === AgentToolCallStatus.Denied)).toHaveLength(1);
     expect(proposeToolCalls.filter((toolCall) => toolCall.status === AgentToolCallStatus.Completed)).toHaveLength(1);
     expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('operation-plan-ready');
+  });
+
+  it('creates a metadata update plan from an assistant prompt and continues after apply', async () => {
+    const harness = setup();
+    const assetIds = [newUuid(), newUuid()];
+    const planSummary = 'Set description on newest photos.';
+
+    harness.searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    harness.accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    harness.accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    harness.accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set());
+    harness.assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    harness.configureRunnerMessage(async function* ({ body }) {
+      const text = body.content.blocks
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('\n');
+
+      if (text === 'Set the description on the 5 newest photos to Test batch.') {
+        const created = getMcpToolResult(
+          await harness.mcpService.handle(
+            harness.auth,
+            body.gallerySessionId,
+            makeMcpToolCallRequest(AgentToolName.ProposeAssetBatchFromSearch, {
+              summary: planSummary,
+              action: { type: AgentOperationType.AssetUpdateMetadata, description: 'Test batch' },
+              assetSource: { kind: 'search', filters: {}, materialization: 'all-matches-with-limit' },
+            }),
+          ),
+        );
+        expect(created.isError).not.toBe(true);
+
+        yield {
+          type: 'assistant-message-completed',
+          sessionId: body.gallerySessionId,
+          runnerSessionId: 'runner-session-1',
+          providerMessageId: 'provider-message-metadata-plan',
+          content: { blocks: [{ type: 'text', text: 'I prepared the metadata update plan.' }] },
+        };
+        return;
+      }
+
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        providerMessageId: 'provider-message-after-metadata-apply',
+        content: { blocks: [{ type: 'text', text: 'The chat is ready for another request.' }] },
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: { entrypoint: 'assistant-page' },
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: {
+        blocks: [{ type: 'text', text: 'Set the description on the 5 newest photos to Test batch.' }],
+      },
+    });
+
+    await waitFor(async () => {
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForPlanReview);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: AgentMessageRole.Assistant,
+            providerMessageId: 'provider-message-metadata-plan',
+          }),
+        ]),
+      );
+    });
+
+    expect(harness.operationPlans.plans).toHaveLength(1);
+    const [plan] = harness.operationPlans.plans;
+    expect(plan).toMatchObject({
+      status: AgentOperationPlanStatus.Proposed,
+      summary: planSummary,
+    });
+    expect(plan.operations).toHaveLength(1);
+    expect(plan.operations[0]).toMatchObject({
+      type: AgentOperationType.AssetUpdateMetadata,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: { description: 'Test batch' },
+    });
+
+    const applyResult = await harness.operationPlanService.applyApprovedOperations(harness.auth, session.id, plan.id, {
+      operationIds: [plan.operations[0].id],
+    });
+
+    expect(applyResult).toMatchObject({
+      status: AgentOperationApplyStatus.Applied,
+      appliedOperationIds: [plan.operations[0].id],
+      failedOperationIds: [],
+      skippedOperationIds: [],
+    });
+    expect(harness.assetService.updateAll).toHaveBeenCalledWith(harness.auth, {
+      ids: assetIds,
+      description: 'Test batch',
+    });
+    await waitFor(async () => {
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: 'Thanks, keep going.' }] },
+    });
+
+    await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: AgentMessageRole.Assistant,
+            providerMessageId: 'provider-message-after-metadata-apply',
+          }),
+        ]),
+      );
+    });
+  });
+
+  it('asks for coordinates for a place-name metadata prompt without creating a plan', async () => {
+    const harness = setup();
+
+    harness.configureRunnerMessage(async function* ({ body }) {
+      expect(body.content).toEqual({ blocks: [{ type: 'text', text: 'Set these photos to Paris.' }] });
+
+      yield {
+        type: 'assistant-message-completed',
+        sessionId: body.gallerySessionId,
+        runnerSessionId: 'runner-session-1',
+        providerMessageId: 'provider-message-coordinate-clarification',
+        content: {
+          blocks: [
+            {
+              type: 'text',
+              text: 'I can update location metadata when you provide explicit latitude and longitude.',
+            },
+          ],
+        },
+      };
+    });
+
+    const session = await harness.sessionService.create(harness.auth, {
+      providerCredentialId: '00000000-0000-4000-8000-000000000201',
+      model: 'gpt-5.1',
+      permissionPreset: AgentPermissionPreset.VisualOrganizer,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      initialContext: { entrypoint: 'assistant-page' },
+    });
+
+    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+      content: { blocks: [{ type: 'text', text: 'Set these photos to Paris.' }] },
+    });
+
+    await waitFor(async () => {
+      const messages = await harness.messageService.getMessages(harness.auth, session.id);
+      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+      expect(reloadedSession?.status).toBe(AgentSessionStatus.Running);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: AgentMessageRole.Assistant,
+            providerMessageId: 'provider-message-coordinate-clarification',
+            content: {
+              blocks: [
+                expect.objectContaining({
+                  type: 'text',
+                  text: expect.stringMatching(/latitude and longitude/i),
+                }),
+              ],
+            },
+          }),
+        ]),
+      );
+    });
+
+    expect(harness.operationPlans.plans).toHaveLength(0);
+    expect(
+      harness.toolCalls.toolCalls.filter((toolCall) => toolCall.toolName === AgentToolName.ProposeAssetBatchFromSearch),
+    ).toHaveLength(0);
   });
 
   it('returns truncated metadata results with omitted fields without leaking inaccessible assets', async () => {

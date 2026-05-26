@@ -126,6 +126,32 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(4200);
   });
 
+  it('teaches metadata edits as reviewable search-backed plans with explicit coordinates only', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const examples = sut.listPromptExamples();
+    const metadataExample = examples.find(
+      (example) =>
+        example.toolName === AgentToolName.ProposeAssetBatchFromSearch &&
+        example.exampleName === 'metadata-search-results',
+    );
+
+    expect(metadataExample?.arguments).toMatchObject({
+      action: {
+        type: 'asset.updateMetadata',
+        description: 'Berlin weekend',
+        timeZone: 'Europe/Berlin',
+      },
+      assetSource: { kind: 'search' },
+    });
+    expect(prompt).toContain('asset.updateMetadata');
+    expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
+    expect(prompt).toMatch(/metadata edits?.*reviewable/i);
+    expect(prompt).toMatch(/coordinates?.*latitude.*longitude/i);
+    expect(prompt).toMatch(/place names?.*ask/i);
+    expect(prompt).not.toContain('placeName');
+    expect(prompt.length).toBeLessThanOrEqual(4200);
+  });
+
   it('renders schema-valid source-backed prompt snippets with required workflow fields', () => {
     const prompt = sut.generatePromptCheatSheet();
     const lineJson = (prefix: string) => {
