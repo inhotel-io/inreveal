@@ -571,7 +571,7 @@ class InMemoryAgentOperationPlanRepository {
         candidate.status === AgentOperationPlanStatus.Proposed,
     );
     if (!session || session.status !== AgentSessionStatus.WaitingForPlanReview || !plan) {
-      return Promise.resolve(undefined);
+      return Promise.resolve();
     }
 
     session.status = AgentSessionStatus.Applying;
@@ -1252,6 +1252,7 @@ describe('Pi agent runner flow harness', () => {
     const harness = setup();
 
     harness.configureRunnerMessage(async function* ({ body }) {
+      await Promise.resolve();
       expect(body.content).toEqual({ blocks: [{ type: 'text', text: 'Set these photos to Paris.' }] });
 
       yield {
