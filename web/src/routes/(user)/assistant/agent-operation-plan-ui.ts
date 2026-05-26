@@ -1549,7 +1549,7 @@ const highlightCriteriaPattern =
   /\b((?:metadata-only|preview-assisted) suggested highlights? (?:prioritized|prioritizing|considered) [^.]+)(?:\.|$)/i;
 
 const normalizeCriteriaSentence = (criteria: string) => {
-  const normalized = criteria.trim().replace(/\s+/g, ' ');
+  const normalized = criteria.trim().replaceAll(/\s+/g, ' ');
   return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1).replace(/\.$/, '')}.`;
 };
 
