@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
@@ -32,6 +33,49 @@ import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
+
+TimelineService _emptyService(TimelineOrigin origin) {
+  return TimelineService((
+    bucketSource: () => const Stream<List<Bucket>>.empty(),
+    assetSource: (offset, count) async => const <BaseAsset>[],
+    origin: origin,
+  ));
+}
+
+class _AdoptedRouteCase {
+  const _AdoptedRouteCase({required this.label, required this.constraint, required this.origin});
+
+  final String label;
+  final String constraint;
+  final TimelineOrigin origin;
+}
+
+class _ObservedRouteCall {
+  const _ObservedRouteCall({required this.constraint, required this.scope, required this.groupBy});
+
+  final String constraint;
+  final TimelineTemporalScope scope;
+  final GroupAssetsBy groupBy;
+}
+
+const _adoptedRouteCases = [
+  _AdoptedRouteCase(label: 'remote album', constraint: 'album:album-1', origin: TimelineOrigin.remoteAlbum),
+  _AdoptedRouteCase(label: 'space', constraint: 'space:space-1', origin: TimelineOrigin.remoteSpace),
+  _AdoptedRouteCase(label: 'person', constraint: 'person:person-1', origin: TimelineOrigin.person),
+  _AdoptedRouteCase(label: 'favorites', constraint: 'favorite:true', origin: TimelineOrigin.favorite),
+  _AdoptedRouteCase(label: 'archive', constraint: 'archive:true', origin: TimelineOrigin.archive),
+  _AdoptedRouteCase(label: 'locked folder', constraint: 'locked:true', origin: TimelineOrigin.lockedFolder),
+  _AdoptedRouteCase(label: 'trash', constraint: 'trash:true', origin: TimelineOrigin.trash),
+  _AdoptedRouteCase(label: 'videos', constraint: 'media:video', origin: TimelineOrigin.video),
+  _AdoptedRouteCase(label: 'place', constraint: 'place:Paris', origin: TimelineOrigin.place),
+  _AdoptedRouteCase(label: 'partner', constraint: 'partner:user-2', origin: TimelineOrigin.remoteAssets),
+  _AdoptedRouteCase(label: 'recently taken', constraint: 'remote-assets:user-1', origin: TimelineOrigin.remoteAssets),
+  _AdoptedRouteCase(label: 'local album', constraint: 'local-album:local-1', origin: TimelineOrigin.localAlbum),
+];
+
+GroupAssetsBy _storedGroupBy() {
+  return GroupAssetsBy.values[Store.get(StoreKey.groupAssetsBy, GroupAssetsBy.day.index)];
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -144,5 +188,66 @@ void main() {
         kTimelineGroupingHeaderSliverHeight + kSyncStatusBannerSliverHeight,
       );
     });
+
+    for (final route in _adoptedRouteCases) {
+      testWidgets('${route.label} keeps route constraints during year and month zoom', (tester) async {
+        await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.year.index);
+        final calls = <_ObservedRouteCall>[];
+
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: TimelineRouteScope(
+                timelineServiceBuilder: (ref, scope) {
+                  calls.add(_ObservedRouteCall(constraint: route.constraint, scope: scope, groupBy: _storedGroupBy()));
+                  return _emptyService(route.origin);
+                },
+                child: const CustomScrollView(slivers: [TimelineGroupingHeaderSliver()]),
+              ),
+            ),
+          ),
+        );
+
+        final ref = ProviderScope.containerOf(tester.element(find.byType(TimelineGroupingHeaderSliver)));
+        ref.read(timelineServiceProvider);
+
+        expect(calls.single.constraint, route.constraint);
+        expect(calls.single.scope, const TimelineTemporalScope.none());
+        expect(calls.single.groupBy, GroupAssetsBy.year);
+        expect(find.byType(TimelineGroupingSelector), findsOneWidget);
+
+        calls.clear();
+        await tester.runAsync(
+          () async => ref
+              .read(timelineOverviewDrilldownProvider)
+              ?.call(TimeBucket(date: DateTime(2025), assetCount: 3), GroupAssetsBy.year),
+        );
+        ref.read(timelineServiceProvider);
+        await tester.pump();
+
+        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
+        expect(calls.single.constraint, route.constraint);
+        expect(calls.single.scope, const TimelineTemporalScope.none());
+        expect(calls.single.groupBy, GroupAssetsBy.month);
+        expect(ref.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
+        expect(find.text('2025'), findsNothing);
+
+        calls.clear();
+        await tester.runAsync(
+          () async => ref
+              .read(timelineOverviewDrilldownProvider)
+              ?.call(TimeBucket(date: DateTime(2025, 3), assetCount: 3), GroupAssetsBy.month),
+        );
+        ref.read(timelineServiceProvider);
+        await tester.pump();
+
+        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
+        expect(calls.single.constraint, route.constraint);
+        expect(calls.single.scope, const TimelineTemporalScope.none());
+        expect(calls.single.groupBy, GroupAssetsBy.day);
+        expect(ref.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
+        expect(find.text('Mar 2025'), findsNothing);
+      });
+    }
   });
 }
