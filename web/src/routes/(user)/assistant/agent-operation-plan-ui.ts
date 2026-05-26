@@ -120,6 +120,25 @@ export type OperationReviewApplyStateSummary = {
   hasFailures: boolean;
 };
 
+export type AgentOperationMetadataValueKind = 'known' | 'empty' | 'clear' | 'relative' | 'unknown';
+
+export type AgentOperationMetadataDisplayText =
+  | { kind: 'raw'; text: string }
+  | { kind: 'translation'; key: Translations; values?: Record<string, string | number> };
+
+export type AgentOperationMetadataFieldReview = {
+  key: string;
+  label: AgentOperationMetadataDisplayText;
+  currentValues: { assetId: string; text: AgentOperationMetadataDisplayText; kind: AgentOperationMetadataValueKind }[];
+  proposedText: AgentOperationMetadataDisplayText;
+  proposedKind: AgentOperationMetadataValueKind;
+};
+
+export type AgentOperationMetadataReview = {
+  fields: AgentOperationMetadataFieldReview[];
+  warnings: AgentOperationMetadataDisplayText[];
+};
+
 export type OperationTechnicalDetails = {
   operationId: string;
   operationType: string;
@@ -163,6 +182,7 @@ export type OperationReviewItem = {
   editableFields: AgentOperationEditableField[];
   fieldErrors: Record<string, string>;
   fieldOverrides: Record<string, string>;
+  metadataReview?: AgentOperationMetadataReview;
   applyState: OperationApplyState;
 };
 
@@ -212,6 +232,7 @@ const typeLabelKeys: Partial<Record<AgentOperationType, Translations>> = {
   [AgentOperationType.SpaceAddMembers]: 'assistant_operation_type_space_add_members' as Translations,
   [AgentOperationType.SpaceRemoveMembers]: 'assistant_operation_type_space_remove_members' as Translations,
   [AgentOperationType.SpaceUpdateMemberRole]: 'assistant_operation_type_space_update_member_role' as Translations,
+  [AgentOperationType.AssetUpdateMetadata]: 'assistant_operation_type_asset_update_metadata' as Translations,
 };
 
 const riskLabelKeys = {
@@ -565,7 +586,7 @@ export const buildOperationReviewModel = (
   const operationById = new Map(
     plan.operations.map((operation) => [
       operation.id,
-      applyOperationFieldOverrides(operation, fieldOverrideByOperationId[operation.id]),
+      getOperationForReview(applyOperationFieldOverrides(operation, fieldOverrideByOperationId[operation.id])),
     ]),
   );
   const blockedByCache = new Map<string, string[]>();
@@ -636,7 +657,7 @@ export const buildOperationReviewModel = (
       itemSelectionByOperationId[operation.id],
     );
     const editableFields = buildEditableFields(operation, fieldOverrideByOperationId[operation.id]);
-    const selectedAssetIds = getSelectedAssetIds(operation, review.selection);
+    const selectedAssetIds = getSelectedAssetIds(effectiveOperation, review.selection);
     const fieldErrors = validateEditableFields(editableFields, selectedAssetIds);
     const enabled =
       !blocked &&
@@ -646,7 +667,7 @@ export const buildOperationReviewModel = (
 
     return {
       id: operation.id,
-      operation,
+      operation: effectiveOperation,
       review,
       summary: review.summary,
       risk: review.riskLevel,
@@ -667,6 +688,7 @@ export const buildOperationReviewModel = (
       editableFields,
       fieldErrors,
       fieldOverrides: buildSparseOperationFieldOverrides(editableFields),
+      metadataReview: buildMetadataReview(operation, selectedAssetIds),
       applyState: buildOperationApplyState(operation),
     };
   });
@@ -946,6 +968,237 @@ const buildOperationApplyState = (operation: AgentOperationResponseDto): Operati
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const buildMetadataReview = (
+  operation: AgentOperationResponseDto,
+  selectedAssetIds: string[],
+): AgentOperationMetadataReview | undefined => {
+  if (operation.type !== AgentOperationType.AssetUpdateMetadata) {
+    return;
+  }
+
+  const selectedAssetIdSet = new Set(selectedAssetIds);
+  const rawAssetMetadata = getRawAssetMetadataReview(operation);
+  const fields = rawAssetMetadata
+    ? rawAssetMetadata.fields.map((field) => formatMetadataReviewField(field, selectedAssetIds, selectedAssetIdSet))
+    : buildPayloadOnlyMetadataReviewFields(operation, selectedAssetIds);
+
+  if (fields.length === 0) {
+    return;
+  }
+
+  const hasLocationUpdate = fields.some((field) => field.key === 'location');
+  const serverWarnings = (rawAssetMetadata?.warnings ?? [])
+    .filter((warning) => !/coordinate/i.test(warning))
+    .map((warning) => rawMetadataText(warning));
+  const warnings =
+    hasLocationUpdate && selectedAssetIds.length > 1
+      ? [
+          ...serverWarnings,
+          translatedMetadataText('assistant_operation_metadata_warning_coordinates_multi', {
+            count: selectedAssetIds.length,
+          }),
+        ]
+      : serverWarnings;
+
+  return { fields, warnings };
+};
+
+const getRawAssetMetadataReview = (operation: AgentOperationResponseDto) => {
+  const reviewMetadata = isRecord((operation as { reviewMetadata?: unknown }).reviewMetadata)
+    ? (operation as { reviewMetadata?: Record<string, unknown> }).reviewMetadata
+    : undefined;
+  const assetMetadata = isRecord(reviewMetadata?.assetMetadata) ? reviewMetadata.assetMetadata : undefined;
+  const fields = Array.isArray(assetMetadata?.fields) ? assetMetadata.fields : undefined;
+
+  if (!fields) {
+    return;
+  }
+
+  return {
+    fields: fields.flatMap((field) => (isRecord(field) ? [field] : [])),
+    warnings: Array.isArray(assetMetadata?.warnings)
+      ? assetMetadata.warnings.filter((warning): warning is string => typeof warning === 'string')
+      : [],
+  };
+};
+
+const formatMetadataReviewField = (
+  field: Record<string, unknown>,
+  selectedAssetIds: string[],
+  selectedAssetIdSet: Set<string>,
+): AgentOperationMetadataFieldReview => {
+  const key = typeof field.key === 'string' ? field.key : 'unknown';
+  const previousValues = Array.isArray(field.previousValues) ? field.previousValues : [];
+  const currentValues = previousValues
+    .flatMap((value) => (isRecord(value) ? [value] : []))
+    .filter((value) => typeof value.assetId === 'string' && selectedAssetIdSet.has(value.assetId))
+    .map((value) => ({
+      assetId: value.assetId as string,
+      text: formatMetadataValue(key, value.value, getMetadataValueKind(value.valueKind)),
+      kind: getMetadataValueKind(value.valueKind),
+    }));
+
+  return {
+    key,
+    label: getMetadataFieldLabel(key),
+    currentValues:
+      currentValues.length > 0
+        ? currentValues
+        : selectedAssetIds.slice(0, 1).map((assetId) => ({
+            assetId,
+            text: translatedMetadataText('assistant_operation_metadata_value_unavailable'),
+            kind: 'unknown',
+          })),
+    proposedText: formatProposedMetadataValue(key, field.proposedValue, getMetadataValueKind(field.proposedValueKind)),
+    proposedKind: getMetadataValueKind(field.proposedValueKind),
+  };
+};
+
+const buildPayloadOnlyMetadataReviewFields = (
+  operation: AgentOperationResponseDto,
+  selectedAssetIds: string[],
+): AgentOperationMetadataFieldReview[] => {
+  const payload = isRecord(operation.payload) ? operation.payload : {};
+  const fields: AgentOperationMetadataFieldReview[] = [];
+  const currentValues = selectedAssetIds.slice(0, 1).map((assetId) => ({
+    assetId,
+    text: translatedMetadataText('assistant_operation_metadata_value_unavailable'),
+    kind: 'unknown' as const,
+  }));
+
+  if (Object.hasOwn(payload, 'description') && typeof payload.description === 'string') {
+    fields.push({
+      key: 'description',
+      label: getMetadataFieldLabel('description'),
+      currentValues,
+      proposedText: formatProposedMetadataValue(
+        'description',
+        payload.description || null,
+        payload.description ? 'known' : 'clear',
+      ),
+      proposedKind: payload.description ? 'known' : 'clear',
+    });
+  }
+
+  if (Object.hasOwn(payload, 'rating') && (typeof payload.rating === 'number' || payload.rating === null)) {
+    fields.push({
+      key: 'rating',
+      label: getMetadataFieldLabel('rating'),
+      currentValues,
+      proposedText: formatProposedMetadataValue('rating', payload.rating, payload.rating === null ? 'clear' : 'known'),
+      proposedKind: payload.rating === null ? 'clear' : 'known',
+    });
+  }
+
+  if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+    fields.push({
+      key: 'location',
+      label: getMetadataFieldLabel('location'),
+      currentValues,
+      proposedText: rawMetadataText(`${payload.latitude}, ${payload.longitude}`),
+      proposedKind: 'known',
+    });
+  }
+
+  for (const key of ['dateTimeOriginal', 'dateTimeRelative', 'timeZone']) {
+    if (!Object.hasOwn(payload, key)) {
+      continue;
+    }
+
+    fields.push({
+      key,
+      label: getMetadataFieldLabel(key),
+      currentValues,
+      proposedText: formatProposedMetadataValue(
+        key,
+        payload[key],
+        key === 'dateTimeRelative' ? 'relative' : getMetadataValueKind(undefined),
+      ),
+      proposedKind: key === 'dateTimeRelative' ? 'relative' : 'known',
+    });
+  }
+
+  return fields;
+};
+
+const getMetadataValueKind = (value: unknown): AgentOperationMetadataValueKind =>
+  value === 'known' || value === 'empty' || value === 'clear' || value === 'relative' || value === 'unknown'
+    ? value
+    : 'known';
+
+const rawMetadataText = (text: string): AgentOperationMetadataDisplayText => ({ kind: 'raw', text });
+
+const translatedMetadataText = (
+  key: Translations,
+  values?: Record<string, string | number>,
+): AgentOperationMetadataDisplayText => ({
+  kind: 'translation',
+  key,
+  ...(values ? { values } : {}),
+});
+
+const getMetadataFieldLabel = (key: string) => {
+  switch (key) {
+    case 'description': {
+      return translatedMetadataText('assistant_operation_metadata_field_description' as Translations);
+    }
+    case 'rating': {
+      return translatedMetadataText('assistant_operation_metadata_field_rating' as Translations);
+    }
+    case 'dateTimeOriginal': {
+      return translatedMetadataText('assistant_operation_metadata_field_date_taken' as Translations);
+    }
+    case 'dateTimeRelative': {
+      return translatedMetadataText('assistant_operation_metadata_field_date_shift' as Translations);
+    }
+    case 'timeZone': {
+      return translatedMetadataText('assistant_operation_metadata_field_time_zone' as Translations);
+    }
+    case 'location': {
+      return translatedMetadataText('assistant_operation_metadata_field_location' as Translations);
+    }
+    default: {
+      return translatedMetadataText('assistant_operation_metadata_field_unknown' as Translations);
+    }
+  }
+};
+
+const formatMetadataValue = (key: string, value: unknown, kind: AgentOperationMetadataValueKind) => {
+  if (kind === 'unknown') {
+    return translatedMetadataText('assistant_operation_metadata_value_unavailable' as Translations);
+  }
+
+  if (key === 'rating') {
+    return typeof value === 'number'
+      ? translatedMetadataText('assistant_operation_metadata_value_rating' as Translations, { rating: value })
+      : translatedMetadataText('assistant_operation_metadata_value_unrated' as Translations);
+  }
+
+  if (kind === 'empty' || value === null || value === undefined || value === '') {
+    return key === 'description'
+      ? translatedMetadataText('assistant_operation_metadata_value_empty' as Translations)
+      : translatedMetadataText('assistant_operation_metadata_value_unavailable' as Translations);
+  }
+
+  return rawMetadataText(String(value));
+};
+
+const formatProposedMetadataValue = (key: string, value: unknown, kind: AgentOperationMetadataValueKind) => {
+  if (kind === 'clear') {
+    return key === 'rating'
+      ? translatedMetadataText('assistant_operation_metadata_value_clear_rating' as Translations)
+      : translatedMetadataText('assistant_operation_metadata_value_clear' as Translations);
+  }
+
+  if (kind === 'relative') {
+    return typeof value === 'number'
+      ? translatedMetadataText('assistant_operation_metadata_value_shift_minutes' as Translations, { minutes: value })
+      : translatedMetadataText('assistant_operation_metadata_value_shift_capture_time' as Translations);
+  }
+
+  return formatMetadataValue(key, value, kind);
+};
+
 const getStringArray = (value: unknown) =>
   Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined;
 
@@ -1106,6 +1359,22 @@ const buildOperationReviewSelection = (
 
 const getOperationItemKind = (operation: Pick<AgentOperationResponseDto, 'type'>): AgentReviewItemKind =>
   isMemberOperation(operation.type) ? 'person' : 'asset';
+
+const getOperationForReview = (operation: AgentOperationResponseDto): AgentOperationResponseDto => {
+  const result = isRecord(operation.result) ? operation.result : undefined;
+  const appliedAssetIds = getStringArray(result?.assetIds);
+
+  if (
+    operation.status === AgentOperationStatus.Applied &&
+    operation.type === AgentOperationType.AssetUpdateMetadata &&
+    appliedAssetIds &&
+    appliedAssetIds.length > 0
+  ) {
+    return { ...operation, assetIds: appliedAssetIds };
+  }
+
+  return operation;
+};
 
 const getOperationSelectableItemIds = (operation: Pick<AgentOperationResponseDto, 'assetIds' | 'payload' | 'type'>) =>
   isMemberOperation(operation.type) ? getOperationUserIds(operation) : [...new Set(operation.assetIds)];
@@ -1293,6 +1562,10 @@ const getOperationReviewSummary = (operation: AgentOperationResponseDto) => {
     case AgentOperationType.SpaceUpdateMemberRole: {
       const role = typeof operation.payload.role === 'string' ? operation.payload.role : 'member';
       return `Change ${formatPersonCount(getOperationUserIds(operation).length)} to ${role}`;
+    }
+    case AgentOperationType.AssetUpdateMetadata: {
+      const verb = operation.status === AgentOperationStatus.Applied ? 'Updated' : 'Update';
+      return `${verb} metadata for ${formatPhotoCount(getOperationAssetCount([operation]))}`;
     }
     default: {
       return operation.summary;
