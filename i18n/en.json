@@ -850,6 +850,7 @@
   "assistant_operation_asset_count": "{count, plural, one {# asset} other {# assets}}",
   "assistant_operation_asset_selection_summary": "{selected, number} of {total, number} photos selected",
   "assistant_operation_blocked_by": "Blocked by {dependencies}",
+  "assistant_operation_curation_criteria": "Criteria: {criteria}",
   "assistant_operation_destination_selected_summary": "{selected, number} of {total, number} changes selected",
   "assistant_operation_destination_toggle": "Select destination {name}",
   "assistant_operation_detail_assets_overflow": "{count, plural, one {# more asset ID} other {{count, number} more asset IDs}}",
