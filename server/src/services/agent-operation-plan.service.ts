@@ -48,7 +48,7 @@ import { AgentSelectionHandleRepository } from 'src/repositories/agent-selection
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
-import { AssetRepository } from 'src/repositories/asset.repository';
+import { AssetRepository, type AgentAssetMetadataReviewRow } from 'src/repositories/asset.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
@@ -76,7 +76,12 @@ import {
   validateAgentAssetSourceMechanismCount,
   validateNoAgentAssetSourceMechanisms,
 } from 'src/types/agent-asset-source.types';
-import type { AgentAlbumOperationInput, AgentOperationResult } from 'src/types/agent-operation.types';
+import type {
+  AgentAlbumOperationInput,
+  AgentOperationResult,
+  AgentOperationReviewMetadata,
+  AgentOperationReviewMetadataValueKind,
+} from 'src/types/agent-operation.types';
 import type {
   AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
@@ -91,6 +96,7 @@ import type {
 import z from 'zod';
 
 const selectionHandleRecoveryLimit = 5;
+const metadataReviewSampleLimit = 5;
 const searchSourceRefPrefix = 'asset-source:search:';
 const assetUpdateMetadataWorkflowPayloadKeys = [
   'description',
@@ -105,6 +111,7 @@ type AssetUpdateMetadataApplyPayload = Pick<
   AssetBulkUpdateDto,
   'description' | 'rating' | 'dateTimeOriginal' | 'dateTimeRelative' | 'timeZone' | 'latitude' | 'longitude'
 >;
+type AgentPlanOperation = AgentOperationPlanWithOperations['operations'][number];
 const assetUpdateMetadataApplyPayloadKeys = [
   'description',
   'rating',
@@ -245,14 +252,14 @@ export class AgentOperationPlanService {
     const session = await this.getOwnedSession(auth, sessionId, { requireActive: false });
     const plan = await this.planRepository.getCurrentBySessionId(session.id);
 
-    return plan ? this.mapPlan(plan) : null;
+    return plan ? this.mapPlanForUserReview(plan) : null;
   }
 
   async getAppliedPlans(auth: AuthDto, sessionId: string): Promise<AgentOperationPlanResponseDto[]> {
     const session = await this.getOwnedSession(auth, sessionId, { requireActive: false });
     const plans = await this.planRepository.getAppliedBySessionId(session.id);
 
-    return plans.map((plan) => this.mapPlan(plan));
+    return Promise.all(plans.map((plan) => this.mapPlanForUserReview(plan)));
   }
 
   async proposeAlbumOperations(
@@ -766,9 +773,16 @@ export class AgentOperationPlanService {
     }
 
     try {
+      const reviewMetadataByOperationId = await this.buildPlanReviewMetadata(claimedPlan, applySelection);
       const applyUpdates = await this.applyClaimedPlan(auth, session, claimedPlan, applySelection);
-      const appliedPlan = await this.planRepository.completeApply(claimedPlan.id, applyUpdates);
-      const response = this.buildApplyResponse(this.mapPlan(appliedPlan), applySelection.selectedOperationIds);
+      const appliedPlan = await this.planRepository.completeApply(
+        claimedPlan.id,
+        this.attachReviewMetadataToApplyUpdates(applyUpdates, reviewMetadataByOperationId),
+      );
+      const response = this.buildApplyResponse(
+        this.mapPlan(appliedPlan, reviewMetadataByOperationId),
+        applySelection.selectedOperationIds,
+      );
 
       await this.sessionRepository.update(auth.user.id, session.id, {
         status: AgentSessionStatus.Running,
@@ -3141,7 +3155,7 @@ export class AgentOperationPlanService {
       requestSummary:
         toolName === AgentToolName.SummarizePlan
           ? `Summarize operation plan ${request.planId}`
-          : `Store ${operations.length} proposed album operation(s)`,
+          : this.getPlanningAuditRequestSummary(operations),
       responseSummary: result.responseSummary,
       redactedRequestMetadata: this.redactRequestMetadata(toolName, request, operations, {
         albumIds,
@@ -3165,6 +3179,16 @@ export class AgentOperationPlanService {
       completedAt: result.status === AgentToolCallStatus.Executing ? null : new Date(),
       error: result.error,
     });
+  }
+
+  private getPlanningAuditRequestSummary(operations: AgentAlbumOperationInput[]) {
+    const operationKind =
+      operations.length > 0 &&
+      operations.every((operation) => operation.type === AgentOperationType.AssetUpdateMetadata)
+        ? 'metadata'
+        : 'album';
+
+    return `Store ${operations.length} proposed ${operationKind} operation(s)`;
   }
 
   private async transitionPlanningAudit(session: AgentSession, toolCallId: string, result: PlanningAuditResult) {
@@ -3414,14 +3438,249 @@ export class AgentOperationPlanService {
     ];
   }
 
-  private mapPlan(plan: AgentOperationPlanWithOperations): AgentOperationPlanResponseDto {
+  private async mapPlanForUserReview(plan: AgentOperationPlanWithOperations): Promise<AgentOperationPlanResponseDto> {
+    return this.mapPlan(plan, await this.buildPlanReviewMetadata(plan));
+  }
+
+  private async buildPlanReviewMetadata(
+    plan: AgentOperationPlanWithOperations,
+    applySelection?: ApplySelection,
+  ): Promise<Map<string, AgentOperationReviewMetadata>> {
+    const reviewMetadataByOperationId = new Map<string, AgentOperationReviewMetadata>();
+    const operationsForFreshReview: AgentPlanOperation[] = [];
+
+    for (const operation of plan.operations) {
+      const persistedReviewMetadata = this.getPersistedReviewMetadata(operation.result);
+      if (persistedReviewMetadata) {
+        reviewMetadataByOperationId.set(operation.id, persistedReviewMetadata);
+        continue;
+      }
+
+      if (operation.type !== AgentOperationType.AssetUpdateMetadata) {
+        continue;
+      }
+
+      if (applySelection && !applySelection.selectedOperationIds.has(operation.id)) {
+        continue;
+      }
+
+      if (!applySelection && plan.status === AgentOperationPlanStatus.Applied) {
+        continue;
+      }
+
+      const selectedAssetIds = applySelection?.selectedAssetIdsByOperationId.get(operation.id);
+      operationsForFreshReview.push(selectedAssetIds ? { ...operation, assetIds: selectedAssetIds } : operation);
+    }
+
+    const sampleAssetIds = [
+      ...new Set(
+        operationsForFreshReview.flatMap((operation) =>
+          [...new Set(operation.assetIds)].slice(0, metadataReviewSampleLimit),
+        ),
+      ),
+    ];
+    const metadataRows =
+      sampleAssetIds.length > 0 ? await this.assetRepository.getAgentMetadataReviewByIds(sampleAssetIds) : [];
+    const metadataByAssetId = new Map(metadataRows.map((row) => [row.id, row]));
+
+    for (const operation of operationsForFreshReview) {
+      const reviewMetadata = this.buildAssetMetadataReview(operation, metadataByAssetId);
+      if (reviewMetadata) {
+        reviewMetadataByOperationId.set(operation.id, reviewMetadata);
+      }
+    }
+
+    return reviewMetadataByOperationId;
+  }
+
+  private buildAssetMetadataReview(
+    operation: AgentPlanOperation,
+    metadataByAssetId: Map<string, AgentAssetMetadataReviewRow>,
+  ): AgentOperationReviewMetadata | undefined {
+    const payload = this.requireObjectPayload(operation.payload);
+    const sampleAssetIds = [...new Set(operation.assetIds)].slice(0, metadataReviewSampleLimit);
+    const fields: NonNullable<AgentOperationReviewMetadata['assetMetadata']>['fields'] = [];
+
+    if (Object.hasOwn(payload, 'description') && typeof payload.description === 'string') {
+      fields.push({
+        key: 'description',
+        label: 'Description',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value: exifInfo.description || null,
+          valueKind: exifInfo.description ? 'known' : 'empty',
+        })),
+        proposedValue: payload.description === '' ? null : payload.description,
+        proposedValueKind: payload.description === '' ? 'clear' : 'known',
+      });
+    }
+
+    if (
+      Object.hasOwn(payload, 'rating') &&
+      (payload.rating === null || (typeof payload.rating === 'number' && Number.isInteger(payload.rating)))
+    ) {
+      fields.push({
+        key: 'rating',
+        label: 'Rating',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value: exifInfo.rating,
+          valueKind: exifInfo.rating === null ? 'empty' : 'known',
+        })),
+        proposedValue: payload.rating,
+        proposedValueKind: payload.rating === null ? 'clear' : 'known',
+      });
+    }
+
+    if (Object.hasOwn(payload, 'dateTimeOriginal') && typeof payload.dateTimeOriginal === 'string') {
+      fields.push({
+        key: 'dateTimeOriginal',
+        label: 'Date taken',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value: this.formatMetadataDate(exifInfo.dateTimeOriginal),
+          valueKind: exifInfo.dateTimeOriginal ? 'known' : 'empty',
+        })),
+        proposedValue: payload.dateTimeOriginal,
+        proposedValueKind: 'known',
+      });
+    }
+
+    if (Object.hasOwn(payload, 'dateTimeRelative') && typeof payload.dateTimeRelative === 'number') {
+      fields.push({
+        key: 'dateTimeRelative',
+        label: 'Date shift',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value: this.formatMetadataDate(exifInfo.dateTimeOriginal),
+          valueKind: exifInfo.dateTimeOriginal ? 'known' : 'empty',
+        })),
+        proposedValue: payload.dateTimeRelative,
+        proposedValueKind: 'relative',
+      });
+    }
+
+    if (Object.hasOwn(payload, 'timeZone') && typeof payload.timeZone === 'string') {
+      fields.push({
+        key: 'timeZone',
+        label: 'Time zone',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value: exifInfo.timeZone || null,
+          valueKind: exifInfo.timeZone ? 'known' : 'empty',
+        })),
+        proposedValue: payload.timeZone,
+        proposedValueKind: 'known',
+      });
+    }
+
+    if (typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+      fields.push({
+        key: 'location',
+        label: 'Location',
+        previousValues: this.buildPreviousMetadataValues(sampleAssetIds, metadataByAssetId, (exifInfo) => ({
+          value:
+            typeof exifInfo.latitude === 'number' && typeof exifInfo.longitude === 'number'
+              ? this.formatCoordinates(exifInfo.latitude, exifInfo.longitude)
+              : null,
+          valueKind:
+            typeof exifInfo.latitude === 'number' && typeof exifInfo.longitude === 'number' ? 'known' : 'empty',
+        })),
+        proposedValue: this.formatCoordinates(payload.latitude, payload.longitude),
+        proposedValueKind: 'known',
+      });
+    }
+
+    if (fields.length === 0) {
+      return;
+    }
+
+    return {
+      assetMetadata: {
+        fields,
+        sampleAssetIds,
+        warnings:
+          fields.some((field) => field.key === 'location') && operation.assetIds.length > 1
+            ? ['Coordinates will be applied to multiple photos.']
+            : [],
+      },
+    };
+  }
+
+  private buildPreviousMetadataValues(
+    assetIds: string[],
+    metadataByAssetId: Map<string, AgentAssetMetadataReviewRow>,
+    getValue: (exifInfo: NonNullable<AgentAssetMetadataReviewRow['exifInfo']>) => {
+      value: string | number | null;
+      valueKind: AgentOperationReviewMetadataValueKind;
+    },
+  ) {
+    return assetIds.map((assetId) => {
+      const row = metadataByAssetId.get(assetId);
+      if (!row || !row.exifInfo) {
+        return { assetId, value: null, valueKind: 'unknown' as const };
+      }
+
+      return { assetId, ...getValue(row.exifInfo) };
+    });
+  }
+
+  private formatMetadataDate(value: Date | string | null) {
+    if (!value) {
+      return null;
+    }
+
+    return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  }
+
+  private formatCoordinates(latitude: number, longitude: number) {
+    return `${latitude}, ${longitude}`;
+  }
+
+  private getPersistedReviewMetadata(result: AgentOperationResult | null): AgentOperationReviewMetadata | undefined {
+    const record = this.asRecord(result);
+    const reviewMetadata = this.asRecord(record?.reviewMetadata);
+    const assetMetadata = reviewMetadata ? this.asRecord(reviewMetadata.assetMetadata) : undefined;
+
+    if (!assetMetadata || !Array.isArray(assetMetadata.fields) || !Array.isArray(assetMetadata.sampleAssetIds)) {
+      return;
+    }
+
+    return reviewMetadata as AgentOperationReviewMetadata;
+  }
+
+  private attachReviewMetadataToApplyUpdates(
+    updates: AgentOperationApplyUpdate[],
+    reviewMetadataByOperationId: Map<string, AgentOperationReviewMetadata>,
+  ): AgentOperationApplyUpdate[] {
+    return updates.map((update) => {
+      const reviewMetadata = reviewMetadataByOperationId.get(update.id);
+      if (!reviewMetadata) {
+        return update;
+      }
+
+      return {
+        ...update,
+        result: {
+          ...(update.result ?? {}),
+          reviewMetadata,
+        },
+      };
+    });
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+  }
+
+  private mapPlan(
+    plan: AgentOperationPlanWithOperations,
+    reviewMetadataByOperationId = new Map<string, AgentOperationReviewMetadata>(),
+  ): AgentOperationPlanResponseDto {
     return {
       id: plan.id,
       sessionId: plan.sessionId,
       revision: plan.revision,
       status: plan.status,
       summary: plan.summary,
-      operations: plan.operations.map((operation) => this.mapOperation(operation)),
+      operations: plan.operations.map((operation) =>
+        this.mapOperation(operation, reviewMetadataByOperationId.get(operation.id)),
+      ),
       createdAt: plan.createdAt,
       updatedAt: plan.updatedAt,
     };
@@ -3460,7 +3719,10 @@ export class AgentOperationPlanService {
     };
   }
 
-  private mapOperation(operation: AgentOperationPlanWithOperations['operations'][number]) {
+  private mapOperation(
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    reviewMetadata?: AgentOperationReviewMetadata,
+  ) {
     return {
       id: operation.id,
       planId: operation.planId,
@@ -3476,6 +3738,7 @@ export class AgentOperationPlanService {
       enabled: operation.enabled,
       status: operation.status,
       result: operation.result,
+      ...(reviewMetadata ? { reviewMetadata } : {}),
       error: operation.error,
       createdAt: operation.createdAt,
       updatedAt: operation.updatedAt,
@@ -3509,7 +3772,14 @@ export class AgentOperationPlanService {
     const coverCount = plan.operations.filter(
       (operation) => operation.type === AgentOperationType.AlbumSetCover,
     ).length;
+    const metadataUpdateCount = plan.operations.filter(
+      (operation) => operation.type === AgentOperationType.AssetUpdateMetadata,
+    ).length;
 
-    return `Plan revision ${plan.revision}: ${createCount} album create, ${addCount} asset add, ${updateCount} detail update, ${coverCount} cover change operation(s).`;
+    if (metadataUpdateCount > 0 && createCount === 0 && addCount === 0 && updateCount === 0 && coverCount === 0) {
+      return `Plan revision ${plan.revision}: ${metadataUpdateCount} metadata update operation(s).`;
+    }
+
+    return `Plan revision ${plan.revision}: ${createCount} album create, ${addCount} asset add, ${updateCount} detail update, ${coverCount} cover change, ${metadataUpdateCount} metadata update operation(s).`;
   }
 }

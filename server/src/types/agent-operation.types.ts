@@ -16,6 +16,26 @@ export type AgentOperationAssetResult = {
   errorMessage?: string;
 };
 
+export type AgentOperationReviewMetadataValueKind = 'known' | 'empty' | 'clear' | 'relative' | 'unknown';
+
+export type AgentOperationReviewMetadata = {
+  assetMetadata?: {
+    fields: Array<{
+      key: string;
+      label: string;
+      previousValues: Array<{
+        assetId: string;
+        value: string | number | null;
+        valueKind: AgentOperationReviewMetadataValueKind;
+      }>;
+      proposedValue: string | number | null;
+      proposedValueKind: AgentOperationReviewMetadataValueKind;
+    }>;
+    sampleAssetIds: string[];
+    warnings: string[];
+  };
+};
+
 export type AgentOperationResult = {
   albumId?: string;
   spaceId?: string;
@@ -25,6 +45,7 @@ export type AgentOperationResult = {
   skippedUserIds?: string[];
   assetResults?: AgentOperationAssetResult[];
   skippedReason?: string;
+  reviewMetadata?: AgentOperationReviewMetadata;
 };
 
 export type AgentAlbumOperationInput = {

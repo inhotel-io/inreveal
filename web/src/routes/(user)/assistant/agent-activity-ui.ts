@@ -206,6 +206,13 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
   },
 };
 
+const metadataAssetBatchActivityDefinition: ToolActivityDefinition = {
+  kind: 'plan',
+  title: 'Preparing metadata update plan',
+  completedSummary: 'Prepared metadata update plan',
+  coalesceKey: 'propose-asset-metadata-batch-from-search',
+};
+
 const responseSummaryTools = new Set<AgentToolName>([
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
@@ -301,7 +308,16 @@ const mapToolCallStatus = (status: AgentToolCallStatus): AgentActivityStatus => 
   }
 };
 
-const getDefinitionForTool = (toolName: AgentToolName) => toolActivityDefinitions[toolName] ?? unknownToolDefinition;
+const isMetadataAssetBatchPlanningToolCall = (toolCall: AgentToolCallResponseDto) =>
+  toolCall.toolName === AgentToolName.ProposeAssetBatchFromSearch &&
+  [toolCall.requestSummary, toolCall.responseSummary].some(
+    (summary) => typeof summary === 'string' && /metadata/i.test(summary),
+  );
+
+const getDefinitionForToolCall = (toolCall: AgentToolCallResponseDto) =>
+  isMetadataAssetBatchPlanningToolCall(toolCall)
+    ? metadataAssetBatchActivityDefinition
+    : (toolActivityDefinitions[toolCall.toolName] ?? unknownToolDefinition);
 
 const technicalTextLimit = 500;
 const unsafePromptPattern = /\b(raw prompt|system prompt|chain-of-thought|reasoning trace)\s*:/i;
@@ -449,7 +465,7 @@ const getSummaryForStatus = (
 const buildToolActivityCandidate = (toolCall: AgentToolCallResponseDto): ToolActivityCandidate => {
   const toolName = toolCall.toolName;
   const status = mapToolCallStatus(toolCall.status);
-  const baseDefinition = getDefinitionForTool(toolName);
+  const baseDefinition = getDefinitionForToolCall(toolCall);
   const definition =
     toolCall.status === AgentToolCallStatus.PendingApproval
       ? {
