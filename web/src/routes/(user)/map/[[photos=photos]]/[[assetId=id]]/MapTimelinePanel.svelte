@@ -34,7 +34,11 @@
     type OnUnlink,
   } from '$lib/utils/actions';
   import { buildMapTimelineOptions } from '$lib/utils/map-filter-options';
-  import { type ActivatableTimelineBucket, getTimelineBucketZoomTarget } from '$lib/utils/timeline-zoom-navigation';
+  import {
+    type ActivatableTimelineBucket,
+    getTimelineBucketZoomTarget,
+    getTimelineZoomScopeOptions,
+  } from '$lib/utils/timeline-zoom-navigation';
   import { ActionButton, CloseButton, CommandPaletteDefaultProvider, Icon } from '@immich/ui';
   import { mdiDotsVertical, mdiImageMultiple } from '@mdi/js';
   import { ceil, floor } from 'lodash-es';
@@ -61,6 +65,7 @@
   let timelineManager = $state<TimelineManager>() as TimelineManager;
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let selectedAssets = $derived(assetMultiSelectManager.assets);
   let isAssetStackSelected = $derived(selectedAssets.length === 1 && !!selectedAssets[0].stack);
   let isLinkActionAvailable = $derived.by(() => {
@@ -95,6 +100,7 @@
   const handleTimelineGroupingChange = (grouping: TimelineGrouping) => {
     timelineGrouping = grouping;
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   };
 
   const handleTimelineBucketActivate = (bucket: ActivatableTimelineBucket) => {
@@ -109,11 +115,13 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
+    timelineZoomScope = result.anchor;
   };
 
   const clearTemporalFilter = () => {
     filters = clearTimelineTemporalFilter(filters);
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   };
 
   const timelineBoundingBox = $derived(
@@ -126,6 +134,7 @@
         onlyFavorites: $mapSettings.onlyFavorites,
         withPartners: $mapSettings.withPartners,
       }),
+      ...getTimelineZoomScopeOptions(timelineZoomScope),
       grouping: timelineGrouping,
     };
   });

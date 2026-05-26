@@ -31,12 +31,15 @@
   let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   const baseTimelineOptions = $derived({
     userId: data.partner.id,
     visibility: AssetVisibility.Timeline,
     withStacked: true,
   });
-  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const options = $derived(
+    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
+  );
   const hasTemporalFilters = $derived(
     Boolean(
       timelineFilters.dateAfter ||
@@ -60,6 +63,7 @@
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
     timelineGrouping = grouping;
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -74,11 +78,13 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
+    timelineZoomScope = result.anchor;
   }
 
   function clearRouteTemporalFilter() {
     timelineFilters = clearTimelineTemporalFilter(timelineFilters);
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 </script>
 

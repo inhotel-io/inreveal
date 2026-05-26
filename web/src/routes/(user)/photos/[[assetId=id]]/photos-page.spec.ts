@@ -632,6 +632,8 @@ describe('Photos page search URL state', () => {
       expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
       expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2015-12-31"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });
     expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(
@@ -659,6 +661,8 @@ describe('Photos page search URL state', () => {
       expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '');
       expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-month', '');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015,"month":8}');
     });
     expect(buildPhotosTimelineOptions).toHaveBeenLastCalledWith(

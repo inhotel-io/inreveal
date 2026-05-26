@@ -14,6 +14,11 @@ export type TimelineZoomActivationResult = {
   anchor: TimelineTemporalAnchor;
 };
 
+export type TimelineZoomScopeOptions = {
+  takenAfter?: string;
+  takenBefore?: string;
+};
+
 type TemporalBucketSource = {
   timelineBuckets?: Array<{ timeBucket: string; count: number }>;
   months?: Array<{ yearMonth: { year: number; month: number }; assetsCount: number }>;
@@ -39,6 +44,20 @@ export function getTimelineBucketZoomTarget(
       anchor: { year: bucket.date.year, month: bucket.date.month },
     };
   }
+}
+
+const formatDate = (year: number, month: number, day: number) =>
+  `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+export function getTimelineZoomScopeOptions(anchor: TimelineTemporalAnchor | undefined): TimelineZoomScopeOptions {
+  if (!anchor || anchor.month !== undefined) {
+    return {};
+  }
+
+  return {
+    takenAfter: formatDate(anchor.year, 1, 1),
+    takenBefore: formatDate(anchor.year, 12, 31),
+  };
 }
 
 export function getTimelineManagerTimeBuckets(source: TemporalBucketSource | undefined) {

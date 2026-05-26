@@ -88,13 +88,16 @@
   let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let numberOfAssets = $derived(timelineManager?.isInitialized ? timelineManager.assetCount : data.statistics.assets);
   const baseTimelineOptions = $derived({
     visibility: AssetVisibility.Timeline,
     personIds: [data.person.filterId ?? data.person.id],
     withSharedSpaces: true,
   });
-  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const options = $derived(
+    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
+  );
 
   let viewMode: PersonPageViewMode = $state(PersonPageViewMode.VIEW_ASSETS);
   let isEditingName = $state(false);
@@ -362,6 +365,7 @@
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
     timelineGrouping = grouping;
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -376,11 +380,13 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
+    timelineZoomScope = result.anchor;
   }
 
   function clearPersonTemporalFilter() {
     timelineFilters = clearTimelineTemporalFilter(timelineFilters);
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   const onPersonUpdate = async (response: PersonResponseDto) => {

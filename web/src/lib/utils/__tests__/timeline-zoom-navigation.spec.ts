@@ -1,4 +1,8 @@
-import { getTimelineBucketZoomTarget, getTimelineManagerTimeBuckets } from '../timeline-zoom-navigation';
+import {
+  getTimelineBucketZoomTarget,
+  getTimelineManagerTimeBuckets,
+  getTimelineZoomScopeOptions,
+} from '../timeline-zoom-navigation';
 
 describe('timeline zoom navigation helpers', () => {
   it('zooms a year bucket to month grouping without requiring filters', () => {
@@ -42,6 +46,22 @@ describe('timeline zoom navigation helpers', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('builds an internal year scope for month zoom without filter chips', () => {
+    expect(getTimelineZoomScopeOptions({ year: 2015 })).toEqual({
+      takenAfter: '2015-01-01',
+      takenBefore: '2015-12-31',
+    });
+  });
+
+  it('does not scope detailed day zoom because all assets must stay reachable', () => {
+    expect(getTimelineZoomScopeOptions({ year: 2016, month: 2 })).toEqual({});
+  });
+
+  it('does not add temporal request options without an active zoom scope', () => {
+    expect(getTimelineZoomScopeOptions(undefined)).toEqual({});
+  });
+
   it('uses generic timeline buckets for temporal picker buckets before falling back to month buckets', () => {
     const manager = {
       timelineBuckets: [

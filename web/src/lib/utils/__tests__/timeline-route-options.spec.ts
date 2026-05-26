@@ -73,4 +73,32 @@ describe('buildTimelineRouteOptions', () => {
       takenBefore: '2023-05-21T00:00:00.000Z',
     });
   });
+
+  it('adds hidden year zoom scope bounds when no explicit temporal filter is active', () => {
+    const base = {
+      visibility: AssetVisibility.Timeline,
+      withStacked: true,
+    };
+
+    expect(buildTimelineRouteOptions(base, createFilterState(), 'month', { year: 2016 })).toEqual({
+      visibility: AssetVisibility.Timeline,
+      withStacked: true,
+      grouping: 'month',
+      takenAfter: '2016-01-01',
+      takenBefore: '2016-12-31',
+    });
+  });
+
+  it('does not add hidden bounds for final day zoom so adjacent months stay reachable', () => {
+    const base = {
+      visibility: AssetVisibility.Timeline,
+      withStacked: true,
+    };
+
+    expect(buildTimelineRouteOptions(base, createFilterState(), 'day', { year: 2016, month: 2 })).toEqual({
+      visibility: AssetVisibility.Timeline,
+      withStacked: true,
+      grouping: 'day',
+    });
+  });
 });

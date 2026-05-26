@@ -57,6 +57,7 @@
   let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   // Tags can belong to a space's owner while the tagged assets are only reachable
   // through the shared space. Opt into shared-space assets (which requires an explicit
   // timeline visibility) so non-admin members actually see photos under a tag (#647).
@@ -66,7 +67,9 @@
     visibility: AssetVisibility.Timeline,
     withSharedSpaces: true,
   });
-  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const options = $derived(
+    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
+  );
 
   const handleNavigation = (tag: string) => navigateToView(joinPaths(data.path, tag));
 
@@ -82,6 +85,7 @@
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
     timelineGrouping = grouping;
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -96,11 +100,13 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
+    timelineZoomScope = result.anchor;
   }
 
   function clearRouteTemporalFilter() {
     timelineFilters = clearTimelineTemporalFilter(timelineFilters);
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   registerSelectionContext({

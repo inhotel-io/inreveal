@@ -315,8 +315,8 @@ describe('Spaces person detail page', () => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spaceId":"space-1"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"spacePersonId":"person-1"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"withStacked":true');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
-      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01"');
+      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2015-12-31"');
       expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });

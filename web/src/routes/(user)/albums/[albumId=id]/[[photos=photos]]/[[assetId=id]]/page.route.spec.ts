@@ -282,8 +282,8 @@ describe('album detail filter panel route', () => {
     await user.click(screen.getByTestId('activate-year-bucket'));
     await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"grouping":"month"'));
     expect(screen.getByTestId('timeline-options').textContent).toContain('"albumId"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2015-01-01"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenBefore":"2015-12-31"');
     expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
 
@@ -308,8 +308,8 @@ describe('album detail filter panel route', () => {
     expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Album Person');
     expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('2015');
     expect(screen.getByTestId('timeline-options').textContent).toContain('"albumId"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenAfter"');
-    expect(screen.getByTestId('timeline-options').textContent).not.toContain('"takenBefore"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2015-01-01"');
+    expect(screen.getByTestId('timeline-options').textContent).toContain('"takenBefore":"2015-12-31"');
     expect(screen.getByTestId('timeline-anchor')).toHaveTextContent(JSON.stringify({ year: 2015 }));
   });
 

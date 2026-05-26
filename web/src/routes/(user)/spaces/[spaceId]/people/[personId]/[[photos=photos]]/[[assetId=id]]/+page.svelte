@@ -85,6 +85,7 @@
   let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let personOverride = $state<SharedSpacePersonResponseDto>();
   let personOverrideKey = $state('');
   const person = $derived(personOverrideKey === routeStateKey && personOverride ? personOverride : data.person);
@@ -115,7 +116,9 @@
     spacePersonId: person.id,
     withStacked: true,
   });
-  const options = $derived(buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping));
+  const options = $derived(
+    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
+  );
 
   const currentMember = $derived(members.find((member) => member.userId === authManager.user.id));
   const isEditor = $derived(
@@ -341,6 +344,7 @@
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
     timelineGrouping = grouping;
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -355,11 +359,13 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
+    timelineZoomScope = result.anchor;
   }
 
   function clearSpacePersonTemporalFilter() {
     timelineFilters = clearTimelineTemporalFilter(timelineFilters);
     temporalAnchor = undefined;
+    timelineZoomScope = undefined;
   }
 
   async function closeMergeFlow() {
