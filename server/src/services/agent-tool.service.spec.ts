@@ -4491,12 +4491,84 @@ describe(AgentToolService.name, () => {
       strategy: 'date-spread',
     });
 
-    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds }));
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [assetIds[1], assetIds[2], assetIds[0]] }),
+    );
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.warnings).toContain('Requested 5 assets but only 3 eligible assets were available.');
       expect(result.criteriaSummary.join(' ')).toMatch(/date-spread/i);
     }
+  });
+
+  it('curateSelection keeps ranked order when target exceeds eligible assets', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, [assetIds[1], assetIds[2], assetIds[0]]);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], { isFavorite: false, exifInfo: { ...makeMetadata(assetIds[0]).exifInfo!, rating: 1 } }),
+      makeMetadata(assetIds[1], { isFavorite: true, exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 2 } }),
+      makeMetadata(assetIds[2], { isFavorite: false, exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 } }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 5,
+      strategy: 'favorites-first',
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [assetIds[1], assetIds[2], assetIds[0]] }),
+    );
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.warnings).toContain('Requested 5 assets but only 3 eligible assets were available.');
+    }
+  });
+
+  it('curateSelection date-spread starts with newest date group before older high-score groups', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, [assetIds[1], assetIds[0], assetIds[2]]);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], {
+        isFavorite: true,
+        localDateTime: new Date('2026-05-01T10:00:00.000Z'),
+        exifInfo: { ...makeMetadata(assetIds[0]).exifInfo!, rating: 5 },
+      }),
+      makeMetadata(assetIds[1], {
+        isFavorite: false,
+        localDateTime: new Date('2026-05-03T10:00:00.000Z'),
+        exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 1 },
+      }),
+      makeMetadata(assetIds[2], {
+        isFavorite: false,
+        localDateTime: new Date('2026-05-01T11:00:00.000Z'),
+        exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 4 },
+      }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 3,
+      strategy: 'date-spread',
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [assetIds[1], assetIds[0], assetIds[2]] }),
+    );
   });
 
   it('curateSelection supports cover-candidate constraints and sampleSize zero', async () => {
