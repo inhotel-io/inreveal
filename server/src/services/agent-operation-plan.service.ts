@@ -1379,8 +1379,12 @@ export class AgentOperationPlanService {
       return this.resolveSearchAssetSourceAssetIds(auth, session, toolName, assetSource, operationType, selectionAudit);
     }
 
+    if (assetSource.kind === 'selectionHandle') {
+      return this.resolveSelectionHandleAssetIds(auth, session, assetSource.selectionHandleId, selectionAudit);
+    }
+
     throw new BadRequestException(
-      'Only assetSource.search and assetSource.previousSearch are supported for operation planning',
+      'Only assetSource.search, assetSource.previousSearch, and assetSource.selectionHandle are supported for operation planning',
     );
   }
 
