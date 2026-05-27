@@ -56,10 +56,7 @@ describe('agent MCP prompt placeholders', () => {
       operations: [
         {
           targetId: '<album.id from listAlbums/readAlbum>',
-          assetIds: [
-            '<exact-asset-id-from-readAssetMetadata>',
-            '<another-exact-asset-id-from-readAssetMetadata>',
-          ],
+          assetIds: ['<exact-asset-id-from-readAssetMetadata>', '<another-exact-asset-id-from-readAssetMetadata>'],
           payload: {
             tagId: '<tagIds value from resolveAssetSearchFilters>',
             untouched: 'not-a-fixture',
@@ -322,9 +319,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).not.toContain('createSelectionHandle');
     expect(prompt).toContain('assetSelectionHandleId');
     expect(prompt).toContain('provider planning rejects raw assetIds');
-    expect(prompt).toMatch(
-      /low-level planning uses handles\/sources.*album\.addAssets.*space\.addAssets/is,
-    );
+    expect(prompt).toMatch(/low-level planning uses handles\/sources.*album\.addAssets.*space\.addAssets/is);
   });
 
   it('includes compact visual and technical metadata guidance without direct writes', () => {

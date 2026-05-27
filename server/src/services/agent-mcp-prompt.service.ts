@@ -73,11 +73,6 @@ export class AgentMcpPromptService {
       AgentToolName.ProposeAssetBatchFromSearch,
       'favorite-search-results',
     );
-    const metadataBatch = this.getPromptExample(
-      examples,
-      AgentToolName.ProposeAssetBatchFromSearch,
-      'metadata-search-results',
-    );
     const metadataContract = this.getContract(AgentToolName.ReadAssetMetadata);
     const planContract = this.getContract(AgentToolName.ProposeAlbumOperations);
     const retryMode = metadataContract.argumentModes.find((mode) => mode.name === 'approved-retry');

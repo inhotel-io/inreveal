@@ -181,6 +181,9 @@ String parameterToString(dynamic value) {
   if (value is AgentSearchAssetsOrder) {
     return AgentSearchAssetsOrderTypeTransformer().encode(value).toString();
   }
+  if (value is AgentSearchAssetsRequestDetail) {
+    return AgentSearchAssetsRequestDetailTypeTransformer().encode(value).toString();
+  }
   if (value is AgentSessionActivityEventSource) {
     return AgentSessionActivityEventSourceTypeTransformer().encode(value).toString();
   }
