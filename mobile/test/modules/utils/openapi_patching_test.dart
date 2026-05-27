@@ -82,7 +82,8 @@ void main() {
       expect(approvalRequired, isNotNull);
       expect(approvalRequired!.status.value, 'approval-required');
       expect(approvalRequired.reason, isNull);
-      expect(approvalRequired.assets, isEmpty);
+      expect(approvalRequired.selectionHandle, isNull);
+      expect(approvalRequired.sample, isNull);
 
       final denied = AgentSearchAssetsToolResponseDto.fromJson({
         'status': 'denied',
@@ -96,14 +97,41 @@ void main() {
       final success = AgentSearchAssetsToolResponseDto.fromJson({
         'status': 'success',
         'toolCall': {...toolCall, 'status': 'completed'},
-        'assets': [],
+        'summary': 'Created a selection handle for 1 asset',
+        'detail': 'summary',
+        'returnedCount': 1,
+        'hasMore': false,
         'nextPage': null,
+        'resultSize': {
+          'estimatedBytes': 512,
+          'hasMore': false,
+          'nextPage': null,
+          'omittedFields': [],
+          'returnedItems': 1,
+          'truncated': false,
+        },
+        'sample': {
+          'sampleSize': 1,
+          'items': [
+            {'itemRef': 'item:001', 'originalFileName': 'berlin.jpg'},
+          ],
+        },
+        'selectionHandle': {
+          'id': '00000000-0000-4000-8000-000000000003',
+          'sourceRef': 'asset-source:search:00000000-0000-4000-8000-000000000003',
+          'assetCount': 1,
+          'sourceToolCallId': '00000000-0000-4000-8000-000000000001',
+          'expiresAt': '2026-05-22T10:00:00.000Z',
+        },
       });
       expect(success, isNotNull);
       expect(success!.status.value, 'success');
       expect(success.reason, isNull);
+      expect(success.summary, 'Created a selection handle for 1 asset');
+      expect(success.detail?.value, 'summary');
       expect(success.nextPage, isNull);
-      expect(success.assets, isEmpty);
+      expect(success.selectionHandle?.assetCount, 1);
+      expect(success.sample?.items.first.itemRef, 'item:001');
     });
   });
 }
