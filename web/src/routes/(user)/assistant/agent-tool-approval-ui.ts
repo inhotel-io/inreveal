@@ -10,6 +10,8 @@ import type { Translations } from 'svelte-i18n';
 
 const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.SearchAssets]: 'assistant_agent_tool_name_searchAssets',
+  [AgentToolName.ReadSelectionMetadata]: 'assistant_agent_tool_name_readSelectionMetadata',
+  [AgentToolName.CurateSelection]: 'assistant_agent_tool_name_curateSelection',
   [AgentToolName.ResolveAssetSearchFilters]: 'assistant_agent_tool_name_resolveAssetSearchFilters',
   [AgentToolName.ReadAssetMetadata]: 'assistant_agent_tool_name_readAssetMetadata',
   [AgentToolName.ReadAssetPreviews]: 'assistant_agent_tool_name_readAssetPreviews',
@@ -21,10 +23,12 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.SearchUsers]: 'assistant_agent_tool_name_searchUsers',
   [AgentToolName.ProposeAlbumOperations]: 'assistant_agent_tool_name_proposeAlbumOperations',
   [AgentToolName.ProposeAlbumFromSearch]: 'assistant_agent_tool_name_proposeAlbumFromSearch',
+  [AgentToolName.ProposeAlbumFromSelection]: 'assistant_agent_tool_name_proposeAlbumFromSelection',
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: 'assistant_agent_tool_name_proposeAddAssetsToAlbumFromSearch',
   [AgentToolName.ProposeSpaceFromSearch]: 'assistant_agent_tool_name_proposeSpaceFromSearch',
   [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: 'assistant_agent_tool_name_proposeAddAssetsToSpaceFromSearch',
   [AgentToolName.ProposeAssetBatchFromSearch]: 'assistant_agent_tool_name_proposeAssetBatchFromSearch',
+  [AgentToolName.ProposeAssetBatchFromSelection]: 'assistant_agent_tool_name_proposeAssetBatchFromSelection',
   [AgentToolName.ReviseProposedOperations]: 'assistant_agent_tool_name_reviseProposedOperations',
   [AgentToolName.SummarizePlan]: 'assistant_agent_tool_name_summarizePlan',
 };
@@ -59,6 +63,8 @@ export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
 
 const pendingActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi wants to search your photos.',
+  [AgentToolName.ReadSelectionMetadata]: 'Pi wants to read selection details.',
+  [AgentToolName.CurateSelection]: 'Pi wants to choose a smaller photo selection.',
   [AgentToolName.ResolveAssetSearchFilters]: 'Pi wants to match your search terms to gallery filters.',
   [AgentToolName.SearchUsers]: 'Pi wants to find visible Gallery users.',
   [AgentToolName.ReadAssetMetadata]: 'Pi wants to read photo details.',
@@ -70,16 +76,20 @@ const pendingActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.ReadSpace]: 'Pi wants to inspect a space.',
   [AgentToolName.ProposeAlbumOperations]: 'Pi wants to draft album changes.',
   [AgentToolName.ProposeAlbumFromSearch]: 'Pi wants to draft album changes from a search.',
+  [AgentToolName.ProposeAlbumFromSelection]: 'Pi wants to draft album changes from a selection.',
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: 'Pi wants to draft adding photos to an album.',
   [AgentToolName.ProposeSpaceFromSearch]: 'Pi wants to draft space changes from a search.',
   [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: 'Pi wants to draft adding photos to a space.',
   [AgentToolName.ProposeAssetBatchFromSearch]: 'Pi wants to draft photo changes from a search.',
+  [AgentToolName.ProposeAssetBatchFromSelection]: 'Pi wants to draft photo changes from a selection.',
   [AgentToolName.ReviseProposedOperations]: 'Pi wants to revise album changes.',
   [AgentToolName.SummarizePlan]: 'Pi wants to summarize the plan.',
 };
 
 const completedActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi searched your photos.',
+  [AgentToolName.ReadSelectionMetadata]: 'Pi read selection details.',
+  [AgentToolName.CurateSelection]: 'Pi chose a smaller photo selection.',
   [AgentToolName.ResolveAssetSearchFilters]: 'Pi matched your search terms to gallery filters.',
   [AgentToolName.ReadAssetMetadata]: 'Pi read photo details.',
   [AgentToolName.ReadAssetPreviews]: 'Pi viewed photo previews.',
@@ -90,18 +100,25 @@ const completedActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.ReadSpace]: 'Pi inspected a space.',
   [AgentToolName.ProposeAlbumOperations]: 'Pi drafted album changes.',
   [AgentToolName.ProposeAlbumFromSearch]: 'Pi drafted album changes from a search.',
+  [AgentToolName.ProposeAlbumFromSelection]: 'Pi drafted album changes from a selection.',
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: 'Pi drafted adding photos to an album.',
   [AgentToolName.ProposeSpaceFromSearch]: 'Pi drafted space changes from a search.',
   [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: 'Pi drafted adding photos to a space.',
   [AgentToolName.ProposeAssetBatchFromSearch]: 'Pi drafted photo changes from a search.',
+  [AgentToolName.ProposeAssetBatchFromSelection]: 'Pi drafted photo changes from a selection.',
   [AgentToolName.ReviseProposedOperations]: 'Pi revised album changes.',
   [AgentToolName.SummarizePlan]: 'Pi summarized the plan.',
 };
 
 const pluralize = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`;
 
+const assetBatchPlanningTools = new Set<AgentToolName>([
+  AgentToolName.ProposeAssetBatchFromSearch,
+  AgentToolName.ProposeAssetBatchFromSelection,
+]);
+
 const isMetadataAssetBatchPlanningToolCall = (toolCall: AgentToolCallResponseDto) =>
-  toolCall.toolName === AgentToolName.ProposeAssetBatchFromSearch &&
+  assetBatchPlanningTools.has(toolCall.toolName) &&
   [toolCall.requestSummary, toolCall.responseSummary].some(
     (summary) => typeof summary === 'string' && /metadata/i.test(summary),
   );

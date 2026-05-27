@@ -591,6 +591,8 @@ describe('agent activity UI helpers', () => {
   it.each([
     [AgentToolName.ResolveAssetSearchFilters, 'search', 'Resolving filters', 'Matched search filters'],
     [AgentToolName.SearchAssets, 'search', 'Searching photos', 'Found matching photos'],
+    [AgentToolName.ReadSelectionMetadata, 'metadata', 'Reading selection details', 'Read selection details'],
+    [AgentToolName.CurateSelection, 'search', 'Narrowing photo selection', 'Narrowed photo selection'],
     [AgentToolName.ReadAssetMetadata, 'metadata', 'Reading photo details', 'Read details for photos'],
     [AgentToolName.ReadAssetPreviews, 'preview', 'Loading photo previews', 'Loaded photo previews'],
     [AgentToolName.ReadAssetOriginals, 'preview', 'Opening original files', 'Opened original files'],
@@ -602,10 +604,12 @@ describe('agent activity UI helpers', () => {
     [AgentToolName.ReviseProposedOperations, 'plan', 'Revising the plan', 'Revised the plan'],
     [AgentToolName.SummarizePlan, 'plan', 'Summarizing the plan', 'Summarized the plan'],
     [AgentToolName.ProposeAlbumFromSearch, 'plan', 'Preparing album plan', 'Prepared album plan'],
+    [AgentToolName.ProposeAlbumFromSelection, 'plan', 'Preparing album plan', 'Prepared album plan'],
     [AgentToolName.ProposeAddAssetsToAlbumFromSearch, 'plan', 'Preparing album plan', 'Prepared album plan'],
     [AgentToolName.ProposeSpaceFromSearch, 'plan', 'Preparing space plan', 'Prepared space plan'],
     [AgentToolName.ProposeAddAssetsToSpaceFromSearch, 'plan', 'Preparing space plan', 'Prepared space plan'],
     [AgentToolName.ProposeAssetBatchFromSearch, 'plan', 'Preparing asset update plan', 'Prepared asset update plan'],
+    [AgentToolName.ProposeAssetBatchFromSelection, 'plan', 'Preparing asset update plan', 'Prepared asset update plan'],
   ] as const)('maps %s to safe activity copy', (toolName, kind, title, summary) => {
     const model = buildModel({
       toolCalls: [makeToolCall({ toolName, status: AgentToolCallStatus.Completed, responseSummary: null })],
