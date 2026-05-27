@@ -147,11 +147,13 @@ const propertyDescriptions = {
   focus: 'An optional summary focus, such as risks, selected changes, or skipped operations.',
 } as const satisfies Record<string, string>;
 
-const toArgumentModeMetadata = (mode: AgentMcpArgumentMode) => ({
+const toArgumentModeMetadata = (mode: AgentMcpArgumentMode, omitProviderRejectedRawIds = false) => ({
   name: mode.name,
   description: mode.description,
   requiredFields: mode.requiredFields,
-  forbiddenFields: mode.forbiddenFields,
+  forbiddenFields: omitProviderRejectedRawIds
+    ? mode.forbiddenFields.filter((field) => field !== 'assetIds')
+    : mode.forbiddenFields,
   whenToUse: mode.whenToUse,
 });
 
@@ -174,7 +176,12 @@ const enrichToolFromContract = (
   }
 
   inputSchema.examples = contract.examples.map((example) => structuredClone(example.arguments));
-  inputSchema['x-gallery-argumentModes'] = contract.argumentModes.map((mode) => toArgumentModeMetadata(mode));
+  const omitProviderRejectedRawIds =
+    tool.name === AgentToolName.ProposeAlbumFromSelection ||
+    tool.name === AgentToolName.ProposeAssetBatchFromSelection;
+  inputSchema['x-gallery-argumentModes'] = contract.argumentModes.map((mode) =>
+    toArgumentModeMetadata(mode, omitProviderRejectedRawIds),
+  );
 
   return {
     ...tool,
@@ -318,6 +325,20 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Propose asset batch from search',
       description: 'Preferred workflow for favorite, archive, tag, or rotate actions on matching photos.',
       schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch],
+      annotations: planningToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ProposeAlbumFromSelection,
+      title: 'Propose album from selection',
+      description: 'Preferred workflow for creating an album from an existing selection handle as a reviewable plan.',
+      schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSelection],
+      annotations: planningToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ProposeAssetBatchFromSelection,
+      title: 'Propose asset batch from selection',
+      description: 'Preferred workflow for favorite, archive, tag, metadata, or rotate actions on a selection handle.',
+      schema: AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection],
       annotations: planningToolAnnotations,
     }),
     defineTool({
