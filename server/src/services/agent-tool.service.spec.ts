@@ -4591,6 +4591,98 @@ describe(AgentToolService.name, () => {
     expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(personId);
   });
 
+  it('readSelectionMetadata denies metadata policy before resolving selection handles', async () => {
+    const auth = AuthFactory.create();
+    const selectionHandleId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ read: { metadata: false, previews: false, originals: false } }),
+    });
+    const denied = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadSelectionMetadata,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
+      error: 'Agent permission policy does not allow metadata reads',
+      completedAt,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.create.mockResolvedValue(denied);
+
+    const result = await sut.readSelectionMetadata(auth, session.id, {
+      selectionHandleId,
+      fields: ['dates'],
+      sampleSize: 2,
+    });
+
+    expect(result).toEqual({
+      status: 'denied',
+      reason: 'Agent permission policy does not allow metadata reads',
+      toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied, error: denied.error }),
+    });
+    expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
+  });
+
+  it('approved readSelectionMetadata retry records denied when the stored handle is unavailable', async () => {
+    const auth = AuthFactory.create();
+    const selectionHandleId = newUuid();
+    const session = makeSession({ userId: auth.user.id });
+    const approved = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadSelectionMetadata,
+      status: AgentToolCallStatus.Approved,
+      approvalDecision: AgentToolApprovalDecision.Approved,
+      redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    toolCallRepository.getByIdForSession.mockResolvedValue(approved);
+    toolCallRepository.transition.mockResolvedValueOnce(
+      makeToolCall({ ...approved, status: AgentToolCallStatus.Executing }),
+    );
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readSelectionMetadata(auth, session.id, { toolCallId: approved.id })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      1,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Approved,
+      expect.objectContaining({ status: AgentToolCallStatus.Executing }),
+    );
+    expect(toolCallRepository.transition).toHaveBeenNthCalledWith(
+      2,
+      session.id,
+      approved.id,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Denied,
+        approvalDecision: AgentToolApprovalDecision.Denied,
+        responseSummary: null,
+        redactedResponseMetadata: { resultSize: emptyResultSize() },
+        completedAt: expect.any(Date),
+        error: 'Selection handle is expired or not available for this session',
+      },
+    );
+    expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
+      status: AgentSessionStatus.Running,
+    });
+  });
+
   it('listAlbums filters out shared albums when assetScope.sharedSpaces is false', async () => {
     const auth = AuthFactory.create();
     const ownedAlbum = makeAlbumSummary({ ownerId: auth.user.id });
