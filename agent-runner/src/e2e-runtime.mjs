@@ -153,18 +153,48 @@ const createE2eMcpClient = ({ gateway, fetch: fetchImplementation = fetch }) => 
   };
 };
 
-const requireSearchAssets = async (client) => {
-  const result = await client.call('searchAssets', { filters: { isNotInAlbum: true }, limit: 3 });
+const requireSearchSelectionHandle = async (client) => {
+  const result = await client.call('searchAssets', { filters: { isNotInAlbum: true }, limit: 3, detail: 'handle' });
   if (result.status !== 'success') {
     throw new Error(`Asset search did not complete successfully: ${result.status}`);
   }
 
-  const assetIds = compactAssetIdsFromResult(result);
-  if (assetIds.length < 2) {
+  const handle = result.selectionHandle;
+  if (typeof handle?.id !== 'string' || handle.id.length === 0) {
+    throw new Error('Asset search did not return a selection handle');
+  }
+
+  const assetCount = typeof handle.assetCount === 'number' ? handle.assetCount : (result.returnedCount ?? 0);
+  if (assetCount < 2) {
     throw new Error('The e2e runner needs at least two visible loose assets');
   }
 
-  return assetIds.slice(0, 2);
+  return handle.id;
+};
+
+const requireCoverSelectionHandle = async (client, selectionHandleId) => {
+  const result = await client.call('curateSelection', {
+    selectionHandleId,
+    targetCount: 1,
+    strategy: 'cover-candidate',
+    sampleSize: 0,
+  });
+  if (result.status !== 'success') {
+    throw new Error(`Cover selection did not complete successfully: ${result.status}`);
+  }
+
+  const handle = result.selectionHandle;
+  if (typeof handle?.id !== 'string' || handle.id.length === 0) {
+    throw new Error('Cover selection did not return a selection handle');
+  }
+
+  const selectedAssetCount =
+    typeof result.selectedAssetCount === 'number' ? result.selectedAssetCount : (handle.assetCount ?? 0);
+  if (selectedAssetCount < 1) {
+    throw new Error('Cover selection did not find an eligible image');
+  }
+
+  return handle.id;
 };
 
 const searchSelectionSourceRef = async (client, args) => {
@@ -193,8 +223,8 @@ const proposeMetadataBatchFromSearch = async (client, { searchArgs, action }) =>
 };
 
 const proposePortugalTrip = async (client) => {
-  const assetIds = await requireSearchAssets(client);
-  const [coverAssetId] = assetIds;
+  const selectionHandleId = await requireSearchSelectionHandle(client);
+  const coverSelectionHandleId = await requireCoverSelectionHandle(client, selectionHandleId);
   await client.call('proposeAlbumOperations', {
     summary: 'Create Portugal Trip and add 2 loose assets.',
     operations: [
@@ -215,7 +245,7 @@ const proposePortugalTrip = async (client) => {
         summary: 'Add selected photos to Portugal Trip',
         targetKind: 'new_album',
         temporaryTargetId: 'portugal-trip',
-        assetIds,
+        assetSelectionHandleId: selectionHandleId,
         riskLevel: 'medium',
         enabled: true,
         payload: {},
@@ -225,7 +255,7 @@ const proposePortugalTrip = async (client) => {
         summary: 'Use first photo as Portugal Trip cover',
         targetKind: 'new_album',
         temporaryTargetId: 'portugal-trip',
-        assetIds: [coverAssetId],
+        assetSelectionHandleId: coverSelectionHandleId,
         riskLevel: 'low',
         enabled: true,
         payload: {},
@@ -255,7 +285,7 @@ const proposeDeniedTrip = async (client) => {
         summary: 'Add inaccessible photo to Denied Trip',
         targetKind: 'new_album',
         temporaryTargetId: 'denied-trip',
-        assetIds: [inaccessibleAssetId],
+        assetSelectionHandleId: inaccessibleAssetId,
         riskLevel: 'high',
         enabled: true,
         payload: {},

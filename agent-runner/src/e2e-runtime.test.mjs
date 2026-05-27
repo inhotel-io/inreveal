@@ -148,22 +148,29 @@ const successHandlers = () => [
         result: {
           structuredContent: {
             status: 'success',
-            assets: [
-              { id: '00000000-0000-4000-8000-000000000201' },
-              { id: '00000000-0000-4000-8000-000000000202' },
-              { id: '00000000-0000-4000-8000-000000000203' },
-            ],
-            selectionHandle: args.createSelectionHandle
+            detail: args.detail === 'ids' ? 'handle' : (args.detail ?? 'handle'),
+            returnedCount: 3,
+            hasMore: false,
+            nextPage: null,
+            ...(args.detail === 'ids' || args.createSelectionHandle
               ? {
-                  id: '00000000-0000-4000-8000-000000000333',
-                  sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
-                  assetCount: 3,
-                  sampleAssetIds: [
+                  assets: [
+                    { id: '00000000-0000-4000-8000-000000000201' },
+                    { id: '00000000-0000-4000-8000-000000000202' },
+                    { id: '00000000-0000-4000-8000-000000000203' },
+                  ],
+                  assetIds: [
                     '00000000-0000-4000-8000-000000000201',
                     '00000000-0000-4000-8000-000000000202',
+                    '00000000-0000-4000-8000-000000000203',
                   ],
                 }
-              : undefined,
+              : {}),
+            selectionHandle: {
+              id: '00000000-0000-4000-8000-000000000333',
+              sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
+              assetCount: 3,
+            },
           },
         },
       },
@@ -204,6 +211,28 @@ const successHandlers = () => [
             summary: 'Stored 1 proposed metadata operation.',
             plan: { id: '00000000-0000-4000-8000-000000000302' },
             received: args,
+          },
+        },
+      },
+    }),
+  },
+  {
+    name: 'curateSelection',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'success',
+            summary: `Curated ${args.targetCount} asset(s).`,
+            selectionHandle: {
+              id: '00000000-0000-4000-8000-000000000334',
+              assetCount: args.targetCount,
+            },
+            selectedAssetCount: args.targetCount,
+            sourceAssetCount: 3,
+            criteriaSummary: ['cover-candidate selected a deterministic cover candidate.'],
           },
         },
       },
@@ -522,38 +551,51 @@ describe('e2e runtime', () => {
     assert.equal(JSON.stringify(session).includes(token), false);
   });
 
-  it('searches visible assets and proposes a deterministic album plan', async () => {
+  it('searches visible assets and proposes a deterministic album plan through selection handles', async () => {
     const { calls, fetchImplementation } = createFetch(successHandlers());
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
 
     const events = await collectEvents(runtime, 'Create a Portugal trip album.');
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[0].url, gateway.url);
     assert.equal(calls[0].body.method, 'tools/call');
     assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.deepEqual(calls[0].body.params.arguments, { filters: { isNotInAlbum: true }, limit: 3 });
+    assert.deepEqual(calls[0].body.params.arguments, { filters: { isNotInAlbum: true }, limit: 3, detail: 'handle' });
     assert.equal(calls[0].authorization, `Bearer ${token}`);
     assert.equal(calls[1].url, gateway.url);
     assert.equal(calls[1].body.method, 'tools/call');
-    assert.equal(calls[1].body.params.name, 'proposeAlbumOperations');
+    assert.equal(calls[1].body.params.name, 'curateSelection');
+    assert.deepEqual(calls[1].body.params.arguments, {
+      selectionHandleId: '00000000-0000-4000-8000-000000000333',
+      targetCount: 1,
+      strategy: 'cover-candidate',
+      sampleSize: 0,
+    });
+    assert.equal(calls[2].url, gateway.url);
+    assert.equal(calls[2].body.method, 'tools/call');
+    assert.equal(calls[2].body.params.name, 'proposeAlbumOperations');
     assert.equal(JSON.stringify(calls[0].body).includes(token), false);
-    assert.equal(calls[1].body.params.arguments.summary, 'Create Portugal Trip and add 2 loose assets.');
+    assert.equal(calls[2].body.params.arguments.summary, 'Create Portugal Trip and add 2 loose assets.');
     assert.deepEqual(
-      calls[1].body.params.arguments.operations.map((operation) => operation.type),
+      calls[2].body.params.arguments.operations.map((operation) => operation.type),
       ['album.create', 'album.addAssets', 'album.setCover'],
     );
-    assert.deepEqual(calls[1].body.params.arguments.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000201',
-      '00000000-0000-4000-8000-000000000202',
-    ]);
-    assert.deepEqual(calls[1].body.params.arguments.operations[2].assetIds, ['00000000-0000-4000-8000-000000000201']);
+    assert.equal(
+      calls[2].body.params.arguments.operations[1].assetSelectionHandleId,
+      '00000000-0000-4000-8000-000000000333',
+    );
+    assert.equal(
+      calls[2].body.params.arguments.operations[2].assetSelectionHandleId,
+      '00000000-0000-4000-8000-000000000334',
+    );
+    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetIds'), false);
     assert.equal(events.at(-1).type, 'assistant-message-completed');
     assert.match(events.at(-1).content.blocks[0].text, /I proposed a Portugal Trip album/);
   });
 
-  it('uses compact asset ids from search when metadata assets are omitted', async () => {
+  it('reports a missing search selection handle before creating a proposal', async () => {
     const { calls, fetchImplementation } = createFetch([
       {
         name: 'searchAssets',
@@ -564,11 +606,6 @@ describe('e2e runtime', () => {
             result: {
               structuredContent: {
                 status: 'success',
-                assetIds: [
-                  '00000000-0000-4000-8000-000000000211',
-                  '00000000-0000-4000-8000-000000000212',
-                  '00000000-0000-4000-8000-000000000213',
-                ],
                 returnedCount: 3,
                 hasMore: false,
               },
@@ -576,22 +613,16 @@ describe('e2e runtime', () => {
           },
         }),
       },
-      successHandlers()[1],
     ]);
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
 
     const events = await collectEvents(runtime, 'Create a Portugal trip album.');
 
-    assert.equal(calls.length, 2);
-    assert.equal(calls[1].body.params.name, 'proposeAlbumOperations');
-    assert.deepEqual(calls[1].body.params.arguments.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000211',
-      '00000000-0000-4000-8000-000000000212',
-    ]);
-    assert.deepEqual(calls[1].body.params.arguments.operations[2].assetIds, ['00000000-0000-4000-8000-000000000211']);
+    assert.equal(calls.length, 1);
     assert.equal(events.at(-1).type, 'assistant-message-completed');
-    assert.match(events.at(-1).content.blocks[0].text, /I proposed a Portugal Trip album/);
+    assert.match(events.at(-1).content.blocks[0].text, /Gallery denied the album organization request/);
+    assert.match(events.at(-1).content.blocks[0].text, /selection handle/i);
   });
 
   it('proposes a metadata description plan from a newest-photos prompt', async () => {
@@ -1605,6 +1636,11 @@ describe('e2e runtime', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0].body.params.name, 'proposeAlbumOperations');
     assert.equal(calls[0].body.params.arguments.summary, 'Denied Trip would use inaccessible assets.');
+    assert.equal(
+      calls[0].body.params.arguments.operations[1].assetSelectionHandleId,
+      '00000000-0000-4000-8000-000000000014',
+    );
+    assert.equal(JSON.stringify(calls[0].body.params.arguments).includes('assetIds'), false);
     assert.equal(events.at(-1).type, 'assistant-message-completed');
     assert.match(events.at(-1).content.blocks[0].text, /Gallery denied the album organization request/);
     assert.equal(events.at(-1).content.blocks[0].text.includes(token), false);
@@ -1622,7 +1658,11 @@ describe('e2e runtime', () => {
             result: {
               structuredContent: {
                 status: 'success',
-                assets: [{ id: '00000000-0000-4000-8000-000000000201' }],
+                selectionHandle: {
+                  id: '00000000-0000-4000-8000-000000000333',
+                  assetCount: 1,
+                },
+                returnedCount: 1,
               },
             },
           },
