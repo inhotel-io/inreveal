@@ -99,11 +99,11 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 ## Progressive Detail Workflow
 
-Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Request fields only for exact non-search asset IDs. Propose a plan only after the selected asset set is clear.
+Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Use `readSelectionMetadata` for search-handle metadata inspection and `readAssetMetadata` is legacy exact non-search ID usage. Propose a plan only after the selected asset set is clear.
 
 - Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
-- Visual curation: search for a handle/sourceRef first and use summary samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
-- Technical metadata: search for a handle/sourceRef first, then call `readAssetMetadata` with exact `fields` such as `camera`, `dates`, and `filename` for exact non-search asset IDs.
+- Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
+- Technical metadata: search for a handle first, then call `readSelectionMetadata` with exact `fields` such as `camera`, `dates`, and `filename`; use `readAssetMetadata` only for legacy exact non-search asset IDs.
 - Large album: page bounded handle results and propose operations from `selectionHandle.id` or `sourceRef`. Do not request full metadata for every candidate.
 - All photos: avoid loading the whole library. Ask for a narrower date, album, tag, person, space, rating, or media-type filter when the task does not require every asset.
 
@@ -734,13 +734,56 @@ Retry an approved read request by id.
 }
 ```
 
+### Read selection metadata
+
+MCP tool name: `readSelectionMetadata`
+
+Read aggregate counts and bounded itemRef metadata samples for a search selection handle.
+
+Use selectionHandleId from searchAssets selectionHandle.id to inspect search-backed selections. Returns aggregate counts and bounded itemRef samples without provider-visible asset IDs. Use fields for exact metadata groups and sampleSize from 0 to 25. Use only toolCallId when retrying a Gallery-approved request.
+
+Argument modes:
+
+- `selection-metadata`: Use after searchAssets returns selectionHandle.id and metadata samples are needed.
+  Required fields: `selectionHandleId`.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `selectionHandleId`, `fields`, `sampleSize`.
+
+#### read-selection-metadata-sample
+
+Read bounded camera, date, and filename metadata samples from a search handle.
+
+<!-- mcp-docs:tool-arguments tool="readSelectionMetadata" example="read-selection-metadata-sample" -->
+
+```json
+{
+  "selectionHandleId": "<selectionHandle.id from searchAssets>",
+  "fields": ["dates", "camera", "filename"],
+  "sampleSize": 5
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="readSelectionMetadata" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
 ### Read asset metadata
 
 MCP tool name: `readAssetMetadata`
 
-Read selected metadata for selected assets.
+Legacy exact non-search metadata read for selected assets.
 
-Search for a handle/sourceRef first, then call this tool only for exact non-search asset IDs with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
+Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
 
 Argument modes:
 
@@ -2798,6 +2841,12 @@ Summarize plan risks and selected changes.
 - `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
+### Read selection metadata
+
+- `selection-metadata-missing-selection-handle-or-tool-call-id`: Call readSelectionMetadata with selectionHandleId from searchAssets selectionHandle.id, or retry an approved request with only toolCallId.
+- `selection-metadata-combined-selection-handle-and-tool-call-id`: Use selectionHandleId for a new selection metadata read or toolCallId for an approved retry, not both.
+- `selection-metadata-invalid-sample-size`: Use sampleSize from 0 to 25 for readSelectionMetadata.
 
 ### Read asset metadata
 
