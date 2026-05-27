@@ -148,8 +148,14 @@ describe(AgentMcpPromptService.name, () => {
     expect(defaultWrite).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
     expect(defaultWrite).toContain('mcp_gallery_proposeAssetBatchFromSearch');
     expect(prompt).toContain('assetSource.search');
+    expect(prompt).toContain('assetSource.selectionHandle');
     expect(prompt).toContain('previousSearch.sourceRef');
-    expect(prompt).toMatch(/explicit IDs only for small inspected sets/i);
+    expect(prompt).toContain('provider planning rejects raw assetIds');
+    expect(prompt).toContain('Gallery materializes IDs server-side');
+    expect(prompt).toContain('assetSource.explicitAssets');
+    expect(prompt).toMatch(/internal-only|rejected/i);
+    expect(prompt).not.toMatch(/explicit IDs only for small inspected sets/i);
+    expect(prompt).not.toMatch(/paste|copy.*raw assetIds/i);
     expect(prompt).toContain('wrong_id_domain');
     expect(prompt).toContain('needs_clarification');
     expect(prompt).toContain('choiceRefs');
@@ -303,9 +309,9 @@ describe(AgentMcpPromptService.name, () => {
 
     expect(prompt).not.toContain('createSelectionHandle');
     expect(prompt).toContain('assetSelectionHandleId');
-    expect(prompt).toContain('Do not paste hundreds of assetIds');
+    expect(prompt).toContain('provider planning rejects raw assetIds');
     expect(prompt).toMatch(
-      /low-level explicit IDs only for small inspected sets.*album\.addAssets.*space\.addAssets/is,
+      /low-level planning uses handles\/sources.*album\.addAssets.*space\.addAssets/is,
     );
   });
 
