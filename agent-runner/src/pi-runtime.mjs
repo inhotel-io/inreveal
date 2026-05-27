@@ -18,16 +18,16 @@ const protocolVersion = '2026-05-14';
 const runnerBehaviorPrompt = [
   'You are Gallery Assistant, a personal photo organization assistant.',
   'Your goal is to help the user organize photos into albums by producing a reviewable album operation plan.',
-  'For metadata-only trip album requests, use mcp_gallery_searchAssets with location and taken-date metadata, then use mcp_gallery_readAssetMetadata for candidate assets before planning.',
+  'For metadata-only trip album requests, use mcp_gallery_searchAssets with location and taken-date metadata; searchAssets returns selection handles, source refs, counts, and result-size metadata for planning follow-up reads.',
   'For metadata-only trip album requests, do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals. If metadata is insufficient, ask one concise follow-up question instead of escalating to media reads.',
   'If a metadata-only trip search returns more than 250 candidate assets without a clearly bounded date range and location match, ask one concise follow-up question to narrow the date range or location before proposing operations.',
   'For best/highlight requests, require a bounded source; default to 10 only when the source is bounded and no count is specified; zero, negative, or above 500 counts ask for a valid smaller count; ask to narrow only when known count or total is above 500. No matching highlight candidates: answer directly and do not create a plan.',
-  'For metadata-only suggested highlights, search bounded candidate ids, read mcp_gallery_readAssetMetadata for favorites, ratings, dates, tags, and location, prioritize existing favorites and ratings, disclose that no previews were inspected, and create reviewable album/favorite plans only when requested.',
-  'After metadata-only curation narrows candidates, propose writes with selected assetIds only; do not use broad assetSource or previousSearch sources for curated highlight write plans.',
+  'For metadata-only suggested highlights, start from a bounded search handle, use returned counts/source refs/samples and source-backed workflows, prioritize existing favorites and ratings when available, disclose that no previews were inspected, and ask to narrow when handle-only metadata is insufficient.',
+  'After metadata-only curation narrows candidates, propose writes with returned selection handles or source refs; do not use broad assetSource for curated highlight write plans, and do not copy search-derived asset IDs into provider-facing prompts.',
   'No previews are required for metadata-only highlight plans. Use mcp_gallery_readAssetPreviews later only for preview-assisted curation when allowed and the bounded candidate set is small.',
-  'Preview-assisted highlight requests use mcp_gallery_readAssetPreviews only after bounded candidate ids are known and candidate count is 250 or fewer; above 250 preview candidates, ask the user to narrow before preview-assisted curation.',
+  'Preview-assisted highlight requests must start from a bounded handle or exact small non-search selection; above 250 preview candidates, ask the user to narrow before preview-assisted curation.',
   'If previews are denied or unavailable, or the provider cannot inspect images, continue with metadata-only highlight criteria when that satisfies the request, disclose the fallback, or ask one concise clarification.',
-  'Cover suggestions use album.setCover with exactly one selected assetId from the resolved album. Prefer previews when allowed and bounded; otherwise use metadata-only criteria with disclosure.',
+  'Cover suggestions require exactly one bounded exact selection before album.setCover. Prefer previews when allowed and bounded; otherwise use metadata-only criteria with disclosure or ask one concise follow-up.',
   'Never call mcp_gallery_readAssetOriginals for highlight or cover curation.',
   'When a user asks you to create or fill an album and metadata candidates are found, call mcp_gallery_proposeAlbumOperations with album.create and album.addAssets operations. A chat-only answer is not enough for album creation requests.',
   'For factual questions about albums, photo counts, video counts, asset counts, dates, places, tags, ratings, or asset details, use Gallery MCP read tools before answering. Do not guess from memory or say you cannot inspect Gallery while read tools are available.',
@@ -40,7 +40,32 @@ const runnerBehaviorPrompt = [
   'You have no direct write tools and must not apply album changes yourself.',
   'Never claim you changed albums. Album writes require a separate user-reviewed apply step.',
 ].join('\n');
-const systemPrompt = [runnerBehaviorPrompt, galleryMcpPromptCheatSheet].join('\n\n');
+const rewriteRunnerMcpPromptLine = (line) => {
+  if (line.startsWith('Progressive:')) {
+    return 'Progressive: resolve names -> searchAssets returns selection handles and source refs; use readAssetMetadata only for specific non-search asset details when required. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.';
+  }
+
+  if (line.startsWith('Large:')) {
+    return 'Large: use returned selectionHandle.id or sourceRef for planning.';
+  }
+
+  if (line.startsWith('Best/highlights require')) {
+    return 'Best/highlights require bounded source album/space/date/search/selection; suggested not objective quality scoring; use returned handles or source refs for write planning.';
+  }
+
+  if (line.startsWith('Technical metadata:')) {
+    return 'Technical metadata: search handles first; call readAssetMetadata only when specific non-search asset details are required.';
+  }
+
+  if (line.startsWith('Low-level ')) {
+    return 'Low-level exact sets: prefer assetSelectionHandleId for search results; explicit IDs only for exact small non-search inspected sets. Example {"targetKind":"existing_space","targetId":"<target-id>","assetSelectionHandleId":"<selectionHandle.id from searchAssets>"}';
+  }
+
+  return line;
+};
+
+const runnerGalleryMcpPromptCheatSheet = galleryMcpPromptCheatSheet.split('\n').map(rewriteRunnerMcpPromptLine).join('\n');
+const systemPrompt = [runnerBehaviorPrompt, runnerGalleryMcpPromptCheatSheet].join('\n\n');
 const runtimePackageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const runtimeAgentDir = join(runtimePackageRoot, '.pi-runtime');
 const runtimeSessionRoot = join(runtimeAgentDir, 'sessions');
@@ -194,6 +219,34 @@ const byteLength = (value) => Buffer.byteLength(value, 'utf8');
 
 const countArray = (value, key) => (Array.isArray(value?.[key]) ? value[key].length : 0);
 
+const searchToolNames = new Set(['searchAssets', 'mcp_gallery_searchAssets']);
+
+const resultToolName = (toolResult) =>
+  typeof toolResult?.toolCall?.toolName === 'string'
+    ? toolResult.toolCall.toolName
+    : typeof toolResult?.toolName === 'string'
+      ? toolResult.toolName
+      : undefined;
+
+const isSearchAssetsToolResult = (toolResult) => searchToolNames.has(resultToolName(toolResult));
+
+const countNestedAssetItems = (toolResult) =>
+  Array.isArray(toolResult?.assets?.items)
+    ? toolResult.assets.items.length
+    : Array.isArray(toolResult?.assets)
+      ? toolResult.assets.length
+      : 0;
+
+const containsLegacySearchAssetPayload = (toolResult) =>
+  isSearchAssetsToolResult(toolResult) &&
+  (Array.isArray(toolResult?.assetIds) || countNestedAssetItems(toolResult) > 0);
+
+const shouldCompactGalleryToolResult = (toolResult, serialized, force) =>
+  force ||
+  containsLegacySearchAssetPayload(toolResult) ||
+  !serialized ||
+  byteLength(serialized) > galleryToolResultPromptBudgetBytes;
+
 const sampleIds = (items) =>
   Array.isArray(items)
     ? items
@@ -221,6 +274,24 @@ const compactResultSize = (resultSize) => {
           .map((field) => field.slice(0, 80))
           .slice(0, 20)
       : [],
+  };
+};
+
+const compactSelectionHandle = (selectionHandle) => {
+  if (!selectionHandle || typeof selectionHandle !== 'object') {
+    return undefined;
+  }
+
+  return {
+    id: typeof selectionHandle.id === 'string' ? selectionHandle.id : undefined,
+    sourceRef: typeof selectionHandle.sourceRef === 'string' ? selectionHandle.sourceRef.slice(0, 160) : undefined,
+    assetCount:
+      Number.isInteger(selectionHandle.assetCount) && selectionHandle.assetCount >= 0
+        ? selectionHandle.assetCount
+        : undefined,
+    sourceToolCallId:
+      typeof selectionHandle.sourceToolCallId === 'string' ? selectionHandle.sourceToolCallId : undefined,
+    expiresAt: typeof selectionHandle.expiresAt === 'string' ? selectionHandle.expiresAt : undefined,
   };
 };
 
@@ -281,7 +352,7 @@ const compactToolSummary = (toolResult, resultSize, counts) => {
 
 export const compactGalleryToolResultForPrompt = (toolResult, { force = false } = {}) => {
   const serialized = safeJsonStringify(toolResult);
-  if (!force && serialized && byteLength(serialized) <= galleryToolResultPromptBudgetBytes) {
+  if (!shouldCompactGalleryToolResult(toolResult, serialized, force)) {
     return toolResult;
   }
 
@@ -299,8 +370,12 @@ export const compactGalleryToolResultForPrompt = (toolResult, { force = false } 
   const compactedResultSize = compactResultSize(resultSize);
   const operationIds = compactOperationIds(toolResult);
   const operationCount = compactOperationCount(toolResult, operationIds);
+  const assetCount =
+    Number.isInteger(toolResult?.selectionHandle?.assetCount) && toolResult.selectionHandle.assetCount >= 0
+      ? toolResult.selectionHandle.assetCount
+      : countArray(toolResult, 'assets') || countArray(toolResult, 'assetIds') || countNestedAssetItems(toolResult);
   const counts = {
-    assets: countArray(toolResult, 'assets') || countArray(toolResult, 'assetIds'),
+    assets: assetCount,
     albums: countArray(toolResult, 'albums') || countArray(toolResult, 'albumIds'),
     spaces: countArray(toolResult, 'spaces') || countArray(toolResult, 'spaceIds'),
     users: countArray(toolResult, 'users') || countArray(toolResult, 'userIds'),
@@ -330,15 +405,15 @@ export const compactGalleryToolResultForPrompt = (toolResult, { force = false } 
     resultSize: compactedResultSize,
     counts,
     ids: {
-      assetIdsSample: sampleIds(toolResult.assetIds ?? toolResult.assets),
       albumIdsSample: sampleIds(toolResult.albumIds ?? toolResult.albums),
       spaceIdsSample: sampleIds(toolResult.spaceIds ?? toolResult.spaces),
       userIdsSample: sampleIds(toolResult.userIds ?? toolResult.users),
       operationIdsSample: operationIds.slice(0, 10),
     },
+    selectionHandle: compactSelectionHandle(toolResult.selectionHandle),
     plan: planId ? { planId, operationCount } : undefined,
     omittedDetailInstruction:
-      'Detailed rows were omitted. If more detail is needed, call the smallest Gallery MCP read tool for specific ids and fields.',
+      'Detailed rows were omitted. Continue with returned selection handles, source refs, counts, or the smallest Gallery MCP read tool for specific non-search assets when required.',
   };
 };
 
@@ -360,7 +435,7 @@ export const compactGalleryToolTranscript = (session) => {
       }
 
       const serialized = safeJsonStringify(parsed);
-      if (serialized && byteLength(serialized) <= galleryToolResultPromptBudgetBytes) {
+      if (!shouldCompactGalleryToolResult(parsed, serialized, false)) {
         continue;
       }
 
