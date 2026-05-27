@@ -147,7 +147,7 @@ export class AgentMcpDocsService {
       '',
       'Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Use `readSelectionMetadata` for search-handle metadata inspection and `readAssetMetadata` is legacy exact non-search ID usage. Propose a plan only after the selected asset set is clear.',
       '',
-      '- Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.',
+      '- Broad search: use `searchAssets` with handle detail or omit `detail`. Bounded handle-first searches may use `limit` up to 1000 when policy allows; samples remain 10-25. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.',
       '- Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs and is not objective image-quality scoring.',
       '- Selection-backed plans: Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id.',
       '- Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.',

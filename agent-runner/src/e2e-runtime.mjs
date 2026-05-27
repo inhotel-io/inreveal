@@ -298,7 +298,7 @@ const parseMetadataPrompt = (prompt) => {
 };
 
 const defaultHighlightCount = 10;
-const metadataHighlightCandidateLimit = 500;
+const metadataHighlightCandidateLimit = 1000;
 const previewHighlightCandidateLimit = 250;
 const highlightMetadataFields = ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
 
@@ -815,7 +815,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           yield completedEvent({
             gallerySessionId,
             runnerSessionId,
-            text: 'Please choose 500 or fewer highlights, or narrow the source before curation.',
+            text: 'Please choose 1000 or fewer highlights, or narrow the source before curation.',
           });
           return;
         }

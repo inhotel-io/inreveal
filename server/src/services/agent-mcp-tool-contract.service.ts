@@ -338,7 +338,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   description:
     'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.',
+    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. For bounded handle-first searches, use limit up to 1000 when the session policy allows it; samples stay small. For broad or ambiguous requests, ask one narrowing question or page with nextPage. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -728,7 +728,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-large-limit',
       match: { issuePath: 'limit', messageIncludes: 'limit 1000 ' },
-      hint: 'Use a bounded limit such as 25 or 50. Do not use limit 1000; page with nextPage or ask a narrowing question for broad requests.',
+      hint: 'Use limit up to 1000 only for bounded handle-first searches where the user supplied a clear album, space, date, person, tag, rating, or media-type scope; otherwise page with nextPage or ask a narrowing question.',
       exampleName: 'large-album-page-search',
     },
     {

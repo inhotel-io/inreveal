@@ -305,7 +305,9 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('readSelectionMetadata');
     expect(prompt).toContain('itemRef');
     expect(prompt).toContain('readAssetMetadata legacy exact non-search IDs only');
-    expect(prompt).toContain('No 1k');
+    expect(prompt).toContain('limit up to 1000');
+    expect(prompt).not.toContain('No 1k');
+    expect(prompt).not.toContain('Do not use limit 1000');
     expect(prompt).toContain('if truncated/hasMore, page/ask');
     expect(prompt).not.toContain('"detail":"ids"');
     expect(prompt).not.toContain('"detail":"handle","fields"');
