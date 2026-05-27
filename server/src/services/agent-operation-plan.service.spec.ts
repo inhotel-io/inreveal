@@ -3463,6 +3463,95 @@ describe(AgentOperationPlanService.name, () => {
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
   });
 
+  it('returns tool-aware wrong-domain recovery for workflow assetSource.selectionHandle', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .proposeAssetBatchFromSearch(auth, session.id, {
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        assetSource: { kind: 'selectionHandle', selectionHandleId: assetId },
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content).toMatchObject({
+      status: 'error',
+      toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      error: 'That value is an asset ID, not a selection handle ID.',
+      retryable: true,
+      hint: expect.stringContaining('proposeAssetBatchFromSearch'),
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'assetSource.selectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain: 'asset',
+        instruction: expect.stringContaining('proposeAssetBatchFromSearch'),
+      },
+    });
+    expect(error.content.recovery).not.toMatchObject({ field: 'operations[].assetSelectionHandleId' });
+    expect(JSON.stringify(error.content.recovery)).not.toContain(assetId);
+    expect(selectionHandleRepository.listValidForRecovery).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
+  it('returns operation assetSource field recovery when assetSource.selectionHandle is a readable asset id', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const assetId = newUuid();
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .proposeAlbumOperations(auth, session.id, {
+        summary: 'Add selected photos',
+        operations: [
+          {
+            type: AgentOperationType.AlbumAddAssets,
+            summary: 'Add selected photos',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: newUuid(),
+            assetSource: { kind: 'selectionHandle', selectionHandleId: assetId },
+            payload: {},
+            riskLevel: AgentOperationRiskLevel.Medium,
+            enabled: true,
+          },
+        ],
+      })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toMatchObject({
+      kind: 'wrong_id_domain',
+      field: 'operations[].assetSource.selectionHandleId',
+      expectedDomain: 'selectionHandle',
+      receivedDomain: 'asset',
+    });
+    expect(error.content.recovery).not.toMatchObject({ field: 'operations[].assetSelectionHandleId' });
+    expect(JSON.stringify(error.content.recovery)).not.toContain(assetId);
+    expect(selectionHandleRepository.listValidForRecovery).not.toHaveBeenCalled();
+    expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
+  });
+
   it('returns wrong-domain recovery when assetSelectionHandleId is a readable person id', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
