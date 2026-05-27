@@ -2239,6 +2239,73 @@ describe(AgentMcpService.name, () => {
       expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
     });
 
+    it('routes proposeAlbumFromSelection and redacts materialized operation ids', async () => {
+      const rawAssetIds = [factory.uuid(), factory.uuid()];
+      const selectionHandleId = factory.uuid();
+      const serviceResult = {
+        status: 'success',
+        summary: 'Plan revision 1 is ready for review.',
+        toolCall: null,
+        plan: {
+          id: factory.uuid(),
+          sessionId,
+          revision: 1,
+          status: AgentOperationPlanStatus.Proposed,
+          summary: 'Create curated album.',
+          operations: [
+            {
+              id: factory.uuid(),
+              planId: factory.uuid(),
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add selected photos.',
+              targetKind: AgentOperationTargetKind.NewAlbum,
+              targetId: null,
+              temporaryTargetId: 'tmp-album-from-selection',
+              assetIds: rawAssetIds,
+              payload: {},
+              dependencyIds: [],
+              riskLevel: AgentOperationRiskLevel.Medium,
+              enabled: true,
+              status: AgentOperationStatus.Proposed,
+              result: null,
+              error: null,
+              createdAt: new Date('2026-05-27T12:00:00.000Z'),
+              updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+            },
+          ],
+          createdAt: new Date('2026-05-27T12:00:00.000Z'),
+          updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+        },
+      };
+      operationPlanService.proposeAlbumFromSelection.mockResolvedValue(serviceResult as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumFromSelection, {
+          summary: 'Create curated album.',
+          albumName: 'Curated album',
+          description: 'Selected photos.',
+          selectionHandleId,
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, any>;
+      const [operation] = structuredContent.plan.operations;
+
+      expect(operationPlanService.proposeAlbumFromSelection).toHaveBeenCalledWith(auth, sessionId, {
+        summary: 'Create curated album.',
+        albumName: 'Curated album',
+        description: 'Selected photos.',
+        selectionHandleId,
+      });
+      expect(operation).not.toHaveProperty('assetIds');
+      expect(operation.assetCount).toBe(2);
+      expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
+      expect(JSON.stringify(response)).not.toContain(rawAssetIds[1]);
+    });
+
     it('redacts nested planning result ids from MCP structured content', async () => {
       const rawAssetIds = [factory.uuid(), factory.uuid()];
       const rawResultAssetId = factory.uuid();
