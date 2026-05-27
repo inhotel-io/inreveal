@@ -194,6 +194,20 @@ const makeMetadata = (
   ...overrides,
 });
 
+const makeCurateHandle = (session: AgentSession, userId: string, assetIds: string[], overrides = {}) => ({
+  id: newUuid(),
+  sessionId: session.id,
+  userId,
+  sourceToolCallId: newUuid(),
+  assetIds,
+  assetCount: assetIds.length,
+  sampleAssetIds: assetIds.slice(0, 25),
+  expiresAt: new Date(now.getTime() + 60 * 60_000),
+  createdAt: now,
+  updateId: newUuid(),
+  ...overrides,
+});
+
 const makeMediaReference = (
   assetId: string,
   overrides: Partial<AgentAssetMediaReference> = {},
@@ -4404,6 +4418,170 @@ describe(AgentToolService.name, () => {
       expect(JSON.stringify(result)).not.toContain(missingAssetId);
       expect(JSON.stringify(result)).not.toContain(visibleAssetId);
     }
+  });
+
+  it('curateSelection creates a derived handle with deterministic metadata highlights and no response ids', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, [assetIds[1], assetIds[2]], {
+      sourceToolCallId: newUuid(),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], { exifInfo: { ...makeMetadata(assetIds[0]).exifInfo!, rating: 2 } }),
+      makeMetadata(assetIds[1], { isFavorite: true, originalFileName: 'favorite.jpg' }),
+      makeMetadata(assetIds[2], { exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5, city: 'Paris' } }),
+      makeMetadata(assetIds[3], { exifInfo: { ...makeMetadata(assetIds[3]).exifInfo!, rating: null, city: null } }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 2,
+      strategy: 'metadata-highlights',
+      constraints: { diversifyBy: ['location'] },
+      sampleSize: 2,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith({
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: expect.any(String),
+      assetIds: [assetIds[1], assetIds[2]],
+      expiresAt: expect.any(Date),
+    });
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.selectionHandle).toMatchObject({ id: derivedHandle.id, assetCount: 2 });
+    expect(result.sourceAssetCount).toBe(4);
+    expect(result.selectedAssetCount).toBe(2);
+    expect(result.criteriaSummary.join(' ')).toMatch(/metadata-only/i);
+    expect(result.criteriaSummary.join(' ')).not.toMatch(/quality scoring|preview inspected/i);
+    expect(result.sample?.items.map((item) => item.itemRef)).toEqual(['item:001', 'item:002']);
+    expect(JSON.stringify(result)).not.toContain(assetIds[1]);
+    expect(JSON.stringify(result)).not.toContain('"assetIds"');
+    expect(JSON.stringify(result)).not.toContain('"sampleAssetIds"');
+  });
+
+  it('curateSelection spreads dates deterministically and warns when target exceeds eligible assets', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, assetIds);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], { localDateTime: new Date('2026-05-01T10:00:00.000Z') }),
+      makeMetadata(assetIds[1], { localDateTime: new Date('2026-05-02T10:00:00.000Z') }),
+      makeMetadata(assetIds[2], { localDateTime: new Date('2026-05-01T11:00:00.000Z') }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 5,
+      strategy: 'date-spread',
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds }));
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.warnings).toContain('Requested 5 assets but only 3 eligible assets were available.');
+      expect(result.criteriaSummary.join(' ')).toMatch(/date-spread/i);
+    }
+  });
+
+  it('curateSelection supports cover-candidate constraints and sampleSize zero', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, [assetIds[2]]);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], { type: AssetType.Video }),
+      makeMetadata(assetIds[1], { type: AssetType.Image, exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 3 } }),
+      makeMetadata(assetIds[2], { type: AssetType.Image, isFavorite: true, exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 } }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 1,
+      strategy: 'cover-candidate',
+      constraints: { excludeVideos: true },
+      sampleSize: 0,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds: [assetIds[2]] }));
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.sample).toBeUndefined();
+      expect(result.criteriaSummary.join(' ')).toMatch(/cover-candidate/i);
+    }
+  });
+
+  it('curateSelection skips missing metadata rows and creates an empty handle when none are eligible', async () => {
+    const auth = AuthFactory.create();
+    const missingAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, [missingAssetId]);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, []);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 1,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds: [] }));
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectedAssetCount).toBe(0);
+      expect(result.warnings).toContain('No eligible metadata rows were available for this curation request.');
+      expect(JSON.stringify(result)).not.toContain(missingAssetId);
+    }
+  });
+
+  it('curateSelection asks for narrowing when the source handle is over the metadata curation cap', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 101 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 100 } }),
+    });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+
+    const thrown = await sut
+      .curateSelection(auth, session.id, { selectionHandleId: sourceHandle.id, targetCount: 10 })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content.recovery).toMatchObject({
+      kind: 'selection-too-large',
+      sourceAssetCount: 101,
+      maxSourceAssetCount: 100,
+    });
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+    expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content)).not.toContain(assetIds[0]);
   });
 
   it('readSelectionMetadata stores replayable request metadata and handle asset count for approval retry', async () => {
