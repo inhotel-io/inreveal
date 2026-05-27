@@ -391,6 +391,20 @@ describe(AgentToolService.name, () => {
     searchRepository.getCameraLensModels.mockResolvedValue([]);
     searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
     searchRepository.searchSmart.mockResolvedValue({ items: [], hasNextPage: false });
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
     configRepository.getEnv.mockReturnValue({ configFile: undefined } as never);
     systemMetadataRepository.get.mockResolvedValue(null);
     machineLearningRepository.encodeText.mockResolvedValue('[1, 2, 3]');
@@ -888,7 +902,7 @@ describe(AgentToolService.name, () => {
       }),
     );
     if (result.status === 'success') {
-      expect(result.assetIds).not.toContain(hiddenAssetId);
+      expect(JSON.stringify(result)).not.toContain(hiddenAssetId);
     }
   });
 
@@ -1478,7 +1492,7 @@ describe(AgentToolService.name, () => {
         searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
         accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
       },
-      resultKey: 'assetIds',
+      resultKey: 'selectionHandle',
       dataClass: AgentToolDataClass.Metadata,
       assetCount: 1,
       albumCount: 0,
@@ -2206,13 +2220,14 @@ describe(AgentToolService.name, () => {
       status: 'success',
       resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      summary: 'Returned 1 asset id',
-      detail: 'ids',
-      assetIds: [sharedAssetId],
+      summary: 'Created a selection handle for 1 asset',
+      detail: 'handle',
+      selectionHandle: expect.objectContaining({ assetCount: 1 }),
       returnedCount: 1,
       hasMore: false,
       nextPage: null,
     });
+    expect(result).not.toHaveProperty('assetIds');
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({ userIds: [], timelineSpaceIds: expect.any(Array) }),
@@ -2244,13 +2259,14 @@ describe(AgentToolService.name, () => {
       status: 'success',
       resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      summary: 'Returned 1 asset id; more results available on page 2',
-      detail: 'ids',
-      assetIds: [assetId],
+      summary: 'Created a selection handle for 1 asset; more results available on page 2',
+      detail: 'handle',
+      selectionHandle: expect.objectContaining({ assetCount: 1 }),
       returnedCount: 1,
       hasMore: true,
       nextPage: '2',
     });
+    expect(result).not.toHaveProperty('assetIds');
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         requestSummary: 'Search metadata assets (limit 1, ids)',
@@ -2284,7 +2300,12 @@ describe(AgentToolService.name, () => {
       AgentToolCallStatus.Executing,
       expect.objectContaining({
         status: AgentToolCallStatus.Completed,
-        redactedResponseMetadata: expect.objectContaining({ assetIds: [assetId], resultSize: expect.any(Object) }),
+        redactedResponseMetadata: expect.objectContaining({
+          selectionHandleIds: [expect.any(String)],
+          sourceRefs: [expect.stringMatching(/^asset-source:search:/)],
+          selectionHandleAssetCount: 1,
+          resultSize: expect.any(Object),
+        }),
         assetCount: 1,
       }),
     );
@@ -2323,15 +2344,16 @@ describe(AgentToolService.name, () => {
       resultSize: expect.any(Object),
       toolCall: expect.objectContaining({
         status: AgentToolCallStatus.Completed,
-        responseSummary: 'Returned 2 asset ids; more results available on page 3',
+        responseSummary: 'Created a selection handle for 2 assets; more results available on page 3',
       }),
-      summary: 'Returned 2 asset ids; more results available on page 3',
-      detail: 'ids',
-      assetIds,
+      summary: 'Created a selection handle for 2 assets; more results available on page 3',
+      detail: 'handle',
+      selectionHandle: expect.objectContaining({ assetCount: 2 }),
       returnedCount: 2,
       hasMore: true,
       nextPage: '3',
     });
+    expect(result).not.toHaveProperty('assetIds');
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
       { page: 2, size: 2 },
       expect.objectContaining({ isFavorite: true, orderDirection: AssetOrder.Desc, userIds: [auth.user.id] }),
@@ -2378,7 +2400,7 @@ describe(AgentToolService.name, () => {
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
-        toolCall: expect.objectContaining({ responseSummary: 'Returned 1 asset id' }),
+        toolCall: expect.objectContaining({ responseSummary: 'Created a selection handle for 1 asset' }),
       }),
     );
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 3, size: 50 }, expect.any(Object));
@@ -2402,13 +2424,14 @@ describe(AgentToolService.name, () => {
       status: 'success',
       resultSize: expect.any(Object),
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
-      summary: 'Returned 0 asset ids',
-      detail: 'ids',
-      assetIds: [],
+      summary: 'Created a selection handle for 0 assets',
+      detail: 'handle',
+      selectionHandle: expect.objectContaining({ assetCount: 0 }),
       returnedCount: 0,
       hasMore: false,
       nextPage: null,
     });
+    expect(result).not.toHaveProperty('assetIds');
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         requestSummary: 'Search metadata assets (limit 100, ids)',
@@ -2431,7 +2454,7 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.searchAgentMetadata).not.toHaveBeenCalled();
   });
 
-  it('returns compact asset ids by default without metadata hydration', async () => {
+  it('searchAssets creates a handle by default without metadata hydration', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
@@ -2442,24 +2465,121 @@ describe(AgentToolService.name, () => {
       items: assetIds.map((id) => ({ id })) as never,
       hasNextPage: true,
     });
+    selectionHandleRepository.create.mockResolvedValue({
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds.slice(0, 25),
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    });
 
     const result = await sut.searchAssets(auth, session.id, {});
 
-    expect(result).toEqual({
-      status: 'success',
-      resultSize: expect.any(Object),
-      toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids; more results available on page 2' }),
-      summary: 'Returned 2 asset ids; more results available on page 2',
-      detail: 'ids',
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith({
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: expect.any(String),
       assetIds,
-      returnedCount: 2,
-      hasMore: true,
-      nextPage: '2',
+      expiresAt: expect.any(Date),
     });
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Created a selection handle for 2 assets; more results available on page 2',
+        detail: 'handle',
+        returnedCount: 2,
+        hasMore: true,
+        nextPage: '2',
+        selectionHandle: expect.objectContaining({ assetCount: 2 }),
+      }),
+    );
+    expect(result).not.toHaveProperty('assetIds');
     expect(result).not.toHaveProperty('assets');
     expect(result).not.toHaveProperty('sample');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 100 }, expect.any(Object));
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+  });
+
+  it('searchAssets ignores createSelectionHandle false and still returns a handle', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const handle = {
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds: [assetId],
+      assetCount: 1,
+      sampleAssetIds: [assetId],
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    selectionHandleRepository.create.mockResolvedValue(handle);
+
+    const result = await sut.searchAssets(auth, session.id, {
+      filters: {},
+      limit: 1,
+      detail: 'ids',
+      createSelectionHandle: false,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalled();
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.detail).toBe('handle');
+    expect(result.selectionHandle.id).toBe(handle.id);
+    expect(result).not.toHaveProperty('assetIds');
+    expect(JSON.stringify(result)).not.toContain(assetId);
+  });
+
+  it('searchAssets creates handles for zero-result searches', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const handle = {
+      id: newUuid(),
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds: [],
+      assetCount: 0,
+      sampleAssetIds: [],
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    };
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+    selectionHandleRepository.create.mockResolvedValue(handle);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: {}, limit: 10 });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [], sessionId: session.id, userId: auth.user.id }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'Created a selection handle for 0 assets',
+        detail: 'handle',
+        returnedCount: 0,
+        selectionHandle: expect.objectContaining({ assetCount: 0 }),
+      }),
+    );
   });
 
   it('does not truncate when the estimated result is exactly at the read-tool budget', async () => {
@@ -2488,7 +2608,8 @@ describe(AgentToolService.name, () => {
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.resultSize.truncated).toBe(false);
-      expect(result.assetIds).toEqual([firstAssetId, secondAssetId]);
+      expect(result.selectionHandle.assetCount).toBe(2);
+      expect(result).not.toHaveProperty('assetIds');
     }
   });
 
@@ -2519,15 +2640,15 @@ describe(AgentToolService.name, () => {
       return;
     }
 
-    expect(result.assetIds).toEqual([firstAssetId]);
-    expect(result.returnedCount).toBe(1);
+    expect(result).not.toHaveProperty('assetIds');
+    expect(result.returnedCount).toBe(2);
     expect(result.resultSize).toMatchObject({
-      returnedItems: 1,
-      truncated: true,
-      omittedFields: ['assetIds'],
+      returnedItems: 2,
+      truncated: false,
+      omittedFields: [],
     });
-    expect(result.summary).toBe('Returned 1 asset id; response was truncated by budget');
-    expect(result.toolCall.responseSummary).toBe('Returned 1 asset id; response was truncated by budget');
+    expect(result.summary).toBe('Created a selection handle for 2 assets');
+    expect(result.toolCall.responseSummary).toBe('Created a selection handle for 2 assets');
     expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalledWith(
       auth.user.id,
       new Set([firstAssetId, secondAssetId]),
@@ -2589,7 +2710,6 @@ describe(AgentToolService.name, () => {
           selectionHandleIds: [handle.id],
           sourceRefs: [sourceRef],
           selectionHandleAssetCount: 60,
-          selectionHandleSampleAssetIds: assetIds.slice(0, 25),
           resultSize: expect.any(Object),
         },
       }),
@@ -2615,10 +2735,10 @@ describe(AgentToolService.name, () => {
         id: handle.id,
         sourceRef,
         assetCount: 60,
-        sampleAssetIds: assetIds.slice(0, 25),
         sourceToolCallId: handle.sourceToolCallId,
         expiresAt: handle.expiresAt,
       });
+      expect(result.selectionHandle).not.toHaveProperty('sampleAssetIds');
       expect(result.selectionHandle?.sourceRef).not.toBe(handle.id);
       expect(result.selectionHandle?.sourceRef).toMatch(/^asset-source:search:/);
       expect(toolCallRepository.transition).toHaveBeenCalledWith(
@@ -2630,12 +2750,17 @@ describe(AgentToolService.name, () => {
             selectionHandleIds: [handle.id],
             sourceRefs: [sourceRef],
             selectionHandleAssetCount: 60,
-            selectionHandleSampleAssetIds: assetIds.slice(0, 25),
           }),
         }),
       );
-      expect(result.assetIds).toEqual(assetIds.slice(0, 5));
-      expect(JSON.stringify(result)).not.toContain(assetIds[59]);
+      const completedMetadata = toolCallRepository.transition.mock.calls.find(
+        ([, , fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
+      )?.[3]?.redactedResponseMetadata;
+      expect(completedMetadata).not.toHaveProperty('assetIds');
+      expect(completedMetadata).not.toHaveProperty('selectionHandleSampleAssetIds');
+      expect(JSON.stringify(completedMetadata)).not.toContain(assetIds[0]);
+      expect(result).not.toHaveProperty('assetIds');
+      expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     }
     vi.useRealTimers();
   });
@@ -2808,13 +2933,13 @@ describe(AgentToolService.name, () => {
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
-      expect(result.selectionHandle?.assetCount).toBe(500);
-      expect(result.selectionHandle?.sampleAssetIds).toEqual(assetIds.slice(0, 25));
+      expect(result.selectionHandle.assetCount).toBe(500);
       const returnedHandle = result.selectionHandle;
-      expect(returnedHandle).toBeDefined();
-      expect(returnedHandle?.sourceRef).toBe(`asset-source:search:${returnedHandle?.id}`);
-      expect(result.resultSize.truncated).toBe(true);
-      expect(result.resultSize.omittedFields).toContain('assetIds');
+      expect(returnedHandle.sourceRef).toBe(`asset-source:search:${returnedHandle.id}`);
+      expect(result.resultSize.truncated).toBe(false);
+      expect(result.resultSize.omittedFields).toEqual([]);
+      expect(result).not.toHaveProperty('assetIds');
+      expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     }
     vi.useRealTimers();
   });
@@ -2852,7 +2977,9 @@ describe(AgentToolService.name, () => {
     assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
     selectionHandleRepository.create.mockResolvedValue(handle);
     assetRepository.getAgentMetadataByIds.mockResolvedValue(
-      assetIds.slice(0, 3).map((id) => makeMetadata(id)) as never,
+      assetIds
+        .slice(0, 3)
+        .map((id, index) => makeMetadata(id, { originalFileName: `sample-${index + 1}.jpg` })) as never,
     );
     toolCallRepository.createWithSessionLimit.mockResolvedValue({
       status: 'created',
@@ -2888,9 +3015,10 @@ describe(AgentToolService.name, () => {
       expect(result.selectionHandle?.assetCount).toBe(60);
       expect(result.selectionHandle?.sourceRef).toBe(`asset-source:search:${handle.id}`);
       expect(result.selectionHandle?.expiresAt).toEqual(handle.expiresAt);
-      expect(result.assetIds).toEqual(assetIds.slice(0, 3));
-      expect(result.assets?.map((asset) => asset.id)).toEqual(assetIds.slice(0, 3));
-      expect(JSON.stringify(result)).not.toContain(assetIds[59]);
+      expect(result).not.toHaveProperty('assetIds');
+      expect(result).not.toHaveProperty('assets');
+      expect(result.sample?.items.map((asset) => asset.itemRef)).toEqual(['item:001', 'item:002', 'item:003']);
+      expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     }
     vi.useRealTimers();
   });
@@ -2937,13 +3065,14 @@ describe(AgentToolService.name, () => {
     if (result.status === 'success') {
       expect(result.selectionHandle?.sourceRef).toBe(`asset-source:search:${handle.id}`);
       expect(result.selectionHandle?.assetCount).toBe(4);
-      expect(result.assetIds).toEqual(assetIds.slice(0, 2));
-      expect(result.sample?.map((asset) => asset.id)).toEqual(assetIds.slice(0, 2));
+      expect(result).not.toHaveProperty('assetIds');
+      expect(result.sample?.items.map((asset) => asset.itemRef)).toEqual(['item:001', 'item:002']);
+      expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     }
     vi.useRealTimers();
   });
 
-  it('searchAssets omits sourceRef when no selection handle is requested', async () => {
+  it('searchAssets returns sourceRef even when no selection handle is requested', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
@@ -2959,8 +3088,8 @@ describe(AgentToolService.name, () => {
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
-      expect(result.selectionHandle).toBeUndefined();
-      expect(JSON.stringify(result)).not.toContain('asset-source:search:');
+      expect(result.selectionHandle.sourceRef).toMatch(/^asset-source:search:/);
+      expect(result).not.toHaveProperty('assetIds');
     }
   });
 
@@ -2989,23 +3118,24 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: 'success',
         resultSize: expect.any(Object),
-        summary: 'Returned 2 asset ids with 2 samples',
+        summary: 'Created a selection handle for 2 assets with 2 samples',
         detail: 'summary',
-        assetIds,
         returnedCount: 2,
-        toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids with 2 samples' }),
-        sample: [
-          expect.objectContaining({
-            id: assetIds[0],
-            localDateTime: now,
-            exifInfo: expect.objectContaining({ city: 'Berlin', state: 'Berlin', country: 'Germany' }),
-          }),
-          expect.objectContaining({ id: assetIds[1] }),
-        ],
+        sample: {
+          sampleSize: 2,
+          items: [
+            expect.objectContaining({
+              itemRef: 'item:001',
+              localDateTime: now,
+              exifInfo: expect.objectContaining({ city: 'Berlin', state: 'Berlin', country: 'Germany' }),
+            }),
+            expect.objectContaining({ itemRef: 'item:002' }),
+          ],
+        },
       }),
     );
-    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('originalFileName');
-    expect(result.status === 'success' ? result.sample?.[0].exifInfo : undefined).not.toHaveProperty('make');
+    expect(result.status === 'success' ? result.sample?.items[0] : undefined).not.toHaveProperty('id');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds);
   });
 
@@ -3032,18 +3162,17 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: 'success',
         resultSize: expect.any(Object),
-        summary: 'Returned 2 asset ids',
+        summary: 'Created a selection handle for 2 assets',
         detail: 'summary',
-        assetIds,
         returnedCount: 2,
-        toolCall: expect.objectContaining({ responseSummary: 'Returned 2 asset ids' }),
       }),
     );
     expect(result).not.toHaveProperty('sample');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
-  it('keeps summary samples id-only when no fields are requested', async () => {
+  it('keeps summary samples handle-local itemRef only when no fields are requested', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid()];
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
@@ -3066,20 +3195,18 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: 'success',
         resultSize: expect.any(Object),
-        summary: 'Returned 1 asset id with 1 sample',
+        summary: 'Created a selection handle for 1 asset with 1 sample',
         detail: 'summary',
-        assetIds,
-        sample: [{ id: assetIds[0] }],
+        sample: { sampleSize: 1, items: [{ itemRef: 'item:001' }] },
       }),
     );
-    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('originalFileName');
-    expect(result.status === 'success' ? result.sample?.[0] : undefined).not.toHaveProperty('exifInfo');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
   });
 
   it('returns full metadata rows only when metadata detail is requested without fields', async () => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
-    const metadata = makeMetadata(assetId);
+    const metadata = makeMetadata(assetId, { originalFileName: 'berlin.jpg' });
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
 
     sessionRepository.getById.mockResolvedValue(session);
@@ -3093,13 +3220,16 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         status: 'success',
         resultSize: expect.any(Object),
-        summary: 'Returned metadata for 1 asset',
+        summary: 'Created a selection handle for 1 asset with 1 sample',
         detail: 'metadata',
-        assetIds: [assetId],
-        toolCall: expect.objectContaining({ responseSummary: 'Returned metadata for 1 asset' }),
-        assets: [metadata],
+        sample: {
+          sampleSize: 1,
+          items: [expect.objectContaining({ itemRef: 'item:001', originalFileName: 'berlin.jpg' })],
+        },
       }),
     );
+    expect(result).not.toHaveProperty('assets');
+    expect(JSON.stringify(result)).not.toContain(assetId);
   });
 
   it('returns field-selected metadata rows and omits unrequested fields', async () => {
@@ -3110,7 +3240,9 @@ describe(AgentToolService.name, () => {
     sessionRepository.getById.mockResolvedValue(session);
     accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
     searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
-    assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(assetId)] as never);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetId, { originalFileName: 'berlin.jpg' }),
+    ] as never);
 
     const result = await sut.searchAssets(auth, session.id, {
       filters: {},
@@ -3124,11 +3256,15 @@ describe(AgentToolService.name, () => {
         status: 'success',
         resultSize: expect.any(Object),
         detail: 'metadata',
-        assets: [{ id: assetId, originalFileName: `${assetId}.jpg`, isFavorite: false }],
+        sample: {
+          sampleSize: 1,
+          items: [{ itemRef: 'item:001', originalFileName: 'berlin.jpg', isFavorite: false }],
+        },
       }),
     );
-    expect(result.status === 'success' ? result.assets?.[0] : undefined).not.toHaveProperty('exifInfo');
-    expect(result.status === 'success' ? result.assets?.[0] : undefined).not.toHaveProperty('tags');
+    expect(result.status === 'success' ? result.sample?.items[0] : undefined).not.toHaveProperty('id');
+    expect(result.status === 'success' ? result.sample?.items[0] : undefined).not.toHaveProperty('exifInfo');
+    expect(result.status === 'success' ? result.sample?.items[0] : undefined).not.toHaveProperty('tags');
   });
 
   it('denies inaccessible compact search results before hydration or sampling', async () => {
@@ -3880,10 +4016,11 @@ describe(AgentToolService.name, () => {
         resultSize: expect.any(Object),
         returnedCount: 0,
         hasMore: false,
-        detail: 'ids',
-        assetIds: [],
+        detail: 'handle',
+        selectionHandle: expect.objectContaining({ assetCount: 0 }),
       }),
     );
+    expect(result).not.toHaveProperty('assetIds');
   });
 
   it('space person filters use explicit space scope without broad timeline IDs', async () => {
