@@ -14,6 +14,8 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSelectionMetadataToolRequestDto,
+  AgentReadSelectionMetadataToolResponseDto,
   AgentReadSpaceToolRequestDto,
   AgentReadSpaceToolResponseDto,
   AgentResolveAssetSearchFiltersToolRequestDto,
@@ -50,7 +52,11 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
-import { isAgentMcpRecoverableToolError, wrongIdDomainError } from 'src/services/agent-mcp-recoverable-tool-error';
+import {
+  invalidSelectionHandleError,
+  isAgentMcpRecoverableToolError,
+  wrongIdDomainError,
+} from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { UserService } from 'src/services/user.service';
@@ -64,6 +70,7 @@ import {
   AgentAssetMetadataDetail,
   AgentAssetMetadataField,
   AgentAssetMetadataResult,
+  AgentReadSelectionMetadataCounts,
   AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetResult,
   AgentSearchAssetsDetail,
@@ -82,6 +89,7 @@ import {
   AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadAssetMetadataRequestMetadata,
+  AgentToolReadSelectionMetadataRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
   AgentToolResponseIdsMetadata,
@@ -146,6 +154,8 @@ const isReadAssetIdsRequestMetadata = (
   'assetIds' in metadata && Array.isArray(metadata.assetIds) && metadata.assetIds.every((id) => typeof id === 'string');
 
 const maxAgentSpaceAssetIds = 10_000;
+const selectionMetadataRecoveryLimit = 5;
+const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 
 @Injectable()
 export class AgentToolService {
@@ -181,6 +191,14 @@ export class AgentToolService {
     dto: AgentSearchAssetsToolRequestDto,
   ): Promise<AgentSearchAssetsToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.searchAssetsDescriptor());
+  }
+
+  async readSelectionMetadata(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentReadSelectionMetadataToolRequestDto,
+  ): Promise<AgentReadSelectionMetadataToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.readSelectionMetadataDescriptor());
   }
 
   async resolveAssetSearchFilters(
@@ -348,6 +366,9 @@ export class AgentToolService {
     switch (toolCall.toolName) {
       case AgentToolName.SearchAssets: {
         return this.searchAssets(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ReadSelectionMetadata: {
+        return this.readSelectionMetadata(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ResolveAssetSearchFilters: {
         return this.resolveAssetSearchFilters(auth, session.id, { toolCallId: toolCall.id });
@@ -774,6 +795,91 @@ export class AgentToolService {
     };
   }
 
+  private async getValidSelectionMetadataHandle(auth: AuthDto, session: AgentSession, id: string) {
+    const handle = await this.selectionHandleRepository.getValidForPlanning({
+      id,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: new Date(),
+    });
+
+    if (!handle) {
+      throw await this.createInvalidSelectionMetadataHandleError(auth, session, id);
+    }
+
+    return handle;
+  }
+
+  private async createInvalidSelectionMetadataHandleError(auth: AuthDto, session: AgentSession, id: string) {
+    const [readableAssetIds, readablePersonIds] = await Promise.all([
+      this.getReadableAssetIds(auth, session.permissionPlanSnapshot, [id]),
+      this.getReadablePersonIds(auth, session.permissionPlanSnapshot, new Set([id])),
+    ]);
+    const receivedDomain = readableAssetIds.has(id) ? 'asset' : readablePersonIds.has(id) ? 'person' : null;
+    if (receivedDomain) {
+      return wrongIdDomainError({
+        toolName: AgentToolName.ReadSelectionMetadata,
+        field: 'selectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain,
+        instruction: 'Use the selectionHandle.id returned by searchAssets, not an asset or person ID.',
+      });
+    }
+
+    const now = new Date();
+    const [availableSelectionHandles, attemptedHandle] = await Promise.all([
+      this.selectionHandleRepository.listValidForRecovery({
+        sessionId: session.id,
+        userId: auth.user.id,
+        now,
+        limit: selectionMetadataRecoveryLimit,
+      }),
+      this.selectionHandleRepository.getForRecovery({ id, sessionId: session.id, userId: auth.user.id }),
+    ]);
+    const expiredSelectionHandle =
+      attemptedHandle && attemptedHandle.expiresAt <= now
+        ? this.toSelectionMetadataHandleRecoveryHint(attemptedHandle)
+        : undefined;
+    const available = availableSelectionHandles.map((handle) => this.toSelectionMetadataHandleRecoveryHint(handle));
+    const recovery = {
+      kind: 'invalid-selection-handle',
+      attemptedSelectionHandleId: id,
+      looksLikeExamplePlaceholder: knownExampleSelectionHandleIds.has(id),
+      availableSelectionHandles: available,
+      ...(expiredSelectionHandle ? { expiredSelectionHandle } : {}),
+      instruction: 'Retry readSelectionMetadata with a valid same-session selectionHandle.id, or rerun searchAssets.',
+    };
+
+    return invalidSelectionHandleError({
+      toolName: AgentToolName.ReadSelectionMetadata,
+      error: 'Selection handle is expired or not available for this session',
+      hint: expiredSelectionHandle
+        ? 'The attempted selection handle is expired. Rerun searchAssets, then retry readSelectionMetadata with the returned selectionHandle.id.'
+        : available.length === 1
+          ? `Retry readSelectionMetadata with the exact handle ${available[0].id} if that is the intended search selection.`
+          : available.length > 1
+            ? 'Choose the intended same-session handle from availableSelectionHandles and retry readSelectionMetadata with that exact id.'
+            : 'Rerun searchAssets, then retry readSelectionMetadata with the returned selectionHandle.id.',
+      recovery,
+    });
+  }
+
+  private toSelectionMetadataHandleRecoveryHint(handle: {
+    id: string;
+    assetCount: number;
+    sourceToolCallId: string | null;
+    createdAt: Date;
+    expiresAt: Date;
+  }) {
+    return {
+      id: handle.id,
+      assetCount: handle.assetCount,
+      sourceToolCallId: handle.sourceToolCallId,
+      createdAt: handle.createdAt.toISOString(),
+      expiresAt: handle.expiresAt.toISOString(),
+    };
+  }
+
   private buildSearchSample(assets: AgentSearchAssetResult[]): AgentSearchAssetsSample | undefined {
     const items = assets.map((asset, index) => this.mapSearchSampleItem(asset, index));
     return items.length === 0 ? undefined : { sampleSize: items.length, items };
@@ -811,6 +917,13 @@ export class AgentToolService {
     return result.hasMore && result.nextPage
       ? `${summary}; more results available on page ${result.nextPage}`
       : summary;
+  }
+
+  private getReadSelectionMetadataResponseSummary(assetCount: number, sampleCount: number, truncated = false) {
+    const summary = `Read selection metadata for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'} with ${sampleCount} ${
+      sampleCount === 1 ? 'sample' : 'samples'
+    }`;
+    return truncated ? this.appendTruncatedResponseSummary(summary) : summary;
   }
 
   private resolveAssetSearchFiltersDescriptor(): AgentReadToolDescriptor<
@@ -875,6 +988,79 @@ export class AgentToolService {
       request.cameraModels,
       request.lensModels,
     ].reduce((total, terms) => total + (terms?.length ?? 0), 0);
+  }
+
+  private readSelectionMetadataDescriptor(): AgentReadToolDescriptor<
+    AgentReadSelectionMetadataToolRequestDto,
+    {
+      summary: string;
+      selectionHandle: AgentSearchAssetsSelectionHandleResult;
+      fields: AgentAssetMetadataField[];
+      counts: AgentReadSelectionMetadataCounts;
+      sample?: AgentSearchAssetsSample;
+    }
+  > {
+    return {
+      toolName: AgentToolName.ReadSelectionMetadata,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) =>
+        `Read selection metadata for handle ${request.selectionHandleId} (${request.sampleSize ?? 10} sample(s))`,
+      requestMetadata: (request) =>
+        ({
+          selectionHandleId: request.selectionHandleId ?? '',
+          fields: request.fields ?? [],
+          sampleSize: request.sampleSize ?? 10,
+        }) as AgentToolReadSelectionMetadataRequestMetadata,
+      requestedAssetCount: (request) => request.sampleSize ?? 10,
+      requestedAlbumCount: () => 0,
+      perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: async (auth, session, request) => {
+        await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        return null;
+      },
+      execute: async (auth, session, request) => {
+        const handle = await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        const fields = request.fields ?? [];
+        const sampleAssetIds = handle.sampleAssetIds.slice(0, request.sampleSize ?? 10);
+        const unorderedAssets =
+          sampleAssetIds.length > 0 ? await this.assetRepository.getAgentMetadataByIds(sampleAssetIds) : [];
+        const assetsById = new Map(
+          unorderedAssets.map((asset) => [asset.id, this.mapAssetMetadata(asset as AgentAssetMetadata)]),
+        );
+        const sampleAssets = sampleAssetIds.flatMap((id) => {
+          const asset = assetsById.get(id);
+          return asset ? [asset] : [];
+        });
+        const sample = this.buildSearchSample(
+          sampleAssets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
+        );
+        const sampled = sample?.items.length ?? 0;
+
+        return {
+          summary: this.getReadSelectionMetadataResponseSummary(handle.assetCount, sampled),
+          selectionHandle: this.mapSearchSelectionHandle(handle),
+          fields,
+          counts: { assets: handle.assetCount, sampled },
+          ...(sample ? { sample } : {}),
+        };
+      },
+      responseSummary: (result) => result.summary,
+      responseMetadata: (result) => ({
+        selectionHandleIds: [result.selectionHandle.id],
+        sourceRefs: [result.selectionHandle.sourceRef],
+        selectionHandleAssetCount: result.selectionHandle.assetCount,
+      }),
+      resultAssetCount: (result) => result.counts.sampled,
+      resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.counts.sampled,
+        hasMore: false,
+        nextPage: null,
+      }),
+      truncateForBudget: (result, budgetBytes) => this.truncateSelectionMetadataResult(result, budgetBytes),
+      failedReason: 'Selection metadata read failed',
+    };
   }
 
   private readAssetMetadataDescriptor(): AgentReadToolDescriptor<
@@ -2369,6 +2555,55 @@ export class AgentToolService {
       result: {
         ...nextResult,
         summary: omittedFields.size > 0 ? this.appendTruncatedResponseSummary(summary) : summary,
+      },
+      omittedFields: [...omittedFields],
+    };
+  }
+
+  private truncateSelectionMetadataResult<
+    TResult extends {
+      summary: string;
+      selectionHandle: AgentSearchAssetsSelectionHandleResult;
+      counts: AgentReadSelectionMetadataCounts;
+      sample?: AgentSearchAssetsSample;
+    },
+  >(result: TResult, budgetBytes: number): { result: TResult; omittedFields: string[] } {
+    const omittedFields = new Set<string>();
+    let nextResult = {
+      ...result,
+      sample: result.sample ? { ...result.sample, items: [...result.sample.items] } : undefined,
+    };
+
+    while (
+      nextResult.sample &&
+      nextResult.sample.items.length > 0 &&
+      (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes
+    ) {
+      const sampled = nextResult.sample.items.length - 1;
+      nextResult = {
+        ...nextResult,
+        sample: {
+          sampleSize: sampled,
+          items: nextResult.sample.items.slice(0, -1),
+        },
+        counts: { ...nextResult.counts, sampled },
+      };
+      omittedFields.add('sample');
+    }
+
+    if (nextResult.sample?.items.length === 0) {
+      const { sample: _sample, ...withoutSample } = nextResult;
+      nextResult = { ...withoutSample, counts: { ...withoutSample.counts, sampled: 0 } } as typeof nextResult;
+    }
+
+    return {
+      result: {
+        ...nextResult,
+        summary: this.getReadSelectionMetadataResponseSummary(
+          nextResult.selectionHandle.assetCount,
+          nextResult.counts.sampled,
+          omittedFields.size > 0,
+        ),
       },
       omittedFields: [...omittedFields],
     };
