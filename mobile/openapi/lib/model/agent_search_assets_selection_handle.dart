@@ -16,7 +16,6 @@ class AgentSearchAssetsSelectionHandle {
     required this.assetCount,
     required this.expiresAt,
     required this.id,
-    this.sampleAssetIds = const [],
     required this.sourceRef,
     required this.sourceToolCallId,
   });
@@ -29,8 +28,6 @@ class AgentSearchAssetsSelectionHandle {
 
   String id;
 
-  List<String> sampleAssetIds;
-
   String sourceRef;
 
   String? sourceToolCallId;
@@ -40,7 +37,6 @@ class AgentSearchAssetsSelectionHandle {
     other.assetCount == assetCount &&
     other.expiresAt == expiresAt &&
     other.id == id &&
-    _deepEquality.equals(other.sampleAssetIds, sampleAssetIds) &&
     other.sourceRef == sourceRef &&
     other.sourceToolCallId == sourceToolCallId;
 
@@ -50,12 +46,11 @@ class AgentSearchAssetsSelectionHandle {
     (assetCount.hashCode) +
     (expiresAt.hashCode) +
     (id.hashCode) +
-    (sampleAssetIds.hashCode) +
     (sourceRef.hashCode) +
     (sourceToolCallId == null ? 0 : sourceToolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsSelectionHandle[assetCount=$assetCount, expiresAt=$expiresAt, id=$id, sampleAssetIds=$sampleAssetIds, sourceRef=$sourceRef, sourceToolCallId=$sourceToolCallId]';
+  String toString() => 'AgentSearchAssetsSelectionHandle[assetCount=$assetCount, expiresAt=$expiresAt, id=$id, sourceRef=$sourceRef, sourceToolCallId=$sourceToolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -64,7 +59,6 @@ class AgentSearchAssetsSelectionHandle {
         ? this.expiresAt.millisecondsSinceEpoch
         : this.expiresAt.toUtc().toIso8601String();
       json[r'id'] = this.id;
-      json[r'sampleAssetIds'] = this.sampleAssetIds;
       json[r'sourceRef'] = this.sourceRef;
     if (this.sourceToolCallId != null) {
       json[r'sourceToolCallId'] = this.sourceToolCallId;
@@ -86,9 +80,6 @@ class AgentSearchAssetsSelectionHandle {
         assetCount: mapValueOfType<int>(json, r'assetCount')!,
         expiresAt: mapDateTime(json, r'expiresAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')!,
         id: mapValueOfType<String>(json, r'id')!,
-        sampleAssetIds: json[r'sampleAssetIds'] is Iterable
-            ? (json[r'sampleAssetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
         sourceRef: mapValueOfType<String>(json, r'sourceRef')!,
         sourceToolCallId: mapValueOfType<String>(json, r'sourceToolCallId'),
       );
@@ -141,7 +132,6 @@ class AgentSearchAssetsSelectionHandle {
     'assetCount',
     'expiresAt',
     'id',
-    'sampleAssetIds',
     'sourceRef',
     'sourceToolCallId',
   };

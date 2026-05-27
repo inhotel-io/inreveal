@@ -2642,7 +2642,7 @@ describe(AgentToolService.name, () => {
       expect.any(Number),
     );
     const completedMetadata = toolCallRepository.transition.mock.calls.find(
-      ([, , fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
+      ([_sessionId, _toolCallId, fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
     )?.[3]?.redactedResponseMetadata;
     expect(completedMetadata).toEqual(
       expect.objectContaining({
@@ -2861,7 +2861,7 @@ describe(AgentToolService.name, () => {
         }),
       );
       const completedMetadata = toolCallRepository.transition.mock.calls.find(
-        ([, , fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
+        ([_sessionId, _toolCallId, fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
       )?.[3]?.redactedResponseMetadata;
       expect(completedMetadata).not.toHaveProperty('assetIds');
       expect(completedMetadata).not.toHaveProperty('selectionHandleSampleAssetIds');
@@ -4654,8 +4654,15 @@ describe(AgentToolService.name, () => {
     selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
     assetRepository.getAgentMetadataByIds.mockResolvedValue([
       makeMetadata(assetIds[0], { type: AssetType.Video }),
-      makeMetadata(assetIds[1], { type: AssetType.Image, exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 3 } }),
-      makeMetadata(assetIds[2], { type: AssetType.Image, isFavorite: true, exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 } }),
+      makeMetadata(assetIds[1], {
+        type: AssetType.Image,
+        exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 3 },
+      }),
+      makeMetadata(assetIds[2], {
+        type: AssetType.Image,
+        isFavorite: true,
+        exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 },
+      }),
     ] as never);
     selectionHandleRepository.create.mockResolvedValue(derivedHandle);
 

@@ -14,15 +14,13 @@ class AgentSearchAssetsToolSuccessResponse {
   /// Returns a new [AgentSearchAssetsToolSuccessResponse] instance.
   AgentSearchAssetsToolSuccessResponse({
     this.approximateTotal,
-    this.assetIds = const [],
-    this.assets = const [],
     required this.detail,
     required this.hasMore,
     required this.nextPage,
     required this.resultSize,
     required this.returnedCount,
-    this.sample = const [],
-    this.selectionHandle,
+    this.sample,
+    required this.selectionHandle,
     required this.status,
     required this.summary,
     required this.toolCall,
@@ -39,10 +37,6 @@ class AgentSearchAssetsToolSuccessResponse {
   ///
   int? approximateTotal;
 
-  List<String> assetIds;
-
-  List<AgentSearchAssetResult> assets;
-
   AgentSearchAssetsDetail detail;
 
   bool hasMore;
@@ -55,15 +49,15 @@ class AgentSearchAssetsToolSuccessResponse {
   /// Maximum value: 9007199254740991
   int returnedCount;
 
-  List<AgentSearchAssetResult> sample;
-
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
   /// does not include a default value (using the "default:" property), however, the generated
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsSelectionHandle? selectionHandle;
+  AgentSearchAssetsSample? sample;
+
+  AgentSearchAssetsSelectionHandle selectionHandle;
 
   AgentSearchAssetsToolSuccessResponseStatusEnum status;
 
@@ -84,14 +78,12 @@ class AgentSearchAssetsToolSuccessResponse {
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolSuccessResponse &&
     other.approximateTotal == approximateTotal &&
-    _deepEquality.equals(other.assetIds, assetIds) &&
-    _deepEquality.equals(other.assets, assets) &&
     other.detail == detail &&
     other.hasMore == hasMore &&
     other.nextPage == nextPage &&
     other.resultSize == resultSize &&
     other.returnedCount == returnedCount &&
-    _deepEquality.equals(other.sample, sample) &&
+    other.sample == sample &&
     other.selectionHandle == selectionHandle &&
     other.status == status &&
     other.summary == summary &&
@@ -102,22 +94,20 @@ class AgentSearchAssetsToolSuccessResponse {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (approximateTotal == null ? 0 : approximateTotal!.hashCode) +
-    (assetIds.hashCode) +
-    (assets.hashCode) +
     (detail.hashCode) +
     (hasMore.hashCode) +
     (nextPage == null ? 0 : nextPage!.hashCode) +
     (resultSize.hashCode) +
     (returnedCount.hashCode) +
-    (sample.hashCode) +
-    (selectionHandle == null ? 0 : selectionHandle!.hashCode) +
+    (sample == null ? 0 : sample!.hashCode) +
+    (selectionHandle.hashCode) +
     (status.hashCode) +
     (summary.hashCode) +
     (toolCall.hashCode) +
     (totalCount == null ? 0 : totalCount!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolSuccessResponse[approximateTotal=$approximateTotal, assetIds=$assetIds, assets=$assets, detail=$detail, hasMore=$hasMore, nextPage=$nextPage, resultSize=$resultSize, returnedCount=$returnedCount, sample=$sample, selectionHandle=$selectionHandle, status=$status, summary=$summary, toolCall=$toolCall, totalCount=$totalCount]';
+  String toString() => 'AgentSearchAssetsToolSuccessResponse[approximateTotal=$approximateTotal, detail=$detail, hasMore=$hasMore, nextPage=$nextPage, resultSize=$resultSize, returnedCount=$returnedCount, sample=$sample, selectionHandle=$selectionHandle, status=$status, summary=$summary, toolCall=$toolCall, totalCount=$totalCount]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -126,8 +116,6 @@ class AgentSearchAssetsToolSuccessResponse {
     } else {
     //  json[r'approximateTotal'] = null;
     }
-      json[r'assetIds'] = this.assetIds;
-      json[r'assets'] = this.assets;
       json[r'detail'] = this.detail;
       json[r'hasMore'] = this.hasMore;
     if (this.nextPage != null) {
@@ -137,12 +125,12 @@ class AgentSearchAssetsToolSuccessResponse {
     }
       json[r'resultSize'] = this.resultSize;
       json[r'returnedCount'] = this.returnedCount;
+    if (this.sample != null) {
       json[r'sample'] = this.sample;
-    if (this.selectionHandle != null) {
-      json[r'selectionHandle'] = this.selectionHandle;
     } else {
-    //  json[r'selectionHandle'] = null;
+    //  json[r'sample'] = null;
     }
+      json[r'selectionHandle'] = this.selectionHandle;
       json[r'status'] = this.status;
       json[r'summary'] = this.summary;
       json[r'toolCall'] = this.toolCall;
@@ -164,17 +152,13 @@ class AgentSearchAssetsToolSuccessResponse {
 
       return AgentSearchAssetsToolSuccessResponse(
         approximateTotal: mapValueOfType<int>(json, r'approximateTotal'),
-        assetIds: json[r'assetIds'] is Iterable
-            ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        assets: AgentSearchAssetResult.listFromJson(json[r'assets']),
         detail: AgentSearchAssetsDetail.fromJson(json[r'detail'])!,
         hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         nextPage: mapValueOfType<String>(json, r'nextPage'),
         resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         returnedCount: mapValueOfType<int>(json, r'returnedCount')!,
-        sample: AgentSearchAssetResult.listFromJson(json[r'sample']),
-        selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle']),
+        sample: AgentSearchAssetsSample.fromJson(json[r'sample']),
+        selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle'])!,
         status: AgentSearchAssetsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
@@ -226,12 +210,12 @@ class AgentSearchAssetsToolSuccessResponse {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'assetIds',
     'detail',
     'hasMore',
     'nextPage',
     'resultSize',
     'returnedCount',
+    'selectionHandle',
     'status',
     'summary',
     'toolCall',

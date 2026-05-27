@@ -27300,111 +27300,6 @@
         ],
         "type": "string"
       },
-      "AgentSearchAssetResult": {
-        "properties": {
-          "exifInfo": {
-            "nullable": true,
-            "properties": {
-              "city": {
-                "nullable": true,
-                "type": "string"
-              },
-              "country": {
-                "nullable": true,
-                "type": "string"
-              },
-              "dateTimeOriginal": {
-                "example": "2024-01-01T00:00:00.000Z",
-                "format": "date-time",
-                "nullable": true,
-                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
-                "type": "string"
-              },
-              "latitude": {
-                "nullable": true,
-                "type": "number"
-              },
-              "lensModel": {
-                "nullable": true,
-                "type": "string"
-              },
-              "longitude": {
-                "nullable": true,
-                "type": "number"
-              },
-              "make": {
-                "nullable": true,
-                "type": "string"
-              },
-              "model": {
-                "nullable": true,
-                "type": "string"
-              },
-              "rating": {
-                "maximum": 9007199254740991,
-                "minimum": -9007199254740991,
-                "nullable": true,
-                "type": "integer"
-              },
-              "state": {
-                "nullable": true,
-                "type": "string"
-              }
-            },
-            "type": "object"
-          },
-          "fileCreatedAt": {
-            "example": "2024-01-01T00:00:00.000Z",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
-            "type": "string"
-          },
-          "fileModifiedAt": {
-            "example": "2024-01-01T00:00:00.000Z",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-            "type": "string"
-          },
-          "isFavorite": {
-            "type": "boolean"
-          },
-          "localDateTime": {
-            "example": "2024-01-01T00:00:00.000Z",
-            "format": "date-time",
-            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
-            "type": "string"
-          },
-          "originalFileName": {
-            "type": "string"
-          },
-          "ownerId": {
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-            "type": "string"
-          },
-          "tags": {
-            "items": {
-              "$ref": "#/components/schemas/AgentAssetMetadataTag"
-            },
-            "type": "array"
-          },
-          "type": {
-            "$ref": "#/components/schemas/AssetTypeEnum"
-          },
-          "visibility": {
-            "$ref": "#/components/schemas/AssetVisibility"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "type": "object"
-      },
       "AgentSearchAssetSourceInput": {
         "additionalProperties": false,
         "properties": {
@@ -27465,7 +27360,7 @@
       },
       "AgentSearchAssetsDetail": {
         "enum": [
-          "ids",
+          "handle",
           "summary",
           "metadata"
         ],
@@ -27636,6 +27531,148 @@
         ],
         "type": "string"
       },
+      "AgentSearchAssetsRequestDetail": {
+        "enum": [
+          "ids",
+          "handle",
+          "summary",
+          "metadata"
+        ],
+        "type": "string"
+      },
+      "AgentSearchAssetsSample": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSearchAssetsSampleItem"
+            },
+            "maxItems": 25,
+            "type": "array"
+          },
+          "sampleSize": {
+            "maximum": 25,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "sampleSize"
+        ],
+        "type": "object"
+      },
+      "AgentSearchAssetsSampleItem": {
+        "properties": {
+          "exifInfo": {
+            "nullable": true,
+            "properties": {
+              "city": {
+                "nullable": true,
+                "type": "string"
+              },
+              "country": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dateTimeOriginal": {
+                "example": "2024-01-01T00:00:00.000Z",
+                "format": "date-time",
+                "nullable": true,
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                "type": "string"
+              },
+              "latitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "lensModel": {
+                "nullable": true,
+                "type": "string"
+              },
+              "longitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "make": {
+                "nullable": true,
+                "type": "string"
+              },
+              "model": {
+                "nullable": true,
+                "type": "string"
+              },
+              "rating": {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "nullable": true,
+                "type": "integer"
+              },
+              "state": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "fileCreatedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "fileModifiedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "itemRef": {
+            "pattern": "^item:\\d{3,}$",
+            "type": "string"
+          },
+          "localDateTime": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "properties": {
+                "color": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value",
+                "color"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetTypeEnum"
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/AssetVisibility"
+          }
+        },
+        "required": [
+          "itemRef"
+        ],
+        "type": "object"
+      },
       "AgentSearchAssetsSelectionHandle": {
         "properties": {
           "assetCount": {
@@ -27654,15 +27691,6 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
-          "sampleAssetIds": {
-            "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            },
-            "maxItems": 25,
-            "type": "array"
-          },
           "sourceRef": {
             "$ref": "#/components/schemas/AgentSearchSourceRef"
           },
@@ -27677,7 +27705,6 @@
           "assetCount",
           "expiresAt",
           "id",
-          "sampleAssetIds",
           "sourceRef",
           "sourceToolCallId"
         ],
@@ -27730,7 +27757,7 @@
             "type": "boolean"
           },
           "detail": {
-            "$ref": "#/components/schemas/AgentSearchAssetsDetail"
+            "$ref": "#/components/schemas/AgentSearchAssetsRequestDetail"
           },
           "fields": {
             "items": {
@@ -27789,25 +27816,12 @@
         ]
       },
       "AgentSearchAssetsToolSuccessResponse": {
+        "additionalProperties": false,
         "properties": {
           "approximateTotal": {
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
-          },
-          "assetIds": {
-            "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "assets": {
-            "items": {
-              "$ref": "#/components/schemas/AgentSearchAssetResult"
-            },
-            "type": "array"
           },
           "detail": {
             "$ref": "#/components/schemas/AgentSearchAssetsDetail"
@@ -27828,10 +27842,7 @@
             "type": "integer"
           },
           "sample": {
-            "items": {
-              "$ref": "#/components/schemas/AgentSearchAssetResult"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/AgentSearchAssetsSample"
           },
           "selectionHandle": {
             "$ref": "#/components/schemas/AgentSearchAssetsSelectionHandle"
@@ -27857,12 +27868,12 @@
           }
         },
         "required": [
-          "assetIds",
           "detail",
           "hasMore",
           "nextPage",
           "resultSize",
           "returnedCount",
+          "selectionHandle",
           "status",
           "summary",
           "toolCall"
@@ -28599,6 +28610,8 @@
       "AgentToolName": {
         "enum": [
           "searchAssets",
+          "readSelectionMetadata",
+          "curateSelection",
           "resolveAssetSearchFilters",
           "readAssetMetadata",
           "readAssetPreviews",
@@ -28610,10 +28623,12 @@
           "searchUsers",
           "proposeAlbumOperations",
           "proposeAlbumFromSearch",
+          "proposeAlbumFromSelection",
           "proposeAddAssetsToAlbumFromSearch",
           "proposeSpaceFromSearch",
           "proposeAddAssetsToSpaceFromSearch",
           "proposeAssetBatchFromSearch",
+          "proposeAssetBatchFromSelection",
           "reviseProposedOperations",
           "summarizePlan"
         ],
