@@ -659,6 +659,15 @@ const AgentProposeAlbumFromSearchToolRequestSchema = z
   })
   .meta({ id: 'AgentProposeAlbumFromSearchToolRequestDto' });
 
+const AgentProposeAlbumFromSelectionToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    albumName,
+    description: albumDescription,
+    selectionHandleId: uuid,
+  })
+  .meta({ id: 'AgentProposeAlbumFromSelectionToolRequestDto' });
+
 const AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema = z
   .strictObject({
     summary: summary.optional(),
@@ -737,6 +746,14 @@ const AgentProposeAssetBatchFromSearchToolRequestSchema = z
   })
   .meta({ id: 'AgentProposeAssetBatchFromSearchToolRequestDto' });
 
+const AgentProposeAssetBatchFromSelectionToolRequestSchema = z
+  .strictObject({
+    summary: summary.optional(),
+    action: AgentAssetBatchWorkflowActionSchema,
+    selectionHandleId: uuid,
+  })
+  .meta({ id: 'AgentProposeAssetBatchFromSelectionToolRequestDto' });
+
 const AgentOperationPlanParamsSchema = z
   .strictObject({
     id: uuid,
@@ -766,10 +783,12 @@ const AgentSummarizePlanToolRequestSchema = AgentOperationPlanSummaryRequestSche
 export const AgentOperationPlanToolRequestSchemas = {
   [AgentToolName.ProposeAlbumOperations]: AgentProposeAlbumOperationsSchema,
   [AgentToolName.ProposeAlbumFromSearch]: AgentProposeAlbumFromSearchToolRequestSchema,
+  [AgentToolName.ProposeAlbumFromSelection]: AgentProposeAlbumFromSelectionToolRequestSchema,
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
   [AgentToolName.ProposeSpaceFromSearch]: AgentProposeSpaceFromSearchToolRequestSchema,
   [AgentToolName.ProposeAddAssetsToSpaceFromSearch]: AgentProposeAddAssetsToSpaceFromSearchToolRequestSchema,
   [AgentToolName.ProposeAssetBatchFromSearch]: AgentProposeAssetBatchFromSearchToolRequestSchema,
+  [AgentToolName.ProposeAssetBatchFromSelection]: AgentProposeAssetBatchFromSelectionToolRequestSchema,
   [AgentToolName.ReviseProposedOperations]: AgentReviseProposedOperationsToolRequestSchema,
   [AgentToolName.SummarizePlan]: AgentSummarizePlanToolRequestSchema,
 } as const;
@@ -1097,6 +1116,9 @@ export class AgentProposeAlbumOperationsDto extends createZodDto(AgentProposeAlb
 export class AgentProposeAlbumFromSearchToolRequestDto extends createZodDto(
   AgentProposeAlbumFromSearchToolRequestSchema,
 ) {}
+export class AgentProposeAlbumFromSelectionToolRequestDto extends createZodDto(
+  AgentProposeAlbumFromSelectionToolRequestSchema,
+) {}
 export class AgentProposeAddAssetsToAlbumFromSearchToolRequestDto extends createZodDto(
   AgentProposeAddAssetsToAlbumFromSearchToolRequestSchema,
 ) {}
@@ -1108,6 +1130,9 @@ export class AgentProposeAddAssetsToSpaceFromSearchToolRequestDto extends create
 ) {}
 export class AgentProposeAssetBatchFromSearchToolRequestDto extends createZodDto(
   AgentProposeAssetBatchFromSearchToolRequestSchema,
+) {}
+export class AgentProposeAssetBatchFromSelectionToolRequestDto extends createZodDto(
+  AgentProposeAssetBatchFromSelectionToolRequestSchema,
 ) {}
 export class AgentReviseAlbumOperationsDto extends createZodDto(AgentReviseAlbumOperationsSchema) {}
 export class AgentOperationPlanParamsDto extends createZodDto(AgentOperationPlanParamsSchema) {}
