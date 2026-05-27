@@ -70,7 +70,11 @@ import {
   AgentSearchAssetsFilters,
   AgentSearchAssetsMode,
   AgentSearchAssetsOrder,
+  AgentSearchAssetsRequestDetail,
+  AgentSearchAssetsSample,
+  AgentSearchAssetsSampleItem,
   AgentSearchAssetsSelectionHandle,
+  AgentSearchAssetsSelectionHandleResult,
   AgentSpaceDetail,
   AgentSpaceMemberSummary,
   AgentSpaceSummary,
@@ -601,15 +605,13 @@ export class AgentToolService {
     {
       summary: string;
       detail: AgentSearchAssetsDetail;
-      assetIds: string[];
-      sample?: AgentSearchAssetResult[];
-      assets?: AgentSearchAssetResult[];
+      selectionHandle: AgentSearchAssetsSelectionHandleResult;
+      sample?: AgentSearchAssetsSample;
       returnedCount: number;
       hasMore: boolean;
       nextPage: string | null;
       totalCount?: number;
       approximateTotal?: number;
-      selectionHandle?: AgentSearchAssetsSelectionHandle;
     }
   > {
     return {
@@ -673,80 +675,70 @@ export class AgentToolService {
             : await this.searchRepository.searchMetadata(search.pagination, search.options);
         const assetIds = result.items.map((asset) => asset.id);
         await this.assertReturnedAssetsAreAccessible(auth, session, assetIds);
-        const detail = normalizedRequest.detail;
+        const responseDetail = this.normalizeSearchResponseDetail(normalizedRequest.detail);
         const fields = normalizedRequest.fields;
-        const selectionHandle = request.createSelectionHandle
-          ? await this.selectionHandleRepository.create({
-              sessionId: session.id,
-              userId: auth.user.id,
-              sourceToolCallId: toolCallId,
-              assetIds,
-              expiresAt: this.getSelectionHandleExpiresAt(session),
-            })
-          : undefined;
-        const compactAssetIds =
-          selectionHandle && assetIds.length > 0 ? assetIds.slice(0, request.sampleSize ?? 25) : assetIds;
+        const selectionHandle = await this.selectionHandleRepository.create({
+          sessionId: session.id,
+          userId: auth.user.id,
+          sourceToolCallId: toolCallId,
+          assetIds,
+          expiresAt: this.getSelectionHandleExpiresAt(session),
+        });
+        const responseHandle = this.mapSearchSelectionHandle(selectionHandle);
         const pageResult = {
-          detail,
-          assetIds: compactAssetIds,
-          returnedCount: compactAssetIds.length,
+          detail: responseDetail,
+          selectionHandle: responseHandle,
+          returnedCount: selectionHandle.assetCount,
           hasMore: result.hasNextPage,
           nextPage: result.hasNextPage ? String(normalizedRequest.page + 1) : null,
-          ...(selectionHandle
-            ? {
-                selectionHandle: {
-                  id: selectionHandle.id,
-                  sourceRef: this.buildSearchSourceRef(selectionHandle.id),
-                  assetCount: selectionHandle.assetCount,
-                  sampleAssetIds: selectionHandle.sampleAssetIds,
-                  sourceToolCallId: selectionHandle.sourceToolCallId,
-                  expiresAt: selectionHandle.expiresAt,
-                },
-              }
-            : {}),
         };
 
-        if (detail === 'ids') {
+        if (responseDetail === 'handle') {
           const summary = this.getSearchAssetsResponseSummary(pageResult);
           return { ...pageResult, summary };
         }
 
-        if (detail === 'summary') {
+        if (responseDetail === 'summary') {
           const sampleSize = request.sampleSize ?? 10;
           const sampleAssetIds = assetIds.slice(0, sampleSize);
           const sampleAssets = await this.getOrderedAgentMetadata(sampleAssetIds);
-          const sample = sampleAssets.map((asset) => this.mapSelectedAssetMetadata(asset, fields));
-          const summary = this.getSearchAssetsResponseSummary({ ...pageResult, sampleCount: sample.length });
+          const sample = this.buildSearchSample(
+            sampleAssets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
+          );
+          const summary = this.getSearchAssetsResponseSummary({
+            ...pageResult,
+            sampleCount: sample?.items.length ?? 0,
+          });
           return {
             ...pageResult,
             summary,
-            ...(sample.length === 0 ? {} : { sample }),
+            ...(sample ? { sample } : {}),
           };
         }
 
-        const metadataAssetIds = selectionHandle ? compactAssetIds : assetIds;
+        const sampleSize = request.sampleSize ?? 10;
+        const metadataAssetIds = assetIds.slice(0, sampleSize);
         const assets = await this.getOrderedAgentMetadata(metadataAssetIds);
-        const summary = this.getSearchAssetsResponseSummary({ ...pageResult, metadataCount: assets.length });
+        const sample = this.buildSearchSample(
+          fields.length === 0 ? assets : assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
+        );
+        const summary = this.getSearchAssetsResponseSummary({ ...pageResult, sampleCount: sample?.items.length ?? 0 });
         return {
           ...pageResult,
           summary,
-          assets: fields.length === 0 ? assets : assets.map((asset) => this.mapSelectedAssetMetadata(asset, fields)),
+          ...(sample ? { sample } : {}),
         };
       },
       responseSummary: (result) => result.summary,
-      responseMetadata: (result) =>
-        result.selectionHandle
-          ? {
-              selectionHandleIds: [result.selectionHandle.id],
-              sourceRefs: [result.selectionHandle.sourceRef],
-              selectionHandleAssetCount: result.selectionHandle.assetCount,
-              selectionHandleSampleAssetIds: result.selectionHandle.sampleAssetIds,
-            }
-          : { assetIds: result.assetIds },
-      resultAssetCount: (result) => result.selectionHandle?.assetCount ?? result.assetIds.length,
+      responseMetadata: (result) => ({
+        selectionHandleIds: [result.selectionHandle.id],
+        sourceRefs: [result.selectionHandle.sourceRef],
+        selectionHandleAssetCount: result.selectionHandle.assetCount,
+      }),
+      resultAssetCount: (result) => result.selectionHandle.assetCount,
       resultAlbumCount: () => 0,
       resultSize: (result) => ({
-        returnedItems: result.assetIds.length,
+        returnedItems: result.selectionHandle.assetCount,
         hasMore: result.hasMore,
         nextPage: result.nextPage,
       }),
@@ -768,26 +760,49 @@ export class AgentToolService {
     return buildAgentSourceRef('search', selectionHandleId) as AgentSearchSourceRef;
   }
 
+  private normalizeSearchResponseDetail(detail: AgentSearchAssetsRequestDetail): AgentSearchAssetsDetail {
+    return detail === 'ids' ? 'handle' : detail;
+  }
+
+  private mapSearchSelectionHandle(handle: AgentSearchAssetsSelectionHandle): AgentSearchAssetsSelectionHandleResult {
+    return {
+      id: handle.id,
+      sourceRef: this.buildSearchSourceRef(handle.id),
+      assetCount: handle.assetCount,
+      sourceToolCallId: handle.sourceToolCallId,
+      expiresAt: handle.expiresAt,
+    };
+  }
+
+  private buildSearchSample(assets: AgentSearchAssetResult[]): AgentSearchAssetsSample | undefined {
+    const items = assets.map((asset, index) => this.mapSearchSampleItem(asset, index));
+    return items.length === 0 ? undefined : { sampleSize: items.length, items };
+  }
+
+  private mapSearchSampleItem(asset: AgentSearchAssetResult, index: number): AgentSearchAssetsSampleItem {
+    const { id: _id, ownerId: _ownerId, tags, ...rest } = asset;
+    return {
+      itemRef: `item:${String(index + 1).padStart(3, '0')}`,
+      ...rest,
+      ...(tags ? { tags: tags.map(({ value, color }) => ({ value, color })) } : {}),
+    };
+  }
+
   private getSearchAssetsResponseSummary(result: {
     detail: AgentSearchAssetsDetail;
-    assetIds: string[];
+    selectionHandle: AgentSearchAssetsSelectionHandleResult;
     hasMore: boolean;
     nextPage: string | null;
     sampleCount?: number;
-    metadataCount?: number;
-    selectionHandle?: AgentSearchAssetsSelectionHandle;
   }) {
-    const summary = result.selectionHandle
-      ? `Created a selection handle for ${result.selectionHandle.assetCount} assets; returned ${
-          result.assetIds.length
-        } sample asset ${result.assetIds.length === 1 ? 'id' : 'ids'}`
-      : result.detail === 'metadata'
-        ? this.getReturnedMetadataSummary(result.metadataCount ?? result.assetIds.length)
-        : result.detail === 'summary' && (result.sampleCount ?? 0) > 0
-          ? `Returned ${result.assetIds.length} asset ${result.assetIds.length === 1 ? 'id' : 'ids'} with ${
-              result.sampleCount ?? 0
-            } ${(result.sampleCount ?? 0) === 1 ? 'sample' : 'samples'}`
-          : `Returned ${result.assetIds.length} asset ${result.assetIds.length === 1 ? 'id' : 'ids'}`;
+    const assetCount = result.selectionHandle.assetCount;
+    const sampleCount = result.sampleCount ?? 0;
+    const summary =
+      (result.detail === 'summary' || result.detail === 'metadata') && sampleCount > 0
+        ? `Created a selection handle for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'} with ${sampleCount} ${
+            sampleCount === 1 ? 'sample' : 'samples'
+          }`
+        : `Created a selection handle for ${assetCount} ${assetCount === 1 ? 'asset' : 'assets'}`;
     return result.hasMore && result.nextPage
       ? `${summary}; more results available on page ${result.nextPage}`
       : summary;
@@ -2298,49 +2313,50 @@ export class AgentToolService {
     TResult extends {
       summary: string;
       detail: AgentSearchAssetsDetail;
-      assetIds: string[];
-      sample?: AgentSearchAssetResult[];
-      assets?: AgentSearchAssetResult[];
+      selectionHandle: AgentSearchAssetsSelectionHandleResult;
+      sample?: AgentSearchAssetsSample;
       returnedCount: number;
       hasMore: boolean;
       nextPage: string | null;
     },
   >(result: TResult, budgetBytes: number): { result: TResult; omittedFields: string[] } {
     const omittedFields = new Set<string>();
-    let nextResult = { ...result };
-
-    const trimOne = () => {
-      if (nextResult.assets && nextResult.assets.length > 0) {
-        nextResult = {
-          ...nextResult,
-          assetIds: nextResult.assetIds.slice(0, -1),
-          assets: nextResult.assets.slice(0, -1),
-        };
-        omittedFields.add('assets');
-      } else if (nextResult.sample && nextResult.sample.length > 0) {
-        nextResult = { ...nextResult, sample: nextResult.sample.slice(0, -1) };
-        omittedFields.add('sample');
-      } else if (nextResult.assetIds.length > 0) {
-        nextResult = { ...nextResult, assetIds: nextResult.assetIds.slice(0, -1) };
-        omittedFields.add('assetIds');
-      } else {
-        return false;
-      }
-
-      nextResult.returnedCount = nextResult.assetIds.length;
-      return true;
+    let nextResult = {
+      ...result,
+      sample: result.sample ? { ...result.sample, items: [...result.sample.items] } : undefined,
     };
 
-    do {
-      if (!trimOne()) {
-        break;
+    while (
+      nextResult.sample &&
+      nextResult.sample.items.length > 0 &&
+      (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes
+    ) {
+      nextResult = {
+        ...nextResult,
+        sample: {
+          sampleSize: nextResult.sample.items.length - 1,
+          items: nextResult.sample.items.slice(0, -1),
+        },
+      };
+      omittedFields.add('sample');
+    }
+
+    if (nextResult.sample?.items.length === 0) {
+      const { sample: _sample, ...withoutSample } = nextResult;
+      nextResult = withoutSample as typeof nextResult;
+    }
+
+    if (omittedFields.size === 0 && (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes) {
+      if (nextResult.sample) {
+        const { sample: _sample, ...withoutSample } = nextResult;
+        nextResult = withoutSample as typeof nextResult;
+        omittedFields.add('sample');
       }
-    } while ((this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes);
+    }
 
     const summary = this.getSearchAssetsResponseSummary({
       ...nextResult,
-      sampleCount: nextResult.sample?.length,
-      metadataCount: nextResult.assets?.length,
+      sampleCount: nextResult.sample?.items.length,
     });
 
     return {

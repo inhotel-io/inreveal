@@ -1406,9 +1406,9 @@ describe('Pi agent runner flow harness', () => {
       return;
     }
 
-    expect(first.assetIds).toEqual(pageOneIds);
+    expect(first.selectionHandle.assetCount).toBe(pageOneIds.length);
     expect(first.resultSize).toMatchObject({ returnedItems: 2, hasMore: true, nextPage: '2' });
-    expect(second.assetIds).toEqual(pageTwoIds);
+    expect(second.selectionHandle.assetCount).toBe(pageTwoIds.length);
     expect(second.resultSize).toMatchObject({ returnedItems: 1, hasMore: false, nextPage: null });
   });
 
