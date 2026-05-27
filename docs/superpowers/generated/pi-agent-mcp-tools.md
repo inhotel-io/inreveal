@@ -55,7 +55,7 @@ Call a read tool with params.arguments.
   "params": {
     "name": "readAssetMetadata",
     "arguments": {
-      "assetIds": ["<asset-id-from-searchAssets>"]
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"]
     }
   }
 }
@@ -99,12 +99,12 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 ## Progressive Detail Workflow
 
-Use the smallest useful payload first. Resolve names before search. Search compact IDs first. Request fields only for selected IDs. Propose a plan only after the selected asset set is clear.
+Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Request fields only for exact non-search asset IDs. Propose a plan only after the selected asset set is clear.
 
-- Broad search: use `searchAssets` with `detail: "ids"` and a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
-- Visual curation: search compact IDs first, then call preview reads only for shortlisted `assetIds` when visual inspection is needed.
-- Technical metadata: search IDs first, then call `readAssetMetadata` with exact `fields` such as `camera`, `dates`, and `filename` for selected IDs.
-- Large album: page compact search results and propose operations from returned asset IDs. Do not request full metadata for every candidate.
+- Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
+- Visual curation: search for a handle/sourceRef first and use summary samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
+- Technical metadata: search for a handle/sourceRef first, then call `readAssetMetadata` with exact `fields` such as `camera`, `dates`, and `filename` for exact non-search asset IDs.
+- Large album: page bounded handle results and propose operations from `selectionHandle.id` or `sourceRef`. Do not request full metadata for every candidate.
 - All photos: avoid loading the whole library. Ask for a narrower date, album, tag, person, space, rating, or media-type filter when the task does not require every asset.
 
 ### Resolver-to-search fidelity
@@ -116,7 +116,7 @@ Use the smallest useful payload first. Resolve names before search. Search compa
 
 ### Large selections
 
-- Search compactly first and use `createSelectionHandle: true` only for the current bounded page.
+- Search compactly first and use the returned `selectionHandle.id` for the current bounded page.
 - Use `selectionHandle.id` as `assetSelectionHandleId` in the plan instead of pasting hundreds of `assetIds`.
 - If `hasMore` is true, page or narrow before claiming the handle covers every matching photo.
 - Plan review still shows counts and samples; Gallery applies only after user approval.
@@ -308,7 +308,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.
+Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.
 
 Argument modes:
 
@@ -355,13 +355,13 @@ Search photos from a known place and date window.
 
 #### compact-date-location-search
 
-Search compact asset ids for a known date and place.
+Search handle-first results for a known date and place.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="compact-date-location-search" -->
 
 ```json
 {
-  "detail": "ids",
+  "detail": "handle",
   "filters": {
     "takenAfter": "2026-05-01T00:00:00.000Z",
     "takenBefore": "2026-05-18T23:59:59.999Z",
@@ -393,7 +393,7 @@ Request a small representative sample with only needed fields.
 
 #### visual-curation-candidate-search
 
-Find visual curation candidates by compact ids before reading previews.
+Find visual curation candidates with a bounded handle before narrowing to preview reads.
 
 <!-- mcp-docs:tool-arguments tool="searchAssets" example="visual-curation-candidate-search" -->
 
@@ -401,7 +401,7 @@ Find visual curation candidates by compact ids before reading previews.
 {
   "mode": "smart",
   "query": "best beach sunset photos",
-  "detail": "ids",
+  "detail": "handle",
   "limit": 25
 }
 ```
@@ -414,7 +414,7 @@ Page a broad album-building search without requesting full metadata.
 
 ```json
 {
-  "detail": "ids",
+  "detail": "handle",
   "filters": {
     "isNotInAlbum": true
   },
@@ -432,8 +432,7 @@ Create a compact server-side selection handle for a bounded large result.
 
 ```json
 {
-  "detail": "ids",
-  "createSelectionHandle": true,
+  "detail": "handle",
   "sampleSize": 5,
   "filters": {
     "isNotInAlbum": true
@@ -597,8 +596,7 @@ Search January 2026 South Africa photos after resolving "Pierre OR Aurelia"; kee
 
 ```json
 {
-  "detail": "ids",
-  "createSelectionHandle": true,
+  "detail": "handle",
   "filters": {
     "country": "South Africa",
     "takenAfter": "2026-01-01T00:00:00.000Z",
@@ -620,7 +618,7 @@ Search after resolving a named person inside a shared space; spaceId must be sen
 
 ```json
 {
-  "detail": "ids",
+  "detail": "handle",
   "filters": {
     "spaceId": "<space.id from listSpaces/readSpace>",
     "spacePersonIds": ["<spacePersonIds value from resolveAssetSearchFilters>"]
@@ -742,7 +740,7 @@ MCP tool name: `readAssetMetadata`
 
 Read selected metadata for selected assets.
 
-Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
+Search for a handle/sourceRef first, then call this tool only for exact non-search asset IDs with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
 
 Argument modes:
 
@@ -764,7 +762,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"]
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"]
 }
 ```
 
@@ -776,7 +774,7 @@ Read basic type and date metadata for selected assets.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"],
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
   "detail": "basic"
 }
 ```
@@ -789,7 +787,7 @@ Read selected metadata field groups for selected assets.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"],
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
   "fields": ["filename", "rating", "tags"]
 }
 ```
@@ -802,7 +800,7 @@ Read exact camera, date, and filename fields for selected assets.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"],
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
   "fields": ["camera", "dates", "filename"]
 }
 ```
@@ -844,7 +842,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"]
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"]
 }
 ```
 
@@ -885,7 +883,7 @@ Read selected assets by id.
 
 ```json
 {
-  "assetIds": ["<asset-id-from-searchAssets>"]
+  "assetIds": ["<exact-asset-id-from-readAssetMetadata>"]
 }
 ```
 
@@ -1490,7 +1488,7 @@ MCP tool name: `proposeAlbumOperations`
 
 Create a reviewable Gallery operation plan for albums, spaces, and asset batches.
 
-Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.
+Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.
 
 Argument modes:
 
@@ -1547,7 +1545,7 @@ Create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"]
     }
   ]
 }
@@ -1604,7 +1602,7 @@ Add selected assets to an existing album.
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"]
     }
   ]
 }
@@ -1625,7 +1623,7 @@ Remove selected assets from an existing album.
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -1671,7 +1669,7 @@ Set an existing album cover from a selected asset.
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -1729,7 +1727,7 @@ Create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -1751,7 +1749,7 @@ Add selected assets to an existing shared space.
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
       "targetId": "<space.id from listSpaces/readSpace>",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -1773,7 +1771,7 @@ Remove selected assets from an existing shared space.
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
       "targetId": "<space.id from listSpaces/readSpace>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -1911,7 +1909,7 @@ Rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "angle": 90
       }
@@ -1934,7 +1932,7 @@ Mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "favorite": true
       }
@@ -1957,7 +1955,7 @@ Archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "archived": true
       }
@@ -1980,7 +1978,7 @@ Update selected asset descriptions.
       "type": "asset.updateMetadata",
       "summary": "Update selected photo descriptions.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "description": "Berlin weekend"
       }
@@ -2003,7 +2001,7 @@ Set selected asset ratings.
       "type": "asset.updateMetadata",
       "summary": "Set selected photo ratings.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "rating": 5
       }
@@ -2026,7 +2024,7 @@ Set selected asset coordinates with explicit latitude and longitude.
       "type": "asset.updateMetadata",
       "summary": "Set selected photo coordinates.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "latitude": 52.52,
         "longitude": 13.405
@@ -2050,7 +2048,7 @@ Add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "tagName": "Travel"
       }
@@ -2073,7 +2071,7 @@ Remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "tagId": "<tagIds value from resolveAssetSearchFilters>"
       }
@@ -2152,7 +2150,7 @@ Revise a plan to create a new album and add selected assets to it.
       "summary": "Add selected photos to today test.",
       "targetKind": "new_album",
       "temporaryTargetId": "tmp-today-test",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"]
     }
   ]
 }
@@ -2213,7 +2211,7 @@ Revise a plan to add selected assets to an existing album.
       "summary": "Add selected photos.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"]
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"]
     }
   ]
 }
@@ -2236,7 +2234,7 @@ Revise a plan to remove selected assets from an existing album.
       "summary": "Remove selected photos.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -2286,7 +2284,7 @@ Revise a plan to set an existing album cover from a selected asset.
       "summary": "Set cover photo.",
       "targetKind": "existing_album",
       "targetId": "<album.id from listAlbums/readAlbum>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -2348,7 +2346,7 @@ Revise a plan to create a new shared space and add selected assets.
       "summary": "Add selected photos to Family space.",
       "targetKind": "new_space",
       "temporaryTargetId": "tmp-family-space",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -2372,7 +2370,7 @@ Revise a plan to add selected assets to an existing shared space.
       "summary": "Add selected photos to Family space.",
       "targetKind": "existing_space",
       "targetId": "<space.id from listSpaces/readSpace>",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -2396,7 +2394,7 @@ Revise a plan to remove selected assets from an existing shared space.
       "summary": "Remove selected photos from Family space.",
       "targetKind": "existing_space",
       "targetId": "<space.id from listSpaces/readSpace>",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {}
     }
   ]
@@ -2546,7 +2544,7 @@ Revise a plan to rotate selected image assets.
       "type": "asset.rotate",
       "summary": "Rotate selected images clockwise.",
       "targetKind": "image_edit_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "angle": 90
       }
@@ -2571,7 +2569,7 @@ Revise a plan to mark selected assets as favorites.
       "type": "asset.setFavorite",
       "summary": "Favorite selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>", "<another-asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>", "<another-exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "favorite": true
       }
@@ -2596,7 +2594,7 @@ Revise a plan to archive selected assets.
       "type": "asset.setArchive",
       "summary": "Archive selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "archived": true
       }
@@ -2621,7 +2619,7 @@ Revise a plan to update selected asset descriptions.
       "type": "asset.updateMetadata",
       "summary": "Update selected photo descriptions.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "description": "Berlin weekend"
       }
@@ -2646,7 +2644,7 @@ Revise a plan to set selected asset ratings.
       "type": "asset.updateMetadata",
       "summary": "Set selected photo ratings.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "rating": 5
       }
@@ -2671,7 +2669,7 @@ Revise a plan to set selected asset coordinates with explicit latitude and longi
       "type": "asset.updateMetadata",
       "summary": "Set selected photo coordinates.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "latitude": 52.52,
         "longitude": 13.405
@@ -2697,7 +2695,7 @@ Revise a plan to add a tag to selected assets.
       "type": "asset.addTag",
       "summary": "Add Travel tag.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "tagName": "Travel"
       }
@@ -2722,7 +2720,7 @@ Revise a plan to remove a tag from selected assets.
       "type": "asset.removeTag",
       "summary": "Remove tag from selected photos.",
       "targetKind": "asset_batch",
-      "assetIds": ["<asset-id-from-searchAssets>"],
+      "assetIds": ["<exact-asset-id-from-readAssetMetadata>"],
       "payload": {
         "tagId": "<tagIds value from resolveAssetSearchFilters>"
       }
@@ -2793,8 +2791,8 @@ Summarize plan risks and selected changes.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
 - `search-large-limit`: Use a bounded limit such as 25 or 50. Do not use limit 1000; page with nextPage or ask a narrowing question for broad requests.
-- `search-broad-full-metadata`: Search compact ids first, then call readAssetMetadata with fields for selected assetIds. Do not request full metadata for broad searches.
-- `search-preview-before-shortlist`: For visual curation, search compact ids first, shortlist candidates, then read previews only for selected assetIds.
+- `search-broad-full-metadata`: Search for a handle/sourceRef first, then inspect summary samples or exact fields only for a small inspected set. Do not request full metadata for broad searches.
+- `search-preview-before-shortlist`: For visual curation, start with a bounded handle/sourceRef and summary samples; use preview reads only for exact small non-search assetIds after narrowing.
 - `search-truncated-needs-more-detail`: When resultSize.truncated is true, request fewer assets, page with nextPage, or ask one narrowing question before requesting more fields.
 - `search-page-continuation`: Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.
 - `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
@@ -2916,7 +2914,7 @@ Summarize plan risks and selected changes.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
-- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
+- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets and use the returned selectionHandle.id as assetSelectionHandleId in the plan.
 - `planning-invalid-rotate-angle`: Rotate payload angle must be exactly 90, 180, or 270.
 - `planning-invalid-tag-payload`: Asset add-tag payload must provide exactly one of tagId or tagName.
 
@@ -2944,7 +2942,7 @@ Summarize plan risks and selected changes.
 - `planning-wrong-asset-batch-target-kind`: Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.
 - `planning-wrong-image-edit-target-kind`: Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.
 - `planning-duplicate-asset-ids`: Provide each asset id only once within a planning operation.
-- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.
+- `planning-pasted-large-asset-ids`: For hundreds or thousands of assets, call searchAssets and use the returned selectionHandle.id as assetSelectionHandleId in the plan.
 - `planning-invalid-rotate-angle`: Rotate payload angle must be exactly 90, 180, or 270.
 - `planning-invalid-tag-payload`: Asset add-tag payload must provide exactly one of tagId or tagName.
 
