@@ -51,7 +51,13 @@ const propertyDescriptions = {
   assetIds:
     'legacy exact non-search asset IDs for a new asset read request or small inspected planning operation. Do not copy IDs from searchAssets results; use selection handles or source refs for search selections.',
   selectionHandleId:
-    'The selectionHandle.id returned by searchAssets for the current bounded search page. Use this for readSelectionMetadata instead of copying search asset IDs.',
+    'The selectionHandle.id returned by searchAssets or curateSelection. Use this for readSelectionMetadata, curateSelection, and handle-backed planning instead of copying search asset IDs.',
+  targetCount: 'Number of assets to select into a derived selection handle. Use 1 to 1000.',
+  strategy:
+    'Curation strategy: metadata-highlights, date-spread, favorites-first, or cover-candidate. Metadata-only and not objective image-quality scoring.',
+  criteria: 'Optional user-facing criteria text to record in criteriaSummary for selection curation.',
+  constraints:
+    'Optional metadata-only curation constraints for media types, favorites, minimum rating, video exclusion, and date/location/tag diversification.',
   albumId: 'Existing album id returned by listAlbums/readAlbum.',
   albumName: 'Album name to create or exact visible album name to resolve.',
   spaceId: 'Existing shared space id returned by listSpaces/readSpace.',
@@ -162,6 +168,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Read selection metadata',
       description: `Read aggregate counts and bounded itemRef metadata samples for a search selection handle.${approvedRequestInstruction}`,
       schema: AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.CurateSelection,
+      title: 'Curate selection',
+      description: `Create a derived selection handle from metadata-only ranking and diversification.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.CurateSelection],
       annotations: readToolAnnotations,
     }),
     defineTool({
