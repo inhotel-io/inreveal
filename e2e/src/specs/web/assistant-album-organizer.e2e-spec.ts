@@ -587,7 +587,7 @@ test.describe('Assistant album organizer', () => {
     expect(proposalToolCall).toMatchObject({
       status: AgentToolCallStatus.Denied,
       toolName: AgentToolName.ProposeAlbumOperations,
-      error: 'One or more assets are not accessible',
+      error: 'Selection handle is expired or not available for this session',
     });
 
     const albums = await getAllAlbums({}, authOptions(admin.accessToken));
