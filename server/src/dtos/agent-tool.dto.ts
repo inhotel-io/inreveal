@@ -36,7 +36,12 @@ const AgentSearchAssetsModeSchema = z
   .enum(['metadata', 'smart', 'description', 'ocr', 'filename'])
   .meta({ id: 'AgentSearchAssetsMode' });
 const AgentSearchAssetsOrderSchema = z.enum(['asc', 'desc', 'relevance']).meta({ id: 'AgentSearchAssetsOrder' });
-const AgentSearchAssetsDetailSchema = z.enum(['ids', 'summary', 'metadata']).meta({ id: 'AgentSearchAssetsDetail' });
+const AgentSearchAssetsRequestDetailSchema = z
+  .enum(['ids', 'handle', 'summary', 'metadata'])
+  .meta({ id: 'AgentSearchAssetsRequestDetail' });
+const AgentSearchAssetsResponseDetailSchema = z
+  .enum(['handle', 'summary', 'metadata'])
+  .meta({ id: 'AgentSearchAssetsDetail' });
 const AgentAssetMetadataFieldValues = [
   'type',
   'dates',
@@ -231,7 +236,7 @@ type AgentSearchAssetsToolRequestOutput = {
   limit?: number;
   page?: number;
   order?: z.output<typeof AgentSearchAssetsOrderSchema>;
-  detail?: z.output<typeof AgentSearchAssetsDetailSchema>;
+  detail?: z.output<typeof AgentSearchAssetsRequestDetailSchema>;
   fields?: z.output<typeof AgentSearchAssetsFieldSchema>[];
   sampleSize?: number;
   createSelectionHandle?: boolean;
@@ -246,7 +251,7 @@ const AgentSearchAssetsToolRequestSchema = z
     limit: z.number().int().min(1).max(MAX_TOOL_LIMIT).optional(),
     page: z.number().int().min(1).optional(),
     order: AgentSearchAssetsOrderSchema.optional(),
-    detail: AgentSearchAssetsDetailSchema.optional(),
+    detail: AgentSearchAssetsRequestDetailSchema.optional(),
     fields: z.array(AgentSearchAssetsFieldSchema).optional(),
     sampleSize: z.number().int().min(0).max(MAX_SEARCH_SAMPLE_SIZE).optional(),
     createSelectionHandle: z.boolean().optional(),
@@ -550,10 +555,6 @@ const AgentAssetMetadataResultSchema = z
   .object(AgentAssetMetadataResultFields)
   .meta({ id: 'AgentAssetMetadataResult' });
 
-const AgentSearchAssetResultSchema = z
-  .object({ ...AgentAssetMetadataResultFields, ownerId: uuid.optional() })
-  .meta({ id: 'AgentSearchAssetResult' });
-
 const AgentAssetMediaReferenceSchema = z
   .object({
     assetId: uuid,
@@ -680,30 +681,49 @@ const AgentSearchAssetsSelectionHandleSchema = z
     id: uuid,
     sourceRef: AgentSearchSourceRefSchema,
     assetCount: z.number().int().min(0),
-    sampleAssetIds: z.array(uuid).max(MAX_SEARCH_SAMPLE_SIZE),
     sourceToolCallId: uuid.nullable(),
     expiresAt: isoDatetimeToDate,
   })
   .meta({ id: 'AgentSearchAssetsSelectionHandle' });
+
+const AgentSearchAssetsSampleItemSchema = z
+  .object({
+    itemRef: z.string().regex(/^item:\d{3,}$/),
+    type: AssetTypeSchema.optional(),
+    originalFileName: z.string().optional(),
+    localDateTime: isoDatetimeToDate.optional(),
+    fileCreatedAt: isoDatetimeToDate.optional(),
+    fileModifiedAt: isoDatetimeToDate.optional(),
+    isFavorite: z.boolean().optional(),
+    visibility: AssetVisibilitySchema.optional(),
+    exifInfo: AgentAssetMetadataExifSchema.partial().nullable().optional(),
+    tags: z.array(AgentAssetMetadataTagSchema.omit({ id: true })).optional(),
+  })
+  .meta({ id: 'AgentSearchAssetsSampleItem' });
+
+const AgentSearchAssetsSampleSchema = z
+  .object({
+    sampleSize: z.number().int().min(0).max(MAX_SEARCH_SAMPLE_SIZE),
+    items: z.array(AgentSearchAssetsSampleItemSchema).max(MAX_SEARCH_SAMPLE_SIZE),
+  })
+  .meta({ id: 'AgentSearchAssetsSample' });
 
 const AgentSearchAssetsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentSearchAssetsToolApprovalRequiredResponse'),
     deniedResponse('AgentSearchAssetsToolDeniedResponse'),
     z
-      .object({
+      .strictObject({
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
         summary,
-        detail: AgentSearchAssetsDetailSchema,
-        assetIds: z.array(uuid),
-        sample: z.array(AgentSearchAssetResultSchema).optional(),
-        assets: z.array(AgentSearchAssetResultSchema).optional(),
+        detail: AgentSearchAssetsResponseDetailSchema,
+        selectionHandle: AgentSearchAssetsSelectionHandleSchema,
+        sample: AgentSearchAssetsSampleSchema.optional(),
         returnedCount: z.number().int().min(0),
         hasMore: z.boolean(),
         nextPage: z.string().nullable(),
         resultSize: AgentToolResultSizeSchema,
-        selectionHandle: AgentSearchAssetsSelectionHandleSchema.optional(),
         totalCount: z.number().int().min(0).optional(),
         approximateTotal: z.number().int().min(0).optional(),
       })
