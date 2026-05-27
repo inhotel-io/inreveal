@@ -114,6 +114,18 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Found matching photos',
     coalesceKey: 'search-assets',
   },
+  [AgentToolName.ReadSelectionMetadata]: {
+    kind: 'metadata',
+    title: 'Reading selection details',
+    completedSummary: 'Read selection details',
+    coalesceKey: 'read-selection-metadata',
+  },
+  [AgentToolName.CurateSelection]: {
+    kind: 'search',
+    title: 'Narrowing photo selection',
+    completedSummary: 'Narrowed photo selection',
+    coalesceKey: 'curate-selection',
+  },
   [AgentToolName.ReadAssetMetadata]: {
     kind: 'metadata',
     title: 'Reading photo details',
@@ -180,6 +192,12 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Prepared album plan',
     coalesceKey: 'propose-album-from-search',
   },
+  [AgentToolName.ProposeAlbumFromSelection]: {
+    kind: 'plan',
+    title: 'Preparing album plan',
+    completedSummary: 'Prepared album plan',
+    coalesceKey: 'propose-album-from-selection',
+  },
   [AgentToolName.ProposeAddAssetsToAlbumFromSearch]: {
     kind: 'plan',
     title: 'Preparing album plan',
@@ -204,6 +222,12 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Prepared asset update plan',
     coalesceKey: 'propose-asset-batch-from-search',
   },
+  [AgentToolName.ProposeAssetBatchFromSelection]: {
+    kind: 'plan',
+    title: 'Preparing asset update plan',
+    completedSummary: 'Prepared asset update plan',
+    coalesceKey: 'propose-asset-batch-from-selection',
+  },
 };
 
 const metadataAssetBatchActivityDefinition: ToolActivityDefinition = {
@@ -216,11 +240,15 @@ const metadataAssetBatchActivityDefinition: ToolActivityDefinition = {
 const responseSummaryTools = new Set<AgentToolName>([
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.ReadSelectionMetadata,
+  AgentToolName.CurateSelection,
   AgentToolName.ProposeAlbumFromSearch,
+  AgentToolName.ProposeAlbumFromSelection,
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeSpaceFromSearch,
   AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAssetBatchFromSearch,
+  AgentToolName.ProposeAssetBatchFromSelection,
 ]);
 
 const statusPriority: Record<AgentActivityStatus, number> = {
