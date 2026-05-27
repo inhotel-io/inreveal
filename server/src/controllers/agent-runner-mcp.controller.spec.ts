@@ -331,7 +331,7 @@ describe(AgentRunnerMcpController.name, () => {
           limit: 10,
           page: 1,
           order: 'desc',
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         },
       );
