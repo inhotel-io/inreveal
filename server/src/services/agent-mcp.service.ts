@@ -23,6 +23,7 @@ import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contrac
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import type { AgentMcpPlanningToolName } from 'src/types/agent-mcp-contract.types';
 import type {
   AgentMcpErrorResponse,
   AgentMcpHandleResponse,
@@ -76,10 +77,12 @@ export class AgentMcpService {
   private readonly planningToolNames = new Set<AgentToolName>([
     AgentToolName.ProposeAlbumOperations,
     AgentToolName.ProposeAlbumFromSearch,
+    AgentToolName.ProposeAlbumFromSelection,
     AgentToolName.ProposeAddAssetsToAlbumFromSearch,
     AgentToolName.ProposeSpaceFromSearch,
     AgentToolName.ProposeAddAssetsToSpaceFromSearch,
     AgentToolName.ProposeAssetBatchFromSearch,
+    AgentToolName.ProposeAssetBatchFromSelection,
     AgentToolName.ReviseProposedOperations,
     AgentToolName.SummarizePlan,
   ]);
@@ -183,6 +186,19 @@ export class AgentMcpService {
     return this.planningToolNames.has(name);
   }
 
+  private isPlanningCorrectionToolName(name: AgentToolName): name is AgentMcpPlanningToolName {
+    return (
+      name === AgentToolName.ProposeAlbumOperations ||
+      name === AgentToolName.ProposeAlbumFromSearch ||
+      name === AgentToolName.ProposeAddAssetsToAlbumFromSearch ||
+      name === AgentToolName.ProposeSpaceFromSearch ||
+      name === AgentToolName.ProposeAddAssetsToSpaceFromSearch ||
+      name === AgentToolName.ProposeAssetBatchFromSearch ||
+      name === AgentToolName.ReviseProposedOperations ||
+      name === AgentToolName.SummarizePlan
+    );
+  }
+
   private async invokeTool<TDto>(
     id: AgentMcpRequestId,
     toolName: AgentToolName,
@@ -261,6 +277,14 @@ export class AgentMcpService {
           (dto) => this.operationPlanService.proposeAlbumFromSearch(auth, sessionId, dto),
         );
       }
+      case AgentToolName.ProposeAlbumFromSelection: {
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAlbumFromSelection>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAlbumFromSelection(auth, sessionId, dto),
+        );
+      }
       case AgentToolName.ProposeAddAssetsToAlbumFromSearch: {
         return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAddAssetsToAlbumFromSearch>>(
           id,
@@ -291,6 +315,14 @@ export class AgentMcpService {
           toolName,
           args,
           (dto) => this.operationPlanService.proposeAssetBatchFromSearch(auth, sessionId, dto),
+        );
+      }
+      case AgentToolName.ProposeAssetBatchFromSelection: {
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAssetBatchFromSelection>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAssetBatchFromSelection(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {
@@ -679,7 +711,7 @@ export class AgentMcpService {
       return this.toolContractService.getReadToolValidationCorrection(toolName, request);
     }
 
-    if (this.isPlanningToolName(toolName)) {
+    if (this.isPlanningCorrectionToolName(toolName)) {
       return this.toolContractService.getPlanningToolValidationCorrection(toolName, request);
     }
 
