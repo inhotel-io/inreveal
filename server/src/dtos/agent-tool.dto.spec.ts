@@ -316,6 +316,12 @@ describe('Agent tool DTOs', () => {
       });
     });
 
+    it('accepts toolCallId for approved-call resume without curation defaults', () => {
+      const toolCallId = '00000000-0000-4000-8000-000000000111';
+
+      expect(AgentReadToolRequestSchemas[AgentToolName.CurateSelection].parse({ toolCallId })).toEqual({ toolCallId });
+    });
+
     it('validates curation request modes and bounds', () => {
       expect(
         AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
