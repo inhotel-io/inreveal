@@ -308,12 +308,17 @@ const sessionSupportsImageInput = (body) =>
   body.credential?.capabilities?.imageInput === true;
 
 const usaTripDateFilters = (prompt) => {
-  if (!/\b(?:USA|United States|U\.S\.)\b/i.test(prompt)) return null;
+  if (!/(?:\b(?:USA|United States)\b|\bU\.S\.(?=\s|$|[.,!?]))/i.test(prompt)) return null;
   if (/\bJanuary\s+2026\b/i.test(prompt)) {
     return { country: 'USA', takenAfter: '2026-01-01T00:00:00.000Z', takenBefore: '2026-02-01T00:00:00.000Z' };
   }
   return { country: 'USA' };
 };
+
+const isJanuary2026UsaTripFilter = (filters) =>
+  filters?.country === 'USA' &&
+  filters?.takenAfter === '2026-01-01T00:00:00.000Z' &&
+  filters?.takenBefore === '2026-02-01T00:00:00.000Z';
 
 const parseHighlightPrompt = (prompt) => {
   if (!/\b(best|highlights?)\b/i.test(prompt)) {
@@ -957,7 +962,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
               return;
             }
 
-            const criteria = highlightPrompt.filters?.country === 'USA'
+            const criteria = isJanuary2026UsaTripFilter(highlightPrompt.filters)
               ? 'top highlights from January 2026 USA trip'
               : 'top metadata-only highlights from the bounded source';
             const curated = await curateMetadataHighlights(
