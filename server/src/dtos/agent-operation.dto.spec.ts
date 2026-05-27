@@ -1896,6 +1896,17 @@ describe('Agent operation DTOs', () => {
       expect(result.success).toBe(true);
     });
 
+    it('accepts proposeAlbumFromSelection with a selection handle', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSelection].safeParse({
+        summary: 'Create album.',
+        albumName: 'Handle album',
+        description: 'Selected photos.',
+        selectionHandleId: factory.uuid(),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
     it('keeps album workflow text validation aligned with album.create planning constraints', () => {
       const emptyName = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
         albumName: '',
@@ -2202,6 +2213,35 @@ describe('Agent operation DTOs', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+
+    it('accepts proposeAssetBatchFromSelection with a selection handle', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection].safeParse({
+        summary: 'Favorite selected photos.',
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        selectionHandleId: factory.uuid(),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('keeps selection workflow DTOs handle-only', () => {
+      const albumResult = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSelection].safeParse({
+        summary: 'Create album.',
+        albumName: 'Handle album',
+        description: 'Selected photos.',
+        selectionHandleId: factory.uuid(),
+        assetIds: [factory.uuid()],
+      });
+      const batchResult = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection].safeParse({
+        summary: 'Favorite selected photos.',
+        action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+        selectionHandleId: factory.uuid(),
+        assetSource: { kind: 'explicitAssets', assetIds: [factory.uuid()] },
+      });
+
+      expect(albumResult.success).toBe(false);
+      expect(batchResult.success).toBe(false);
     });
 
     it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {

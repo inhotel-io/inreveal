@@ -8,8 +8,10 @@ import {
   AgentOperationPlanToolResponseDto,
   AgentProposeAddAssetsToAlbumFromSearchToolRequestDto,
   AgentProposeAddAssetsToSpaceFromSearchToolRequestDto,
+  AgentProposeAlbumFromSelectionToolRequestDto,
   AgentProposeAlbumFromSearchToolRequestDto,
   AgentProposeAlbumOperationsDto,
+  AgentProposeAssetBatchFromSelectionToolRequestDto,
   AgentProposeAssetBatchFromSearchToolRequestDto,
   AgentProposeSpaceFromSearchToolRequestDto,
   AgentReviseAlbumOperationsDto,
@@ -309,6 +311,40 @@ export class AgentOperationPlanService {
     });
   }
 
+  async proposeAlbumFromSelection(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAlbumFromSelectionToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const temporaryTargetId = 'tmp-album-from-selection';
+    const summary = dto.summary ?? `Create album "${dto.albumName}" from selected photos.`;
+
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeAlbumFromSelection, {
+      summary,
+      operations: [
+        {
+          type: AgentOperationType.AlbumCreate,
+          summary: `Create album "${dto.albumName}"`,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId,
+          payload: { albumName: dto.albumName, description: dto.description ?? '' },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+        {
+          type: AgentOperationType.AlbumAddAssets,
+          summary: `Add selected photos to "${dto.albumName}"`,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId,
+          assetSource: { kind: 'selectionHandle', selectionHandleId: dto.selectionHandleId },
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Medium,
+          enabled: true,
+        },
+      ],
+    });
+  }
+
   async proposeAddAssetsToAlbumFromSearch(
     auth: AuthDto,
     sessionId: string,
@@ -440,7 +476,32 @@ export class AgentOperationPlanService {
     });
   }
 
-  private getAssetBatchWorkflowActionSummary(dto: AgentProposeAssetBatchFromSearchToolRequestDto['action']): string {
+  async proposeAssetBatchFromSelection(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentProposeAssetBatchFromSelectionToolRequestDto,
+  ): Promise<AgentOperationPlanToolResponseDto> {
+    const operation = {
+      type: dto.action.type,
+      summary: this.getAssetBatchWorkflowActionSummary(dto.action),
+      targetKind: this.getAssetBatchWorkflowTargetKind(dto.action),
+      assetSource: { kind: 'selectionHandle', selectionHandleId: dto.selectionHandleId },
+      payload: this.getAssetBatchWorkflowPayload(dto.action),
+      riskLevel: this.getAssetBatchWorkflowRiskLevel(dto.action),
+      enabled: true,
+    };
+
+    return this.proposeOperations(auth, sessionId, AgentToolName.ProposeAssetBatchFromSelection, {
+      summary: dto.summary ?? operation.summary,
+      operations: [operation as AgentProposeAlbumOperationsDto['operations'][number]],
+    });
+  }
+
+  private getAssetBatchWorkflowActionSummary(
+    dto:
+      | AgentProposeAssetBatchFromSearchToolRequestDto['action']
+      | AgentProposeAssetBatchFromSelectionToolRequestDto['action'],
+  ): string {
     switch (dto.type) {
       case AgentOperationType.AssetSetFavorite: {
         return dto.favorite ? 'Mark matching photos as favorites' : 'Remove matching photos from favorites';
