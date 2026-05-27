@@ -79,7 +79,7 @@ describe('agent MCP prompt placeholders', () => {
 });
 
 describe(AgentMcpPromptService.name, () => {
-  const maxPromptLength = 4300;
+  const maxPromptLength = 4700;
   let contractService: AgentMcpToolContractService;
   let sut: AgentMcpPromptService;
 
@@ -101,6 +101,11 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_proposeSpaceFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
     expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSearch');
+    expect(prompt).toContain('mcp_gallery_proposeAlbumFromSelection');
+    expect(prompt).toContain('mcp_gallery_proposeAssetBatchFromSelection');
+    expect(prompt).toContain('curateSelection');
+    expect(prompt).toContain('proposeAlbumFromSelection');
+    expect(prompt).not.toContain('choose selected assetIds');
     expect(prompt).not.toContain('Tmcp_gallery');
     expect(prompt).not.toContain('RKnown');
     expect(prompt).not.toContain('Wcall');
@@ -147,6 +152,11 @@ describe(AgentMcpPromptService.name, () => {
     expect(defaultWrite).toContain('mcp_gallery_proposeSpaceFromSearch');
     expect(defaultWrite).toContain('mcp_gallery_proposeAddAssetsToSpaceFromSearch');
     expect(defaultWrite).toContain('mcp_gallery_proposeAssetBatchFromSearch');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAlbumFromSelection');
+    expect(defaultWrite).toContain('mcp_gallery_proposeAssetBatchFromSelection');
+    expect(prompt).toContain(
+      'After curateSelection: use proposeAlbumFromSelection or proposeAssetBatchFromSelection with selectionHandle.id; do not copy asset IDs.',
+    );
     expect(prompt).toContain('assetSource.search');
     expect(prompt).toContain('assetSource.selectionHandle');
     expect(prompt).toContain('previousSearch.sourceRef');
