@@ -49,7 +49,9 @@ const approvedRequestInstruction =
 
 const propertyDescriptions = {
   assetIds:
-    'legacy exact non-search asset IDs for a new asset read request or small inspected planning operation. Do not copy IDs from searchAssets results; use selection handles or source refs for search selections.',
+    'legacy exact non-search asset IDs for read tools. For provider-facing planning, raw assetIds are internal materialized plan fields and rejected as inputs. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side.',
+  assetSelectionHandleId:
+    'Provider-facing planning handle input. Pass selectionHandle.id returned by searchAssets or curateSelection; Gallery materializes IDs server-side instead of the provider sending raw assetIds.',
   selectionHandleId:
     'The selectionHandle.id returned by searchAssets or curateSelection. Use this for readSelectionMetadata, curateSelection, and handle-backed planning instead of copying search asset IDs.',
   targetCount: 'Number of assets to select into a derived selection handle. Use 1 to 1000.',
@@ -89,7 +91,7 @@ const propertyDescriptions = {
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
   assetSource:
-    'Preferred source object for search-backed planning. Use kind search for declarative filters or previousSearch for a sourceRef returned by searchAssets.',
+    'Preferred provider-facing planning source object. Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch; assetSource.explicitAssets is internal-only and rejected for provider-facing planning.',
   action: 'One constrained asset batch action to propose from a search source.',
   planId: 'The id of an existing proposed plan returned by Gallery.',
   feedback: 'Optional user feedback explaining how to revise the existing plan.',
@@ -109,6 +111,7 @@ const enrichToolFromContract = (
   contract: AgentMcpToolContract,
 ): AgentMcpToolDefinition => {
   const inputSchema = structuredClone(tool.inputSchema);
+  inputSchema.description = `${contract.description} ${contract.usage}`;
   const properties = inputSchema.properties;
 
   if (properties && typeof properties === 'object' && !Array.isArray(properties)) {

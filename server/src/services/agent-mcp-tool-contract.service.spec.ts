@@ -183,7 +183,7 @@ describe(AgentMcpToolContractService.name, () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: 'asset-batch-workflow-raw-asset-ids',
-          hint: expect.stringMatching(/raw asset ids/i),
+          hint: expect.stringMatching(/raw assetIds/i),
           exampleName: 'favorite-search-results',
         }),
         expect.objectContaining({
@@ -263,7 +263,11 @@ describe(AgentMcpToolContractService.name, () => {
 
     for (const contract of workflowContracts) {
       expect(`${contract.description} ${contract.usage}`).toMatch(/preferred|before low-level/i);
-      expect(JSON.stringify(contract.commonMistakes)).toMatch(/assetSource\.search|assetSource\.previousSearch/);
+      const mistakes = JSON.stringify(contract.commonMistakes);
+      expect(mistakes).toContain('assetSource.selectionHandle');
+      expect(mistakes).toContain('assetSource.search');
+      expect(mistakes).toContain('assetSource.previousSearch');
+      expect(mistakes).not.toMatch(/paste raw assetIds|copy raw assetIds/i);
     }
   });
 
@@ -497,6 +501,9 @@ describe(AgentMcpToolContractService.name, () => {
     );
 
     expect(plan?.usage).toContain('assetSelectionHandleId');
+    expect(plan?.usage).toContain('provider planning rejects raw assetIds');
+    expect(plan?.usage).toContain('assetSource.selectionHandle');
+    expect(plan?.usage).toContain('Gallery materializes IDs server-side');
     expect(JSON.stringify(planExample?.arguments)).toContain('assetSelectionHandleId');
     expect(
       AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse(planExample?.arguments)
@@ -964,9 +971,10 @@ describe(AgentMcpToolContractService.name, () => {
       expect(parsed.operations[0]).toMatchObject({
         type: AgentOperationType.AssetUpdateMetadata,
         targetKind: AgentOperationTargetKind.AssetBatch,
-        assetIds: ['00000000-0000-4000-8000-000000000001'],
+        assetSource: { kind: 'selectionHandle', selectionHandleId: '00000000-0000-4000-8000-000000000333' },
         payload: expectation.payload,
       });
+      expect(parsed.operations[0]).not.toHaveProperty('assetIds');
     }
   });
 
@@ -1670,8 +1678,8 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction).toEqual({
         expected:
-          'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.',
-        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.',
+          'Create a reviewable Gallery operation plan. provider planning rejects raw assetIds; use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side. assetSource.explicitAssets is internal-only and rejected for provider-facing planning.',
+        hint: 'Create a reviewable Gallery operation plan. provider planning rejects raw assetIds; use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side. assetSource.explicitAssets is internal-only and rejected for provider-facing planning.',
         exampleArguments: expect.objectContaining({
           summary: 'Create today test album.',
           operations: expect.any(Array),
