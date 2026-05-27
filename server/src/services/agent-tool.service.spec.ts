@@ -1181,13 +1181,14 @@ describe(AgentToolService.name, () => {
       error: 'That value is a person ID, not an asset ID.',
       toolName: AgentToolName.ReadAssetMetadata,
       retryable: true,
-      hint: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+      hint: 'Use exact asset IDs from a small inspected asset set. For search-backed writes, use assetSource.search or previousSearch.sourceRef instead of assetIds.',
       recovery: {
         kind: 'wrong_id_domain',
         field: 'assetIds',
         expectedDomain: 'asset',
         receivedDomain: 'person',
-        instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+        instruction:
+          'Use exact asset IDs from a small inspected asset set. For search-backed writes, use assetSource.search or previousSearch.sourceRef instead of assetIds.',
       },
     });
     expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(personId);

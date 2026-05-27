@@ -399,7 +399,7 @@ describe(AgentMcpToolContractService.name, () => {
     }
 
     expect(exampleByName.get('compact-date-location-search')?.arguments).toMatchObject({
-      detail: 'ids',
+      detail: 'handle',
       limit: 50,
     });
     expect(exampleByName.get('summary-sample-search')?.arguments).toMatchObject({
@@ -416,12 +416,13 @@ describe(AgentMcpToolContractService.name, () => {
     const searchExample = search?.examples.find((example) => example.name === 'large-selection-handle-search');
     const planExample = plan?.examples.find((example) => example.name === 'create-album-from-selection-handle');
 
-    expect(search?.usage).toContain('createSelectionHandle');
+    expect(search?.usage).toContain('selectionHandle');
+    expect(search?.usage).not.toContain('createSelectionHandle');
     expect(searchExample?.arguments).toMatchObject({
-      createSelectionHandle: true,
-      detail: 'ids',
+      detail: 'handle',
       sampleSize: 5,
     });
+    expect(searchExample?.arguments).not.toHaveProperty('createSelectionHandle');
     expect(AgentReadToolRequestSchemas[AgentToolName.SearchAssets].safeParse(searchExample?.arguments).success).toBe(
       true,
     );
@@ -445,8 +446,7 @@ describe(AgentMcpToolContractService.name, () => {
     expect(resolverExample?.arguments).toEqual({ people: ['Pierre', 'Aurelia'] });
     expect(searchExample?.description).toMatch(/same personIds array/i);
     expect(searchExample?.arguments).toEqual({
-      detail: 'ids',
-      createSelectionHandle: true,
+      detail: 'handle',
       filters: {
         country: 'South Africa',
         takenAfter: '2026-01-01T00:00:00.000Z',
@@ -470,7 +470,7 @@ describe(AgentMcpToolContractService.name, () => {
 
     expect(searchExample?.description).toMatch(/spaceId.*spacePersonIds/is);
     expect(searchExample?.arguments).toEqual({
-      detail: 'ids',
+      detail: 'handle',
       filters: {
         spaceId: '00000000-0000-4000-8000-000000000020',
         spacePersonIds: ['00000000-0000-4000-8000-000000000021'],
@@ -488,7 +488,7 @@ describe(AgentMcpToolContractService.name, () => {
       (example) => example.name === 'read-technical-fields-for-selected-assets',
     );
 
-    expect(metadata?.usage).toContain('Search compact asset ids first');
+    expect(metadata?.usage).toContain('Search for a handle/sourceRef first');
     expect(metadata?.usage).toContain('fields');
     expect(exactTechnical?.arguments).toEqual({
       assetIds: ['00000000-0000-4000-8000-000000000001'],
@@ -503,7 +503,7 @@ describe(AgentMcpToolContractService.name, () => {
     const search = sut.getReadToolContract(AgentToolName.SearchAssets);
     const mistakeIds = search?.commonMistakes.map((mistake) => mistake.id);
 
-    expect(search?.usage).toContain('Default to compact asset ids');
+    expect(search?.usage).toContain('Default to handle-first search results');
     expect(search?.usage).toContain('Do not use limit 1000');
     expect(search?.usage).toContain('ask one narrowing question');
     expect(mistakeIds).toEqual(
@@ -518,7 +518,14 @@ describe(AgentMcpToolContractService.name, () => {
       'Use a bounded limit such as 25 or 50',
     );
     expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-broad-full-metadata')?.hint).toContain(
-      'Search compact ids first',
+      'Search for a handle/sourceRef first',
+    );
+    const oldSearchIdHint = ['Search compact', 'ids first'].join(' ');
+    expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-broad-full-metadata')?.hint).not.toContain(
+      oldSearchIdHint,
+    );
+    expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-preview-before-shortlist')?.hint).toContain(
+      'exact small non-search assetIds',
     );
   });
 
@@ -1593,8 +1600,8 @@ describe(AgentMcpToolContractService.name, () => {
 
       expect(correction).toEqual({
         expected:
-          'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.',
-        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.',
+          'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.',
+        hint: 'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.',
         exampleArguments: expect.objectContaining({
           summary: 'Create today test album.',
           operations: expect.any(Array),

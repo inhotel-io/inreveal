@@ -48,7 +48,8 @@ const approvedRequestInstruction =
   ' If approval is required, Gallery may ask the user; after approval, continue the approved request by calling this tool with toolCallId.';
 
 const propertyDescriptions = {
-  assetIds: 'Asset ids for a new asset read request or planning operation. Use ids returned by Gallery tools.',
+  assetIds:
+    'Exact non-search asset IDs for a new asset read request or small inspected planning operation. Do not copy IDs from searchAssets results; use selection handles or source refs for search selections.',
   albumId: 'Existing album id returned by listAlbums/readAlbum.',
   albumName: 'Album name to create or exact visible album name to resolve.',
   spaceId: 'Existing shared space id returned by listSpaces/readSpace.',
@@ -72,7 +73,7 @@ const propertyDescriptions = {
   page: 'One-based result page. Use the returned nextPage value as page to continue the same search with the same mode, query, filters, order, and limit.',
   order: 'Result order. Only desc is currently executable.',
   detail:
-    'Result detail level. For searchAssets, ids returns compact asset ids, summary returns asset ids plus a compact sample, and metadata returns metadata rows. For readAssetMetadata, use basic, descriptive, technical, or allSafe metadata presets.',
+    'Result detail level. For searchAssets, handle returns selectionHandle/sourceRef and compact counts, summary adds a compact sample, and metadata returns metadata rows for bounded inspection; legacy ids requests still parse but are not the advertised search path. For readAssetMetadata, use basic, descriptive, technical, or allSafe metadata presets.',
   fields:
     'Optional metadata field groups for summary samples, metadata rows, or readAssetMetadata custom reads: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
   sampleSize: 'Maximum summary sample rows from 0 to 25. Use 0 to disable samples.',
