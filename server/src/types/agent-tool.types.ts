@@ -26,6 +26,31 @@ export type AgentToolReadSelectionMetadataRequestMetadata = {
   sampleSize: number;
 };
 
+export type AgentCurateSelectionStrategy =
+  | 'metadata-highlights'
+  | 'date-spread'
+  | 'favorites-first'
+  | 'cover-candidate';
+
+export type AgentCurateSelectionDiversifyBy = 'date' | 'location' | 'people' | 'tags';
+
+export type AgentCurateSelectionConstraints = {
+  types?: Array<'IMAGE' | 'VIDEO'>;
+  includeFavorites?: boolean;
+  minRating?: number;
+  excludeVideos?: boolean;
+  diversifyBy?: AgentCurateSelectionDiversifyBy[];
+};
+
+export type AgentToolCurateSelectionRequestMetadata = {
+  selectionHandleId: string;
+  targetCount: number;
+  strategy: AgentCurateSelectionStrategy;
+  criteria?: string;
+  constraints: AgentCurateSelectionConstraints;
+  sampleSize: number;
+};
+
 export type AgentReadSelectionMetadataCounts = {
   assets: number;
   sampled: number;
@@ -365,6 +390,7 @@ export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolResolveAssetSearchFiltersRequestMetadata
   | AgentToolReadSelectionMetadataRequestMetadata
+  | AgentToolCurateSelectionRequestMetadata
   | AgentToolReadAssetMetadataRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata

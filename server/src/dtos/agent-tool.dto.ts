@@ -21,6 +21,8 @@ const DEFAULT_SEARCH_LIMIT = 100;
 const MAX_SEARCH_SAMPLE_SIZE = 25;
 const MAX_SELECTION_METADATA_SAMPLE_SIZE = 25;
 const DEFAULT_SELECTION_METADATA_SAMPLE_SIZE = 10;
+const MAX_CURATE_SELECTION_TARGET_COUNT = 1000;
+const DEFAULT_CURATE_SELECTION_SAMPLE_SIZE = 10;
 const MAX_USER_LOOKUP_LIMIT = 20;
 const MAX_RESOLVE_FILTER_NAMES_PER_KIND = 20;
 const MAX_RESOLVE_FILTER_NAME_LENGTH = 120;
@@ -60,6 +62,34 @@ const AgentAssetMetadataDetailSchema = z
   .enum(['basic', 'descriptive', 'technical', 'allSafe'])
   .meta({ id: 'AgentAssetMetadataDetail' });
 const AgentAssetMetadataFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentAssetMetadataField' });
+const AgentCurateSelectionStrategySchema = z
+  .enum(['metadata-highlights', 'date-spread', 'favorites-first', 'cover-candidate'])
+  .meta({ id: 'AgentCurateSelectionStrategy' });
+const AgentCurateSelectionDiversifyBySchema = z
+  .enum(['date', 'location', 'people', 'tags'])
+  .meta({ id: 'AgentCurateSelectionDiversifyBy' });
+const AgentCurateSelectionAssetTypeSchema = z.enum(['IMAGE', 'VIDEO']).meta({ id: 'AgentCurateSelectionAssetType' });
+const AgentCurateSelectionConstraintsSchema = z
+  .strictObject({
+    types: z.array(AgentCurateSelectionAssetTypeSchema).min(1).max(2).optional(),
+    includeFavorites: z.boolean().optional(),
+    minRating: z.number().int().min(1).max(5).optional(),
+    excludeVideos: z.boolean().optional(),
+    diversifyBy: z.array(AgentCurateSelectionDiversifyBySchema).min(1).max(4).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.types && new Set(value.types).size !== value.types.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['types'], message: 'types must be unique' });
+    }
+    if (value.diversifyBy && new Set(value.diversifyBy).size !== value.diversifyBy.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['diversifyBy'],
+        message: 'diversifyBy values must be unique',
+      });
+    }
+  })
+  .meta({ id: 'AgentCurateSelectionConstraints' });
 const DEFAULT_SELECTION_METADATA_FIELDS = [
   'type',
   'dates',
@@ -213,6 +243,52 @@ const AgentReadSelectionMetadataToolRequestSchema = z
     };
   })
   .meta({ id: 'AgentReadSelectionMetadataToolRequestDto' });
+
+const AgentCurateSelectionToolRequestSchema = z
+  .strictObject({
+    selectionHandleId: uuid.optional(),
+    targetCount: z.number().int().min(1).max(MAX_CURATE_SELECTION_TARGET_COUNT).optional(),
+    strategy: AgentCurateSelectionStrategySchema.optional(),
+    criteria: z.string().trim().min(1).max(500).optional(),
+    constraints: AgentCurateSelectionConstraintsSchema.optional(),
+    sampleSize: z.number().int().min(0).max(MAX_SELECTION_METADATA_SAMPLE_SIZE).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.selectionHandleId && value.toolCallId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+    }
+    if (
+      (value.targetCount !== undefined ||
+        value.strategy !== undefined ||
+        value.criteria !== undefined ||
+        value.constraints !== undefined ||
+        value.sampleSize !== undefined) &&
+      value.toolCallId
+    ) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+    }
+    if (!value.selectionHandleId && !value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide selectionHandleId and targetCount for a new curation request or toolCallId for an approved request',
+      });
+    }
+    if (value.selectionHandleId && value.targetCount === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['targetCount'], message: 'targetCount is required' });
+    }
+  })
+  .transform((value) =>
+    value.toolCallId
+      ? value
+      : {
+          ...value,
+          strategy: value.strategy ?? 'metadata-highlights',
+          constraints: value.constraints ?? {},
+          sampleSize: value.sampleSize ?? DEFAULT_CURATE_SELECTION_SAMPLE_SIZE,
+        },
+  )
+  .meta({ id: 'AgentCurateSelectionToolRequestDto' });
 
 const AgentReadAssetPreviewsToolRequestSchema = assetIdRequest(
   'AgentReadAssetPreviewsToolRequestDto',
@@ -511,6 +587,7 @@ const AgentSearchUsersToolRequestSchema = z
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
   [AgentToolName.ReadSelectionMetadata]: AgentReadSelectionMetadataToolRequestSchema,
+  [AgentToolName.CurateSelection]: AgentCurateSelectionToolRequestSchema,
   [AgentToolName.ResolveAssetSearchFilters]: AgentResolveAssetSearchFiltersToolRequestSchema,
   [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
   [AgentToolName.ReadAssetPreviews]: AgentReadAssetPreviewsToolRequestSchema,
@@ -794,6 +871,28 @@ const AgentReadSelectionMetadataToolResponseSchema = z
   ])
   .meta({ id: 'AgentReadSelectionMetadataToolResponseDto' });
 
+const AgentCurateSelectionToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentCurateSelectionToolApprovalRequiredResponse'),
+    deniedResponse('AgentCurateSelectionToolDeniedResponse'),
+    z
+      .strictObject({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        summary,
+        strategy: AgentCurateSelectionStrategySchema,
+        selectionHandle: AgentSearchAssetsSelectionHandleSchema,
+        sourceAssetCount: z.number().int().min(0),
+        selectedAssetCount: z.number().int().min(0),
+        criteriaSummary: z.array(z.string().trim().min(1).max(300)).min(1).max(10),
+        warnings: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+        sample: AgentSearchAssetsSampleSchema.optional(),
+        resultSize: AgentToolResultSizeSchema,
+      })
+      .meta({ id: 'AgentCurateSelectionToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentCurateSelectionToolResponseDto' });
+
 const AgentSearchAssetsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentSearchAssetsToolApprovalRequiredResponse'),
@@ -989,6 +1088,7 @@ export class AgentReadAssetMetadataToolRequestDto extends createZodDto(AgentRead
 export class AgentReadSelectionMetadataToolRequestDto extends createZodDto(
   AgentReadSelectionMetadataToolRequestSchema,
 ) {}
+export class AgentCurateSelectionToolRequestDto extends createZodDto(AgentCurateSelectionToolRequestSchema) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
 export class AgentResolveAssetSearchFiltersToolRequestDto extends createZodDto(
   AgentResolveAssetSearchFiltersToolRequestSchema,
@@ -1015,6 +1115,11 @@ export const AgentReadSelectionMetadataToolResponseDto = namedZodDto(
 export type AgentReadSelectionMetadataToolResponseDto = z.output<
   typeof AgentReadSelectionMetadataToolResponseSchema
 >;
+export const AgentCurateSelectionToolResponseDto = namedZodDto(
+  'AgentCurateSelectionToolResponseDto',
+  AgentCurateSelectionToolResponseSchema,
+);
+export type AgentCurateSelectionToolResponseDto = z.output<typeof AgentCurateSelectionToolResponseSchema>;
 export const AgentSearchAssetsToolResponseDto = namedZodDto(
   'AgentSearchAssetsToolResponseDto',
   AgentSearchAssetsToolResponseSchema,
