@@ -40,7 +40,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsDetail? detail;
+  AgentSearchAssetsRequestDetail? detail;
 
   List<AgentSearchAssetsField> fields;
 
@@ -212,7 +212,7 @@ class AgentSearchAssetsToolRequestDto {
 
       return AgentSearchAssetsToolRequestDto(
         createSelectionHandle: mapValueOfType<bool>(json, r'createSelectionHandle'),
-        detail: AgentSearchAssetsDetail.fromJson(json[r'detail']),
+        detail: AgentSearchAssetsRequestDetail.fromJson(json[r'detail']),
         fields: AgentSearchAssetsField.listFromJson(json[r'fields']),
         filters: AgentSearchAssetsFilters.fromJson(json[r'filters']),
         limit: mapValueOfType<int>(json, r'limit'),
