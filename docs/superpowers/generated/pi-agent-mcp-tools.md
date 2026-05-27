@@ -101,7 +101,7 @@ Do not ask the user to approve in chat and do not create a new read request with
 
 Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Use `readSelectionMetadata` for search-handle metadata inspection and `readAssetMetadata` is legacy exact non-search ID usage. Propose a plan only after the selected asset set is clear.
 
-- Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
+- Broad search: use `searchAssets` with handle detail or omit `detail`. Bounded handle-first searches may use `limit` up to 1000 when policy allows; samples remain 10-25. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
 - Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs and is not objective image-quality scoring.
 - Selection-backed plans: Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id.
 - Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
@@ -311,7 +311,7 @@ MCP tool name: `searchAssets`
 
 Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.
 
-Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.
+Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. For bounded handle-first searches, use limit up to 1000 when the session policy allows it; samples stay small. For broad or ambiguous requests, ask one narrowing question or page with nextPage. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.
 
 Argument modes:
 
@@ -3046,7 +3046,7 @@ Summarize plan risks and selected changes.
 - `search-filter-name-in-space-person-ids`: Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.
 - `search-combined-filters-and-tool-call-id`: Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.
 - `search-limit-out-of-range`: Use a positive integer limit no greater than 10000.
-- `search-large-limit`: Use a bounded limit such as 25 or 50. Do not use limit 1000; page with nextPage or ask a narrowing question for broad requests.
+- `search-large-limit`: Use limit up to 1000 only for bounded handle-first searches where the user supplied a clear album, space, date, person, tag, rating, or media-type scope; otherwise page with nextPage or ask a narrowing question.
 - `search-broad-full-metadata`: Search for a handle/sourceRef first, then inspect summary samples or exact fields only for a small inspected set. Do not request full metadata for broad searches.
 - `search-preview-before-shortlist`: For visual curation, start with a bounded handle/sourceRef and summary samples; use preview reads only for exact small non-search assetIds after narrowing.
 - `search-truncated-needs-more-detail`: When resultSize.truncated is true, request fewer assets, page with nextPage, or ask one narrowing question before requesting more fields.
