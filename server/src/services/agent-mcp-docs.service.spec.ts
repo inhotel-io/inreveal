@@ -332,6 +332,8 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('All photos');
     expect(markdown).toContain('ask a narrowing question');
     expect(markdown).toContain('resultSize.truncated');
+    expect(markdown).toContain('limit` up to 1000');
+    expect(markdown).not.toContain('Do not use limit 1000');
     expect(markdown).not.toContain('"limit": 1000');
   });
 

@@ -21,7 +21,7 @@ const runnerBehaviorPrompt = [
   'For metadata-only trip album requests, use mcp_gallery_searchAssets with location and taken-date metadata; searchAssets returns selection handles, source refs, counts, and result-size metadata for planning follow-up reads.',
   'For metadata-only trip album requests, do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals. If metadata is insufficient, ask one concise follow-up question instead of escalating to media reads.',
   'If a metadata-only trip search returns more than 250 candidate assets without a clearly bounded date range and location match, ask one concise follow-up question to narrow the date range or location before proposing operations.',
-  'For best/highlight requests, require a bounded source; default to 10 only when the source is bounded and no count is specified; zero, negative, or above 500 counts ask for a valid smaller count; ask to narrow only when known count or total is above 500. No matching highlight candidates: answer directly and do not create a plan.',
+  'For best/highlight requests, require a bounded source; default to 10 only when the source is bounded and no count is specified; zero, negative, or above 1000 counts ask for a valid smaller count; ask to narrow only when known count or total is above 1000. No matching highlight candidates: answer directly and do not create a plan.',
   'For metadata-only suggested highlights, start from a bounded search handle, use returned counts/source refs/samples and source-backed workflows, prioritize existing favorites and ratings when available, disclose that no previews were inspected, and ask to narrow when handle-only metadata is insufficient.',
   'After metadata-only curation narrows candidates, propose writes with returned selection handles or source refs; do not use broad assetSource for curated highlight write plans, and do not copy search-derived asset IDs into provider-facing prompts.',
   'No previews are required for metadata-only highlight plans. Use mcp_gallery_readAssetPreviews later only for preview-assisted curation when allowed and the bounded candidate set is small.',
@@ -42,7 +42,7 @@ const runnerBehaviorPrompt = [
 ].join('\n');
 const rewriteRunnerMcpPromptLine = (line) => {
   if (line.startsWith('Progressive:')) {
-    return 'Progressive: resolve names -> searchAssets returns selection handles and source refs; use readAssetMetadata only for specific non-search asset details when required. Do not use limit 1000; if truncated/hasMore, page or ask one narrowing question.';
+    return 'Progressive: resolve names -> searchAssets returns selection handles and source refs; use readAssetMetadata only for specific non-search asset details when required. Bounded handle-first searches may use limit up to 1000; if truncated/hasMore, page or ask one narrowing question.';
   }
 
   if (line.startsWith('Large:')) {
