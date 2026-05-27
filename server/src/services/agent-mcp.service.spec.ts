@@ -471,7 +471,7 @@ describe(AgentMcpService.name, () => {
         limit: 5,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       },
       serviceMethod: 'searchAssets' as const,
@@ -553,7 +553,7 @@ describe(AgentMcpService.name, () => {
       limit: 100,
       page: 1,
       order: 'desc',
-      detail: 'ids',
+      detail: 'handle',
       fields: [],
     });
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
@@ -819,7 +819,7 @@ describe(AgentMcpService.name, () => {
       limit: 50,
       page: 1,
       order: 'desc',
-      detail: 'ids',
+      detail: 'handle',
       fields: [],
     });
     expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(auth, sessionId, {
@@ -1976,13 +1976,14 @@ describe(AgentMcpService.name, () => {
         error: 'That value is a person ID, not an asset ID.',
         toolName: AgentToolName.ReadAssetMetadata,
         retryable: true,
-        hint: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+        hint: 'Use exact asset IDs from a small inspected asset set. For search-backed writes, use assetSource.search or previousSearch.sourceRef instead of assetIds.',
         recovery: {
           kind: 'wrong_id_domain',
           field: 'assetIds',
           expectedDomain: 'asset',
           receivedDomain: 'person',
-          instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+          instruction:
+            'Use exact asset IDs from a small inspected asset set. For search-backed writes, use assetSource.search or previousSearch.sourceRef instead of assetIds.',
         },
       });
       toolService.readAssetMetadata.mockRejectedValue(recoverableError);
@@ -2020,14 +2021,14 @@ describe(AgentMcpService.name, () => {
         error: 'Source ref is expired or not available for this session',
         toolName: AgentToolName.ProposeAlbumOperations,
         retryable: true,
-        hint: 'The attempted source ref is expired. Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
+        hint: 'The attempted source ref is expired. Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
         recovery: {
           kind: 'invalid-source-ref',
           attemptedSourceRef: sourceRef,
           expectedSourceKind: 'search',
           expiredSourceRef: sourceRef,
           instruction:
-            'Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
+            'Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.sourceRef.',
         },
       });
       operationPlanService.proposeAlbumOperations.mockRejectedValue(recoverableError);

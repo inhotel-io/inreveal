@@ -1552,7 +1552,8 @@ export class AgentToolService {
         field: 'assetIds',
         expectedDomain: 'asset',
         receivedDomain: 'person',
-        instruction: 'Use asset IDs returned by searchAssets, or use assetSource.search once available.',
+        instruction:
+          'Use exact asset IDs from a small inspected asset set. For search-backed writes, use assetSource.search or previousSearch.sourceRef instead of assetIds.',
       });
     }
 
