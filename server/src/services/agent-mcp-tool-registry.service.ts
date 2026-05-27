@@ -177,8 +177,7 @@ const enrichToolFromContract = (
 
   inputSchema.examples = contract.examples.map((example) => structuredClone(example.arguments));
   const omitProviderRejectedRawIds =
-    tool.name === AgentToolName.ProposeAlbumFromSelection ||
-    tool.name === AgentToolName.ProposeAssetBatchFromSelection;
+    tool.name === AgentToolName.ProposeAlbumFromSelection || tool.name === AgentToolName.ProposeAssetBatchFromSelection;
   inputSchema['x-gallery-argumentModes'] = contract.argumentModes.map((mode) =>
     toArgumentModeMetadata(mode, omitProviderRejectedRawIds),
   );

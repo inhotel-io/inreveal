@@ -221,7 +221,10 @@ describe(AgentMcpDocsService.name, () => {
 
   it('renders model-facing docs examples and wrappers with semantic placeholders instead of fixture UUIDs', () => {
     const markdown = sut.generateMarkdown();
-    const rawRenderedInputs = JSON.stringify([...sut.listDocumentedToolArgumentExamples(), ...sut.listJsonRpcExamples()]);
+    const rawRenderedInputs = JSON.stringify([
+      ...sut.listDocumentedToolArgumentExamples(),
+      ...sut.listJsonRpcExamples(),
+    ]);
 
     for (const [fixtureId, placeholder] of Object.entries(agentMcpPromptPlaceholderMap)) {
       expect(markdown).not.toContain(fixtureId);

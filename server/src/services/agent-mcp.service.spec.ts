@@ -205,7 +205,9 @@ const secretLeakPattern =
 
 const getRuntimeFailureMatrixCases = () => new AgentMcpToolContractService().listRuntimeFailureMatrixCases();
 
-const providerBoundaryAdjustedPlanningRequest = <T extends { id: string; request: unknown }>(failureCase: T): unknown => {
+const providerBoundaryAdjustedPlanningRequest = <T extends { id: string; request: unknown }>(
+  failureCase: T,
+): unknown => {
   if (failureCase.id === 'planning-duplicate-asset-ids') {
     return failureCase.request;
   }
@@ -681,7 +683,14 @@ describe(AgentMcpService.name, () => {
       sourceAssetCount: 4,
       selectedAssetCount: 2,
       criteriaSummary: ['Metadata-only curation used favorites and ratings.'],
-      resultSize: { returnedItems: 2, hasMore: false, nextPage: null, estimatedBytes: 512, truncated: false, omittedFields: [] },
+      resultSize: {
+        returnedItems: 2,
+        hasMore: false,
+        nextPage: null,
+        estimatedBytes: 512,
+        truncated: false,
+        omittedFields: [],
+      },
     };
     toolService.curateSelection.mockResolvedValue(serviceResult as never);
 
@@ -2686,9 +2695,7 @@ describe(AgentMcpService.name, () => {
         hint: expect.any(String),
         exampleArguments: expect.any(Object),
       });
-      expect(issues).toEqual(
-        expect.arrayContaining([expect.objectContaining({ path: expectedIssuePath })]),
-      );
+      expect(issues).toEqual(expect.arrayContaining([expect.objectContaining({ path: expectedIssuePath })]));
       expect(expectedPathIssue?.hint ?? structuredContent.hint).toEqual(expect.any(String));
       expect((structuredContent.expected as string).trim()).not.toBe('');
       expect((structuredContent.hint as string).trim()).not.toBe('');

@@ -512,8 +512,6 @@ class ApiClient {
           return AgentRunnerStatusDto.fromJson(value);
         case 'AgentRunnerStatusReason':
           return AgentRunnerStatusReasonTypeTransformer().decode(value);
-        case 'AgentSearchAssetResult':
-          return AgentSearchAssetResult.fromJson(value);
         case 'AgentSearchAssetSourceInput':
           return AgentSearchAssetSourceInput.fromJson(value);
         case 'AgentSearchAssetsDetail':
@@ -526,6 +524,14 @@ class ApiClient {
           return AgentSearchAssetsModeTypeTransformer().decode(value);
         case 'AgentSearchAssetsOrder':
           return AgentSearchAssetsOrderTypeTransformer().decode(value);
+        case 'AgentSearchAssetsRequestDetail':
+          return AgentSearchAssetsRequestDetailTypeTransformer().decode(value);
+        case 'AgentSearchAssetsSample':
+          return AgentSearchAssetsSample.fromJson(value);
+        case 'AgentSearchAssetsSampleItem':
+          return AgentSearchAssetsSampleItem.fromJson(value);
+        case 'AgentSearchAssetsSampleItemTagsInner':
+          return AgentSearchAssetsSampleItemTagsInner.fromJson(value);
         case 'AgentSearchAssetsSelectionHandle':
           return AgentSearchAssetsSelectionHandle.fromJson(value);
         case 'AgentSearchAssetsToolApprovalRequiredResponse':

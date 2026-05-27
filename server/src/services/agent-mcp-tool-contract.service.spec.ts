@@ -458,9 +458,9 @@ describe(AgentMcpToolContractService.name, () => {
       ]),
     );
     for (const example of contract?.examples ?? []) {
-      expect(AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse(example.arguments).success).toBe(
-        true,
-      );
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse(example.arguments).success,
+      ).toBe(true);
     }
   });
 

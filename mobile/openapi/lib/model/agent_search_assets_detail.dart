@@ -23,13 +23,13 @@ class AgentSearchAssetsDetail {
 
   String toJson() => value;
 
-  static const ids = AgentSearchAssetsDetail._(r'ids');
+  static const handle = AgentSearchAssetsDetail._(r'handle');
   static const summary = AgentSearchAssetsDetail._(r'summary');
   static const metadata = AgentSearchAssetsDetail._(r'metadata');
 
   /// List of all possible values in this [enum][AgentSearchAssetsDetail].
   static const values = <AgentSearchAssetsDetail>[
-    ids,
+    handle,
     summary,
     metadata,
   ];
@@ -70,7 +70,7 @@ class AgentSearchAssetsDetailTypeTransformer {
   AgentSearchAssetsDetail? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
-        case r'ids': return AgentSearchAssetsDetail.ids;
+        case r'handle': return AgentSearchAssetsDetail.handle;
         case r'summary': return AgentSearchAssetsDetail.summary;
         case r'metadata': return AgentSearchAssetsDetail.metadata;
         default:

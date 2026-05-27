@@ -1593,7 +1593,7 @@ export type AgentSearchAssetsFilters = {
 };
 export type AgentSearchAssetsToolRequestDto = {
     createSelectionHandle?: boolean;
-    detail?: AgentSearchAssetsDetail;
+    detail?: AgentSearchAssetsRequestDetail;
     fields?: AgentSearchAssetsField[];
     filters?: AgentSearchAssetsFilters;
     limit?: number;
@@ -1613,7 +1613,7 @@ export type AgentSearchAssetsToolDeniedResponse = {
     status: Status24;
     toolCall: AgentToolCallResponseDto;
 };
-export type AgentSearchAssetResult = {
+export type AgentSearchAssetsSampleItem = {
     exifInfo?: {
         city?: string | null;
         country?: string | null;
@@ -1628,34 +1628,37 @@ export type AgentSearchAssetResult = {
     } | null;
     fileCreatedAt?: string;
     fileModifiedAt?: string;
-    id: string;
     isFavorite?: boolean;
+    itemRef: string;
     localDateTime?: string;
     originalFileName?: string;
-    ownerId?: string;
-    tags?: AgentAssetMetadataTag[];
+    tags?: {
+        color: string | null;
+        value: string;
+    }[];
     "type"?: AssetTypeEnum;
     visibility?: AssetVisibility;
+};
+export type AgentSearchAssetsSample = {
+    items: AgentSearchAssetsSampleItem[];
+    sampleSize: number;
 };
 export type AgentSearchAssetsSelectionHandle = {
     assetCount: number;
     expiresAt: string;
     id: string;
-    sampleAssetIds: string[];
     sourceRef: AgentSearchSourceRef;
     sourceToolCallId: string | null;
 };
 export type AgentSearchAssetsToolSuccessResponse = {
     approximateTotal?: number;
-    assetIds: string[];
-    assets?: AgentSearchAssetResult[];
     detail: AgentSearchAssetsDetail;
     hasMore: boolean;
     nextPage: string | null;
     resultSize: AgentToolResultSize;
     returnedCount: number;
-    sample?: AgentSearchAssetResult[];
-    selectionHandle?: AgentSearchAssetsSelectionHandle;
+    sample?: AgentSearchAssetsSample;
+    selectionHandle: AgentSearchAssetsSelectionHandle;
     status: Status25;
     summary: string;
     toolCall: AgentToolCallResponseDto;
@@ -10482,6 +10485,8 @@ export enum AgentToolCallStatus {
 }
 export enum AgentToolName {
     SearchAssets = "searchAssets",
+    ReadSelectionMetadata = "readSelectionMetadata",
+    CurateSelection = "curateSelection",
     ResolveAssetSearchFilters = "resolveAssetSearchFilters",
     ReadAssetMetadata = "readAssetMetadata",
     ReadAssetPreviews = "readAssetPreviews",
@@ -10493,10 +10498,12 @@ export enum AgentToolName {
     SearchUsers = "searchUsers",
     ProposeAlbumOperations = "proposeAlbumOperations",
     ProposeAlbumFromSearch = "proposeAlbumFromSearch",
+    ProposeAlbumFromSelection = "proposeAlbumFromSelection",
     ProposeAddAssetsToAlbumFromSearch = "proposeAddAssetsToAlbumFromSearch",
     ProposeSpaceFromSearch = "proposeSpaceFromSearch",
     ProposeAddAssetsToSpaceFromSearch = "proposeAddAssetsToSpaceFromSearch",
     ProposeAssetBatchFromSearch = "proposeAssetBatchFromSearch",
+    ProposeAssetBatchFromSelection = "proposeAssetBatchFromSelection",
     ReviseProposedOperations = "reviseProposedOperations",
     SummarizePlan = "summarizePlan"
 }
@@ -10610,8 +10617,9 @@ export enum Status21 {
 export enum Status22 {
     Success = "success"
 }
-export enum AgentSearchAssetsDetail {
+export enum AgentSearchAssetsRequestDetail {
     Ids = "ids",
+    Handle = "handle",
     Summary = "summary",
     Metadata = "metadata"
 }
@@ -10643,6 +10651,11 @@ export enum Status23 {
 }
 export enum Status24 {
     Denied = "denied"
+}
+export enum AgentSearchAssetsDetail {
+    Handle = "handle",
+    Summary = "summary",
+    Metadata = "metadata"
 }
 export enum Status25 {
     Success = "success"

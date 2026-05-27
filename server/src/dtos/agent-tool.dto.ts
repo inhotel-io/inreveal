@@ -256,7 +256,10 @@ const AgentCurateSelectionToolRequestSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.selectionHandleId && value.toolCallId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
     if (
       (value.targetCount !== undefined ||
@@ -266,12 +269,16 @@ const AgentCurateSelectionToolRequestSchema = z
         value.sampleSize !== undefined) &&
       value.toolCallId
     ) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
     if (!value.selectionHandleId && !value.toolCallId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Provide selectionHandleId and targetCount for a new curation request or toolCallId for an approved request',
+        message:
+          'Provide selectionHandleId and targetCount for a new curation request or toolCallId for an approved request',
       });
     }
     if (value.selectionHandleId && value.targetCount === undefined) {
@@ -1112,9 +1119,7 @@ export const AgentReadSelectionMetadataToolResponseDto = namedZodDto(
   'AgentReadSelectionMetadataToolResponseDto',
   AgentReadSelectionMetadataToolResponseSchema,
 );
-export type AgentReadSelectionMetadataToolResponseDto = z.output<
-  typeof AgentReadSelectionMetadataToolResponseSchema
->;
+export type AgentReadSelectionMetadataToolResponseDto = z.output<typeof AgentReadSelectionMetadataToolResponseSchema>;
 export const AgentCurateSelectionToolResponseDto = namedZodDto(
   'AgentCurateSelectionToolResponseDto',
   AgentCurateSelectionToolResponseSchema,
