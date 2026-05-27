@@ -8,6 +8,7 @@ import type {
   AgentReadAssetMetadataToolRequestDto,
   AgentReadAssetOriginalsToolRequestDto,
   AgentReadAssetPreviewsToolRequestDto,
+  AgentReadSelectionMetadataToolRequestDto,
   AgentReadSpaceToolRequestDto,
   AgentResolveAssetSearchFiltersToolRequestDto,
   AgentSearchAssetsToolRequestDto,
@@ -48,6 +49,7 @@ export class AgentMcpService {
   private readonly readToolNames = new Set<AgentToolName>([
     AgentToolName.ResolveAssetSearchFilters,
     AgentToolName.SearchAssets,
+    AgentToolName.ReadSelectionMetadata,
     AgentToolName.ReadAssetMetadata,
     AgentToolName.ReadAssetPreviews,
     AgentToolName.ReadAssetOriginals,
@@ -265,6 +267,9 @@ export class AgentMcpService {
       }
       case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto as AgentSearchAssetsToolRequestDto);
+      }
+      case AgentToolName.ReadSelectionMetadata: {
+        return this.toolService.readSelectionMetadata(auth, sessionId, dto as AgentReadSelectionMetadataToolRequestDto);
       }
       case AgentToolName.ReadAssetMetadata: {
         return this.toolService.readAssetMetadata(auth, sessionId, dto as AgentReadAssetMetadataToolRequestDto);
