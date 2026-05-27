@@ -45,6 +45,13 @@ type AgentMcpRequest = {
   params?: unknown;
 };
 
+type AgentMcpValidationIssue = { path: string; message: string };
+
+type AgentMcpInvokeToolOptions<TDto> = {
+  preValidate?: (args: Record<string, unknown>) => AgentMcpValidationIssue[];
+  mapResult?: (result: unknown, dto: TDto) => unknown;
+};
+
 @Injectable()
 export class AgentMcpService {
   private readonly readToolNames = new Set<AgentToolName>([
@@ -178,10 +185,16 @@ export class AgentMcpService {
     args: unknown,
     schema: z.ZodType<TDto>,
     delegate: (dto: TDto) => Promise<unknown>,
+    options: AgentMcpInvokeToolOptions<TDto> = {},
   ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
     const argumentValidation = this.validateToolArguments(args);
     if (!argumentValidation.valid) {
       return this.success(id, this.argumentErrorResult(toolName, argumentValidation.path, argumentValidation.message));
+    }
+
+    const preValidationIssues = options.preValidate?.(argumentValidation.value) ?? [];
+    if (preValidationIssues.length > 0) {
+      return this.success(id, this.validationIssuesResult(toolName, preValidationIssues, 'tool-arguments'));
     }
 
     const parseResult = schema.safeParse(argumentValidation.value);
@@ -190,7 +203,8 @@ export class AgentMcpService {
     }
 
     try {
-      return this.success(id, this.toolResult(await delegate(parseResult.data)));
+      const result = await delegate(parseResult.data);
+      return this.success(id, this.toolResult(options.mapResult ? options.mapResult(result, parseResult.data) : result));
     } catch (error) {
       if (isAgentMcpRecoverableToolError(error)) {
         return this.success(id, this.recoverableToolErrorResult(error.content));
@@ -198,6 +212,25 @@ export class AgentMcpService {
 
       return this.error(id, -32_603, 'Internal error');
     }
+  }
+
+  private invokePlanningTool<TDto>(
+    id: AgentMcpRequestId,
+    toolName: keyof typeof AgentOperationPlanToolRequestSchemas,
+    args: unknown,
+    delegate: (dto: TDto) => Promise<unknown>,
+  ) {
+    return this.invokeTool(
+      id,
+      toolName,
+      args,
+      AgentOperationPlanToolRequestSchemas[toolName] as z.ZodType<TDto>,
+      delegate,
+      {
+        preValidate: (value) => this.providerFacingPlanningArgumentIssues(value),
+        mapResult: (result) => this.redactProviderFacingPlanningResult(result),
+      },
+    );
   }
 
   private async handlePlanningToolCall(
@@ -209,48 +242,124 @@ export class AgentMcpService {
   ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
     switch (toolName) {
       case AgentToolName.ProposeAlbumOperations: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAlbumFromSearch: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeAlbumFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAddAssetsToAlbumFromSearch: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeAddAssetsToAlbumFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeSpaceFromSearch: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeSpaceFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAddAssetsToSpaceFromSearch: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeAddAssetsToSpaceFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAssetBatchFromSearch: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) =>
+        return this.invokePlanningTool(id, toolName, args, (dto) =>
           this.operationPlanService.proposeAssetBatchFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+        return this.invokePlanningTool(id, toolName, args, (dto) => {
           const { planId, ...body } = dto;
           return this.operationPlanService.reviseProposedOperations(auth, sessionId, planId, body);
         });
       }
       case AgentToolName.SummarizePlan: {
-        return this.invokeTool(id, toolName, args, AgentOperationPlanToolRequestSchemas[toolName], (dto) => {
+        return this.invokePlanningTool(id, toolName, args, (dto) => {
           const { planId, ...body } = dto;
           return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
         });
       }
     }
+  }
+
+  private providerFacingPlanningArgumentIssues(args: Record<string, unknown>): AgentMcpValidationIssue[] {
+    const operations = Array.isArray(args.operations) ? args.operations : [];
+    return operations.flatMap((operation, index) => {
+      const record = this.recordValue(operation);
+      if (!record) {
+        return [];
+      }
+
+      const issues: AgentMcpValidationIssue[] = [];
+      if (Array.isArray(record.assetIds)) {
+        issues.push({
+          path: `operations.${index}.assetIds`,
+          message:
+            'Provider-facing planning calls must use selection handles or declarative asset sources instead of raw assetIds. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search.',
+        });
+      }
+
+      const assetSource = this.recordValue(record.assetSource);
+      if (assetSource?.kind === 'explicitAssets') {
+        issues.push({
+          path: `operations.${index}.assetSource`,
+          message:
+            'assetSource.explicitAssets is not available in provider-facing planning. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search.',
+        });
+      }
+
+      return issues;
+    });
+  }
+
+  private redactProviderFacingPlanningResult(result: unknown): unknown {
+    const content = this.recordValue(result);
+    const plan = this.recordValue(content?.plan);
+    if (!content || !plan || !Array.isArray(plan.operations)) {
+      return result;
+    }
+
+    return {
+      ...content,
+      plan: {
+        ...plan,
+        operations: plan.operations.map((operation) => this.redactProviderFacingPlanningOperation(operation)),
+      },
+    };
+  }
+
+  private redactProviderFacingPlanningOperation(operation: unknown): unknown {
+    const record = this.recordValue(operation);
+    if (!record) {
+      return operation;
+    }
+
+    const { assetIds, result, ...rest } = record;
+    const assetCount = Array.isArray(assetIds) ? assetIds.length : 0;
+    return {
+      ...rest,
+      assetCount,
+      result: this.redactProviderFacingPlanningOperationResult(result),
+    };
+  }
+
+  private redactProviderFacingPlanningOperationResult(result: unknown): unknown {
+    const record = this.recordValue(result);
+    if (!record) {
+      return result;
+    }
+
+    const { assetIds, assetId, ...rest } = record;
+    const assetCount = Array.isArray(assetIds) ? assetIds.length : typeof assetId === 'string' ? 1 : undefined;
+
+    return {
+      ...rest,
+      ...(assetCount === undefined ? {} : { assetCount }),
+    };
   }
 
   private async callReadTool(
