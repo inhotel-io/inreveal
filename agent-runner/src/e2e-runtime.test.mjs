@@ -377,16 +377,23 @@ const metadataHighlightHandlers = ({
   successHandlers()[1],
 ];
 
-const usaTripHandleFirstHandlers = () => [
+const usaTripHandleFirstHandlers = ({
+  expectedFilters = {
+    country: 'USA',
+    takenAfter: '2026-01-01T00:00:00.000Z',
+    takenBefore: '2026-02-01T00:00:00.000Z',
+  },
+  expectedTargetCount = 15,
+  expectedCriteria = 'top highlights from January 2026 USA trip',
+  searchAssetCount = 80,
+  selectedAssetCount = expectedTargetCount,
+  expectedAlbumName = 'USA Highlights',
+} = {}) => [
   {
     name: 'searchAssets',
     handle: (args, request) => {
       assert.deepEqual(args, {
-        filters: {
-          country: 'USA',
-          takenAfter: '2026-01-01T00:00:00.000Z',
-          takenBefore: '2026-02-01T00:00:00.000Z',
-        },
+        filters: expectedFilters,
         detail: 'handle',
         limit: 1000,
       });
@@ -397,13 +404,13 @@ const usaTripHandleFirstHandlers = () => [
           result: {
             structuredContent: {
               status: 'success',
-              selectionHandle: { id: usaTripSearchHandleId, assetCount: 80 },
-              assetCount: 80,
+              selectionHandle: { id: usaTripSearchHandleId, assetCount: searchAssetCount },
+              assetCount: searchAssetCount,
               detail: 'handle',
-              returnedCount: 80,
+              returnedCount: searchAssetCount,
               hasMore: false,
               nextPage: null,
-              resultSize: 80,
+              resultSize: searchAssetCount,
             },
           },
         },
@@ -415,9 +422,9 @@ const usaTripHandleFirstHandlers = () => [
     handle: (args, request) => {
       assert.deepEqual(args, {
         selectionHandleId: usaTripSearchHandleId,
-        targetCount: 15,
+        targetCount: expectedTargetCount,
         strategy: 'metadata-highlights',
-        criteria: 'top highlights from January 2026 USA trip',
+        criteria: expectedCriteria,
         sampleSize: 10,
       });
       return {
@@ -427,10 +434,10 @@ const usaTripHandleFirstHandlers = () => [
           result: {
             structuredContent: {
               status: 'success',
-              selectionHandle: { id: usaTripCuratedHandleId, assetCount: 15 },
-              selectedAssetCount: 15,
-              sourceAssetCount: 80,
-              criteriaSummary: 'top highlights from January 2026 USA trip',
+              selectionHandle: { id: usaTripCuratedHandleId, assetCount: selectedAssetCount },
+              selectedAssetCount,
+              sourceAssetCount: searchAssetCount,
+              criteriaSummary: expectedCriteria,
             },
           },
         },
@@ -441,8 +448,8 @@ const usaTripHandleFirstHandlers = () => [
     name: 'proposeAlbumFromSelection',
     handle: (args, request) => {
       assert.deepEqual(args, {
-        summary: 'Create USA Highlights with 15 metadata-only curated highlights.',
-        albumName: 'USA Highlights',
+        summary: `Create ${expectedAlbumName} with ${selectedAssetCount} metadata-only curated highlights.`,
+        albumName: expectedAlbumName,
         description: 'Suggested highlights selected from metadata signals. No previews were inspected.',
         selectionHandleId: usaTripCuratedHandleId,
       });
@@ -713,6 +720,46 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
     assert.match(events.at(-1).content.blocks[0].text, /15 suggested highlights/i);
     assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('creates January 2026 U.S. trip highlights with USA date filters', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      usaTripHandleFirstHandlers({ expectedAlbumName: 'Trip Highlights' }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Create an album of the top 15 highlights from my January 2026 U.S. trip called Trip Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
+    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /15 suggested highlights/i);
+  });
+
+  it('uses generic metadata criteria for non-January USA trip highlights', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      usaTripHandleFirstHandlers({
+        expectedFilters: { country: 'USA' },
+        expectedTargetCount: 5,
+        expectedCriteria: 'top metadata-only highlights from the bounded source',
+        searchAssetCount: 25,
+        selectedAssetCount: 5,
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Create an album of the top 5 highlights from my USA trip called USA Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
+    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /5 suggested highlights/i);
   });
 
   it('reads previews after bounded candidates for preview-assisted highlight album planning', async () => {
