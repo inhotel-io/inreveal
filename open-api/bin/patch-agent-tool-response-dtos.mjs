@@ -1,73 +1,160 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const responseDtos = [
   {
-    className: 'AgentListAlbumsToolResponseDto',
-    fileName: 'agent_list_albums_tool_response_dto.dart',
-    fields: [{ name: 'albums', type: 'List<AgentAlbumSummary>', defaultValue: 'const []', fromJson: "AgentAlbumSummary.listFromJson(json[r'albums'])" }],
-  },
-  {
-    className: 'AgentReadAlbumToolResponseDto',
-    fileName: 'agent_read_album_tool_response_dto.dart',
-    fields: [{ name: 'album', type: 'AgentAlbumDetail?', fromJson: "AgentAlbumDetail.fromJson(json[r'album'])" }],
-  },
-  {
-    className: 'AgentReadAssetMetadataToolResponseDto',
-    fileName: 'agent_read_asset_metadata_tool_response_dto.dart',
+    className: "AgentListAlbumsToolResponseDto",
+    fileName: "agent_list_albums_tool_response_dto.dart",
     fields: [
       {
-        name: 'assets',
-        type: 'List<AgentAssetMetadataResult>',
-        defaultValue: 'const []',
+        name: "albums",
+        type: "List<AgentAlbumSummary>",
+        defaultValue: "const []",
+        fromJson: "AgentAlbumSummary.listFromJson(json[r'albums'])",
+      },
+    ],
+  },
+  {
+    className: "AgentReadAlbumToolResponseDto",
+    fileName: "agent_read_album_tool_response_dto.dart",
+    fields: [
+      {
+        name: "album",
+        type: "AgentAlbumDetail?",
+        fromJson: "AgentAlbumDetail.fromJson(json[r'album'])",
+      },
+    ],
+  },
+  {
+    className: "AgentReadAssetMetadataToolResponseDto",
+    fileName: "agent_read_asset_metadata_tool_response_dto.dart",
+    fields: [
+      {
+        name: "assets",
+        type: "List<AgentAssetMetadataResult>",
+        defaultValue: "const []",
         fromJson: "AgentAssetMetadataResult.listFromJson(json[r'assets'])",
       },
     ],
   },
   {
-    className: 'AgentReadAssetOriginalsToolResponseDto',
-    fileName: 'agent_read_asset_originals_tool_response_dto.dart',
-    fields: [{ name: 'originals', type: 'List<AgentAssetMediaReference>', defaultValue: 'const []', fromJson: "AgentAssetMediaReference.listFromJson(json[r'originals'])" }],
-  },
-  {
-    className: 'AgentReadAssetPreviewsToolResponseDto',
-    fileName: 'agent_read_asset_previews_tool_response_dto.dart',
-    fields: [{ name: 'previews', type: 'List<AgentAssetMediaReference>', defaultValue: 'const []', fromJson: "AgentAssetMediaReference.listFromJson(json[r'previews'])" }],
-  },
-  {
-    className: 'AgentSearchAssetsToolResponseDto',
-    fileName: 'agent_search_assets_tool_response_dto.dart',
+    className: "AgentReadAssetOriginalsToolResponseDto",
+    fileName: "agent_read_asset_originals_tool_response_dto.dart",
     fields: [
       {
-        name: 'assets',
-        type: 'List<AgentSearchAssetResult>',
-        defaultValue: 'const []',
-        fromJson: "AgentSearchAssetResult.listFromJson(json[r'assets'])",
+        name: "originals",
+        type: "List<AgentAssetMediaReference>",
+        defaultValue: "const []",
+        fromJson: "AgentAssetMediaReference.listFromJson(json[r'originals'])",
       },
-      { name: 'nextPage', type: 'String?', fromJson: "mapValueOfType<String>(json, r'nextPage')" },
+    ],
+  },
+  {
+    className: "AgentReadAssetPreviewsToolResponseDto",
+    fileName: "agent_read_asset_previews_tool_response_dto.dart",
+    fields: [
+      {
+        name: "previews",
+        type: "List<AgentAssetMediaReference>",
+        defaultValue: "const []",
+        fromJson: "AgentAssetMediaReference.listFromJson(json[r'previews'])",
+      },
+    ],
+  },
+  {
+    className: "AgentSearchAssetsToolResponseDto",
+    fileName: "agent_search_assets_tool_response_dto.dart",
+    fields: [
+      {
+        name: "summary",
+        type: "String?",
+        fromJson: "mapValueOfType<String>(json, r'summary')",
+      },
+      {
+        name: "detail",
+        type: "AgentSearchAssetsDetail?",
+        fromJson: "AgentSearchAssetsDetail.fromJson(json[r'detail'])",
+      },
+      {
+        name: "returnedCount",
+        type: "int?",
+        fromJson: "mapValueOfType<int>(json, r'returnedCount')",
+      },
+      {
+        name: "hasMore",
+        type: "bool?",
+        fromJson: "mapValueOfType<bool>(json, r'hasMore')",
+      },
+      {
+        name: "nextPage",
+        type: "String?",
+        fromJson: "mapValueOfType<String>(json, r'nextPage')",
+      },
+      {
+        name: "resultSize",
+        type: "AgentToolResultSize?",
+        fromJson: "AgentToolResultSize.fromJson(json[r'resultSize'])",
+      },
+      {
+        name: "sample",
+        type: "AgentSearchAssetsSample?",
+        fromJson: "AgentSearchAssetsSample.fromJson(json[r'sample'])",
+      },
+      {
+        name: "selectionHandle",
+        type: "AgentSearchAssetsSelectionHandle?",
+        fromJson:
+          "AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle'])",
+      },
+      {
+        name: "approximateTotal",
+        type: "int?",
+        fromJson: "mapValueOfType<int>(json, r'approximateTotal')",
+      },
+      {
+        name: "totalCount",
+        type: "int?",
+        fromJson: "mapValueOfType<int>(json, r'totalCount')",
+      },
     ],
   },
 ];
 
-const modelDir = join(process.cwd(), '..', 'mobile', 'openapi', 'lib', 'model');
+const modelDir = join(process.cwd(), "..", "mobile", "openapi", "lib", "model");
 
 for (const dto of responseDtos) {
-  writeFileSync(join(modelDir, dto.fileName), renderDto(dto), 'utf8');
+  writeFileSync(join(modelDir, dto.fileName), renderDto(dto), "utf8");
 }
 
 function renderDto({ className, fields }) {
   const enumName = `${className}StatusEnum`;
   const transformerName = `${enumName}TypeTransformer`;
   const fieldConstructorParams = fields
-    .map((field) => (field.defaultValue ? `    this.${field.name} = ${field.defaultValue},` : `    this.${field.name},`))
-    .join('\n');
-  const fieldDeclarations = fields.map((field) => `  ${field.type} ${field.name};`).join('\n\n');
-  const equalityFields = fields.map((field) => `    ${fieldEquality(field)} &&`).join('\n');
-  const hashFields = fields.map((field) => `    (${fieldHash(field)}) +`).join('\n');
-  const toStringFields = fields.map((field) => `, ${field.name}=$${field.name}`).join('');
-  const toJsonFields = fields.map(renderToJsonField).join('\n');
-  const fromJsonFields = fields.map((field) => `        ${field.name}: ${field.fromJson},`).join('\n');
-  const requiredKeys = ['status', 'toolCall'].map((field) => `    '${field}',`).join('\n');
+    .map((field) =>
+      field.defaultValue
+        ? `    this.${field.name} = ${field.defaultValue},`
+        : `    this.${field.name},`,
+    )
+    .join("\n");
+  const fieldDeclarations = fields
+    .map((field) => `  ${field.type} ${field.name};`)
+    .join("\n\n");
+  const equalityFields = fields
+    .map((field) => `    ${fieldEquality(field)} &&`)
+    .join("\n");
+  const hashFields = fields
+    .map((field) => `    (${fieldHash(field)}) +`)
+    .join("\n");
+  const toStringFields = fields
+    .map((field) => `, ${field.name}=$${field.name}`)
+    .join("");
+  const toJsonFields = fields.map(renderToJsonField).join("\n");
+  const fromJsonFields = fields
+    .map((field) => `        ${field.name}: ${field.fromJson},`)
+    .join("\n");
+  const requiredKeys = ["status", "toolCall"]
+    .map((field) => `    '${field}',`)
+    .join("\n");
 
   return `//
 // AUTO-GENERATED FILE, DO NOT MODIFY!
@@ -102,7 +189,7 @@ ${fieldDeclarations}
   bool operator ==(Object other) => identical(this, other) || other is ${className} &&
     other.status == status &&
     other.toolCall == toolCall &&
-    other.reason == reason${fields.length > 0 ? ' &&' : ';'}
+    other.reason == reason${fields.length > 0 ? " &&" : ";"}
 ${equalityFields.slice(0, -3)};
 
   @override
@@ -110,7 +197,7 @@ ${equalityFields.slice(0, -3)};
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason == null ? 0 : reason!.hashCode)${fields.length > 0 ? ' +' : ';'}
+    (reason == null ? 0 : reason!.hashCode)${fields.length > 0 ? " +" : ";"}
 ${hashFields.slice(0, -2)};
 
   @override
@@ -271,7 +358,7 @@ class ${transformerName} {
 }
 
 function fieldEquality(field) {
-  if (field.type.startsWith('List<')) {
+  if (field.type.startsWith("List<")) {
     return `_deepEquality.equals(other.${field.name}, ${field.name})`;
   }
 
@@ -279,7 +366,7 @@ function fieldEquality(field) {
 }
 
 function fieldHash(field) {
-  if (field.type.endsWith('?')) {
+  if (field.type.endsWith("?")) {
     return `${field.name} == null ? 0 : ${field.name}!.hashCode`;
   }
 
@@ -287,7 +374,7 @@ function fieldHash(field) {
 }
 
 function renderToJsonField(field) {
-  if (field.type.endsWith('?')) {
+  if (field.type.endsWith("?")) {
     return `    if (this.${field.name} != null) {
       json[r'${field.name}'] = this.${field.name};
     }`;
