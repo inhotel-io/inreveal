@@ -1,6 +1,13 @@
 import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
-import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import {
+  AgentOperationPlanStatus,
+  AgentOperationRiskLevel,
+  AgentOperationStatus,
+  AgentOperationTargetKind,
+  AgentOperationType,
+  AgentToolName,
+} from 'src/enum';
 import { AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
@@ -2021,6 +2028,150 @@ describe(AgentMcpService.name, () => {
       expect(result.content[0].text).toEqual(expect.stringContaining('Invalid tool arguments'));
       expect(result.content[0].text.length).toBeLessThanOrEqual(MCP_TOOL_TEXT_MAX_CHARS);
       expect(result.content[0].text).not.toBe(JSON.stringify(result.structuredContent));
+    });
+
+    it('rejects provider-facing raw planning assetIds before delegation', async () => {
+      const rawAssetId = factory.uuid();
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add copied IDs.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add copied IDs.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetIds: [rawAssetId],
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+
+      expect(result.isError).toBe(true);
+      expect(structuredContent).toMatchObject({
+        status: 'error',
+        error: 'Invalid tool arguments',
+        toolName: AgentToolName.ProposeAlbumOperations,
+        retryable: true,
+      });
+      expect(structuredContent.issues).toEqual([
+        expect.objectContaining({
+          path: 'operations.0.assetIds',
+          message: expect.stringContaining('Provider-facing planning calls must use selection handles'),
+        }),
+      ]);
+      expect(JSON.stringify(response)).not.toContain(rawAssetId);
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+    });
+
+    it('rejects provider-facing assetSource.explicitAssets before delegation', async () => {
+      const rawAssetId = factory.uuid();
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add explicit assets.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add explicit assets.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSource: { kind: 'explicitAssets', assetIds: [rawAssetId] },
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+
+      expect(result.isError).toBe(true);
+      expect(structuredContent.issues).toEqual([
+        expect.objectContaining({
+          path: 'operations.0.assetSource',
+          message: expect.stringContaining('assetSource.explicitAssets is not available'),
+        }),
+      ]);
+      expect(JSON.stringify(response)).not.toContain(rawAssetId);
+      expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
+    });
+
+    it('redacts materialized planning assetIds from MCP structured content', async () => {
+      const rawAssetIds = [factory.uuid(), factory.uuid()];
+      const serviceResult = {
+        status: 'success',
+        summary:
+          'Plan revision 1: 0 album create, 1 asset add, 0 detail update, 0 cover change, 0 metadata update operation(s).',
+        toolCall: null,
+        plan: {
+          id: factory.uuid(),
+          sessionId,
+          revision: 1,
+          status: AgentOperationPlanStatus.Proposed,
+          summary: 'Add handle assets.',
+          operations: [
+            {
+              id: factory.uuid(),
+              planId: factory.uuid(),
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add handle assets.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              temporaryTargetId: null,
+              assetIds: rawAssetIds,
+              payload: {},
+              dependencyIds: [],
+              riskLevel: AgentOperationRiskLevel.Medium,
+              enabled: true,
+              status: AgentOperationStatus.Proposed,
+              result: null,
+              error: null,
+              createdAt: new Date('2026-05-27T12:00:00.000Z'),
+              updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+            },
+          ],
+          createdAt: new Date('2026-05-27T12:00:00.000Z'),
+          updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+        },
+      };
+      operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAlbumOperations, {
+          summary: 'Add handle assets.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add handle assets.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: factory.uuid(),
+              assetSelectionHandleId: factory.uuid(),
+              payload: {},
+            },
+          ],
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, any>;
+      const [operation] = structuredContent.plan.operations;
+
+      expect(operation).not.toHaveProperty('assetIds');
+      expect(operation.assetCount).toBe(2);
+      expect(JSON.stringify(response)).not.toContain('"assetIds"');
+      expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
     });
 
     it('returns recoverable invalid selection handle tool errors as MCP tool results', async () => {
