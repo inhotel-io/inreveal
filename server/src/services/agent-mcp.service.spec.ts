@@ -2242,6 +2242,10 @@ describe(AgentMcpService.name, () => {
     it('redacts nested planning result ids from MCP structured content', async () => {
       const rawAssetIds = [factory.uuid(), factory.uuid()];
       const rawResultAssetId = factory.uuid();
+      const operationSampleAssetIds = [factory.uuid(), factory.uuid()];
+      const operationPreviousValueAssetId = factory.uuid();
+      const resultSampleAssetIds = [factory.uuid()];
+      const resultPreviousValueAssetId = factory.uuid();
       const serviceResult = {
         status: 'success',
         summary: 'Plan applied.',
@@ -2267,9 +2271,50 @@ describe(AgentMcpService.name, () => {
               riskLevel: AgentOperationRiskLevel.Low,
               enabled: true,
               status: AgentOperationStatus.Proposed,
+              reviewMetadata: {
+                warnings: ['Will update selected assets.'],
+                assetMetadata: {
+                  sampleAssetIds: operationSampleAssetIds,
+                  fields: [
+                    {
+                      key: 'rating',
+                      label: 'Rating',
+                      proposedValue: 5,
+                      previousValues: [
+                        {
+                          assetId: operationPreviousValueAssetId,
+                          value: 4,
+                          valueKind: 'number',
+                          observedAt: '2026-05-27T12:00:00.000Z',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
               result: {
                 assetIds: rawAssetIds,
                 assetResults: [{ id: rawResultAssetId, success: true }],
+                reviewMetadata: {
+                  warnings: ['Result warning.'],
+                  assetMetadata: {
+                    sampleAssetIds: resultSampleAssetIds,
+                    fields: [
+                      {
+                        key: 'favorite',
+                        label: 'Favorite',
+                        proposedValue: true,
+                        previousValues: [
+                          {
+                            assetId: resultPreviousValueAssetId,
+                            value: false,
+                            valueKind: 'boolean',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
               },
               error: null,
               createdAt: new Date('2026-05-27T12:00:00.000Z'),
@@ -2299,10 +2344,26 @@ describe(AgentMcpService.name, () => {
       expect(operation.assetCount).toBe(2);
       expect(operation.result.assetCount).toBe(2);
       expect(operation.result.assetResultsCount).toBe(1);
+      expect(operation.reviewMetadata.assetMetadata.sampleAssetCount).toBe(2);
+      expect(operation.reviewMetadata.assetMetadata.fields[0].previousValues).toEqual([
+        { value: 4, valueKind: 'number', observedAt: '2026-05-27T12:00:00.000Z' },
+      ]);
+      expect(operation.reviewMetadata.warnings).toEqual(['Will update selected assets.']);
+      expect(operation.result.reviewMetadata.assetMetadata.sampleAssetCount).toBe(1);
+      expect(operation.result.reviewMetadata.assetMetadata.fields[0].previousValues).toEqual([
+        { value: false, valueKind: 'boolean' },
+      ]);
+      expect(operation.result.reviewMetadata.warnings).toEqual(['Result warning.']);
       expect(operation.result).not.toHaveProperty('assetResults');
       expect(JSON.stringify(response)).not.toContain('"assetIds"');
+      expect(JSON.stringify(response)).not.toContain('sampleAssetIds');
+      expect(JSON.stringify(response)).not.toContain('"assetId"');
       expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
       expect(JSON.stringify(response)).not.toContain(rawResultAssetId);
+      expect(JSON.stringify(response)).not.toContain(operationSampleAssetIds[0]);
+      expect(JSON.stringify(response)).not.toContain(operationPreviousValueAssetId);
+      expect(JSON.stringify(response)).not.toContain(resultSampleAssetIds[0]);
+      expect(JSON.stringify(response)).not.toContain(resultPreviousValueAssetId);
     });
 
     it('returns recoverable invalid selection handle tool errors as MCP tool results', async () => {
