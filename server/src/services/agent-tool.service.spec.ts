@@ -4406,7 +4406,7 @@ describe(AgentToolService.name, () => {
     }
   });
 
-  it('readSelectionMetadata stores replayable request metadata for approval retry', async () => {
+  it('readSelectionMetadata stores replayable request metadata and handle asset count for approval retry', async () => {
     const auth = AuthFactory.create();
     const selectionHandleId = newUuid();
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.Strict });
@@ -4415,7 +4415,7 @@ describe(AgentToolService.name, () => {
       toolName: AgentToolName.ReadSelectionMetadata,
       requestSummary: `Read selection metadata for handle ${selectionHandleId} (2 sample(s))`,
       redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
-      assetCount: 2,
+      assetCount: 100,
     });
 
     sessionRepository.getById.mockResolvedValue(session);
@@ -4425,7 +4425,7 @@ describe(AgentToolService.name, () => {
       userId: auth.user.id,
       sourceToolCallId: null,
       assetIds: [newUuid(), newUuid()],
-      assetCount: 2,
+      assetCount: 100,
       sampleAssetIds: [newUuid(), newUuid()],
       expiresAt: new Date(now.getTime() + 60 * 60_000),
       createdAt: now,
@@ -4443,7 +4443,7 @@ describe(AgentToolService.name, () => {
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
-        assetCount: 2,
+        assetCount: 100,
       }),
       expect.any(Object),
       AgentToolDataClass.Metadata,
@@ -4559,6 +4559,36 @@ describe(AgentToolService.name, () => {
       },
     });
     expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(assetId);
+  });
+
+  it('readSelectionMetadata returns wrong-domain recovery for readable person IDs', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set([personId]));
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readSelectionMetadata(auth, session.id, { selectionHandleId: personId })
+      .catch((error) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
+      error: 'That value is a person ID, not a selection handle ID.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'selectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain: 'person',
+      },
+    });
+    expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(personId);
   });
 
   it('listAlbums filters out shared albums when assetScope.sharedSpaces is false', async () => {

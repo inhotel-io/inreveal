@@ -54,6 +54,7 @@ export type AgentMcpToolContract<TName extends AgentToolName = AgentToolName> = 
 export type AgentMcpReadToolName =
   | AgentToolName.ResolveAssetSearchFilters
   | AgentToolName.SearchAssets
+  | AgentToolName.ReadSelectionMetadata
   | AgentToolName.ReadAssetMetadata
   | AgentToolName.ReadAssetPreviews
   | AgentToolName.ReadAssetOriginals

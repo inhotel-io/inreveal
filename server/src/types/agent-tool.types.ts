@@ -364,6 +364,7 @@ export type AgentUserLookupResult = {
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolResolveAssetSearchFiltersRequestMetadata
+  | AgentToolReadSelectionMetadataRequestMetadata
   | AgentToolReadAssetMetadataRequestMetadata
   | AgentToolReadAssetIdsRequestMetadata
   | AgentToolReadAlbumRequestMetadata
