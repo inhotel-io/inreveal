@@ -9,6 +9,7 @@ const expectedToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadSelectionMetadata,
+  AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -31,6 +32,7 @@ const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadSelectionMetadata,
+  AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -254,6 +256,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     const resolver = toolsByName.get(AgentToolName.ResolveAssetSearchFilters)?.inputSchema;
     const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
     const selectionMetadata = toolsByName.get(AgentToolName.ReadSelectionMetadata)?.inputSchema;
+    const curation = toolsByName.get(AgentToolName.CurateSelection)?.inputSchema;
     const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
     const searchProperties = search?.properties as Record<string, { description?: string }> | undefined;
     const searchFiltersDescription = searchProperties?.filters?.description;
@@ -285,6 +288,23 @@ describe(AgentMcpToolRegistryService.name, () => {
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
+      }),
+    });
+    expect(curation?.properties).toMatchObject({
+      selectionHandleId: expect.objectContaining({
+        description: expect.stringContaining('curateSelection'),
+      }),
+      targetCount: expect.objectContaining({
+        description: expect.stringContaining('derived selection handle'),
+      }),
+      strategy: expect.objectContaining({
+        description: expect.stringContaining('not objective image-quality scoring'),
+      }),
+      constraints: expect.objectContaining({
+        description: expect.stringContaining('metadata-only curation constraints'),
+      }),
+      sampleSize: expect.objectContaining({
+        description: expect.stringContaining('sample'),
       }),
     });
 

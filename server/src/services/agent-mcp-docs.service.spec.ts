@@ -149,6 +149,17 @@ describe(AgentMcpDocsService.name, () => {
     expect(docs).toContain('selectionHandle.id');
   });
 
+  it('documents metadata-only curation into derived selection handles', () => {
+    const markdown = sut.generateMarkdown();
+
+    expect(markdown).toContain('`curateSelection`');
+    expect(markdown).toContain('targetCount');
+    expect(markdown).toContain('metadata-only');
+    expect(markdown).toContain('not objective image-quality scoring');
+    expect(markdown).toContain('new selectionHandle');
+    expect(markdown).not.toContain('choose selected assetIds');
+  });
+
   it('documents existing-space detail updates, supported fields, and no-op guidance', () => {
     const markdown = sut.generateMarkdown();
 

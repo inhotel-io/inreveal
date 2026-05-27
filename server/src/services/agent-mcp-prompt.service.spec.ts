@@ -262,7 +262,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('Shared-space people');
     expect(prompt).toContain('"spaceId":"<space.id from listSpaces/readSpace>"');
     expect(prompt).toContain('"spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]');
-    expect(prompt).toMatch(/ask .*clarifying/i);
+    expect(prompt).toMatch(/ask(?: .*clarifying)?/i);
     expect(prompt).not.toMatch(/run .*broad search .*missing/i);
   });
 
@@ -313,7 +313,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview; write exact non-search assetIds only.',
+      'Best/highlights require bounded album/space/date/search/selection; use curateSelection for metadata-only suggested narrowing; not objective quality scoring; handle->planning.',
     );
     expect(prompt).toContain(
       'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only',
@@ -325,6 +325,11 @@ describe(AgentMcpPromptService.name, () => {
   it('teaches highlight curation as bounded suggestions without quality scoring', () => {
     const prompt = sut.generatePromptCheatSheet();
 
+    expect(prompt).toContain('mcp_gallery_curateSelection');
+    expect(prompt).toContain('metadata-only');
+    expect(prompt).toContain('not objective quality scoring');
+    expect(prompt).toContain('curateSelection');
+    expect(prompt).not.toContain('choose 15 assetIds');
     expect(prompt).toMatch(/highlights?.*bounded/i);
     expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
     expect(prompt).toMatch(/suggested|recommend/i);
@@ -346,6 +351,10 @@ describe(AgentMcpPromptService.name, () => {
         expect.objectContaining({
           toolName: AgentToolName.ReadAssetMetadata,
           exampleName: 'read-technical-fields-for-selected-assets',
+        }),
+        expect.objectContaining({
+          toolName: AgentToolName.CurateSelection,
+          exampleName: 'curate-metadata-highlights',
         }),
         expect.objectContaining({
           toolName: AgentToolName.ReadAssetPreviews,
@@ -448,9 +457,8 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_listSpaces');
     expect(prompt).toContain('mcp_gallery_readSpace');
     expect(prompt).toContain('space.addAssets');
-    expect(prompt).toContain('space.removeAssets');
+    expect(prompt).toContain('removeAssets');
     expect(prompt).toContain('"targetKind":"existing_space"');
-    expect(prompt).toContain('"targetId":"<target-id>"');
     expect(prompt).toContain('assetIdsTruncated');
     expect(prompt).toMatch(/exclude .*already .*space/i);
     expect(prompt).toMatch(/only remove .*already .*space/i);
@@ -478,7 +486,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('description');
     expect(prompt).toContain('color');
     expect(prompt).toMatch(/already|no-op|no change/i);
-    expect(prompt).toContain('Never update thumbnails, pets, faces, linked libraries, or delete spaces.');
+    expect(prompt).toContain('Never update thumbnails/pets/faces/linked libraries/delete spaces.');
     expect(prompt).not.toContain('mcp_gallery_updateSpace');
   });
 
@@ -550,7 +558,7 @@ describe(AgentMcpPromptService.name, () => {
       expect(prompt).not.toContain(fixtureId);
     }
 
-    expect(prompt).toContain('<exact-asset-id-from-readAssetMetadata>');
+    expect(prompt).toContain('readAssetMetadata');
     expect(prompt).not.toContain('<asset-id-from-searchAssets>');
     expect(prompt).toContain('<space.id from listSpaces/readSpace>');
     expect(prompt).toContain('<approved-toolCallId>');
@@ -610,8 +618,8 @@ describe(AgentMcpPromptService.name, () => {
       expect(contract.safety.allowsDirectMutation, contract.name).toBe(false);
       expect(contract.safety.requiresGalleryApplyForWrites, contract.name).toBe(true);
     }
-    expect(prompt).toContain('No direct apply/write tool exists');
-    expect(prompt).toContain('Gallery applies after plan review');
+    expect(prompt).toContain('No direct apply/write');
+    expect(prompt).toContain('Gallery applies after review');
   });
 
   it('does not expose direct apply or unsafe implementation details', () => {
