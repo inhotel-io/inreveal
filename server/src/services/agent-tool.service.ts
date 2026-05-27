@@ -2,6 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentSession, AgentToolCall } from 'src/database';
 import { buildAgentSourceRef } from 'src/dtos/agent-asset-source.dto';
 import {
+  AgentCurateSelectionToolRequestDto,
+  AgentCurateSelectionToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -37,6 +39,7 @@ import {
   AgentToolDataClass,
   AgentToolName,
   AlbumUserRole,
+  AssetType,
   AssetVisibility,
 } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
@@ -55,6 +58,7 @@ import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-
 import {
   invalidSelectionHandleError,
   isAgentMcpRecoverableToolError,
+  selectionTooLargeError,
   wrongIdDomainError,
 } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
@@ -70,6 +74,9 @@ import {
   AgentAssetMetadataDetail,
   AgentAssetMetadataField,
   AgentAssetMetadataResult,
+  AgentCurateSelectionConstraints,
+  AgentCurateSelectionDiversifyBy,
+  AgentCurateSelectionStrategy,
   AgentReadSelectionMetadataCounts,
   AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetResult,
@@ -90,6 +97,7 @@ import {
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadSelectionMetadataRequestMetadata,
+  AgentToolCurateSelectionRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
   AgentToolResponseIdsMetadata,
@@ -156,11 +164,24 @@ const isReadAssetIdsRequestMetadata = (
 
 const maxAgentSpaceAssetIds = 10_000;
 const selectionMetadataRecoveryLimit = 5;
+const maxMetadataCurationSourceAssets = 1000;
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
 
 type PreparedSelectionMetadataRequest = AgentReadSelectionMetadataToolRequestDto & {
   resolvedSelectionHandleAssetCount?: number;
 };
+
+type PreparedCurateSelectionRequest = AgentCurateSelectionToolRequestDto & {
+  resolvedSourceAssetCount?: number;
+};
+
+type CurateCandidate = {
+  asset: AgentAssetMetadata;
+  order: number;
+  score: number;
+};
+
+type AgentCurateSelectionAssetType = 'IMAGE' | 'VIDEO';
 
 @Injectable()
 export class AgentToolService {
@@ -204,6 +225,14 @@ export class AgentToolService {
     dto: AgentReadSelectionMetadataToolRequestDto,
   ): Promise<AgentReadSelectionMetadataToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.readSelectionMetadataDescriptor());
+  }
+
+  async curateSelection(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentCurateSelectionToolRequestDto,
+  ): Promise<AgentCurateSelectionToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.curateSelectionDescriptor());
   }
 
   async resolveAssetSearchFilters(
@@ -374,6 +403,9 @@ export class AgentToolService {
       }
       case AgentToolName.ReadSelectionMetadata: {
         return this.readSelectionMetadata(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.CurateSelection: {
+        return this.curateSelection(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ResolveAssetSearchFilters: {
         return this.resolveAssetSearchFilters(auth, session.id, { toolCallId: toolCall.id });
@@ -953,6 +985,180 @@ export class AgentToolService {
     return truncated ? this.appendTruncatedResponseSummary(summary) : summary;
   }
 
+  private curateMetadataSelection(input: {
+    assets: AgentAssetMetadata[];
+    targetCount: number;
+    strategy: AgentCurateSelectionStrategy;
+    constraints: AgentCurateSelectionConstraints;
+    criteria?: string;
+  }) {
+    const warnings: string[] = [];
+    const eligible = this.applyCurateSelectionConstraints(input.assets, input.constraints, input.strategy);
+    const candidates = eligible.map((asset, order) => ({
+      asset,
+      order,
+      score: this.getCurateCandidateScore(asset, input.strategy),
+    }));
+    const ranked = this.rankCurateCandidates(candidates, input.strategy, input.constraints);
+    const selectedCandidates =
+      input.targetCount >= ranked.length ? candidates : ranked.slice(0, Math.min(input.targetCount, ranked.length));
+    const selected = selectedCandidates.map((candidate) => candidate.asset);
+    if (input.targetCount > ranked.length) {
+      warnings.push(`Requested ${input.targetCount} assets but only ${ranked.length} eligible assets were available.`);
+    }
+    if (ranked.length === 0) {
+      warnings.push('No eligible metadata rows were available for this curation request.');
+    }
+
+    const criteriaSummary = [
+      `Metadata-only ${input.strategy} curation used favorites, ratings, dates, tags, and location; no visual inspection or objective image analysis was used.`,
+      `Selected ${selected.length} of ${input.assets.length} hydrated metadata rows from the source selection.`,
+    ];
+    if (input.criteria) {
+      criteriaSummary.push(`User criteria: ${input.criteria}`);
+    }
+    if (input.constraints.diversifyBy?.includes('people')) {
+      criteriaSummary.push('People diversity was requested but is not available from metadata-only rows in this version.');
+    }
+
+    return { selectedAssets: selected, criteriaSummary, warnings };
+  }
+
+  private applyCurateSelectionConstraints(
+    assets: AgentAssetMetadata[],
+    constraints: AgentCurateSelectionConstraints,
+    strategy: AgentCurateSelectionStrategy,
+  ): AgentAssetMetadata[] {
+    const requestedTypes = constraints.types ?? (strategy === 'cover-candidate' ? ['IMAGE'] : ['IMAGE', 'VIDEO']);
+    let eligible = assets.filter((asset) => requestedTypes.includes(asset.type as AgentCurateSelectionAssetType));
+
+    if (strategy === 'cover-candidate') {
+      eligible = eligible.filter((asset) => asset.type === AssetType.Image);
+    }
+    if (constraints.excludeVideos) {
+      eligible = eligible.filter((asset) => asset.type !== AssetType.Video);
+    }
+    if (constraints.includeFavorites === false) {
+      eligible = eligible.filter((asset) => !asset.isFavorite);
+    }
+    if (constraints.minRating !== undefined) {
+      eligible = eligible.filter((asset) => (asset.exifInfo?.rating ?? 0) >= constraints.minRating!);
+    }
+
+    return eligible;
+  }
+
+  private getCurateCandidateScore(asset: AgentAssetMetadata, strategy: AgentCurateSelectionStrategy): number {
+    return (
+      (asset.isFavorite ? 100 : 0) +
+      (asset.exifInfo?.rating ?? 0) * 10 +
+      (this.hasCurateLocation(asset) ? 3 : 0) +
+      (asset.localDateTime ? 2 : 0) +
+      Math.min(asset.tags.length, 3) +
+      (strategy === 'cover-candidate' && asset.type === AssetType.Image ? 1 : 0)
+    );
+  }
+
+  private rankCurateCandidates(
+    candidates: CurateCandidate[],
+    strategy: AgentCurateSelectionStrategy,
+    constraints: AgentCurateSelectionConstraints,
+  ): CurateCandidate[] {
+    const sorted = this.sortCurateCandidates(candidates);
+
+    if (strategy === 'favorites-first') {
+      return [...sorted].sort((left, right) => {
+        const favoriteDelta = Number(right.asset.isFavorite) - Number(left.asset.isFavorite);
+        return favoriteDelta || this.compareCurateCandidates(left, right);
+      });
+    }
+
+    if (strategy === 'date-spread') {
+      return this.roundRobinCurateGroups(sorted, 'date');
+    }
+
+    const supportedDiversifiers = constraints.diversifyBy?.filter((value) => value !== 'people') ?? [];
+    return supportedDiversifiers.reduce(
+      (ranked, diversifyBy) => this.roundRobinCurateGroups(ranked, diversifyBy),
+      sorted,
+    );
+  }
+
+  private sortCurateCandidates(candidates: CurateCandidate[]): CurateCandidate[] {
+    return [...candidates].sort((left, right) => this.compareCurateCandidates(left, right));
+  }
+
+  private compareCurateCandidates(left: CurateCandidate, right: CurateCandidate): number {
+    const scoreDelta = right.score - left.score;
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    const dateDelta = right.asset.localDateTime.getTime() - left.asset.localDateTime.getTime();
+    if (dateDelta !== 0) {
+      return dateDelta;
+    }
+
+    return left.order - right.order || left.asset.id.localeCompare(right.asset.id);
+  }
+
+  private roundRobinCurateGroups(
+    candidates: CurateCandidate[],
+    diversifyBy: AgentCurateSelectionDiversifyBy,
+  ): CurateCandidate[] {
+    const groups = new Map<string, CurateCandidate[]>();
+    for (const candidate of candidates) {
+      const key = this.getCurateGroupKey(candidate.asset, diversifyBy);
+      groups.set(key, [...(groups.get(key) ?? []), candidate]);
+    }
+
+    const groupQueues = [...groups.entries()]
+      .map(([key, group]) => ({ key, group: this.sortCurateCandidates(group) }))
+      .sort((left, right) => {
+        const topCandidateDelta = this.compareCurateCandidates(left.group[0], right.group[0]);
+        return topCandidateDelta || left.key.localeCompare(right.key);
+      })
+      .map(({ group }) => group);
+    const ranked: CurateCandidate[] = [];
+
+    while (groupQueues.some((group) => group.length > 0)) {
+      for (const group of groupQueues) {
+        const next = group.shift();
+        if (next) {
+          ranked.push(next);
+        }
+      }
+    }
+
+    return ranked;
+  }
+
+  private getCurateGroupKey(asset: AgentAssetMetadata, diversifyBy: AgentCurateSelectionDiversifyBy): string {
+    switch (diversifyBy) {
+      case 'date':
+        return asset.localDateTime.toISOString().slice(0, 10);
+      case 'location': {
+        const location = [asset.exifInfo?.city, asset.exifInfo?.state, asset.exifInfo?.country]
+          .filter(Boolean)
+          .join('|');
+        return location || 'location:missing';
+      }
+      case 'tags':
+        return (
+          asset.tags
+            .map((tag) => tag.value)
+            .sort((left, right) => left.localeCompare(right))
+            .join('|') || 'tags:missing'
+        );
+      case 'people':
+        return 'people:unavailable';
+    }
+  }
+
+  private hasCurateLocation(asset: AgentAssetMetadata): boolean {
+    return Boolean(asset.exifInfo?.city || asset.exifInfo?.state || asset.exifInfo?.country);
+  }
+
   private resolveAssetSearchFiltersDescriptor(): AgentReadToolDescriptor<
     AgentResolveAssetSearchFiltersToolRequestDto,
     {
@@ -1015,6 +1221,153 @@ export class AgentToolService {
       request.cameraModels,
       request.lensModels,
     ].reduce((total, terms) => total + (terms?.length ?? 0), 0);
+  }
+
+  private curateSelectionDescriptor(): AgentReadToolDescriptor<
+    AgentCurateSelectionToolRequestDto,
+    {
+      summary: string;
+      strategy: AgentCurateSelectionStrategy;
+      selectionHandle: AgentSearchAssetsSelectionHandleResult;
+      sourceAssetCount: number;
+      selectedAssetCount: number;
+      criteriaSummary: string[];
+      warnings?: string[];
+      sample?: AgentSearchAssetsSample;
+    }
+  > {
+    const selectionTooLargeInstruction =
+      'Rerun searchAssets with narrower filters or page the result, then retry curateSelection with a smaller same-session selectionHandle.id.';
+
+    return {
+      toolName: AgentToolName.CurateSelection,
+      dataClass: AgentToolDataClass.Metadata,
+      prepareRequest: async (auth, session, request) => {
+        const handle = await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        const sourceLimit = Math.min(
+          session.permissionPlanSnapshot.limits.maxAssetsPerToolCall,
+          maxMetadataCurationSourceAssets,
+        );
+        if (handle.assetCount > sourceLimit) {
+          throw selectionTooLargeError({
+            toolName: AgentToolName.CurateSelection,
+            sourceAssetCount: handle.assetCount,
+            maxSourceAssetCount: sourceLimit,
+            instruction: selectionTooLargeInstruction,
+          });
+        }
+        return { ...request, resolvedSourceAssetCount: handle.assetCount };
+      },
+      requestSummary: (request) =>
+        `Curate ${request.targetCount ?? 0} ${request.strategy ?? 'metadata-highlights'} asset(s) from handle ${request.selectionHandleId}`,
+      requestMetadata: (request) =>
+        ({
+          selectionHandleId: request.selectionHandleId ?? '',
+          targetCount: request.targetCount ?? 0,
+          strategy: request.strategy ?? 'metadata-highlights',
+          ...(request.criteria ? { criteria: request.criteria } : {}),
+          constraints: request.constraints ?? {},
+          sampleSize: request.sampleSize ?? 10,
+        }) as AgentToolCurateSelectionRequestMetadata,
+      requestedAssetCount: (request) =>
+        (request as PreparedCurateSelectionRequest).resolvedSourceAssetCount ?? request.targetCount ?? 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: (plan) => Math.min(plan.limits.maxAssetsPerToolCall, maxMetadataCurationSourceAssets),
+      perToolLimitDenialReason: (request, limit) =>
+        `Selection has ${(request as PreparedCurateSelectionRequest).resolvedSourceAssetCount ?? 0} assets, but metadata-only curation allows ${limit}. Narrow the search before curation.`,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: async (auth, session, request) => {
+        const handle = await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        const sourceLimit = Math.min(
+          session.permissionPlanSnapshot.limits.maxAssetsPerToolCall,
+          maxMetadataCurationSourceAssets,
+        );
+        if (handle.assetCount > sourceLimit) {
+          throw selectionTooLargeError({
+            toolName: AgentToolName.CurateSelection,
+            sourceAssetCount: handle.assetCount,
+            maxSourceAssetCount: sourceLimit,
+            instruction: selectionTooLargeInstruction,
+          });
+        }
+        return null;
+      },
+      execute: async (auth, session, request, toolCallId) => {
+        const handle = await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        const sourceLimit = Math.min(
+          session.permissionPlanSnapshot.limits.maxAssetsPerToolCall,
+          maxMetadataCurationSourceAssets,
+        );
+        if (handle.assetCount > sourceLimit) {
+          throw selectionTooLargeError({
+            toolName: AgentToolName.CurateSelection,
+            sourceAssetCount: handle.assetCount,
+            maxSourceAssetCount: sourceLimit,
+            instruction: selectionTooLargeInstruction,
+          });
+        }
+
+        const unorderedAssets =
+          handle.assetIds.length > 0 ? await this.assetRepository.getAgentMetadataByIds(handle.assetIds) : [];
+        const assetsById = new Map(unorderedAssets.map((asset) => [asset.id, asset as AgentAssetMetadata]));
+        const orderedAssets = handle.assetIds.flatMap((id) => {
+          const asset = assetsById.get(id);
+          return asset ? [asset] : [];
+        });
+        const { selectedAssets, criteriaSummary, warnings } = this.curateMetadataSelection({
+          assets: orderedAssets,
+          targetCount: request.targetCount ?? 0,
+          strategy: request.strategy ?? 'metadata-highlights',
+          constraints: request.constraints ?? {},
+          criteria: request.criteria,
+        });
+        const selectedIds = selectedAssets.map((asset) => asset.id);
+        const derived = await this.selectionHandleRepository.create({
+          sessionId: session.id,
+          userId: auth.user.id,
+          sourceToolCallId: toolCallId,
+          assetIds: selectedIds,
+          expiresAt: this.getSelectionHandleExpiresAt(session),
+        });
+        const sampleSize = request.sampleSize ?? 10;
+        const sampleAssets = sampleSize > 0 ? selectedAssets.slice(0, sampleSize) : [];
+        const sample = this.buildSearchSample(
+          sampleAssets.map((asset) =>
+            this.mapSelectedAssetMetadata(this.mapAssetMetadata(asset), [
+              'type',
+              'dates',
+              'location',
+              'tags',
+              'rating',
+              'filename',
+              'favorite',
+            ]),
+          ),
+        );
+
+        return {
+          summary: `Curated ${selectedIds.length} metadata-only ${request.strategy ?? 'metadata-highlights'} asset${selectedIds.length === 1 ? '' : 's'} from ${handle.assetCount} source asset${handle.assetCount === 1 ? '' : 's'}.`,
+          strategy: request.strategy ?? 'metadata-highlights',
+          selectionHandle: this.mapSearchSelectionHandle(derived),
+          sourceAssetCount: handle.assetCount,
+          selectedAssetCount: selectedIds.length,
+          criteriaSummary,
+          ...(warnings.length ? { warnings } : {}),
+          ...(sample ? { sample } : {}),
+        };
+      },
+      responseSummary: (result) => result.summary,
+      responseMetadata: (result) => ({
+        selectionHandleIds: [result.selectionHandle.id],
+        sourceRefs: [result.selectionHandle.sourceRef],
+        selectionHandleAssetCount: result.selectionHandle.assetCount,
+      }),
+      resultAssetCount: (result) => result.sourceAssetCount,
+      resultAlbumCount: () => 0,
+      resultSize: (result) => ({ returnedItems: result.selectedAssetCount, hasMore: false, nextPage: null }),
+      truncateForBudget: (result, budgetBytes) => this.truncateCurateSelectionResult(result, budgetBytes),
+      failedReason: 'Selection curation failed',
+    };
   }
 
   private readSelectionMetadataDescriptor(): AgentReadToolDescriptor<
@@ -2636,6 +2989,48 @@ export class AgentToolService {
           nextResult.counts.sampled,
           omittedFields.size > 0,
         ),
+      },
+      omittedFields: [...omittedFields],
+    };
+  }
+
+  private truncateCurateSelectionResult<
+    TResult extends {
+      summary: string;
+      sample?: AgentSearchAssetsSample;
+    },
+  >(result: TResult, budgetBytes: number): { result: TResult; omittedFields: string[] } {
+    const omittedFields = new Set<string>();
+    let nextResult = {
+      ...result,
+      sample: result.sample ? { ...result.sample, items: [...result.sample.items] } : undefined,
+    };
+
+    while (
+      nextResult.sample &&
+      nextResult.sample.items.length > 0 &&
+      (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes
+    ) {
+      nextResult = {
+        ...nextResult,
+        sample: {
+          sampleSize: nextResult.sample.items.length - 1,
+          items: nextResult.sample.items.slice(0, -1),
+        },
+      };
+      omittedFields.add('sample');
+    }
+
+    if (nextResult.sample?.items.length === 0) {
+      const { sample: _sample, ...withoutSample } = nextResult;
+      nextResult = withoutSample as typeof nextResult;
+      omittedFields.add('sample');
+    }
+
+    return {
+      result: {
+        ...nextResult,
+        summary: omittedFields.size > 0 ? this.appendTruncatedResponseSummary(nextResult.summary) : nextResult.summary,
       },
       omittedFields: [...omittedFields],
     };

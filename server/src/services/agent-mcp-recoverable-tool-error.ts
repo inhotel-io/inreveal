@@ -42,6 +42,26 @@ export const invalidSourceRefError = (input: {
     recovery: input.recovery,
   });
 
+export const selectionTooLargeError = (input: {
+  toolName: AgentToolName;
+  sourceAssetCount: number;
+  maxSourceAssetCount: number;
+  instruction: string;
+}) =>
+  new AgentMcpRecoverableToolError({
+    status: 'error',
+    error: 'Selection is too large for metadata-only curation',
+    toolName: input.toolName,
+    retryable: true,
+    hint: input.instruction,
+    recovery: {
+      kind: 'selection-too-large',
+      sourceAssetCount: input.sourceAssetCount,
+      maxSourceAssetCount: input.maxSourceAssetCount,
+      instruction: input.instruction,
+    },
+  });
+
 const agentIdDomainLabel = (domain: AgentIdDomain) => {
   switch (domain) {
     case 'selectionHandle': {
