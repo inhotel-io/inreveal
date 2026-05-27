@@ -43,6 +43,55 @@ const defineTool = ({ schema, ...tool }: AgentMcpToolDefinitionInput): AgentMcpT
   inputSchema: toInputSchema(schema),
 });
 
+const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const providerForbiddenAssetSourceRefs = new Set(['#/$defs/AgentExplicitAssetsAssetSourceInput']);
+
+const isProviderForbiddenRef = (value: unknown) =>
+  isJsonObject(value) && typeof value.$ref === 'string' && providerForbiddenAssetSourceRefs.has(value.$ref);
+
+const pruneProviderPlanningSchemaValue = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index--) {
+      if (isProviderForbiddenRef(value[index])) {
+        value.splice(index, 1);
+      } else {
+        pruneProviderPlanningSchemaValue(value[index]);
+      }
+    }
+    return;
+  }
+
+  if (!isJsonObject(value)) {
+    return;
+  }
+
+  const properties = value.properties;
+  if (isJsonObject(properties)) {
+    delete properties.assetIds;
+  }
+
+  if (Array.isArray(value.required)) {
+    value.required = value.required.filter((field) => field !== 'assetIds');
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    pruneProviderPlanningSchemaValue(nestedValue);
+  }
+};
+
+const toProviderFacingPlanningInputSchema = (inputSchema: Record<string, unknown>): Record<string, unknown> => {
+  const providerSchema = structuredClone(inputSchema);
+  pruneProviderPlanningSchemaValue(providerSchema);
+
+  if (isJsonObject(providerSchema.$defs)) {
+    delete providerSchema.$defs.AgentExplicitAssetsAssetSourceInput;
+  }
+
+  return providerSchema;
+};
+
 const cloneTool = (tool: AgentMcpToolDefinition): AgentMcpToolDefinition => structuredClone(tool);
 const approvedRequestInstruction =
   ' If approval is required, Gallery may ask the user; after approval, continue the approved request by calling this tool with toolCallId.';
@@ -292,12 +341,16 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       schema: AgentOperationPlanToolRequestSchemas[AgentToolName.SummarizePlan],
       annotations: planningToolAnnotations,
     }),
-  ].map((tool) =>
-    Object.hasOwn(AgentReadToolRequestSchemas, tool.name) ||
-    Object.hasOwn(AgentOperationPlanToolRequestSchemas, tool.name)
-      ? enrichToolFromContract(tool, getToolContract(contractsByName, tool.name))
-      : tool,
-  );
+  ].map((tool) => {
+    const planningTool = Object.hasOwn(AgentOperationPlanToolRequestSchemas, tool.name);
+    const providerTool = planningTool
+      ? { ...tool, inputSchema: toProviderFacingPlanningInputSchema(tool.inputSchema) }
+      : tool;
+
+    return Object.hasOwn(AgentReadToolRequestSchemas, tool.name) || planningTool
+      ? enrichToolFromContract(providerTool, getToolContract(contractsByName, tool.name))
+      : providerTool;
+  });
 
 @Injectable()
 export class AgentMcpToolRegistryService {
