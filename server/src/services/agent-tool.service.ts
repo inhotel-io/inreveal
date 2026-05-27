@@ -112,6 +112,7 @@ type ToolCallCreate = Parameters<AgentToolCallRepository['create']>[0];
 type AgentReadToolDescriptor<TRequest, TResult extends Record<string, unknown>> = {
   toolName: AgentToolName;
   dataClass: AgentToolDataClass;
+  prepareRequest?: (auth: AuthDto, session: AgentSession, request: TRequest) => Promise<TRequest>;
   requestSummary: (request: TRequest) => string;
   requestMetadata: (request: TRequest) => AgentToolCall['redactedRequestMetadata'];
   requestedAssetCount: (request: TRequest) => number;
@@ -156,6 +157,10 @@ const isReadAssetIdsRequestMetadata = (
 const maxAgentSpaceAssetIds = 10_000;
 const selectionMetadataRecoveryLimit = 5;
 const knownExampleSelectionHandleIds = new Set(['00000000-0000-4000-8000-000000000333']);
+
+type PreparedSelectionMetadataRequest = AgentReadSelectionMetadataToolRequestDto & {
+  resolvedSelectionHandleAssetCount?: number;
+};
 
 @Injectable()
 export class AgentToolService {
@@ -427,9 +432,11 @@ export class AgentToolService {
   private async createOrExecuteRead<TRequest, TResult extends Record<string, unknown>>(
     auth: AuthDto,
     session: AgentSession,
-    request: TRequest,
+    rawRequest: TRequest,
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<AgentReadToolResponse<TResult>> {
+    const request = await this.prepareReadRequest(auth, session, rawRequest, descriptor);
+
     if (this.requiresApproval(session, descriptor.dataClass)) {
       const shouldUseAtomicSessionLimit = this.shouldUseAtomicSessionLimit(session, request, descriptor);
       const denialReason = await this.validateReadRequest(auth, session, request, descriptor, undefined, {
@@ -502,7 +509,12 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call has not been approved');
     }
 
-    const request = this.getStoredRequest(toolCall, descriptor);
+    const request = await this.prepareReadRequest(
+      auth,
+      session,
+      this.getStoredRequest(toolCall, descriptor),
+      descriptor,
+    );
 
     const executing = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
@@ -619,6 +631,15 @@ export class AgentToolService {
       });
       return { status: 'denied', reason, toolCall: this.mapToolCall(failed) };
     }
+  }
+
+  private prepareReadRequest<TRequest, TResult extends Record<string, unknown>>(
+    auth: AuthDto,
+    session: AgentSession,
+    request: TRequest,
+    descriptor: AgentReadToolDescriptor<TRequest, TResult>,
+  ): Promise<TRequest> {
+    return descriptor.prepareRequest ? descriptor.prepareRequest(auth, session, request) : Promise.resolve(request);
   }
 
   private searchAssetsDescriptor(): AgentReadToolDescriptor<
@@ -1003,6 +1024,10 @@ export class AgentToolService {
     return {
       toolName: AgentToolName.ReadSelectionMetadata,
       dataClass: AgentToolDataClass.Metadata,
+      prepareRequest: async (auth, session, request) => {
+        const handle = await this.getValidSelectionMetadataHandle(auth, session, request.selectionHandleId ?? '');
+        return { ...request, resolvedSelectionHandleAssetCount: handle.assetCount };
+      },
       requestSummary: (request) =>
         `Read selection metadata for handle ${request.selectionHandleId} (${request.sampleSize ?? 10} sample(s))`,
       requestMetadata: (request) =>
@@ -1011,7 +1036,8 @@ export class AgentToolService {
           fields: request.fields ?? [],
           sampleSize: request.sampleSize ?? 10,
         }) as AgentToolReadSelectionMetadataRequestMetadata,
-      requestedAssetCount: (request) => request.sampleSize ?? 10,
+      requestedAssetCount: (request) =>
+        (request as PreparedSelectionMetadataRequest).resolvedSelectionHandleAssetCount ?? request.sampleSize ?? 10,
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
