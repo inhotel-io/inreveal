@@ -52,6 +52,10 @@ type AgentMcpInvokeToolOptions<TDto> = {
   mapResult?: (result: unknown, dto: TDto) => unknown;
 };
 
+type AgentPlanningToolDto<TToolName extends keyof typeof AgentOperationPlanToolRequestSchemas> = z.output<
+  (typeof AgentOperationPlanToolRequestSchemas)[TToolName]
+>;
+
 @Injectable()
 export class AgentMcpService {
   private readonly readToolNames = new Set<AgentToolName>([
@@ -224,7 +228,7 @@ export class AgentMcpService {
       id,
       toolName,
       args,
-      AgentOperationPlanToolRequestSchemas[toolName] as z.ZodType<TDto>,
+      AgentOperationPlanToolRequestSchemas[toolName] as unknown as z.ZodType<TDto>,
       delegate,
       {
         preValidate: (value) => this.providerFacingPlanningArgumentIssues(value),
@@ -242,53 +246,82 @@ export class AgentMcpService {
   ): Promise<AgentMcpSuccessResponse | AgentMcpErrorResponse> {
     switch (toolName) {
       case AgentToolName.ProposeAlbumOperations: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAlbumOperations>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAlbumOperations(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAlbumFromSearch: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeAlbumFromSearch(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAlbumFromSearch>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAlbumFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAddAssetsToAlbumFromSearch: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeAddAssetsToAlbumFromSearch(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAddAssetsToAlbumFromSearch>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAddAssetsToAlbumFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeSpaceFromSearch: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeSpaceFromSearch(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeSpaceFromSearch>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeSpaceFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAddAssetsToSpaceFromSearch: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeAddAssetsToSpaceFromSearch(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAddAssetsToSpaceFromSearch>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAddAssetsToSpaceFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ProposeAssetBatchFromSearch: {
-        return this.invokePlanningTool(id, toolName, args, (dto) =>
-          this.operationPlanService.proposeAssetBatchFromSearch(auth, sessionId, dto),
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ProposeAssetBatchFromSearch>>(
+          id,
+          toolName,
+          args,
+          (dto) => this.operationPlanService.proposeAssetBatchFromSearch(auth, sessionId, dto),
         );
       }
       case AgentToolName.ReviseProposedOperations: {
-        return this.invokePlanningTool(id, toolName, args, (dto) => {
-          const { planId, ...body } = dto;
-          return this.operationPlanService.reviseProposedOperations(auth, sessionId, planId, body);
-        });
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.ReviseProposedOperations>>(
+          id,
+          toolName,
+          args,
+          (dto) => {
+            const { planId, ...body } = dto;
+            return this.operationPlanService.reviseProposedOperations(auth, sessionId, planId, body);
+          },
+        );
       }
       case AgentToolName.SummarizePlan: {
-        return this.invokePlanningTool(id, toolName, args, (dto) => {
-          const { planId, ...body } = dto;
-          return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
-        });
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.SummarizePlan>>(
+          id,
+          toolName,
+          args,
+          (dto) => {
+            const { planId, ...body } = dto;
+            return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
+          },
+        );
       }
     }
   }
 
   private providerFacingPlanningArgumentIssues(args: Record<string, unknown>): AgentMcpValidationIssue[] {
     const operations = Array.isArray(args.operations) ? args.operations : [];
-    return operations.flatMap((operation, index) => {
+    const topLevelIssues = this.providerFacingExplicitAssetSourceIssue(args.assetSource, 'assetSource');
+    const operationIssues = operations.flatMap((operation, index) => {
       const record = this.recordValue(operation);
       if (!record) {
         return [];
@@ -303,17 +336,27 @@ export class AgentMcpService {
         });
       }
 
-      const assetSource = this.recordValue(record.assetSource);
-      if (assetSource?.kind === 'explicitAssets') {
-        issues.push({
-          path: `operations.${index}.assetSource`,
-          message:
-            'assetSource.explicitAssets is not available in provider-facing planning. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search.',
-        });
-      }
+      issues.push(...this.providerFacingExplicitAssetSourceIssue(record.assetSource, `operations.${index}.assetSource`));
 
       return issues;
     });
+
+    return [...topLevelIssues, ...operationIssues];
+  }
+
+  private providerFacingExplicitAssetSourceIssue(value: unknown, path: string): AgentMcpValidationIssue[] {
+    const assetSource = this.recordValue(value);
+    if (assetSource?.kind !== 'explicitAssets') {
+      return [];
+    }
+
+    return [
+      {
+        path,
+        message:
+          'assetSource.explicitAssets is not available in provider-facing planning. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search.',
+      },
+    ];
   }
 
   private redactProviderFacingPlanningResult(result: unknown): unknown {
@@ -323,11 +366,21 @@ export class AgentMcpService {
       return result;
     }
 
+    let redacted = false;
+    const operations = plan.operations.map((operation) => {
+      const redactedOperation = this.redactProviderFacingPlanningOperation(operation);
+      redacted ||= redactedOperation !== operation;
+      return redactedOperation;
+    });
+    if (!redacted) {
+      return result;
+    }
+
     return {
       ...content,
       plan: {
         ...plan,
-        operations: plan.operations.map((operation) => this.redactProviderFacingPlanningOperation(operation)),
+        operations,
       },
     };
   }
@@ -339,11 +392,15 @@ export class AgentMcpService {
     }
 
     const { assetIds, result, ...rest } = record;
-    const assetCount = Array.isArray(assetIds) ? assetIds.length : 0;
+    const redactedResult = this.redactProviderFacingPlanningOperationResult(result);
+    if (!Array.isArray(assetIds) && redactedResult === result) {
+      return operation;
+    }
+
     return {
       ...rest,
-      assetCount,
-      result: this.redactProviderFacingPlanningOperationResult(result),
+      ...(Array.isArray(assetIds) ? { assetCount: assetIds.length } : {}),
+      result: redactedResult,
     };
   }
 
@@ -353,12 +410,17 @@ export class AgentMcpService {
       return result;
     }
 
-    const { assetIds, assetId, ...rest } = record;
+    const { assetIds, assetId, assetResults, ...rest } = record;
     const assetCount = Array.isArray(assetIds) ? assetIds.length : typeof assetId === 'string' ? 1 : undefined;
+    const assetResultsCount = Array.isArray(assetResults) ? assetResults.length : undefined;
+    if (assetCount === undefined && assetResultsCount === undefined) {
+      return result;
+    }
 
     return {
       ...rest,
       ...(assetCount === undefined ? {} : { assetCount }),
+      ...(assetResultsCount === undefined ? {} : { assetResultsCount }),
     };
   }
 
