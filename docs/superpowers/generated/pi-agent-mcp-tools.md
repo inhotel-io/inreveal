@@ -103,6 +103,7 @@ Use the smallest useful payload first. Resolve names before search. Search for a
 
 - Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
 - Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs and is not objective image-quality scoring.
+- Selection-backed plans: Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id.
 - Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
 - Technical metadata: search for a handle first, then call `readSelectionMetadata` with exact `fields` such as `camera`, `dates`, and `filename`; use `readAssetMetadata` only for legacy exact non-search asset IDs.
 - Large album: page bounded handle results and propose operations from `selectionHandle.id` or `sourceRef`. Do not request full metadata for every candidate.
@@ -125,6 +126,7 @@ Use the smallest useful payload first. Resolve names before search. Search for a
 ## Source-Backed Planning Defaults
 
 Use high-level workflow tools first for album, space, and asset batch requests. provider planning rejects raw assetIds; use `assetSelectionHandleId`, `assetSource.selectionHandle`, `assetSource.previousSearch`, or `assetSource.search` so Gallery materializes IDs server-side. `assetSource.explicitAssets` is internal-only and rejected for provider-facing planning.
+Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id.
 
 Treat `wrong_id_domain` as recoverable: retry with `assetSource.selectionHandle`, `assetSource.search`, or `previousSearch.sourceRef` from the correct tool domain. Treat `needs_clarification` as recoverable: ask the user to choose one Gallery-provided option, then pass the selected `choiceRefs` in the next declarative named filter.
 
@@ -1589,6 +1591,66 @@ Rotate photos from a previous search source reference after review.
     "kind": "previousSearch",
     "sourceRef": "<sourceRef from searchAssets>"
   }
+}
+```
+
+### Propose album from selection
+
+MCP tool name: `proposeAlbumFromSelection`
+
+preferred tool for creating a new album from an existing search or curated selection handle.
+
+Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.
+
+Argument modes:
+
+- `new-album-from-selection`: Use when searchAssets or curateSelection returned the exact selectionHandle.id for the album contents.
+  Required fields: `albumName`, `selectionHandleId`.
+  Forbidden fields: `operations`, `assetIds`, `assetSource`, `assetSelectionHandleId`.
+
+#### create-album-from-selection
+
+Create a new album from an existing curated selection handle.
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumFromSelection" example="create-album-from-selection" -->
+
+```json
+{
+  "summary": "Create USA highlights from curated selection.",
+  "albumName": "USA Highlights",
+  "description": "Curated trip highlights.",
+  "selectionHandleId": "<selectionHandle.id from searchAssets>"
+}
+```
+
+### Propose asset batch from selection
+
+MCP tool name: `proposeAssetBatchFromSelection`
+
+preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from an existing selection handle.
+
+Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.
+
+Argument modes:
+
+- `asset-batch-from-selection`: Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests after searchAssets or curateSelection returned the exact selectionHandle.id.
+  Required fields: `action`, `selectionHandleId`.
+  Forbidden fields: `operations`, `assetIds`, `assetSource`, `assetSelectionHandleId`, `targetKind`.
+
+#### favorite-selection
+
+Favorite all assets represented by an existing curated selection handle.
+
+<!-- mcp-docs:tool-arguments tool="proposeAssetBatchFromSelection" example="favorite-selection" -->
+
+```json
+{
+  "summary": "Favorite curated highlights.",
+  "action": {
+    "type": "asset.setFavorite",
+    "favorite": true
+  },
+  "selectionHandleId": "<selectionHandle.id from searchAssets>"
 }
 ```
 
@@ -3097,6 +3159,15 @@ Summarize plan risks and selected changes.
 
 - `asset-batch-workflow-raw-asset-ids`: Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.
 - `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.
+
+### Propose album from selection
+
+- `album-selection-workflow-raw-asset-ids`: Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.
+
+### Propose asset batch from selection
+
+- `asset-batch-selection-workflow-raw-asset-ids`: Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.
+- `asset-batch-selection-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.
 
 ### Propose album operations
 
