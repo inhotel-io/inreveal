@@ -1159,7 +1159,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
 ];
 
 const planningUsage =
-  'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.';
+  'Create a reviewable Gallery operation plan. provider planning rejects raw assetIds; use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side. assetSource.explicitAssets is internal-only and rejected for provider-facing planning.';
 
 const planningMode: AgentMcpArgumentMode = {
   name: 'operation-plan',
@@ -1215,7 +1215,7 @@ const createAlbumAndAddAssetsExample: AgentMcpToolExample = {
         summary: 'Add selected photos to today test.',
         targetKind: AgentOperationTargetKind.NewAlbum,
         temporaryTargetId: 'tmp-today-test',
-        assetIds: [exampleAssetId, exampleSecondAssetId],
+        assetSelectionHandleId: exampleSelectionHandleId,
       },
     ],
   },
@@ -1223,7 +1223,7 @@ const createAlbumAndAddAssetsExample: AgentMcpToolExample = {
 
 const createAlbumFromSelectionHandleExample: AgentMcpToolExample = {
   name: 'create-album-from-selection-handle',
-  description: 'Create an album and add a large server-side selection without pasting asset IDs.',
+  description: 'Create an album and add a server-side selection handle.',
   arguments: {
     summary: 'Create an album from the selected search result.',
     operations: [
@@ -1265,7 +1265,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Add selected photos.',
           targetKind: AgentOperationTargetKind.ExistingAlbum,
           targetId: exampleAlbumId,
-          assetIds: [exampleAssetId, exampleSecondAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
         },
       ],
     },
@@ -1281,7 +1281,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Remove selected photos.',
           targetKind: AgentOperationTargetKind.ExistingAlbum,
           targetId: exampleAlbumId,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: {},
         },
       ],
@@ -1314,7 +1314,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Set cover photo.',
           targetKind: AgentOperationTargetKind.ExistingAlbum,
           targetId: exampleAlbumId,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: {},
         },
       ],
@@ -1354,7 +1354,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Add selected photos to Family space.',
           targetKind: AgentOperationTargetKind.NewSpace,
           temporaryTargetId: 'tmp-family-space',
-          assetIds: [exampleAssetId, exampleSecondAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: {},
         },
       ],
@@ -1371,7 +1371,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Add selected photos to Family space.',
           targetKind: AgentOperationTargetKind.ExistingSpace,
           targetId: exampleSpaceId,
-          assetIds: [exampleAssetId, exampleSecondAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: {},
         },
       ],
@@ -1388,7 +1388,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           summary: 'Remove selected photos from Family space.',
           targetKind: AgentOperationTargetKind.ExistingSpace,
           targetId: exampleSpaceId,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: {},
         },
       ],
@@ -1484,7 +1484,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetRotate,
           summary: 'Rotate selected images clockwise.',
           targetKind: AgentOperationTargetKind.ImageEditBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { angle: 90 },
         },
       ],
@@ -1500,7 +1500,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetSetFavorite,
           summary: 'Favorite selected photos.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId, exampleSecondAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { favorite: true },
         },
       ],
@@ -1516,7 +1516,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetSetArchive,
           summary: 'Archive selected photos.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { archived: true },
         },
       ],
@@ -1532,7 +1532,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetUpdateMetadata,
           summary: 'Update selected photo descriptions.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { description: 'Berlin weekend' },
         },
       ],
@@ -1548,7 +1548,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetUpdateMetadata,
           summary: 'Set selected photo ratings.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { rating: 5 },
         },
       ],
@@ -1564,7 +1564,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetUpdateMetadata,
           summary: 'Set selected photo coordinates.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { latitude: 52.52, longitude: 13.405 },
         },
       ],
@@ -1580,7 +1580,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetAddTag,
           summary: 'Add Travel tag.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { tagName: 'Travel' },
         },
       ],
@@ -1596,7 +1596,7 @@ const planningProposalExamples: AgentMcpToolExample[] = [
           type: AgentOperationType.AssetRemoveTag,
           summary: 'Remove tag from selected photos.',
           targetKind: AgentOperationTargetKind.AssetBatch,
-          assetIds: [exampleAssetId],
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
           payload: { tagId: exampleTagId },
         },
       ],
@@ -1743,13 +1743,13 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'planning-duplicate-asset-ids',
     match: { messageIncludes: 'assetIds must be unique' },
-    hint: 'Provide each asset id only once within a planning operation.',
+    hint: 'Provider planning rejects raw assetIds. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side.',
     exampleName: 'favorite-assets',
   },
   {
     id: 'planning-pasted-large-asset-ids',
     match: { issuePath: 'operations.0.assetIds', messageIncludes: 'expected array to have <=' },
-    hint: 'For hundreds or thousands of assets, call searchAssets and use the returned selectionHandle.id as assetSelectionHandleId in the plan.',
+    hint: 'Provider planning rejects raw assetIds. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side.',
     exampleName: 'create-album-from-selection-handle',
   },
   {
@@ -1890,7 +1890,8 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'album-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      hint:
+        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'create-album-from-declarative-search',
     },
   ],
@@ -1918,7 +1919,8 @@ const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = 
     {
       id: 'album-add-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      hint:
+        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'add-search-results-to-album-by-name',
     },
     {
@@ -2019,7 +2021,8 @@ const proposeSpaceFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'space-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      hint:
+        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'create-space-from-declarative-search',
     },
   ],
@@ -2047,7 +2050,8 @@ const proposeAddAssetsToSpaceFromSearchContract: AgentMcpPlanningToolContract = 
     {
       id: 'space-add-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      hint:
+        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'add-search-results-to-space-by-name',
     },
     {
@@ -2156,7 +2160,8 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint: 'Use assetSource.search or assetSource.previousSearch with this workflow tool; do not paste raw asset ids.',
+      hint:
+        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'favorite-search-results',
     },
     {
