@@ -38,7 +38,7 @@ const safety: AgentMcpToolSafetyContract = {
 
 const approvalRetry: AgentMcpApprovalRetryContract = {
   field: 'toolCallId',
-  instruction: 'After Gallery approves a pending read request, retry with only toolCallId.',
+  instruction: 'After approval, retry with only toolCallId.',
 };
 
 const approvedRetryMode: AgentMcpArgumentMode = {
