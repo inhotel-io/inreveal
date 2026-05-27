@@ -19,8 +19,8 @@ describe('agent MCP prompt placeholders', () => {
 
   it('defines semantic placeholders for every schema-valid MCP fixture id', () => {
     expect(agentMcpPromptPlaceholderMap).toEqual({
-      '00000000-0000-4000-8000-000000000001': '<asset-id-from-searchAssets>',
-      '00000000-0000-4000-8000-000000000002': '<another-asset-id-from-searchAssets>',
+      '00000000-0000-4000-8000-000000000001': '<exact-asset-id-from-readAssetMetadata>',
+      '00000000-0000-4000-8000-000000000002': '<another-exact-asset-id-from-readAssetMetadata>',
       '00000000-0000-4000-8000-000000000010': '<album.id from listAlbums/readAlbum>',
       '00000000-0000-4000-8000-000000000020': '<space.id from listSpaces/readSpace>',
       '00000000-0000-4000-8000-000000000021': '<spacePersonIds value from resolveAssetSearchFilters>',
@@ -56,7 +56,10 @@ describe('agent MCP prompt placeholders', () => {
       operations: [
         {
           targetId: '<album.id from listAlbums/readAlbum>',
-          assetIds: ['<asset-id-from-searchAssets>', '<another-asset-id-from-searchAssets>'],
+          assetIds: [
+            '<exact-asset-id-from-readAssetMetadata>',
+            '<another-exact-asset-id-from-readAssetMetadata>',
+          ],
           payload: {
             tagId: '<tagIds value from resolveAssetSearchFilters>',
             untouched: 'not-a-fixture',
@@ -256,11 +259,13 @@ describe(AgentMcpPromptService.name, () => {
   it('teaches progressive detail before broad metadata reads', () => {
     const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toContain('Progressive: resolve names -> search detail ids');
-    expect(prompt).toContain('readAssetMetadata fields for selected ids');
-    expect(prompt).toContain('Do not use limit 1000');
-    expect(prompt).toContain('if truncated/hasMore, page or ask one narrowing question');
-    expect(prompt).toContain('"detail":"ids"');
+    expect(prompt).toContain('Progressive: resolve names -> search handle');
+    expect(prompt).toContain('metadata exact ids');
+    expect(prompt).toContain('No 1k');
+    expect(prompt).toContain('if truncated/hasMore, page/ask');
+    expect(prompt).not.toContain('"detail":"ids"');
+    expect(prompt).not.toContain('"detail":"handle","fields"');
+    expect(prompt).toContain('"detail":"summary"');
     expect(prompt).toContain('"fields":["dates","location"]');
     expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
@@ -268,7 +273,7 @@ describe(AgentMcpPromptService.name, () => {
   it('renders large-selection handle guidance without encouraging pasted asset ids', () => {
     const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toContain('createSelectionHandle');
+    expect(prompt).not.toContain('createSelectionHandle');
     expect(prompt).toContain('assetSelectionHandleId');
     expect(prompt).toContain('Do not paste hundreds of assetIds');
     expect(prompt).toMatch(
@@ -280,10 +285,10 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Best/highlights require bounded source album/space/date/search/selection; suggested not objective quality scoring; search ids->metadata->preview if allowed; write selected assetIds only.',
+      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->metadata->preview if allowed; write exact non-search assetIds only.',
     );
     expect(prompt).toContain(
-      'Technical metadata: search ids first, then readAssetMetadata fields camera/dates/filename',
+      'Technical metadata: search handle/sourceRef, then readAssetMetadata fields camera/dates/filename for exact asset IDs',
     );
     expect(prompt).not.toContain('"limit":1000');
     expect(prompt).not.toContain('mcp_gallery_apply');
@@ -292,11 +297,11 @@ describe(AgentMcpPromptService.name, () => {
   it('teaches highlight curation as bounded suggestions without quality scoring', () => {
     const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toMatch(/highlights?.*bounded source/i);
+    expect(prompt).toMatch(/highlights?.*bounded/i);
     expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
     expect(prompt).toMatch(/suggested|recommend/i);
     expect(prompt).toMatch(/not objective|no objective|not .*quality scoring/i);
-    expect(prompt).toMatch(/selected assetIds only|selected ids only/i);
+    expect(prompt).not.toMatch(/selected assetIds only|selected ids only/i);
     expect(prompt).not.toContain('analyzeAssetQuality');
     expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
@@ -517,10 +522,20 @@ describe(AgentMcpPromptService.name, () => {
       expect(prompt).not.toContain(fixtureId);
     }
 
-    expect(prompt).toContain('<asset-id-from-searchAssets>');
+    expect(prompt).toContain('<exact-asset-id-from-readAssetMetadata>');
+    expect(prompt).not.toContain('<asset-id-from-searchAssets>');
     expect(prompt).toContain('<space.id from listSpaces/readSpace>');
     expect(prompt).toContain('<approved-toolCallId>');
     expect(prompt).toContain('<selectionHandle.id from searchAssets>');
+  });
+
+  it('does not advertise legacy search id prompt guidance', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).not.toContain('<asset-id-from-searchAssets>');
+    expect(prompt).not.toContain('selected assetIds only');
+    expect(prompt).not.toContain('search ids first');
+    expect(prompt).not.toContain('createSelectionHandle');
   });
 
   it('keeps structured prompt examples schema-valid and unmodified before rendering', () => {
