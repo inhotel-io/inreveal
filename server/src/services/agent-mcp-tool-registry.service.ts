@@ -49,7 +49,9 @@ const approvedRequestInstruction =
 
 const propertyDescriptions = {
   assetIds:
-    'Exact non-search asset IDs for a new asset read request or small inspected planning operation. Do not copy IDs from searchAssets results; use selection handles or source refs for search selections.',
+    'legacy exact non-search asset IDs for a new asset read request or small inspected planning operation. Do not copy IDs from searchAssets results; use selection handles or source refs for search selections.',
+  selectionHandleId:
+    'The selectionHandle.id returned by searchAssets for the current bounded search page. Use this for readSelectionMetadata instead of copying search asset IDs.',
   albumId: 'Existing album id returned by listAlbums/readAlbum.',
   albumName: 'Album name to create or exact visible album name to resolve.',
   spaceId: 'Existing shared space id returned by listSpaces/readSpace.',
@@ -75,8 +77,8 @@ const propertyDescriptions = {
   detail:
     'Result detail level. For searchAssets, handle returns selectionHandle/sourceRef and compact counts, summary adds a compact sample, and metadata returns metadata rows for bounded inspection; legacy ids requests still parse but are not the advertised search path. For readAssetMetadata, use basic, descriptive, technical, or allSafe metadata presets.',
   fields:
-    'Optional metadata field groups for summary samples, metadata rows, or readAssetMetadata custom reads: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
-  sampleSize: 'Maximum summary sample rows from 0 to 25. Use 0 to disable samples.',
+    'Optional metadata field groups for summary samples, metadata rows, itemRef samples, or legacy readAssetMetadata custom reads: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
+  sampleSize: 'Maximum summary or selection metadata sample rows from 0 to 25. Use 0 to disable samples.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
@@ -153,6 +155,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Search assets',
       description: `Search the photo library by mode, metadata filters, text query, page, order, and result limit.${approvedRequestInstruction}`,
       schema: AgentReadToolRequestSchemas[AgentToolName.SearchAssets],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.ReadSelectionMetadata,
+      title: 'Read selection metadata',
+      description: `Read aggregate counts and bounded itemRef metadata samples for a search selection handle.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata],
       annotations: readToolAnnotations,
     }),
     defineTool({
