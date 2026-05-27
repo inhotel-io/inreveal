@@ -132,11 +132,12 @@ it('compacts legacy search results with asset ids even under the normal prompt b
   assert.equal(compacted.compacted, true);
   assert.equal(compacted.selectionHandle.id, '00000000-0000-4000-8000-000000000444');
   assert.equal(compacted.counts.assets, 2);
+  assert.equal(JSON.parse(text).counts.assets, 2);
+  assert.equal(Object.hasOwn(compacted, 'assets'), false);
   assert.equal(text.includes(leakedAssetIds[0]), false);
   assert.equal(text.includes(leakedAssetIds[1]), false);
   assert.equal(text.includes('"assetIds"'), false);
   assert.equal(text.includes('"assetIdsSample"'), false);
-  assert.equal(text.includes('"assets"'), false);
 });
 
 it('redacts nested legacy search asset ids from prior tool transcript compaction', () => {
@@ -173,8 +174,9 @@ it('redacts nested legacy search asset ids from prior tool transcript compaction
   const compacted = JSON.parse(messages[0].content[0].text);
   assert.equal(compacted.compacted, true);
   assert.equal(compacted.selectionHandle.assetCount, 1);
+  assert.equal(compacted.counts.assets, 1);
+  assert.equal(Object.hasOwn(compacted, 'assets'), false);
   assert.equal(messages[0].content[0].text.includes(leakedAssetId), false);
-  assert.equal(messages[0].content[0].text.includes('"assets"'), false);
 });
 
 it('resumes approval with a compact handle summary for legacy search results', async () => {
