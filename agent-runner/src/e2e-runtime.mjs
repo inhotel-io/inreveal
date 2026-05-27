@@ -307,11 +307,20 @@ const sessionSupportsImageInput = (body) =>
   body.credential?.supportsImageInput === true ||
   body.credential?.capabilities?.imageInput === true;
 
+const usaTripDateFilters = (prompt) => {
+  if (!/\b(?:USA|United States|U\.S\.)\b/i.test(prompt)) return null;
+  if (/\bJanuary\s+2026\b/i.test(prompt)) {
+    return { country: 'USA', takenAfter: '2026-01-01T00:00:00.000Z', takenBefore: '2026-02-01T00:00:00.000Z' };
+  }
+  return { country: 'USA' };
+};
+
 const parseHighlightPrompt = (prompt) => {
   if (!/\b(best|highlights?)\b/i.test(prompt)) {
     return null;
   }
 
+  const usaFilters = usaTripDateFilters(prompt);
   const countMatch =
     prompt.match(/(?:^|\s)(-?\d+)\s+(?:best\s+)?(?:highlights?|photos?)\b/i) ??
     prompt.match(/\b(?:best|top|pick|choose|suggest)\s+(-?\d+)\s+(?:highlights?|photos?)\b/i);
@@ -319,13 +328,13 @@ const parseHighlightPrompt = (prompt) => {
   const unbounded = /\b(my|entire|whole)?\s*library\b/i.test(prompt) || /\b(all photos|everything)\b/i.test(prompt);
   const bounded =
     !unbounded &&
-    /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt);
-  const filters = /\b(last weekend|weekend)\b/i.test(prompt)
+    (Boolean(usaFilters) || /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt));
+  const filters = usaFilters ?? (/\b(last weekend|weekend)\b/i.test(prompt)
     ? {
         takenAfter: '2026-05-23T00:00:00.000Z',
         takenBefore: '2026-05-24T23:59:59.999Z',
       }
-    : null;
+    : null);
 
   return {
     bounded,
@@ -359,6 +368,11 @@ const extractAlbumName = (prompt) => {
   const unquoted = prompt.match(/\balbum called\s+(.+?)\.?$/i);
   if (unquoted) {
     return stripTrailingSourcePhrase(unquoted[1]);
+  }
+
+  const called = prompt.match(/\bcalled\s+(.+?)\.?$/i);
+  if (called) {
+    return stripTrailingSourcePhrase(called[1]);
   }
 
   return 'Suggested Highlights';
@@ -457,6 +471,26 @@ const readHighlightCandidates = async (client, highlightPrompt, limit = highligh
     assetIds,
     candidateCount: highlightCandidateCount(result, assetIds, limit),
   };
+};
+
+const readHighlightSelection = async (client, highlightPrompt, limit) => {
+  const result = await client.call('searchAssets', { filters: highlightPrompt.filters, detail: 'handle', limit });
+  assertMcpResultSuccess(result, 'Asset search');
+  if (!result.selectionHandle?.id) throw new Error('Asset search did not return a selection handle');
+  return { selectionHandle: result.selectionHandle, candidateCount: highlightCandidateCount(result, [], limit) };
+};
+
+const curateMetadataHighlights = async (client, selectionHandleId, targetCount, criteria) => {
+  const result = await client.call('curateSelection', {
+    selectionHandleId,
+    targetCount,
+    strategy: 'metadata-highlights',
+    criteria,
+    sampleSize: 10,
+  });
+  assertMcpResultSuccess(result, 'Selection curation');
+  if (!result.selectionHandle?.id) throw new Error('Selection curation did not return a selection handle');
+  return result;
 };
 
 const readHighlightMetadata = async (client, assetIds) => {
@@ -558,6 +592,15 @@ const proposeMetadataHighlightAlbum = async (client, intent, selectedAssetIds, c
   });
 };
 
+const proposeMetadataHighlightAlbumFromSelection = async (client, intent, selectionHandleId, selectedCount) => {
+  await client.call('proposeAlbumFromSelection', {
+    summary: `Create ${intent.albumName} with ${selectedCount} metadata-only curated highlights.`,
+    albumName: intent.albumName,
+    description: highlightAlbumDescription('metadata-only'),
+    selectionHandleId,
+  });
+};
+
 const resolveExistingAlbum = async (client, targetAlbumName) => {
   const result = await client.call('listAlbums', {});
   assertMcpResultSuccess(result, 'Album list');
@@ -621,6 +664,14 @@ const proposeMetadataHighlightFavorites = async (client, selectedAssetIds, crite
         payload: { favorite: true },
       },
     ],
+  });
+};
+
+const proposeMetadataHighlightFavoritesFromSelection = async (client, selectionHandleId, selectedCount) => {
+  await client.call('proposeAssetBatchFromSelection', {
+    summary: `Favorite ${selectedCount} metadata-only curated highlights.`,
+    action: { type: 'asset.setFavorite', favorite: true },
+    selectionHandleId,
   });
 };
 
@@ -875,6 +926,92 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           if (highlightPrompt.usesCurrentAlbum) {
             const resolution = await readAlbumById(client, contextAlbumId);
             sourceAlbumAssetIds = Array.isArray(resolution.album?.assetIds) ? resolution.album.assetIds : [];
+          }
+
+          const shouldUseSelectionPlanning =
+            !usePreviewAssistedCuration &&
+            !sourceAlbumAssetIds &&
+            (planIntent?.kind === 'create-album' || planIntent?.kind === 'favorite');
+
+          if (shouldUseSelectionPlanning) {
+            const { selectionHandle, candidateCount } = await readHighlightSelection(
+              client,
+              highlightPrompt,
+              planCandidateLimit,
+            );
+            if (candidateCount === 0) {
+              yield completedEvent({
+                gallerySessionId,
+                runnerSessionId,
+                text: 'I found no matching candidates in that bounded source, so I did not create a plan.',
+              });
+              return;
+            }
+
+            if (candidateCount > activeCandidateLimit) {
+              yield completedEvent({
+                gallerySessionId,
+                runnerSessionId,
+                text: 'That source has too many candidate assets for this metadata-only highlight pass. Please narrow the album, space, date range, search/filter, or selected photos.',
+              });
+              return;
+            }
+
+            const criteria = highlightPrompt.filters?.country === 'USA'
+              ? 'top highlights from January 2026 USA trip'
+              : 'top metadata-only highlights from the bounded source';
+            const curated = await curateMetadataHighlights(
+              client,
+              selectionHandle.id,
+              highlightPrompt.effectiveCount,
+              criteria,
+            );
+            const selectedCount =
+              typeof curated.selectedAssetCount === 'number'
+                ? curated.selectedAssetCount
+                : curated.selectionHandle.assetCount ?? highlightPrompt.effectiveCount;
+
+            if (selectedCount === 0) {
+              yield completedEvent({
+                gallerySessionId,
+                runnerSessionId,
+                text: planIntent.kind === 'favorite'
+                  ? 'I found no eligible metadata candidates to favorite, so I did not create a plan.'
+                  : 'I found no eligible metadata candidates in that bounded source, so I did not create a plan.',
+              });
+              return;
+            }
+
+            if (planIntent.kind === 'favorite') {
+              await proposeMetadataHighlightFavoritesFromSelection(client, curated.selectionHandle.id, selectedCount);
+              const shortage =
+                selectedCount < highlightPrompt.effectiveCount
+                  ? ` Only ${selectedCount} eligible candidates were available, though you requested ${highlightPrompt.effectiveCount}.`
+                  : '';
+              yield completedEvent({
+                gallerySessionId,
+                runnerSessionId,
+                text: `I proposed favorite operations for ${selectedCount} metadata-only suggested highlights. Review the plan before applying it.${shortage}`,
+              });
+              return;
+            }
+
+            await proposeMetadataHighlightAlbumFromSelection(
+              client,
+              planIntent,
+              curated.selectionHandle.id,
+              selectedCount,
+            );
+            const shortage =
+              selectedCount < highlightPrompt.effectiveCount
+                ? ` Only ${selectedCount} eligible candidates were available, though you requested ${highlightPrompt.effectiveCount}.`
+                : '';
+            yield completedEvent({
+              gallerySessionId,
+              runnerSessionId,
+              text: `I proposed ${selectedCount} suggested highlights using metadata-only criteria. Review the plan before applying it.${shortage}`,
+            });
+            return;
           }
 
           const candidateResult = sourceAlbumAssetIds
