@@ -75,6 +75,52 @@ const toExpectedInputSchema = (schema: z.ZodType): Record<string, unknown> => {
   return inputSchema;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isProviderForbiddenAssetSourceRef = (value: unknown) =>
+  isRecord(value) && value.$ref === '#/$defs/AgentExplicitAssetsAssetSourceInput';
+
+const pruneProviderPlanningSchemaValue = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index--) {
+      if (isProviderForbiddenAssetSourceRef(value[index])) {
+        value.splice(index, 1);
+      } else {
+        pruneProviderPlanningSchemaValue(value[index]);
+      }
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  if (isRecord(value.properties)) {
+    delete value.properties.assetIds;
+  }
+
+  if (Array.isArray(value.required)) {
+    value.required = value.required.filter((field) => field !== 'assetIds');
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    pruneProviderPlanningSchemaValue(nestedValue);
+  }
+};
+
+const toExpectedProviderPlanningInputSchema = (schema: z.ZodType): Record<string, unknown> => {
+  const inputSchema = toExpectedInputSchema(schema);
+  pruneProviderPlanningSchemaValue(inputSchema);
+
+  if (isRecord(inputSchema.$defs)) {
+    delete inputSchema.$defs.AgentExplicitAssetsAssetSourceInput;
+  }
+
+  return inputSchema;
+};
+
 const stripContractMetadata = (value: unknown, depth = 0): unknown => {
   if (Array.isArray(value)) {
     return value.map((item) => stripContractMetadata(item, depth + 1));
@@ -697,12 +743,12 @@ describe(AgentMcpToolRegistryService.name, () => {
     );
   });
 
-  it('preserves DTO-derived planning tool input schema structure after stripping contract metadata', () => {
+  it('preserves DTO-derived planning tool input schema structure after stripping provider-forbidden raw IDs', () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
 
     for (const toolName of expectedPlanningToolNames) {
       expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
-        stripContractMetadata(toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
+        stripContractMetadata(toExpectedProviderPlanningInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
       );
     }
   });
@@ -775,6 +821,42 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(schemaJson).toContain('assetSource.explicitAssets is internal-only');
     expect(schemaJson).not.toMatch(/paste|copy.*raw assetIds/i);
     expect(schemaJson).not.toContain('"kind":"explicitAssets"');
+  });
+
+  it('does not advertise provider-rejected raw assetIds or explicit asset sources in planning schemas', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations);
+    const revision = toolsByName.get(AgentToolName.ReviseProposedOperations);
+    const workflow = toolsByName.get(AgentToolName.ProposeAssetBatchFromSearch);
+    const dtoSchemaJson = JSON.stringify(
+      toExpectedInputSchema(AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations]),
+    );
+
+    expect(dtoSchemaJson).toContain('AgentExplicitAssetsAssetSourceInput');
+    expect(dtoSchemaJson).toContain('"assetIds"');
+
+    for (const tool of [proposal, revision, workflow]) {
+      const schemaJson = JSON.stringify(tool?.inputSchema);
+
+      expect(schemaJson).not.toContain('AgentExplicitAssetsAssetSourceInput');
+      expect(schemaJson).not.toContain('"const":"explicitAssets"');
+    }
+
+    for (const operationType of [
+      AgentOperationType.AlbumAddAssets,
+      AgentOperationType.AlbumSetCover,
+      AgentOperationType.SpaceAddAssets,
+      AgentOperationType.AssetSetFavorite,
+      AgentOperationType.AssetUpdateMetadata,
+    ]) {
+      const operationSchema = findOperationSchema(proposal?.inputSchema, operationType);
+      const properties = operationSchema?.properties as Record<string, unknown> | undefined;
+
+      expect(properties, operationType).toBeDefined();
+      expect(properties, operationType).not.toHaveProperty('assetIds');
+      expect(properties, operationType).toHaveProperty('assetSource');
+      expect(properties, operationType).toHaveProperty('assetSelectionHandleId');
+    }
   });
 
   it('publishes a closed-world asset.updateMetadata payload schema with only supported metadata fields', () => {
