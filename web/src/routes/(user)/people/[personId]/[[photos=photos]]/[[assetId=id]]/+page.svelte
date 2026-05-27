@@ -12,7 +12,6 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/menu-option.svelte';
   import ControlAppBar from '$lib/components/shared-components/control-app-bar.svelte';
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
   import ChangeDate from '$lib/components/timeline/actions/ChangeDateAction.svelte';
   import ChangeDescription from '$lib/components/timeline/actions/ChangeDescriptionAction.svelte';
@@ -45,9 +44,11 @@
   import { isExternalUrl } from '$lib/utils/navigation';
   import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
-  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+  import {
+    getTimelineBucketZoomTarget,
+    getTimelineZoomScopeOptions,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-zoom-navigation';
   import {
     AssetVisibility,
     detachScopedPerson,
@@ -85,7 +86,6 @@
   let { data }: Props = $props();
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
@@ -95,9 +95,11 @@
     personIds: [data.person.filterId ?? data.person.id],
     withSharedSpaces: true,
   });
-  const options = $derived(
-    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
-  );
+  const options = $derived({
+    ...baseTimelineOptions,
+    ...getTimelineZoomScopeOptions(timelineZoomScope),
+    grouping: timelineGrouping,
+  });
 
   let viewMode: PersonPageViewMode = $state(PersonPageViewMode.VIEW_ASSETS);
   let isEditingName = $state(false);
@@ -383,12 +385,6 @@
     timelineZoomScope = result.anchor;
   }
 
-  function clearPersonTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
-  }
-
   const onPersonUpdate = async (response: PersonResponseDto) => {
     if (response.id !== person.id) {
       return;
@@ -565,12 +561,9 @@
             </section>
             <TimelineRouteGroupingBar
               grouping={timelineGrouping}
-              filters={timelineFilters}
-              resultCount={numberOfAssets}
               hidden={assetMultiSelectManager.selectionActive || viewMode !== PersonPageViewMode.VIEW_ASSETS}
               class="shrink-0 px-0 py-0"
               onGroupingChange={handleTimelineGroupingChange}
-              onClearTemporalFilter={clearPersonTemporalFilter}
             />
           </div>
           {#if isEditingName}

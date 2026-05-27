@@ -3,7 +3,6 @@
   import { clickOutside } from '$lib/actions/click-outside';
   import { listNavigation } from '$lib/actions/list-navigation';
   import ImageThumbnail from '$lib/components/assets/thumbnail/image-thumbnail.svelte';
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import PeopleMergeSelector from '$lib/components/people/people-merge-selector.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import ControlAppBar from '$lib/components/shared-components/control-app-bar.svelte';
@@ -33,9 +32,11 @@
   import { locale } from '$lib/stores/preferences.store';
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { toScopedPersonRef as toPersonScopedRef } from '$lib/utils/scoped-person-ref';
-  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+  import {
+    getTimelineBucketZoomTarget,
+    getTimelineZoomScopeOptions,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-zoom-navigation';
   import {
     detachScopedPerson,
     getSpacePersonFaces,
@@ -82,7 +83,6 @@
   const routeStateKey = $derived(`${data.space.id}:${data.person.id}:${data.person.updatedAt}:${data.action ?? ''}`);
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
@@ -116,9 +116,11 @@
     spacePersonId: person.id,
     withStacked: true,
   });
-  const options = $derived(
-    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
-  );
+  const options = $derived({
+    ...baseTimelineOptions,
+    ...getTimelineZoomScopeOptions(timelineZoomScope),
+    grouping: timelineGrouping,
+  });
 
   const currentMember = $derived(members.find((member) => member.userId === authManager.user.id));
   const isEditor = $derived(
@@ -360,12 +362,6 @@
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
     timelineZoomScope = result.anchor;
-  }
-
-  function clearSpacePersonTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
   }
 
   async function closeMergeFlow() {
@@ -639,12 +635,9 @@
           </section>
           <TimelineRouteGroupingBar
             grouping={timelineGrouping}
-            filters={timelineFilters}
-            resultCount={statistics.assets}
             hidden={assetMultiSelectManager.selectionActive || action === 'merge'}
             class="shrink-0 px-0 py-0"
             onGroupingChange={handleTimelineGroupingChange}
-            onClearTemporalFilter={clearSpacePersonTemporalFilter}
           />
         </div>
         {#if isEditingName}

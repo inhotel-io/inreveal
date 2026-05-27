@@ -1,6 +1,5 @@
 <script lang="ts">
   import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import EmptyPlaceholder from '$lib/components/shared-components/empty-placeholder.svelte';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
@@ -21,9 +20,11 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAssetBulkActions } from '$lib/services/asset.service';
-  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+  import {
+    getTimelineBucketZoomTarget,
+    getTimelineZoomScopeOptions,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-zoom-navigation';
   import { AssetVisibility } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
@@ -36,25 +37,18 @@
 
   let { data }: Props = $props();
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   const baseTimelineOptions = { visibility: AssetVisibility.Archive };
-  const options = $derived(
-    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
-  );
-  const hasTemporalFilters = $derived(
-    Boolean(
-      timelineFilters.dateAfter ||
-      timelineFilters.dateBefore ||
-      timelineFilters.selectedYear ||
-      timelineFilters.selectedMonth,
-    ),
-  );
+  const options = $derived({
+    ...baseTimelineOptions,
+    ...getTimelineZoomScopeOptions(timelineZoomScope),
+    grouping: timelineGrouping,
+  });
   const hideGroupingControls = $derived(
     assetMultiSelectManager.selectionActive ||
-      (!hasTemporalFilters && Boolean(timelineManager?.isInitialized && timelineManager.assetCount === 0)),
+      Boolean(timelineManager?.isInitialized && timelineManager.assetCount === 0),
   );
 
   const handleEscape = () => {
@@ -90,12 +84,6 @@
     timelineZoomScope = result.anchor;
   }
 
-  function clearRouteTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
-  }
-
   registerSelectionContext({
     getAssets: () => assetMultiSelectManager.assets,
     clearSelection: () => assetMultiSelectManager.clear(),
@@ -111,11 +99,8 @@
 <UserPageLayout hideNavbar={assetMultiSelectManager.selectionActive} title={data.meta.title} scrollbar={false}>
   <TimelineRouteGroupingBar
     grouping={timelineGrouping}
-    filters={timelineFilters}
-    resultCount={timelineManager?.assetCount}
     hidden={hideGroupingControls}
     onGroupingChange={handleTimelineGroupingChange}
-    onClearTemporalFilter={clearRouteTemporalFilter}
   />
   <Timeline
     enableRouting={true}

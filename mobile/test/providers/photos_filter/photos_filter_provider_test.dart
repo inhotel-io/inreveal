@@ -401,12 +401,6 @@ void main() {
       notifier.removeChip(const TextChipId());
       expect(container.read(photosFilterProvider).context, null);
     });
-    test('TemporalScopeChipId leaves SearchFilter untouched', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setText('paris');
-      notifier.removeChip(const TemporalScopeChipId());
-      expect(container.read(photosFilterProvider).context, 'paris');
-    });
   });
 
   test('setSort updates the filter sort', () {

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import OnEvents from '$lib/components/OnEvents.svelte';
-  import { createFilterState } from '$lib/components/filter-panel/filter-panel';
   import UserPageLayout, { headerId } from '$lib/components/layouts/user-page-layout.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import Breadcrumbs from '$lib/components/shared-components/tree/breadcrumbs.svelte';
@@ -33,9 +32,11 @@
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { getTagActions } from '$lib/services/tag.service';
   import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
-  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
-  import { buildTimelineRouteOptions } from '$lib/utils/timeline-route-options';
+  import {
+    getTimelineBucketZoomTarget,
+    getTimelineZoomScopeOptions,
+    type ActivatableTimelineBucket,
+  } from '$lib/utils/timeline-zoom-navigation';
   import { joinPaths, TreeNode } from '$lib/utils/tree-utils';
   import { AssetVisibility, getAllTags, type TagResponseDto } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider, Text } from '@immich/ui';
@@ -54,7 +55,6 @@
   const tag = $derived(tree.traverse(data.path));
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
-  let timelineFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
@@ -67,9 +67,11 @@
     visibility: AssetVisibility.Timeline,
     withSharedSpaces: true,
   });
-  const options = $derived(
-    buildTimelineRouteOptions(baseTimelineOptions, timelineFilters, timelineGrouping, timelineZoomScope),
-  );
+  const options = $derived({
+    ...baseTimelineOptions,
+    ...getTimelineZoomScopeOptions(timelineZoomScope),
+    grouping: timelineGrouping,
+  });
 
   const handleNavigation = (tag: string) => navigateToView(joinPaths(data.path, tag));
 
@@ -101,12 +103,6 @@
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
     timelineZoomScope = result.anchor;
-  }
-
-  function clearRouteTemporalFilter() {
-    timelineFilters = clearTimelineTemporalFilter(timelineFilters);
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
   }
 
   registerSelectionContext({
@@ -161,11 +157,8 @@
     {#if tag.hasAssets}
       <TimelineRouteGroupingBar
         grouping={timelineGrouping}
-        filters={timelineFilters}
-        resultCount={timelineManager?.assetCount}
         hidden={assetMultiSelectManager.selectionActive}
         onGroupingChange={handleTimelineGroupingChange}
-        onClearTemporalFilter={clearRouteTemporalFilter}
       />
       <Timeline
         enableRouting={true}

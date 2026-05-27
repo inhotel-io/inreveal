@@ -98,18 +98,6 @@ void main() {
       expect(find.text('clear_all'.tr()), findsOneWidget);
     });
 
-    testWidgets('renders when only temporal scope is active', (tester) async {
-      await tester.pumpConsumerWidget(_scroll(const PhotosFilterSubheader()));
-      await tester.pumpAndSettle();
-      final container = ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)));
-      container.read(timelineTemporalScopeProvider.notifier).setYear(2025);
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('photos-filter-subheader')), findsOneWidget);
-      expect(find.text('2025'), findsOneWidget);
-      expect(find.byType(ActiveFilterChip), findsOneWidget);
-    });
-
     testWidgets('does not render a temporal chip from Photos year activation', (tester) async {
       await tester.pumpConsumerWidget(_scroll(const PhotosFilterSubheader()));
       await tester.pumpAndSettle();
@@ -182,26 +170,19 @@ void main() {
       expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
     });
 
-    testWidgets('clearing temporal chip keeps normal Photos filters intact', (tester) async {
+    testWidgets('temporal scope alone does not render as a filter chip', (tester) async {
       await tester.pumpConsumerWidget(_scroll(const PhotosFilterSubheader()));
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)));
-      container.read(photosFilterProvider.notifier).setText('paris');
       container.read(timelineTemporalScopeProvider.notifier).setMonth(year: 2025, month: 3);
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(find.text('Mar 2025'), 100, scrollable: find.byType(Scrollable).last);
-      await tester.drag(find.byType(Scrollable).last, const Offset(-120, 0));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.close_rounded).last);
-      await tester.pumpAndSettle();
-
-      expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
-      expect(container.read(photosFilterProvider).context, 'paris');
-      expect(find.text('"paris"'), findsOneWidget);
+      expect(container.read(timelineTemporalScopeProvider), TimelineTemporalScope.month(year: 2025, month: 3));
+      expect(find.byKey(const Key('photos-filter-subheader')), findsNothing);
+      expect(find.text('Mar 2025'), findsNothing);
     });
 
-    testWidgets('Clear all resets normal filters and temporal scope', (tester) async {
+    testWidgets('Clear all resets normal filters without treating temporal scope as a chip', (tester) async {
       await tester.pumpConsumerWidget(_scroll(const PhotosFilterSubheader()));
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)));
@@ -213,7 +194,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(photosFilterProvider).isEmpty, isTrue);
-      expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
+      expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.year(2025));
       expect(find.byKey(const Key('photos-filter-subheader')), findsNothing);
     });
   });

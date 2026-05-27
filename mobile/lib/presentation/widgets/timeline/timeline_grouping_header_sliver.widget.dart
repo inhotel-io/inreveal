@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:immich_mobile/presentation/widgets/filter_sheet/active_filter_chip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
-import 'package:immich_mobile/providers/photos_filter/active_chips.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
-import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
 
 const double kTimelineGroupingHeaderSliverHeight = 56.0;
 
@@ -18,11 +15,6 @@ class TimelineGroupingHeaderSliver extends ConsumerWidget {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
-    final temporalScope = ref.watch(timelineTemporalScopeProvider);
-    final temporalChip = activeTemporalScopeChip(
-      temporalScope,
-      locale: Localizations.localeOf(context).toLanguageTag(),
-    );
     final colors = Theme.of(context).colorScheme;
 
     return SliverToBoxAdapter(
@@ -31,20 +23,7 @@ class TimelineGroupingHeaderSliver extends ConsumerWidget {
         height: kTimelineGroupingHeaderSliverHeight,
         color: colors.surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
-          children: [
-            const TimelineGroupingSelector(),
-            if (temporalChip != null) ...[
-              const SizedBox(width: 10),
-              Flexible(
-                child: ActiveFilterChip(
-                  spec: temporalChip,
-                  onRemove: () => ref.read(timelineTemporalScopeProvider.notifier).clear(),
-                ),
-              ),
-            ],
-          ],
-        ),
+        child: const Row(children: [TimelineGroupingSelector()]),
       ),
     );
   }
