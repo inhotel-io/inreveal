@@ -510,7 +510,7 @@ describe('e2e runtime', () => {
     assert.deepEqual(calls[0].body.params.arguments, {
       filters: lastWeekendHighlightFilters,
       detail: 'ids',
-      limit: 500,
+      limit: 1000,
     });
     assert.deepEqual(calls[1].body.params.arguments, {
       assetIds: highlightAssetIds,
@@ -839,7 +839,7 @@ describe('e2e runtime', () => {
       'listAlbums,readAlbum,searchAssets,readAssetMetadata,proposeAlbumOperations',
     );
     assert.deepEqual(calls[1].body.params.arguments, { albumId: familyAlbumId });
-    assert.equal(calls[2].body.params.arguments.limit, 500);
+    assert.equal(calls[2].body.params.arguments.limit, 1000);
     const plan = calls.at(-1).body.params.arguments;
     assert.equal(JSON.stringify(plan).includes('assetSource'), false);
     assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
@@ -926,7 +926,7 @@ describe('e2e runtime', () => {
     );
 
     assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
-    assert.equal(calls[0].body.params.arguments.limit, 500);
+    assert.equal(calls[0].body.params.arguments.limit, 1000);
     assert.deepEqual(calls[2].body.params.arguments.operations[1].assetIds, [
       '00000000-0000-4000-8000-000000000402',
       '00000000-0000-4000-8000-000000000401',
@@ -939,7 +939,7 @@ describe('e2e runtime', () => {
 
   it('asks to narrow metadata highlight plans when the bounded source exceeds the metadata candidate limit', async () => {
     const oversizedAssetIds = Array.from(
-      { length: 501 },
+      { length: 1001 },
       (_value, index) => `00000000-0000-4000-8000-${String(1000 + index).padStart(12, '0')}`,
     );
     const { calls, fetchImplementation } = createFetch(
@@ -956,7 +956,7 @@ describe('e2e runtime', () => {
     );
 
     assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets');
-    assert.equal(calls[0].body.params.arguments.limit, 500);
+    assert.equal(calls[0].body.params.arguments.limit, 1000);
     assert.match(events.at(-1).content.blocks[0].text, /too many/i);
     assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
   });
@@ -1009,10 +1009,10 @@ describe('e2e runtime', () => {
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Suggest 501 highlights from this album.');
+    const events = await collectEvents(runtime, 'Suggest 1001 highlights from this album.');
 
     assert.equal(calls.length, 0);
-    assert.match(events.at(-1).content.blocks[0].text, /500 or fewer/i);
+    assert.match(events.at(-1).content.blocks[0].text, /1000 or fewer/i);
     assert.match(events.at(-1).content.blocks[0].text, /narrow/i);
   });
 
@@ -1028,7 +1028,7 @@ describe('e2e runtime', () => {
               structuredContent: {
                 status: 'success',
                 assetIds: ['00000000-0000-4000-8000-000000000201'],
-                returnedCount: 501,
+                returnedCount: 1001,
                 hasMore: true,
               },
             },
@@ -1066,7 +1066,7 @@ describe('e2e runtime', () => {
                   '00000000-0000-4000-8000-000000000202',
                 ],
                 returnedCount: 10,
-                totalCount: 501,
+                totalCount: 1001,
                 hasMore: true,
               },
             },

@@ -607,7 +607,8 @@ describe(AgentMcpToolContractService.name, () => {
     const mistakeIds = search?.commonMistakes.map((mistake) => mistake.id);
 
     expect(search?.usage).toContain('Default to handle-first search results');
-    expect(search?.usage).toContain('Do not use limit 1000');
+    expect(search?.usage).toContain('limit up to 1000');
+    expect(search?.usage).not.toContain('Do not use limit 1000');
     expect(search?.usage).toContain('ask one narrowing question');
     expect(mistakeIds).toEqual(
       expect.arrayContaining([
@@ -618,7 +619,7 @@ describe(AgentMcpToolContractService.name, () => {
       ]),
     );
     expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-large-limit')?.hint).toContain(
-      'Use a bounded limit such as 25 or 50',
+      'Use limit up to 1000 only for bounded handle-first searches',
     );
     expect(search?.commonMistakes.find((mistake) => mistake.id === 'search-broad-full-metadata')?.hint).toContain(
       'Search for a handle/sourceRef first',
@@ -1303,7 +1304,8 @@ describe(AgentMcpToolContractService.name, () => {
       });
 
       expect(broadLimitPolicy?.mistakeId).toBe('search-large-limit');
-      expect(broadLimitPolicy?.hint).toContain('Do not use limit 1000');
+      expect(broadLimitPolicy?.hint).toContain('Use limit up to 1000 only for bounded handle-first searches');
+      expect(broadLimitPolicy?.hint).not.toContain('Do not use limit 1000');
       expect(invalidLimit?.mistakeId).toBe('search-limit-out-of-range');
       expect(invalidLimit?.hint).toBe('Use a positive integer limit no greater than 10000.');
     });
