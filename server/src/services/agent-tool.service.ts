@@ -780,12 +780,17 @@ export class AgentToolService {
   }
 
   private mapSearchSampleItem(asset: AgentSearchAssetResult, index: number): AgentSearchAssetsSampleItem {
-    const { id: _id, ownerId: _ownerId, tags, ...rest } = asset;
+    const { id: _id, ownerId: _ownerId, originalFileName, tags, ...rest } = asset;
     return {
       itemRef: `item:${String(index + 1).padStart(3, '0')}`,
       ...rest,
+      ...(originalFileName && !this.containsUuidLikeValue(originalFileName) ? { originalFileName } : {}),
       ...(tags ? { tags: tags.map(({ value, color }) => ({ value, color })) } : {}),
     };
+  }
+
+  private containsUuidLikeValue(value: string): boolean {
+    return /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(value);
   }
 
   private getSearchAssetsResponseSummary(result: {
