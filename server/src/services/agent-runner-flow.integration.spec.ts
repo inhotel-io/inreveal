@@ -998,13 +998,13 @@ describe('Pi agent runner flow harness', () => {
       );
       expect(search.isError).not.toBe(true);
       const searchContent = search.structuredContent as {
-        assetIds: string[];
-        selectionHandle: { id: string; assetCount: number; sampleAssetIds: string[] };
+        selectionHandle: { id: string; assetCount: number };
       };
       realHandleId = searchContent.selectionHandle.id;
       expect(realHandleId).toEqual(expect.any(String));
-      expect(searchContent.assetIds).toEqual(assetIds.slice(0, 2));
       expect(searchContent.selectionHandle.assetCount).toBe(3);
+      expect(searchContent).not.toHaveProperty('assetIds');
+      expect(searchContent.selectionHandle).not.toHaveProperty('sampleAssetIds');
 
       const denied = getMcpToolResult(
         await mcpService.handle(
