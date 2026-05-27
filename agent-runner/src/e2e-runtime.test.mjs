@@ -10,6 +10,8 @@ const lastWeekendHighlightFilters = {
   takenAfter: '2026-05-23T00:00:00.000Z',
   takenBefore: '2026-05-24T23:59:59.999Z',
 };
+const usaTripSearchHandleId = '00000000-0000-4000-8000-000000000901';
+const usaTripCuratedHandleId = '00000000-0000-4000-8000-000000000902';
 const highlightAssetIds = [
   '00000000-0000-4000-8000-000000000401',
   '00000000-0000-4000-8000-000000000402',
@@ -215,11 +217,39 @@ const metadataHighlightHandlers = ({
   totalCount,
   albums = [],
   albumAssetIds = [],
+  searchHandleId = '00000000-0000-4000-8000-000000000901',
+  curatedHandleId = '00000000-0000-4000-8000-000000000902',
+  curatedCount,
 } = {}) => [
   {
     name: 'searchAssets',
     handle: (args, request) => {
       const returnedAssetIds = assetIds.slice(0, args.limit ?? assetIds.length);
+      if (args.detail === 'handle') {
+        return {
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                summary: `Returned ${returnedAssetIds.length} highlight candidate(s).`,
+                detail: 'handle',
+                selectionHandle: {
+                  id: searchHandleId,
+                  assetCount: totalCount ?? assetIds.length,
+                },
+                returnedCount: returnedAssetIds.length,
+                hasMore: assetIds.length > returnedAssetIds.length,
+                nextPage: assetIds.length > returnedAssetIds.length ? '2' : null,
+                resultSize: returnedAssetIds.length,
+                ...(totalCount === undefined ? {} : { totalCount }),
+              },
+            },
+          },
+        };
+      }
+
       return {
         body: {
           jsonrpc: '2.0',
@@ -250,6 +280,62 @@ const metadataHighlightHandlers = ({
             summary: `Returned metadata for ${args.assetIds.length} asset(s).`,
             fields: args.fields,
             assets: args.assetIds.map((id) => metadataAssets.find((asset) => asset.id === id)).filter(Boolean),
+          },
+        },
+      },
+    }),
+  },
+  {
+    name: 'curateSelection',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'success',
+            summary: `Curated ${curatedCount ?? args.targetCount} highlight(s).`,
+            selectionHandle: {
+              id: curatedHandleId,
+              assetCount: curatedCount ?? args.targetCount,
+            },
+            selectedAssetCount: curatedCount ?? args.targetCount,
+            sourceAssetCount: assetIds.length,
+            criteriaSummary: args.criteria,
+          },
+        },
+      },
+    }),
+  },
+  {
+    name: 'proposeAlbumFromSelection',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'success',
+            summary: 'Stored proposed album from selection.',
+            plan: { id: '00000000-0000-4000-8000-000000000303' },
+            received: args,
+          },
+        },
+      },
+    }),
+  },
+  {
+    name: 'proposeAssetBatchFromSelection',
+    handle: (args, request) => ({
+      body: {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          structuredContent: {
+            status: 'success',
+            summary: 'Stored proposed asset batch from selection.',
+            plan: { id: '00000000-0000-4000-8000-000000000304' },
+            received: args,
           },
         },
       },
@@ -291,6 +377,91 @@ const metadataHighlightHandlers = ({
   successHandlers()[1],
 ];
 
+const usaTripHandleFirstHandlers = () => [
+  {
+    name: 'searchAssets',
+    handle: (args, request) => {
+      assert.deepEqual(args, {
+        filters: {
+          country: 'USA',
+          takenAfter: '2026-01-01T00:00:00.000Z',
+          takenBefore: '2026-02-01T00:00:00.000Z',
+        },
+        detail: 'handle',
+        limit: 1000,
+      });
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              selectionHandle: { id: usaTripSearchHandleId, assetCount: 80 },
+              assetCount: 80,
+              detail: 'handle',
+              returnedCount: 80,
+              hasMore: false,
+              nextPage: null,
+              resultSize: 80,
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    name: 'curateSelection',
+    handle: (args, request) => {
+      assert.deepEqual(args, {
+        selectionHandleId: usaTripSearchHandleId,
+        targetCount: 15,
+        strategy: 'metadata-highlights',
+        criteria: 'top highlights from January 2026 USA trip',
+        sampleSize: 10,
+      });
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              selectionHandle: { id: usaTripCuratedHandleId, assetCount: 15 },
+              selectedAssetCount: 15,
+              sourceAssetCount: 80,
+              criteriaSummary: 'top highlights from January 2026 USA trip',
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    name: 'proposeAlbumFromSelection',
+    handle: (args, request) => {
+      assert.deepEqual(args, {
+        summary: 'Create USA Highlights with 15 metadata-only curated highlights.',
+        albumName: 'USA Highlights',
+        description: 'Suggested highlights selected from metadata signals. No previews were inspected.',
+        selectionHandleId: usaTripCuratedHandleId,
+      });
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              plan: { id: '00000000-0000-4000-8000-000000000305' },
+            },
+          },
+        },
+      };
+    },
+  },
+];
+
 const previewReference = (assetId) => ({
   assetId,
   mediaUrl: `/api/assets/${assetId}/thumbnail?size=preview`,
@@ -319,9 +490,12 @@ const previewHighlightHandlers = (options = {}) => {
         },
       }),
     },
-    handlers[2],
-    handlers[3],
-    handlers[4],
+    handlers.find((handler) => handler.name === 'curateSelection'),
+    handlers.find((handler) => handler.name === 'proposeAlbumFromSelection'),
+    handlers.find((handler) => handler.name === 'proposeAssetBatchFromSelection'),
+    handlers.find((handler) => handler.name === 'listAlbums'),
+    handlers.find((handler) => handler.name === 'readAlbum'),
+    handlers.find((handler) => handler.name === 'proposeAlbumOperations'),
   ];
 };
 
@@ -496,7 +670,7 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /album|shared space|date range|selected photos/i);
   });
 
-  it('proposes a metadata-only highlights album with selected asset ids only', async () => {
+  it('proposes a metadata-only highlight album planning through selection handles', async () => {
     const { calls, fetchImplementation } = createFetch(metadataHighlightHandlers());
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
@@ -506,35 +680,38 @@ describe('e2e runtime', () => {
       'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
     );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
     assert.deepEqual(calls[0].body.params.arguments, {
       filters: lastWeekendHighlightFilters,
-      detail: 'ids',
+      detail: 'handle',
       limit: 1000,
     });
-    assert.deepEqual(calls[1].body.params.arguments, {
-      assetIds: highlightAssetIds,
-      fields: ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'],
-    });
-
+    assert.equal(calls[1].body.params.arguments.selectionHandleId, usaTripSearchHandleId);
+    assert.equal(calls[1].body.params.arguments.targetCount, 2);
     const plan = calls[2].body.params.arguments;
     assert.match(plan.summary, /metadata-only/i);
-    assert.match(plan.summary, /ratings|favorites/i);
-    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
-    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
-    assert.deepEqual(
-      plan.operations.map((operation) => operation.type),
-      ['album.create', 'album.addAssets'],
-    );
-    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
-    assert.equal(plan.operations[1].targetKind, 'new_album');
-    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
-    assert.deepEqual(plan.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000402',
-      '00000000-0000-4000-8000-000000000403',
-    ]);
+    assert.equal(plan.albumName, 'Weekend Highlights');
+    assert.equal(plan.selectionHandleId, usaTripCuratedHandleId);
+    assert.equal(JSON.stringify(plan).includes('assetIds'), false);
     assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
     assert.match(events.at(-1).content.blocks[0].text, /2 suggested highlights/i);
+    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('creates USA trip highlights through search handle, curation handle, and selection plan without raw ids', async () => {
+    const { calls, fetchImplementation } = createFetch(usaTripHandleFirstHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Create an album of the top 15 highlights from my January 2026 USA trip called USA Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
+    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
+    assert.match(events.at(-1).content.blocks[0].text, /15 suggested highlights/i);
     assert.match(events.at(-1).content.blocks[0].text, /Review/i);
   });
 
@@ -630,7 +807,7 @@ describe('e2e runtime', () => {
       'Pick the best 2 photos from last weekend and make an album called Weekend Highlights.',
     );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
     assert.match(calls.at(-1).body.params.arguments.summary, /metadata-only/i);
     assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
   });
@@ -798,14 +975,11 @@ describe('e2e runtime', () => {
 
     await collectEvents(runtime, 'Pick the best 2 photos from last weekend and make an album called Favorite Highlights.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
     const plan = calls[2].body.params.arguments;
-    assert.deepEqual(
-      plan.operations.map((operation) => operation.type),
-      ['album.create', 'album.addAssets'],
-    );
-    assert.equal(plan.operations[0].payload.albumName, 'Favorite Highlights');
-    assert.equal(plan.operations[1].temporaryTargetId, 'favorite-highlights');
+    assert.equal(plan.albumName, 'Favorite Highlights');
+    assert.equal(plan.selectionHandleId, usaTripCuratedHandleId);
+    assert.equal(JSON.stringify(plan).includes('assetIds'), false);
   });
 
   it('parses album names before trailing source phrases in highlight album requests', async () => {
@@ -815,10 +989,11 @@ describe('e2e runtime', () => {
 
     await collectEvents(runtime, 'Pick the best 2 photos and make an album called Weekend Highlights from last weekend.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
     const plan = calls[2].body.params.arguments;
-    assert.equal(plan.operations[0].payload.albumName, 'Weekend Highlights');
-    assert.equal(plan.operations[1].temporaryTargetId, 'weekend-highlights');
+    assert.equal(plan.albumName, 'Weekend Highlights');
+    assert.equal(plan.selectionHandleId, usaTripCuratedHandleId);
+    assert.equal(JSON.stringify(plan).includes('assetIds'), false);
   });
 
   it('adds metadata highlights to an existing album while excluding assets already in the album', async () => {
@@ -888,24 +1063,11 @@ describe('e2e runtime', () => {
 
     const events = await collectEvents(runtime, 'Favorite the best 2 photos from last weekend.');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAssetBatchFromSelection');
     const plan = calls[2].body.params.arguments;
-    assert.equal(JSON.stringify(plan).includes('assetSource'), false);
-    assert.equal(JSON.stringify(plan).includes('previousSearch'), false);
-    assert.deepEqual(plan.operations, [
-      {
-        type: 'asset.setFavorite',
-        summary: 'Favorite 2 metadata-only suggested highlights.',
-        targetKind: 'asset_batch',
-        assetIds: [
-          '00000000-0000-4000-8000-000000000402',
-          '00000000-0000-4000-8000-000000000403',
-        ],
-        riskLevel: 'low',
-        enabled: true,
-        payload: { favorite: true },
-      },
-    ]);
+    assert.deepEqual(plan.action, { type: 'asset.setFavorite', favorite: true });
+    assert.equal(plan.selectionHandleId, usaTripCuratedHandleId);
+    assert.equal(JSON.stringify(plan).includes('assetIds'), false);
     assert.match(events.at(-1).content.blocks[0].text, /favorite/i);
     assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
   });
@@ -913,8 +1075,8 @@ describe('e2e runtime', () => {
   it('plans available metadata highlights when fewer candidates than requested exist', async () => {
     const { calls, fetchImplementation } = createFetch(
       metadataHighlightHandlers({
-        assetIds: highlightAssetIds.slice(0, 2),
-        metadataAssets: defaultHighlightMetadataAssets().slice(0, 2),
+        assetIds: highlightAssetIds,
+        curatedCount: 2,
       }),
     );
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
@@ -925,15 +1087,11 @@ describe('e2e runtime', () => {
       'Pick the best 5 photos from last weekend and make an album called Weekend Highlights.',
     );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
     assert.equal(calls[0].body.params.arguments.limit, 1000);
-    assert.deepEqual(calls[2].body.params.arguments.operations[1].assetIds, [
-      '00000000-0000-4000-8000-000000000402',
-      '00000000-0000-4000-8000-000000000401',
-    ]);
-    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetSource'), false);
-    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('previousSearch'), false);
-    assert.match(events.at(-1).content.blocks[0].text, /only 2 eligible/i);
+    assert.equal(calls[2].body.params.arguments.selectionHandleId, usaTripCuratedHandleId);
+    assert.equal(JSON.stringify(calls[2].body.params.arguments).includes('assetIds'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /Only 2 eligible/i);
     assert.match(events.at(-1).content.blocks[0].text, /requested 5/i);
   });
 
@@ -1201,23 +1359,12 @@ describe('e2e runtime', () => {
 
       const events = await collectEvents(runtime, 'Favorite the best 3 photos from last weekend.');
 
-      assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,readAssetMetadata,proposeAlbumOperations');
+      assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAssetBatchFromSelection');
       const plan = calls.at(-1).body.params.arguments;
-      assert.deepEqual(plan.operations, [
-        {
-          type: 'asset.setFavorite',
-          summary: 'Favorite 3 metadata-only suggested highlights.',
-          targetKind: 'asset_batch',
-          assetIds: [
-            '00000000-0000-4000-8000-000000000402',
-            '00000000-0000-4000-8000-000000000403',
-            '00000000-0000-4000-8000-000000000401',
-          ],
-          riskLevel: 'low',
-          enabled: true,
-          payload: { favorite: true },
-        },
-      ]);
+      assert.equal(plan.summary, 'Favorite 3 metadata-only curated highlights.');
+      assert.deepEqual(plan.action, { type: 'asset.setFavorite', favorite: true });
+      assert.equal(plan.selectionHandleId, usaTripCuratedHandleId);
+      assert.equal(JSON.stringify(plan).includes('assetIds'), false);
       assert.match(events.at(-1).content.blocks[0].text, /3 metadata-only suggested highlights/i);
     });
 
