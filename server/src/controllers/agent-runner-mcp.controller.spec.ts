@@ -274,6 +274,8 @@ describe(AgentRunnerMcpController.name, () => {
       expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
         AgentToolName.ResolveAssetSearchFilters,
         AgentToolName.SearchAssets,
+        AgentToolName.ReadSelectionMetadata,
+        AgentToolName.CurateSelection,
         AgentToolName.ReadAssetMetadata,
         AgentToolName.ReadAssetPreviews,
         AgentToolName.ReadAssetOriginals,
@@ -287,6 +289,8 @@ describe(AgentRunnerMcpController.name, () => {
         AgentToolName.ProposeSpaceFromSearch,
         AgentToolName.ProposeAddAssetsToSpaceFromSearch,
         AgentToolName.ProposeAssetBatchFromSearch,
+        AgentToolName.ProposeAlbumFromSelection,
+        AgentToolName.ProposeAssetBatchFromSelection,
         AgentToolName.ProposeAlbumOperations,
         AgentToolName.ReviseProposedOperations,
         AgentToolName.SummarizePlan,
