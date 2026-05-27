@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import type {
+  AgentCurateSelectionToolRequestDto,
   AgentListAlbumsToolRequestDto,
   AgentListSpacesToolRequestDto,
   AgentReadAlbumToolRequestDto,
@@ -50,6 +51,7 @@ export class AgentMcpService {
     AgentToolName.ResolveAssetSearchFilters,
     AgentToolName.SearchAssets,
     AgentToolName.ReadSelectionMetadata,
+    AgentToolName.CurateSelection,
     AgentToolName.ReadAssetMetadata,
     AgentToolName.ReadAssetPreviews,
     AgentToolName.ReadAssetOriginals,
@@ -270,6 +272,9 @@ export class AgentMcpService {
       }
       case AgentToolName.ReadSelectionMetadata: {
         return this.toolService.readSelectionMetadata(auth, sessionId, dto as AgentReadSelectionMetadataToolRequestDto);
+      }
+      case AgentToolName.CurateSelection: {
+        return this.toolService.curateSelection(auth, sessionId, dto as AgentCurateSelectionToolRequestDto);
       }
       case AgentToolName.ReadAssetMetadata: {
         return this.toolService.readAssetMetadata(auth, sessionId, dto as AgentReadAssetMetadataToolRequestDto);
