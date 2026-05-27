@@ -55,6 +55,7 @@ export type AgentMcpReadToolName =
   | AgentToolName.ResolveAssetSearchFilters
   | AgentToolName.SearchAssets
   | AgentToolName.ReadSelectionMetadata
+  | AgentToolName.CurateSelection
   | AgentToolName.ReadAssetMetadata
   | AgentToolName.ReadAssetPreviews
   | AgentToolName.ReadAssetOriginals
