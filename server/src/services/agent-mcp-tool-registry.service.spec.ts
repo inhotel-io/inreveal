@@ -764,6 +764,19 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ImageEditBatch);
   });
 
+  it('describes provider planning sources as handle-backed and raw assetIds as internal materialized fields', () => {
+    const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
+    const schemaJson = JSON.stringify(proposal?.inputSchema);
+
+    expect(schemaJson).toContain('provider planning rejects raw assetIds');
+    expect(schemaJson).toContain('Gallery materializes IDs server-side');
+    expect(schemaJson).toContain('assetSource.selectionHandle');
+    expect(schemaJson).toContain('assetSelectionHandleId');
+    expect(schemaJson).toContain('assetSource.explicitAssets is internal-only');
+    expect(schemaJson).not.toMatch(/paste|copy.*raw assetIds/i);
+    expect(schemaJson).not.toContain('"kind":"explicitAssets"');
+  });
+
   it('publishes a closed-world asset.updateMetadata payload schema with only supported metadata fields', () => {
     const proposal = sut.listTools().find((tool) => tool.name === AgentToolName.ProposeAlbumOperations);
     const operationSchema = findOperationSchema(proposal?.inputSchema, AgentOperationType.AssetUpdateMetadata);
