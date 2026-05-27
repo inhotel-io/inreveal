@@ -205,6 +205,35 @@ const secretLeakPattern =
 
 const getRuntimeFailureMatrixCases = () => new AgentMcpToolContractService().listRuntimeFailureMatrixCases();
 
+const providerBoundaryAdjustedPlanningRequest = <T extends { id: string; request: unknown }>(failureCase: T): unknown => {
+  if (failureCase.id === 'planning-duplicate-asset-ids') {
+    return failureCase.request;
+  }
+
+  const request = JSON.parse(JSON.stringify(failureCase.request)) as Record<string, any>;
+  const args = request.params?.arguments;
+  const operations = args && typeof args === 'object' && Array.isArray(args.operations) ? args.operations : [];
+  for (const operation of operations) {
+    if (operation && typeof operation === 'object' && Array.isArray(operation.assetIds)) {
+      delete operation.assetIds;
+      operation.assetSelectionHandleId = '00000000-0000-4000-8000-000000000901';
+    }
+  }
+
+  return request;
+};
+
+const providerBoundaryAdjustedPlanningIssuePath = (failureCase: {
+  id: string;
+  expectedResult: { kind: string; expectedIssuePath?: string };
+}): string => {
+  if (failureCase.id === 'planning-duplicate-asset-ids') {
+    return 'operations.0.assetIds';
+  }
+
+  return failureCase.expectedResult.expectedIssuePath ?? '';
+};
+
 describe(AgentMcpService.name, () => {
   let registry: AgentMcpToolRegistryService;
   let contractService: AgentMcpToolContractService;
@@ -857,6 +886,7 @@ describe(AgentMcpService.name, () => {
     const alreadyInSpaceAssetId = '00000000-0000-4000-8000-000000000501';
     const newCandidateAssetId = '00000000-0000-4000-8000-000000000502';
     const secondNewCandidateAssetId = '00000000-0000-4000-8000-000000000503';
+    const selectionHandleId = factory.uuid();
     const serviceResult = makePlanningServiceResult('plan-space-add');
 
     toolService.listSpaces.mockResolvedValue({
@@ -921,7 +951,7 @@ describe(AgentMcpService.name, () => {
             summary: 'Add 2 Berlin photos to Family space.',
             targetKind: AgentOperationTargetKind.ExistingSpace,
             targetId: familySpaceId,
-            assetIds: [newCandidateAssetId, secondNewCandidateAssetId],
+            assetSelectionHandleId: selectionHandleId,
             payload: {},
           },
         ],
@@ -946,7 +976,7 @@ describe(AgentMcpService.name, () => {
           type: AgentOperationType.SpaceAddAssets,
           targetKind: AgentOperationTargetKind.ExistingSpace,
           targetId: familySpaceId,
-          assetIds: [newCandidateAssetId, secondNewCandidateAssetId],
+          assetSelectionHandleId: selectionHandleId,
           payload: {},
         }),
       ],
@@ -969,6 +999,7 @@ describe(AgentMcpService.name, () => {
     const familySpaceId = '00000000-0000-4000-8000-000000000401';
     const inSpaceAssetId = '00000000-0000-4000-8000-000000000501';
     const absentAssetId = '00000000-0000-4000-8000-000000000502';
+    const selectionHandleId = factory.uuid();
     const serviceResult = makePlanningServiceResult('plan-space-remove');
 
     toolService.listSpaces.mockResolvedValue({
@@ -1013,7 +1044,7 @@ describe(AgentMcpService.name, () => {
             summary: 'Remove screenshots from Family space.',
             targetKind: AgentOperationTargetKind.ExistingSpace,
             targetId: familySpaceId,
-            assetIds: [inSpaceAssetId],
+            assetSelectionHandleId: selectionHandleId,
             payload: {},
           },
         ],
@@ -1027,7 +1058,7 @@ describe(AgentMcpService.name, () => {
           type: AgentOperationType.SpaceRemoveAssets,
           targetKind: AgentOperationTargetKind.ExistingSpace,
           targetId: familySpaceId,
-          assetIds: [inSpaceAssetId],
+          assetSelectionHandleId: selectionHandleId,
         }),
       ],
     });
@@ -1672,7 +1703,11 @@ describe(AgentMcpService.name, () => {
         .listSlice4PlanningFailureMatrixCases()
         .filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
     )('keeps runtime validation baseline for Slice 4 planning case $id', async (failureCase) => {
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        providerBoundaryAdjustedPlanningRequest(failureCase),
+      )) as AgentMcpSuccessResponse;
 
       if (failureCase.expectedResult.kind !== 'tool-validation') {
         throw new Error(`Expected tool-validation case for ${failureCase.id}`);
@@ -1680,7 +1715,7 @@ describe(AgentMcpService.name, () => {
 
       expectEnrichedToolValidationError(response, {
         toolName: failureCase.toolName!,
-        path: failureCase.expectedResult.expectedIssuePath,
+        path: providerBoundaryAdjustedPlanningIssuePath(failureCase),
       });
       expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
       expect(operationPlanService.reviseProposedOperations).not.toHaveBeenCalled();
@@ -1720,7 +1755,6 @@ describe(AgentMcpService.name, () => {
       },
       {
         id: 'planning-duplicate-asset-ids',
-        hintIncludes: 'only once',
         expectedIncludes: 'reviewable Gallery operation plan',
       },
       {
@@ -1753,7 +1787,11 @@ describe(AgentMcpService.name, () => {
         .listSlice4PlanningFailureMatrixCases()
         .find((candidate) => candidate.id === expectation.id)!;
 
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        providerBoundaryAdjustedPlanningRequest(failureCase),
+      )) as AgentMcpSuccessResponse;
 
       if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
         throw new Error(`Expected tool-validation planning case for ${failureCase.id}`);
@@ -1761,7 +1799,7 @@ describe(AgentMcpService.name, () => {
 
       expectEnrichedToolValidationError(response, {
         toolName: failureCase.toolName,
-        path: failureCase.expectedResult.expectedIssuePath,
+        path: providerBoundaryAdjustedPlanningIssuePath(failureCase),
         hintIncludes: expectation.hintIncludes,
         expectedIncludes: expectation.expectedIncludes,
       });
@@ -2106,6 +2144,33 @@ describe(AgentMcpService.name, () => {
       expect(operationPlanService.proposeAlbumOperations).not.toHaveBeenCalled();
     });
 
+    it('rejects provider-facing top-level assetSource.explicitAssets before delegation', async () => {
+      const rawAssetId = factory.uuid();
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAssetBatchFromSearch, {
+          summary: 'Favorite explicit assets.',
+          action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+          assetSource: { kind: 'explicitAssets', assetIds: [rawAssetId] },
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, unknown>;
+
+      expect(result.isError).toBe(true);
+      expect(structuredContent.issues).toEqual([
+        expect.objectContaining({
+          path: 'assetSource',
+          message: expect.stringContaining('assetSource.explicitAssets is not available'),
+        }),
+      ]);
+      expect(JSON.stringify(response)).not.toContain(rawAssetId);
+      expect(operationPlanService.proposeAssetBatchFromSearch).not.toHaveBeenCalled();
+    });
+
     it('redacts materialized planning assetIds from MCP structured content', async () => {
       const rawAssetIds = [factory.uuid(), factory.uuid()];
       const serviceResult = {
@@ -2172,6 +2237,72 @@ describe(AgentMcpService.name, () => {
       expect(operation.assetCount).toBe(2);
       expect(JSON.stringify(response)).not.toContain('"assetIds"');
       expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
+    });
+
+    it('redacts nested planning result ids from MCP structured content', async () => {
+      const rawAssetIds = [factory.uuid(), factory.uuid()];
+      const rawResultAssetId = factory.uuid();
+      const serviceResult = {
+        status: 'success',
+        summary: 'Plan applied.',
+        toolCall: null,
+        plan: {
+          id: factory.uuid(),
+          sessionId,
+          revision: 1,
+          status: AgentOperationPlanStatus.Proposed,
+          summary: 'Favorite handle assets.',
+          operations: [
+            {
+              id: factory.uuid(),
+              planId: factory.uuid(),
+              type: AgentOperationType.AssetSetFavorite,
+              summary: 'Favorite handle assets.',
+              targetKind: AgentOperationTargetKind.AssetBatch,
+              targetId: null,
+              temporaryTargetId: null,
+              assetIds: rawAssetIds,
+              payload: { favorite: true },
+              dependencyIds: [],
+              riskLevel: AgentOperationRiskLevel.Low,
+              enabled: true,
+              status: AgentOperationStatus.Proposed,
+              result: {
+                assetIds: rawAssetIds,
+                assetResults: [{ id: rawResultAssetId, success: true }],
+              },
+              error: null,
+              createdAt: new Date('2026-05-27T12:00:00.000Z'),
+              updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+            },
+          ],
+          createdAt: new Date('2026-05-27T12:00:00.000Z'),
+          updatedAt: new Date('2026-05-27T12:00:00.000Z'),
+        },
+      };
+      operationPlanService.proposeAssetBatchFromSearch.mockResolvedValue(serviceResult as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolCallRequest(AgentToolName.ProposeAssetBatchFromSearch, {
+          summary: 'Favorite handle assets.',
+          action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+          assetSource: { kind: 'search', filters: { country: 'South Africa' } },
+        }),
+      )) as AgentMcpSuccessResponse;
+
+      const result = response.result as AgentMcpToolCallResult;
+      const structuredContent = result.structuredContent as Record<string, any>;
+      const [operation] = structuredContent.plan.operations;
+
+      expect(operation.assetCount).toBe(2);
+      expect(operation.result.assetCount).toBe(2);
+      expect(operation.result.assetResultsCount).toBe(1);
+      expect(operation.result).not.toHaveProperty('assetResults');
+      expect(JSON.stringify(response)).not.toContain('"assetIds"');
+      expect(JSON.stringify(response)).not.toContain(rawAssetIds[0]);
+      expect(JSON.stringify(response)).not.toContain(rawResultAssetId);
     });
 
     it('returns recoverable invalid selection handle tool errors as MCP tool results', async () => {
@@ -2373,7 +2504,7 @@ describe(AgentMcpService.name, () => {
               summary: 'Add photos to Family.',
               targetKind: AgentOperationTargetKind.ExistingAlbum,
               targetId: '00000000-0000-4000-8000-000000000010',
-              assetIds: ['00000000-0000-4000-8000-000000000001'],
+              assetSelectionHandleId: '00000000-0000-4000-8000-000000000001',
               payload: {},
             },
           ],
@@ -2392,17 +2523,25 @@ describe(AgentMcpService.name, () => {
     it.each(
       getRuntimeFailureMatrixCases().filter((failureCase) => failureCase.expectedResult.kind === 'tool-validation'),
     )('returns compact actionable validation guidance for $id', async (failureCase) => {
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+      const isPlanningCase = failureCase.id.startsWith('planning-');
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        isPlanningCase ? providerBoundaryAdjustedPlanningRequest(failureCase) : failureCase.request,
+      )) as AgentMcpSuccessResponse;
 
       if (failureCase.expectedResult.kind !== 'tool-validation' || !failureCase.toolName) {
         throw new Error(`Expected tool-validation case for ${failureCase.id}`);
       }
 
       const expectedResult = failureCase.expectedResult;
+      const expectedIssuePath = isPlanningCase
+        ? providerBoundaryAdjustedPlanningIssuePath(failureCase)
+        : expectedResult.expectedIssuePath;
       const result = response.result as AgentMcpToolCallResult;
       const structuredContent = result.structuredContent as Record<string, unknown>;
       const issues = structuredContent.issues as Array<Record<string, unknown>>;
-      const expectedPathIssue = issues.find((issue) => issue.path === expectedResult.expectedIssuePath);
+      const expectedPathIssue = issues.find((issue) => issue.path === expectedIssuePath);
       const serialized = JSON.stringify(structuredContent);
 
       expect(response).toMatchObject({
@@ -2420,7 +2559,7 @@ describe(AgentMcpService.name, () => {
         exampleArguments: expect.any(Object),
       });
       expect(issues).toEqual(
-        expect.arrayContaining([expect.objectContaining({ path: expectedResult.expectedIssuePath })]),
+        expect.arrayContaining([expect.objectContaining({ path: expectedIssuePath })]),
       );
       expect(expectedPathIssue?.hint ?? structuredContent.hint).toEqual(expect.any(String));
       expect((structuredContent.expected as string).trim()).not.toBe('');
@@ -2478,7 +2617,11 @@ describe(AgentMcpService.name, () => {
         throw new Error(`Expected tool-validation case for ${id}`);
       }
 
-      const response = (await sut.handle(auth, sessionId, failureCase.request)) as AgentMcpSuccessResponse;
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        id.startsWith('planning-') ? providerBoundaryAdjustedPlanningRequest(failureCase) : failureCase.request,
+      )) as AgentMcpSuccessResponse;
       const result = response.result as AgentMcpToolCallResult;
       const structuredContent = result.structuredContent as Record<string, unknown>;
 
