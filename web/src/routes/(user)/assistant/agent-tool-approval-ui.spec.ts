@@ -57,8 +57,18 @@ describe('agent tool approval UI helpers', () => {
       requestSummary: 'Store 1 proposed metadata operation(s)',
       status: AgentToolCallStatus.PendingApproval,
     });
+    const metadataSelectionPlan = toolCall({
+      toolName: AgentToolName.ProposeAssetBatchFromSelection,
+      requestSummary: 'Store 1 proposed metadata operation(s)',
+      status: AgentToolCallStatus.PendingApproval,
+    });
     const genericAssetPlan = toolCall({
       toolName: AgentToolName.ProposeAssetBatchFromSearch,
+      requestSummary: 'Store 1 proposed album operation(s)',
+      status: AgentToolCallStatus.Completed,
+    });
+    const genericSelectionPlan = toolCall({
+      toolName: AgentToolName.ProposeAssetBatchFromSelection,
       requestSummary: 'Store 1 proposed album operation(s)',
       status: AgentToolCallStatus.Completed,
     });
@@ -67,8 +77,11 @@ describe('agent tool approval UI helpers', () => {
     expect(getAgentToolCallCompletedText({ ...metadataPlan, status: AgentToolCallStatus.Completed })).toBe(
       'Pi drafted metadata changes.',
     );
+    expect(getAgentToolCallPendingText(metadataSelectionPlan)).toBe('Pi wants to draft metadata changes.');
     expect(getAgentToolCallPendingText(genericAssetPlan)).toBe('Pi wants to draft photo changes from a search.');
     expect(getAgentToolCallCompletedText(genericAssetPlan)).toBe('Pi drafted photo changes from a search.');
+    expect(getAgentToolCallPendingText(genericSelectionPlan)).toBe('Pi wants to draft photo changes from a selection.');
+    expect(getAgentToolCallCompletedText(genericSelectionPlan)).toBe('Pi drafted photo changes from a selection.');
   });
 
   it('maps every current data class to a label key', () => {
