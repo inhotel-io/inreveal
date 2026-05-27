@@ -260,7 +260,9 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('Progressive: resolve names -> search handle');
-    expect(prompt).toContain('metadata exact ids');
+    expect(prompt).toContain('readSelectionMetadata');
+    expect(prompt).toContain('itemRef');
+    expect(prompt).toContain('readAssetMetadata legacy exact non-search IDs only');
     expect(prompt).toContain('No 1k');
     expect(prompt).toContain('if truncated/hasMore, page/ask');
     expect(prompt).not.toContain('"detail":"ids"');
@@ -285,10 +287,10 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->metadata->preview if allowed; write exact non-search assetIds only.',
+      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview if allowed; write exact non-search assetIds only.',
     );
     expect(prompt).toContain(
-      'Technical metadata: search handle/sourceRef, then readAssetMetadata fields camera/dates/filename for exact asset IDs',
+      'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only',
     );
     expect(prompt).not.toContain('"limit":1000');
     expect(prompt).not.toContain('mcp_gallery_apply');
@@ -535,6 +537,8 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).not.toContain('<asset-id-from-searchAssets>');
     expect(prompt).not.toContain('selected assetIds only');
     expect(prompt).not.toContain('search ids first');
+    expect(prompt).not.toContain('search handle->metadata');
+    expect(prompt).not.toContain('search handle/sourceRef, then readAssetMetadata');
     expect(prompt).not.toContain('createSelectionHandle');
   });
 

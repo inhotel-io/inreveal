@@ -6,6 +6,7 @@ import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contrac
 const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.ReadSelectionMetadata,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -342,6 +343,8 @@ describe(AgentMcpToolContractService.name, () => {
   it('documents compact readAssetMetadata detail presets and field-selected reads', () => {
     const contract = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
 
+    expect(contract?.usage).toMatch(/legacy exact non-search/i);
+    expect(contract?.usage).not.toMatch(/search.*handle\/sourceRef.*readAssetMetadata/i);
     expect(contract?.usage).toContain('detail');
     expect(contract?.usage).toContain('fields');
     expect(contract?.usage).toContain('basic');
@@ -381,6 +384,52 @@ describe(AgentMcpToolContractService.name, () => {
       ]),
     );
     expect(JSON.stringify(contract)).not.toMatch(/private|rawPath|storageKey|checksum|original path|bearer|token/i);
+  });
+
+  it('documents readSelectionMetadata immediately after searchAssets for selection metadata reads', () => {
+    const contracts = sut.listReadToolContracts();
+    const contract = sut.getReadToolContract(AgentToolName.ReadSelectionMetadata);
+
+    expect(contracts.map((item) => item.name).slice(0, 4)).toEqual([
+      AgentToolName.ResolveAssetSearchFilters,
+      AgentToolName.SearchAssets,
+      AgentToolName.ReadSelectionMetadata,
+      AgentToolName.ReadAssetMetadata,
+    ]);
+    expect(contract?.usage).toMatch(/selectionHandle\.id/i);
+    expect(contract?.usage).toMatch(/itemRef/i);
+    expect(contract?.usage).toMatch(/without provider-visible asset IDs/i);
+    expect(contract?.argumentModes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'selection-metadata',
+          requiredFields: ['selectionHandleId'],
+          forbiddenFields: expect.arrayContaining(['toolCallId']),
+        }),
+        expect.objectContaining({
+          name: 'approved-retry',
+          requiredFields: ['toolCallId'],
+          forbiddenFields: expect.arrayContaining(['selectionHandleId', 'fields', 'sampleSize']),
+        }),
+      ]),
+    );
+    expect(contract?.examples).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'read-selection-metadata-sample',
+          arguments: {
+            selectionHandleId: '00000000-0000-4000-8000-000000000333',
+            fields: ['dates', 'camera', 'filename'],
+            sampleSize: 5,
+          },
+        }),
+      ]),
+    );
+    for (const example of contract?.examples ?? []) {
+      expect(AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse(example.arguments).success).toBe(
+        true,
+      );
+    }
   });
 
   it('documents progressive detail search examples that parse through the live DTO schema', () => {
@@ -488,7 +537,8 @@ describe(AgentMcpToolContractService.name, () => {
       (example) => example.name === 'read-technical-fields-for-selected-assets',
     );
 
-    expect(metadata?.usage).toContain('Search for a handle/sourceRef first');
+    expect(metadata?.usage).toContain('Legacy exact non-search ID usage only');
+    expect(metadata?.usage).toContain('readSelectionMetadata');
     expect(metadata?.usage).toContain('fields');
     expect(exactTechnical?.arguments).toEqual({
       assetIds: ['00000000-0000-4000-8000-000000000001'],
