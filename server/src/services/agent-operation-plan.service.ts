@@ -1652,8 +1652,7 @@ export class AgentOperationPlanService {
     toolName: AgentToolName,
     sourceRef: string,
   ) {
-    const instruction =
-      'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.';
+    const instruction = 'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.';
     const recovery: AgentSourceRefRecoveryMetadata = {
       kind: 'invalid-source-ref',
       attemptedSourceRef: sourceRef,
@@ -1696,7 +1695,7 @@ export class AgentOperationPlanService {
         expectedDomain: 'selectionHandle',
         receivedDomain,
         instruction:
-          'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+          'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.',
       });
     }
 
@@ -1749,7 +1748,7 @@ export class AgentOperationPlanService {
 
   private invalidSelectionHandleHint(recovery: AgentSelectionHandleRecoveryMetadata) {
     if (recovery.expiredSelectionHandle) {
-      return 'The attempted selection handle is expired. Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.id.';
+      return 'The attempted selection handle is expired. Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.id.';
     }
 
     if (recovery.availableSelectionHandles.length === 1) {
@@ -1760,7 +1759,7 @@ export class AgentOperationPlanService {
       return 'Choose the intended same-session handle from availableSelectionHandles and retry proposeAlbumOperations with that exact id.';
     }
 
-    return 'Rerun searchAssets with createSelectionHandle true, then retry proposeAlbumOperations with the returned selectionHandle.id.';
+    return 'Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.id.';
   }
 
   private validateWriteScope(session: AgentSession, type: AgentOperationType) {

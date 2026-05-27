@@ -338,7 +338,7 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('Only desc is currently executable'),
       }),
       detail: expect.objectContaining({
-        description: expect.stringContaining('ids'),
+        description: expect.stringContaining('handle'),
       }),
       fields: expect.objectContaining({
         description: expect.stringContaining('location'),
@@ -350,6 +350,7 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('approved retry'),
       }),
     });
+    expect(searchProperties?.detail?.description).not.toContain('ids returns compact asset ids');
     expect(search?.properties).toMatchObject({
       mode: expect.objectContaining({
         description: expect.not.stringContaining('later slice'),

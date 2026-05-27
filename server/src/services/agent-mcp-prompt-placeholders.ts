@@ -1,6 +1,6 @@
 export const agentMcpPromptPlaceholderMap = {
-  '00000000-0000-4000-8000-000000000001': '<asset-id-from-searchAssets>',
-  '00000000-0000-4000-8000-000000000002': '<another-asset-id-from-searchAssets>',
+  '00000000-0000-4000-8000-000000000001': '<exact-asset-id-from-readAssetMetadata>',
+  '00000000-0000-4000-8000-000000000002': '<another-exact-asset-id-from-readAssetMetadata>',
   '00000000-0000-4000-8000-000000000010': '<album.id from listAlbums/readAlbum>',
   '00000000-0000-4000-8000-000000000020': '<space.id from listSpaces/readSpace>',
   '00000000-0000-4000-8000-000000000021': '<spacePersonIds value from resolveAssetSearchFilters>',

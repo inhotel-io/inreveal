@@ -2911,7 +2911,7 @@ describe(AgentOperationPlanService.name, () => {
       attemptedSourceRef: sourceRef,
       expectedSourceKind: 'search',
       instruction:
-        'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+        'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
     });
     expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
@@ -2952,7 +2952,7 @@ describe(AgentOperationPlanService.name, () => {
         attemptedSourceRef: sourceRef,
         expectedSourceKind: 'search',
         instruction:
-          'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+          'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
       },
     });
     expect(error.content.hint).not.toContain('proposeAlbumOperations');
@@ -3069,7 +3069,7 @@ describe(AgentOperationPlanService.name, () => {
       attemptedSourceRef: sourceRef,
       expectedSourceKind: 'search',
       instruction:
-        'Rerun searchAssets with createSelectionHandle true, then retry with the returned selectionHandle.sourceRef.',
+        'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
     });
     const serialized = JSON.stringify(error.content);
     expect(serialized).not.toContain('expiredSourceRef');
@@ -3091,7 +3091,7 @@ describe(AgentOperationPlanService.name, () => {
       kind: 'invalid-source-ref',
       attemptedSourceRef: sourceRef,
       expectedSourceKind: 'search',
-      instruction: 'Rerun searchAssets with createSelectionHandle true.',
+      instruction: 'Rerun searchAssets.',
       expiredSourceRef: sourceRef,
       assetIds: [newUuid()],
       sampleAssetIds: [newUuid()],
@@ -3103,7 +3103,7 @@ describe(AgentOperationPlanService.name, () => {
         kind: 'invalid-source-ref',
         attemptedSourceRef: sourceRef,
         expectedSourceKind: 'search',
-        instruction: 'Rerun searchAssets with createSelectionHandle true.',
+        instruction: 'Rerun searchAssets.',
         expiredSourceRef: sourceRef,
       },
     });
@@ -3273,14 +3273,14 @@ describe(AgentOperationPlanService.name, () => {
       error: 'That value is an asset ID, not a selection handle ID.',
       toolName: AgentToolName.ProposeAlbumOperations,
       retryable: true,
-      hint: 'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+      hint: 'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.',
       recovery: {
         kind: 'wrong_id_domain',
         field: 'operations[].assetSelectionHandleId',
         expectedDomain: 'selectionHandle',
         receivedDomain: 'asset',
         instruction:
-          'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+          'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.',
       },
     });
     expect(JSON.stringify(error.content.recovery)).not.toContain(assetId);
@@ -3296,7 +3296,7 @@ describe(AgentOperationPlanService.name, () => {
             expectedDomain: 'selectionHandle',
             receivedDomain: 'asset',
             instruction:
-              'Use a same-session selection handle returned by searchAssets with createSelectionHandle true, or use assetSource.search once available.',
+              'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.',
           },
         },
       }),
@@ -3538,7 +3538,7 @@ describe(AgentOperationPlanService.name, () => {
       }),
     ).rejects.toMatchObject({
       content: {
-        hint: expect.stringContaining('Rerun searchAssets with createSelectionHandle true'),
+        hint: expect.stringContaining('Rerun searchAssets'),
         recovery: expect.objectContaining({ availableSelectionHandles: [] }),
       },
     });

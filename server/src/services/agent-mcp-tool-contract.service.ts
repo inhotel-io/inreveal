@@ -185,7 +185,7 @@ const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMet
   title: 'Read asset metadata',
   description: 'Read selected metadata for selected assets.',
   usage:
-    'Search compact asset ids first, then call this tool for selected ids with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
+    'Search for a handle/sourceRef first, then call this tool only for exact non-search asset IDs with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
   examples: [
     assetIdsExample,
@@ -205,7 +205,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   description:
     'Find assets using Gallery text search or metadata filters for people, spaces, visibility, dates, albums, tags, camera fields, ratings, media types, and bounded result pages.',
   usage:
-    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to compact asset ids. createSelectionHandle -> assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.',
+    'Known ID filters: people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types. Use returned personIds or spaceId plus spacePersonIds. Use mode smart, description, ocr, or filename with query for text search. Default to handle-first search results with selectionHandle/sourceRef; use selectionHandle.id as assetSelectionHandleId for large bounded pages. Do not use limit 1000; ask one narrowing question or repeat the same mode, query, filters, order, and limit using the returned nextPage value as page. When resolveAssetSearchFilters returns resolvedFilters, copy those fields into searchAssets.filters exactly. For people OR requests, use one personIds array with every resolved person id. For shared-space people, include both spaceId and spacePersonIds.',
   argumentModes: [
     {
       name: 'empty-search',
@@ -252,9 +252,9 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     },
     {
       name: 'compact-date-location-search',
-      description: 'Search compact asset ids for a known date and place.',
+      description: 'Search handle-first results for a known date and place.',
       arguments: {
-        detail: 'ids',
+        detail: 'handle',
         filters: {
           takenAfter: '2026-05-01T00:00:00.000Z',
           takenBefore: '2026-05-18T23:59:59.999Z',
@@ -277,11 +277,11 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     },
     {
       name: 'visual-curation-candidate-search',
-      description: 'Find visual curation candidates by compact ids before reading previews.',
+      description: 'Find visual curation candidates with a bounded handle before narrowing to preview reads.',
       arguments: {
         mode: 'smart',
         query: 'best beach sunset photos',
-        detail: 'ids',
+        detail: 'handle',
         limit: 25,
       },
     },
@@ -289,7 +289,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       name: 'large-album-page-search',
       description: 'Page a broad album-building search without requesting full metadata.',
       arguments: {
-        detail: 'ids',
+        detail: 'handle',
         filters: { isNotInAlbum: true },
         limit: 50,
         page: 1,
@@ -300,8 +300,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       name: 'large-selection-handle-search',
       description: 'Create a compact server-side selection handle for a bounded large result.',
       arguments: {
-        detail: 'ids',
-        createSelectionHandle: true,
+        detail: 'handle',
         sampleSize: 5,
         filters: { isNotInAlbum: true },
         limit: 500,
@@ -419,8 +418,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       description:
         'Search January 2026 South Africa photos after resolving "Pierre OR Aurelia"; keep both IDs in the same personIds array.',
       arguments: {
-        detail: 'ids',
-        createSelectionHandle: true,
+        detail: 'handle',
         filters: {
           country: 'South Africa',
           takenAfter: '2026-01-01T00:00:00.000Z',
@@ -435,7 +433,7 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
       description:
         'Search after resolving a named person inside a shared space; spaceId must be sent with the resolved spacePersonIds.',
       arguments: {
-        detail: 'ids',
+        detail: 'handle',
         filters: {
           spaceId: exampleSpaceId,
           spacePersonIds: [exampleSpacePersonId],
@@ -603,13 +601,13 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
     {
       id: 'search-broad-full-metadata',
       match: { messageIncludes: 'metadata detail is too broad' },
-      hint: 'Search compact ids first, then call readAssetMetadata with fields for selected assetIds. Do not request full metadata for broad searches.',
+      hint: 'Search for a handle/sourceRef first, then inspect summary samples or exact fields only for a small inspected set. Do not request full metadata for broad searches.',
       exampleName: 'compact-date-location-search',
     },
     {
       id: 'search-preview-before-shortlist',
       match: { messageIncludes: 'preview reads require selected asset ids' },
-      hint: 'For visual curation, search compact ids first, shortlist candidates, then read previews only for selected assetIds.',
+      hint: 'For visual curation, start with a bounded handle/sourceRef and summary samples; use preview reads only for exact small non-search assetIds after narrowing.',
       exampleName: 'visual-curation-candidate-search',
     },
     {
@@ -1026,7 +1024,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
 ];
 
 const planningUsage =
-  'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from searchAssets createSelectionHandle instead of pasting every asset ID.';
+  'Create a reviewable Gallery operation plan. Put all writes in operations and let Gallery apply the plan after user review. For large search selections, use assetSelectionHandleId from the searchAssets selectionHandle.id instead of pasting every asset ID.';
 
 const planningMode: AgentMcpArgumentMode = {
   name: 'operation-plan',
@@ -1616,7 +1614,7 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'planning-pasted-large-asset-ids',
     match: { issuePath: 'operations.0.assetIds', messageIncludes: 'expected array to have <=' },
-    hint: 'For hundreds or thousands of assets, call searchAssets with createSelectionHandle and use assetSelectionHandleId in the plan.',
+    hint: 'For hundreds or thousands of assets, call searchAssets and use the returned selectionHandle.id as assetSelectionHandleId in the plan.',
     exampleName: 'create-album-from-selection-handle',
   },
   {

@@ -143,9 +143,10 @@ describe(AgentMcpDocsService.name, () => {
     const docs = sut.generateMarkdown();
 
     expect(docs).toContain('Large selections');
-    expect(docs).toContain('createSelectionHandle');
+    expect(docs).not.toContain('createSelectionHandle');
+    expect(docs).not.toContain('detail: "ids"');
     expect(docs).toContain('assetSelectionHandleId');
-    expect(docs).toContain('current bounded page');
+    expect(docs).toContain('selectionHandle.id');
   });
 
   it('documents existing-space detail updates, supported fields, and no-op guidance', () => {
@@ -306,8 +307,8 @@ describe(AgentMcpDocsService.name, () => {
 
     expect(markdown).toContain('## Progressive Detail Workflow');
     expect(markdown).toContain('Resolve names before search');
-    expect(markdown).toContain('Search compact IDs first');
-    expect(markdown).toContain('Request fields only for selected IDs');
+    expect(markdown).toContain('Search for a handle/sourceRef first');
+    expect(markdown).toContain('Request fields only for exact non-search asset IDs');
     expect(markdown).toContain('Visual curation');
     expect(markdown).toContain('Technical metadata');
     expect(markdown).toContain('Large album');
