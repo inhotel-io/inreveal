@@ -2174,6 +2174,96 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
   safety,
 };
 
+const proposeAlbumFromSelectionExamples: AgentMcpToolExample[] = [
+  {
+    name: 'create-album-from-selection',
+    description: 'Create a new album from an existing curated selection handle.',
+    arguments: {
+      summary: 'Create USA highlights from curated selection.',
+      albumName: 'USA Highlights',
+      description: 'Curated trip highlights.',
+      selectionHandleId: exampleSelectionHandleId,
+    },
+  },
+];
+
+const proposeAssetBatchFromSelectionExamples: AgentMcpToolExample[] = [
+  {
+    name: 'favorite-selection',
+    description: 'Favorite all assets represented by an existing curated selection handle.',
+    arguments: {
+      summary: 'Favorite curated highlights.',
+      action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+      selectionHandleId: exampleSelectionHandleId,
+    },
+  },
+];
+
+const proposeAlbumFromSelectionContract: AgentMcpPlanningToolContract = {
+  name: AgentToolName.ProposeAlbumFromSelection,
+  title: 'Propose album from selection',
+  description: 'preferred tool for creating a new album from an existing search or curated selection handle.',
+  usage:
+    'Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.',
+  argumentModes: [
+    {
+      name: 'new-album-from-selection',
+      description: 'Create a new album and add assets from an existing selection handle.',
+      requiredFields: ['albumName', 'selectionHandleId'],
+      forbiddenFields: ['operations', 'assetIds', 'assetSource', 'assetSelectionHandleId'],
+      whenToUse:
+        'Use when searchAssets or curateSelection returned the exact selectionHandle.id for the album contents.',
+    },
+  ],
+  examples: proposeAlbumFromSelectionExamples,
+  commonMistakes: [
+    {
+      id: 'album-selection-workflow-raw-asset-ids',
+      match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
+      hint:
+        'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
+      exampleName: 'create-album-from-selection',
+    },
+  ],
+  safety,
+};
+
+const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
+  name: AgentToolName.ProposeAssetBatchFromSelection,
+  title: 'Propose asset batch from selection',
+  description:
+    'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from an existing selection handle.',
+  usage:
+    'Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.',
+  argumentModes: [
+    {
+      name: 'asset-batch-from-selection',
+      description: 'Propose one supported asset batch action for an existing selection handle.',
+      requiredFields: ['action', 'selectionHandleId'],
+      forbiddenFields: ['operations', 'assetIds', 'assetSource', 'assetSelectionHandleId', 'targetKind'],
+      whenToUse:
+        'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests after searchAssets or curateSelection returned the exact selectionHandle.id.',
+    },
+  ],
+  examples: proposeAssetBatchFromSelectionExamples,
+  commonMistakes: [
+    {
+      id: 'asset-batch-selection-workflow-raw-asset-ids',
+      match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
+      hint:
+        'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
+      exampleName: 'favorite-selection',
+    },
+    {
+      id: 'asset-batch-selection-workflow-unsupported-action',
+      match: { issuePath: 'action.type', requestShape: 'tool-arguments' },
+      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.',
+      exampleName: 'favorite-selection',
+    },
+  ],
+  safety,
+};
+
 const proposeAlbumOperationsContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAlbumOperations,
   title: 'Propose album operations',
@@ -2252,6 +2342,8 @@ const planningToolContracts: AgentMcpPlanningToolContract[] = [
   proposeSpaceFromSearchContract,
   proposeAddAssetsToSpaceFromSearchContract,
   proposeAssetBatchFromSearchContract,
+  proposeAlbumFromSelectionContract,
+  proposeAssetBatchFromSelectionContract,
   proposeAlbumOperationsContract,
   reviseProposedOperationsContract,
   summarizePlanContract,

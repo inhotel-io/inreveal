@@ -24,6 +24,8 @@ const expectedPlanningToolNames = [
   AgentToolName.ProposeSpaceFromSearch,
   AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAssetBatchFromSearch,
+  AgentToolName.ProposeAlbumFromSelection,
+  AgentToolName.ProposeAssetBatchFromSelection,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -195,6 +197,30 @@ describe(AgentMcpToolContractService.name, () => {
         }),
       ]),
     );
+  });
+
+  it('documents selection-backed album and asset batch workflow tools', () => {
+    const album = sut.getPlanningToolContract(AgentToolName.ProposeAlbumFromSelection);
+    const batch = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSelection);
+
+    expect(album).toBeDefined();
+    expect(batch).toBeDefined();
+    expect(album?.usage).toContain('selectionHandle.id');
+    expect(batch?.usage).toContain('selectionHandle.id');
+    expect(album?.examples.map((example) => example.name)).toContain('create-album-from-selection');
+    expect(batch?.examples.map((example) => example.name)).toContain('favorite-selection');
+
+    for (const contract of [album, batch]) {
+      expect(JSON.stringify(contract?.examples)).not.toContain('assetIds');
+      expect(JSON.stringify(contract?.examples)).not.toContain('explicitAssets');
+      for (const example of contract?.examples ?? []) {
+        expect(JSON.stringify(example.arguments)).not.toContain('assetIds');
+        expect(JSON.stringify(example.arguments)).not.toContain('explicitAssets');
+        const result = AgentOperationPlanToolRequestSchemas[contract!.name].safeParse(example.arguments);
+
+        expect(result.success, `${contract!.name} ${example.name}`).toBe(true);
+      }
+    }
   });
 
   it('defines source-backed workflow examples for album, space, batch, and previous search defaults', () => {

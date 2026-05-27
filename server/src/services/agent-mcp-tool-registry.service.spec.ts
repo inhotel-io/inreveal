@@ -23,6 +23,8 @@ const expectedToolNames = [
   AgentToolName.ProposeSpaceFromSearch,
   AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAssetBatchFromSearch,
+  AgentToolName.ProposeAlbumFromSelection,
+  AgentToolName.ProposeAssetBatchFromSelection,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -49,6 +51,8 @@ const expectedPlanningToolNames = [
   AgentToolName.ProposeSpaceFromSearch,
   AgentToolName.ProposeAddAssetsToSpaceFromSearch,
   AgentToolName.ProposeAssetBatchFromSearch,
+  AgentToolName.ProposeAlbumFromSelection,
+  AgentToolName.ProposeAssetBatchFromSelection,
   AgentToolName.ProposeAlbumOperations,
   AgentToolName.ReviseProposedOperations,
   AgentToolName.SummarizePlan,
@@ -627,7 +631,11 @@ describe(AgentMcpToolRegistryService.name, () => {
           name: mode.name,
           description: mode.description,
           requiredFields: mode.requiredFields,
-          forbiddenFields: mode.forbiddenFields,
+          forbiddenFields:
+            contract.name === AgentToolName.ProposeAlbumFromSelection ||
+            contract.name === AgentToolName.ProposeAssetBatchFromSelection
+              ? mode.forbiddenFields.filter((field) => field !== 'assetIds')
+              : mode.forbiddenFields,
           whenToUse: mode.whenToUse,
         })),
       );
@@ -750,6 +758,21 @@ describe(AgentMcpToolRegistryService.name, () => {
       expect(stripContractMetadata(toolsByName.get(toolName)?.inputSchema)).toEqual(
         stripContractMetadata(toExpectedProviderPlanningInputSchema(AgentOperationPlanToolRequestSchemas[toolName])),
       );
+    }
+  });
+
+  it('publishes selection workflow schemas without raw asset ids', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    for (const toolName of [
+      AgentToolName.ProposeAlbumFromSelection,
+      AgentToolName.ProposeAssetBatchFromSelection,
+    ] as const) {
+      const schemaJson = JSON.stringify(toolsByName.get(toolName)?.inputSchema);
+
+      expect(schemaJson).toContain('selectionHandleId');
+      expect(schemaJson).not.toContain('"assetIds"');
+      expect(schemaJson).not.toContain('explicitAssets');
     }
   });
 

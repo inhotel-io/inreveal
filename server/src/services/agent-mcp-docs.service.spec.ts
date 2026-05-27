@@ -454,6 +454,18 @@ describe(AgentMcpDocsService.name, () => {
     expect(defaults).not.toContain('"assetIds"');
   });
 
+  it('documents selection-backed workflow tools', () => {
+    const markdown = sut.generateMarkdown();
+    const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
+
+    expect(markdown).toContain('proposeAlbumFromSelection');
+    expect(markdown).toContain('proposeAssetBatchFromSelection');
+    expect(markdown).toContain('create-album-from-selection');
+    expect(markdown).toContain('favorite-selection');
+    expect(documentedNames).toEqual(expect.arrayContaining(['create-album-from-selection', 'favorite-selection']));
+    expect(markdown).not.toContain('choose selected assetIds');
+  });
+
   it('keeps the committed generated guide in sync with the renderer', () => {
     const generatedPath = resolve(process.cwd(), '..', AGENT_MCP_GENERATED_DOC_RELATIVE_PATH);
     const committed = readFileSync(generatedPath, 'utf8');
