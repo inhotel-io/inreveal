@@ -104,6 +104,7 @@ export enum AgentMessageRole {
 
 export enum AgentToolName {
   SearchAssets = 'searchAssets',
+  ReadSelectionMetadata = 'readSelectionMetadata',
   ResolveAssetSearchFilters = 'resolveAssetSearchFilters',
   ReadAssetMetadata = 'readAssetMetadata',
   ReadAssetPreviews = 'readAssetPreviews',
