@@ -102,6 +102,7 @@ Do not ask the user to approve in chat and do not create a new read request with
 Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Use `readSelectionMetadata` for search-handle metadata inspection and `readAssetMetadata` is legacy exact non-search ID usage. Propose a plan only after the selected asset set is clear.
 
 - Broad search: use `searchAssets` with handle detail or omit `detail`, plus a bounded `limit` such as 25 or 50. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
+- Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs and is not objective image-quality scoring.
 - Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
 - Technical metadata: search for a handle first, then call `readSelectionMetadata` with exact `fields` such as `camera`, `dates`, and `filename`; use `readAssetMetadata` only for legacy exact non-search asset IDs.
 - Large album: page bounded handle results and propose operations from `selectionHandle.id` or `sourceRef`. Do not request full metadata for every candidate.
@@ -770,6 +771,72 @@ Read bounded camera, date, and filename metadata samples from a search handle.
 Retry an approved read request by id.
 
 <!-- mcp-docs:tool-arguments tool="readSelectionMetadata" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
+### Curate selection
+
+MCP tool name: `curateSelection`
+
+Create a derived selection handle from metadata-only ranking and diversification.
+
+Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, or date-spread workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only and not objective image-quality scoring; no previews are inspected.
+
+Argument modes:
+
+- `selection-curation`: Use when a broad search handle needs deterministic metadata-only narrowing before planning.
+  Required fields: `selectionHandleId`, `targetCount`.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `selectionHandleId`, `targetCount`, `strategy`, `criteria`, `constraints`, `sampleSize`.
+
+#### curate-metadata-highlights
+
+Select metadata-only highlights with date and location variety.
+
+<!-- mcp-docs:tool-arguments tool="curateSelection" example="curate-metadata-highlights" -->
+
+```json
+{
+  "selectionHandleId": "<selectionHandle.id from searchAssets>",
+  "targetCount": 15,
+  "strategy": "metadata-highlights",
+  "constraints": {
+    "diversifyBy": ["date", "location"]
+  },
+  "sampleSize": 5
+}
+```
+
+#### curate-cover-candidate
+
+Select one image cover candidate from a search handle.
+
+<!-- mcp-docs:tool-arguments tool="curateSelection" example="curate-cover-candidate" -->
+
+```json
+{
+  "selectionHandleId": "<selectionHandle.id from searchAssets>",
+  "targetCount": 1,
+  "strategy": "cover-candidate",
+  "constraints": {
+    "types": ["IMAGE"],
+    "excludeVideos": true
+  },
+  "sampleSize": 1
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="curateSelection" example="approved-retry" -->
 
 ```json
 {
@@ -2847,6 +2914,13 @@ Summarize plan risks and selected changes.
 - `selection-metadata-missing-selection-handle-or-tool-call-id`: Call readSelectionMetadata with selectionHandleId from searchAssets selectionHandle.id, or retry an approved request with only toolCallId.
 - `selection-metadata-combined-selection-handle-and-tool-call-id`: Use selectionHandleId for a new selection metadata read or toolCallId for an approved retry, not both.
 - `selection-metadata-invalid-sample-size`: Use sampleSize from 0 to 25 for readSelectionMetadata.
+
+### Curate selection
+
+- `curation-missing-handle-or-target-count`: Call searchAssets first, then pass selectionHandle.id and a targetCount to curateSelection.
+- `curation-target-count-out-of-range`: Use targetCount from 1 to 1000. If the source selection is huge, narrow searchAssets first.
+- `tool-call-arguments-missing`: Put the tool arguments object at params.arguments in the MCP tools/call request.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
 
 ### Read asset metadata
 
