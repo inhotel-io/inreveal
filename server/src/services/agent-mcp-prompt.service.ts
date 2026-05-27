@@ -51,21 +51,7 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = [
-      AgentToolName.ResolveAssetSearchFilters,
-      AgentToolName.SearchAssets,
-      AgentToolName.ReadSelectionMetadata,
-      AgentToolName.ReadAssetMetadata,
-      AgentToolName.ReadAssetPreviews,
-      AgentToolName.ReadAssetOriginals,
-      AgentToolName.ListAlbums,
-      AgentToolName.ReadAlbum,
-      AgentToolName.SearchUsers,
-      AgentToolName.ReviseProposedOperations,
-      AgentToolName.SummarizePlan,
-    ]
-      .map((toolName) => this.toPiToolName(toolName))
-      .join(',');
+    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
     const albumSourceSearch = this.getPromptExample(
       examples,
       AgentToolName.ProposeAlbumFromSearch,
@@ -104,18 +90,18 @@ export class AgentMcpPromptService {
         'Patterns: unalbumed=isNotInAlbum; 5-star videos=rating 5+type VIDEO; OCR invoice=mode ocr+query invoice; names=resolve names first.',
         'Text search: smart/ocr/description/filename require query',
         `Default write: ${albumSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToAlbumFromSearch)},${spaceSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToSpaceFromSearch)},${batchSourceSearch.piToolName}`,
-        `Metadata edits reviewable: asset.updateMetadata ${metadataBatch.piToolName}; coordinates latitude+longitude; place names/one coordinate: ask.`,
+        `Metadata edits reviewable: asset.updateMetadata ${metadataBatch.piToolName}; coordinates latitude+longitude; place names ask.`,
         `assetSource.search: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
         `previousSearch.sourceRef after inspect: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
-        `Recoverable: wrong_id_domain; needs_clarification; choiceRefs.`,
+        `Recoverable: wrong_id_domain needs_clarification choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata selectionHandleId itemRef; readAssetMetadata legacy exact non-search IDs only. No 1k; if truncated/hasMore, page/ask.',
         'Large: selectionHandle.id->assetSelectionHandleId. Do not paste hundreds of assetIds',
-        'Resolve names before searchAssets {"tags":["Travel"]}',
-        'Resolver fidelity: copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying.',
+        'Resolve names before searchAssets{"tags":["Travel"]}',
+        'Resolver fidelity:copy resolvedFilters into searchAssets.filters. Missing/ambiguous: ask clarifying.',
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
-        'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview if allowed; write exact non-search assetIds only.',
+        'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview; write exact non-search assetIds only.',
         'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only.',
         `Space lookup:${this.toPiToolName(AgentToolName.ListSpaces)}->${this.toPiToolName(AgentToolName.ReadSpace)}.`,
         'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
