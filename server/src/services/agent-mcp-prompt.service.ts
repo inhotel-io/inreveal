@@ -97,7 +97,7 @@ export class AgentMcpPromptService {
         `Recoverable: wrong_id_domain needs_clarification choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
-        'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata selectionHandleId itemRef; readAssetMetadata legacy exact non-search IDs only. No 1k; if truncated/hasMore, page/ask.',
+        'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata selectionHandleId itemRef; readAssetMetadata legacy exact non-search IDs only; bounded handle-first searches may use limit up to 1000; samples stay small; if truncated/hasMore, page/ask.',
         'Curation: handle->curateSelection targetCount strategy->use selectionHandle.id/sourceRef.',
         'After curateSelection: use proposeAlbumFromSelection or proposeAssetBatchFromSelection with selectionHandle.id; do not copy asset IDs.',
         'provider planning rejects raw assetIds; assetSelectionHandleId; assetSource.selectionHandle/search/previousSearch. Gallery materializes IDs server-side; assetSource.explicitAssets internal-only/rejected.',

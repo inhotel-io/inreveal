@@ -567,11 +567,12 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), false);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('limit up to 1000'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Best/highlights require bounded source'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('default to 10 only when the source is bounded'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('zero, negative, or above 500'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('known count or total is above 500'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('zero, negative, or above 1000'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('known count or total is above 1000'), true);
     assert.equal(
       calls.loaders[0].systemPrompt.includes('No matching highlight candidates: answer directly and do not create a plan'),
       true,
