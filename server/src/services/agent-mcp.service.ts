@@ -224,7 +224,10 @@ export class AgentMcpService {
 
     try {
       const result = await delegate(parseResult.data);
-      return this.success(id, this.toolResult(options.mapResult ? options.mapResult(result, parseResult.data) : result));
+      return this.success(
+        id,
+        this.toolResult(options.mapResult ? options.mapResult(result, parseResult.data) : result),
+      );
     } catch (error) {
       if (isAgentMcpRecoverableToolError(error)) {
         return this.success(id, this.recoverableToolErrorResult(error.content));
@@ -337,15 +340,10 @@ export class AgentMcpService {
         );
       }
       case AgentToolName.SummarizePlan: {
-        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.SummarizePlan>>(
-          id,
-          toolName,
-          args,
-          (dto) => {
-            const { planId, ...body } = dto;
-            return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
-          },
-        );
+        return this.invokePlanningTool<AgentPlanningToolDto<AgentToolName.SummarizePlan>>(id, toolName, args, (dto) => {
+          const { planId, ...body } = dto;
+          return this.operationPlanService.summarizePlan(auth, sessionId, planId, body);
+        });
       }
     }
   }
@@ -368,7 +366,9 @@ export class AgentMcpService {
         });
       }
 
-      issues.push(...this.providerFacingExplicitAssetSourceIssue(record.assetSource, `operations.${index}.assetSource`));
+      issues.push(
+        ...this.providerFacingExplicitAssetSourceIssue(record.assetSource, `operations.${index}.assetSource`),
+      );
 
       return issues;
     });
@@ -521,7 +521,7 @@ export class AgentMcpService {
         return previousValue;
       }
 
-      const { assetId, ...rest } = previousValueRecord;
+      const { assetId: _assetId, ...rest } = previousValueRecord;
       redacted = true;
       return rest;
     });
