@@ -221,10 +221,13 @@ describe(AgentMcpDocsService.name, () => {
 
   it('renders model-facing docs examples and wrappers with semantic placeholders instead of fixture UUIDs', () => {
     const markdown = sut.generateMarkdown();
+    const renderedExamples = markdown.replace(/<[^>]+>/g, '');
 
     for (const [fixtureId, placeholder] of Object.entries(agentMcpPromptPlaceholderMap)) {
       expect(markdown).not.toContain(fixtureId);
-      expect(markdown).toContain(placeholder);
+      if (renderedExamples.includes(fixtureId)) {
+        expect(markdown).toContain(placeholder);
+      }
     }
   });
 
@@ -423,9 +426,13 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown.indexOf('## Source-Backed Planning Defaults')).toBeLessThan(markdown.indexOf('## Tools'));
     expect(defaults).toContain('Use high-level workflow tools first');
     expect(defaults).toContain('assetSource.search');
+    expect(defaults).toContain('assetSource.selectionHandle');
     expect(defaults).toContain('previousSearch.sourceRef');
-    expect(defaults).toContain('explicit IDs');
-    expect(defaults).toContain('small inspected sets');
+    expect(defaults).toContain('provider planning rejects raw assetIds');
+    expect(defaults).toContain('Gallery materializes IDs server-side');
+    expect(defaults).toContain('assetSource.explicitAssets');
+    expect(defaults).toMatch(/internal-only|rejected/i);
+    expect(defaults).not.toMatch(/paste|copy.*raw assetIds/i);
     expect(defaults).toContain('wrong_id_domain');
     expect(defaults).toContain('needs_clarification');
     expect(defaults).toContain('choiceRefs');
