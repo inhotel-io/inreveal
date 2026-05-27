@@ -141,7 +141,8 @@ it('redacts materialized planning assetIds from MCP structured content', async (
   const rawAssetIds = [factory.uuid(), factory.uuid()];
   const serviceResult = {
     status: 'success',
-    summary: 'Plan revision 1: 0 album create, 1 asset add, 0 detail update, 0 cover change, 0 metadata update operation(s).',
+    summary:
+      'Plan revision 1: 0 album create, 1 asset add, 0 detail update, 0 cover change, 0 metadata update operation(s).',
     toolCall: null,
     plan: {
       id: factory.uuid(),
@@ -634,17 +635,17 @@ This keeps `assetSource.explicitAssets` invalid in direct DTO parsing while allo
 In `server/src/services/agent-operation-plan.service.ts`, update `resolveAssetSourceAssetIds()`:
 
 ```ts
-    if (assetSource.kind === 'selectionHandle') {
-      return this.resolveSelectionHandleAssetIds(auth, session, assetSource.selectionHandleId, selectionAudit);
-    }
+if (assetSource.kind === 'selectionHandle') {
+  return this.resolveSelectionHandleAssetIds(auth, session, assetSource.selectionHandleId, selectionAudit);
+}
 ```
 
 Then update the fallback error:
 
 ```ts
-    throw new BadRequestException(
-      'Only assetSource.search, assetSource.previousSearch, and assetSource.selectionHandle are supported for operation planning',
-    );
+throw new BadRequestException(
+  'Only assetSource.search, assetSource.previousSearch, and assetSource.selectionHandle are supported for operation planning',
+);
 ```
 
 No apply-path changes are needed: the service already stores materialized `assetIds` internally and apply uses the stored plan.
@@ -708,7 +709,8 @@ it('returns handle guidance for provider raw planning ids', () => {
     issues: [
       {
         path: 'operations.0.assetIds',
-        message: 'Provider-facing planning calls must use selection handles or declarative asset sources instead of raw assetIds.',
+        message:
+          'Provider-facing planning calls must use selection handles or declarative asset sources instead of raw assetIds.',
       },
     ],
   });

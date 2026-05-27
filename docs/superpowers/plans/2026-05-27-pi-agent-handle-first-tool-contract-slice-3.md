@@ -224,11 +224,17 @@ const AgentReadSelectionMetadataToolRequestSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.selectionHandleId && value.toolCallId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
 
     if ((value.fields || value.sampleSize !== undefined) && value.toolCallId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
 
     if (!value.selectionHandleId && !value.toolCallId) {
@@ -303,9 +309,7 @@ export const AgentReadSelectionMetadataToolResponseDto = namedZodDto(
   'AgentReadSelectionMetadataToolResponseDto',
   AgentReadSelectionMetadataToolResponseSchema,
 );
-export type AgentReadSelectionMetadataToolResponseDto = z.output<
-  typeof AgentReadSelectionMetadataToolResponseSchema
->;
+export type AgentReadSelectionMetadataToolResponseDto = z.output<typeof AgentReadSelectionMetadataToolResponseSchema>;
 ```
 
 - [ ] **Step 4: Add shared TypeScript types**
@@ -471,7 +475,9 @@ it('readSelectionMetadata skips missing sample metadata without leaking handle a
     createdAt: now,
     updateId: newUuid(),
   });
-  assetRepository.getAgentMetadataByIds.mockResolvedValue([makeMetadata(visibleAssetId, { originalFileName: 'visible.jpg' })] as never);
+  assetRepository.getAgentMetadataByIds.mockResolvedValue([
+    makeMetadata(visibleAssetId, { originalFileName: 'visible.jpg' }),
+  ] as never);
 
   const result = await sut.readSelectionMetadata(auth, session.id, { selectionHandleId, sampleSize: 2 });
 
@@ -622,7 +628,9 @@ it('readSelectionMetadata returns wrong-domain recovery for readable asset IDs',
   accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
   accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
 
-  const thrown = await sut.readSelectionMetadata(auth, session.id, { selectionHandleId: assetId }).catch((error) => error);
+  const thrown = await sut
+    .readSelectionMetadata(auth, session.id, { selectionHandleId: assetId })
+    .catch((error) => error);
 
   expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
   expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
@@ -661,7 +669,14 @@ it('delegates readSelectionMetadata and keeps MCP text compact', async () => {
     fields: ['dates'],
     counts: { assets: 3, sampled: 2 },
     sample: { sampleSize: 2, items: [{ itemRef: 'item:001' }, { itemRef: 'item:002' }] },
-    resultSize: { returnedItems: 2, hasMore: false, nextPage: null, estimatedBytes: 512, truncated: false, omittedFields: [] },
+    resultSize: {
+      returnedItems: 2,
+      hasMore: false,
+      nextPage: null,
+      estimatedBytes: 512,
+      truncated: false,
+      omittedFields: [],
+    },
   };
   toolService.readSelectionMetadata.mockResolvedValue(serviceResult as never);
 
@@ -1037,7 +1052,9 @@ it('documents handle-based selection metadata reads as the search inspection pat
   expect(markdown).toContain('itemRef');
   expect(markdown).toMatch(/readAssetMetadata.*legacy|legacy.*readAssetMetadata/is);
   expect(markdown).not.toContain('Search IDs first');
-  expect(markdown).not.toContain('readAssetMetadata with exact `fields` such as `camera`, `dates`, and `filename` for exact non-search asset IDs');
+  expect(markdown).not.toContain(
+    'readAssetMetadata with exact `fields` such as `camera`, `dates`, and `filename` for exact non-search asset IDs',
+  );
 });
 ```
 
@@ -1144,7 +1161,7 @@ const readSelectionMetadataContract: AgentMcpToolContract<AgentToolName.ReadSele
 Update `readAssetMetadataContract.usage` to include:
 
 ```ts
-'Legacy exact-ID read. Use only for exact small non-search asset IDs that Gallery already exposed through an exact context. For search results, call readSelectionMetadata with selectionHandleId instead.'
+'Legacy exact-ID read. Use only for exact small non-search asset IDs that Gallery already exposed through an exact context. For search results, call readSelectionMetadata with selectionHandleId instead.';
 ```
 
 Add `readSelectionMetadataContract` to `readToolContracts` immediately after `searchAssetsContract`.
@@ -1162,7 +1179,7 @@ sampleSize: 'Maximum itemRef metadata samples to return from a selection handle,
 Update `assetIds` description to start with:
 
 ```ts
-'Legacy exact non-search asset IDs for small inspected reads or plans.'
+'Legacy exact non-search asset IDs for small inspected reads or plans.';
 ```
 
 Add a `defineTool` entry for `AgentToolName.ReadSelectionMetadata` immediately after `SearchAssets` with schema `AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata]`.

@@ -274,7 +274,10 @@ const AgentCurateSelectionToolRequestSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.selectionHandleId && value.toolCallId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
     if (
       (value.targetCount !== undefined ||
@@ -284,12 +287,16 @@ const AgentCurateSelectionToolRequestSchema = z
         value.sampleSize !== undefined) &&
       value.toolCallId
     ) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide either selectionHandleId or toolCallId, not both' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
     }
     if (!value.selectionHandleId && !value.toolCallId) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Provide selectionHandleId and targetCount for a new curation request or toolCallId for an approved request',
+        message:
+          'Provide selectionHandleId and targetCount for a new curation request or toolCallId for an approved request',
       });
     }
     if (value.selectionHandleId && value.targetCount === undefined) {
@@ -528,8 +535,15 @@ it('curateSelection supports cover-candidate constraints and sampleSize zero', a
   selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
   assetRepository.getAgentMetadataByIds.mockResolvedValue([
     makeMetadata(assetIds[0], { type: AssetType.Video }),
-    makeMetadata(assetIds[1], { type: AssetType.Image, exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 3 } }),
-    makeMetadata(assetIds[2], { type: AssetType.Image, isFavorite: true, exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 } }),
+    makeMetadata(assetIds[1], {
+      type: AssetType.Image,
+      exifInfo: { ...makeMetadata(assetIds[1]).exifInfo!, rating: 3 },
+    }),
+    makeMetadata(assetIds[2], {
+      type: AssetType.Image,
+      isFavorite: true,
+      exifInfo: { ...makeMetadata(assetIds[2]).exifInfo!, rating: 5 },
+    }),
   ] as never);
   selectionHandleRepository.create.mockResolvedValue(derivedHandle);
 
@@ -625,7 +639,14 @@ it('delegates curateSelection and keeps MCP text compact', async () => {
     sourceAssetCount: 4,
     selectedAssetCount: 2,
     criteriaSummary: ['Metadata-only curation used favorites and ratings.'],
-    resultSize: { returnedItems: 2, hasMore: false, nextPage: null, estimatedBytes: 512, truncated: false, omittedFields: [] },
+    resultSize: {
+      returnedItems: 2,
+      hasMore: false,
+      nextPage: null,
+      estimatedBytes: 512,
+      truncated: false,
+      omittedFields: [],
+    },
   };
   toolService.curateSelection.mockResolvedValue(serviceResult as never);
 
@@ -1250,7 +1271,7 @@ constraints:
 Update `selectionHandleId` description to mention `curateSelection`:
 
 ```ts
-'The selectionHandle.id returned by searchAssets or curateSelection. Use this for readSelectionMetadata, curateSelection, and handle-backed planning instead of copying search asset IDs.'
+'The selectionHandle.id returned by searchAssets or curateSelection. Use this for readSelectionMetadata, curateSelection, and handle-backed planning instead of copying search asset IDs.';
 ```
 
 Add a `defineTool` entry for `AgentToolName.CurateSelection` after `ReadSelectionMetadata`.

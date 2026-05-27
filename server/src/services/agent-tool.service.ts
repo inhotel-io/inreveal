@@ -92,12 +92,12 @@ import {
   AgentSpaceDetail,
   AgentSpaceMemberSummary,
   AgentSpaceSummary,
+  AgentToolCurateSelectionRequestMetadata,
   AgentToolListAlbumsRequestMetadata,
   AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadAssetMetadataRequestMetadata,
   AgentToolReadSelectionMetadataRequestMetadata,
-  AgentToolCurateSelectionRequestMetadata,
   AgentToolReadSpaceRequestMetadata,
   AgentToolResolveAssetSearchFiltersRequestMetadata,
   AgentToolResponseIdsMetadata,
@@ -1017,7 +1017,9 @@ export class AgentToolService {
       criteriaSummary.push(`User criteria: ${input.criteria}`);
     }
     if (input.constraints.diversifyBy?.includes('people')) {
-      criteriaSummary.push('People diversity was requested but is not available from metadata-only rows in this version.');
+      criteriaSummary.push(
+        'People diversity was requested but is not available from metadata-only rows in this version.',
+      );
     }
 
     return { selectedAssets: selected, criteriaSummary, warnings };
@@ -1066,7 +1068,7 @@ export class AgentToolService {
     const sorted = this.sortCurateCandidates(candidates);
 
     if (strategy === 'favorites-first') {
-      return [...sorted].sort((left, right) => {
+      return sorted.toSorted((left, right) => {
         const favoriteDelta = Number(right.asset.isFavorite) - Number(left.asset.isFavorite);
         return favoriteDelta || this.compareCurateCandidates(left, right);
       });
@@ -1077,14 +1079,16 @@ export class AgentToolService {
     }
 
     const supportedDiversifiers = constraints.diversifyBy?.filter((value) => value !== 'people') ?? [];
-    return supportedDiversifiers.reduce(
-      (ranked, diversifyBy) => this.roundRobinCurateGroups(ranked, diversifyBy),
-      sorted,
-    );
+    let ranked = sorted;
+    for (const diversifyBy of supportedDiversifiers) {
+      ranked = this.roundRobinCurateGroups(ranked, diversifyBy);
+    }
+
+    return ranked;
   }
 
   private sortCurateCandidates(candidates: CurateCandidate[]): CurateCandidate[] {
-    return [...candidates].sort((left, right) => this.compareCurateCandidates(left, right));
+    return candidates.toSorted((left, right) => this.compareCurateCandidates(left, right));
   }
 
   private compareCurateCandidates(left: CurateCandidate, right: CurateCandidate): number {
@@ -1114,7 +1118,7 @@ export class AgentToolService {
 
     const groupQueues = [...groups.entries()]
       .map(([key, group]) => ({ key, group: this.sortCurateCandidates(group) }))
-      .sort((left, right) => {
+      .toSorted((left, right) => {
         if (groupOrder === 'key-desc') {
           return right.key.localeCompare(left.key);
         }
@@ -1138,23 +1142,26 @@ export class AgentToolService {
 
   private getCurateGroupKey(asset: AgentAssetMetadata, diversifyBy: AgentCurateSelectionDiversifyBy): string {
     switch (diversifyBy) {
-      case 'date':
+      case 'date': {
         return asset.localDateTime.toISOString().slice(0, 10);
+      }
       case 'location': {
         const location = [asset.exifInfo?.city, asset.exifInfo?.state, asset.exifInfo?.country]
           .filter(Boolean)
           .join('|');
         return location || 'location:missing';
       }
-      case 'tags':
+      case 'tags': {
         return (
           asset.tags
             .map((tag) => tag.value)
-            .sort((left, right) => left.localeCompare(right))
+            .toSorted((left, right) => left.localeCompare(right))
             .join('|') || 'tags:missing'
         );
-      case 'people':
+      }
+      case 'people': {
         return 'people:unavailable';
+      }
     }
   }
 
@@ -1355,7 +1362,7 @@ export class AgentToolService {
           sourceAssetCount: handle.assetCount,
           selectedAssetCount: selectedIds.length,
           criteriaSummary,
-          ...(warnings.length ? { warnings } : {}),
+          ...(warnings.length > 0 ? { warnings } : {}),
           ...(sample ? { sample } : {}),
         };
       },
@@ -2926,12 +2933,10 @@ export class AgentToolService {
       nextResult = withoutSample as typeof nextResult;
     }
 
-    if (omittedFields.size === 0 && (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes) {
-      if (nextResult.sample) {
-        const { sample: _sample, ...withoutSample } = nextResult;
-        nextResult = withoutSample as typeof nextResult;
-        omittedFields.add('sample');
-      }
+    if (omittedFields.size === 0 && nextResult.sample && (this.estimateJsonBytes(nextResult) ?? 0) > budgetBytes) {
+      const { sample: _sample, ...withoutSample } = nextResult;
+      nextResult = withoutSample as typeof nextResult;
+      omittedFields.add('sample');
     }
 
     const summary = this.getSearchAssetsResponseSummary({

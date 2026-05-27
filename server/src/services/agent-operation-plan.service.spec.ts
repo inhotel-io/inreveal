@@ -3206,8 +3206,7 @@ describe(AgentOperationPlanService.name, () => {
       kind: 'invalid-source-ref',
       attemptedSourceRef: sourceRef,
       expectedSourceKind: 'search',
-      instruction:
-        'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
+      instruction: 'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
     });
     expect(selectionHandleRepository.getValidForPlanning).not.toHaveBeenCalled();
     expect(planRepository.createReplacementRevision).not.toHaveBeenCalled();
@@ -3247,8 +3246,7 @@ describe(AgentOperationPlanService.name, () => {
         kind: 'invalid-source-ref',
         attemptedSourceRef: sourceRef,
         expectedSourceKind: 'search',
-        instruction:
-          'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
+        instruction: 'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
       },
     });
     expect(error.content.hint).not.toContain('proposeAlbumOperations');
@@ -3364,8 +3362,7 @@ describe(AgentOperationPlanService.name, () => {
       kind: 'invalid-source-ref',
       attemptedSourceRef: sourceRef,
       expectedSourceKind: 'search',
-      instruction:
-        'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
+      instruction: 'Rerun searchAssets, then retry with the returned selectionHandle.sourceRef.',
     });
     const serialized = JSON.stringify(error.content);
     expect(serialized).not.toContain('expiredSourceRef');

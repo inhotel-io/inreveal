@@ -1440,7 +1440,6 @@ describe('Agent tool DTOs', () => {
     });
 
     it('encodes search responses with compact selection handle summaries', () => {
-      const assetIds = Array.from({ length: 3 }, () => factory.uuid());
       const handleId = factory.uuid();
       const toolCallId = factory.uuid();
       const sourceRef = `asset-source:search:${handleId}` as const;
@@ -1480,7 +1479,6 @@ describe('Agent tool DTOs', () => {
     });
 
     it('rejects bare UUID source refs in search selection handles', () => {
-      const assetIds = [factory.uuid()];
       const handleId = factory.uuid();
       const toolCallId = factory.uuid();
 
