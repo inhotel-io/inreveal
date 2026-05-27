@@ -1875,7 +1875,7 @@ describe('Agent operation DTOs', () => {
       ]);
     });
 
-    it('rejects workflow asset sources that require raw ids or handles', () => {
+    it('rejects album workflow asset sources that require raw ids', () => {
       const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
         summary: 'Create album.',
         albumName: 'Manual ids',
@@ -1884,6 +1884,16 @@ describe('Agent operation DTOs', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues).toEqual([expect.objectContaining({ path: ['assetSource', 'kind'] })]);
+    });
+
+    it('accepts proposeAlbumFromSearch with a selection handle source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumFromSearch].safeParse({
+        summary: 'Create album.',
+        albumName: 'Handle album',
+        assetSource: { kind: 'selectionHandle', selectionHandleId: factory.uuid() },
+      });
+
+      expect(result.success).toBe(true);
     });
 
     it('keeps album workflow text validation aligned with album.create planning constraints', () => {
@@ -1977,7 +1987,7 @@ describe('Agent operation DTOs', () => {
       ]);
     });
 
-    it('rejects space workflow asset sources that require raw ids or handles', () => {
+    it('rejects space workflow asset sources that require raw ids', () => {
       const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
         summary: 'Create space.',
         spaceName: 'Manual ids',
@@ -1986,6 +1996,16 @@ describe('Agent operation DTOs', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues).toEqual([expect.objectContaining({ path: ['assetSource', 'kind'] })]);
+    });
+
+    it('accepts proposeSpaceFromSearch with a selection handle source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeSpaceFromSearch].safeParse({
+        summary: 'Create space.',
+        spaceName: 'Handle space',
+        assetSource: { kind: 'selectionHandle', selectionHandleId: factory.uuid() },
+      });
+
+      expect(result.success).toBe(true);
     });
 
     it('keeps space workflow text validation aligned with space.create planning constraints', () => {
@@ -2166,18 +2186,22 @@ describe('Agent operation DTOs', () => {
       expectIssue(result, path, message);
     });
 
-    it('rejects proposeAssetBatchFromSearch raw id and selection-handle sources', () => {
-      const rawIds = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+    it('rejects proposeAssetBatchFromSearch raw id sources', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
         action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
         assetSource: { kind: 'explicitAssets', assetIds: [factory.uuid()] },
       });
-      const handle = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts proposeAssetBatchFromSearch with a selection handle source', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
         action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
         assetSource: { kind: 'selectionHandle', selectionHandleId: factory.uuid() },
       });
 
-      expect(rawIds.success).toBe(false);
-      expect(handle.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it('requires planId for reviseProposedOperations MCP calls and keeps the body fields', () => {
