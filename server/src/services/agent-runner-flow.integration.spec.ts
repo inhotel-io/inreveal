@@ -1537,7 +1537,7 @@ describe('Pi agent runner flow harness', () => {
           toolName: AgentToolName.SearchAssets,
           status: AgentToolCallStatus.Completed,
           approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: 'Returned 1 asset id',
+          responseSummary: 'Created a selection handle for 1 asset',
           assetCount: 1,
         }),
       ]);
@@ -1880,7 +1880,7 @@ describe('Pi agent runner flow harness', () => {
           toolName: AgentToolName.SearchAssets,
           status: AgentToolCallStatus.Completed,
           approvalDecision: AgentToolApprovalDecision.Approved,
-          responseSummary: 'Returned 1 asset id',
+          responseSummary: 'Created a selection handle for 1 asset',
           assetCount: 1,
         }),
       ]);
