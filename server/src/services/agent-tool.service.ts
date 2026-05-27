@@ -435,6 +435,12 @@ export class AgentToolService {
     rawRequest: TRequest,
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<AgentReadToolResponse<TResult>> {
+    const policyDenial = this.getPolicyDenial(session, descriptor.dataClass);
+    if (policyDenial) {
+      const toolCall = await this.createDeniedAudit(session, rawRequest, descriptor, policyDenial);
+      return { status: 'denied', reason: policyDenial, toolCall: this.mapToolCall(toolCall) };
+    }
+
     const request = await this.prepareReadRequest(auth, session, rawRequest, descriptor);
 
     if (this.requiresApproval(session, descriptor.dataClass)) {
@@ -509,12 +515,7 @@ export class AgentToolService {
       throw new BadRequestException('Agent tool call has not been approved');
     }
 
-    const request = await this.prepareReadRequest(
-      auth,
-      session,
-      this.getStoredRequest(toolCall, descriptor),
-      descriptor,
-    );
+    const storedRequest = this.getStoredRequest(toolCall, descriptor);
 
     const executing = await this.toolCallRepository.transition(session.id, toolCall.id, AgentToolCallStatus.Approved, {
       status: AgentToolCallStatus.Executing,
@@ -543,9 +544,14 @@ export class AgentToolService {
       });
       throw error;
     }
+    let request: TRequest | undefined;
     let denialReason: string | null;
     try {
-      denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
+      denialReason = this.getPolicyDenial(refreshedSession, descriptor.dataClass);
+      if (!denialReason) {
+        request = await this.prepareReadRequest(auth, refreshedSession, storedRequest, descriptor);
+        denialReason = await this.validateReadRequest(auth, refreshedSession, request, descriptor, toolCall.id);
+      }
     } catch (error) {
       if (isAgentMcpRecoverableToolError(error)) {
         await this.transitionExecuting(auth, refreshedSession, toolCall.id, {
@@ -571,7 +577,7 @@ export class AgentToolService {
       return { status: 'denied', reason: denialReason, toolCall: this.mapToolCall(denied) };
     }
 
-    return this.executeClaimedRead(auth, refreshedSession, toolCall.id, request, descriptor);
+    return this.executeClaimedRead(auth, refreshedSession, toolCall.id, request!, descriptor);
   }
 
   private async executeClaimedRead<TRequest, TResult extends Record<string, unknown>>(
