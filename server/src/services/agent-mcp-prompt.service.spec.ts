@@ -111,6 +111,32 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('mcp_gallery_proposeAlbumOperations');
   });
 
+  it('lists every required runner tool in the Tool: line', () => {
+    const prompt = sut.generatePromptCheatSheet();
+    const toolLine = prompt.split('\n').find((line) => line.startsWith('Tool: '));
+    const listedTools = toolLine?.replace('Tool: ', '').split(',') ?? [];
+
+    expect(toolLine).toBeDefined();
+    expect(listedTools).toEqual(
+      expect.arrayContaining([
+        'mcp_gallery_resolveAssetSearchFilters',
+        'mcp_gallery_searchAssets',
+        'mcp_gallery_readSelectionMetadata',
+        'mcp_gallery_readAssetMetadata',
+        'mcp_gallery_readAssetPreviews',
+        'mcp_gallery_readAssetOriginals',
+        'mcp_gallery_listSpaces',
+        'mcp_gallery_readSpace',
+        'mcp_gallery_proposeAlbumFromSearch',
+        'mcp_gallery_proposeAddAssetsToAlbumFromSearch',
+        'mcp_gallery_proposeSpaceFromSearch',
+        'mcp_gallery_proposeAddAssetsToSpaceFromSearch',
+        'mcp_gallery_proposeAssetBatchFromSearch',
+        'mcp_gallery_proposeAlbumOperations',
+      ]),
+    );
+  });
+
   it('teaches source-backed workflow tools as the default write path', () => {
     const prompt = sut.generatePromptCheatSheet();
     const defaultWrite = prompt.split('\n').find((line) => line.startsWith('Default write:'));
@@ -287,7 +313,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview if allowed; write exact non-search assetIds only.',
+      'Best/highlights require bounded album/space/date/search/selection; suggested, not objective quality scoring; search handle->readSelectionMetadata itemRef sample->preview; write exact non-search assetIds only.',
     );
     expect(prompt).toContain(
       'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only',
