@@ -1050,14 +1050,120 @@ describe('Agent tool DTOs', () => {
   });
 
   describe('expanded agent tool response DTOs', () => {
-    it('encodes and parses compact id search responses without metadata assets', () => {
+    it('encodes handle-first compact search responses without asset ids', () => {
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
+      const sourceRef = `asset-source:search:${handleId}` as const;
+
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset',
+        detail: 'handle',
+        selectionHandle: {
+          id: handleId,
+          sourceRef,
+          assetCount: 1,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 1 }),
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.detail).toBe('handle');
+      expect(encoded.data).not.toHaveProperty('assetIds');
+      expect(encoded.data).not.toHaveProperty('assets');
+      expect(encoded.data.selectionHandle).not.toHaveProperty('sampleAssetIds');
+      expect(JSON.stringify(encoded.data)).not.toContain('"assetIds"');
+    });
+
+    it('rejects legacy search success responses that expose assetIds', () => {
       const assetId = factory.uuid();
+      const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse({
+        status: 'success',
+        toolCall: { ...makeEncodedToolCall(), toolName: AgentToolName.SearchAssets },
+        summary: 'Returned 1 asset id',
+        detail: 'ids',
+        assetIds: [assetId],
+        returnedCount: 1,
+        hasMore: false,
+        nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 1 }),
+      });
+
+      expect(parsed.success).toBe(false);
+    });
+
+    it('encodes ID-free search samples with handle-local item refs', () => {
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
+      const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 2 assets with 1 sample',
+        detail: 'summary',
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}`,
+          assetCount: 2,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
+        sample: {
+          sampleSize: 1,
+          items: [
+            {
+              itemRef: 'item:001',
+              localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+              exifInfo: { city: 'Berlin', state: 'Berlin', country: 'Germany' },
+              tags: [{ value: 'travel', color: null }],
+            },
+          ],
+        },
+        returnedCount: 2,
+        hasMore: false,
+        nextPage: null,
+        resultSize: makeResultSize({ returnedItems: 2, estimatedBytes: 512 }),
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success || encoded.data.status !== 'success') {
+        return;
+      }
+
+      expect(encoded.data.sample?.items[0]).toMatchObject({
+        itemRef: 'item:001',
+        localDateTime: '2026-05-14T12:00:00.000Z',
+      });
+      expect(encoded.data.sample?.items[0]).not.toHaveProperty('id');
+      expect(JSON.stringify(encoded.data.sample)).not.toMatch(
+        /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i,
+      );
+    });
+
+    it('encodes and parses compact search responses without metadata assets', () => {
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
       const response = {
         status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned 1 asset id.',
-        detail: 'ids' as const,
-        assetIds: [assetId],
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset',
+        detail: 'handle' as const,
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}` as const,
+          assetCount: 1,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
@@ -1068,27 +1174,38 @@ describe('Agent tool DTOs', () => {
 
       expect(encoded.success).toBe(true);
       if (encoded.success && encoded.data.status === 'success') {
-        expect(encoded.data.assetIds).toEqual([assetId]);
+        expect(encoded.data.selectionHandle.assetCount).toBe(1);
+        expect(encoded.data).not.toHaveProperty('assetIds');
         expect(encoded.data).not.toHaveProperty('assets');
         expect(encoded.data).not.toHaveProperty('sample');
       }
     });
 
     it('encodes and parses field-selected search samples', () => {
-      const assetId = factory.uuid();
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
       const response = {
         status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned 1 asset id with 1 sample.',
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset with 1 sample',
         detail: 'summary' as const,
-        assetIds: [assetId],
-        sample: [
-          {
-            id: assetId,
-            localDateTime: new Date('2026-05-14T12:00:00.000Z'),
-            exifInfo: { city: 'Berlin', state: 'Berlin', country: 'Germany' },
-          },
-        ],
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}` as const,
+          assetCount: 1,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
+        sample: {
+          sampleSize: 1,
+          items: [
+            {
+              itemRef: 'item:001',
+              localDateTime: new Date('2026-05-14T12:00:00.000Z'),
+              exifInfo: { city: 'Berlin', state: 'Berlin', country: 'Germany' },
+            },
+          ],
+        },
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
@@ -1099,8 +1216,8 @@ describe('Agent tool DTOs', () => {
 
       expect(encoded.success).toBe(true);
       if (encoded.success && encoded.data.status === 'success') {
-        expect(encoded.data.sample?.[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
-        expect(encoded.data.sample?.[0]).not.toHaveProperty('originalFileName');
+        expect(encoded.data.sample?.items[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+        expect(encoded.data.sample?.items[0]).not.toHaveProperty('originalFileName');
       }
     });
 
@@ -1113,9 +1230,8 @@ describe('Agent tool DTOs', () => {
         status: 'success' as const,
         toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
         summary: 'Created a selection handle for 3 assets',
-        detail: 'ids' as const,
-        assetIds: assetIds.slice(0, 1),
-        returnedCount: 1,
+        detail: 'handle' as const,
+        returnedCount: 3,
         hasMore: false,
         nextPage: null,
         resultSize: makeResultSize({ returnedItems: 1 }),
@@ -1123,7 +1239,6 @@ describe('Agent tool DTOs', () => {
           id: handleId,
           sourceRef,
           assetCount: 3,
-          sampleAssetIds: assetIds.slice(0, 2),
           sourceToolCallId: toolCallId,
           expiresAt: new Date('2026-05-21T12:30:00.000Z'),
         },
@@ -1137,12 +1252,12 @@ describe('Agent tool DTOs', () => {
           id: handleId,
           sourceRef,
           assetCount: 3,
-          sampleAssetIds: assetIds.slice(0, 2),
           sourceToolCallId: toolCallId,
         });
+        expect(encoded.data.selectionHandle).not.toHaveProperty('sampleAssetIds');
         expect(encoded.data.selectionHandle?.sourceRef).not.toBe(handleId);
         expect(encoded.data.selectionHandle?.sourceRef).toMatch(/^asset-source:search:/);
-        expect(encoded.data.assetIds).toEqual(assetIds.slice(0, 1));
+        expect(encoded.data).not.toHaveProperty('assetIds');
       }
     });
 
@@ -1155,8 +1270,7 @@ describe('Agent tool DTOs', () => {
         status: 'success',
         toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
         summary: 'Created a selection handle for 1 asset',
-        detail: 'ids',
-        assetIds,
+        detail: 'handle',
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
@@ -1165,7 +1279,6 @@ describe('Agent tool DTOs', () => {
           id: handleId,
           sourceRef: handleId,
           assetCount: 1,
-          sampleAssetIds: assetIds,
           sourceToolCallId: toolCallId,
           expiresAt: '2026-05-21T12:30:00.000Z',
         },
@@ -1180,13 +1293,24 @@ describe('Agent tool DTOs', () => {
     });
 
     it('encodes and parses search responses with result metadata', () => {
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
       const response = {
         status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned metadata for 1 asset; more results available on page 2',
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset with 1 sample; more results available on page 2',
         detail: 'metadata' as const,
-        assetIds: [makeAssets()[0].id],
-        assets: makeAssets(),
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}` as const,
+          assetCount: 1,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
+        sample: {
+          sampleSize: 1,
+          items: [{ itemRef: 'item:001', localDateTime: new Date('2026-05-14T12:00:00.000Z') }],
+        },
         returnedCount: 1,
         hasMore: true,
         nextPage: '2',
@@ -1205,7 +1329,7 @@ describe('Agent tool DTOs', () => {
         return;
       }
 
-      expect(encoded.data.assets?.[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
+      expect(encoded.data.sample?.items[0].localDateTime).toBe('2026-05-14T12:00:00.000Z');
       expect(encoded.data.returnedCount).toBe(1);
       expect(encoded.data.hasMore).toBe(true);
       expect(encoded.data.nextPage).toBe('2');
@@ -1214,7 +1338,7 @@ describe('Agent tool DTOs', () => {
       const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
       expect(parsed.success).toBe(true);
       if (parsed.success && parsed.data.status === 'success') {
-        expect(parsed.data.assets?.[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
+        expect(parsed.data.sample?.items[0].localDateTime).toEqual(new Date('2026-05-14T12:00:00.000Z'));
         expect(parsed.data.returnedCount).toBe(1);
         expect(parsed.data.hasMore).toBe(true);
         expect(parsed.data.nextPage).toBe('2');
@@ -1236,13 +1360,20 @@ describe('Agent tool DTOs', () => {
     });
 
     it('encodes and parses final empty search pages', () => {
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
       const response = {
         status: 'success' as const,
-        toolCall: makeToolCall(),
-        summary: 'Returned 0 asset ids.',
-        detail: 'ids' as const,
-        assetIds: [],
-        assets: [],
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 0 assets',
+        detail: 'handle' as const,
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}` as const,
+          assetCount: 0,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
         returnedCount: 0,
         hasMore: false,
         nextPage: null,
@@ -1259,7 +1390,8 @@ describe('Agent tool DTOs', () => {
         return;
       }
 
-      expect(encoded.data.assets).toEqual([]);
+      expect(encoded.data).not.toHaveProperty('assets');
+      expect(encoded.data).not.toHaveProperty('assetIds');
       expect(encoded.data.returnedCount).toBe(0);
       expect(encoded.data.hasMore).toBe(false);
       expect(encoded.data.nextPage).toBeNull();
@@ -1269,7 +1401,7 @@ describe('Agent tool DTOs', () => {
       const parsed = AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data);
       expect(parsed.success).toBe(true);
       if (parsed.success && parsed.data.status === 'success') {
-        expect(parsed.data.assets).toEqual([]);
+        expect(parsed.data).not.toHaveProperty('assets');
         expect(parsed.data.returnedCount).toBe(0);
         expect(parsed.data.hasMore).toBe(false);
         expect(parsed.data.nextPage).toBeNull();
@@ -1277,13 +1409,20 @@ describe('Agent tool DTOs', () => {
     });
 
     it('encodes and parses truncated search responses with omitted fields', () => {
-      const assetId = factory.uuid();
+      const handleId = factory.uuid();
+      const toolCallId = factory.uuid();
       const encoded = AgentSearchAssetsToolResponseDto.schema.safeEncode({
         status: 'success',
-        toolCall: makeToolCall({ toolName: AgentToolName.SearchAssets }),
-        summary: 'Returned 1 asset id; response was truncated by budget',
-        detail: 'ids',
-        assetIds: [assetId],
+        toolCall: makeToolCall({ id: toolCallId, toolName: AgentToolName.SearchAssets }),
+        summary: 'Created a selection handle for 1 asset; response was truncated by budget',
+        detail: 'handle',
+        selectionHandle: {
+          id: handleId,
+          sourceRef: `asset-source:search:${handleId}` as const,
+          assetCount: 1,
+          sourceToolCallId: toolCallId,
+          expiresAt: new Date('2026-05-21T12:30:00.000Z'),
+        },
         returnedCount: 1,
         hasMore: false,
         nextPage: null,
@@ -1293,7 +1432,7 @@ describe('Agent tool DTOs', () => {
           nextPage: null,
           estimatedBytes: 64_000,
           truncated: true,
-          omittedFields: ['assetIds'],
+          omittedFields: [],
         },
       });
 
@@ -1303,7 +1442,7 @@ describe('Agent tool DTOs', () => {
       }
 
       expect(encoded.data.resultSize.truncated).toBe(true);
-      expect(encoded.data.resultSize.omittedFields).toEqual(['assetIds']);
+      expect(encoded.data.resultSize.omittedFields).toEqual([]);
       expect(AgentSearchAssetsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
 
