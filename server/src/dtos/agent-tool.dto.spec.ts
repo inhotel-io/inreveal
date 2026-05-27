@@ -1,4 +1,5 @@
 import {
+  AgentCurateSelectionToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -294,6 +295,112 @@ describe('Agent tool DTOs', () => {
       expect(JSON.stringify(encoded.data)).not.toContain('"assetIds"');
       expect(JSON.stringify(encoded.data)).not.toContain('"assetId"');
       expect(JSON.stringify(encoded.data)).not.toContain('"id":"00000000-0000-4000-8000-000000000001"');
+    });
+  });
+
+  describe('AgentCurateSelectionToolRequestSchema', () => {
+    const selectionHandleId = '00000000-0000-4000-8000-000000000333';
+
+    it('defaults strategy, constraints, and sample size for selection curation', () => {
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].parse({
+          selectionHandleId,
+          targetCount: 15,
+        }),
+      ).toEqual({
+        selectionHandleId,
+        targetCount: 15,
+        strategy: 'metadata-highlights',
+        constraints: {},
+        sampleSize: 10,
+      });
+    });
+
+    it('validates curation request modes and bounds', () => {
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
+          selectionHandleId,
+          targetCount: 0,
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
+          selectionHandleId,
+          targetCount: 1001,
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
+          selectionHandleId,
+          targetCount: 5,
+          toolCallId: '00000000-0000-4000-8000-000000000111',
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
+          toolCallId: '00000000-0000-4000-8000-000000000111',
+          targetCount: 5,
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse({
+          selectionHandleId,
+          targetCount: 5,
+          constraints: { diversifyBy: ['date', 'date'] },
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.CurateSelection].parse({
+          selectionHandleId,
+          targetCount: 1,
+          strategy: 'cover-candidate',
+          constraints: { types: ['IMAGE'], minRating: 4, excludeVideos: true, diversifyBy: ['location'] },
+          sampleSize: 0,
+        }),
+      ).toEqual({
+        selectionHandleId,
+        targetCount: 1,
+        strategy: 'cover-candidate',
+        constraints: { types: ['IMAGE'], minRating: 4, excludeVideos: true, diversifyBy: ['location'] },
+        sampleSize: 0,
+      });
+    });
+
+    it('encodes curation responses without selected asset UUID fields', () => {
+      const encoded = AgentCurateSelectionToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.CurateSelection }),
+        summary: 'Curated 3 metadata-only highlights from 12 source assets.',
+        strategy: 'metadata-highlights',
+        selectionHandle: {
+          id: selectionHandleId,
+          sourceRef: `asset-source:search:${selectionHandleId}`,
+          assetCount: 3,
+          sourceToolCallId: '00000000-0000-4000-8000-000000000444',
+          expiresAt: new Date('2026-05-27T12:00:00.000Z'),
+        },
+        sourceAssetCount: 12,
+        selectedAssetCount: 3,
+        criteriaSummary: ['Metadata-only curation used favorites, ratings, dates, tags, and location.'],
+        warnings: ['Requested 5 assets but only 3 eligible assets were available.'],
+        sample: { sampleSize: 1, items: [{ itemRef: 'item:001', isFavorite: true }] },
+        resultSize: {
+          returnedItems: 3,
+          hasMore: false,
+          nextPage: null,
+          estimatedBytes: 512,
+          truncated: false,
+          omittedFields: [],
+        },
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        throw new Error('Expected curation response to encode');
+      }
+      expect(JSON.stringify(encoded.data)).not.toContain('"assetIds"');
+      expect(JSON.stringify(encoded.data)).not.toContain('"assetId"');
+      expect(JSON.stringify(encoded.data)).not.toContain('"sampleAssetIds"');
     });
   });
 
