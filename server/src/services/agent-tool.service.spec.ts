@@ -3333,7 +3333,7 @@ describe(AgentToolService.name, () => {
         hasMore: true,
         nextPage: '2',
         toolCall: expect.objectContaining({
-          responseSummary: 'Returned 3 asset ids; more results available on page 2',
+          responseSummary: 'Created a selection handle for 3 assets; more results available on page 2',
         }),
       }),
     );
@@ -3482,7 +3482,7 @@ describe(AgentToolService.name, () => {
         hasMore: true,
         nextPage: '3',
         toolCall: expect.objectContaining({
-          responseSummary: 'Returned 1 asset id; more results available on page 3',
+          responseSummary: 'Created a selection handle for 1 asset; more results available on page 3',
         }),
       }),
     );
@@ -3830,9 +3830,19 @@ describe(AgentToolService.name, () => {
         returnedCount: 2,
         hasMore: true,
         nextPage: '2',
-        assets: [expect.objectContaining({ id: secondAssetId }), expect.objectContaining({ id: firstAssetId })],
+        sample: {
+          sampleSize: 2,
+          items: [
+            expect.objectContaining({ itemRef: 'item:001' }),
+            expect.objectContaining({ itemRef: 'item:002' }),
+          ],
+        },
       }),
     );
+    expect(result).not.toHaveProperty('assets');
+    expect(result).not.toHaveProperty('assetIds');
+    expect(JSON.stringify(result)).not.toContain(secondAssetId);
+    expect(JSON.stringify(result)).not.toContain(firstAssetId);
   });
 
   it('records failed search hydration instead of returning partial assets when metadata rows are missing', async () => {
