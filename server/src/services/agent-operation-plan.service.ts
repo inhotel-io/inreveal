@@ -160,6 +160,11 @@ type SelectionHandleRecoveryRow = {
   expiresAt: Date;
 };
 
+type SelectionHandleResolutionContext = {
+  toolName: AgentToolName;
+  field: string;
+};
+
 type PlanningAuditResult = {
   status: AgentToolCallStatus.Completed | AgentToolCallStatus.Denied | AgentToolCallStatus.Failed;
   approvalDecision: AgentToolApprovalDecision;
@@ -1330,7 +1335,10 @@ export class AgentOperationPlanService {
     }
 
     if (operation.assetSelectionHandleId) {
-      return this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit);
+      return this.resolveSelectionHandleAssetIds(auth, session, operation.assetSelectionHandleId, selectionAudit, {
+        toolName,
+        field: 'operations[].assetSelectionHandleId',
+      });
     }
 
     return operation.assetIds ?? [];
@@ -1380,7 +1388,13 @@ export class AgentOperationPlanService {
     }
 
     if (assetSource.kind === 'selectionHandle') {
-      return this.resolveSelectionHandleAssetIds(auth, session, assetSource.selectionHandleId, selectionAudit);
+      return this.resolveSelectionHandleAssetIds(
+        auth,
+        session,
+        assetSource.selectionHandleId,
+        selectionAudit,
+        this.selectionHandleResolutionContextForAssetSource(toolName),
+      );
     }
 
     throw new BadRequestException(
@@ -1625,7 +1639,9 @@ export class AgentOperationPlanService {
     session: AgentSession,
     id: string,
     selectionAudit: PlanningSelectionAudit,
-    source?: { toolName: AgentToolName; sourceKind: 'previousSearch'; sourceRef: AgentSearchSourceRef },
+    source?:
+      | { toolName: AgentToolName; sourceKind: 'previousSearch'; sourceRef: AgentSearchSourceRef }
+      | SelectionHandleResolutionContext,
   ) {
     const handle = await this.selectionHandleRepository.getValidForPlanning({
       id,
@@ -1634,20 +1650,34 @@ export class AgentOperationPlanService {
       now: new Date(),
     });
     if (!handle) {
-      if (source?.sourceRef) {
+      if (source && 'sourceRef' in source) {
         throw await this.createInvalidSourceRefError(auth, session, source.toolName, source.sourceRef);
       }
-      throw await this.createInvalidSelectionHandleError(auth, session, id);
+      throw await this.createInvalidSelectionHandleError(
+        auth,
+        session,
+        id,
+        source ?? { toolName: AgentToolName.ProposeAlbumOperations, field: 'operations[].assetSelectionHandleId' },
+      );
     }
 
     selectionAudit.push({
       id: handle.id,
       assetCount: handle.assetCount,
       sampleAssetIds: handle.sampleAssetIds,
-      ...(source ? { sourceKind: source.sourceKind, sourceRef: source.sourceRef } : {}),
+      ...(source && 'sourceRef' in source ? { sourceKind: source.sourceKind, sourceRef: source.sourceRef } : {}),
     });
 
     return handle.assetIds;
+  }
+
+  private selectionHandleResolutionContextForAssetSource(toolName: AgentToolName): SelectionHandleResolutionContext {
+    const field =
+      toolName === AgentToolName.ProposeAlbumOperations || toolName === AgentToolName.ReviseProposedOperations
+        ? 'operations[].assetSource.selectionHandleId'
+        : 'assetSource.selectionHandleId';
+
+    return { toolName, field };
   }
 
   private async createInvalidSourceRefError(
@@ -1686,20 +1716,25 @@ export class AgentOperationPlanService {
     });
   }
 
-  private async createInvalidSelectionHandleError(auth: AuthDto, session: AgentSession, id: string) {
+  private async createInvalidSelectionHandleError(
+    auth: AuthDto,
+    session: AgentSession,
+    id: string,
+    context: SelectionHandleResolutionContext,
+  ) {
     const [readableAssetIds, readablePersonIds] = await Promise.all([
       this.getReadableAssetIds(auth, session, [id]),
       this.getReadablePersonIds(auth, session, [id]),
     ]);
     const receivedDomain = readableAssetIds.has(id) ? 'asset' : readablePersonIds.has(id) ? 'person' : null;
+    const instruction = this.invalidSelectionHandleInstruction(context);
     if (receivedDomain) {
       return wrongIdDomainError({
-        toolName: AgentToolName.ProposeAlbumOperations,
-        field: 'operations[].assetSelectionHandleId',
+        toolName: context.toolName,
+        field: context.field,
         expectedDomain: 'selectionHandle',
         receivedDomain,
-        instruction:
-          'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.',
+        instruction,
       });
     }
 
@@ -1727,13 +1762,13 @@ export class AgentOperationPlanService {
       looksLikeExamplePlaceholder: knownExampleSelectionHandleIds.has(id),
       availableSelectionHandles: availableSelectionHandles.map((handle) => this.toSelectionHandleRecoveryHint(handle)),
       ...(expiredSelectionHandle ? { expiredSelectionHandle } : {}),
-      instruction: 'Retry proposeAlbumOperations with a valid same-session selection handle, or rerun searchAssets.',
+      instruction: `Retry ${context.toolName} with a valid same-session selection handle, or rerun searchAssets.`,
     };
     const error = 'Selection handle is expired or not available for this session';
-    const hint = this.invalidSelectionHandleHint(recovery);
+    const hint = this.invalidSelectionHandleHint(recovery, context.toolName);
 
     return invalidSelectionHandleError({
-      toolName: AgentToolName.ProposeAlbumOperations,
+      toolName: context.toolName,
       error,
       hint,
       recovery,
@@ -1750,20 +1785,28 @@ export class AgentOperationPlanService {
     };
   }
 
-  private invalidSelectionHandleHint(recovery: AgentSelectionHandleRecoveryMetadata) {
+  private invalidSelectionHandleInstruction(context: SelectionHandleResolutionContext) {
+    if (context.field === 'operations[].assetSelectionHandleId') {
+      return 'Use a same-session selectionHandle.id returned by searchAssets, or use assetSource.search once available.';
+    }
+
+    return `Use a same-session selectionHandle.id returned by searchAssets, then retry ${context.toolName} with ${context.field}.`;
+  }
+
+  private invalidSelectionHandleHint(recovery: AgentSelectionHandleRecoveryMetadata, toolName: AgentToolName) {
     if (recovery.expiredSelectionHandle) {
-      return 'The attempted selection handle is expired. Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.id.';
+      return `The attempted selection handle is expired. Rerun searchAssets, then retry ${toolName} with the returned selectionHandle.id.`;
     }
 
     if (recovery.availableSelectionHandles.length === 1) {
-      return `Retry proposeAlbumOperations with the exact handle ${recovery.availableSelectionHandles[0].id} if that is the intended search selection.`;
+      return `Retry ${toolName} with the exact handle ${recovery.availableSelectionHandles[0].id} if that is the intended search selection.`;
     }
 
     if (recovery.availableSelectionHandles.length > 1) {
-      return 'Choose the intended same-session handle from availableSelectionHandles and retry proposeAlbumOperations with that exact id.';
+      return `Choose the intended same-session handle from availableSelectionHandles and retry ${toolName} with that exact id.`;
     }
 
-    return 'Rerun searchAssets, then retry proposeAlbumOperations with the returned selectionHandle.id.';
+    return `Rerun searchAssets, then retry ${toolName} with the returned selectionHandle.id.`;
   }
 
   private validateWriteScope(session: AgentSession, type: AgentOperationType) {
