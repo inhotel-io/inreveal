@@ -2521,6 +2521,78 @@ describe(AgentToolService.name, () => {
     expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
   });
 
+  it('searchAssets supports 1000-result handle-only pages without prompt-sized payloads', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = Array.from({ length: 1000 }, () => newUuid());
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({
+      items: assetIds.map((id) => ({ id })) as never,
+      hasNextPage: false,
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    selectionHandleRepository.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: newUuid(),
+        sessionId: dto.sessionId,
+        userId: dto.userId,
+        sourceToolCallId: dto.sourceToolCallId,
+        assetIds: dto.assetIds,
+        assetCount: dto.assetIds.length,
+        sampleAssetIds: dto.assetIds.slice(0, 25),
+        expiresAt: dto.expiresAt,
+        createdAt: now,
+        updateId: newUuid(),
+      }),
+    );
+
+    const result = await sut.searchAssets(auth, session.id, { filters: { country: 'USA' }, limit: 1000 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 1, size: 1000 }, expect.any(Object));
+    expect(result.detail).toBe('handle');
+    expect(result.selectionHandle.assetCount).toBe(1000);
+    expect(result).not.toHaveProperty('assetIds');
+    expect(result).not.toHaveProperty('assets');
+    expect(result).not.toHaveProperty('sample');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('searchAssets still rejects handle pages above the session per-tool limit', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1000, maxAssetsPerSession: 1000 },
+      }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchAssets(auth, session.id, { filters: { country: 'USA' }, limit: 1001 });
+
+    expect(result.status).toBe('denied');
+    if (result.status !== 'denied') {
+      return;
+    }
+    expect(result.reason).toBe('Requested asset count exceeds per-tool limit');
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
+  });
+
   it('searchAssets ignores createSelectionHandle false and still returns a handle', async () => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
