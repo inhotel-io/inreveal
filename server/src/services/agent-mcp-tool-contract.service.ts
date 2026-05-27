@@ -27,6 +27,7 @@ const examplePersonId = '00000000-0000-4000-8000-000000000040';
 const exampleSecondPersonId = '00000000-0000-4000-8000-000000000041';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
+const exampleSelectionHandleId = '00000000-0000-4000-8000-000000000333';
 
 const validationCorrectionTextMaxLength = 500;
 
@@ -117,6 +118,20 @@ const readTechnicalFieldsForSelectedAssetsExample: AgentMcpToolExample = {
   arguments: { assetIds: [exampleAssetId], fields: ['camera', 'dates', 'filename'] },
 };
 
+const toolCallArgumentsMissingMistake: AgentMcpCommonMistake = {
+  id: 'tool-call-arguments-missing',
+  match: { missingField: 'arguments', requestShape: 'json-rpc' },
+  hint: 'Put the tool arguments object at params.arguments in the MCP tools/call request.',
+  exampleName: 'read-selected-assets',
+};
+
+const toolCallArgumentsObjectMistake: AgentMcpCommonMistake = {
+  id: 'tool-call-arguments-not-object',
+  match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+  hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
+  exampleName: 'read-selected-assets',
+};
+
 const assetIdMistakes: AgentMcpCommonMistake[] = [
   {
     id: 'asset-read-missing-asset-ids-or-tool-call-id',
@@ -154,18 +169,8 @@ const assetIdMistakes: AgentMcpCommonMistake[] = [
     hint: 'Asset read requests may include at most 10000 asset ids. Search or narrow the request before reading.',
     exampleName: 'read-selected-assets',
   },
-  {
-    id: 'tool-call-arguments-missing',
-    match: { missingField: 'arguments', requestShape: 'json-rpc' },
-    hint: 'Put the tool arguments object at params.arguments in the MCP tools/call request.',
-    exampleName: 'read-selected-assets',
-  },
-  {
-    id: 'tool-call-arguments-not-object',
-    match: { issuePath: 'arguments', requestShape: 'json-rpc' },
-    hint: 'The params.arguments value must be a JSON object, not an array, primitive, or null.',
-    exampleName: 'read-selected-assets',
-  },
+  toolCallArgumentsMissingMistake,
+  toolCallArgumentsObjectMistake,
 ];
 
 const defineAssetReadContract = (
@@ -251,6 +256,76 @@ const readSelectionMetadataContract: AgentMcpToolContract<AgentToolName.ReadSele
       match: { issuePath: 'sampleSize' },
       hint: 'Use sampleSize from 0 to 25 for readSelectionMetadata.',
       exampleName: 'read-selection-metadata-sample',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
+const curateSelectionContract: AgentMcpToolContract<AgentToolName.CurateSelection> = {
+  name: AgentToolName.CurateSelection,
+  title: 'Curate selection',
+  description: 'Create a derived selection handle from metadata-only ranking and diversification.',
+  usage:
+    'Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, or date-spread workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only and not objective image-quality scoring; no previews are inspected.',
+  argumentModes: [
+    {
+      name: 'selection-curation',
+      description: 'Curate a same-session selection handle into a smaller derived handle.',
+      requiredFields: ['selectionHandleId', 'targetCount'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use when a broad search handle needs deterministic metadata-only narrowing before planning.',
+    },
+    {
+      ...approvedRetryMode,
+      forbiddenFields: ['selectionHandleId', 'targetCount', 'strategy', 'criteria', 'constraints', 'sampleSize'],
+    },
+  ],
+  examples: [
+    {
+      name: 'curate-metadata-highlights',
+      description: 'Select metadata-only highlights with date and location variety.',
+      arguments: {
+        selectionHandleId: exampleSelectionHandleId,
+        targetCount: 15,
+        strategy: 'metadata-highlights',
+        constraints: { diversifyBy: ['date', 'location'] },
+        sampleSize: 5,
+      },
+    },
+    {
+      name: 'curate-cover-candidate',
+      description: 'Select one image cover candidate from a search handle.',
+      arguments: {
+        selectionHandleId: exampleSelectionHandleId,
+        targetCount: 1,
+        strategy: 'cover-candidate',
+        constraints: { types: ['IMAGE'], excludeVideos: true },
+        sampleSize: 1,
+      },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'curation-missing-handle-or-target-count',
+      match: { messageIncludes: 'Provide selectionHandleId and targetCount' },
+      hint: 'Call searchAssets first, then pass selectionHandle.id and a targetCount to curateSelection.',
+      exampleName: 'curate-metadata-highlights',
+    },
+    {
+      id: 'curation-target-count-out-of-range',
+      match: { issuePath: 'targetCount' },
+      hint: 'Use targetCount from 1 to 1000. If the source selection is huge, narrow searchAssets first.',
+      exampleName: 'curate-metadata-highlights',
+    },
+    {
+      ...toolCallArgumentsMissingMistake,
+      exampleName: 'curate-metadata-highlights',
+    },
+    {
+      ...toolCallArgumentsObjectMistake,
+      exampleName: 'curate-metadata-highlights',
     },
   ],
   approvalRetry,
@@ -1064,6 +1139,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
   readSelectionMetadataContract,
+  curateSelectionContract,
   readAssetMetadataContract,
   defineAssetReadContract(
     AgentToolName.ReadAssetPreviews,

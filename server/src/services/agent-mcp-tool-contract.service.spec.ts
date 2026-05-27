@@ -7,6 +7,7 @@ const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.ReadSelectionMetadata,
+  AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -390,10 +391,11 @@ describe(AgentMcpToolContractService.name, () => {
     const contracts = sut.listReadToolContracts();
     const contract = sut.getReadToolContract(AgentToolName.ReadSelectionMetadata);
 
-    expect(contracts.map((item) => item.name).slice(0, 4)).toEqual([
+    expect(contracts.map((item) => item.name).slice(0, 5)).toEqual([
       AgentToolName.ResolveAssetSearchFilters,
       AgentToolName.SearchAssets,
       AgentToolName.ReadSelectionMetadata,
+      AgentToolName.CurateSelection,
       AgentToolName.ReadAssetMetadata,
     ]);
     expect(contract?.usage).toMatch(/selectionHandle\.id/i);
@@ -430,6 +432,24 @@ describe(AgentMcpToolContractService.name, () => {
         true,
       );
     }
+  });
+
+  it('documents metadata-only selection curation without selected asset ids', () => {
+    const contract = sut.getReadToolContract(AgentToolName.CurateSelection);
+    const example = contract?.examples.find((candidate) => candidate.name === 'curate-metadata-highlights');
+
+    expect(contract?.usage).toContain('metadata-only');
+    expect(contract?.usage).toContain('new selectionHandle');
+    expect(contract?.usage).toContain('not objective image-quality scoring');
+    expect(contract?.usage).not.toContain('selected assetIds');
+    expect(example?.arguments).toEqual({
+      selectionHandleId: '00000000-0000-4000-8000-000000000333',
+      targetCount: 15,
+      strategy: 'metadata-highlights',
+      constraints: { diversifyBy: ['date', 'location'] },
+      sampleSize: 5,
+    });
+    expect(AgentReadToolRequestSchemas[AgentToolName.CurateSelection].safeParse(example?.arguments).success).toBe(true);
   });
 
   it('documents progressive detail search examples that parse through the live DTO schema', () => {
