@@ -670,7 +670,8 @@ const proposeAlbumFromSelectionContract: AgentMcpPlanningToolContract = {
 const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAssetBatchFromSelection,
   title: 'Propose asset batch from selection',
-  description: 'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a selection handle.',
+  description:
+    'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a selection handle.',
   usage:
     'Use after searchAssets or curateSelection when the selected asset set is already represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.',
   argumentModes: [
@@ -926,7 +927,7 @@ In `server/src/services/agent-mcp-tool-contract.service.ts`:
 - Replace search usage text that says `Do not use limit 1000` with:
 
 ```ts
-'For bounded handle-first searches, use limit up to 1000 when the session policy allows it; samples stay small. For broad or ambiguous requests, ask one narrowing question or page with nextPage.'
+'For bounded handle-first searches, use limit up to 1000 when the session policy allows it; samples stay small. For broad or ambiguous requests, ask one narrowing question or page with nextPage.';
 ```
 
 - Replace the `search-large-limit` hint with:
@@ -1146,7 +1147,10 @@ it('creates USA trip highlights through search handle, curation handle, and sele
     'Create an album of the top 15 highlights from my January 2026 USA trip called USA Highlights.',
   );
 
-  assert.equal(calls.map((call) => call.body.params.name).join(','), 'searchAssets,curateSelection,proposeAlbumFromSelection');
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'searchAssets,curateSelection,proposeAlbumFromSelection',
+  );
   assert.equal(JSON.stringify(calls).includes('assetIds'), false);
   assert.equal(JSON.stringify(calls).includes('00000000-0000-4000-8000-000000000401'), false);
   assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
@@ -1194,7 +1198,9 @@ Use it in `parseHighlightPrompt()` before last-weekend filters:
 ```js
 const usaFilters = usaTripDateFilters(prompt);
 const filters = usaFilters ?? (/\b(last weekend|weekend)\b/i.test(prompt) ? lastWeekendFilters : null);
-const bounded = !unbounded && (Boolean(usaFilters) || /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt));
+const bounded =
+  !unbounded &&
+  (Boolean(usaFilters) || /\b(this album|album|space|last weekend|weekend|from|selected|selection)\b/i.test(prompt));
 ```
 
 2. Add handle-first helpers:

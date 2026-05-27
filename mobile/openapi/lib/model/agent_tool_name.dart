@@ -24,6 +24,8 @@ class AgentToolName {
   String toJson() => value;
 
   static const searchAssets = AgentToolName._(r'searchAssets');
+  static const readSelectionMetadata = AgentToolName._(r'readSelectionMetadata');
+  static const curateSelection = AgentToolName._(r'curateSelection');
   static const resolveAssetSearchFilters = AgentToolName._(r'resolveAssetSearchFilters');
   static const readAssetMetadata = AgentToolName._(r'readAssetMetadata');
   static const readAssetPreviews = AgentToolName._(r'readAssetPreviews');
@@ -35,16 +37,20 @@ class AgentToolName {
   static const searchUsers = AgentToolName._(r'searchUsers');
   static const proposeAlbumOperations = AgentToolName._(r'proposeAlbumOperations');
   static const proposeAlbumFromSearch = AgentToolName._(r'proposeAlbumFromSearch');
+  static const proposeAlbumFromSelection = AgentToolName._(r'proposeAlbumFromSelection');
   static const proposeAddAssetsToAlbumFromSearch = AgentToolName._(r'proposeAddAssetsToAlbumFromSearch');
   static const proposeSpaceFromSearch = AgentToolName._(r'proposeSpaceFromSearch');
   static const proposeAddAssetsToSpaceFromSearch = AgentToolName._(r'proposeAddAssetsToSpaceFromSearch');
   static const proposeAssetBatchFromSearch = AgentToolName._(r'proposeAssetBatchFromSearch');
+  static const proposeAssetBatchFromSelection = AgentToolName._(r'proposeAssetBatchFromSelection');
   static const reviseProposedOperations = AgentToolName._(r'reviseProposedOperations');
   static const summarizePlan = AgentToolName._(r'summarizePlan');
 
   /// List of all possible values in this [enum][AgentToolName].
   static const values = <AgentToolName>[
     searchAssets,
+    readSelectionMetadata,
+    curateSelection,
     resolveAssetSearchFilters,
     readAssetMetadata,
     readAssetPreviews,
@@ -56,10 +62,12 @@ class AgentToolName {
     searchUsers,
     proposeAlbumOperations,
     proposeAlbumFromSearch,
+    proposeAlbumFromSelection,
     proposeAddAssetsToAlbumFromSearch,
     proposeSpaceFromSearch,
     proposeAddAssetsToSpaceFromSearch,
     proposeAssetBatchFromSearch,
+    proposeAssetBatchFromSelection,
     reviseProposedOperations,
     summarizePlan,
   ];
@@ -101,6 +109,8 @@ class AgentToolNameTypeTransformer {
     if (data != null) {
       switch (data) {
         case r'searchAssets': return AgentToolName.searchAssets;
+        case r'readSelectionMetadata': return AgentToolName.readSelectionMetadata;
+        case r'curateSelection': return AgentToolName.curateSelection;
         case r'resolveAssetSearchFilters': return AgentToolName.resolveAssetSearchFilters;
         case r'readAssetMetadata': return AgentToolName.readAssetMetadata;
         case r'readAssetPreviews': return AgentToolName.readAssetPreviews;
@@ -112,10 +122,12 @@ class AgentToolNameTypeTransformer {
         case r'searchUsers': return AgentToolName.searchUsers;
         case r'proposeAlbumOperations': return AgentToolName.proposeAlbumOperations;
         case r'proposeAlbumFromSearch': return AgentToolName.proposeAlbumFromSearch;
+        case r'proposeAlbumFromSelection': return AgentToolName.proposeAlbumFromSelection;
         case r'proposeAddAssetsToAlbumFromSearch': return AgentToolName.proposeAddAssetsToAlbumFromSearch;
         case r'proposeSpaceFromSearch': return AgentToolName.proposeSpaceFromSearch;
         case r'proposeAddAssetsToSpaceFromSearch': return AgentToolName.proposeAddAssetsToSpaceFromSearch;
         case r'proposeAssetBatchFromSearch': return AgentToolName.proposeAssetBatchFromSearch;
+        case r'proposeAssetBatchFromSelection': return AgentToolName.proposeAssetBatchFromSelection;
         case r'reviseProposedOperations': return AgentToolName.reviseProposedOperations;
         case r'summarizePlan': return AgentToolName.summarizePlan;
         default:

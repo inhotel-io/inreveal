@@ -18,7 +18,6 @@ import type {
 } from 'src/types/agent-mcp-contract.types';
 
 const exampleAssetId = '00000000-0000-4000-8000-000000000001';
-const exampleSecondAssetId = '00000000-0000-4000-8000-000000000002';
 const exampleAlbumId = '00000000-0000-4000-8000-000000000010';
 const exampleSpaceId = '00000000-0000-4000-8000-000000000020';
 const exampleSpacePersonId = '00000000-0000-4000-8000-000000000021';
@@ -1890,8 +1889,7 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'album-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
+      hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'create-album-from-declarative-search',
     },
   ],
@@ -1919,8 +1917,7 @@ const proposeAddAssetsToAlbumFromSearchContract: AgentMcpPlanningToolContract = 
     {
       id: 'album-add-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
+      hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'add-search-results-to-album-by-name',
     },
     {
@@ -2021,8 +2018,7 @@ const proposeSpaceFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'space-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
+      hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'create-space-from-declarative-search',
     },
   ],
@@ -2050,8 +2046,7 @@ const proposeAddAssetsToSpaceFromSearchContract: AgentMcpPlanningToolContract = 
     {
       id: 'space-add-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
+      hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'add-search-results-to-space-by-name',
     },
     {
@@ -2160,8 +2155,7 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
+      hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
       exampleName: 'favorite-search-results',
     },
     {
@@ -2220,8 +2214,7 @@ const proposeAlbumFromSelectionContract: AgentMcpPlanningToolContract = {
     {
       id: 'album-selection-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
+      hint: 'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
       exampleName: 'create-album-from-selection',
     },
   ],
@@ -2250,8 +2243,7 @@ const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-selection-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
-      hint:
-        'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
+      hint: 'Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.',
       exampleName: 'favorite-selection',
     },
     {
