@@ -3853,10 +3853,7 @@ describe(AgentToolService.name, () => {
         nextPage: '2',
         sample: {
           sampleSize: 2,
-          items: [
-            expect.objectContaining({ itemRef: 'item:001' }),
-            expect.objectContaining({ itemRef: 'item:002' }),
-          ],
+          items: [expect.objectContaining({ itemRef: 'item:001' }), expect.objectContaining({ itemRef: 'item:002' })],
         },
       }),
     );
@@ -4281,6 +4278,287 @@ describe(AgentToolService.name, () => {
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Completed }),
       albums: [sharedAlbum],
     });
+  });
+
+  it('readSelectionMetadata returns aggregate counts and itemRef samples without asset ids', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid()];
+    const selectionHandleId = newUuid();
+    const sourceToolCallId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId,
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue(
+      assetIds.map((id, index) =>
+        makeMetadata(id, {
+          originalFileName: index === 0 ? `${id}.jpg` : `photo-${index}.jpg`,
+        }),
+      ) as never,
+    );
+
+    const result = await sut.readSelectionMetadata(auth, session.id, {
+      selectionHandleId,
+      fields: ['dates', 'camera', 'rating', 'filename'],
+      sampleSize: 2,
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(assetRepository.getAgentMetadataByIds).toHaveBeenCalledWith(assetIds.slice(0, 2));
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.summary).toBe('Read selection metadata for 3 assets with 2 samples');
+    expect(result.selectionHandle).toMatchObject({
+      id: selectionHandleId,
+      sourceRef: `asset-source:search:${selectionHandleId}`,
+      assetCount: 3,
+      sourceToolCallId,
+    });
+    expect(result.counts).toEqual({ assets: 3, sampled: 2 });
+    expect(result.sample?.items.map((item) => item.itemRef)).toEqual(['item:001', 'item:002']);
+    expect(result.sample?.items[0]).not.toHaveProperty('id');
+    expect(result.sample?.items[0]).not.toHaveProperty('assetId');
+    expect(result.sample?.items[0]).not.toHaveProperty('ownerId');
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
+    expect(result.resultSize).toMatchObject({ returnedItems: 2, hasMore: false, nextPage: null });
+  });
+
+  it('readSelectionMetadata supports aggregate-only sampleSize zero without metadata hydration', async () => {
+    const auth = AuthFactory.create();
+    const selectionHandleId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: null,
+      assetIds: [newUuid()],
+      assetCount: 1,
+      sampleAssetIds: [newUuid()],
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+
+    const result = await sut.readSelectionMetadata(auth, session.id, { selectionHandleId, sampleSize: 0 });
+
+    expect(assetRepository.getAgentMetadataByIds).not.toHaveBeenCalled();
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.counts).toEqual({ assets: 1, sampled: 0 });
+      expect(result).not.toHaveProperty('sample');
+    }
+  });
+
+  it('readSelectionMetadata skips missing sample metadata without leaking handle asset ids', async () => {
+    const auth = AuthFactory.create();
+    const missingAssetId = newUuid();
+    const visibleAssetId = newUuid();
+    const selectionHandleId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: null,
+      assetIds: [missingAssetId, visibleAssetId],
+      assetCount: 2,
+      sampleAssetIds: [missingAssetId, visibleAssetId],
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(visibleAssetId, { originalFileName: 'visible.jpg' }),
+    ] as never);
+
+    const result = await sut.readSelectionMetadata(auth, session.id, { selectionHandleId, sampleSize: 2 });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.counts).toEqual({ assets: 2, sampled: 1 });
+      expect(result.sample?.items).toHaveLength(1);
+      expect(JSON.stringify(result)).not.toContain(missingAssetId);
+      expect(JSON.stringify(result)).not.toContain(visibleAssetId);
+    }
+  });
+
+  it('readSelectionMetadata stores replayable request metadata for approval retry', async () => {
+    const auth = AuthFactory.create();
+    const selectionHandleId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.Strict });
+    const pending = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.ReadSelectionMetadata,
+      requestSummary: `Read selection metadata for handle ${selectionHandleId} (2 sample(s))`,
+      redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
+      assetCount: 2,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: null,
+      assetIds: [newUuid(), newUuid()],
+      assetCount: 2,
+      sampleAssetIds: [newUuid(), newUuid()],
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    toolCallRepository.createWithSessionLimit.mockResolvedValue({ status: 'created', toolCall: pending });
+
+    const result = await sut.readSelectionMetadata(auth, session.id, {
+      selectionHandleId,
+      fields: ['dates'],
+      sampleSize: 2,
+    });
+
+    expect(result.status).toBe('approval-required');
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        redactedRequestMetadata: { selectionHandleId, fields: ['dates'], sampleSize: 2 },
+        assetCount: 2,
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+  });
+
+  it('readSelectionMetadata returns recoverable invalid-selection-handle for expired or unavailable handles', async () => {
+    const auth = AuthFactory.create();
+    const selectionHandleId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const expiredHandle = {
+      id: selectionHandleId,
+      assetCount: 12,
+      sourceToolCallId: newUuid(),
+      createdAt: new Date('2026-05-27T08:00:00.000Z'),
+      expiresAt: new Date('2026-05-27T09:00:00.000Z'),
+    };
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(expiredHandle);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([]);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readSelectionMetadata(auth, session.id, { selectionHandleId, sampleSize: 5 })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content).toMatchObject({
+      status: 'error',
+      toolName: AgentToolName.ReadSelectionMetadata,
+      retryable: true,
+      recovery: {
+        kind: 'invalid-selection-handle',
+        attemptedSelectionHandleId: selectionHandleId,
+        expiredSelectionHandle: expect.objectContaining({ id: selectionHandleId, assetCount: 12 }),
+      },
+    });
+    expect(JSON.stringify(error.content)).not.toContain('assetIds');
+    expect(JSON.stringify(error.content)).not.toContain('sampleAssetIds');
+  });
+
+  it('readSelectionMetadata treats cross-session handles as unavailable without recovery leaks', async () => {
+    const auth = AuthFactory.create();
+    const foreignHandleId = newUuid();
+    const availableHandle = {
+      id: newUuid(),
+      assetCount: 4,
+      sourceToolCallId: newUuid(),
+      createdAt: new Date('2026-05-27T08:00:00.000Z'),
+      expiresAt: new Date('2026-05-27T10:00:00.000Z'),
+    };
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    selectionHandleRepository.getForRecovery.mockResolvedValue(void 0);
+    selectionHandleRepository.listValidForRecovery.mockResolvedValue([availableHandle]);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readSelectionMetadata(auth, session.id, { selectionHandleId: foreignHandleId })
+      .catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    const error = thrown as AgentMcpRecoverableToolError;
+    expect(error.content.recovery).toMatchObject({
+      kind: 'invalid-selection-handle',
+      attemptedSelectionHandleId: foreignHandleId,
+      availableSelectionHandles: [expect.objectContaining({ id: availableHandle.id, assetCount: 4 })],
+    });
+    expect(JSON.stringify(error.content.recovery)).not.toContain('assetIds');
+    expect(JSON.stringify(error.content.recovery)).not.toContain('sampleAssetIds');
+    expect(JSON.stringify(error.content.recovery)).not.toContain('foreign-owner');
+  });
+
+  it('readSelectionMetadata returns wrong-domain recovery for readable asset IDs', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(void 0);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    accessRepository.person.checkOwnerAccess.mockResolvedValue(new Set());
+    accessRepository.person.checkSharedSpaceAccess.mockResolvedValue(new Set());
+
+    const thrown = await sut
+      .readSelectionMetadata(auth, session.id, { selectionHandleId: assetId })
+      .catch((error) => error);
+
+    expect(thrown).toBeInstanceOf(AgentMcpRecoverableToolError);
+    expect((thrown as AgentMcpRecoverableToolError).content).toMatchObject({
+      error: 'That value is an asset ID, not a selection handle ID.',
+      recovery: {
+        kind: 'wrong_id_domain',
+        field: 'selectionHandleId',
+        expectedDomain: 'selectionHandle',
+        receivedDomain: 'asset',
+      },
+    });
+    expect(JSON.stringify((thrown as AgentMcpRecoverableToolError).content.recovery)).not.toContain(assetId);
   });
 
   it('listAlbums filters out shared albums when assetScope.sharedSpaces is false', async () => {
