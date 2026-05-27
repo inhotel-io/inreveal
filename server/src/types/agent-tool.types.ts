@@ -24,7 +24,9 @@ export type AgentSearchAssetsMode = 'metadata' | 'smart' | 'description' | 'ocr'
 
 export type AgentSearchAssetsOrder = 'asc' | 'desc' | 'relevance';
 
-export type AgentSearchAssetsDetail = 'ids' | 'summary' | 'metadata';
+export type AgentSearchAssetsRequestDetail = 'ids' | 'handle' | 'summary' | 'metadata';
+
+export type AgentSearchAssetsDetail = 'handle' | 'summary' | 'metadata';
 
 export type AgentSearchAssetsField =
   | 'type'
@@ -48,7 +50,7 @@ export type AgentToolSearchAssetsRequestMetadata = {
   limit: number;
   page: number;
   order?: AgentSearchAssetsOrder;
-  detail: AgentSearchAssetsDetail;
+  detail: AgentSearchAssetsRequestDetail;
   fields: AgentSearchAssetsField[];
   sampleSize?: number;
   createSelectionHandle?: boolean;
@@ -56,11 +58,36 @@ export type AgentToolSearchAssetsRequestMetadata = {
 
 export type AgentSearchAssetsSelectionHandle = {
   id: string;
-  sourceRef: AgentSearchSourceRef;
   assetCount: number;
   sampleAssetIds: string[];
   sourceToolCallId: string | null;
   expiresAt: Date;
+};
+
+export type AgentSearchAssetsSelectionHandleResult = {
+  id: string;
+  sourceRef: AgentSearchSourceRef;
+  assetCount: number;
+  sourceToolCallId: string | null;
+  expiresAt: Date;
+};
+
+export type AgentSearchAssetsSampleItem = {
+  itemRef: string;
+  type?: AssetType;
+  originalFileName?: string;
+  localDateTime?: Date;
+  fileCreatedAt?: Date;
+  fileModifiedAt?: Date;
+  isFavorite?: boolean;
+  visibility?: AssetVisibility;
+  exifInfo?: AgentSearchAssetExif | null;
+  tags?: Array<{ value: string; color: string | null }>;
+};
+
+export type AgentSearchAssetsSample = {
+  sampleSize: number;
+  items: AgentSearchAssetsSampleItem[];
 };
 
 export type AgentResolveAssetSearchFiltersScope = {
@@ -122,7 +149,6 @@ export type AgentToolResponseIdsMetadata = {
   selectionHandleIds?: string[];
   sourceRefs?: AgentSearchSourceRef[];
   selectionHandleAssetCount?: number;
-  selectionHandleSampleAssetIds?: string[];
   resultSize?: AgentToolResultSize;
 };
 
