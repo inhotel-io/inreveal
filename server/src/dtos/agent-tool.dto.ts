@@ -306,7 +306,7 @@ const AgentSearchAssetsToolRequestSchema = z
       filters: value.filters ?? {},
       limit: value.limit ?? DEFAULT_SEARCH_LIMIT,
       page: value.page ?? DEFAULT_SEARCH_PAGE,
-      detail: value.detail ?? 'ids',
+      detail: value.detail ?? 'handle',
       fields: value.fields ?? [],
       ...(value.createSelectionHandle === undefined ? {} : { createSelectionHandle: value.createSelectionHandle }),
       ...(value.sampleSize === undefined ? {} : { sampleSize: value.sampleSize }),

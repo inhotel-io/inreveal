@@ -618,7 +618,7 @@ export class AgentToolService {
       toolName: AgentToolName.SearchAssets,
       dataClass: AgentToolDataClass.Metadata,
       requestSummary: (request) =>
-        `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)}, ${request.detail ?? 'ids'})`,
+        `Search ${request.mode ?? 'metadata'} assets (limit ${this.getSearchLimit(request)}, ${request.detail ?? 'handle'})`,
       requestMetadata: (request) => {
         const mode = request.mode ?? 'metadata';
         return {
@@ -626,7 +626,7 @@ export class AgentToolService {
           filters: request.filters ?? {},
           limit: this.getSearchLimit(request),
           page: request.page ?? 1,
-          detail: request.detail ?? 'ids',
+          detail: request.detail ?? 'handle',
           fields: request.fields ?? [],
           ...(request.createSelectionHandle ? { createSelectionHandle: true } : {}),
           ...(request.sampleSize === undefined ? {} : { sampleSize: request.sampleSize }),
@@ -647,7 +647,7 @@ export class AgentToolService {
           filters: request.filters ?? {},
           limit: this.getSearchLimit(request),
           page: request.page ?? 1,
-          detail: request.detail ?? 'ids',
+          detail: request.detail ?? 'handle',
           fields: request.fields ?? [],
         };
         const timelineSpaceIds = await this.getSearchTimelineSpaceIds(auth, session, request.filters ?? {});
