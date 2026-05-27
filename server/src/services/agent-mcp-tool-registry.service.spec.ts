@@ -8,6 +8,7 @@ import z from 'zod';
 const expectedToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.ReadSelectionMetadata,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -29,6 +30,7 @@ const expectedToolNames = [
 const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.ReadSelectionMetadata,
   AgentToolName.ReadAssetMetadata,
   AgentToolName.ReadAssetPreviews,
   AgentToolName.ReadAssetOriginals,
@@ -251,6 +253,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
     const resolver = toolsByName.get(AgentToolName.ResolveAssetSearchFilters)?.inputSchema;
     const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
+    const selectionMetadata = toolsByName.get(AgentToolName.ReadSelectionMetadata)?.inputSchema;
     const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
     const searchProperties = search?.properties as Record<string, { description?: string }> | undefined;
     const searchFiltersDescription = searchProperties?.filters?.description;
@@ -258,13 +261,27 @@ describe(AgentMcpToolRegistryService.name, () => {
 
     expect(metadata?.properties).toMatchObject({
       assetIds: expect.objectContaining({
-        description: expect.stringContaining('new asset read request'),
+        description: expect.stringContaining('legacy exact non-search'),
       }),
       detail: expect.objectContaining({
         description: expect.stringContaining('basic'),
       }),
       fields: expect.objectContaining({
         description: expect.stringContaining('filename'),
+      }),
+      toolCallId: expect.objectContaining({
+        description: expect.stringContaining('approved retry'),
+      }),
+    });
+    expect(selectionMetadata?.properties).toMatchObject({
+      selectionHandleId: expect.objectContaining({
+        description: expect.stringContaining('selectionHandle.id returned by searchAssets'),
+      }),
+      fields: expect.objectContaining({
+        description: expect.stringContaining('itemRef samples'),
+      }),
+      sampleSize: expect.objectContaining({
+        description: expect.stringContaining('selection metadata'),
       }),
       toolCallId: expect.objectContaining({
         description: expect.stringContaining('approved retry'),
