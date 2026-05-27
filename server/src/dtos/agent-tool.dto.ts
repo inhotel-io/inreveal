@@ -19,6 +19,8 @@ const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
 const MAX_TOOL_LIMIT = 10_000;
 const DEFAULT_SEARCH_LIMIT = 100;
 const MAX_SEARCH_SAMPLE_SIZE = 25;
+const MAX_SELECTION_METADATA_SAMPLE_SIZE = 25;
+const DEFAULT_SELECTION_METADATA_SAMPLE_SIZE = 10;
 const MAX_USER_LOOKUP_LIMIT = 20;
 const MAX_RESOLVE_FILTER_NAMES_PER_KIND = 20;
 const MAX_RESOLVE_FILTER_NAME_LENGTH = 120;
@@ -58,6 +60,17 @@ const AgentAssetMetadataDetailSchema = z
   .enum(['basic', 'descriptive', 'technical', 'allSafe'])
   .meta({ id: 'AgentAssetMetadataDetail' });
 const AgentAssetMetadataFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentAssetMetadataField' });
+const DEFAULT_SELECTION_METADATA_FIELDS = [
+  'type',
+  'dates',
+  'location',
+  'camera',
+  'tags',
+  'rating',
+  'filename',
+  'favorite',
+  'visibility',
+] as const satisfies readonly z.output<typeof AgentAssetMetadataFieldSchema>[];
 const resolverNameList = z
   .array(z.string().trim().min(1).max(MAX_RESOLVE_FILTER_NAME_LENGTH))
   .min(1)
@@ -154,6 +167,52 @@ const AgentReadAssetMetadataToolRequestSchema = z
     return value.fields ? value : { ...value, detail: value.detail ?? 'basic' };
   })
   .meta({ id: 'AgentReadAssetMetadataToolRequestDto' });
+
+const AgentReadSelectionMetadataToolRequestSchema = z
+  .strictObject({
+    selectionHandleId: uuid.optional(),
+    fields: z.array(AgentAssetMetadataFieldSchema).min(1).max(20).optional(),
+    sampleSize: z.number().int().min(0).max(MAX_SELECTION_METADATA_SAMPLE_SIZE).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.selectionHandleId && value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
+    }
+
+    if ((value.fields || value.sampleSize !== undefined) && value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either selectionHandleId or toolCallId, not both',
+      });
+    }
+
+    if (!value.selectionHandleId && !value.toolCallId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide selectionHandleId for a new tool request or toolCallId for an approved request',
+      });
+    }
+
+    if (value.fields && new Set(value.fields).size !== value.fields.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fields'], message: 'fields must be unique' });
+    }
+  })
+  .transform((value) => {
+    if (value.toolCallId) {
+      return value;
+    }
+
+    return {
+      ...value,
+      fields: value.fields ?? [...DEFAULT_SELECTION_METADATA_FIELDS],
+      sampleSize: value.sampleSize ?? DEFAULT_SELECTION_METADATA_SAMPLE_SIZE,
+    };
+  })
+  .meta({ id: 'AgentReadSelectionMetadataToolRequestDto' });
 
 const AgentReadAssetPreviewsToolRequestSchema = assetIdRequest(
   'AgentReadAssetPreviewsToolRequestDto',
@@ -451,6 +510,7 @@ const AgentSearchUsersToolRequestSchema = z
 
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
+  [AgentToolName.ReadSelectionMetadata]: AgentReadSelectionMetadataToolRequestSchema,
   [AgentToolName.ResolveAssetSearchFilters]: AgentResolveAssetSearchFiltersToolRequestSchema,
   [AgentToolName.ReadAssetMetadata]: AgentReadAssetMetadataToolRequestSchema,
   [AgentToolName.ReadAssetPreviews]: AgentReadAssetPreviewsToolRequestSchema,
@@ -708,6 +768,32 @@ const AgentSearchAssetsSampleSchema = z
   })
   .meta({ id: 'AgentSearchAssetsSample' });
 
+const AgentReadSelectionMetadataCountsSchema = z
+  .object({
+    assets: z.number().int().min(0),
+    sampled: z.number().int().min(0).max(MAX_SELECTION_METADATA_SAMPLE_SIZE),
+  })
+  .meta({ id: 'AgentReadSelectionMetadataCounts' });
+
+const AgentReadSelectionMetadataToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentReadSelectionMetadataToolApprovalRequiredResponse'),
+    deniedResponse('AgentReadSelectionMetadataToolDeniedResponse'),
+    z
+      .strictObject({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        summary,
+        selectionHandle: AgentSearchAssetsSelectionHandleSchema,
+        fields: z.array(AgentAssetMetadataFieldSchema),
+        counts: AgentReadSelectionMetadataCountsSchema,
+        sample: AgentSearchAssetsSampleSchema.optional(),
+        resultSize: AgentToolResultSizeSchema,
+      })
+      .meta({ id: 'AgentReadSelectionMetadataToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentReadSelectionMetadataToolResponseDto' });
+
 const AgentSearchAssetsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentSearchAssetsToolApprovalRequiredResponse'),
@@ -900,6 +986,9 @@ const namedZodDto = <TSchema extends z.ZodType>(schemaName: string, schema: TSch
 };
 
 export class AgentReadAssetMetadataToolRequestDto extends createZodDto(AgentReadAssetMetadataToolRequestSchema) {}
+export class AgentReadSelectionMetadataToolRequestDto extends createZodDto(
+  AgentReadSelectionMetadataToolRequestSchema,
+) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
 export class AgentResolveAssetSearchFiltersToolRequestDto extends createZodDto(
   AgentResolveAssetSearchFiltersToolRequestSchema,
@@ -919,6 +1008,13 @@ export const AgentReadAssetMetadataToolResponseDto = namedZodDto(
   AgentReadAssetMetadataToolResponseSchema,
 );
 export type AgentReadAssetMetadataToolResponseDto = z.output<typeof AgentReadAssetMetadataToolResponseSchema>;
+export const AgentReadSelectionMetadataToolResponseDto = namedZodDto(
+  'AgentReadSelectionMetadataToolResponseDto',
+  AgentReadSelectionMetadataToolResponseSchema,
+);
+export type AgentReadSelectionMetadataToolResponseDto = z.output<
+  typeof AgentReadSelectionMetadataToolResponseSchema
+>;
 export const AgentSearchAssetsToolResponseDto = namedZodDto(
   'AgentSearchAssetsToolResponseDto',
   AgentSearchAssetsToolResponseSchema,

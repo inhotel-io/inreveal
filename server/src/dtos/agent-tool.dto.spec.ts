@@ -11,6 +11,7 @@ import {
   AgentReadAssetOriginalsToolResponseDto,
   AgentReadAssetPreviewsToolRequestDto,
   AgentReadAssetPreviewsToolResponseDto,
+  AgentReadSelectionMetadataToolResponseDto,
   AgentReadSpaceToolRequestDto,
   AgentReadSpaceToolResponseDto,
   AgentReadToolRequestSchemas,
@@ -203,6 +204,96 @@ describe('Agent tool DTOs', () => {
       const result = parseRequest({ assetIds: [factory.uuid()], fields: ['filename', 'filename'] });
 
       expectIssue(result, ['fields'], 'fields must be unique');
+    });
+  });
+
+  describe('AgentReadSelectionMetadataToolRequestSchema', () => {
+    const selectionHandleId = '00000000-0000-4000-8000-000000000333';
+
+    it('defaults sample size and safe fields for selection metadata reads', () => {
+      expect(AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].parse({ selectionHandleId })).toEqual({
+        selectionHandleId,
+        sampleSize: 10,
+        fields: ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'],
+      });
+    });
+
+    it('validates readSelectionMetadata argument modes and field/sample bounds', () => {
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse({
+          selectionHandleId,
+          fields: ['dates', 'dates'],
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse({
+          selectionHandleId,
+          sampleSize: 26,
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse({
+          selectionHandleId,
+          toolCallId: '00000000-0000-4000-8000-000000000111',
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].safeParse({
+          toolCallId: '00000000-0000-4000-8000-000000000111',
+          fields: ['dates'],
+        }).success,
+      ).toBe(false);
+      expect(
+        AgentReadToolRequestSchemas[AgentToolName.ReadSelectionMetadata].parse({
+          selectionHandleId,
+          fields: ['dates', 'camera'],
+          sampleSize: 0,
+        }),
+      ).toEqual({ selectionHandleId, fields: ['dates', 'camera'], sampleSize: 0 });
+    });
+
+    it('encodes selection metadata responses without asset UUID fields in samples', () => {
+      const encoded = AgentReadSelectionMetadataToolResponseDto.schema.safeEncode({
+        status: 'success',
+        toolCall: makeToolCall({ toolName: AgentToolName.ReadSelectionMetadata }),
+        summary: 'Read selection metadata for 12 assets with 1 sample.',
+        selectionHandle: {
+          id: selectionHandleId,
+          sourceRef: `asset-source:search:${selectionHandleId}`,
+          assetCount: 12,
+          sourceToolCallId: '00000000-0000-4000-8000-000000000444',
+          expiresAt: new Date('2026-05-27T12:00:00.000Z'),
+        },
+        fields: ['dates', 'camera'],
+        counts: { assets: 12, sampled: 1 },
+        sample: {
+          sampleSize: 1,
+          items: [
+            {
+              itemRef: 'item:001',
+              localDateTime: new Date('2026-05-20T10:00:00.000Z'),
+              exifInfo: { make: 'Canon', model: 'R5' },
+            },
+          ],
+        },
+        resultSize: {
+          returnedItems: 1,
+          hasMore: false,
+          nextPage: null,
+          estimatedBytes: 512,
+          truncated: false,
+          omittedFields: [],
+        },
+      });
+
+      expect(encoded.success).toBe(true);
+      if (!encoded.success) {
+        throw new Error('Expected selection metadata response to encode');
+      }
+
+      expect(JSON.stringify(encoded.data)).not.toContain('"assetIds"');
+      expect(JSON.stringify(encoded.data)).not.toContain('"assetId"');
+      expect(JSON.stringify(encoded.data)).not.toContain('"id":"00000000-0000-4000-8000-000000000001"');
     });
   });
 
