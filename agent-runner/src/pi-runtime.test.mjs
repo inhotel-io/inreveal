@@ -4,7 +4,13 @@ import { readFile, rm, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { describe, it } from 'node:test';
 import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
-import { compactGalleryToolTranscript, createPiRuntime, mapProviderType, redactSecret } from './pi-runtime.mjs';
+import {
+  compactGalleryToolResultForPrompt,
+  compactGalleryToolTranscript,
+  createPiRuntime,
+  mapProviderType,
+  redactSecret,
+} from './pi-runtime.mjs';
 
 const permissionPlan = {
   read: { metadata: true, previews: false, originals: false },
@@ -549,7 +555,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].noExtensions, true);
     assert.ok(Array.isArray(calls.loaders[0].extensionFactories));
     assert.equal(calls.loaders[0].systemPrompt.startsWith('You are Gallery Assistant'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes(galleryMcpPromptCheatSheet), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Gallery MCP tool-use cheat sheet'), true);
     assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_searchAssets'), true);
     assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(galleryMcpPromptCheatSheet.includes('mcp_gallery_proposeAlbumOperations'), true);
@@ -560,7 +566,7 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_searchAssets'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_readAssetMetadata'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('mcp_gallery_proposeAlbumOperations'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Progressive: resolve names -> search detail ids'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Do not use limit 1000'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Best/highlights require bounded source'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('default to 10 only when the source is bounded'), true);
@@ -572,25 +578,30 @@ describe('pi runtime adapter', () => {
     );
     assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only suggested highlights'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('prioritize existing favorites and ratings'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('selected assetIds only'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('do not use broad assetSource'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('No previews are required for metadata-only highlight plans'), true);
     assert.equal(
       calls.loaders[0].systemPrompt.includes(
-        'Preview-assisted highlight requests use mcp_gallery_readAssetPreviews only after bounded candidate ids are known',
+        'Preview-assisted highlight requests must start from a bounded handle or exact small non-search selection',
       ),
       true,
     );
     assert.equal(calls.loaders[0].systemPrompt.includes('above 250 preview candidates'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('If previews are denied or unavailable'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Cover suggestions use album.setCover with exactly one selected assetId'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Cover suggestions require exactly one bounded exact selection'), true);
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes('Cover suggestions use album.setCover with exactly one selected assetId'),
+      false,
+    );
     assert.equal(calls.loaders[0].systemPrompt.includes('Never call mcp_gallery_readAssetOriginals for highlight or cover curation'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('Slice 2 is read-only'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), false);
+    assert.equal(calls.loaders[0].systemPrompt.includes('searchAssets returns selection handles'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_readAssetMetadata for candidate assets'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('use readAssetMetadata only for specific non-search asset details'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'), true);
@@ -1089,6 +1100,125 @@ describe('pi runtime adapter', () => {
     assert.equal(compacted.toolCall.status, 'pending-approval');
     assert.equal(compacted.compacted, true);
     assert.equal(messages[0].content[0].text.includes('thumbhash'), false);
+  });
+
+  it('compacts legacy search results with asset ids even under the normal prompt budget', () => {
+    const leakedAssetIds = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
+    const compacted = compactGalleryToolResultForPrompt({
+      status: 'success',
+      summary: `Returned ${leakedAssetIds.length} asset ids`,
+      toolCall: {
+        id: '00000000-0000-4000-8000-000000000333',
+        toolName: 'mcp_gallery_searchAssets',
+        status: 'completed',
+      },
+      detail: 'ids',
+      assetIds: leakedAssetIds,
+      assets: { items: leakedAssetIds.map((id) => ({ id, originalFileName: `${id}.jpg` })) },
+      selectionHandle: {
+        id: '00000000-0000-4000-8000-000000000444',
+        sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000444',
+        assetCount: 2,
+        sourceToolCallId: '00000000-0000-4000-8000-000000000333',
+        expiresAt: '2026-05-27T12:00:00.000Z',
+      },
+      resultSize: {
+        returnedItems: 2,
+        hasMore: false,
+        nextPage: null,
+        estimatedBytes: 1024,
+        truncated: false,
+        omittedFields: [],
+      },
+    });
+
+    const text = JSON.stringify(compacted);
+
+    assert.equal(compacted.compacted, true);
+    assert.equal(compacted.selectionHandle.id, '00000000-0000-4000-8000-000000000444');
+    assert.equal(compacted.counts.assets, 2);
+    assert.equal(JSON.parse(text).counts.assets, 2);
+    assert.equal(Object.hasOwn(compacted, 'assets'), false);
+    assert.equal(text.includes(leakedAssetIds[0]), false);
+    assert.equal(text.includes(leakedAssetIds[1]), false);
+    assert.equal(text.includes('"assetIds"'), false);
+    assert.equal(text.includes('"assetIdsSample"'), false);
+  });
+
+  it('redacts nested legacy search asset ids from prior tool transcript compaction', () => {
+    const leakedAssetId = '33333333-3333-4333-8333-333333333333';
+    const messages = [
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              status: 'success',
+              toolCall: {
+                id: '00000000-0000-4000-8000-000000000333',
+                toolName: 'searchAssets',
+                status: 'completed',
+              },
+              assets: { items: [{ id: leakedAssetId, city: 'Paris' }] },
+              selectionHandle: {
+                id: '00000000-0000-4000-8000-000000000444',
+                sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000444',
+                assetCount: 1,
+                sourceToolCallId: '00000000-0000-4000-8000-000000000333',
+                expiresAt: '2026-05-27T12:00:00.000Z',
+              },
+            }),
+          },
+        ],
+      },
+    ];
+
+    compactGalleryToolTranscript({ messages });
+
+    const compacted = JSON.parse(messages[0].content[0].text);
+    assert.equal(compacted.compacted, true);
+    assert.equal(compacted.selectionHandle.assetCount, 1);
+    assert.equal(compacted.counts.assets, 1);
+    assert.equal(Object.hasOwn(compacted, 'assets'), false);
+    assert.equal(messages[0].content[0].text.includes(leakedAssetId), false);
+  });
+
+  it('resumes approval with a compact handle summary for legacy search results', async () => {
+    const { sdk, ai, calls } = createFakeDependencies();
+    const runtime = createPiRuntime({ sdk, ai });
+    await runtime.createSession(createSessionBody());
+    const leakedAssetId = '44444444-4444-4444-8444-444444444444';
+
+    await collect(
+      runtime.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: {
+          status: 'success',
+          toolCall: {
+            id: '00000000-0000-4000-8000-000000000333',
+            toolName: 'searchAssets',
+            status: 'completed',
+          },
+          assetIds: [leakedAssetId],
+          selectionHandle: {
+            id: '00000000-0000-4000-8000-000000000444',
+            sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000444',
+            assetCount: 1,
+            sourceToolCallId: '00000000-0000-4000-8000-000000000333',
+            expiresAt: '2026-05-27T12:00:00.000Z',
+          },
+        },
+      }),
+    );
+
+    assert.match(calls.prompts[0], /compact approved tool result summary/i);
+    assert.match(calls.prompts[0], /selectionHandle/i);
+    assert.equal(calls.prompts[0].includes(leakedAssetId), false);
+    assert.equal(calls.prompts[0].includes('assetIdsSample'), false);
   });
 
   it('pauses without assistant completion when a Gallery tool returns approval-required', async () => {
