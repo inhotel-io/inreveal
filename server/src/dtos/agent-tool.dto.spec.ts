@@ -207,7 +207,7 @@ describe('Agent tool DTOs', () => {
   });
 
   describe(AgentSearchAssetsToolRequestDto.name, () => {
-    it('defaults searchAssets to compact id detail and a bounded limit', () => {
+    it('defaults searchAssets to handle detail and a bounded limit', () => {
       const result = parseSearchAssetsRequest({});
 
       expect(result.success).toBe(true);
@@ -221,9 +221,23 @@ describe('Agent tool DTOs', () => {
         limit: 100,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       });
+    });
+
+    it('accepts explicit ids detail for deprecated compatibility', () => {
+      const result = parseSearchAssetsRequest({ detail: 'ids', limit: 25 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(
+          expect.objectContaining({
+            detail: 'ids',
+            limit: 25,
+          }),
+        );
+      }
     });
 
     it('accepts compact search detail, field selection, and sample size', () => {
@@ -378,7 +392,7 @@ describe('Agent tool DTOs', () => {
           limit: 100,
           page: 1,
           order: 'desc',
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         }),
       );
@@ -498,7 +512,7 @@ describe('Agent tool DTOs', () => {
           filters: { city: 'Berlin' },
           limit: 25,
           page: 1,
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         }),
       );

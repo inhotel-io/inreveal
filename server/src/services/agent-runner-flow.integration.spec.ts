@@ -1838,7 +1838,7 @@ describe('Pi agent runner flow harness', () => {
         expect.objectContaining({
           toolName: AgentToolName.SearchAssets,
           status: AgentToolCallStatus.PendingApproval,
-          requestSummary: 'Search metadata assets (limit 25, ids)',
+          requestSummary: 'Search metadata assets (limit 25, handle)',
         }),
       ]);
     });
@@ -1911,7 +1911,7 @@ describe('Pi agent runner flow harness', () => {
         page: 1,
         order: 'desc',
       },
-      expectedRequestSummary: 'Search metadata assets (limit 50, ids)',
+      expectedRequestSummary: 'Search metadata assets (limit 50, handle)',
       expectedRequestMetadata: {
         mode: 'metadata',
         filters: {
@@ -1924,7 +1924,7 @@ describe('Pi agent runner flow harness', () => {
         limit: 50,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       },
       expectedSearchPath: 'metadata',
@@ -1936,14 +1936,14 @@ describe('Pi agent runner flow harness', () => {
         filters: { rating: 5, type: AssetType.Video, country: 'Japan' },
         limit: 50,
       },
-      expectedRequestSummary: 'Search metadata assets (limit 50, ids)',
+      expectedRequestSummary: 'Search metadata assets (limit 50, handle)',
       expectedRequestMetadata: {
         mode: 'metadata',
         filters: { rating: 5, type: AssetType.Video, country: 'Japan' },
         limit: 50,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       },
       expectedSearchPath: 'metadata',
@@ -1961,7 +1961,7 @@ describe('Pi agent runner flow harness', () => {
         },
         limit: 50,
       },
-      expectedRequestSummary: 'Search ocr assets (limit 50, ids)',
+      expectedRequestSummary: 'Search ocr assets (limit 50, handle)',
       expectedRequestMetadata: {
         mode: 'ocr',
         filters: {
@@ -1972,7 +1972,7 @@ describe('Pi agent runner flow harness', () => {
         limit: 50,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
         query: 'invoice',
       },
@@ -1988,13 +1988,13 @@ describe('Pi agent runner flow harness', () => {
         limit: 50,
         page: 1,
       },
-      expectedRequestSummary: 'Search smart assets (limit 50, ids)',
+      expectedRequestSummary: 'Search smart assets (limit 50, handle)',
       expectedRequestMetadata: {
         mode: 'smart',
         filters: { spaceId: familySpaceId },
         limit: 50,
         page: 1,
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
         query: 'beach sunset',
       },
@@ -2011,7 +2011,7 @@ describe('Pi agent runner flow harness', () => {
         },
         limit: 50,
       },
-      expectedRequestSummary: 'Search metadata assets (limit 50, ids)',
+      expectedRequestSummary: 'Search metadata assets (limit 50, handle)',
       expectedRequestMetadata: {
         mode: 'metadata',
         filters: {
@@ -2022,7 +2022,7 @@ describe('Pi agent runner flow harness', () => {
         limit: 50,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       },
       expectedSearchPath: 'metadata',
