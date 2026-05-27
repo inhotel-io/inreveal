@@ -489,6 +489,23 @@ describe(AgentMcpService.name, () => {
       },
     },
     {
+      toolName: AgentToolName.CurateSelection,
+      args: { selectionHandleId: factory.uuid(), targetCount: 2, strategy: 'metadata-highlights' },
+      expectedArgs: {
+        selectionHandleId: expect.any(String),
+        targetCount: 2,
+        strategy: 'metadata-highlights',
+        constraints: {},
+        sampleSize: 10,
+      },
+      serviceMethod: 'curateSelection' as const,
+      serviceResult: {
+        status: 'success',
+        toolCall: null,
+        summary: 'Curated 2 metadata-only highlights from 4 source assets.',
+      },
+    },
+    {
       toolName: AgentToolName.ReadAssetMetadata,
       args: { assetIds: [factory.uuid()] },
       expectedArgs: { assetIds: [expect.any(String)], detail: 'basic' },
@@ -609,6 +626,47 @@ describe(AgentMcpService.name, () => {
       sampleSize: 2,
     });
     expectToolResult(response, `${AgentToolName.ReadSelectionMetadata}-call`, serviceResult, serviceResult.summary);
+  });
+
+  it('delegates curateSelection and keeps MCP text compact', async () => {
+    const selectionHandleId = factory.uuid();
+    const serviceResult = {
+      status: 'success',
+      toolCall: null,
+      summary: 'Curated 2 metadata-only highlights from 4 source assets.',
+      strategy: 'metadata-highlights',
+      selectionHandle: {
+        id: factory.uuid(),
+        sourceRef: `asset-source:search:${factory.uuid()}`,
+        assetCount: 2,
+        sourceToolCallId: null,
+        expiresAt: new Date('2026-05-27T12:00:00.000Z'),
+      },
+      sourceAssetCount: 4,
+      selectedAssetCount: 2,
+      criteriaSummary: ['Metadata-only curation used favorites and ratings.'],
+      resultSize: { returnedItems: 2, hasMore: false, nextPage: null, estimatedBytes: 512, truncated: false, omittedFields: [] },
+    };
+    toolService.curateSelection.mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.CurateSelection, {
+        selectionHandleId,
+        targetCount: 2,
+        strategy: 'metadata-highlights',
+      }),
+    )) as AgentMcpSuccessResponse;
+
+    expect(toolService.curateSelection).toHaveBeenCalledWith(auth, sessionId, {
+      selectionHandleId,
+      targetCount: 2,
+      strategy: 'metadata-highlights',
+      constraints: {},
+      sampleSize: 10,
+    });
+    expectToolResult(response, `${AgentToolName.CurateSelection}-call`, serviceResult, serviceResult.summary);
   });
 
   it('uses result summary as compact MCP text while preserving structured content', async () => {
@@ -1570,6 +1628,7 @@ describe(AgentMcpService.name, () => {
       const expectedReadToolNames = new Set<AgentMcpReadToolName>([
         AgentToolName.SearchAssets,
         AgentToolName.ReadSelectionMetadata,
+        AgentToolName.CurateSelection,
         AgentToolName.ReadAssetMetadata,
         AgentToolName.ReadAssetPreviews,
         AgentToolName.ReadAssetOriginals,
