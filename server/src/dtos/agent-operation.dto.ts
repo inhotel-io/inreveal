@@ -52,15 +52,15 @@ const uniqueCoverAssetIds = z
   });
 const assetSelectionHandleId = uuid;
 const agentOperationPlanningAssetSourceInput = AgentAssetSourceInputSchema.superRefine((value, ctx) => {
-  if (value.kind !== 'search' && value.kind !== 'previousSearch') {
+  if (value.kind !== 'search' && value.kind !== 'previousSearch' && value.kind !== 'selectionHandle') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['kind'],
-      message: 'Invalid input: expected "search" or "previousSearch"',
+      message: 'Invalid input: expected "search", "previousSearch", or "selectionHandle"',
     });
   }
 }).meta({ id: 'AgentOperationPlanningAssetSourceInput' }) as z.ZodType<
-  Extract<AgentAssetSourceInput, { kind: 'search' | 'previousSearch' }>
+  Extract<AgentAssetSourceInput, { kind: 'search' | 'previousSearch' | 'selectionHandle' }>
 >;
 const assetSelection = {
   assetSource: agentOperationPlanningAssetSourceInput.optional(),

@@ -198,10 +198,27 @@ describe('Agent operation DTOs', () => {
       }
     });
 
-    it.each([
-      ['selectionHandle', { kind: 'selectionHandle', selectionHandleId: factory.uuid() }],
-      ['explicitAssets', { kind: 'explicitAssets', assetIds: [factory.uuid()] }],
-    ])(
+    it('accepts provider planning assetSource.selectionHandle', () => {
+      const selectionHandleId = '00000000-0000-4000-8000-000000000333';
+
+      expect(
+        AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].safeParse({
+          summary: 'Create an album from a selection handle.',
+          operations: [
+            {
+              type: AgentOperationType.AlbumAddAssets,
+              summary: 'Add handle assets.',
+              targetKind: AgentOperationTargetKind.ExistingAlbum,
+              targetId: '00000000-0000-4000-8000-000000000111',
+              assetSource: { kind: 'selectionHandle', selectionHandleId },
+              payload: {},
+            },
+          ],
+        }).success,
+      ).toBe(true);
+    });
+
+    it.each([['explicitAssets', { kind: 'explicitAssets', assetIds: [factory.uuid()] }]])(
       'rejects %s assetSource in operation planning until that source kind is supported here',
       (_label, assetSource) => {
         const result = parsePlan({
