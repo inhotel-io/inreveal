@@ -2269,7 +2269,7 @@ describe(AgentToolService.name, () => {
     expect(result).not.toHaveProperty('assetIds');
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestSummary: 'Search metadata assets (limit 1, ids)',
+        requestSummary: 'Search metadata assets (limit 1, handle)',
         redactedRequestMetadata: expect.not.objectContaining({
           query: expect.anything(),
         }),
@@ -2286,7 +2286,7 @@ describe(AgentToolService.name, () => {
           limit: 1,
           page: 1,
           order: 'desc',
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         },
       }),
@@ -2366,7 +2366,7 @@ describe(AgentToolService.name, () => {
           limit: 2,
           page: 2,
           order: 'desc',
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         },
       }),
@@ -2434,14 +2434,14 @@ describe(AgentToolService.name, () => {
     expect(result).not.toHaveProperty('assetIds');
     expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
       expect.objectContaining({
-        requestSummary: 'Search metadata assets (limit 100, ids)',
+        requestSummary: 'Search metadata assets (limit 100, handle)',
         redactedRequestMetadata: {
           mode: 'metadata',
           filters: {},
           limit: 100,
           page: 1,
           order: 'desc',
-          detail: 'ids',
+          detail: 'handle',
           fields: [],
         },
         assetCount: 100,
@@ -2545,6 +2545,26 @@ describe(AgentToolService.name, () => {
     expect(result.selectionHandle.id).toBe(handle.id);
     expect(result).not.toHaveProperty('assetIds');
     expect(JSON.stringify(result)).not.toContain(assetId);
+    expect(toolCallRepository.createWithSessionLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestSummary: 'Search metadata assets (limit 1, ids)',
+        redactedRequestMetadata: expect.objectContaining({ detail: 'ids' }),
+      }),
+      expect.any(Object),
+      AgentToolDataClass.Metadata,
+      expect.any(Number),
+    );
+    const completedMetadata = toolCallRepository.transition.mock.calls.find(
+      ([, , fromStatus]) => fromStatus === AgentToolCallStatus.Executing,
+    )?.[3]?.redactedResponseMetadata;
+    expect(completedMetadata).toEqual(
+      expect.objectContaining({
+        selectionHandleIds: [handle.id],
+        sourceRefs: [`asset-source:search:${handle.id}`],
+        selectionHandleAssetCount: 1,
+      }),
+    );
+    expect(completedMetadata).not.toHaveProperty('assetIds');
   });
 
   it('searchAssets creates handles for zero-result searches', async () => {
