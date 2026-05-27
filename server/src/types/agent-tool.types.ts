@@ -20,6 +20,17 @@ export type AgentToolReadAssetMetadataRequestMetadata = AgentToolReadAssetIdsReq
 
 export type AgentToolReadAssetMetadataResponseMetadata = AgentToolResponseIdsMetadata;
 
+export type AgentToolReadSelectionMetadataRequestMetadata = {
+  selectionHandleId: string;
+  fields: AgentAssetMetadataField[];
+  sampleSize: number;
+};
+
+export type AgentReadSelectionMetadataCounts = {
+  assets: number;
+  sampled: number;
+};
+
 export type AgentSearchAssetsMode = 'metadata' | 'smart' | 'description' | 'ocr' | 'filename';
 
 export type AgentSearchAssetsOrder = 'asc' | 'desc' | 'relevance';
