@@ -308,9 +308,12 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('## Progressive Detail Workflow');
     expect(markdown).toContain('Resolve names before search');
     expect(markdown).toContain('Search for a handle/sourceRef first');
-    expect(markdown).toContain('Request fields only for exact non-search asset IDs');
+    expect(markdown).toContain('readSelectionMetadata');
+    expect(markdown).toContain('itemRef');
+    expect(markdown).toContain('readAssetMetadata` is legacy exact non-search ID usage');
     expect(markdown).toContain('Visual curation');
     expect(markdown).toContain('Technical metadata');
+    expect(markdown).not.toContain('then call `readAssetMetadata`');
     expect(markdown).toContain('Large album');
     expect(markdown).toContain('All photos');
     expect(markdown).toContain('ask a narrowing question');
@@ -341,6 +344,7 @@ describe(AgentMcpDocsService.name, () => {
       'summary-sample-search',
       'visual-curation-candidate-search',
       'large-album-page-search',
+      'read-selection-metadata-sample',
       'read-technical-fields-for-selected-assets',
     ]) {
       expect(markdown).toContain(name);

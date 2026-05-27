@@ -38,8 +38,7 @@ const safety: AgentMcpToolSafetyContract = {
 
 const approvalRetry: AgentMcpApprovalRetryContract = {
   field: 'toolCallId',
-  instruction:
-    'After Gallery approves a pending read request, retry the same read tool with only toolCallId unless Gallery already supplied the approved result.',
+  instruction: 'After Gallery approves a pending read request, retry with only toolCallId.',
 };
 
 const approvedRetryMode: AgentMcpArgumentMode = {
@@ -54,6 +53,11 @@ const approvedRetryExample: AgentMcpToolExample = {
   name: 'approved-retry',
   description: 'Retry an approved read request by id.',
   arguments: { toolCallId: exampleToolCallId },
+};
+
+const selectionMetadataApprovedRetryMode: AgentMcpArgumentMode = {
+  ...approvedRetryMode,
+  forbiddenFields: ['selectionHandleId', 'fields', 'sampleSize'],
 };
 
 const searchApprovedRetryMode: AgentMcpArgumentMode = {
@@ -183,9 +187,9 @@ const defineAssetReadContract = (
 const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMetadata> = {
   name: AgentToolName.ReadAssetMetadata,
   title: 'Read asset metadata',
-  description: 'Read selected metadata for selected assets.',
+  description: 'Legacy exact non-search metadata read for selected assets.',
   usage:
-    'Search for a handle/sourceRef first, then call this tool only for exact non-search asset IDs with the smallest useful detail preset or fields. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
+    'Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
   examples: [
     assetIdsExample,
@@ -195,6 +199,60 @@ const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMet
     approvedRetryExample,
   ],
   commonMistakes: assetIdMistakes,
+  approvalRetry,
+  safety,
+};
+
+const readSelectionMetadataContract: AgentMcpToolContract<AgentToolName.ReadSelectionMetadata> = {
+  name: AgentToolName.ReadSelectionMetadata,
+  title: 'Read selection metadata',
+  description: 'Read aggregate counts and bounded itemRef metadata samples for a search selection handle.',
+  usage:
+    'Use selectionHandleId from searchAssets selectionHandle.id to inspect search-backed selections. Returns aggregate counts and bounded itemRef samples without provider-visible asset IDs. Use fields for exact metadata groups and sampleSize from 0 to 25. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [
+    {
+      name: 'selection-metadata',
+      description: 'Start a metadata read for a search selection handle.',
+      requiredFields: ['selectionHandleId'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use after searchAssets returns selectionHandle.id and metadata samples are needed.',
+    },
+    selectionMetadataApprovedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'read-selection-metadata-sample',
+      description: 'Read bounded camera, date, and filename metadata samples from a search handle.',
+      arguments: {
+        selectionHandleId: '00000000-0000-4000-8000-000000000333',
+        fields: ['dates', 'camera', 'filename'],
+        sampleSize: 5,
+      },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'selection-metadata-missing-selection-handle-or-tool-call-id',
+      match: {
+        messageIncludes: 'Provide selectionHandleId for a new tool request or toolCallId for an approved request',
+      },
+      hint: 'Call readSelectionMetadata with selectionHandleId from searchAssets selectionHandle.id, or retry an approved request with only toolCallId.',
+      exampleName: 'read-selection-metadata-sample',
+    },
+    {
+      id: 'selection-metadata-combined-selection-handle-and-tool-call-id',
+      match: { messageIncludes: 'Provide either selectionHandleId or toolCallId, not both' },
+      hint: 'Use selectionHandleId for a new selection metadata read or toolCallId for an approved retry, not both.',
+      exampleName: 'approved-retry',
+    },
+    {
+      id: 'selection-metadata-invalid-sample-size',
+      match: { issuePath: 'sampleSize' },
+      hint: 'Use sampleSize from 0 to 25 for readSelectionMetadata.',
+      exampleName: 'read-selection-metadata-sample',
+    },
+  ],
   approvalRetry,
   safety,
 };
@@ -1005,6 +1063,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 const readToolContracts: AgentMcpReadToolContract[] = [
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
+  readSelectionMetadataContract,
   readAssetMetadataContract,
   defineAssetReadContract(
     AgentToolName.ReadAssetPreviews,
