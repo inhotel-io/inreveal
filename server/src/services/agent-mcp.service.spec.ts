@@ -180,6 +180,7 @@ const expectNoMcpDownstreamServicesCalled = (
 ) => {
   expect(toolService.resolveAssetSearchFilters).not.toHaveBeenCalled();
   expect(toolService.searchAssets).not.toHaveBeenCalled();
+  expect(toolService.readSelectionMetadata).not.toHaveBeenCalled();
   expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
   expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
   expect(toolService.readAssetOriginals).not.toHaveBeenCalled();
@@ -478,6 +479,16 @@ describe(AgentMcpService.name, () => {
       serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
     },
     {
+      toolName: AgentToolName.ReadSelectionMetadata,
+      args: { selectionHandleId: factory.uuid(), fields: ['dates'], sampleSize: 2 },
+      serviceMethod: 'readSelectionMetadata' as const,
+      serviceResult: {
+        status: 'success',
+        toolCall: null,
+        summary: 'Read selection metadata for 3 assets with 2 samples',
+      },
+    },
+    {
       toolName: AgentToolName.ReadAssetMetadata,
       args: { assetIds: [factory.uuid()] },
       expectedArgs: { assetIds: [expect.any(String)], detail: 'basic' },
@@ -557,6 +568,47 @@ describe(AgentMcpService.name, () => {
       fields: [],
     });
     expectToolResult(response, `${AgentToolName.SearchAssets}-call`, serviceResult);
+  });
+
+  it('delegates readSelectionMetadata and keeps MCP text compact', async () => {
+    const selectionHandleId = factory.uuid();
+    const serviceResult = {
+      status: 'success',
+      toolCall: null,
+      summary: 'Read selection metadata for 3 assets with 2 samples',
+      selectionHandle: {
+        id: selectionHandleId,
+        sourceRef: `asset-source:search:${selectionHandleId}`,
+        assetCount: 3,
+        sourceToolCallId: null,
+        expiresAt: new Date('2026-05-27T12:00:00.000Z'),
+      },
+      fields: ['dates'],
+      counts: { assets: 3, sampled: 2 },
+      sample: { sampleSize: 2, items: [{ itemRef: 'item:001' }, { itemRef: 'item:002' }] },
+      resultSize: {
+        returnedItems: 2,
+        hasMore: false,
+        nextPage: null,
+        estimatedBytes: 512,
+        truncated: false,
+        omittedFields: [],
+      },
+    };
+    toolService.readSelectionMetadata.mockResolvedValue(serviceResult as never);
+
+    const response = (await sut.handle(
+      auth,
+      sessionId,
+      makeToolCallRequest(AgentToolName.ReadSelectionMetadata, { selectionHandleId, fields: ['dates'], sampleSize: 2 }),
+    )) as AgentMcpSuccessResponse;
+
+    expect(toolService.readSelectionMetadata).toHaveBeenCalledWith(auth, sessionId, {
+      selectionHandleId,
+      fields: ['dates'],
+      sampleSize: 2,
+    });
+    expectToolResult(response, `${AgentToolName.ReadSelectionMetadata}-call`, serviceResult, serviceResult.summary);
   });
 
   it('uses result summary as compact MCP text while preserving structured content', async () => {
@@ -1517,6 +1569,7 @@ describe(AgentMcpService.name, () => {
     it('connects read-tool failure cases to contract common mistakes', () => {
       const expectedReadToolNames = new Set<AgentMcpReadToolName>([
         AgentToolName.SearchAssets,
+        AgentToolName.ReadSelectionMetadata,
         AgentToolName.ReadAssetMetadata,
         AgentToolName.ReadAssetPreviews,
         AgentToolName.ReadAssetOriginals,
