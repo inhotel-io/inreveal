@@ -1000,8 +1000,7 @@ export class AgentToolService {
       score: this.getCurateCandidateScore(asset, input.strategy),
     }));
     const ranked = this.rankCurateCandidates(candidates, input.strategy, input.constraints);
-    const selectedCandidates =
-      input.targetCount >= ranked.length ? candidates : ranked.slice(0, Math.min(input.targetCount, ranked.length));
+    const selectedCandidates = ranked.slice(0, Math.min(input.targetCount, ranked.length));
     const selected = selectedCandidates.map((candidate) => candidate.asset);
     if (input.targetCount > ranked.length) {
       warnings.push(`Requested ${input.targetCount} assets but only ${ranked.length} eligible assets were available.`);
@@ -1074,7 +1073,7 @@ export class AgentToolService {
     }
 
     if (strategy === 'date-spread') {
-      return this.roundRobinCurateGroups(sorted, 'date');
+      return this.roundRobinCurateGroups(sorted, 'date', 'key-desc');
     }
 
     const supportedDiversifiers = constraints.diversifyBy?.filter((value) => value !== 'people') ?? [];
@@ -1105,6 +1104,7 @@ export class AgentToolService {
   private roundRobinCurateGroups(
     candidates: CurateCandidate[],
     diversifyBy: AgentCurateSelectionDiversifyBy,
+    groupOrder: 'base-rank' | 'key-desc' = 'base-rank',
   ): CurateCandidate[] {
     const groups = new Map<string, CurateCandidate[]>();
     for (const candidate of candidates) {
@@ -1115,6 +1115,9 @@ export class AgentToolService {
     const groupQueues = [...groups.entries()]
       .map(([key, group]) => ({ key, group: this.sortCurateCandidates(group) }))
       .sort((left, right) => {
+        if (groupOrder === 'key-desc') {
+          return right.key.localeCompare(left.key);
+        }
         const topCandidateDelta = this.compareCurateCandidates(left.group[0], right.group[0]);
         return topCandidateDelta || left.key.localeCompare(right.key);
       })
