@@ -164,7 +164,7 @@ describe(AgentToolController.name, () => {
         limit: 5,
         page: 1,
         order: 'desc',
-        detail: 'ids',
+        detail: 'handle',
         fields: [],
       } satisfies AgentSearchAssetsToolRequestDto,
       invalidBody: { limit: 0 },
