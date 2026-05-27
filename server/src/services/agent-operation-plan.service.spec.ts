@@ -2164,6 +2164,144 @@ describe(AgentOperationPlanService.name, () => {
     expect(result.plan?.operations[0].assetIds).toEqual(assetIds);
   });
 
+  it('proposeAlbumFromSelection materializes a curated handle into an album create plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+    const selectionHandleId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-05-27T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AlbumCreate,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-album-from-selection',
+          payload: { albumName: 'Curated album', description: 'Selected photos.' },
+        }),
+        makeOperation({
+          type: AgentOperationType.AlbumAddAssets,
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          temporaryTargetId: 'tmp-album-from-selection',
+          assetIds,
+          payload: {},
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    const result = await sut.proposeAlbumFromSelection(auth, session.id, {
+      summary: 'Create curated album.',
+      albumName: 'Curated album',
+      description: 'Selected photos.',
+      selectionHandleId,
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.AlbumCreate,
+            assetIds: [],
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+          expect.objectContaining({
+            type: AgentOperationType.AlbumAddAssets,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(result.plan?.operations[1].assetIds).toEqual(assetIds);
+  });
+
+  it('proposeAssetBatchFromSelection materializes a curated handle into an asset batch plan', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-05-27T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AssetSetFavorite,
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          payload: { favorite: true },
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    const result = await sut.proposeAssetBatchFromSelection(auth, session.id, {
+      summary: 'Favorite selected photos.',
+      action: { type: AgentOperationType.AssetSetFavorite, favorite: true },
+      selectionHandleId,
+    });
+
+    expect(selectionHandleRepository.getValidForPlanning).toHaveBeenCalledWith({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      now: expect.any(Date),
+    });
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            type: AgentOperationType.AssetSetFavorite,
+            assetIds,
+            assetSource: undefined,
+            assetSelectionHandleId: undefined,
+          }),
+        ],
+      }),
+    );
+    expect(result.plan?.operations[0].assetIds).toEqual(assetIds);
+  });
+
   it('re-checks assetSource.selectionHandle assets against current permissions and deleted assets', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id });
