@@ -391,14 +391,16 @@ export class AgentMcpService {
       return operation;
     }
 
-    const { assetIds, result, ...rest } = record;
+    const { assetIds, result, reviewMetadata, ...rest } = record;
     const redactedResult = this.redactProviderFacingPlanningOperationResult(result);
-    if (!Array.isArray(assetIds) && redactedResult === result) {
+    const redactedReviewMetadata = this.redactProviderFacingPlanningReviewMetadata(reviewMetadata);
+    if (!Array.isArray(assetIds) && redactedResult === result && redactedReviewMetadata === reviewMetadata) {
       return operation;
     }
 
     return {
       ...rest,
+      ...(redactedReviewMetadata === undefined ? {} : { reviewMetadata: redactedReviewMetadata }),
       ...(Array.isArray(assetIds) ? { assetCount: assetIds.length } : {}),
       result: redactedResult,
     };
@@ -410,17 +412,95 @@ export class AgentMcpService {
       return result;
     }
 
-    const { assetIds, assetId, assetResults, ...rest } = record;
+    const { assetIds, assetId, assetResults, reviewMetadata, ...rest } = record;
     const assetCount = Array.isArray(assetIds) ? assetIds.length : typeof assetId === 'string' ? 1 : undefined;
     const assetResultsCount = Array.isArray(assetResults) ? assetResults.length : undefined;
-    if (assetCount === undefined && assetResultsCount === undefined) {
+    const redactedReviewMetadata = this.redactProviderFacingPlanningReviewMetadata(reviewMetadata);
+    if (assetCount === undefined && assetResultsCount === undefined && redactedReviewMetadata === reviewMetadata) {
       return result;
     }
 
     return {
       ...rest,
+      ...(redactedReviewMetadata === undefined ? {} : { reviewMetadata: redactedReviewMetadata }),
       ...(assetCount === undefined ? {} : { assetCount }),
       ...(assetResultsCount === undefined ? {} : { assetResultsCount }),
+    };
+  }
+
+  private redactProviderFacingPlanningReviewMetadata(reviewMetadata: unknown): unknown {
+    const record = this.recordValue(reviewMetadata);
+    if (!record) {
+      return reviewMetadata;
+    }
+
+    const assetMetadata = this.recordValue(record.assetMetadata);
+    if (!assetMetadata) {
+      return reviewMetadata;
+    }
+
+    const redactedAssetMetadata = this.redactProviderFacingPlanningAssetMetadata(assetMetadata);
+    if (redactedAssetMetadata === assetMetadata) {
+      return reviewMetadata;
+    }
+
+    return {
+      ...record,
+      assetMetadata: redactedAssetMetadata,
+    };
+  }
+
+  private redactProviderFacingPlanningAssetMetadata(assetMetadata: Record<string, unknown>): Record<string, unknown> {
+    const { sampleAssetIds, fields, ...rest } = assetMetadata;
+    let redacted = false;
+
+    const redactedFields = Array.isArray(fields)
+      ? fields.map((field) => {
+          const redactedField = this.redactProviderFacingPlanningReviewField(field);
+          redacted ||= redactedField !== field;
+          return redactedField;
+        })
+      : fields;
+    if (Array.isArray(sampleAssetIds)) {
+      redacted = true;
+    }
+
+    if (!redacted) {
+      return assetMetadata;
+    }
+
+    return {
+      ...rest,
+      ...(Array.isArray(sampleAssetIds) ? { sampleAssetCount: sampleAssetIds.length } : {}),
+      ...(fields === undefined ? {} : { fields: redactedFields }),
+    };
+  }
+
+  private redactProviderFacingPlanningReviewField(field: unknown): unknown {
+    const record = this.recordValue(field);
+    if (!record || !Array.isArray(record.previousValues)) {
+      return field;
+    }
+
+    let redacted = false;
+    const previousValues = record.previousValues.map((previousValue) => {
+      const previousValueRecord = this.recordValue(previousValue);
+      if (!previousValueRecord || !('assetId' in previousValueRecord)) {
+        return previousValue;
+      }
+
+      const { assetId, ...rest } = previousValueRecord;
+      redacted = true;
+      return rest;
+    });
+
+    if (!redacted) {
+      return field;
+    }
+
+    return {
+      ...record,
+      previousValues,
     };
   }
 
