@@ -431,162 +431,174 @@ Expected: PASS for all `TripCandidateService` tests.
 Append these tests inside `describe(RecentTripMemoryRule.name, () => { ... })` in `server/src/services/memory-rules/recent-trip.rule.spec.ts`:
 
 ```ts
-  it('uses TripCandidateService and keeps memory cards limited to high-confidence candidates', async () => {
-    const assetRepository = {
-      getMemoryLocationClusters: vi.fn(),
-      getMemoryAssetsForLocation: vi.fn(),
-    };
-    const memoryRepository = { search: vi.fn().mockResolvedValue([]) };
-    const tripCandidateService = {
-      findRecentTripCandidates: vi.fn().mockResolvedValue([
-        {
-          confidence: 'low',
-          country: 'France',
-          city: 'Paris',
-          placeKey: 'france:paris',
-          placeLabel: 'Paris, France',
-          title: 'Recent trip to Paris, France',
-          subtitle: '8 photos over 2 days',
-          score: 68,
-          assetCount: 8,
-          dayCount: 2,
-          takenAfter: new Date('2026-04-15T00:00:00Z'),
-          takenBefore: new Date('2026-04-16T00:00:00Z'),
-          source: {
-            places: [{ country: 'France', city: 'Paris' }],
-          },
-        },
-      ]),
-    };
-
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
-    await expect(
-      rule.evaluate({
-        ownerId: 'user-1',
-        target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
-      }),
-    ).resolves.toEqual([]);
-
-    expect(tripCandidateService.findRecentTripCandidates).toHaveBeenCalledWith({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T00:00:00.000Z'),
-      lookbackDays: 30,
-      maxCandidates: 3,
-    });
-    expect(assetRepository.getMemoryAssetsForLocation).not.toHaveBeenCalled();
-  });
-
-  it('preserves recent-trip memory output while using a high-confidence trip candidate', async () => {
-    const assetRepository = {
-      getMemoryLocationClusters: vi.fn(),
-      getMemoryAssetsForLocation: vi
-        .fn()
-        .mockResolvedValue([
-          makeAsset('asset-1', '2026-04-15T09:00:00Z'),
-          makeAsset('asset-2', '2026-04-16T09:00:00Z'),
-          makeAsset('asset-3', '2026-04-17T09:00:00Z'),
-        ]),
-    };
-    const memoryRepository = { search: vi.fn().mockResolvedValue([]) };
-    const tripCandidateService = {
-      findRecentTripCandidates: vi.fn().mockResolvedValue([
-        {
-          confidence: 'high',
-          placeKey: 'france:paris',
-          placeLabel: 'Paris, France',
-          title: 'Recent trip to Paris, France',
-          subtitle: '9 photos over 3 days',
-          score: 85,
-          assetCount: 9,
-          dayCount: 3,
-          takenAfter: new Date('2026-04-15T00:00:00Z'),
-          takenBefore: new Date('2026-04-17T00:00:00Z'),
-          source: {
-            places: [{ country: 'France', city: 'Paris' }],
-          },
-        },
-      ]),
-    };
-
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
-    const [candidate] = await rule.evaluate({
-      ownerId: 'user-1',
-      target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
-    });
-
-    expect(memoryRepository.search).toHaveBeenCalledWith('user-1', {
-      type: MemoryType.Rule,
-      size: 20,
-      order: AssetOrder.Desc,
-    });
-    expect(assetRepository.getMemoryAssetsForLocation).toHaveBeenCalledWith('user-1', {
-      country: 'France',
-      city: 'Paris',
-      takenAfter: new Date('2026-03-24T00:00:00.000Z'),
-      takenBefore: new Date('2026-04-23T23:59:59.999Z'),
-    });
-    expect(candidate).toMatchObject({
-      ruleId: 'recent_trip',
-      dedupeKey: 'recent_trip:france:paris:2026-04-23',
-      title: 'Recent trip to Paris, France',
-      subtitle: '9 photos over 3 days',
-      score: 85,
-      assetIds: ['asset-1', 'asset-2', 'asset-3'],
-      context: {
-        placeKey: 'france:paris',
-        placeLabel: 'Paris, France',
+it('uses TripCandidateService and keeps memory cards limited to high-confidence candidates', async () => {
+  const assetRepository = {
+    getMemoryLocationClusters: vi.fn(),
+    getMemoryAssetsForLocation: vi.fn(),
+  };
+  const memoryRepository = { search: vi.fn().mockResolvedValue([]) };
+  const tripCandidateService = {
+    findRecentTripCandidates: vi.fn().mockResolvedValue([
+      {
+        confidence: 'low',
         country: 'France',
         city: 'Paris',
+        placeKey: 'france:paris',
+        placeLabel: 'Paris, France',
+        title: 'Recent trip to Paris, France',
+        subtitle: '8 photos over 2 days',
+        score: 68,
+        assetCount: 8,
+        dayCount: 2,
+        takenAfter: new Date('2026-04-15T00:00:00Z'),
+        takenBefore: new Date('2026-04-16T00:00:00Z'),
+        source: {
+          places: [{ country: 'France', city: 'Paris' }],
+        },
+      },
+    ]),
+  };
+
+  const rule = new RecentTripMemoryRule(
+    assetRepository as never,
+    memoryRepository as never,
+    tripCandidateService as never,
+  );
+  await expect(
+    rule.evaluate({
+      ownerId: 'user-1',
+      target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
+    }),
+  ).resolves.toEqual([]);
+
+  expect(tripCandidateService.findRecentTripCandidates).toHaveBeenCalledWith({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T00:00:00.000Z'),
+    lookbackDays: 30,
+    maxCandidates: 3,
+  });
+  expect(assetRepository.getMemoryAssetsForLocation).not.toHaveBeenCalled();
+});
+
+it('preserves recent-trip memory output while using a high-confidence trip candidate', async () => {
+  const assetRepository = {
+    getMemoryLocationClusters: vi.fn(),
+    getMemoryAssetsForLocation: vi
+      .fn()
+      .mockResolvedValue([
+        makeAsset('asset-1', '2026-04-15T09:00:00Z'),
+        makeAsset('asset-2', '2026-04-16T09:00:00Z'),
+        makeAsset('asset-3', '2026-04-17T09:00:00Z'),
+      ]),
+  };
+  const memoryRepository = { search: vi.fn().mockResolvedValue([]) };
+  const tripCandidateService = {
+    findRecentTripCandidates: vi.fn().mockResolvedValue([
+      {
+        confidence: 'high',
+        placeKey: 'france:paris',
+        placeLabel: 'Paris, France',
+        title: 'Recent trip to Paris, France',
+        subtitle: '9 photos over 3 days',
+        score: 85,
         assetCount: 9,
         dayCount: 3,
+        takenAfter: new Date('2026-04-15T00:00:00Z'),
+        takenBefore: new Date('2026-04-17T00:00:00Z'),
+        source: {
+          places: [{ country: 'France', city: 'Paris' }],
+        },
       },
-    });
+    ]),
+  };
+
+  const rule = new RecentTripMemoryRule(
+    assetRepository as never,
+    memoryRepository as never,
+    tripCandidateService as never,
+  );
+  const [candidate] = await rule.evaluate({
+    ownerId: 'user-1',
+    target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
   });
 
-  it('keeps the same-place cooldown after trip candidate extraction', async () => {
-    const assetRepository = {
-      getMemoryLocationClusters: vi.fn(),
-      getMemoryAssetsForLocation: vi.fn(),
-    };
-    const memoryRepository = {
-      search: vi.fn().mockResolvedValue([
-        {
-          type: MemoryType.Rule,
-          memoryAt: new Date('2026-04-10T00:00:00Z'),
-          data: { ruleId: 'recent_trip', context: { placeKey: 'france:paris' } },
-        },
-      ]),
-    };
-    const tripCandidateService = {
-      findRecentTripCandidates: vi.fn().mockResolvedValue([
-        {
-          confidence: 'high',
-          placeKey: 'france:paris',
-          placeLabel: 'Paris, France',
-          title: 'Recent trip to Paris, France',
-          subtitle: '9 photos over 3 days',
-          score: 85,
-          assetCount: 9,
-          dayCount: 3,
-          takenAfter: new Date('2026-04-15T00:00:00Z'),
-          takenBefore: new Date('2026-04-17T00:00:00Z'),
-          source: {
-            places: [{ country: 'France', city: 'Paris' }],
-          },
-        },
-      ]),
-    };
-
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
-
-    await expect(
-      rule.evaluate({
-        ownerId: 'user-1',
-        target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
-      }),
-    ).resolves.toEqual([]);
-    expect(assetRepository.getMemoryAssetsForLocation).not.toHaveBeenCalled();
+  expect(memoryRepository.search).toHaveBeenCalledWith('user-1', {
+    type: MemoryType.Rule,
+    size: 20,
+    order: AssetOrder.Desc,
   });
+  expect(assetRepository.getMemoryAssetsForLocation).toHaveBeenCalledWith('user-1', {
+    country: 'France',
+    city: 'Paris',
+    takenAfter: new Date('2026-03-24T00:00:00.000Z'),
+    takenBefore: new Date('2026-04-23T23:59:59.999Z'),
+  });
+  expect(candidate).toMatchObject({
+    ruleId: 'recent_trip',
+    dedupeKey: 'recent_trip:france:paris:2026-04-23',
+    title: 'Recent trip to Paris, France',
+    subtitle: '9 photos over 3 days',
+    score: 85,
+    assetIds: ['asset-1', 'asset-2', 'asset-3'],
+    context: {
+      placeKey: 'france:paris',
+      placeLabel: 'Paris, France',
+      country: 'France',
+      city: 'Paris',
+      assetCount: 9,
+      dayCount: 3,
+    },
+  });
+});
+
+it('keeps the same-place cooldown after trip candidate extraction', async () => {
+  const assetRepository = {
+    getMemoryLocationClusters: vi.fn(),
+    getMemoryAssetsForLocation: vi.fn(),
+  };
+  const memoryRepository = {
+    search: vi.fn().mockResolvedValue([
+      {
+        type: MemoryType.Rule,
+        memoryAt: new Date('2026-04-10T00:00:00Z'),
+        data: { ruleId: 'recent_trip', context: { placeKey: 'france:paris' } },
+      },
+    ]),
+  };
+  const tripCandidateService = {
+    findRecentTripCandidates: vi.fn().mockResolvedValue([
+      {
+        confidence: 'high',
+        placeKey: 'france:paris',
+        placeLabel: 'Paris, France',
+        title: 'Recent trip to Paris, France',
+        subtitle: '9 photos over 3 days',
+        score: 85,
+        assetCount: 9,
+        dayCount: 3,
+        takenAfter: new Date('2026-04-15T00:00:00Z'),
+        takenBefore: new Date('2026-04-17T00:00:00Z'),
+        source: {
+          places: [{ country: 'France', city: 'Paris' }],
+        },
+      },
+    ]),
+  };
+
+  const rule = new RecentTripMemoryRule(
+    assetRepository as never,
+    memoryRepository as never,
+    tripCandidateService as never,
+  );
+
+  await expect(
+    rule.evaluate({
+      ownerId: 'user-1',
+      target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
+    }),
+  ).resolves.toEqual([]);
+  expect(assetRepository.getMemoryAssetsForLocation).not.toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 2: Run memory-rule tests red**

@@ -246,11 +246,11 @@ V1 should stay deterministic and metadata-based:
    primary assets over stack children. Do not delete, trash, unstack, or resolve
    duplicate groups.
 10. **Classify the recommendation.** Mark the result as auto-usable only when
-   the top candidate is high confidence and clearly ahead of the runner-up. V1
-   should use deterministic rules: a single high-confidence candidate is clear;
-   otherwise the top high-confidence candidate must beat the runner-up by at
-   least 20% score or 15 absolute score points. If not, return candidates but
-   tell Pi to ask the user.
+    the top candidate is high confidence and clearly ahead of the runner-up. V1
+    should use deterministic rules: a single high-confidence candidate is clear;
+    otherwise the top high-confidence candidate must beat the runner-up by at
+    least 20% score or 15 absolute score points. If not, return candidates but
+    tell Pi to ask the user.
 
 ### Reusing Memory Logic
 
