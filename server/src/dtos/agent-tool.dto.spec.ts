@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   AgentCurateSelectionToolResponseDto,
   AgentFindTripCandidatesToolRequestDto,
@@ -483,6 +485,26 @@ describe('Agent tool DTOs', () => {
     it('rejects invalid targetDate and overlong placeHint values', () => {
       expectIssue(parseFindTripCandidatesRequest({ targetDate: 'not-a-date' }), ['targetDate'], 'Invalid');
       expectIssue(parseFindTripCandidatesRequest({ placeHint: 'x'.repeat(81) }), ['placeHint'], 'Too big');
+    });
+
+    it('emits targetDate as a scalar string in the generated OpenAPI contract', () => {
+      const openApi = JSON.parse(
+        readFileSync(resolve(process.cwd(), '../open-api/immich-openapi-specs.json'), 'utf8'),
+      ) as {
+        components: {
+          schemas: {
+            AgentFindTripCandidatesToolRequestDto: {
+              properties: {
+                targetDate: Record<string, unknown>;
+              };
+            };
+          };
+        };
+      };
+
+      const targetDate = openApi.components.schemas.AgentFindTripCandidatesToolRequestDto.properties.targetDate;
+      expect(targetDate).toMatchObject({ type: 'string' });
+      expect(targetDate).not.toHaveProperty('anyOf');
     });
 
     it('accepts toolCallId for approved-call resume and rejects mixed retry fields', () => {
