@@ -737,6 +737,60 @@ Retry an approved read request by id.
 }
 ```
 
+### Find trip candidates
+
+MCP tool name: `findTripCandidates`
+
+Find likely recent trip candidates from existing date and location metadata.
+
+Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.
+
+Argument modes:
+
+- `trip-candidate-lookup`: Use before planning trip albums or trip highlight albums, with placeHint when the user names a place.
+  Required fields: none.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `placeHint`, `targetDate`, `lookbackDays`, `maxCandidates`.
+
+#### recent-trip-to-place
+
+Find a recent USA trip candidate.
+
+<!-- mcp-docs:tool-arguments tool="findTripCandidates" example="recent-trip-to-place" -->
+
+```json
+{
+  "placeHint": "USA"
+}
+```
+
+#### recent-trip-without-place
+
+Find recent trip candidates without a place hint.
+
+<!-- mcp-docs:tool-arguments tool="findTripCandidates" example="recent-trip-without-place" -->
+
+```json
+{
+  "lookbackDays": 180,
+  "maxCandidates": 3
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="findTripCandidates" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
 ### Read selection metadata
 
 MCP tool name: `readSelectionMetadata`
@@ -3054,6 +3108,12 @@ Summarize plan risks and selected changes.
 - `search-order-unavailable`: Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.
 - `tool-call-arguments-missing`: Put the search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
+### Find trip candidates
+
+- `trip-candidates-mixed-tool-call-id`: Use either trip search fields for a new request or toolCallId for an approved retry, not both.
+- `trip-candidates-invalid-lookback-days`: Use lookbackDays between 1 and 365.
+- `trip-candidates-invalid-max-candidates`: Use maxCandidates between 1 and 10.
 
 ### Read selection metadata
 
