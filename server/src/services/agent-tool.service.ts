@@ -4,6 +4,8 @@ import { buildAgentSourceRef } from 'src/dtos/agent-asset-source.dto';
 import {
   AgentCurateSelectionToolRequestDto,
   AgentCurateSelectionToolResponseDto,
+  AgentFindTripCandidatesToolRequestDto,
+  AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -63,6 +65,8 @@ import {
 } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
+import { TripCandidateService } from 'src/services/trip-candidate.service';
+import type { TripCandidate } from 'src/services/trip-candidate.service';
 import { UserService } from 'src/services/user.service';
 import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -93,6 +97,7 @@ import {
   AgentSpaceMemberSummary,
   AgentSpaceSummary,
   AgentToolCurateSelectionRequestMetadata,
+  AgentToolFindTripCandidatesRequestMetadata,
   AgentToolListAlbumsRequestMetadata,
   AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
@@ -183,6 +188,35 @@ type CurateCandidate = {
 
 type AgentCurateSelectionAssetType = 'IMAGE' | 'VIDEO';
 
+type TripCandidateToolService = Pick<
+  TripCandidateService,
+  'findRecentTripCandidates' | 'materializeAlbumReadySelection'
+>;
+
+type AgentTripCandidateToolResult = {
+  dedupeKey: string;
+  title: string;
+  subtitle: string;
+  countries: string[];
+  states: string[];
+  cities: string[];
+  takenAfter: Date;
+  takenBefore: Date;
+  assetCount: number;
+  albumAssetCount: number;
+  excludedDuplicateCount: number;
+  excludedStackChildCount: number;
+  dayCount: number;
+  score: number;
+  confidence: TripCandidate['confidence'];
+  placeLabels: string[];
+  selectionHandle: AgentSearchAssetsSelectionHandleResult;
+};
+
+type MaterializedAgentTripCandidate = Omit<AgentTripCandidateToolResult, 'selectionHandle'> & {
+  assetIds: string[];
+};
+
 @Injectable()
 export class AgentToolService {
   private static readonly activeStatuses = [
@@ -192,6 +226,8 @@ export class AgentToolService {
     AgentSessionStatus.WaitingForPlanReview,
     AgentSessionStatus.Interrupted,
   ];
+
+  private readonly tripCandidateService: TripCandidateToolService;
 
   constructor(
     private readonly accessRepository: AccessRepository,
@@ -209,7 +245,9 @@ export class AgentToolService {
     private readonly agentRunnerService: AgentRunnerService,
     private readonly userService: UserService,
     private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
-  ) {}
+  ) {
+    this.tripCandidateService = new TripCandidateService(assetRepository);
+  }
 
   async searchAssets(
     auth: AuthDto,
@@ -217,6 +255,14 @@ export class AgentToolService {
     dto: AgentSearchAssetsToolRequestDto,
   ): Promise<AgentSearchAssetsToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.searchAssetsDescriptor());
+  }
+
+  async findTripCandidates(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentFindTripCandidatesToolRequestDto,
+  ): Promise<AgentFindTripCandidatesToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.findTripCandidatesDescriptor());
   }
 
   async readSelectionMetadata(
@@ -400,6 +446,9 @@ export class AgentToolService {
     switch (toolCall.toolName) {
       case AgentToolName.SearchAssets: {
         return this.searchAssets(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.FindTripCandidates: {
+        return this.findTripCandidates(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ReadSelectionMetadata: {
         return this.readSelectionMetadata(auth, session.id, { toolCallId: toolCall.id });
@@ -678,6 +727,174 @@ export class AgentToolService {
     descriptor: AgentReadToolDescriptor<TRequest, TResult>,
   ): Promise<TRequest> {
     return descriptor.prepareRequest ? descriptor.prepareRequest(auth, session, request) : Promise.resolve(request);
+  }
+
+  private findTripCandidatesDescriptor(): AgentReadToolDescriptor<
+    AgentFindTripCandidatesToolRequestDto,
+    {
+      summary: string;
+      candidates: AgentTripCandidateToolResult[];
+    }
+  > {
+    return {
+      toolName: AgentToolName.FindTripCandidates,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) =>
+        `Find trip candidates${request.placeHint ? ` matching ${request.placeHint}` : ''} (lookback ${request.lookbackDays ?? 180} days, max ${request.maxCandidates ?? 3})`,
+      requestMetadata: (request) =>
+        ({
+          ...(request.placeHint ? { placeHint: request.placeHint } : {}),
+          ...(request.targetDate ? { targetDate: request.targetDate } : {}),
+          lookbackDays: request.lookbackDays ?? 180,
+          maxCandidates: request.maxCandidates ?? 3,
+        }) as AgentToolFindTripCandidatesRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: () => Promise.resolve(null),
+      execute: async (auth, session, request, toolCallId) => {
+        const candidates = await this.tripCandidateService.findRecentTripCandidates({
+          ownerId: auth.user.id,
+          placeHint: request.placeHint,
+          targetDate: request.targetDate,
+          lookbackDays: request.lookbackDays,
+          maxCandidates: request.maxCandidates,
+        });
+        const materializedCandidates: MaterializedAgentTripCandidate[] = [];
+
+        for (const candidate of candidates) {
+          materializedCandidates.push(await this.materializeTripCandidateForTool(auth, session, candidate));
+        }
+
+        const assetCount = materializedCandidates.reduce((total, candidate) => total + candidate.assetIds.length, 0);
+        if (assetCount > session.permissionPlanSnapshot.limits.maxAssetsPerToolCall) {
+          throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
+        }
+
+        if (materializedCandidates.length > 0) {
+          const reservation = await this.toolCallRepository.transitionWithSessionLimit(
+            session.id,
+            toolCallId,
+            AgentToolCallStatus.Executing,
+            {
+              status: AgentToolCallStatus.Executing,
+              approvalDecision: AgentToolApprovalDecision.Approved,
+              responseSummary: 'Tool call execution started',
+              redactedResponseMetadata: null,
+              assetCount,
+              albumCount: 0,
+              completedAt: null,
+              error: null,
+            },
+            AgentToolDataClass.Metadata,
+            session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+          );
+
+          await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+
+          if (reservation.status === 'stale') {
+            throw new BadRequestException('Agent tool call is already executing or completed');
+          }
+
+          if (reservation.status === 'limit-exceeded') {
+            throw new AgentToolRecordedDeniedError(
+              this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession),
+              reservation.toolCall,
+            );
+          }
+        }
+
+        const mappedCandidates: AgentTripCandidateToolResult[] = [];
+        for (const candidate of materializedCandidates) {
+          mappedCandidates.push(await this.createTripCandidateHandle(auth, session, toolCallId, candidate));
+        }
+
+        return {
+          summary: this.getFindTripCandidatesSummary(mappedCandidates.length, request.placeHint),
+          candidates: mappedCandidates,
+        };
+      },
+      responseSummary: (result) => result.summary,
+      responseMetadata: (result) => ({
+        selectionHandleIds: result.candidates.map((candidate) => candidate.selectionHandle.id),
+        sourceRefs: result.candidates.map((candidate) => candidate.selectionHandle.sourceRef),
+        selectionHandleAssetCount: result.candidates.reduce(
+          (total, candidate) => total + candidate.selectionHandle.assetCount,
+          0,
+        ),
+      }),
+      resultAssetCount: (result) =>
+        result.candidates.reduce((total, candidate) => total + candidate.selectionHandle.assetCount, 0),
+      resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.candidates.length,
+        hasMore: false,
+        nextPage: null,
+      }),
+      failedReason: 'Trip candidate lookup failed',
+    };
+  }
+
+  private async materializeTripCandidateForTool(
+    auth: AuthDto,
+    session: AgentSession,
+    candidate: TripCandidate,
+  ): Promise<MaterializedAgentTripCandidate> {
+    const selection = await this.tripCandidateService.materializeAlbumReadySelection(auth.user.id, candidate.source);
+    const readableIds = await this.getReadableAssetIds(auth, session.permissionPlanSnapshot, selection.assetIds);
+    const assetIds = selection.assetIds.filter((assetId) => readableIds.has(assetId));
+
+    return {
+      dedupeKey: candidate.dedupeKey,
+      title: candidate.title,
+      subtitle: candidate.subtitle,
+      countries: candidate.countries,
+      states: candidate.states,
+      cities: candidate.cities,
+      takenAfter: candidate.takenAfter,
+      takenBefore: candidate.takenBefore,
+      assetCount: candidate.assetCount,
+      albumAssetCount: assetIds.length,
+      excludedDuplicateCount: candidate.excludedDuplicateCount,
+      excludedStackChildCount: candidate.excludedStackChildCount,
+      dayCount: candidate.dayCount,
+      score: candidate.score,
+      confidence: candidate.confidence,
+      placeLabels: candidate.source.placeLabels,
+      assetIds,
+    };
+  }
+
+  private async createTripCandidateHandle(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    candidate: MaterializedAgentTripCandidate,
+  ): Promise<AgentTripCandidateToolResult> {
+    const handle = await this.selectionHandleRepository.create({
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: toolCallId,
+      assetIds: candidate.assetIds,
+      expiresAt: this.getSelectionHandleExpiresAt(session),
+    });
+    const { assetIds: _assetIds, ...result } = candidate;
+
+    return {
+      ...result,
+      albumAssetCount: handle.assetCount,
+      selectionHandle: this.mapSearchSelectionHandle(handle),
+    };
+  }
+
+  private getFindTripCandidatesSummary(candidateCount: number, placeHint?: string) {
+    const suffix = placeHint ? ` matching "${placeHint}"` : '';
+    if (candidateCount === 0) {
+      return `No trip candidates found${suffix}.`;
+    }
+
+    return `Found ${candidateCount} trip candidate${candidateCount === 1 ? '' : 's'}${suffix}.`;
   }
 
   private searchAssetsDescriptor(): AgentReadToolDescriptor<
