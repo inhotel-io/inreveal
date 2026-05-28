@@ -350,6 +350,57 @@ const isJanuary2026UsaTripFilter = (filters) =>
   filters?.takenAfter === '2026-01-01T00:00:00.000Z' &&
   filters?.takenBefore === '2026-02-01T00:00:00.000Z';
 
+const parseRecentTripPrompt = (prompt) => {
+  if (!/\brecent\s+trip\b/i.test(prompt) || !/\balbum\b/i.test(prompt)) {
+    return null;
+  }
+
+  const placeHint = /\b(?:USA|United States|U\.S\.)\b/i.test(prompt) ? 'USA' : null;
+  const countMatch =
+    prompt.match(/(?:^|\s)(-?\d+)\s+(?:best\s+)?(?:highlights?|photos?)\b/i) ??
+    prompt.match(/\b(?:best|top|pick|choose|suggest)\s+(-?\d+)\s+(?:highlights?|photos?)\b/i);
+  const requestedCount = countMatch ? Number(countMatch[1]) : null;
+  const highlights = /\b(top|best|highlights?)\b/i.test(prompt);
+  const albumName = /called\b/i.test(prompt)
+    ? extractAlbumName(prompt)
+    : highlights
+      ? `${placeHint ?? 'Trip'} Highlights`
+      : `${placeHint ?? 'Recent'} Trip`;
+
+  return {
+    placeHint,
+    highlights,
+    requestedCount,
+    effectiveCount: highlights ? requestedCount ?? defaultHighlightCount : null,
+    albumName,
+  };
+};
+
+const tripCandidateDateRange = (candidate) => {
+  const after = new Date(candidate.takenAfter);
+  const before = new Date(candidate.takenBefore);
+  const month = after.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+  const startDay = after.getUTCDate();
+  const endDay = before.getUTCDate();
+  const year = before.getUTCFullYear();
+  return `${month} ${startDay}-${endDay}, ${year}`;
+};
+
+const tripCandidateLabel = (candidate) =>
+  Array.isArray(candidate.placeLabels) && candidate.placeLabels.length > 0
+    ? candidate.placeLabels.join(' and ')
+    : candidate.title?.replace(/^Recent trip to\s+/i, '') || candidate.subtitle || 'that trip';
+
+const duplicateExclusionText = (candidate) => {
+  const duplicateCount = candidate.excludedDuplicateCount ?? 0;
+  const stackCount = candidate.excludedStackChildCount ?? 0;
+  if (duplicateCount === 0 && stackCount === 0) return '';
+  const parts = [];
+  if (duplicateCount > 0) parts.push(`${duplicateCount} known duplicate variant${duplicateCount === 1 ? '' : 's'}`);
+  if (stackCount > 0) parts.push(`${stackCount} stack child${stackCount === 1 ? '' : 'ren'}`);
+  return ` I skipped ${parts.join(' and ')}.`;
+};
+
 const parseHighlightPrompt = (prompt) => {
   if (!/\b(best|highlights?)\b/i.test(prompt)) {
     return null;
@@ -636,6 +687,20 @@ const proposeMetadataHighlightAlbumFromSelection = async (client, intent, select
   });
 };
 
+const proposeTripAlbumFromSelection = async (client, { albumName, selectionHandleId, assetCount, candidate, highlights }) => {
+  const label = tripCandidateLabel(candidate);
+  await client.call('proposeAlbumFromSelection', {
+    summary: highlights
+      ? `Create ${albumName} with ${assetCount} metadata-only curated highlights from ${label}.`
+      : `Create ${albumName} with ${assetCount} trip assets from ${label}.`,
+    albumName,
+    description: highlights
+      ? 'Trip highlights selected from metadata signals. No previews were inspected.'
+      : `Album-ready trip selection from ${label}. Known duplicate variants and stack children were excluded when detected.`,
+    selectionHandleId,
+  });
+};
+
 const resolveExistingAlbum = async (client, targetAlbumName) => {
   const result = await client.call('listAlbums', {});
   assertMcpResultSuccess(result, 'Album list');
@@ -875,6 +940,104 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           });
           return;
         }
+      }
+
+      const tripPrompt = parseRecentTripPrompt(prompt);
+      if (tripPrompt) {
+        const tripResult = await client.call('findTripCandidates', tripPrompt.placeHint ? { placeHint: tripPrompt.placeHint } : {});
+        assertMcpResultSuccess(tripResult, 'Trip candidate lookup');
+        const candidates = Array.isArray(tripResult.candidates) ? tripResult.candidates : [];
+        const recommendation = tripResult.recommendation;
+
+        if (tripPrompt.highlights && tripPrompt.requestedCount !== null && tripPrompt.requestedCount <= 0) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'Please choose a positive count before I suggest trip highlights.',
+          });
+          return;
+        }
+
+        if (tripPrompt.highlights && tripPrompt.effectiveCount > metadataHighlightCandidateLimit) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'Please choose 1000 or fewer trip highlights, or narrow the source before curation.',
+          });
+          return;
+        }
+
+        if (recommendation?.action === 'none' || candidates.length === 0) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'I could not find a likely recent trip from the available date and location metadata. Which date range or place should I use for the album?',
+          });
+          return;
+        }
+
+        if (recommendation?.action === 'ask_user') {
+          const labels = candidates.map(tripCandidateLabel).slice(0, 5).join('; ');
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: `I found multiple possible recent trips: ${labels}. Which one should I use?`,
+          });
+          return;
+        }
+
+        const candidate = candidates.find((item) => item.dedupeKey === recommendation?.candidateDedupeKey) ?? candidates[0];
+        const selectionHandleId = candidate?.selectionHandle?.id;
+        if (!candidate || !selectionHandleId) {
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: 'I found a trip candidate but could not get an album-ready selection handle. Please try again or give me a date range.',
+          });
+          return;
+        }
+
+        if (tripPrompt.highlights) {
+          const tripSourceName = `${tripPrompt.placeHint ?? 'Recent'} Trip`;
+          const curated = await curateMetadataHighlights(
+            client,
+            selectionHandleId,
+            tripPrompt.effectiveCount,
+            `top metadata-only highlights from ${tripSourceName}`,
+          );
+          const selectedCount =
+            typeof curated.selectedAssetCount === 'number'
+              ? curated.selectedAssetCount
+              : curated.selectionHandle.assetCount ?? tripPrompt.effectiveCount;
+          await proposeTripAlbumFromSelection(client, {
+            albumName: tripPrompt.albumName,
+            selectionHandleId: curated.selectionHandle.id,
+            assetCount: selectedCount,
+            candidate,
+            highlights: true,
+          });
+          yield completedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: `I found a likely ${tripCandidateLabel(candidate)} trip from ${tripCandidateDateRange(candidate)} and proposed ${selectedCount} metadata-only suggested highlights for ${tripPrompt.albumName}. Review the plan before applying it.`,
+          });
+          return;
+        }
+
+        const assetCount = candidate.selectionHandle.assetCount ?? candidate.albumAssetCount ?? 0;
+        await proposeTripAlbumFromSelection(client, {
+          albumName: tripPrompt.albumName,
+          selectionHandleId,
+          assetCount,
+          candidate,
+          highlights: false,
+        });
+        yield completedEvent({
+          gallerySessionId,
+          runnerSessionId,
+          text: `I found a likely ${tripCandidateLabel(candidate)} trip from ${tripCandidateDateRange(candidate)} and proposed ${tripPrompt.albumName} with ${assetCount} assets.${duplicateExclusionText(candidate)} Review the plan before applying it.`,
+        });
+        return;
       }
 
       const highlightPrompt = parseHighlightPrompt(prompt);
