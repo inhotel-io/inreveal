@@ -159,6 +159,16 @@ export interface MemoryLocationCluster {
   lastDate: Date;
 }
 
+export interface MemoryLocationDayBucket {
+  localDate: Date;
+  country: string | null;
+  state: string | null;
+  city: string | null;
+  assetCount: number;
+  firstDate: Date;
+  lastDate: Date;
+}
+
 interface AssetExploreFieldOptions {
   maxFields: number;
   minAssetsPerField: number;
@@ -806,6 +816,46 @@ export class AssetRepository {
         ),
       )
       .groupBy(['asset_exif.country', 'asset_exif.city'])
+      .orderBy('assetCount', 'desc')
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, { takenAfter: DummyValue.DATE, takenBefore: DummyValue.DATE }] })
+  getMemoryLocationDayBuckets(
+    ownerId: string,
+    { takenAfter, takenBefore }: { takenAfter: Date; takenBefore: Date },
+  ): Promise<MemoryLocationDayBucket[]> {
+    const localDate = sql<Date>`date_trunc('day', asset."localDateTime" at time zone 'UTC') at time zone 'UTC'`;
+
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select([
+        localDate.as('localDate'),
+        'asset_exif.country as country',
+        'asset_exif.state as state',
+        'asset_exif.city as city',
+        sql<number>`count(*)::int`.as('assetCount'),
+        sql<Date>`min(asset."localDateTime")`.as('firstDate'),
+        sql<Date>`max(asset."localDateTime")`.as('lastDate'),
+      ])
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '>=', takenAfter)
+      .where('asset.localDateTime', '<=', takenBefore)
+      .where('asset_exif.country', 'is not', null)
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .groupBy([localDate, 'asset_exif.country', 'asset_exif.state', 'asset_exif.city'])
+      .orderBy('localDate', 'asc')
       .orderBy('assetCount', 'desc')
       .execute();
   }
