@@ -252,6 +252,18 @@ class ApiClient {
           return AgentDeclarativeSpaceFilter.fromJson(value);
         case 'AgentExplicitAssetsAssetSourceInput':
           return AgentExplicitAssetsAssetSourceInput.fromJson(value);
+        case 'AgentFindTripCandidatesToolApprovalRequiredResponse':
+          return AgentFindTripCandidatesToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentFindTripCandidatesToolDeniedResponse':
+          return AgentFindTripCandidatesToolDeniedResponse.fromJson(value);
+        case 'AgentFindTripCandidatesToolRequestDto':
+          return AgentFindTripCandidatesToolRequestDto.fromJson(value);
+        case 'AgentFindTripCandidatesToolRequestDtoTargetDate':
+          return AgentFindTripCandidatesToolRequestDtoTargetDate.fromJson(value);
+        case 'AgentFindTripCandidatesToolResponseDto':
+          return AgentFindTripCandidatesToolResponseDto.fromJson(value);
+        case 'AgentFindTripCandidatesToolSuccessResponse':
+          return AgentFindTripCandidatesToolSuccessResponse.fromJson(value);
         case 'AgentListAlbumsToolApprovalRequiredResponse':
           return AgentListAlbumsToolApprovalRequiredResponse.fromJson(value);
         case 'AgentListAlbumsToolDeniedResponse':
@@ -602,6 +614,14 @@ class ApiClient {
           return AgentToolNameTypeTransformer().decode(value);
         case 'AgentToolResultSize':
           return AgentToolResultSize.fromJson(value);
+        case 'AgentTripCandidateNonAutoRecommendation':
+          return AgentTripCandidateNonAutoRecommendation.fromJson(value);
+        case 'AgentTripCandidateRecommendation':
+          return AgentTripCandidateRecommendation.fromJson(value);
+        case 'AgentTripCandidateSummary':
+          return AgentTripCandidateSummary.fromJson(value);
+        case 'AgentTripCandidateUseTopRecommendation':
+          return AgentTripCandidateUseTopRecommendation.fromJson(value);
         case 'AgentUserLookupResult':
           return AgentUserLookupResult.fromJson(value);
         case 'AgentUserMessageContent':
