@@ -103,6 +103,7 @@ export enum AgentMessageRole {
 
 export enum AgentToolName {
   SearchAssets = 'searchAssets',
+  FindTripCandidates = 'findTripCandidates',
   ReadSelectionMetadata = 'readSelectionMetadata',
   CurateSelection = 'curateSelection',
   ResolveAssetSearchFilters = 'resolveAssetSearchFilters',

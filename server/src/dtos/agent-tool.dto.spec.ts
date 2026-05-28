@@ -1,5 +1,7 @@
 import {
   AgentCurateSelectionToolResponseDto,
+  AgentFindTripCandidatesToolRequestDto,
+  AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -48,6 +50,8 @@ type AgentToolApprovalInput = z.input<typeof AgentToolApprovalDto.schema>;
 
 const parseRequest = (input: AgentReadAssetMetadataToolRequestInput) =>
   AgentReadAssetMetadataToolRequestDto.schema.safeParse(input);
+const parseFindTripCandidatesRequest = (input: unknown) =>
+  AgentFindTripCandidatesToolRequestDto.schema.safeParse(input);
 const parseSearchAssetsRequest = (input: unknown) => AgentSearchAssetsToolRequestDto.schema.safeParse(input);
 const parseReadAssetPreviewsRequest = (input: AgentReadAssetPreviewsToolRequestInput) =>
   AgentReadAssetPreviewsToolRequestDto.schema.safeParse(input);
@@ -407,6 +411,98 @@ describe('Agent tool DTOs', () => {
       expect(JSON.stringify(encoded.data)).not.toContain('"assetIds"');
       expect(JSON.stringify(encoded.data)).not.toContain('"assetId"');
       expect(JSON.stringify(encoded.data)).not.toContain('"sampleAssetIds"');
+    });
+  });
+
+  describe(AgentFindTripCandidatesToolRequestDto.name, () => {
+    it('defaults trip candidate request bounds for recent trip discovery', () => {
+      const result = parseFindTripCandidatesRequest({});
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({
+          lookbackDays: 180,
+          maxCandidates: 3,
+        });
+      }
+    });
+
+    it('accepts boundary lookbackDays and maxCandidates values', () => {
+      expect(parseFindTripCandidatesRequest({ lookbackDays: 1, maxCandidates: 1 }).success).toBe(true);
+      expect(parseFindTripCandidatesRequest({ lookbackDays: 365, maxCandidates: 10 }).success).toBe(true);
+    });
+
+    it('rejects out-of-bound lookbackDays and maxCandidates values', () => {
+      expectIssue(parseFindTripCandidatesRequest({ lookbackDays: 0 }), ['lookbackDays'], 'Too small');
+      expectIssue(parseFindTripCandidatesRequest({ lookbackDays: 366 }), ['lookbackDays'], 'Too big');
+      expectIssue(parseFindTripCandidatesRequest({ maxCandidates: 0 }), ['maxCandidates'], 'Too small');
+      expectIssue(parseFindTripCandidatesRequest({ maxCandidates: 11 }), ['maxCandidates'], 'Too big');
+    });
+
+    it('accepts ISO date or datetime targetDate values and trims placeHint', () => {
+      const dateOnlyResult = parseFindTripCandidatesRequest({
+        targetDate: '2026-05-27',
+        placeHint: '  USA  ',
+      });
+      const datetimeResult = parseFindTripCandidatesRequest({
+        targetDate: '2026-05-27T12:00:00.000Z',
+        placeHint: '  USA  ',
+      });
+
+      expect(dateOnlyResult.success).toBe(true);
+      if (dateOnlyResult.success) {
+        expect(dateOnlyResult.data).toMatchObject({
+          targetDate: new Date('2026-05-27'),
+          placeHint: 'USA',
+        });
+      }
+      expect(datetimeResult.success).toBe(true);
+      if (datetimeResult.success) {
+        expect(datetimeResult.data).toMatchObject({
+          targetDate: new Date('2026-05-27T12:00:00.000Z'),
+          placeHint: 'USA',
+        });
+      }
+    });
+
+    it('rejects targetDate more than one day in the future', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-27T12:00:00.000Z'));
+      try {
+        expect(parseFindTripCandidatesRequest({ targetDate: '2026-05-28T12:00:00.000Z' }).success).toBe(true);
+        expectIssue(
+          parseFindTripCandidatesRequest({ targetDate: '2026-05-28T12:00:00.001Z' }),
+          ['targetDate'],
+          'targetDate must not be more than one day in the future',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects invalid targetDate and overlong placeHint values', () => {
+      expectIssue(parseFindTripCandidatesRequest({ targetDate: 'not-a-date' }), ['targetDate'], 'Invalid');
+      expectIssue(parseFindTripCandidatesRequest({ placeHint: 'x'.repeat(81) }), ['placeHint'], 'Too big');
+    });
+
+    it('accepts toolCallId for approved-call resume and rejects mixed retry fields', () => {
+      const toolCallId = factory.uuid();
+      const retry = parseFindTripCandidatesRequest({ toolCallId });
+
+      expect(retry.success).toBe(true);
+      if (retry.success) {
+        expect(retry.data).toEqual({ toolCallId });
+      }
+
+      expectIssue(
+        parseFindTripCandidatesRequest({ toolCallId, placeHint: 'USA' }),
+        [],
+        'Provide either trip search fields or toolCallId, not both',
+      );
+    });
+
+    it('publishes the typed response DTO name', () => {
+      expect(AgentFindTripCandidatesToolResponseDto.name).toBe('AgentFindTripCandidatesToolResponseDto');
     });
   });
 

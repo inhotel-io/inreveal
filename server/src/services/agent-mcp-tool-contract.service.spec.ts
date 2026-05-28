@@ -6,6 +6,7 @@ import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contrac
 const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.FindTripCandidates,
   AgentToolName.ReadSelectionMetadata,
   AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
@@ -371,6 +372,16 @@ describe(AgentMcpToolContractService.name, () => {
     );
   });
 
+  it('documents the trip candidate handle-first workflow', () => {
+    const tripContract = sut.getReadToolContract(AgentToolName.FindTripCandidates);
+
+    expect(tripContract?.description).toMatch(/trip/i);
+    expect(tripContract?.usage).toMatch(/selectionHandle/i);
+    expect(tripContract?.usage).toMatch(/proposeAlbumFromSelection/i);
+    expect(tripContract?.examples.some((example) => example.arguments.placeHint === 'USA')).toBe(true);
+    expect(tripContract?.commonMistakes.map(({ id }) => id)).toContain('trip-candidates-mixed-tool-call-id');
+  });
+
   it('documents compact readAssetMetadata detail presets and field-selected reads', () => {
     const contract = sut.getReadToolContract(AgentToolName.ReadAssetMetadata);
 
@@ -417,13 +428,14 @@ describe(AgentMcpToolContractService.name, () => {
     expect(JSON.stringify(contract)).not.toMatch(/private|rawPath|storageKey|checksum|original path|bearer|token/i);
   });
 
-  it('documents readSelectionMetadata immediately after searchAssets for selection metadata reads', () => {
+  it('documents readSelectionMetadata after handle-producing discovery tools for selection metadata reads', () => {
     const contracts = sut.listReadToolContracts();
     const contract = sut.getReadToolContract(AgentToolName.ReadSelectionMetadata);
 
-    expect(contracts.map((item) => item.name).slice(0, 5)).toEqual([
+    expect(contracts.map((item) => item.name).slice(0, 6)).toEqual([
       AgentToolName.ResolveAssetSearchFilters,
       AgentToolName.SearchAssets,
+      AgentToolName.FindTripCandidates,
       AgentToolName.ReadSelectionMetadata,
       AgentToolName.CurateSelection,
       AgentToolName.ReadAssetMetadata,
