@@ -638,7 +638,9 @@ describe(AgentToolService.name, () => {
     const session = makeSession({
       userId: auth.user.id,
       approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({ limits: { maxAssetsPerToolCall: 1 } }),
+      permissionPlanSnapshot: makePlan({
+        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 },
+      }),
     });
 
     sessionRepository.getById.mockResolvedValue(session);
