@@ -102,8 +102,12 @@ export const testAssetDirInternal = '/test-assets';
 export const tempDir = tmpdir();
 export const asBearerAuth = (accessToken: string) => ({ Authorization: `Bearer ${accessToken}` });
 export const asKeyAuth = (key: string) => ({ 'x-api-key': key });
+const cliPackage = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../cli/package.json'), 'utf8')) as {
+  bin?: Record<string, string>;
+};
+const cliBin = Object.values(cliPackage.bin ?? {})[0] ?? './bin/immich';
 export const immichCli = (args: string[]) =>
-  executeCommand('pnpm', ['exec', 'immich', '-d', `/${tempDir}/immich/`, ...args], { cwd: '../cli' }).promise;
+  executeCommand(cliBin, ['-d', `/${tempDir}/immich/`, ...args], { cwd: '../cli' }).promise;
 export const dockerExec = (args: string[]) =>
   executeCommand('docker', ['exec', '-i', 'immich-e2e-server', '/bin/bash', '-c', args.join(' ')]);
 export const immichAdmin = (args: string[]) => dockerExec([`immich-admin ${args.join(' ')}`]);
