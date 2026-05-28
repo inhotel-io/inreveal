@@ -126,7 +126,7 @@ const makeTripCandidate = (overrides = {}) => ({
   ...overrides,
 });
 
-const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendation, planResult } = {}) => {
+const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendation, planResult, planError } = {}) => {
   const calls = [];
   const resolvedRecommendation =
     recommendation ??
@@ -148,6 +148,10 @@ const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendati
       }
 
       if (name === 'proposeAlbumFromSelection') {
+        if (planError) {
+          throw planError;
+        }
+
         return (
           planResult ?? {
             status: 'success',
@@ -247,5 +251,164 @@ describe('create_recent_trip_album workflow execution', () => {
     assert.equal(result.status, 'needs_input');
     assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
     assert.match(result.text, /could not match/i);
+  });
+
+  it('does not emit success copy when planning succeeds without a persisted plan id', async () => {
+    const { client, calls } = createWorkflowClient({
+      planResult: { status: 'success', summary: 'Stored proposal but no id.' },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+    assert.match(result.text, /could not create a reviewable album plan/i);
+  });
+
+  it('does not emit success copy when planning is denied', async () => {
+    const { client } = createWorkflowClient({
+      planResult: { status: 'denied', reason: 'Search source did not match any assets' },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.text, /Search source did not match any assets/i);
+    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('does not call planning for a zero-asset candidate handle', async () => {
+    const { client, calls } = createWorkflowClient({
+      candidates: [makeTripCandidate({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } })],
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'needs_input');
+    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
+    assert.match(result.text, /found no album-ready assets/i);
+  });
+
+  it('returns approval_required without assistant success text', async () => {
+    const { client } = createWorkflowClient({
+      planResult: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'approval_required');
+    assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
+    assert.equal(result.text, '');
+  });
+
+  it('fails safely when approval_required has no usable tool call id', async () => {
+    const { client } = createWorkflowClient({
+      planResult: {
+        status: 'approval-required',
+        toolCall: { id: '' },
+      },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+    assert.match(result.text, /could not create a reviewable album plan/i);
+  });
+
+  it('accepts an approved planning result through the same plan-id gate', async () => {
+    const { client, calls } = createWorkflowClient();
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      approvedPlanResult: { status: 'success', planId: tripPlanId },
+    });
+
+    assert.equal(result.status, 'planned');
+    assert.equal(result.planId, tripPlanId);
+    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
+    assert.match(result.text, /Review the plan before applying it/);
+  });
+
+  it('returns safe failure text when planning throws a redacted tool error', async () => {
+    const { client } = createWorkflowClient({
+      planError: new Error('Gallery MCP JSON-RPC error -32001: token [redacted] was rejected'),
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.text, /\[redacted\]/);
+    assert.doesNotMatch(result.text, /token abc123|secret-value|plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('redacts credential-shaped planning exception details before user-facing output', async () => {
+    const rawValues = [
+      'auth-token-123',
+      'bearer-token-456',
+      'query-api-key-789',
+      'header-api-key-abc',
+      'spaced-api-key-def',
+      'password-value-123',
+      'password-value-456',
+      'secret-equals-123',
+      'secret-colon-456',
+      'secret-word-789',
+      'token-word-abc',
+      'secret-value-extra',
+    ];
+    const { client } = createWorkflowClient({
+      planError: new Error(
+        [
+          'Authorization: Bearer auth-token-123',
+          'Bearer bearer-token-456',
+          'api_key=query-api-key-789',
+          'apiKey: header-api-key-abc',
+          'api-key spaced-api-key-def',
+          'password=password-value-123',
+          'password: password-value-456',
+          'secret=secret-equals-123',
+          'secret: secret-colon-456',
+          'secret value secret-word-789',
+          'token token-word-abc',
+          'secret-value-extra',
+        ].join(' '),
+      ),
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.text, /\[redacted\]/);
+    for (const rawValue of rawValues) {
+      assert.equal(result.text.includes(rawValue), false, rawValue);
+    }
+    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
   });
 });
