@@ -122,6 +122,23 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
   const registeredModels = [];
   let listener;
   const abortGate = createDeferred();
+  const fakeAssistantMessage = (text) => ({
+    role: 'assistant',
+    content: [{ type: 'text', text }],
+    api: 'openai-responses',
+    provider: 'openai',
+    model: 'gpt-5-mini',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp: Date.now(),
+  });
   const session = {
     sessionId: 'pi-sdk-session-1',
     agent: {
@@ -131,8 +148,8 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
           type: 'message_update',
           assistantMessageEvent: { type: 'text_delta', delta: 'Approved. Continuing.' },
         });
-        this.messages?.push?.({ role: 'assistant', content: [{ type: 'text', text: 'Approved. Continuing.' }] });
-        session.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'Approved. Continuing.' }] });
+        this.messages?.push?.(fakeAssistantMessage('Approved. Continuing.'));
+        session.messages.push(fakeAssistantMessage('Approved. Continuing.'));
         listener?.({ type: 'message_end' });
       },
       abort() {
@@ -159,11 +176,17 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
     },
     async prompt(text) {
       calls.prompts.push(text);
+      for (const message of this.messages) {
+        if (message.role === 'assistant') {
+          // Mirrors Pi's context accounting: assistant messages in the transcript must carry usage.
+          void message.usage.totalTokens;
+        }
+      }
       this.emitAssistantDelta('I can help.');
       if (promptGate) {
         await Promise.race([promptGate.promise, abortGate.promise]);
       }
-      this.messages.push({ role: 'assistant', content: [{ type: 'text', text: 'I can help.' }] });
+      this.messages.push(fakeAssistantMessage('I can help.'));
       this.emitMessageEnd();
     },
     dispose() {

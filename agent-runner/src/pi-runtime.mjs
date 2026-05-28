@@ -600,16 +600,48 @@ const sanitizedErrorMessageWithSecrets = (error, secrets) => {
 const sanitizeSessionError = (error, entry) =>
   sanitizedErrorMessageWithSecrets(error, [entry.credentialSecret, entry.mcpToken]);
 
-const appendStrictWorkflowTranscript = (session, prompt, assistantText) => {
+const zeroUsage = Object.freeze({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: Object.freeze({
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+  }),
+});
+
+const syntheticAssistantMessage = ({ text, model }) => ({
+  role: 'assistant',
+  content: [{ type: 'text', text }],
+  api: 'openai-responses',
+  provider: 'openai',
+  model: model ?? 'unknown',
+  usage: zeroUsage,
+  stopReason: 'stop',
+  timestamp: Date.now(),
+});
+
+const syntheticUserMessage = (text) => ({
+  role: 'user',
+  content: [{ type: 'text', text }],
+  timestamp: Date.now(),
+});
+
+const appendStrictWorkflowTranscript = (session, prompt, assistantText, { model } = {}) => {
   if (!Array.isArray(session.messages)) {
     return;
   }
 
   if (prompt) {
-    session.messages.push({ role: 'user', content: [{ type: 'text', text: prompt }] });
+    session.messages.push(syntheticUserMessage(prompt));
   }
   if (assistantText) {
-    session.messages.push({ role: 'assistant', content: [{ type: 'text', text: assistantText }] });
+    session.messages.push(syntheticAssistantMessage({ text: assistantText, model }));
   }
 };
 
@@ -955,12 +987,12 @@ export const createPiRuntime = ({
           });
           if (resolved.status === 'expired') {
             entry.pendingStrictWorkflow = undefined;
-            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text);
+            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text, { model: entry.model });
             yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
             return;
           }
           if (resolved.status === 'needs_input') {
-            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text);
+            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text, { model: entry.model });
             yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
             return;
           }
@@ -987,7 +1019,7 @@ export const createPiRuntime = ({
               return;
             }
 
-            appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text);
+            appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text, { model: entry.model });
             yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: workflowResult.text });
             return;
           }
@@ -1043,7 +1075,7 @@ export const createPiRuntime = ({
             return;
           }
 
-          appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text);
+          appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text, { model: entry.model });
           yield strictCompletedEvent({
             gallerySessionId,
             runnerSessionId,
@@ -1268,7 +1300,7 @@ export const createPiRuntime = ({
           const pending = entry.pendingStrictWorkflow;
           entry.pendingStrictWorkflow = undefined;
           if (approvalDecision !== 'approved') {
-            appendStrictWorkflowTranscript(entry.session, undefined, strictApprovalDeniedText);
+            appendStrictWorkflowTranscript(entry.session, undefined, strictApprovalDeniedText, { model: entry.model });
             yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: strictApprovalDeniedText });
             return;
           }
@@ -1288,7 +1320,7 @@ export const createPiRuntime = ({
             return;
           }
 
-          appendStrictWorkflowTranscript(entry.session, undefined, workflowResult.text);
+          appendStrictWorkflowTranscript(entry.session, undefined, workflowResult.text, { model: entry.model });
           yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: workflowResult.text });
           return;
         } catch (error) {
