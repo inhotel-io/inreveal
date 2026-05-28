@@ -8,12 +8,12 @@ Branch: `explore/pi-agent-brainstorm`
 
 Pi should be able to handle requests like:
 
-> Create an album of the top highlights for my recent trip to USA.
+> Create an album for my recent trip to USA.
 
 without asking the user to provide dates, a count, and media-type preferences up
 front. A trip request is already reviewable: Gallery can infer a likely source,
-curate suggested highlights, create an editable plan, and let the user correct
-the plan before applying it.
+exclude obvious duplicates when possible, create an editable plan, and let the
+user correct the plan before applying it.
 
 The missing piece is a server-side trip detector. The LLM should not infer trip
 windows from tiny samples or raw asset IDs. Gallery should detect likely trip
@@ -54,9 +54,12 @@ assistant workflows:
   confidence, dedupe key, and source descriptor.
 - Add a handle-first MCP read tool so Pi can resolve trip sources without seeing
   raw asset IDs.
-- Let Pi proceed with sensible defaults for highlight album requests: default
-  to 10 suggested highlights and photos/videos matching the source unless the
-  user says otherwise.
+- Let Pi proceed with sensible defaults for trip album requests: include most
+  eligible trip assets, exclude known duplicate variants and stack children when
+  possible, and include photos/videos matching the source unless the user says
+  otherwise.
+- Keep highlight requests as a variant: if the user explicitly asks for "top",
+  "best", or "highlights", curate a smaller suggested set from the trip handle.
 - Reuse the detector from `RecentTripMemoryRule` where practical.
 - Keep proactive album suggestions out of the shipped scope while preserving a
   candidate shape they can consume later.
@@ -73,6 +76,11 @@ assistant workflows:
 - No direct album creation or automatic apply. All writes remain reviewable
   operation plans.
 - No raw asset ID arrays in model-facing trip tool responses.
+- No duplicate cleanup, trashing, or duplicate resolution. The album source may
+  skip known duplicate variants, but it must not mutate duplicate groups.
+- No new semantic duplicate detector. Duplicate exclusion uses existing
+  `duplicateId`, stack primary/child state, and any current duplicate keeper
+  heuristic already available in Gallery.
 - No objective "best photo" scoring. Highlight selection remains
   metadata-based suggested curation until a future quality-analysis capability
   exists.
@@ -81,30 +89,44 @@ assistant workflows:
 
 ## User-Facing Behavior
 
-### Recent Trip Highlight Album
+### Recent Trip Album
+
+For:
+
+> Create an album for my recent trip to USA.
+
+Pi should:
+
+1. Call the trip candidate tool with a place hint for USA.
+2. If one high-confidence candidate exists, propose a reviewable album plan from
+   that candidate's album-ready selection handle.
+3. Use a concise album name, for example `USA Trip`.
+4. Explain assumptions briefly:
+
+> I found a likely USA trip from May 3-12 and proposed an album with 176 assets.
+> I skipped 8 known duplicate or stacked variants. Review the album plan before
+> applying it.
+
+Pi should not ask for dates or count before trying this flow.
+
+### Recent Trip Highlights Variant
 
 For:
 
 > Create an album of the top highlights for my recent trip to USA.
 
-Pi should:
-
-1. Call the trip candidate tool with a place hint for USA.
-2. If one high-confidence candidate exists, curate the default 10 metadata-only
-   highlights from that candidate's selection handle.
-3. Propose a reviewable album plan, for example `USA Highlights`.
-4. Explain assumptions briefly:
-
-> I found a likely USA trip from May 3-12 with 184 assets and proposed 10
-> metadata-only suggested highlights. Review the album plan before applying it.
-
-Pi should not ask for dates or count before trying this flow.
+Pi should use the same trip candidate tool first. After a high-confidence trip
+candidate is found, it should pass the album-ready selection handle to
+`curateSelection` and default to 10 metadata-only suggested highlights when the
+user does not specify a count. This is a narrower variant of the full trip album
+flow, not the default behavior for generic "create an album for my trip"
+requests.
 
 ### Recent Trip Without Place
 
 For:
 
-> Make a highlights album from my recent trip.
+> Make an album from my recent trip.
 
 Pi should call the same tool without a place hint. If the detector finds one
 clear recent travel window, Pi proceeds. If multiple similarly strong candidates
@@ -119,10 +141,10 @@ Pi should ask only after the detector runs when:
 
 - no trip candidate is found;
 - multiple candidates are too close in score/confidence;
-- the best candidate exceeds safe curation limits and cannot be narrowed
-  automatically;
+- the best candidate exceeds safe album materialization limits and cannot be
+  narrowed automatically;
 - the user asks for an invalid count such as zero, negative, or more than the
-  configured highlight maximum;
+  configured highlight maximum for an explicit highlights request;
 - the place hint cannot match metadata labels with enough confidence.
 
 ## Backend Design
@@ -150,6 +172,8 @@ type TripCandidate = {
   takenAfter: Date;
   takenBefore: Date;
   assetCount: number;
+  albumAssetCount: number;
+  excludedDuplicateCount: number;
   dayCount: number;
   score: number;
   confidence: 'high' | 'medium' | 'low';
@@ -215,7 +239,13 @@ V1 should stay deterministic and metadata-based:
    materialization may need a dedicated repository query or a selection handle
    from the candidate asset set because current search filters do not express
    country OR country cleanly.
-9. **Classify the recommendation.** Mark the result as auto-usable only when
+9. **Build the album-ready asset set.** For generic trip album requests,
+   materialize a handle that includes most eligible trip assets while skipping
+   known duplicate variants and stack children. Use existing duplicate metadata
+   only: prefer the same keeper heuristic as duplicate review, and prefer stack
+   primary assets over stack children. Do not delete, trash, unstack, or resolve
+   duplicate groups.
+10. **Classify the recommendation.** Mark the result as auto-usable only when
    the top candidate is high confidence and clearly ahead of the runner-up. V1
    should use deterministic rules: a single high-confidence candidate is clear;
    otherwise the top high-confidence candidate must beat the runner-up by at
@@ -261,6 +291,25 @@ one place.
 Future shared-space trip detection can extend the detector, but it is out of
 scope for this feature unless the existing agent search/materialization path
 already supports it safely.
+
+### Duplicate Exclusion
+
+The default trip album selection should be "most useful trip photos", not every
+row that matched the date/location window.
+
+V1 duplicate exclusion is conservative:
+
+- Exclude known stack children when the stack primary is in the same candidate.
+- For assets sharing a non-null `duplicateId`, include one keeper when that
+  duplicate group is fully inside the candidate. Use Gallery's existing
+  duplicate keeper heuristic rather than inventing a new one.
+- If a duplicate group is only partially inside the trip candidate, include the
+  in-candidate asset and report no duplicate exclusion for that group unless the
+  server can prove the better keeper is also in the candidate.
+- Report exclusion counts in the trip candidate response.
+
+This is not duplicate cleanup. The user can still use the existing duplicate UI
+to resolve duplicate groups globally.
 
 ## MCP Tool
 
@@ -311,6 +360,8 @@ type FindTripCandidatesResponse = {
     takenAfter: string;
     takenBefore: string;
     assetCount: number;
+    albumAssetCount: number;
+    excludedDuplicateCount: number;
     dayCount: number;
     score: number;
     confidence: 'high' | 'medium' | 'low';
@@ -320,6 +371,10 @@ type FindTripCandidatesResponse = {
       sourceRef: string;
       assetCount: number;
       expiresAt: string;
+    };
+    exclusionSummary?: {
+      knownDuplicateVariants: number;
+      stackChildren: number;
     };
   }>;
 };
@@ -337,8 +392,10 @@ follow this recommendation instead of independently interpreting scores.
 If the request is invalid, return the normal Gallery MCP validation result with
 retryable hints.
 
-The tool must create selection handles server-side. Pi should pass the selected
-candidate handle to `curateSelection`, then pass the curated handle to
+The tool must create album-ready selection handles server-side. For generic trip
+album requests, Pi should pass the selected candidate handle directly to
+`proposeAlbumFromSelection`. For explicit highlight requests, Pi should pass the
+selected candidate handle to `curateSelection`, then pass the curated handle to
 `proposeAlbumFromSelection`.
 
 ## Pi Guidance
@@ -347,8 +404,10 @@ Update the runner prompt and generated MCP cheat sheet guidance:
 
 - For "recent trip" requests, call `findTripCandidates` before asking for
   dates.
-- If the user asks for "top highlights" without a count, default to 10 after a
-  trip candidate is found.
+- For generic trip album requests, use the album-ready trip candidate handle
+  directly and do not narrow to highlights.
+- If the user explicitly asks for "top", "best", or "highlights" without a
+  count, default to 10 after a trip candidate is found.
 - If `recommendation.action` is `use_top_candidate`, proceed with a reviewable
   plan for that candidate.
 - If `recommendation.action` is `ask_user`, ask one question with candidate
@@ -356,7 +415,8 @@ Update the runner prompt and generated MCP cheat sheet guidance:
 - If `recommendation.action` is `none`, explain that no likely trip was found,
   ask for one concrete source such as a date range or place if the user still
   wants the album, and do not create a plan.
-- Disclose metadata-only curation and assumptions in the final message.
+- Disclose assumptions and duplicate/stack exclusions in the final message.
+- Disclose metadata-only curation only for explicit highlight variants.
 - Never copy asset IDs from trip detection or search results.
 
 ## Future Album Suggestions
@@ -419,7 +479,30 @@ Implementation:
 - Add window merging and place summarization.
 - Add scoring for recency, day count, asset count, place hint, and continuity.
 
-### Slice 3: Place Hint Filtering
+### Slice 3: Album-Ready Trip Selection
+
+Tests:
+
+- Generic trip album candidates expose an album-ready selection count that is
+  less than or equal to the full candidate asset count.
+- Known duplicate groups inside the trip candidate keep one suggested keeper and
+  exclude the other variants from the album-ready handle.
+- Stack children are excluded when the stack primary is also inside the trip
+  candidate.
+- Duplicate groups that only partially overlap the trip candidate do not exclude
+  the in-candidate asset unless the server can prove the keeper is also inside
+  the candidate.
+- Exclusion counts distinguish known duplicate variants from stack children.
+- No duplicate records, stack records, or asset visibility fields are mutated.
+
+Implementation:
+
+- Add album-ready materialization on top of trip candidate sources.
+- Reuse Gallery's existing duplicate keeper heuristic where possible.
+- Keep duplicate exclusion internal to source materialization and response
+  counts; do not expose raw asset IDs to Pi.
+
+### Slice 4: Place Hint Filtering
 
 Tests:
 
@@ -439,13 +522,15 @@ Implementation:
 - Apply place hints before candidate scoring.
 - Do not call external geocoding services.
 
-### Slice 4: MCP Read Tool
+### Slice 5: MCP Read Tool
 
 Tests:
 
 - `findTripCandidates` returns candidate summaries and selection handles.
 - Response contains no raw asset IDs.
 - Empty result returns `status: success` and `candidates: []`.
+- Candidate responses include `assetCount`, `albumAssetCount`,
+  `excludedDuplicateCount`, and duplicate/stack exclusion summary counts.
 - Invalid `lookbackDays`, `maxCandidates`, and `targetDate` values return
   validation errors.
 - Boundary values for `lookbackDays` and `maxCandidates` are accepted at the
@@ -455,6 +540,8 @@ Tests:
   inaccessible assets.
 - Multi-country candidates materialize through a dedicated source path without
   dropping countries that cannot fit into a single current search filter.
+- The selection handle asset count matches `albumAssetCount`, not the raw trip
+  source count.
 
 Implementation:
 
@@ -462,19 +549,26 @@ Implementation:
 - Materialize candidate sources into selection handles.
 - Regenerate OpenAPI/client artifacts as required by the repo.
 
-### Slice 5: Pi Flow Integration
+### Slice 6: Pi Flow Integration
 
 Tests:
 
+- Prompt: "Create an album for my recent trip to USA" calls
+  `findTripCandidates -> proposeAlbumFromSelection`.
+- The generic trip album flow uses the album-ready candidate handle directly and
+  does not call `curateSelection`.
 - Prompt: "Create an album of the top highlights for my recent trip to USA"
   calls `findTripCandidates -> curateSelection -> proposeAlbumFromSelection`.
-- The flow defaults to 10 highlights when no count is provided.
+- The explicit highlights flow defaults to 10 highlights when no count is
+  provided.
 - The flow creates a reviewable plan and does not ask for dates first.
 - Multiple close candidates produce one clarifying question with labels.
 - No candidate produces an explanatory answer, one concrete follow-up question,
   and no plan.
 - The runner follows `recommendation.action` instead of independently deciding
   whether scores are close.
+- Generic trip album final copy mentions skipped known duplicate/stacked
+  variants when exclusion counts are non-zero.
 - The provider-visible transcript contains no raw asset IDs.
 
 Implementation:
@@ -494,34 +588,47 @@ Implementation:
 - Multiple trips to the same place are separated by date windows and dedupe keys.
 - Trips spanning a year boundary should produce one date window if the travel
   days are contiguous.
-- A very large candidate should still return a handle; curation limits decide
-  whether Pi can proceed or must ask to narrow.
+- A very large candidate should still return a handle when it is within album
+  materialization limits; curation limits apply only to explicit highlight
+  variants.
+- A duplicate group spanning two trips should not cause the current trip album
+  to exclude its only in-trip asset unless the kept variant is also in the same
+  trip candidate.
 - Existing memory cooldown should not suppress MCP trip candidates. Cooldown is
   only for creating memory cards.
 - Future `targetDate` values beyond the validation grace period are rejected.
 - Shared-space-only assets are not included in V1 trip candidates unless a
   future slice explicitly extends trip detection to shared-space access.
-- Candidate handles can expire between trip detection and curation; Pi should
-  rerun `findTripCandidates` if a handle-expired validation hint says to retry.
+- Candidate handles can expire between trip detection and downstream planning or
+  curation; Pi should rerun `findTripCandidates` if a handle-expired validation
+  hint says to retry.
 
 ## Manual Testing
 
 - On a local seeded library, create home assets plus a recent multi-day USA
-  trip and verify Pi proposes a `USA Highlights` album without asking for
-  dates.
+  trip and verify Pi proposes a `USA Trip` album without asking for dates.
+- Add a duplicate group and a stack inside the trip and verify the proposed
+  album skips known duplicate/stacked variants without deleting or resolving
+  duplicates.
 - On a library with two recent trips, verify Pi asks which concrete trip to use.
 - On a library with a multi-country continuous trip, verify one candidate is
   returned with multiple countries.
 - On Pierre's personal instance, ask:
-  "Create an album of the top highlights for my recent trip to USA."
+  "Create an album for my recent trip to USA."
   Confirm Pi uses trip detection, creates a reviewable plan, and avoids raw IDs.
+- Also ask the explicit highlights variant and confirm it uses
+  `curateSelection` only after resolving the trip candidate.
 - Verify the existing recent-trip memory job still creates equivalent memory
   cards after the service extraction.
 
 ## Acceptance Criteria
 
 - Pi can resolve "recent trip to USA" through a server-side trip candidate tool
-  and create a reviewable highlights album plan with no up-front clarification.
+  and create a reviewable full trip album plan with no up-front clarification.
+- Generic trip album plans include most eligible trip assets and skip known
+  duplicate/stacked variants when Gallery can identify them.
+- Explicit highlight requests still create smaller suggested highlight albums
+  from the same trip candidate source.
 - Trip candidates are handle-first and do not expose asset ID arrays to the LLM.
 - Multi-country trips can be represented as one candidate when date continuity
   indicates one trip.
