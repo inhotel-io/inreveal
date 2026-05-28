@@ -65,8 +65,8 @@ import {
 } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
-import { TripCandidateService } from 'src/services/trip-candidate.service';
 import type { TripCandidate } from 'src/services/trip-candidate.service';
+import { TripCandidateService } from 'src/services/trip-candidate.service';
 import { UserService } from 'src/services/user.service';
 import { AgentIdDomain, AgentSearchSourceRef } from 'src/types/agent-asset-source.types';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -212,6 +212,10 @@ type AgentTripCandidateToolResult = {
   placeLabels: string[];
   selectionHandle: AgentSearchAssetsSelectionHandleResult;
 };
+
+type AgentTripCandidateRecommendation =
+  | { action: 'use_top_candidate'; candidateDedupeKey: string; reason: string }
+  | { action: 'ask_user' | 'none'; reason: string };
 
 type MaterializedAgentTripCandidate = Omit<AgentTripCandidateToolResult, 'selectionHandle'> & {
   assetIds: string[];
@@ -733,6 +737,7 @@ export class AgentToolService {
     AgentFindTripCandidatesToolRequestDto,
     {
       summary: string;
+      recommendation: AgentTripCandidateRecommendation;
       candidates: AgentTripCandidateToolResult[];
     }
   > {
@@ -815,6 +820,7 @@ export class AgentToolService {
 
         return {
           summary: this.getFindTripCandidatesSummary(mappedCandidates.length, request.placeHint),
+          recommendation: this.buildTripCandidateRecommendation(mappedCandidates),
           candidates: mappedCandidates,
         };
       },
@@ -898,6 +904,39 @@ export class AgentToolService {
     }
 
     return `Found ${candidateCount} trip candidate${candidateCount === 1 ? '' : 's'}${suffix}.`;
+  }
+
+  private buildTripCandidateRecommendation(
+    candidates: AgentTripCandidateToolResult[],
+  ): AgentTripCandidateRecommendation {
+    const [top, runnerUp] = candidates;
+    if (!top) {
+      return { action: 'none', reason: 'No readable trip candidates matched the request.' };
+    }
+
+    if (top.confidence !== 'high') {
+      return { action: 'ask_user', reason: 'The best matching trip candidate is not high confidence.' };
+    }
+
+    if (!runnerUp) {
+      return {
+        action: 'use_top_candidate',
+        candidateDedupeKey: top.dedupeKey,
+        reason: 'The only readable trip candidate is high confidence.',
+      };
+    }
+
+    const scoreDelta = top.score - runnerUp.score;
+    const clearsRelativeGap = runnerUp.score <= 0 ? scoreDelta > 0 : top.score >= runnerUp.score * 1.2;
+    if (scoreDelta >= 15 || clearsRelativeGap) {
+      return {
+        action: 'use_top_candidate',
+        candidateDedupeKey: top.dedupeKey,
+        reason: 'The top trip candidate is high confidence and clearly ahead of the runner-up.',
+      };
+    }
+
+    return { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' };
   }
 
   private searchAssetsDescriptor(): AgentReadToolDescriptor<

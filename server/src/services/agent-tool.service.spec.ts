@@ -527,6 +527,11 @@ describe(AgentToolService.name, () => {
       return;
     }
     expect(result.summary).toBe('Found 1 trip candidate matching "USA".');
+    expect(result.recommendation).toEqual({
+      action: 'use_top_candidate',
+      candidateDedupeKey: candidate.dedupeKey,
+      reason: 'The only readable trip candidate is high confidence.',
+    });
     expect(result.candidates).toEqual([
       expect.objectContaining({
         dedupeKey: candidate.dedupeKey,
@@ -567,6 +572,83 @@ describe(AgentToolService.name, () => {
       }),
     );
     expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('findTripCandidates recommends the clear high-confidence top candidate after materialization', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const top = makeTripCandidate({ score: 80, confidence: 'high' });
+    const runnerUp = makeTripCandidate({
+      dedupeKey: 'trip:usa:boston:2026-04-20:2026-04-22',
+      title: 'Recent trip to Boston, USA',
+      score: 60,
+      confidence: 'high',
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([top, runnerUp]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'USA',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.recommendation).toEqual({
+        action: 'use_top_candidate',
+        candidateDedupeKey: top.dedupeKey,
+        reason: 'The top trip candidate is high confidence and clearly ahead of the runner-up.',
+      });
+    }
+  });
+
+  it('findTripCandidates asks the user when candidates are close or not high confidence and returns none for empty results', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
+      makeTripCandidate({ score: 80, confidence: 'high' }),
+      makeTripCandidate({ dedupeKey: 'trip:usa:close', score: 70, confidence: 'high' }),
+    ]);
+    const closeResult = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'USA',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+    expect(closeResult.status).toBe('success');
+    if (closeResult.status === 'success') {
+      expect(closeResult.recommendation).toMatchObject({ action: 'ask_user' });
+    }
+
+    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
+      makeTripCandidate({ score: 90, confidence: 'medium' }),
+    ]);
+    const mediumResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+    expect(mediumResult.status).toBe('success');
+    if (mediumResult.status === 'success') {
+      expect(mediumResult.recommendation).toMatchObject({ action: 'ask_user' });
+    }
+
+    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([]);
+    const noneResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+    expect(noneResult.status).toBe('success');
+    if (noneResult.status === 'success') {
+      expect(noneResult.recommendation).toEqual({
+        action: 'none',
+        reason: 'No readable trip candidates matched the request.',
+      });
+    }
   });
 
   it('findTripCandidates drops fully unreadable materialized candidates before reserving counts or returning metadata', async () => {
@@ -622,7 +704,9 @@ describe(AgentToolService.name, () => {
 
     const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
 
-    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds: [readableAssetId] }));
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [readableAssetId] }),
+    );
     expect(result.status).toBe('success');
     if (result.status === 'success') {
       expect(result.candidates[0]).toMatchObject({
