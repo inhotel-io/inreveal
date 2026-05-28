@@ -1,6 +1,6 @@
 {
   "name": "immich-i18n",
-  "version": "2.7.5",
+  "version": "4.56.7",
   "private": true,
   "scripts": {
     "format": "prettier --cache --check .",

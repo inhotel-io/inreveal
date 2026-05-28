@@ -23,6 +23,7 @@ import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:immich_mobile/services/auth.service.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/services/localization.service.dart';
+import 'package:immich_mobile/utils/background_downloader_recovery.dart';
 import 'package:immich_mobile/utils/bootstrap.dart';
 import 'package:immich_mobile/utils/debug_print.dart';
 import 'package:immich_mobile/wm_executor.dart';
@@ -95,6 +96,7 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
       );
 
       configureFileDownloaderNotifications();
+      scheduleBackgroundDownloaderRecovery();
 
       // Notify the host that the background worker service has been initialized and is ready to use
       unawaited(_backgroundHostApi.onInitialized());

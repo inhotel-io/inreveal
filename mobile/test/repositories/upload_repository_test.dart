@@ -13,6 +13,24 @@ void main() {
   TestUtils.init();
 
   group('UploadRepository', () {
+    test('can disable and restore the background downloader holding queue', () async {
+      final configurations = <List<(String, dynamic)>>[];
+      final repository = UploadRepository.forTesting(
+        backgroundDownloaderMethodInvoker: (_, _) => Future<void>.value(),
+        backgroundDownloaderConfigurator: (globalConfig) async {
+          configurations.add(globalConfig);
+        },
+      );
+
+      await repository.disableHoldingQueue();
+      await repository.restoreDefaultHoldingQueue();
+
+      expect(configurations, [
+        [(Config.holdingQueue, Config.never)],
+        [(Config.holdingQueue, (6, 6, 3))],
+      ]);
+    });
+
     test('updateNotification posts the backup group notification without waiting for the native reply', () async {
       final calls = <({String method, Object? arguments})>[];
       final nativeReply = Completer<void>();

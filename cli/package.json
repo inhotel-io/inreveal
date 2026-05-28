@@ -1,11 +1,11 @@
 {
   "name": "@immich/cli",
-  "version": "2.7.5",
-  "description": "Command Line Interface (CLI) for Immich",
+  "version": "4.56.7",
+  "description": "Command Line Interface (CLI) for Noodle Gallery",
   "type": "module",
   "exports": "./dist/index.js",
   "bin": {
-    "immich": "./bin/immich"
+    "noodle-gallery": "./bin/immich"
   },
   "license": "GNU Affero General Public License version 3",
   "keywords": [

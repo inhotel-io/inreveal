@@ -451,7 +451,7 @@
     },
     "/admin/database-backups/start-restore": {
       "post": {
-        "description": "Put Immich into maintenance mode to restore a backup (Immich must not be configured)",
+        "description": "Put Noodle Gallery into maintenance mode to restore a backup (Noodle Gallery must not be configured)",
         "operationId": "startDatabaseRestoreFlow",
         "parameters": [],
         "responses": {
@@ -587,7 +587,7 @@
     },
     "/admin/maintenance": {
       "post": {
-        "description": "Put Immich into or take it out of maintenance mode",
+        "description": "Put Noodle Gallery into or take it out of maintenance mode",
         "operationId": "setMaintenanceMode",
         "parameters": [],
         "requestBody": {
@@ -11846,7 +11846,7 @@
     },
     "/server/statistics": {
       "get": {
-        "description": "Retrieve statistics about the entire Immich instance such as asset counts.",
+        "description": "Retrieve statistics about the entire Noodle Gallery instance such as asset counts.",
         "operationId": "getServerStatistics",
         "parameters": [],
         "responses": {
@@ -19615,8 +19615,8 @@
     }
   },
   "info": {
-    "title": "Immich",
-    "description": "Immich API",
+    "title": "Noodle Gallery",
+    "description": "Noodle Gallery API",
     "version": "2.7.5",
     "contact": {}
   },
@@ -19631,11 +19631,11 @@
     },
     {
       "name": "API keys",
-      "description": "An api key can be used to programmatically access the Immich API."
+      "description": "An api key can be used to programmatically access the Noodle Gallery API."
     },
     {
       "name": "Assets",
-      "description": "An asset is an image or video that has been uploaded to Immich."
+      "description": "An asset is an image or video that has been uploaded to Noodle Gallery."
     },
     {
       "name": "Authentication",
@@ -19647,7 +19647,7 @@
     },
     {
       "name": "Database Backups (admin)",
-      "description": "Manage backups of the Immich database."
+      "description": "Manage backups of the Noodle Gallery database."
     },
     {
       "name": "Deprecated",
@@ -19675,7 +19675,7 @@
     },
     {
       "name": "Maintenance (admin)",
-      "description": "Maintenance mode allows you to put Immich in a read-only state to perform various operations."
+      "description": "Maintenance mode allows you to put Noodle Gallery in a read-only state to perform various operations."
     },
     {
       "name": "Map",
@@ -19687,7 +19687,7 @@
     },
     {
       "name": "Notifications",
-      "description": "A notification is a specialized message sent to users to inform them of important events. Currently, these notifications are only shown in the Immich web application."
+      "description": "A notification is a specialized message sent to users to inform them of important events. Currently, these notifications are only shown in the Noodle Gallery web application."
     },
     {
       "name": "Notifications (admin)",
@@ -21329,7 +21329,7 @@
             "type": "string"
           },
           "createdAt": {
-            "description": "The UTC timestamp when the asset was originally uploaded to Immich.",
+            "description": "The UTC timestamp when the asset was originally uploaded to Noodle Gallery.",
             "format": "date-time",
             "type": "string"
           },

@@ -18,23 +18,31 @@ import 'package:immich_mobile/utils/debug_print.dart';
 final uploadRepositoryProvider = Provider((ref) => UploadRepository());
 
 typedef BackgroundDownloaderMethodInvoker = Future<void> Function(String method, Object? arguments);
+typedef BackgroundDownloaderConfigurator = Future<void> Function(List<(String, dynamic)> globalConfig);
 
 class UploadRepository {
   final Logger logger = Logger('UploadRepository');
   static const _backgroundDownloaderChannel = MethodChannel('com.bbflight.background_downloader');
   final BackgroundDownloaderMethodInvoker _backgroundDownloaderMethodInvoker;
+  final BackgroundDownloaderConfigurator _backgroundDownloaderConfigurator;
   void Function(TaskStatusUpdate)? onUploadStatus;
   void Function(TaskProgressUpdate)? onTaskProgress;
 
   UploadRepository()
     : _backgroundDownloaderMethodInvoker = ((method, arguments) =>
-          _backgroundDownloaderChannel.invokeMethod<void>(method, arguments)) {
+          _backgroundDownloaderChannel.invokeMethod<void>(method, arguments)),
+      _backgroundDownloaderConfigurator = ((globalConfig) => FileDownloader().configure(globalConfig: globalConfig)) {
     _registerCallbacks();
   }
 
   @visibleForTesting
-  UploadRepository.forTesting({required BackgroundDownloaderMethodInvoker backgroundDownloaderMethodInvoker})
-    : _backgroundDownloaderMethodInvoker = backgroundDownloaderMethodInvoker;
+  UploadRepository.forTesting({
+    required BackgroundDownloaderMethodInvoker backgroundDownloaderMethodInvoker,
+    BackgroundDownloaderConfigurator? backgroundDownloaderConfigurator,
+  }) : _backgroundDownloaderMethodInvoker = backgroundDownloaderMethodInvoker,
+       _backgroundDownloaderConfigurator =
+           backgroundDownloaderConfigurator ??
+           ((globalConfig) => FileDownloader().configure(globalConfig: globalConfig));
 
   void _registerCallbacks() {
     FileDownloader().registerCallbacks(
@@ -60,6 +68,14 @@ class UploadRepository {
 
   Future<List<bool>> enqueueBackgroundAll(List<UploadTask> tasks) {
     return FileDownloader().enqueueAll(tasks);
+  }
+
+  Future<void> disableHoldingQueue() {
+    return _backgroundDownloaderConfigurator([(Config.holdingQueue, Config.never)]);
+  }
+
+  Future<void> restoreDefaultHoldingQueue() {
+    return _backgroundDownloaderConfigurator([(Config.holdingQueue, (6, 6, 3))]);
   }
 
   Future<void> updateNotification(Task task, TaskStatus? status) {
