@@ -732,6 +732,114 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  describe('getMemoryLocationDayBuckets', () => {
+    it('should group previewable timeline assets by UTC day, country, state, and city', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const addAsset = async ({
+        localDateTime,
+        country,
+        state = null,
+        city,
+        visibility = AssetVisibility.Timeline,
+        withPreview = true,
+      }: {
+        localDateTime: Date;
+        country: string | null;
+        state?: string | null;
+        city: string | null;
+        visibility?: AssetVisibility;
+        withPreview?: boolean;
+      }) => {
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime });
+        await Promise.all([
+          ctx.newExif({ assetId: asset.id, country, state, city }),
+          withPreview
+            ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+            : null,
+        ]);
+      };
+
+      await addAsset({
+        localDateTime: new Date('2026-04-15T09:00:00Z'),
+        country: 'France',
+        state: 'Ile-de-France',
+        city: 'Paris',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-15T17:00:00Z'),
+        country: 'France',
+        state: 'Ile-de-France',
+        city: 'Paris',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-16T10:00:00Z'),
+        country: 'France',
+        state: 'Auvergne-Rhone-Alpes',
+        city: 'Lyon',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-17T10:00:00Z'),
+        country: 'Italy',
+        state: 'Lazio',
+        city: 'Rome',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-18T10:00:00Z'),
+        country: 'France',
+        city: 'Paris',
+        withPreview: false,
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-19T10:00:00Z'),
+        country: null,
+        city: null,
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-20T10:00:00Z'),
+        country: 'France',
+        city: 'Nice',
+        visibility: AssetVisibility.Archive,
+      });
+
+      await expect(
+        sut.getMemoryLocationDayBuckets(user.id, {
+          takenAfter: new Date('2026-04-01T00:00:00Z'),
+          takenBefore: new Date('2026-04-30T23:59:59Z'),
+        }),
+      ).resolves.toEqual([
+        {
+          localDate: new Date('2026-04-15T00:00:00.000Z'),
+          country: 'France',
+          state: 'Ile-de-France',
+          city: 'Paris',
+          assetCount: 2,
+          firstDate: new Date('2026-04-15T09:00:00.000Z'),
+          lastDate: new Date('2026-04-15T17:00:00.000Z'),
+        },
+        {
+          localDate: new Date('2026-04-16T00:00:00.000Z'),
+          country: 'France',
+          state: 'Auvergne-Rhone-Alpes',
+          city: 'Lyon',
+          assetCount: 1,
+          firstDate: new Date('2026-04-16T10:00:00.000Z'),
+          lastDate: new Date('2026-04-16T10:00:00.000Z'),
+        },
+        {
+          localDate: new Date('2026-04-17T00:00:00.000Z'),
+          country: 'Italy',
+          state: 'Lazio',
+          city: 'Rome',
+          assetCount: 1,
+          firstDate: new Date('2026-04-17T10:00:00.000Z'),
+          lastDate: new Date('2026-04-17T10:00:00.000Z'),
+        },
+      ]);
+    });
+  });
+
   describe('getMemoryAssetsForLocation', () => {
     it('should return previewable timeline assets for the requested country and city, including city=null', async () => {
       const { ctx, sut } = setup();
