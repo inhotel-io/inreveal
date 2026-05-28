@@ -68,6 +68,20 @@ const searchApprovedRetryMode: AgentMcpArgumentMode = {
   whenToUse: 'Use only after Gallery resumes the assistant from an approved search request.',
 };
 
+const tripCandidateLookupMode: AgentMcpArgumentMode = {
+  name: 'trip-candidate-lookup',
+  description: 'Find likely recent trip candidates and album-ready selection handles.',
+  requiredFields: [],
+  forbiddenFields: ['toolCallId'],
+  whenToUse:
+    'Use before planning trip albums or trip highlight albums, with placeHint when the user names a place.',
+};
+
+const tripCandidateApprovedRetryMode: AgentMcpArgumentMode = {
+  ...approvedRetryMode,
+  forbiddenFields: ['placeHint', 'targetDate', 'lookbackDays', 'maxCandidates'],
+};
+
 const assetIdsMode: AgentMcpArgumentMode = {
   name: 'asset-ids',
   description: 'Start a new asset read request for selected assets.',
@@ -777,6 +791,50 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
   safety,
 };
 
+const findTripCandidatesContract: AgentMcpToolContract<AgentToolName.FindTripCandidates> = {
+  name: AgentToolName.FindTripCandidates,
+  title: 'Find trip candidates',
+  description: 'Find likely recent trip candidates from existing date and location metadata.',
+  usage:
+    'Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.',
+  argumentModes: [tripCandidateLookupMode, tripCandidateApprovedRetryMode],
+  examples: [
+    {
+      name: 'recent-trip-to-place',
+      description: 'Find a recent USA trip candidate.',
+      arguments: { placeHint: 'USA' },
+    },
+    {
+      name: 'recent-trip-without-place',
+      description: 'Find recent trip candidates without a place hint.',
+      arguments: { lookbackDays: 180, maxCandidates: 3 },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'trip-candidates-mixed-tool-call-id',
+      match: { messageIncludes: 'Provide either trip search fields or toolCallId, not both' },
+      hint: 'Use either trip search fields for a new request or toolCallId for an approved retry, not both.',
+      exampleName: 'approved-retry',
+    },
+    {
+      id: 'trip-candidates-invalid-lookback-days',
+      match: { issuePath: 'lookbackDays' },
+      hint: 'Use lookbackDays between 1 and 365.',
+      exampleName: 'recent-trip-without-place',
+    },
+    {
+      id: 'trip-candidates-invalid-max-candidates',
+      match: { issuePath: 'maxCandidates' },
+      hint: 'Use maxCandidates between 1 and 10.',
+      exampleName: 'recent-trip-without-place',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const resolverApprovedRetryMode: AgentMcpArgumentMode = {
   name: 'approved-retry',
   description: 'Retry a filter resolver request that Gallery already approved.',
@@ -1137,6 +1195,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 const readToolContracts: AgentMcpReadToolContract[] = [
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
+  findTripCandidatesContract,
   readSelectionMetadataContract,
   curateSelectionContract,
   readAssetMetadataContract,
