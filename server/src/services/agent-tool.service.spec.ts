@@ -34,6 +34,7 @@ import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import type { TripCandidate, TripCandidateAlbumSelection } from 'src/services/trip-candidate.service';
 import { UserService } from 'src/services/user.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import {
@@ -208,6 +209,48 @@ const makeCurateHandle = (session: AgentSession, userId: string, assetIds: strin
   ...overrides,
 });
 
+const makeTripCandidate = (overrides: Partial<TripCandidate> = {}): TripCandidate => ({
+  dedupeKey: 'trip:usa:new-york:2026-04-15:2026-04-16',
+  title: 'Recent trip to New York, USA',
+  subtitle: '8 photos over 2 days',
+  countries: ['USA'],
+  states: ['New York'],
+  cities: ['New York'],
+  takenAfter: new Date('2026-04-15T09:00:00.000Z'),
+  takenBefore: new Date('2026-04-16T17:00:00.000Z'),
+  assetCount: 8,
+  albumAssetCount: 6,
+  excludedDuplicateCount: 1,
+  excludedStackChildCount: 1,
+  dayCount: 2,
+  score: 68,
+  confidence: 'high',
+  placeKey: 'usa:new-york',
+  placeLabel: 'New York, USA',
+  source: {
+    kind: 'tripCandidate',
+    dedupeKey: 'trip:usa:new-york:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T09:00:00.000Z'),
+    takenBefore: new Date('2026-04-16T17:00:00.000Z'),
+    places: [{ country: 'USA', state: 'New York', city: 'New York' }],
+    placeLabels: ['New York, USA'],
+  },
+  ...overrides,
+});
+
+const makeTripSelection = (
+  assetIds: string[],
+  overrides: Partial<TripCandidateAlbumSelection> = {},
+): TripCandidateAlbumSelection => ({
+  assetIds,
+  assetCount: assetIds.length,
+  albumAssetCount: assetIds.length,
+  excludedDuplicateCount: 0,
+  excludedStackChildCount: 0,
+  hydrated: true,
+  ...overrides,
+});
+
 const makeMediaReference = (
   assetId: string,
   overrides: Partial<AgentAssetMediaReference> = {},
@@ -314,6 +357,10 @@ describe(AgentToolService.name, () => {
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
   let assetSearchFilterResolverService: AgentAssetSearchFilterResolverService;
   let userService: { search: ReturnType<typeof vi.fn> };
+  let tripCandidateService: {
+    findRecentTripCandidates: ReturnType<typeof vi.fn>;
+    materializeAlbumReadySelection: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     clearConfigCache();
@@ -336,6 +383,10 @@ describe(AgentToolService.name, () => {
       sharedSpaceRepository,
     );
     userService = { search: vi.fn() };
+    tripCandidateService = {
+      findRecentTripCandidates: vi.fn(),
+      materializeAlbumReadySelection: vi.fn(),
+    };
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
       assetRepository as unknown as AssetRepository,
@@ -353,6 +404,8 @@ describe(AgentToolService.name, () => {
       userService as unknown as UserService,
       assetSearchFilterResolverService,
     );
+    (sut as unknown as { tripCandidateService: typeof tripCandidateService }).tripCandidateService =
+      tripCandidateService;
 
     sessionRepository.update.mockImplementation((_userId, _id, dto) =>
       Promise.resolve(makeSession(dto as Partial<AgentSession>)),
@@ -432,6 +485,215 @@ describe(AgentToolService.name, () => {
     sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([]);
     agentRunnerService.resumeAfterToolApproval.mockResolvedValue();
     userService.search.mockResolvedValue([]);
+  });
+
+  it('findTripCandidates returns compact candidate summaries and same-session selection handles', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const candidate = makeTripCandidate();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([candidate]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'USA',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+
+    expect(tripCandidateService.findRecentTripCandidates).toHaveBeenCalledWith({
+      ownerId: auth.user.id,
+      placeHint: 'USA',
+      lookbackDays: 180,
+      maxCandidates: 3,
+      targetDate: undefined,
+    });
+    expect(tripCandidateService.materializeAlbumReadySelection).toHaveBeenCalledWith(auth.user.id, candidate.source);
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith({
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: expect.any(String),
+      assetIds,
+      expiresAt: new Date(now.getTime() + 60 * 60_000),
+    });
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.summary).toBe('Found 1 trip candidate matching "USA".');
+    expect(result.candidates).toEqual([
+      expect.objectContaining({
+        dedupeKey: candidate.dedupeKey,
+        title: candidate.title,
+        assetCount: 8,
+        albumAssetCount: 6,
+        excludedDuplicateCount: 1,
+        excludedStackChildCount: 1,
+        placeLabels: ['New York, USA'],
+        selectionHandle: expect.objectContaining({
+          assetCount: 6,
+          sourceRef: expect.stringMatching(/^asset-source:search:/),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain(assetIds[0]);
+    expect(result.candidates[0].selectionHandle).not.toHaveProperty('sampleAssetIds');
+    vi.useRealTimers();
+  });
+
+  it('findTripCandidates returns empty success without creating handles when no candidate matches', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([]);
+
+    const result = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'Atlantis',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'No trip candidates found matching "Atlantis".',
+        candidates: [],
+      }),
+    );
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('findTripCandidates filters unreadable materialized assets and aligns albumAssetCount with the handle count', async () => {
+    const auth = AuthFactory.create();
+    const readableAssetId = newUuid();
+    const unreadableAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate({ albumAssetCount: 2 })]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(
+      makeTripSelection([readableAssetId, unreadableAssetId]),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([readableAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([readableAssetId]));
+
+    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(expect.objectContaining({ assetIds: [readableAssetId] }));
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.candidates[0]).toMatchObject({
+        albumAssetCount: 1,
+        selectionHandle: expect.objectContaining({ assetCount: 1 }),
+      });
+    }
+  });
+
+  it('findTripCandidates denies materialized selections that exceed the per-tool asset limit before creating handles', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { maxAssetsPerToolCall: 1 } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'denied',
+        reason: expect.stringContaining('Requested asset count exceeds per-tool limit'),
+      }),
+    );
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('findTripCandidates reserves the filtered asset count before creating handles and denies session overflow', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const deniedToolCall = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.FindTripCandidates,
+      status: AgentToolCallStatus.Denied,
+      approvalDecision: AgentToolApprovalDecision.Denied,
+      error: 'Reading these assets would exceed the session limit of 1000 asset(s)',
+      assetCount: 2,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
+      status: 'limit-exceeded',
+      toolCall: deniedToolCall,
+    });
+
+    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
+
+    expect(toolCallRepository.transitionWithSessionLimit).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({
+        status: AgentToolCallStatus.Executing,
+        assetCount: 2,
+        albumCount: 0,
+      }),
+      AgentToolDataClass.Metadata,
+      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+    );
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'denied',
+        reason: 'Session policy allows at most 1000 assets per session',
+      }),
+    );
+  });
+
+  it('findTripCandidates materializes multi-place trip candidate sources without converting them to search filters', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const source = {
+      kind: 'tripCandidate' as const,
+      dedupeKey: 'trip:france:paris+italy:rome:2026-04-15:2026-04-17',
+      takenAfter: new Date('2026-04-15T00:00:00.000Z'),
+      takenBefore: new Date('2026-04-17T23:59:59.000Z'),
+      places: [
+        { country: 'France', city: 'Paris' },
+        { country: 'Italy', city: 'Rome' },
+      ],
+      placeLabels: ['Paris, France', 'Rome, Italy'],
+    };
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([
+      makeTripCandidate({ source, countries: ['France', 'Italy'], cities: ['Paris', 'Rome'] }),
+    ]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+
+    expect(tripCandidateService.materializeAlbumReadySelection).toHaveBeenCalledWith(auth.user.id, source);
+    expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
   });
 
   it('returns approval-required and creates a pending audit row for strict metadata reads', async () => {
