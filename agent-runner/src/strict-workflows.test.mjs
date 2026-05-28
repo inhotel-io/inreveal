@@ -137,8 +137,8 @@ const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendati
     };
 
   const client = {
-    async call(name, args) {
-      calls.push({ name, args });
+    async call(name, args, options) {
+      calls.push({ name, args, options });
       if (name === 'findTripCandidates') {
         return {
           status: 'success',
@@ -187,6 +187,26 @@ describe('create_recent_trip_album workflow execution', () => {
     assert.match(calls[1].args.description, /3 known duplicate variants and 1 stack child/i);
     assert.match(result.text, /May 3-12, 2026/);
     assert.match(result.text, /skipped 3 known duplicate variants and 1 stack child/i);
+  });
+
+  it('forwards the abort signal to strict MCP calls', async () => {
+    const { client, calls } = createWorkflowClient();
+    const controller = new AbortController();
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      signal: controller.signal,
+    });
+
+    assert.equal(result.status, 'planned');
+    assert.deepEqual(
+      calls.map((call) => [call.name, call.options?.signal]),
+      [
+        ['findTripCandidates', controller.signal],
+        ['proposeAlbumFromSelection', controller.signal],
+      ],
+    );
   });
 
   it('uses no place hint and the default Recent Trip name when the prompt has no place', async () => {
@@ -271,7 +291,7 @@ describe('create_recent_trip_album workflow execution', () => {
 
   it('does not emit success copy when planning is denied', async () => {
     const { client } = createWorkflowClient({
-      planResult: { status: 'denied', reason: 'Search source did not match any assets' },
+      planResult: { status: 'denied', reason: 'Bearer other-secret api_key=raw-key raw denied detail' },
     });
 
     const result = await runCreateRecentTripAlbumWorkflow({
@@ -280,7 +300,26 @@ describe('create_recent_trip_album workflow execution', () => {
     });
 
     assert.equal(result.status, 'failed');
-    assert.match(result.text, /Search source did not match any assets/i);
+    assert.match(result.text, /planning tool returned status "denied" for proposeAlbumFromSelection/i);
+    assert.doesNotMatch(result.text, /other-secret|raw-key|raw denied detail/i);
+    assert.doesNotMatch(result.text, /Bearer \[redacted\]|\[redacted\]/i);
+    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('does not emit raw structured planning error text', async () => {
+    const { client } = createWorkflowClient({
+      planResult: { status: 'error', message: 'Bearer other-secret api_key=raw-key raw tool detail' },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.match(result.text, /planning tool returned status "error" for proposeAlbumFromSelection/i);
+    assert.doesNotMatch(result.text, /other-secret|raw-key|raw tool detail/i);
+    assert.doesNotMatch(result.text, /Bearer \[redacted\]|\[redacted\]/i);
     assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
   });
 
