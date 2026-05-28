@@ -393,6 +393,38 @@ assetRepository.getMemoryLocationDayBuckets
   ]);
 ```
 
+Add this fallback regression test after the existing high-confidence test:
+
+```ts
+  it('falls back to recent location clusters when day buckets are unavailable', async () => {
+    const assetRepository = {
+      getMemoryLocationClusters: vi
+        .fn()
+        .mockResolvedValueOnce([cluster({ country: 'Germany', city: 'Berlin', assetCount: 20, dayCount: 12 })])
+        .mockResolvedValueOnce([cluster({ country: 'France', city: 'Paris', assetCount: 9, dayCount: 3 })]),
+    };
+    const service = new TripCandidateService(assetRepository);
+
+    const [candidate] = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      lookbackDays: 30,
+    });
+
+    expect(assetRepository.getMemoryLocationClusters).toHaveBeenNthCalledWith(2, 'user-1', {
+      takenAfter: new Date('2026-03-24T00:00:00.000Z'),
+      takenBefore: new Date('2026-04-23T23:59:59.999Z'),
+    });
+    expect(candidate).toMatchObject({
+      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-17',
+      title: 'Recent trip to Paris, France',
+      subtitle: '9 photos over 3 days',
+      confidence: 'high',
+      placeKey: 'france:paris',
+    });
+  });
+```
+
 - [ ] **Step 2: Add failing window tests**
 
 Append these tests to `TripCandidateService.name`:
@@ -470,6 +502,71 @@ Append these tests to `TripCandidateService.name`:
         placeLabels: ['Paris, France', 'Rome, Italy'],
       },
     });
+  });
+
+  it('keeps source places distinct when the same city and country appear in different states', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({
+        localDate: '2026-04-15',
+        country: 'USA',
+        state: 'Illinois',
+        city: 'Springfield',
+        assetCount: 4,
+      }),
+      dayBucket({
+        localDate: '2026-04-16',
+        country: 'USA',
+        state: 'Massachusetts',
+        city: 'Springfield',
+        assetCount: 4,
+      }),
+    ]);
+
+    const [candidate] = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+    });
+
+    expect(candidate).toMatchObject({
+      dedupeKey: 'trip:usa:illinois:springfield+usa:massachusetts:springfield:2026-04-15:2026-04-16',
+      states: ['Illinois', 'Massachusetts'],
+      cities: ['Springfield'],
+      placeKey: 'usa:illinois:springfield+usa:massachusetts:springfield',
+      source: {
+        places: [
+          { country: 'USA', state: 'Illinois', city: 'Springfield' },
+          { country: 'USA', state: 'Massachusetts', city: 'Springfield' },
+        ],
+        placeLabels: ['Springfield, Illinois, USA', 'Springfield, Massachusetts, USA'],
+      },
+    });
+  });
+
+  it('does not treat an in-window home photo day as a no-photo gap', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-16', country: 'Germany', city: 'Berlin', assetCount: 6 }),
+      dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-18', country: 'Italy', city: 'Rome', assetCount: 4 }),
+    ]);
+
+    const candidates = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      maxCandidates: 3,
+    });
+
+    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
+      'trip:italy:rome:2026-04-17:2026-04-18',
+    ]);
   });
 
   it('keeps clearly separate trips as separate candidates', async () => {
@@ -638,12 +735,20 @@ Add these methods:
 
 ```ts
   private findWindowCandidates(recent: MemoryLocationDayBucket[], home: HomeBaseline): TripCandidate[] {
-    const travelBuckets = recent
+    const qualifyingBuckets = recent
       .filter((item) => this.isQualifyingTravelBucket(item))
-      .filter((item) => !home.cluster || home.ambiguous || this.isAwayFromHome(item, home.cluster))
       .toSorted((left, right) => left.localDate.getTime() - right.localDate.getTime() || right.assetCount - left.assetCount);
+    const blockedGapDayKeys = new Set<string>();
+    const travelBuckets = qualifyingBuckets.filter((item) => {
+      if (this.isTravelBucket(item, home)) {
+        return true;
+      }
 
-    return this.buildTravelWindows(travelBuckets)
+      blockedGapDayKeys.add(this.dayKey(item.localDate));
+      return false;
+    });
+
+    return this.buildTravelWindows(travelBuckets, blockedGapDayKeys)
       .filter((window) => window.assetCount >= 7 && window.dayKeys.size >= 2)
       .map((window) => this.toWindowTripCandidate(window, home.ambiguous ? 'low' : 'high'));
   }
@@ -652,7 +757,11 @@ Add these methods:
     return !!item.country && item.assetCount > 0;
   }
 
-  private buildTravelWindows(buckets: MemoryLocationDayBucket[]): TravelWindow[] {
+  private isTravelBucket(item: MemoryLocationDayBucket, home: HomeBaseline) {
+    return !home.cluster || home.ambiguous || this.isAwayFromHome(item, home.cluster);
+  }
+
+  private buildTravelWindows(buckets: MemoryLocationDayBucket[], blockedGapDayKeys = new Set<string>()): TravelWindow[] {
     const windows: TravelWindow[] = [];
     let current: TravelWindow | undefined;
     let lastDay: DateTime | undefined;
@@ -661,7 +770,11 @@ Add these methods:
       const bucketDay = DateTime.fromJSDate(bucket.localDate, { zone: 'utc' }).startOf('day');
       const gapDays = lastDay ? bucketDay.diff(lastDay, 'days').days - 1 : 0;
 
-      if (!current || gapDays > TripCandidateService.MAX_NO_PHOTO_GAP_DAYS) {
+      if (
+        !current ||
+        gapDays > TripCandidateService.MAX_NO_PHOTO_GAP_DAYS ||
+        this.hasBlockedGapDay(lastDay, bucketDay, blockedGapDayKeys)
+      ) {
         current = this.createWindow(bucket);
         windows.push(current);
       } else {
@@ -672,6 +785,20 @@ Add these methods:
     }
 
     return windows;
+  }
+
+  private hasBlockedGapDay(lastDay: DateTime | undefined, bucketDay: DateTime, blockedGapDayKeys: Set<string>) {
+    if (!lastDay || blockedGapDayKeys.size === 0) {
+      return false;
+    }
+
+    for (let day = lastDay.plus({ days: 1 }); day < bucketDay; day = day.plus({ days: 1 })) {
+      if (blockedGapDayKeys.has(day.toFormat('yyyy-MM-dd'))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private createWindow(bucket: MemoryLocationDayBucket): TravelWindow {
@@ -697,8 +824,8 @@ Add these methods:
 
     if (bucket.country) {
       const place = { country: bucket.country, state: bucket.state ?? null, city: bucket.city ?? null };
-      const key = this.placeKey([place]);
-      if (!window.places.some((item) => this.placeKey([item]) === key)) {
+      const key = this.sourcePlaceKey(place);
+      if (!window.places.some((item) => this.sourcePlaceKey(item) === key)) {
         window.places.push(place);
       }
     }
@@ -714,7 +841,9 @@ Add these methods:
     const countries = this.uniqueValues(window.places.map((place) => place.country));
     const states = this.uniqueValues(window.places.map((place) => place.state).filter((value): value is string => !!value));
     const cities = this.uniqueValues(window.places.map((place) => place.city).filter((value): value is string => !!value));
-    const placeLabels = this.uniqueValues(window.places.map((place) => this.labelPlace(place)));
+    const placeLabels = this.uniqueValues(
+      window.places.map((place) => this.labelPlace(place, this.needsStateDisambiguation(place, window.places))),
+    );
     const placeKey = this.placeKey(window.places);
     const placeLabel = this.labelWindow(countries, cities);
     const firstDate = this.dayKey(window.firstDate);
@@ -759,12 +888,45 @@ Add these methods:
     return this.joinLabels(countries);
   }
 
-  private labelPlace(place: { country: string; city?: string | null }) {
-    return place.city ? `${place.city}, ${place.country}` : place.country;
+  private labelPlace(place: { country: string; state?: string | null; city?: string | null }, includeState = false) {
+    if (place.city && includeState && place.state) {
+      return `${place.city}, ${place.state}, ${place.country}`;
+    }
+
+    if (place.city) {
+      return `${place.city}, ${place.country}`;
+    }
+
+    if (includeState && place.state) {
+      return `${place.state}, ${place.country}`;
+    }
+
+    return place.country;
   }
 
-  private placeKey(places: Array<{ country: string; city?: string | null }>) {
-    return places.map((place) => `${place.country}:${place.city ?? ''}`.toLowerCase()).join('+');
+  private placeKey(places: Array<{ country: string; state?: string | null; city?: string | null }>) {
+    return places
+      .map((place) => {
+        const baseKey = `${place.country}:${place.city ?? ''}`;
+        if (place.state && this.needsStateDisambiguation(place, places)) {
+          return `${place.country}:${place.state}:${place.city ?? ''}`.toLowerCase();
+        }
+
+        return baseKey.toLowerCase();
+      })
+      .join('+');
+  }
+
+  private sourcePlaceKey(place: { country: string; state?: string | null; city?: string | null }) {
+    return `${place.country}:${place.state ?? ''}:${place.city ?? ''}`.toLowerCase();
+  }
+
+  private needsStateDisambiguation(
+    place: { country: string; state?: string | null; city?: string | null },
+    places: Array<{ country: string; state?: string | null; city?: string | null }>,
+  ) {
+    const cityKey = `${place.country}:${place.city ?? ''}`.toLowerCase();
+    return places.filter((item) => `${item.country}:${item.city ?? ''}`.toLowerCase() === cityKey).length > 1;
   }
 
   private joinLabels(values: string[]) {
@@ -854,7 +1016,7 @@ Expected: one commit containing only Slice 2 implementation and tests.
 
 ## Plan Self-Review
 
-- Spec coverage: Slice 2 tests cover adjacent-day merging, one no-photo-day gaps, separated trips, multi-country windows, deduplicated labels, and same-place trips separated by larger gaps.
+- Spec coverage: Slice 2 tests cover adjacent-day merging, one no-photo-day gaps, home-photo days that must split trips, separated trips, multi-country windows, state-disambiguated same-city places, deduplicated labels, same-place trips separated by larger gaps, and fallback to Slice 1 location clusters when a minimal repository does not expose day buckets.
 - Scope control: This plan intentionally does not implement `placeHint` request behavior because Slice 4 owns place matching and validation. The public score formula remains compatible with Slice 1; recency is used as a deterministic sort tie-breaker until the place-hint and recommendation slices add broader scoring policy.
 - TDD: Repository behavior and service window behavior start with failing tests before implementation.
 - Type consistency: `TripCandidateSource.places` already supports `state`; `MemoryLocationDayBucket` adds `state` from EXIF for summarization.
