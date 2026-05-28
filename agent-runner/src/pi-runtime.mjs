@@ -13,7 +13,13 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
-import { matchStrictWorkflow, runCreateRecentTripAlbumWorkflow } from './strict-workflows.mjs';
+import {
+  createRecentTripCandidateSelectionState,
+  matchStrictWorkflow,
+  resolveRecentTripCandidateSelection,
+  runCreateRecentTripAlbumCandidateWorkflow,
+  runCreateRecentTripAlbumWorkflow,
+} from './strict-workflows.mjs';
 
 const protocolVersion = '2026-05-14';
 const runnerBehaviorPrompt = [
@@ -599,11 +605,23 @@ const appendStrictWorkflowTranscript = (session, prompt, assistantText) => {
     return;
   }
 
-  session.messages.push({ role: 'user', content: [{ type: 'text', text: prompt }] });
+  if (prompt) {
+    session.messages.push({ role: 'user', content: [{ type: 'text', text: prompt }] });
+  }
   if (assistantText) {
     session.messages.push({ role: 'assistant', content: [{ type: 'text', text: assistantText }] });
   }
 };
+
+const strictApprovalDeniedText =
+  'Gallery did not create the recent trip album plan because the approval was denied. Please rerun the recent trip album request if you want to try again.';
+
+const createRecentTripApprovalState = ({ workflow, workflowResult }) => ({
+  kind: 'create_recent_trip_album_approval',
+  toolCallId: workflowResult.toolCallId,
+  workflow,
+  candidate: workflowResult.candidate,
+});
 
 const strictCompletedEvent = ({ gallerySessionId, runnerSessionId, text }) => ({
   type: 'assistant-message-completed',
@@ -754,9 +772,11 @@ export const createPiRuntime = ({
   sdk = defaultDependencies.sdk,
   ai = defaultDependencies.ai,
   fetch: fetchImplementation = fetch,
+  now = () => Date.now(),
 } = {}) => {
   const sessions = new Map();
   const createSessionQueues = new Map();
+  const strictMcpClient = (entry) => createGalleryMcpClient({ gateway: entry.mcpGateway, fetch: fetchImplementation });
 
   const runSerializedCreateSession = async (runnerSessionId, operation) => {
     const previous = createSessionQueues.get(runnerSessionId) ?? Promise.resolve();
@@ -884,6 +904,7 @@ export const createPiRuntime = ({
             inFlight: false,
             abortActiveStream: undefined,
             unsubscribe: undefined,
+            pendingStrictWorkflow: undefined,
           });
 
           return {
@@ -921,6 +942,71 @@ export const createPiRuntime = ({
       entry.inFlight = true;
       const promptText = textPromptFromContent(content);
       const strictWorkflow = matchStrictWorkflow(promptText);
+      if (
+        strictWorkflow.kind !== 'create_recent_trip_album' &&
+        entry.pendingStrictWorkflow?.kind === 'create_recent_trip_album_candidate_selection'
+      ) {
+        let abortStrictStream;
+        try {
+          const resolved = resolveRecentTripCandidateSelection({
+            pending: entry.pendingStrictWorkflow,
+            prompt: promptText,
+            nowMs: now(),
+          });
+          if (resolved.status === 'expired') {
+            entry.pendingStrictWorkflow = undefined;
+            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text);
+            yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
+            return;
+          }
+          if (resolved.status === 'needs_input') {
+            appendStrictWorkflowTranscript(entry.session, promptText, resolved.text);
+            yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
+            return;
+          }
+          if (resolved.status === 'matched' && entry.mcpGateway) {
+            const strictAbortController = new AbortController();
+            abortStrictStream = () => {
+              strictAbortController.abort();
+            };
+            entry.abortActiveStream = abortStrictStream;
+            entry.pendingStrictWorkflow = undefined;
+            const workflowResult = await runCreateRecentTripAlbumCandidateWorkflow({
+              client: strictMcpClient(entry),
+              workflow: resolved.workflow,
+              candidate: resolved.candidate,
+              signal: strictAbortController.signal,
+            });
+
+            if (workflowResult.status === 'approval_required') {
+              entry.pendingStrictWorkflow = createRecentTripApprovalState({
+                workflow: resolved.workflow,
+                workflowResult,
+              });
+              yield strictApprovalEvent({ gallerySessionId, runnerSessionId, toolCallId: workflowResult.toolCallId });
+              return;
+            }
+
+            appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text);
+            yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: workflowResult.text });
+            return;
+          }
+        } catch (error) {
+          yield {
+            type: 'runner-error',
+            sessionId: gallerySessionId,
+            runnerSessionId,
+            message: sanitizeSessionError(error, entry),
+          };
+          return;
+        } finally {
+          if (abortStrictStream && entry.abortActiveStream === abortStrictStream) {
+            entry.abortActiveStream = undefined;
+          }
+          entry.inFlight = false;
+        }
+      }
+
       if (strictWorkflow.kind === 'create_recent_trip_album' && entry.mcpGateway) {
         const strictAbortController = new AbortController();
         const abortStrictStream = () => {
@@ -929,12 +1015,26 @@ export const createPiRuntime = ({
         entry.abortActiveStream = abortStrictStream;
         try {
           const workflowResult = await runCreateRecentTripAlbumWorkflow({
-            client: createGalleryMcpClient({ gateway: entry.mcpGateway, fetch: fetchImplementation }),
+            client: strictMcpClient(entry),
             workflow: strictWorkflow,
             signal: strictAbortController.signal,
           });
 
+          if (workflowResult.status === 'needs_input' && Array.isArray(workflowResult.candidates)) {
+            entry.pendingStrictWorkflow = createRecentTripCandidateSelectionState({
+              workflow: strictWorkflow,
+              candidates: workflowResult.candidates,
+              nowMs: now(),
+            });
+          } else if (workflowResult.status !== 'approval_required') {
+            entry.pendingStrictWorkflow = undefined;
+          }
+
           if (workflowResult.status === 'approval_required') {
+            entry.pendingStrictWorkflow = createRecentTripApprovalState({
+              workflow: strictWorkflow,
+              workflowResult,
+            });
             yield strictApprovalEvent({
               gallerySessionId,
               runnerSessionId,
@@ -1159,6 +1259,50 @@ export const createPiRuntime = ({
         throw new Error('Runner session already has an active message stream');
       }
       entry.inFlight = true;
+
+      if (
+        entry.pendingStrictWorkflow?.kind === 'create_recent_trip_album_approval' &&
+        entry.pendingStrictWorkflow.toolCallId === toolCallId
+      ) {
+        try {
+          const pending = entry.pendingStrictWorkflow;
+          entry.pendingStrictWorkflow = undefined;
+          if (approvalDecision !== 'approved') {
+            appendStrictWorkflowTranscript(entry.session, undefined, strictApprovalDeniedText);
+            yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: strictApprovalDeniedText });
+            return;
+          }
+
+          const workflowResult = await runCreateRecentTripAlbumCandidateWorkflow({
+            client: strictMcpClient(entry),
+            workflow: pending.workflow,
+            candidate: pending.candidate,
+            approvedPlanResult: toolResult,
+          });
+          if (workflowResult.status === 'approval_required') {
+            entry.pendingStrictWorkflow = createRecentTripApprovalState({
+              workflow: pending.workflow,
+              workflowResult,
+            });
+            yield strictApprovalEvent({ gallerySessionId, runnerSessionId, toolCallId: workflowResult.toolCallId });
+            return;
+          }
+
+          appendStrictWorkflowTranscript(entry.session, undefined, workflowResult.text);
+          yield strictCompletedEvent({ gallerySessionId, runnerSessionId, text: workflowResult.text });
+          return;
+        } catch (error) {
+          yield {
+            type: 'runner-error',
+            sessionId: gallerySessionId,
+            runnerSessionId,
+            message: sanitizeSessionError(error, entry),
+          };
+          return;
+        } finally {
+          entry.inFlight = false;
+        }
+      }
 
       let sequence = 0;
       const pendingEvents = [];
