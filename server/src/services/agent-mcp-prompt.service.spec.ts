@@ -134,6 +134,8 @@ describe(AgentMcpPromptService.name, () => {
         'mcp_gallery_proposeSpaceFromSearch',
         'mcp_gallery_proposeAddAssetsToSpaceFromSearch',
         'mcp_gallery_proposeAssetBatchFromSearch',
+        'mcp_gallery_proposeAlbumFromSelection',
+        'mcp_gallery_proposeAssetBatchFromSelection',
         'mcp_gallery_proposeAlbumOperations',
       ]),
     );
@@ -222,11 +224,11 @@ describe(AgentMcpPromptService.name, () => {
     const previousSearch = lineJson('previousSearch.sourceRef after inspect: mcp_gallery_proposeAlbumFromSearch ');
 
     expect(albumSearch).toMatchObject({
-      albumName: 'South Africa with Pierre & Aurelia',
+      albumName: 'SA P&A',
       assetSource: { kind: 'search' },
     });
     expect(previousSearch).toMatchObject({
-      albumName: 'Recent favorites',
+      albumName: 'F',
       assetSource: { kind: 'previousSearch' },
     });
     expect(
