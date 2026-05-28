@@ -150,7 +150,10 @@ Slot extraction:
   `<placeHint> Trip`; if no place hint exists, default `Recent Trip`.
 - `placeHint`: raw text after common phrases such as `recent trip to X`,
   `recent trip in X`, or known normalized aliases like `USA`, `United States`,
-  and `U.S.`. If extraction is uncertain, omit the hint rather than guessing.
+  and `U.S.`. Extraction stops before album-name clauses such as `called`,
+  `named`, or `as`, so `recent trip to USA called Spring Break` yields
+  `placeHint: "USA"` and `albumName: "Spring Break"`. If extraction is
+  uncertain, omit the hint rather than guessing.
 
 If the router is uncertain, it returns `unsupported` and open Pi orchestration
 continues.
@@ -189,6 +192,12 @@ type StrictWorkflowState = {
 
 The assistant may say "I created/proposed a plan" only when `planCreated ===
 true` and `planId` is present.
+
+When `recommendation.action === "use_top_candidate"`, the workflow must select
+the candidate whose `dedupeKey` exactly matches `recommendation.candidateDedupeKey`.
+If the recommendation has no matching candidate, the workflow must not fall back
+to `candidates[0]`; it should treat the detector result as inconsistent and ask
+for a concrete source or surface a retryable detector failure.
 
 ### Tool Calls
 
@@ -233,7 +242,9 @@ question or falls back to open orchestration without creating a plan.
 ### Error Handling
 
 - `approval-required`: stop the turn and let Gallery approval UI resume the
-  workflow.
+  workflow. The strict workflow state must be persisted before pausing so the
+  approved result can continue the same deterministic state machine without
+  restarting open provider orchestration.
 - `denied` or `unavailable` from `findTripCandidates`: explain that Gallery
   could not inspect trip candidates and ask for a concrete date/place source.
 - `recommendation.action === "none"` or empty candidates: ask for one concrete
@@ -245,6 +256,9 @@ question or falls back to open orchestration without creating a plan.
 - Zero-asset handle: do not call planning; ask for a different source.
 - Planning failure: do not claim success; surface the failure and record
   `lastToolError`.
+- Planning success: extract the persisted plan id from the tool result
+  (`planId` or `plan.id`) and verify the session reaches plan-review state
+  before emitting success copy.
 - Provider errors should not occur on strict handled turns because the provider
   is bypassed. If final-copy generation is delegated to a provider later, the
   plan state still controls success language.
@@ -270,6 +284,8 @@ Tests:
 - Matches `Create an album for my recent trip to USA`.
 - Matches `Make an album for my recent trip`.
 - Matches explicit album names.
+- Splits combined place and album-name clauses, for example `recent trip to USA
+  called Spring Break`.
 - Extracts `USA`, `United States`, and `U.S.` as the same place hint.
 - Omits the place hint when extraction is uncertain.
 - Rejects highlight requests containing `top`, `best`, or `highlights`.
@@ -283,6 +299,9 @@ Tests use a fake MCP client and assert exact tool calls:
 - `use_top_candidate` calls `findTripCandidates` then
   `proposeAlbumFromSelection`.
 - `selectionHandleId` equals the candidate handle id.
+- Candidate selection uses `recommendation.candidateDedupeKey` exactly.
+- If the recommended dedupe key is missing from `candidates`, no planning call
+  occurs.
 - No call to `searchAssets` occurs.
 - No provider-visible `assetIds` are sent.
 - Album name defaults to `USA Trip` or `Recent Trip`.
@@ -294,7 +313,7 @@ Tests use a fake MCP client and assert exact tool calls:
 Tests:
 
 - Success message is emitted only when the planning result contains a persisted
-  plan id.
+  plan id, either as `planId` or `plan.id`.
 - If planning returns denied/error, the final message does not contain "plan is
   ready", "I created", or "I proposed".
 - Empty candidates ask for a concrete date/place source.
@@ -302,6 +321,8 @@ Tests:
 - Missing candidate handle does not call planning.
 - Zero-asset candidate handle does not call planning.
 - `approval-required` pauses without explanatory assistant copy.
+- Approval resume continues the same strict workflow with the approved tool
+  result and does not reroute the follow-up through open provider orchestration.
 - Tool errors redact gateway tokens and secrets.
 
 ### Slice 5: Production Runtime Integration
@@ -315,6 +336,8 @@ Tests:
   continue-able.
 - A strict handled turn produces the same user-visible behavior as the e2e
   runtime.
+- A successful strict handled turn leaves the session in plan-review state until
+  the user applies or revises the plan.
 
 ### Slice 6: Session Continuation
 
@@ -335,6 +358,8 @@ Tests:
 - No `searchAssets` call.
 - `agent_operation_plan` row exists after the turn.
 - UI/session activity includes `operation-plan-ready`.
+- The persisted plan contains exactly an album create operation and an album
+  add-assets operation sourced from the trip candidate handle.
 - Assistant text includes trip date range and selected asset count.
 - Assistant text does not ask for dates before running the detector.
 - Failed planning produces no plan card and no success copy.
@@ -348,13 +373,16 @@ The final implementation is not complete until these cases have explicit tests:
 | Clear USA candidate | Create plan from candidate handle. |
 | Clear no-place candidate | Create `Recent Trip` plan from candidate handle. |
 | Explicit album name | Preserve user-provided name. |
+| Combined place and name | Parse `recent trip to USA called Spring Break` as USA source plus Spring Break album name. |
 | Multiple close candidates | Ask one choice question with labels. |
 | No candidate | Ask for one concrete date/place source. |
 | Low-confidence `none` recommendation | Ask for one concrete source. |
+| Recommendation key mismatch | Do not fall back to the first candidate; ask or surface a detector inconsistency. |
 | Candidate missing handle | Explain that an album-ready selection was unavailable. |
 | Zero selected assets | Do not create a plan. |
 | Planning denied/error | Do not claim plan creation. |
 | Approval required | Pause for Gallery approval. |
+| Approval resumed | Continue the same strict workflow from stored state. |
 | Highlight wording | Do not route to this strict workflow. |
 | Unsupported prompt | Fall back to open Pi orchestration. |
 | Duplicate/stack exclusion counts | Mention them only after successful plan creation. |
