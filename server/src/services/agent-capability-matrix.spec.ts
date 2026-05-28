@@ -4,14 +4,23 @@ import { resolve } from 'node:path';
 const readMatrix = () =>
   readFileSync(resolve(process.cwd(), '../docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md'), 'utf8');
 
+const sectionBetween = (markdown: string, startHeading: string, endHeading: string) => {
+  const start = markdown.indexOf(startHeading);
+  expect(start).not.toBe(-1);
+  const end = markdown.indexOf(endHeading, start + startHeading.length);
+  expect(end).not.toBe(-1);
+  return markdown.slice(start, end);
+};
+
 describe('Pi agent capability matrix', () => {
   it('documents completed search filter parity and acceptance prompts', () => {
     const markdown = readMatrix();
+    const coreMatrix = sectionBetween(markdown, '## Core Capability Matrix', '## High-Value Constrained Capabilities');
 
     expect(markdown).toContain('Smart, OCR, description, filename, and metadata search');
     expect(markdown).toContain('resolveAssetSearchFilters');
 
-    const naturalLanguageFilteredSearchRow = markdown
+    const naturalLanguageFilteredSearchRow = coreMatrix
       .split('\n')
       .find((line) => line.includes('Natural-language filtered search'));
     expect(naturalLanguageFilteredSearchRow).toContain('Solid now');
@@ -37,8 +46,9 @@ describe('Pi agent capability matrix', () => {
 
   it('documents explicit batch asset metadata edits as solid while place-name geocoding remains missing', () => {
     const markdown = readMatrix();
+    const coreMatrix = sectionBetween(markdown, '## Core Capability Matrix', '## High-Value Constrained Capabilities');
 
-    const metadataEditRow = markdown.split('\n').find((line) => line.includes('Batch asset metadata edits'));
+    const metadataEditRow = coreMatrix.split('\n').find((line) => line.includes('Batch asset metadata edits'));
     expect(metadataEditRow).toBeDefined();
     expect(metadataEditRow).toContain('Solid now');
     expect(metadataEditRow).toContain('asset.updateMetadata');
@@ -69,8 +79,9 @@ describe('Pi agent capability matrix', () => {
 
   it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
     const markdown = readMatrix();
+    const constrainedMatrix = sectionBetween(markdown, '## High-Value Constrained Capabilities', '## Needs New MCP Tool');
 
-    const bestPhotosRow = markdown.split('\n').find((line) => line.includes('“Best photos” curation'));
+    const bestPhotosRow = constrainedMatrix.split('\n').find((line) => line.includes('“Best photos” curation'));
 
     expect(bestPhotosRow).toBeDefined();
     expect(bestPhotosRow).toContain('Solid now for bounded sources');
@@ -79,7 +90,7 @@ describe('Pi agent capability matrix', () => {
     expect(bestPhotosRow).toMatch(/not quality scoring|not objective/i);
     expect(bestPhotosRow).not.toContain('planned implementation');
 
-    const visualCleanupRow = markdown.split('\n').find((line) => line.includes('Visual cleanup'));
+    const visualCleanupRow = constrainedMatrix.split('\n').find((line) => line.includes('Visual cleanup'));
     expect(visualCleanupRow).toBeDefined();
     expect(visualCleanupRow).toContain('Constrained now');
 
@@ -101,5 +112,28 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).toContain('Image quality scoring');
     expect(needsNewToolSection).toContain('analyzeAssetQuality');
     expect(needsNewToolSection).toMatch(/quality scoring/i);
+  });
+
+  it('documents strict, hybrid, and open flow ownership for Pi capabilities', () => {
+    const markdown = readMatrix();
+
+    expect(markdown).toContain('## Flow Ownership Matrix');
+    const flowSection = markdown.slice(markdown.indexOf('## Flow Ownership Matrix'));
+
+    const recentTripRow = flowSection.split('\n').find((line) => line.includes('Create recent trip album'));
+    expect(recentTripRow).toBeDefined();
+    expect(recentTripRow).toContain('Strict');
+    expect(recentTripRow).toContain('create_recent_trip_album');
+
+    const searchRow = flowSection.split('\n').find((line) => line.includes('Natural-language filtered search'));
+    expect(searchRow).toBeDefined();
+    expect(searchRow).toContain('Open read flow');
+
+    const highlightsRow = flowSection.split('\n').find((line) => line.includes('“Best photos” curation'));
+    expect(highlightsRow).toBeDefined();
+    expect(highlightsRow).toContain('Hybrid');
+
+    expect(flowSection).toMatch(/no claimed plan unless a persisted plan id\s+exists/);
+    expect(flowSection).toContain('selection handles for asset sets');
   });
 });
