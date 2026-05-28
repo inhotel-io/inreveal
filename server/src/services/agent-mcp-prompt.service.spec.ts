@@ -169,6 +169,21 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
   });
 
+  it('teaches the handle-first recent trip album workflow', () => {
+    const prompt = sut.generatePromptCheatSheet();
+
+    expect(prompt).toContain('Trip albums: findTripCandidates first');
+    expect(prompt).toContain('recommendation.action');
+    expect(prompt).toContain('use_top_candidate');
+    expect(prompt).toContain('ask_user');
+    expect(prompt).toContain('none');
+    expect(prompt).toContain('generic handle->proposeAlbumFromSelection');
+    expect(prompt).toContain('highlights default 10->curateSelection');
+    expect(prompt).not.toMatch(/trip album requests.*searchAssets/i);
+    expect(prompt).not.toMatch(/copy .*assetIds/i);
+    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
+  });
+
   it('teaches metadata edits as reviewable search-backed plans with explicit coordinates only', () => {
     const prompt = sut.generatePromptCheatSheet();
     const examples = sut.listPromptExamples();
