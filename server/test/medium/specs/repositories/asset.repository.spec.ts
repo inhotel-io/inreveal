@@ -980,15 +980,10 @@ describe(AssetRepository.name, () => {
       const result = await sut.getTripCandidateAssets(user.id, {
         takenAfter: new Date('2026-04-15T00:00:00Z'),
         takenBefore: new Date('2026-04-15T23:59:59Z'),
-        places: [
-          { country: 'France', state: null, city: null },
-          { country: 'Italy' },
-        ],
+        places: [{ country: 'France', state: null, city: null }, { country: 'Italy' }],
       });
 
-      expect(result.map(({ id }) => id).toSorted()).toEqual(
-        [franceUnknown.id, italyMilan.id, italyRome.id].toSorted(),
-      );
+      expect(result.map(({ id }) => id).toSorted()).toEqual([franceUnknown.id, italyMilan.id, italyRome.id].toSorted());
     });
 
     it('should return duplicate group assets for owned timeline previewable assets only', async () => {
@@ -1006,7 +1001,9 @@ describe(AssetRepository.name, () => {
         });
         await Promise.all([
           ctx.newExif({ assetId: asset.id, country: 'France', city: 'Paris', fileSizeInByte: 100 }),
-          withPreview ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }) : null,
+          withPreview
+            ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+            : null,
         ]);
         return asset;
       };
