@@ -52,15 +52,7 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = contracts
-      .filter(
-        (contract) =>
-          ![AgentToolName.ProposeAlbumFromSelection, AgentToolName.ProposeAssetBatchFromSelection].includes(
-            contract.name,
-          ),
-      )
-      .map((contract) => this.toPiToolName(contract.name))
-      .join(',');
+    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
     const albumSourceSearch = this.getPromptExample(
       examples,
       AgentToolName.ProposeAlbumFromSearch,
@@ -95,24 +87,24 @@ export class AgentMcpPromptService {
         'Text search: smart/ocr/description/filename require query',
         `Default write: ${albumSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToAlbumFromSearch)},${spaceSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAddAssetsToSpaceFromSearch)},${batchSourceSearch.piToolName},${this.toPiToolName(AgentToolName.ProposeAlbumFromSelection)},${this.toPiToolName(AgentToolName.ProposeAssetBatchFromSelection)}`,
         `Metadata edits reviewable: asset.updateMetadata; coordinates latitude+longitude; place names ask.`,
-        `assetSource.search: ${albumSourceSearch.piToolName} ${this.formatJson(albumSourceSearch.arguments)}`,
-        `previousSearch.sourceRef after inspect: ${albumPreviousSearch.piToolName} ${this.formatJson(albumPreviousSearch.arguments)}`,
+        `assetSource.search: ${albumSourceSearch.piToolName} ${this.formatJson({ ...albumSourceSearch.arguments, albumName: 'SA P&A' })}`,
+        `previousSearch.sourceRef after inspect: ${albumPreviousSearch.piToolName} ${this.formatJson({ ...albumPreviousSearch.arguments, albumName: 'F' })}`,
         `Recoverable: wrong_id_domain needs_clarification choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
         'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata itemRef; readAssetMetadata legacy exact non-search IDs only; limit up to 1000; if truncated/hasMore, page/ask.',
         'Curation: handle->curateSelection targetCount strategy->selectionHandle.id/sourceRef.',
         'After curateSelection: use proposeAlbumFromSelection or proposeAssetBatchFromSelection with selectionHandle.id; do not copy asset IDs.',
-        'Trip albums: findTripCandidates first;recommendation.action use_top_candidate ask_user none;generic handle->proposeAlbumFromSelection;highlights default 10->curateSelection;dup/stack exclusions;never asset IDs.',
-        'provider planning rejects raw assetIds; assetSelectionHandleId or assetSource.selectionHandle/search/previousSearch. Gallery materializes IDs server-side; assetSource.explicitAssets rejected.',
+        'Trip albums: findTripCandidates first;recommendation.action use_top_candidate ask_user none;generic handle->proposeAlbumFromSelection;highlights default 10->curateSelection;dup/stack excl;never asset IDs.',
+        'provider planning rejects raw assetIds; assetSelectionHandleId/assetSource.selectionHandle. Gallery materializes IDs server-side; assetSource.explicitAssets rejected.',
         'Resolve names before searchAssets{"tags":["Travel"]}',
         'Resolver fidelity: copy resolvedFilters. Missing/ambiguous: ask.',
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
         'Best/highlights require bounded album/space/date/search/selection; use curateSelection for metadata-only suggested narrowing; not objective quality scoring; handle->planning.',
         'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only.',
         `Space lookup:${this.toPiToolName(AgentToolName.ListSpaces)}->${this.toPiToolName(AgentToolName.ReadSpace)}.`,
-        'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
-        'Details: space.updateDetails spaceName, description, color. Same name/description/color: no-op. Never update thumbnails/pets/faces/linked libraries/delete spaces.',
+        'Space: no matching space ask. No matching assets/no photos/none in space explain. assetIdsTruncated false exclude already in space; only remove already in space; true narrow.',
+        'Details: space.updateDetails spaceName/description/color. Same name/description/color: no-op. Never update thumbnails/pets/faces/linked libraries/delete spaces.',
         `Low-level planning uses handles/sources album.create temporaryTargetId album.addAssets space.addAssets/removeAssets {"targetKind":"existing_space"}`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),

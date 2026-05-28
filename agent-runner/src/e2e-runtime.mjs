@@ -981,7 +981,10 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
           yield completedEvent({
             gallerySessionId,
             runnerSessionId,
-            text: `I found multiple possible recent trips: ${labels}. Which one should I use?`,
+            text:
+              candidates.length === 1
+                ? `I found one possible recent trip: ${labels}. Should I use it, or would you prefer to give me a date range or place?`
+                : `I found multiple possible recent trips: ${labels}. Which one should I use?`,
           });
           return;
         }
