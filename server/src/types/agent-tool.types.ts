@@ -92,6 +92,13 @@ export type AgentToolSearchAssetsRequestMetadata = {
   createSelectionHandle?: boolean;
 };
 
+export type AgentToolFindTripCandidatesRequestMetadata = {
+  placeHint?: string;
+  targetDate?: Date;
+  lookbackDays: number;
+  maxCandidates: number;
+};
+
 export type AgentSearchAssetsSelectionHandle = {
   id: string;
   assetCount: number;
@@ -388,6 +395,7 @@ export type AgentUserLookupResult = {
 
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
+  | AgentToolFindTripCandidatesRequestMetadata
   | AgentToolResolveAssetSearchFiltersRequestMetadata
   | AgentToolReadSelectionMetadataRequestMetadata
   | AgentToolCurateSelectionRequestMetadata
