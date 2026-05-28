@@ -139,34 +139,34 @@ private buildTripCandidateRecommendation(candidates: AgentTripCandidateToolResul
 In `server/src/dtos/agent-tool.dto.spec.ts`, inside `describe(AgentFindTripCandidatesToolRequestDto.name, ...)`, add:
 
 ```ts
-    it('accepts trip candidate response recommendations and requires a top candidate key for auto-use', () => {
-      const successResponse = {
-        status: 'success',
-        toolCall: makeEncodedToolCall(),
-        summary: 'Found 1 trip candidate matching "USA".',
-        recommendation: {
-          action: 'use_top_candidate',
-          candidateDedupeKey: 'trip:usa:new-york:2026-04-15:2026-04-16',
-          reason: 'The only readable trip candidate is high confidence.',
-        },
-        candidates: [],
-        resultSize: makeResultSize(),
-      };
+it('accepts trip candidate response recommendations and requires a top candidate key for auto-use', () => {
+  const successResponse = {
+    status: 'success',
+    toolCall: makeEncodedToolCall(),
+    summary: 'Found 1 trip candidate matching "USA".',
+    recommendation: {
+      action: 'use_top_candidate',
+      candidateDedupeKey: 'trip:usa:new-york:2026-04-15:2026-04-16',
+      reason: 'The only readable trip candidate is high confidence.',
+    },
+    candidates: [],
+    resultSize: makeResultSize(),
+  };
 
-      expect(AgentFindTripCandidatesToolResponseDto.schema.safeParse(successResponse).success).toBe(true);
+  expect(AgentFindTripCandidatesToolResponseDto.schema.safeParse(successResponse).success).toBe(true);
 
-      const missingKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
-        ...successResponse,
-        recommendation: { action: 'use_top_candidate', reason: 'Missing key.' },
-      });
-      expectIssue(missingKey, ['recommendation', 'candidateDedupeKey'], 'Invalid input');
+  const missingKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
+    ...successResponse,
+    recommendation: { action: 'use_top_candidate', reason: 'Missing key.' },
+  });
+  expectIssue(missingKey, ['recommendation', 'candidateDedupeKey'], 'Invalid input');
 
-      const noneWithKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
-        ...successResponse,
-        recommendation: { action: 'none', candidateDedupeKey: 'trip:usa', reason: 'No match.' },
-      });
-      expectIssue(noneWithKey, ['recommendation'], 'Unrecognized key');
-    });
+  const noneWithKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
+    ...successResponse,
+    recommendation: { action: 'none', candidateDedupeKey: 'trip:usa', reason: 'No match.' },
+  });
+  expectIssue(noneWithKey, ['recommendation'], 'Unrecognized key');
+});
 ```
 
 - [ ] **Step 2: Run DTO test and verify it fails**
@@ -184,74 +184,82 @@ Expected: FAIL because `recommendation` is not in `AgentFindTripCandidatesToolSu
 In `server/src/services/agent-tool.service.spec.ts`, add tests near the existing `findTripCandidates` tests:
 
 ```ts
-  it('findTripCandidates recommends the clear high-confidence top candidate after materialization', async () => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid(), newUuid()];
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
-    const top = makeTripCandidate({ score: 80, confidence: 'high' });
-    const runnerUp = makeTripCandidate({
-      dedupeKey: 'trip:usa:boston:2026-04-20:2026-04-22',
-      title: 'Recent trip to Boston, USA',
-      score: 60,
-      confidence: 'high',
+it('findTripCandidates recommends the clear high-confidence top candidate after materialization', async () => {
+  const auth = AuthFactory.create();
+  const assetIds = [newUuid(), newUuid()];
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+  const top = makeTripCandidate({ score: 80, confidence: 'high' });
+  const runnerUp = makeTripCandidate({
+    dedupeKey: 'trip:usa:boston:2026-04-20:2026-04-22',
+    title: 'Recent trip to Boston, USA',
+    score: 60,
+    confidence: 'high',
+  });
+
+  sessionRepository.getById.mockResolvedValue(session);
+  tripCandidateService.findRecentTripCandidates.mockResolvedValue([top, runnerUp]);
+  tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+  const result = await sut.findTripCandidates(auth, session.id, {
+    placeHint: 'USA',
+    lookbackDays: 180,
+    maxCandidates: 3,
+  });
+
+  expect(result.status).toBe('success');
+  if (result.status === 'success') {
+    expect(result.recommendation).toEqual({
+      action: 'use_top_candidate',
+      candidateDedupeKey: top.dedupeKey,
+      reason: 'The top trip candidate is high confidence and clearly ahead of the runner-up.',
     });
+  }
+});
 
-    sessionRepository.getById.mockResolvedValue(session);
-    tripCandidateService.findRecentTripCandidates.mockResolvedValue([top, runnerUp]);
-    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+it('findTripCandidates asks the user when candidates are close or not high confidence and returns none for empty results', async () => {
+  const auth = AuthFactory.create();
+  const assetIds = [newUuid(), newUuid()];
+  const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+  sessionRepository.getById.mockResolvedValue(session);
+  tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+  accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+  assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
 
-    const result = await sut.findTripCandidates(auth, session.id, { placeHint: 'USA', lookbackDays: 180, maxCandidates: 3 });
-
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.recommendation).toEqual({
-        action: 'use_top_candidate',
-        candidateDedupeKey: top.dedupeKey,
-        reason: 'The top trip candidate is high confidence and clearly ahead of the runner-up.',
-      });
-    }
+  tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
+    makeTripCandidate({ score: 80, confidence: 'high' }),
+    makeTripCandidate({ dedupeKey: 'trip:usa:close', score: 70, confidence: 'high' }),
+  ]);
+  const closeResult = await sut.findTripCandidates(auth, session.id, {
+    placeHint: 'USA',
+    lookbackDays: 180,
+    maxCandidates: 3,
   });
+  expect(closeResult.status).toBe('success');
+  if (closeResult.status === 'success') {
+    expect(closeResult.recommendation).toMatchObject({ action: 'ask_user' });
+  }
 
-  it('findTripCandidates asks the user when candidates are close or not high confidence and returns none for empty results', async () => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid(), newUuid()];
-    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
-    sessionRepository.getById.mockResolvedValue(session);
-    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+  tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
+    makeTripCandidate({ score: 90, confidence: 'medium' }),
+  ]);
+  const mediumResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+  expect(mediumResult.status).toBe('success');
+  if (mediumResult.status === 'success') {
+    expect(mediumResult.recommendation).toMatchObject({ action: 'ask_user' });
+  }
 
-    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
-      makeTripCandidate({ score: 80, confidence: 'high' }),
-      makeTripCandidate({ dedupeKey: 'trip:usa:close', score: 70, confidence: 'high' }),
-    ]);
-    const closeResult = await sut.findTripCandidates(auth, session.id, { placeHint: 'USA', lookbackDays: 180, maxCandidates: 3 });
-    expect(closeResult.status).toBe('success');
-    if (closeResult.status === 'success') {
-      expect(closeResult.recommendation).toMatchObject({ action: 'ask_user' });
-    }
-
-    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([
-      makeTripCandidate({ score: 90, confidence: 'medium' }),
-    ]);
-    const mediumResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
-    expect(mediumResult.status).toBe('success');
-    if (mediumResult.status === 'success') {
-      expect(mediumResult.recommendation).toMatchObject({ action: 'ask_user' });
-    }
-
-    tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([]);
-    const noneResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
-    expect(noneResult.status).toBe('success');
-    if (noneResult.status === 'success') {
-      expect(noneResult.recommendation).toEqual({
-        action: 'none',
-        reason: 'No readable trip candidates matched the request.',
-      });
-    }
-  });
+  tripCandidateService.findRecentTripCandidates.mockResolvedValueOnce([]);
+  const noneResult = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 3 });
+  expect(noneResult.status).toBe('success');
+  if (noneResult.status === 'success') {
+    expect(noneResult.recommendation).toEqual({
+      action: 'none',
+      reason: 'No readable trip candidates matched the request.',
+    });
+  }
+});
 ```
 
 - [ ] **Step 4: Run service test and verify it fails**
@@ -318,7 +326,7 @@ Add `recommendation: noTripCandidateRecommendation` to every mocked `findTripCan
 In `server/src/services/agent-mcp-tool-contract.service.ts`, update the `findTripCandidatesContract.usage` string to mention:
 
 ```ts
-'Follow recommendation.action: use_top_candidate means use candidateDedupeKey, ask_user means ask one question with candidate labels, and none means ask for one concrete source before planning.'
+'Follow recommendation.action: use_top_candidate means use candidateDedupeKey, ask_user means ask one question with candidate labels, and none means ask for one concrete source before planning.';
 ```
 
 In `server/src/services/agent-mcp-tool-contract.service.spec.ts`, extend the existing trip candidate workflow test so it asserts the contract documents `recommendation.action`, `use_top_candidate`, `ask_user`, and `none`.
@@ -354,20 +362,20 @@ git commit -m "feat: add trip candidate recommendations"
 In `server/src/services/agent-mcp-prompt.service.spec.ts`, add:
 
 ```ts
-  it('teaches the handle-first recent trip album workflow', () => {
-    const prompt = sut.generatePromptCheatSheet();
+it('teaches the handle-first recent trip album workflow', () => {
+  const prompt = sut.generatePromptCheatSheet();
 
-    expect(prompt).toContain('Trip albums: findTripCandidates first');
-    expect(prompt).toContain('recommendation.action');
-    expect(prompt).toContain('use_top_candidate');
-    expect(prompt).toContain('ask_user');
-    expect(prompt).toContain('none');
-    expect(prompt).toContain('generic handle->proposeAlbumFromSelection');
-    expect(prompt).toContain('highlights default 10->curateSelection');
-    expect(prompt).not.toMatch(/trip album requests.*searchAssets/i);
-    expect(prompt).not.toMatch(/copy .*assetIds/i);
-    expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
-  });
+  expect(prompt).toContain('Trip albums: findTripCandidates first');
+  expect(prompt).toContain('recommendation.action');
+  expect(prompt).toContain('use_top_candidate');
+  expect(prompt).toContain('ask_user');
+  expect(prompt).toContain('none');
+  expect(prompt).toContain('generic handle->proposeAlbumFromSelection');
+  expect(prompt).toContain('highlights default 10->curateSelection');
+  expect(prompt).not.toMatch(/trip album requests.*searchAssets/i);
+  expect(prompt).not.toMatch(/copy .*assetIds/i);
+  expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
+});
 ```
 
 - [ ] **Step 2: Run prompt-service test and verify it fails**
@@ -387,20 +395,42 @@ Update `agent-runner/src/pi-runtime.test.mjs` in the system prompt test:
 Replace the old assertions:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), true);
+assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'),
+  true,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'),
+  true,
+);
 ```
 
 with:
 
 ```js
-    assert.equal(calls.loaders[0].systemPrompt.includes('For recent trip album requests, call mcp_gallery_findTripCandidates before asking for dates'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Follow findTripCandidates.recommendation.action'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('Generic trip albums pass candidate selectionHandle.id directly to mcp_gallery_proposeAlbumFromSelection'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('explicit top/best/highlights default to 10'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), false);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), false);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes(
+    'For recent trip album requests, call mcp_gallery_findTripCandidates before asking for dates',
+  ),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('Follow findTripCandidates.recommendation.action'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes(
+    'Generic trip albums pass candidate selectionHandle.id directly to mcp_gallery_proposeAlbumFromSelection',
+  ),
+  true,
+);
+assert.equal(calls.loaders[0].systemPrompt.includes('explicit top/best/highlights default to 10'), true);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'),
+  false,
+);
+assert.equal(
+  calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'),
+  false,
+);
 ```
 
 - [ ] **Step 4: Run Pi runtime prompt test and verify it fails**
@@ -513,7 +543,10 @@ const tripCandidateHandlers = ({
           result: {
             structuredContent: {
               status: 'success',
-              summary: candidates.length === 0 ? 'No trip candidates found matching "USA".' : `Found ${candidates.length} trip candidate(s) matching "USA".`,
+              summary:
+                candidates.length === 0
+                  ? 'No trip candidates found matching "USA".'
+                  : `Found ${candidates.length} trip candidate(s) matching "USA".`,
               recommendation,
               candidates,
             },
@@ -574,38 +607,38 @@ const tripCandidateHandlers = ({
 Replace the old search-based USA trip test or add:
 
 ```js
-  it('creates a generic USA recent-trip album from the trip candidate handle without asking for dates', async () => {
-    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('creates a generic USA recent-trip album from the trip candidate handle without asking for dates', async () => {
+  const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(calls[0].body.params.arguments, { placeHint: 'USA' });
-    assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
-    assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
-    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
-    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /need.*date|rough dates/i);
-    assert.match(events.at(-1).content.blocks[0].text, /May 3-12, 2026/i);
-    assert.match(events.at(-1).content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
-    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.deepEqual(calls[0].body.params.arguments, { placeHint: 'USA' });
+  assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
+  assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
+  assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+  assert.doesNotMatch(events.at(-1).content.blocks[0].text, /need.*date|rough dates/i);
+  assert.match(events.at(-1).content.blocks[0].text, /May 3-12, 2026/i);
+  assert.match(events.at(-1).content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
+  assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+});
 
-  it('creates a recent-trip album without a place hint after calling the detector with no arguments', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({ expectedPlaceHint: null, expectedAlbumName: 'Recent Trip' }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('creates a recent-trip album without a place hint after calling the detector with no arguments', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({ expectedPlaceHint: null, expectedAlbumName: 'Recent Trip' }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(calls[0].body.params.arguments, {});
-    assert.equal(calls[1].body.params.arguments.albumName, 'Recent Trip');
-    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.deepEqual(calls[0].body.params.arguments, {});
+  assert.equal(calls[1].body.params.arguments.albumName, 'Recent Trip');
+  assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+});
 ```
 
 - [ ] **Step 3: Write failing highlight trip e2e tests**
@@ -613,49 +646,55 @@ Replace the old search-based USA trip test or add:
 Add:
 
 ```js
-  it('creates trip highlights through findTripCandidates, curation, and a reviewable album plan', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({ expectedHighlightCount: 15, selectedAssetCount: 15 }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('creates trip highlights through findTripCandidates, curation, and a reviewable album plan', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({ expectedHighlightCount: 15, selectedAssetCount: 15 }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(
-      runtime,
-      'Create an album of the top 15 highlights for my recent trip to USA called USA Highlights.',
-    );
+  const events = await collectEvents(
+    runtime,
+    'Create an album of the top 15 highlights for my recent trip to USA called USA Highlights.',
+  );
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,curateSelection,proposeAlbumFromSelection');
-    assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
-    assert.equal(calls[1].body.params.arguments.targetCount, 15);
-    assert.equal(calls[2].body.params.arguments.albumName, 'USA Highlights');
-    assert.equal(calls[2].body.params.arguments.selectionHandleId, tripCandidateCuratedHandleId);
-    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
-    assert.match(events.at(-1).content.blocks[0].text, /15 metadata-only suggested highlights/i);
-    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'findTripCandidates,curateSelection,proposeAlbumFromSelection',
+  );
+  assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
+  assert.equal(calls[1].body.params.arguments.targetCount, 15);
+  assert.equal(calls[2].body.params.arguments.albumName, 'USA Highlights');
+  assert.equal(calls[2].body.params.arguments.selectionHandleId, tripCandidateCuratedHandleId);
+  assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+  assert.match(events.at(-1).content.blocks[0].text, /15 metadata-only suggested highlights/i);
+  assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+});
 
-  it('defaults recent-trip highlights to 10 when no count is provided', async () => {
-    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('defaults recent-trip highlights to 10 when no count is provided', async () => {
+  const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    await collectEvents(runtime, 'Create an album of the top highlights for my recent trip to USA');
+  await collectEvents(runtime, 'Create an album of the top highlights for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,curateSelection,proposeAlbumFromSelection');
-    assert.equal(calls[1].body.params.arguments.targetCount, 10);
-  });
+  assert.equal(
+    calls.map((call) => call.body.params.name).join(','),
+    'findTripCandidates,curateSelection,proposeAlbumFromSelection',
+  );
+  assert.equal(calls[1].body.params.arguments.targetCount, 10);
+});
 
-  it('detects the recent trip before asking for a valid explicit highlight count', async () => {
-    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('detects the recent trip before asking for a valid explicit highlight count', async () => {
+  const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album of the top 0 highlights for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album of the top 0 highlights for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
+});
 ```
 
 - [ ] **Step 4: Write failing ask/none recommendation e2e tests**
@@ -663,50 +702,50 @@ Add:
 Add:
 
 ```js
-  it('asks one question with candidate labels when the trip tool recommends asking the user', async () => {
-    const candidates = [
-      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 95 }),
-      makeTripCandidateSummary({
-        title: 'Recent trip to California, USA',
-        dedupeKey: 'trip:ca',
-        placeLabels: ['California, USA'],
-        score: 40,
-      }),
-    ];
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        candidates,
-        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('asks one question with candidate labels when the trip tool recommends asking the user', async () => {
+  const candidates = [
+    makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 95 }),
+    makeTripCandidateSummary({
+      title: 'Recent trip to California, USA',
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      score: 40,
+    }),
+  ];
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(events.at(-1).content.blocks[0].text, /New York, USA/i);
-    assert.match(events.at(-1).content.blocks[0].text, /California, USA/i);
-    assert.match(events.at(-1).content.blocks[0].text, /\?$/);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(events.at(-1).content.blocks[0].text, /New York, USA/i);
+  assert.match(events.at(-1).content.blocks[0].text, /California, USA/i);
+  assert.match(events.at(-1).content.blocks[0].text, /\?$/);
+});
 
-  it('does not plan when no trip candidate is found and asks for one concrete source', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        candidates: [],
-        recommendation: { action: 'none', reason: 'No readable trip candidates matched the request.' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('does not plan when no trip candidate is found and asks for one concrete source', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      candidates: [],
+      recommendation: { action: 'none', reason: 'No readable trip candidates matched the request.' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(events.at(-1).content.blocks[0].text, /could not find a likely recent trip/i);
-    assert.match(events.at(-1).content.blocks[0].text, /date range or place/i);
-    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /Review the plan/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(events.at(-1).content.blocks[0].text, /could not find a likely recent trip/i);
+  assert.match(events.at(-1).content.blocks[0].text, /date range or place/i);
+  assert.doesNotMatch(events.at(-1).content.blocks[0].text, /Review the plan/i);
+});
 ```
 
 The `ask_user` test intentionally gives a much higher top score and still expects no plan. That proves the runner follows `recommendation.action` instead of independently interpreting scores.
@@ -747,7 +786,7 @@ const parseRecentTripPrompt = (prompt) => {
     placeHint,
     highlights,
     requestedCount,
-    effectiveCount: highlights ? requestedCount ?? defaultHighlightCount : null,
+    effectiveCount: highlights ? (requestedCount ?? defaultHighlightCount) : null,
     albumName,
   };
 };
@@ -781,7 +820,10 @@ const duplicateExclusionText = (candidate) => {
 Add proposal helper near `proposeMetadataHighlightAlbumFromSelection`:
 
 ```js
-const proposeTripAlbumFromSelection = async (client, { albumName, selectionHandleId, assetCount, candidate, highlights }) => {
+const proposeTripAlbumFromSelection = async (
+  client,
+  { albumName, selectionHandleId, assetCount, candidate, highlights },
+) => {
   const label = tripCandidateLabel(candidate);
   await client.call('proposeAlbumFromSelection', {
     summary: highlights

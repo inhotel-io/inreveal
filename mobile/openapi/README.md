@@ -96,6 +96,7 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**createAgentSession**](doc//AgentSessionsApi.md#createagentsession) | **POST** /agent/sessions | Create an agent session
 *AgentSessionsApi* | [**deleteAgentSession**](doc//AgentSessionsApi.md#deleteagentsession) | **DELETE** /agent/sessions/{id} | Delete an agent session
 *AgentSessionsApi* | [**executeAgentSearchAssets**](doc//AgentSessionsApi.md#executeagentsearchassets) | **POST** /agent/sessions/{id}/tools/search-assets | Execute the internal searchAssets agent tool
+*AgentSessionsApi* | [**findTripCandidates**](doc//AgentSessionsApi.md#findtripcandidates) | **POST** /agent/sessions/{id}/tools/find-trip-candidates | Execute the internal findTripCandidates agent tool
 *AgentSessionsApi* | [**getAgentSession**](doc//AgentSessionsApi.md#getagentsession) | **GET** /agent/sessions/{id} | Retrieve an agent session
 *AgentSessionsApi* | [**getAgentSessionActivityEvents**](doc//AgentSessionsApi.md#getagentsessionactivityevents) | **GET** /agent/sessions/{id}/activity-events | List agent session activity events
 *AgentSessionsApi* | [**getAgentSessionMessages**](doc//AgentSessionsApi.md#getagentsessionmessages) | **GET** /agent/sessions/{id}/messages | List agent session messages
@@ -454,6 +455,12 @@ Class | Method | HTTP request | Description
  - [AgentDeclarativeNamedFilter](doc//AgentDeclarativeNamedFilter.md)
  - [AgentDeclarativeSpaceFilter](doc//AgentDeclarativeSpaceFilter.md)
  - [AgentExplicitAssetsAssetSourceInput](doc//AgentExplicitAssetsAssetSourceInput.md)
+ - [AgentFindTripCandidatesToolApprovalRequiredResponse](doc//AgentFindTripCandidatesToolApprovalRequiredResponse.md)
+ - [AgentFindTripCandidatesToolDeniedResponse](doc//AgentFindTripCandidatesToolDeniedResponse.md)
+ - [AgentFindTripCandidatesToolRequestDto](doc//AgentFindTripCandidatesToolRequestDto.md)
+ - [AgentFindTripCandidatesToolRequestDtoTargetDate](doc//AgentFindTripCandidatesToolRequestDtoTargetDate.md)
+ - [AgentFindTripCandidatesToolResponseDto](doc//AgentFindTripCandidatesToolResponseDto.md)
+ - [AgentFindTripCandidatesToolSuccessResponse](doc//AgentFindTripCandidatesToolSuccessResponse.md)
  - [AgentListAlbumsToolApprovalRequiredResponse](doc//AgentListAlbumsToolApprovalRequiredResponse.md)
  - [AgentListAlbumsToolDeniedResponse](doc//AgentListAlbumsToolDeniedResponse.md)
  - [AgentListAlbumsToolRequestDto](doc//AgentListAlbumsToolRequestDto.md)
@@ -629,6 +636,10 @@ Class | Method | HTTP request | Description
  - [AgentToolDataClass](doc//AgentToolDataClass.md)
  - [AgentToolName](doc//AgentToolName.md)
  - [AgentToolResultSize](doc//AgentToolResultSize.md)
+ - [AgentTripCandidateNonAutoRecommendation](doc//AgentTripCandidateNonAutoRecommendation.md)
+ - [AgentTripCandidateRecommendation](doc//AgentTripCandidateRecommendation.md)
+ - [AgentTripCandidateSummary](doc//AgentTripCandidateSummary.md)
+ - [AgentTripCandidateUseTopRecommendation](doc//AgentTripCandidateUseTopRecommendation.md)
  - [AgentUserLookupResult](doc//AgentUserLookupResult.md)
  - [AgentUserMessageContent](doc//AgentUserMessageContent.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
