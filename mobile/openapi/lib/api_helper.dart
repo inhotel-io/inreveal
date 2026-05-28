@@ -220,6 +220,15 @@ String parameterToString(dynamic value) {
   if (value is AgentToolName) {
     return AgentToolNameTypeTransformer().encode(value).toString();
   }
+  if (value is AgentTripCandidateConfidence) {
+    return AgentTripCandidateConfidenceTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentTripCandidateNonAutoRecommendationAction) {
+    return AgentTripCandidateNonAutoRecommendationActionTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentTripCandidateUseTopRecommendationAction) {
+    return AgentTripCandidateUseTopRecommendationActionTypeTransformer().encode(value).toString();
+  }
   if (value is AlbumUserRole) {
     return AlbumUserRoleTypeTransformer().encode(value).toString();
   }

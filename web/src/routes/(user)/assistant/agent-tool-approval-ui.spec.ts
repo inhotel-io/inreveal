@@ -51,6 +51,16 @@ describe('agent tool approval UI helpers', () => {
     expect(getAgentToolCallCompletedText(readSpace)).toBe('Pi inspected a space.');
   });
 
+  it('maps trip candidate detection to labels and user-facing pending/completed copy', () => {
+    const tripCandidates = toolCall({ toolName: AgentToolName.FindTripCandidates });
+
+    expect(getAgentToolNameLabelKey(AgentToolName.FindTripCandidates)).toBe(
+      'assistant_agent_tool_name_findTripCandidates',
+    );
+    expect(getAgentToolCallPendingText(tripCandidates)).toBe('Pi wants to find likely trip photo groups.');
+    expect(getAgentToolCallCompletedText(tripCandidates)).toBe('Pi found likely trip photo groups.');
+  });
+
   it('uses metadata-specific approval copy only for metadata asset batch plans', () => {
     const metadataPlan = toolCall({
       toolName: AgentToolName.ProposeAssetBatchFromSearch,

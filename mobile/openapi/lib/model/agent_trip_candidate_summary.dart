@@ -42,7 +42,7 @@ class AgentTripCandidateSummary {
 
   List<String> cities;
 
-  AgentTripCandidateSummaryConfidenceEnum confidence;
+  AgentTripCandidateConfidence confidence;
 
   List<String> countries;
 
@@ -162,7 +162,7 @@ class AgentTripCandidateSummary {
         cities: json[r'cities'] is Iterable
             ? (json[r'cities'] as Iterable).cast<String>().toList(growable: false)
             : const [],
-        confidence: AgentTripCandidateSummaryConfidenceEnum.fromJson(json[r'confidence'])!,
+        confidence: AgentTripCandidateConfidence.fromJson(json[r'confidence'])!,
         countries: json[r'countries'] is Iterable
             ? (json[r'countries'] as Iterable).cast<String>().toList(growable: false)
             : const [],
@@ -248,81 +248,4 @@ class AgentTripCandidateSummary {
     'title',
   };
 }
-
-
-class AgentTripCandidateSummaryConfidenceEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentTripCandidateSummaryConfidenceEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const high = AgentTripCandidateSummaryConfidenceEnum._(r'high');
-  static const medium = AgentTripCandidateSummaryConfidenceEnum._(r'medium');
-  static const low = AgentTripCandidateSummaryConfidenceEnum._(r'low');
-
-  /// List of all possible values in this [enum][AgentTripCandidateSummaryConfidenceEnum].
-  static const values = <AgentTripCandidateSummaryConfidenceEnum>[
-    high,
-    medium,
-    low,
-  ];
-
-  static AgentTripCandidateSummaryConfidenceEnum? fromJson(dynamic value) => AgentTripCandidateSummaryConfidenceEnumTypeTransformer().decode(value);
-
-  static List<AgentTripCandidateSummaryConfidenceEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentTripCandidateSummaryConfidenceEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentTripCandidateSummaryConfidenceEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentTripCandidateSummaryConfidenceEnum] to String,
-/// and [decode] dynamic data back to [AgentTripCandidateSummaryConfidenceEnum].
-class AgentTripCandidateSummaryConfidenceEnumTypeTransformer {
-  factory AgentTripCandidateSummaryConfidenceEnumTypeTransformer() => _instance ??= const AgentTripCandidateSummaryConfidenceEnumTypeTransformer._();
-
-  const AgentTripCandidateSummaryConfidenceEnumTypeTransformer._();
-
-  String encode(AgentTripCandidateSummaryConfidenceEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentTripCandidateSummaryConfidenceEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentTripCandidateSummaryConfidenceEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'high': return AgentTripCandidateSummaryConfidenceEnum.high;
-        case r'medium': return AgentTripCandidateSummaryConfidenceEnum.medium;
-        case r'low': return AgentTripCandidateSummaryConfidenceEnum.low;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentTripCandidateSummaryConfidenceEnumTypeTransformer] instance.
-  static AgentTripCandidateSummaryConfidenceEnumTypeTransformer? _instance;
-}
-
 

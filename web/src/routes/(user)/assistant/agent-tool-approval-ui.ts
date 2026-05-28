@@ -10,6 +10,7 @@ import type { Translations } from 'svelte-i18n';
 
 const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.SearchAssets]: 'assistant_agent_tool_name_searchAssets',
+  [AgentToolName.FindTripCandidates]: 'assistant_agent_tool_name_findTripCandidates',
   [AgentToolName.ReadSelectionMetadata]: 'assistant_agent_tool_name_readSelectionMetadata',
   [AgentToolName.CurateSelection]: 'assistant_agent_tool_name_curateSelection',
   [AgentToolName.ResolveAssetSearchFilters]: 'assistant_agent_tool_name_resolveAssetSearchFilters',
@@ -63,6 +64,7 @@ export const getAgentToolDataClassLabelKey = (dataClass: AgentToolDataClass) =>
 
 const pendingActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi wants to search your photos.',
+  [AgentToolName.FindTripCandidates]: 'Pi wants to find likely trip photo groups.',
   [AgentToolName.ReadSelectionMetadata]: 'Pi wants to read selection details.',
   [AgentToolName.CurateSelection]: 'Pi wants to choose a smaller photo selection.',
   [AgentToolName.ResolveAssetSearchFilters]: 'Pi wants to match your search terms to gallery filters.',
@@ -88,6 +90,7 @@ const pendingActionText: Partial<Record<AgentToolName, string>> = {
 
 const completedActionText: Partial<Record<AgentToolName, string>> = {
   [AgentToolName.SearchAssets]: 'Pi searched your photos.',
+  [AgentToolName.FindTripCandidates]: 'Pi found likely trip photo groups.',
   [AgentToolName.ReadSelectionMetadata]: 'Pi read selection details.',
   [AgentToolName.CurateSelection]: 'Pi chose a smaller photo selection.',
   [AgentToolName.ResolveAssetSearchFilters]: 'Pi matched your search terms to gallery filters.',
