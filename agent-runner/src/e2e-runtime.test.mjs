@@ -12,6 +12,8 @@ const lastWeekendHighlightFilters = {
 };
 const usaTripSearchHandleId = '00000000-0000-4000-8000-000000000901';
 const usaTripCuratedHandleId = '00000000-0000-4000-8000-000000000902';
+const tripCandidateHandleId = '00000000-0000-4000-8000-000000000921';
+const tripCandidateCuratedHandleId = '00000000-0000-4000-8000-000000000922';
 const highlightAssetIds = [
   '00000000-0000-4000-8000-000000000401',
   '00000000-0000-4000-8000-000000000402',
@@ -61,6 +63,31 @@ const currentAlbumMetadataAssets = () =>
 
 const currentAlbumSessionContext = () => ({
   albumId: familyAlbumId,
+});
+
+const makeTripCandidateSummary = (overrides = {}) => ({
+  dedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+  title: 'Recent trip to New York, USA',
+  subtitle: '28 photos over 10 days',
+  countries: ['USA'],
+  states: ['New York'],
+  cities: ['New York'],
+  takenAfter: '2026-05-03T00:00:00.000Z',
+  takenBefore: '2026-05-12T23:59:59.000Z',
+  assetCount: 32,
+  albumAssetCount: 28,
+  excludedDuplicateCount: 3,
+  excludedStackChildCount: 1,
+  dayCount: 10,
+  score: 90,
+  confidence: 'high',
+  placeLabels: ['New York, USA'],
+  selectionHandle: {
+    id: tripCandidateHandleId,
+    sourceRef: `asset-source:search:${tripCandidateHandleId}`,
+    assetCount: 28,
+  },
+  ...overrides,
 });
 
 const familyAlbumSummary = () => ({
@@ -406,6 +433,89 @@ const metadataHighlightHandlers = ({
   successHandlers()[1],
 ];
 
+const tripCandidateHandlers = ({
+  candidates = [makeTripCandidateSummary()],
+  recommendation = {
+    action: 'use_top_candidate',
+    candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+    reason: 'The only readable trip candidate is high confidence.',
+  },
+  expectedPlaceHint = 'USA',
+  expectedAlbumName = 'USA Trip',
+  expectedHighlightCount = 10,
+  selectedAssetCount = expectedHighlightCount,
+} = {}) => [
+  {
+    name: 'findTripCandidates',
+    handle: (args, request) => {
+      assert.deepEqual(args, expectedPlaceHint === null ? {} : { placeHint: expectedPlaceHint });
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              summary: candidates.length === 0
+                ? 'No trip candidates found matching "USA".'
+                : `Found ${candidates.length} trip candidate(s) matching "USA".`,
+              recommendation,
+              candidates,
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    name: 'curateSelection',
+    handle: (args, request) => {
+      assert.deepEqual(args, {
+        selectionHandleId: tripCandidateHandleId,
+        targetCount: expectedHighlightCount,
+        strategy: 'metadata-highlights',
+        criteria: 'top metadata-only highlights from USA Trip',
+        sampleSize: 10,
+      });
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              selectionHandle: { id: tripCandidateCuratedHandleId, assetCount: selectedAssetCount },
+              selectedAssetCount,
+              sourceAssetCount: candidates[0]?.selectionHandle?.assetCount ?? 0,
+              criteriaSummary: ['metadata-only highlights from the trip candidate handle'],
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    name: 'proposeAlbumFromSelection',
+    handle: (args, request) => {
+      assert.equal(args.albumName, expectedAlbumName);
+      return {
+        body: {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            structuredContent: {
+              status: 'success',
+              summary: 'Stored proposed album from selection.',
+              plan: { id: '00000000-0000-4000-8000-000000000923' },
+              received: args,
+            },
+          },
+        },
+      };
+    },
+  },
+];
+
 const usaTripHandleFirstHandlers = ({
   expectedFilters = {
     country: 'USA',
@@ -734,6 +844,132 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /metadata-only/i);
     assert.match(events.at(-1).content.blocks[0].text, /2 suggested highlights/i);
     assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('creates a generic USA recent-trip album from the trip candidate handle without asking for dates', async () => {
+    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(calls[0].body.params.arguments, { placeHint: 'USA' });
+    assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
+    assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
+    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /need.*date|rough dates/i);
+    assert.match(events.at(-1).content.blocks[0].text, /May 3-12, 2026/i);
+    assert.match(events.at(-1).content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
+    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('creates a recent-trip album without a place hint after calling the detector with no arguments', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({ expectedPlaceHint: null, expectedAlbumName: 'Recent Trip' }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(calls[0].body.params.arguments, {});
+    assert.equal(calls[1].body.params.arguments.albumName, 'Recent Trip');
+    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('creates trip highlights through findTripCandidates, curation, and a reviewable album plan', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        expectedHighlightCount: 15,
+        selectedAssetCount: 15,
+        expectedAlbumName: 'USA Highlights',
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(
+      runtime,
+      'Create an album of the top 15 highlights for my recent trip to USA called USA Highlights.',
+    );
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,curateSelection,proposeAlbumFromSelection');
+    assert.equal(calls[1].body.params.arguments.selectionHandleId, tripCandidateHandleId);
+    assert.equal(calls[1].body.params.arguments.targetCount, 15);
+    assert.equal(calls[2].body.params.arguments.albumName, 'USA Highlights');
+    assert.equal(calls[2].body.params.arguments.selectionHandleId, tripCandidateCuratedHandleId);
+    assert.equal(JSON.stringify(calls).includes('assetIds'), false);
+    assert.match(events.at(-1).content.blocks[0].text, /15 metadata-only suggested highlights/i);
+    assert.match(events.at(-1).content.blocks[0].text, /Review/i);
+  });
+
+  it('defaults recent-trip highlights to 10 when no count is provided', async () => {
+    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers({ expectedAlbumName: 'USA Highlights' }));
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Create an album of the top highlights for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,curateSelection,proposeAlbumFromSelection');
+    assert.equal(calls[1].body.params.arguments.targetCount, 10);
+  });
+
+  it('detects the recent trip before asking for a valid explicit highlight count', async () => {
+    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers());
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album of the top 0 highlights for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /positive count/i);
+  });
+
+  it('asks one question with candidate labels when the trip tool recommends asking the user', async () => {
+    const candidates = [
+      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 95 }),
+      makeTripCandidateSummary({
+        title: 'Recent trip to California, USA',
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        score: 40,
+      }),
+    ];
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates,
+        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /New York, USA/i);
+    assert.match(events.at(-1).content.blocks[0].text, /California, USA/i);
+    assert.match(events.at(-1).content.blocks[0].text, /\?$/);
+  });
+
+  it('does not plan when no trip candidate is found and asks for one concrete source', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates: [],
+        recommendation: { action: 'none', reason: 'No readable trip candidates matched the request.' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /could not find a likely recent trip/i);
+    assert.match(events.at(-1).content.blocks[0].text, /date range or place/i);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /Review the plan/i);
   });
 
   it('creates USA trip highlights through search handle, curation handle, and selection plan without raw ids', async () => {
