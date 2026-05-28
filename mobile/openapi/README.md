@@ -458,7 +458,6 @@ Class | Method | HTTP request | Description
  - [AgentFindTripCandidatesToolApprovalRequiredResponse](doc//AgentFindTripCandidatesToolApprovalRequiredResponse.md)
  - [AgentFindTripCandidatesToolDeniedResponse](doc//AgentFindTripCandidatesToolDeniedResponse.md)
  - [AgentFindTripCandidatesToolRequestDto](doc//AgentFindTripCandidatesToolRequestDto.md)
- - [AgentFindTripCandidatesToolRequestDtoTargetDate](doc//AgentFindTripCandidatesToolRequestDtoTargetDate.md)
  - [AgentFindTripCandidatesToolResponseDto](doc//AgentFindTripCandidatesToolResponseDto.md)
  - [AgentFindTripCandidatesToolSuccessResponse](doc//AgentFindTripCandidatesToolSuccessResponse.md)
  - [AgentListAlbumsToolApprovalRequiredResponse](doc//AgentListAlbumsToolApprovalRequiredResponse.md)

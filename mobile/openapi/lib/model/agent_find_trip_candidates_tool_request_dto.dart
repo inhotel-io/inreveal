@@ -54,7 +54,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentFindTripCandidatesToolRequestDtoTargetDate? targetDate;
+  String? targetDate;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -126,7 +126,7 @@ class AgentFindTripCandidatesToolRequestDto {
         lookbackDays: mapValueOfType<int>(json, r'lookbackDays'),
         maxCandidates: mapValueOfType<int>(json, r'maxCandidates'),
         placeHint: mapValueOfType<String>(json, r'placeHint'),
-        targetDate: AgentFindTripCandidatesToolRequestDtoTargetDate.fromJson(json[r'targetDate']),
+        targetDate: mapValueOfType<String>(json, r'targetDate'),
         toolCallId: mapValueOfType<String>(json, r'toolCallId'),
       );
     }
