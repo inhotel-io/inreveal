@@ -28880,15 +28880,19 @@
         ],
         "type": "object"
       },
+      "AgentTripCandidateConfidence": {
+        "enum": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "type": "string"
+      },
       "AgentTripCandidateNonAutoRecommendation": {
         "additionalProperties": false,
         "properties": {
           "action": {
-            "enum": [
-              "ask_user",
-              "none"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentTripCandidateNonAutoRecommendationAction"
           },
           "reason": {
             "maxLength": 300,
@@ -28901,6 +28905,13 @@
           "reason"
         ],
         "type": "object"
+      },
+      "AgentTripCandidateNonAutoRecommendationAction": {
+        "enum": [
+          "ask_user",
+          "none"
+        ],
+        "type": "string"
       },
       "AgentTripCandidateRecommendation": {
         "oneOf": [
@@ -28934,12 +28945,7 @@
             "type": "array"
           },
           "confidence": {
-            "enum": [
-              "high",
-              "medium",
-              "low"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentTripCandidateConfidence"
           },
           "countries": {
             "items": {
@@ -29042,10 +29048,7 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "enum": [
-              "use_top_candidate"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentTripCandidateUseTopRecommendationAction"
           },
           "candidateDedupeKey": {
             "maxLength": 300,
@@ -29064,6 +29067,12 @@
           "reason"
         ],
         "type": "object"
+      },
+      "AgentTripCandidateUseTopRecommendationAction": {
+        "enum": [
+          "use_top_candidate"
+        ],
+        "type": "string"
       },
       "AgentUserLookupResult": {
         "properties": {

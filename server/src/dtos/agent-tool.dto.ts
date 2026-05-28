@@ -975,24 +975,31 @@ const AgentTripCandidateSummarySchema = z
     excludedStackChildCount: z.number().int().min(0),
     dayCount: z.number().int().min(0),
     score: z.number().int().min(0),
-    confidence: z.enum(['high', 'medium', 'low']),
+    confidence: z.enum(['high', 'medium', 'low']).meta({ id: 'AgentTripCandidateConfidence' }),
     placeLabels: z.array(z.string().trim().min(1).max(300)).max(50),
     selectionHandle: AgentSearchAssetsSelectionHandleSchema,
   })
   .meta({ id: 'AgentTripCandidateSummary' });
 
+const AgentTripCandidateUseTopRecommendationActionSchema = z
+  .literal('use_top_candidate')
+  .meta({ id: 'AgentTripCandidateUseTopRecommendationAction' });
+const AgentTripCandidateNonAutoRecommendationActionSchema = z
+  .enum(['ask_user', 'none'])
+  .meta({ id: 'AgentTripCandidateNonAutoRecommendationAction' });
+
 const AgentTripCandidateRecommendationSchema = z
   .discriminatedUnion('action', [
     z
       .strictObject({
-        action: z.literal('use_top_candidate'),
+        action: AgentTripCandidateUseTopRecommendationActionSchema,
         candidateDedupeKey: z.string().trim().min(1).max(300),
         reason: z.string().trim().min(1).max(300),
       })
       .meta({ id: 'AgentTripCandidateUseTopRecommendation' }),
     z
       .strictObject({
-        action: z.enum(['ask_user', 'none']),
+        action: AgentTripCandidateNonAutoRecommendationActionSchema,
         reason: z.string().trim().min(1).max(300),
       })
       .meta({ id: 'AgentTripCandidateNonAutoRecommendation' }),

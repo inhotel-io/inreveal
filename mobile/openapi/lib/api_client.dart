@@ -614,14 +614,20 @@ class ApiClient {
           return AgentToolNameTypeTransformer().decode(value);
         case 'AgentToolResultSize':
           return AgentToolResultSize.fromJson(value);
+        case 'AgentTripCandidateConfidence':
+          return AgentTripCandidateConfidenceTypeTransformer().decode(value);
         case 'AgentTripCandidateNonAutoRecommendation':
           return AgentTripCandidateNonAutoRecommendation.fromJson(value);
+        case 'AgentTripCandidateNonAutoRecommendationAction':
+          return AgentTripCandidateNonAutoRecommendationActionTypeTransformer().decode(value);
         case 'AgentTripCandidateRecommendation':
           return AgentTripCandidateRecommendation.fromJson(value);
         case 'AgentTripCandidateSummary':
           return AgentTripCandidateSummary.fromJson(value);
         case 'AgentTripCandidateUseTopRecommendation':
           return AgentTripCandidateUseTopRecommendation.fromJson(value);
+        case 'AgentTripCandidateUseTopRecommendationAction':
+          return AgentTripCandidateUseTopRecommendationActionTypeTransformer().decode(value);
         case 'AgentUserLookupResult':
           return AgentUserLookupResult.fromJson(value);
         case 'AgentUserMessageContent':

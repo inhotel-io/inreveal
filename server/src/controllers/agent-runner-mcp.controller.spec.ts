@@ -274,6 +274,7 @@ describe(AgentRunnerMcpController.name, () => {
       expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
         AgentToolName.ResolveAssetSearchFilters,
         AgentToolName.SearchAssets,
+        AgentToolName.FindTripCandidates,
         AgentToolName.ReadSelectionMetadata,
         AgentToolName.CurateSelection,
         AgentToolName.ReadAssetMetadata,

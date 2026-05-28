@@ -1354,7 +1354,7 @@ export type AgentTripCandidateSummary = {
     albumAssetCount: number;
     assetCount: number;
     cities: string[];
-    confidence: Confidence;
+    confidence: AgentTripCandidateConfidence;
     countries: string[];
     dayCount: number;
     dedupeKey: string;
@@ -1370,12 +1370,12 @@ export type AgentTripCandidateSummary = {
     title: string;
 };
 export type AgentTripCandidateUseTopRecommendation = {
-    action: Action;
+    action: AgentTripCandidateUseTopRecommendationAction;
     candidateDedupeKey: string;
     reason: string;
 };
 export type AgentTripCandidateNonAutoRecommendation = {
-    action: Action2;
+    action: AgentTripCandidateNonAutoRecommendationAction;
     reason: string;
 };
 export type AgentTripCandidateRecommendation = AgentTripCandidateUseTopRecommendation | AgentTripCandidateNonAutoRecommendation;
@@ -4145,7 +4145,7 @@ export type SystemConfigBackupsDto = {
 };
 export type SystemConfigClassificationCategoryDto = {
     /** Action to take when an asset matches */
-    action: Action3;
+    action: Action;
     /** Whether this category is enabled */
     enabled: boolean;
     faceExclusion?: ClassificationFaceExclusion;
@@ -10614,15 +10614,15 @@ export enum Status2 {
 export enum Status3 {
     Denied = "denied"
 }
-export enum Confidence {
+export enum AgentTripCandidateConfidence {
     High = "high",
     Medium = "medium",
     Low = "low"
 }
-export enum Action {
+export enum AgentTripCandidateUseTopRecommendationAction {
     UseTopCandidate = "use_top_candidate"
 }
-export enum Action2 {
+export enum AgentTripCandidateNonAutoRecommendationAction {
     AskUser = "ask_user",
     None = "none"
 }
@@ -11297,7 +11297,7 @@ export enum SyncRequestType {
     LibraryAssetExifsV1 = "LibraryAssetExifsV1",
     SharedSpaceLibrariesV1 = "SharedSpaceLibrariesV1"
 }
-export enum Action3 {
+export enum Action {
     Tag = "tag",
     TagAndArchive = "tag_and_archive"
 }
