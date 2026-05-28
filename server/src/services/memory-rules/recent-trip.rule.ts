@@ -1,33 +1,31 @@
 import { DateTime } from 'luxon';
 import { AssetOrderWithRandom, MemoryType } from 'src/enum';
-import { AssetRepository, MemoryAsset, MemoryLocationCluster } from 'src/repositories/asset.repository';
+import { AssetRepository, MemoryAsset } from 'src/repositories/asset.repository';
 import { MemoryRepository } from 'src/repositories/memory.repository';
 import { MemoryRule, MemoryRuleCandidate, MemoryRuleContext } from 'src/services/memory-rules/memory-rule.interface';
+import { TripCandidateService } from 'src/services/trip-candidate.service';
 
 export class RecentTripMemoryRule implements MemoryRule {
   readonly id = 'recent_trip';
-  private static readonly HOME_DOMINANCE_RATIO = 1.25;
   private static readonly BURST_WINDOW_MS = 2 * 60 * 1000;
   private static readonly SMALL_TRIP_MAX = 6;
 
   constructor(
     private assetRepository: Pick<AssetRepository, 'getMemoryLocationClusters' | 'getMemoryAssetsForLocation'>,
     private memoryRepository: Pick<MemoryRepository, 'search'>,
+    private tripCandidateService = new TripCandidateService(assetRepository),
   ) {}
 
   async evaluate({ ownerId, target }: MemoryRuleContext): Promise<MemoryRuleCandidate[]> {
     const recentFrom = target.minus({ days: 30 }).startOf('day');
-    const baselineFrom = recentFrom.minus({ days: 90 });
-    const baselineTo = recentFrom.minus({ days: 1 }).endOf('day');
+    const recentTo = target.endOf('day');
 
-    const [baseline, recent, recentRuleMemories] = await Promise.all([
-      this.assetRepository.getMemoryLocationClusters(ownerId, {
-        takenAfter: baselineFrom.toJSDate(),
-        takenBefore: baselineTo.toJSDate(),
-      }),
-      this.assetRepository.getMemoryLocationClusters(ownerId, {
-        takenAfter: recentFrom.toJSDate(),
-        takenBefore: target.endOf('day').toJSDate(),
+    const [tripCandidates, recentRuleMemories] = await Promise.all([
+      this.tripCandidateService.findRecentTripCandidates({
+        ownerId,
+        targetDate: target.startOf('day').toJSDate(),
+        lookbackDays: 30,
+        maxCandidates: 3,
       }),
       this.memoryRepository.search(ownerId, {
         type: MemoryType.Rule,
@@ -36,29 +34,16 @@ export class RecentTripMemoryRule implements MemoryRule {
       }),
     ]);
 
-    const [home, runnerUp] = baseline;
-    if (!home?.country) {
-      return [];
-    }
-
-    const isAmbiguousHome =
-      !!runnerUp &&
-      runnerUp.country !== home.country &&
-      runnerUp.assetCount >= home.assetCount / RecentTripMemoryRule.HOME_DOMINANCE_RATIO;
-    if (isAmbiguousHome) {
-      return [];
-    }
-
-    const candidate = recent.find((item) => this.isTripCandidate(item, home));
+    const candidate = tripCandidates.find((item) => item.confidence === 'high');
     if (!candidate) {
       return [];
     }
 
-    if (!candidate.country) {
+    const place = candidate.source.places[0];
+    if (!place?.country) {
       return [];
     }
 
-    const placeKey = `${candidate.country}:${candidate.city ?? ''}`.toLowerCase();
     const isCoolingDown = recentRuleMemories.some((memory) => {
       const data = memory.data as Record<string, unknown>;
       if (data.ruleId !== this.id) {
@@ -67,7 +52,7 @@ export class RecentTripMemoryRule implements MemoryRule {
 
       const context = data.context as Record<string, unknown> | undefined;
       const seenPlaceKey = typeof context?.placeKey === 'string' ? context.placeKey : undefined;
-      return seenPlaceKey === placeKey && DateTime.fromJSDate(memory.memoryAt) >= target.minus({ days: 30 });
+      return seenPlaceKey === candidate.placeKey && DateTime.fromJSDate(memory.memoryAt) >= target.minus({ days: 30 });
     });
 
     if (isCoolingDown) {
@@ -75,49 +60,36 @@ export class RecentTripMemoryRule implements MemoryRule {
     }
 
     const locationAssets = await this.assetRepository.getMemoryAssetsForLocation(ownerId, {
-      country: candidate.country,
-      city: candidate.city,
+      country: place.country,
+      city: place.city ?? null,
       takenAfter: recentFrom.toJSDate(),
-      takenBefore: target.endOf('day').toJSDate(),
+      takenBefore: recentTo.toJSDate(),
     });
     const assetIds = this.curateTripAssets(locationAssets);
 
-    const placeLabel = candidate.city ? `${candidate.city}, ${candidate.country}` : candidate.country;
     const dedupeDay = target.toFormat('yyyy-MM-dd');
 
     return [
       {
         ruleId: this.id,
-        dedupeKey: `recent_trip:${placeKey}:${dedupeDay}`,
-        title: `Recent trip to ${placeLabel}`,
-        subtitle: `${candidate.assetCount} photos over ${candidate.dayCount} days`,
-        score: 50 + candidate.dayCount * 5 + Math.min(candidate.assetCount, 20),
+        dedupeKey: `recent_trip:${candidate.placeKey}:${dedupeDay}`,
+        title: candidate.title,
+        subtitle: candidate.subtitle,
+        score: candidate.score,
         assetIds,
         memoryAt: target,
         context: {
-          placeKey,
-          placeLabel,
-          country: candidate.country,
-          city: candidate.city,
+          placeKey: candidate.placeKey,
+          placeLabel: candidate.placeLabel,
+          country: place.country,
+          city: place.city,
           assetCount: candidate.assetCount,
           dayCount: candidate.dayCount,
-          tripWindowStart: candidate.firstDate.toISOString(),
-          tripWindowEnd: candidate.lastDate.toISOString(),
+          tripWindowStart: candidate.takenAfter.toISOString(),
+          tripWindowEnd: candidate.takenBefore.toISOString(),
         },
       },
     ];
-  }
-
-  private isTripCandidate(item: MemoryLocationCluster, home: MemoryLocationCluster) {
-    if (item.assetCount < 7 || item.dayCount < 2) {
-      return false;
-    }
-
-    if (item.country !== home.country) {
-      return true;
-    }
-
-    return !!home.city && !!item.city && item.city !== home.city;
   }
 
   private curateTripAssets(assets: MemoryAsset[]): string[] {
