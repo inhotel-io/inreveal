@@ -66,6 +66,8 @@ COPY ./plugins/mise.toml ./plugins/
 ENV MISE_TRUSTED_CONFIG_PATHS=/usr/src/app/plugins/mise.toml
 ENV MISE_DATA_DIR=/buildcache/mise
 RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
+  --mount=type=secret,id=github_token \
+  export GITHUB_TOKEN="$(cat /run/secrets/github_token 2>/dev/null || true)" && \
   mise install --cd plugins
 
 COPY ./plugins ./plugins/
