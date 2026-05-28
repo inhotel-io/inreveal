@@ -36,7 +36,6 @@
 
       {@render link('https://github.com/open-noodle/gallery', mdiGithub, $t('source'))}
 
-
       {@render link(
         'https://github.com/open-noodle/gallery/issues/new/choose',
         mdiBugOutline,
