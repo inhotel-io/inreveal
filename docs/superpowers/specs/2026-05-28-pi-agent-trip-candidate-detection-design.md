@@ -158,7 +158,7 @@ type TripCandidate = {
 ```
 
 `TripCandidateSource` should be a stable descriptor that other consumers can
-materialize later:
+materialize later without depending on MCP or agent DTOs:
 
 ```ts
 type TripCandidateSource = {
@@ -171,7 +171,6 @@ type TripCandidateSource = {
     state?: string | null;
     city?: string | null;
   }>;
-  filters?: AgentSearchAssetsFilters;
   placeLabels: string[];
 };
 ```
@@ -179,8 +178,8 @@ type TripCandidateSource = {
 The service may use asset IDs internally for scoring or memory representative
 selection, but it must not expose raw IDs to model-facing callers.
 
-`filters` is present only when the candidate can be represented by the current
-search filter shape. Multi-country and other OR-style candidates should use the
+Single-place candidates may be translated by an adapter into existing search
+filters. Multi-country and other OR-style candidates should use the
 `takenAfter`/`takenBefore` plus `places` descriptor and be materialized by a
 dedicated repository query or selection-handle creation path.
 
@@ -216,6 +215,12 @@ V1 should stay deterministic and metadata-based:
    materialization may need a dedicated repository query or a selection handle
    from the candidate asset set because current search filters do not express
    country OR country cleanly.
+9. **Classify the recommendation.** Mark the result as auto-usable only when
+   the top candidate is high confidence and clearly ahead of the runner-up. V1
+   should use deterministic rules: a single high-confidence candidate is clear;
+   otherwise the top high-confidence candidate must beat the runner-up by at
+   least 20% score or 15 absolute score points. If not, return candidates but
+   tell Pi to ask the user.
 
 ### Reusing Memory Logic
 
@@ -236,6 +241,26 @@ Trip detection behavior moves to the shared service:
 - trip-window merging;
 - scoring and confidence;
 - candidate dedupe key generation.
+
+The memory rule should remain conservative: it should create memory cards only
+from high-confidence candidates and should continue to apply its cooldown and
+daily rule cap. A low-confidence candidate can still be useful to Pi as an
+option in a clarification question, but it should not silently create a memory.
+
+### Access And Materialization
+
+The detector must not bypass existing visibility rules.
+
+V1 trip detection should use the same asset constraints as recent-trip memories
+for candidate discovery: owned timeline assets with location metadata and
+preview availability, excluding deleted assets. The MCP adapter must then
+materialize each candidate through the agent selection-handle path so session
+permissions, locked/offline asset filtering, and handle expiry are enforced in
+one place.
+
+Future shared-space trip detection can extend the detector, but it is out of
+scope for this feature unless the existing agent search/materialization path
+already supports it safely.
 
 ## MCP Tool
 
@@ -258,12 +283,25 @@ Defaults:
 - `maxCandidates`: 3
 - `targetDate`: now
 
+Validation:
+
+- `lookbackDays` must be an integer from 7 through 730.
+- `maxCandidates` must be an integer from 1 through 5.
+- `targetDate` must be a valid ISO date or datetime and must not be more than
+  one day in the future.
+- `placeHint`, when provided, is trimmed and capped at 120 characters.
+
 Response:
 
 ```ts
 type FindTripCandidatesResponse = {
   status: 'success';
   summary: string;
+  recommendation: {
+    action: 'use_top_candidate' | 'ask_user' | 'none';
+    candidateDedupeKey?: string;
+    reason: string;
+  };
   candidates: Array<{
     label: string;
     subtitle: string;
@@ -290,6 +328,12 @@ type FindTripCandidatesResponse = {
 If no candidates are found, return `status: 'success'` with an empty candidate
 array and a useful summary. This is not an error.
 
+When no candidates are found, `recommendation.action` should be `none`. When
+multiple plausible candidates are returned, `recommendation.action` should be
+`ask_user`. When Gallery has one clear best candidate, the action should be
+`use_top_candidate` and `candidateDedupeKey` should identify it. Pi should
+follow this recommendation instead of independently interpreting scores.
+
 If the request is invalid, return the normal Gallery MCP validation result with
 retryable hints.
 
@@ -305,8 +349,13 @@ Update the runner prompt and generated MCP cheat sheet guidance:
   dates.
 - If the user asks for "top highlights" without a count, default to 10 after a
   trip candidate is found.
-- If the top candidate has high confidence, proceed with a reviewable plan.
-- If several candidates are close, ask one question with candidate labels.
+- If `recommendation.action` is `use_top_candidate`, proceed with a reviewable
+  plan for that candidate.
+- If `recommendation.action` is `ask_user`, ask one question with candidate
+  labels.
+- If `recommendation.action` is `none`, explain that no likely trip was found,
+  ask for one concrete source such as a date range or place if the user still
+  wants the album, and do not create a plan.
 - Disclose metadata-only curation and assumptions in the final message.
 - Never copy asset IDs from trip detection or search results.
 
@@ -342,6 +391,9 @@ Tests:
 - Returns no high-confidence trip for home-only recent assets.
 - Handles ambiguous home baseline by lowering confidence instead of crashing.
 - Generates stable dedupe keys for the same trip window.
+- Keeps `RecentTripMemoryRule` conservative: low-confidence candidates are not
+  converted into memory cards.
+- Preserves recent-trip memory cooldown and daily cap behavior.
 
 Implementation:
 
@@ -359,6 +411,7 @@ Tests:
 - Keeps clearly separate trips as separate candidates.
 - Produces one multi-country candidate when a continuous trip crosses borders.
 - Summarizes countries/cities without duplicating labels.
+- Separates trips that span the same place but are divided by a larger date gap.
 
 Implementation:
 
@@ -377,6 +430,8 @@ Tests:
   error.
 - A place hint can find a trip in the home country but with lower confidence if
   it overlaps the home city.
+- Overlong place hints are trimmed and rejected or capped without affecting
+  query construction.
 
 Implementation:
 
@@ -393,7 +448,13 @@ Tests:
 - Empty result returns `status: success` and `candidates: []`.
 - Invalid `lookbackDays`, `maxCandidates`, and `targetDate` values return
   validation errors.
+- Boundary values for `lookbackDays` and `maxCandidates` are accepted at the
+  documented min/max and rejected just outside them.
 - Selection handles are session-scoped and expire like other agent handles.
+- Materialized handles exclude deleted, locked, offline, and otherwise
+  inaccessible assets.
+- Multi-country candidates materialize through a dedicated source path without
+  dropping countries that cannot fit into a single current search filter.
 
 Implementation:
 
@@ -410,7 +471,10 @@ Tests:
 - The flow defaults to 10 highlights when no count is provided.
 - The flow creates a reviewable plan and does not ask for dates first.
 - Multiple close candidates produce one clarifying question with labels.
-- No candidate produces an explanatory answer and no plan.
+- No candidate produces an explanatory answer, one concrete follow-up question,
+  and no plan.
+- The runner follows `recommendation.action` instead of independently deciding
+  whether scores are close.
 - The provider-visible transcript contains no raw asset IDs.
 
 Implementation:
@@ -434,6 +498,11 @@ Implementation:
   whether Pi can proceed or must ask to narrow.
 - Existing memory cooldown should not suppress MCP trip candidates. Cooldown is
   only for creating memory cards.
+- Future `targetDate` values beyond the validation grace period are rejected.
+- Shared-space-only assets are not included in V1 trip candidates unless a
+  future slice explicitly extends trip detection to shared-space access.
+- Candidate handles can expire between trip detection and curation; Pi should
+  rerun `findTripCandidates` if a handle-expired validation hint says to retry.
 
 ## Manual Testing
 
