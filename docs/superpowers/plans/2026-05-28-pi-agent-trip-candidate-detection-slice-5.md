@@ -4,7 +4,7 @@
 
 **Goal:** Add the handle-first `findTripCandidates` MCP/read tool so Pi can resolve trip album sources without receiving raw asset IDs.
 
-**Architecture:** Extend the existing agent read-tool pipeline rather than adding a parallel controller path. The new tool validates bounded request inputs, calls `TripCandidateService`, materializes each candidate through existing album-ready trip selection logic, filters materialized assets through the existing agent access/readability checks, creates same-session selection handles, and returns compact candidate summaries. The tool registry and contract docs advertise the handle-first flow; prompt behavior remains Slice 6.
+**Architecture:** Extend the existing agent read-tool pipeline rather than adding a parallel controller path. The new tool validates bounded request inputs, calls `TripCandidateService`, materializes each candidate through existing album-ready trip selection logic, filters materialized assets through the existing agent access/readability checks, creates same-session selection handles, and returns compact candidate summaries. The tool registry and contract docs advertise the handle-first flow; handwritten trip-flow prompt behavior remains Slice 6.
 
 **Tech Stack:** TypeScript, NestJS controllers/services, Zod DTOs, existing agent read-tool descriptor pattern, Vitest unit tests, generated OpenAPI and MCP docs.
 
@@ -29,7 +29,7 @@ Slice 5 implements:
 
 Out of scope:
 
-- No runner prompt changes.
+- No handwritten runner prompt behavior changes. The generated runner prompt cheat-sheet tool list is regenerated if the contract-owned tool list changes, but Slice 6 owns natural-language trip workflow guidance.
 - No deterministic Pi flow tests.
 - No automatic album proposal.
 - No proactive album suggestions.
@@ -1259,6 +1259,7 @@ git commit -m "feat: expose trip candidate MCP tool"
 **Files:**
 
 - Generated: `docs/superpowers/generated/pi-agent-mcp-tools.md`
+- Generated if drift tests require it: `agent-runner/src/generated/gallery-mcp-prompt-cheat-sheet.mjs`
 - Generated as needed: `open-api/immich-openapi-specs.json`
 - Generated as needed: `open-api/typescript-sdk/src/index.ts`
 - Generated as needed: mobile OpenAPI files
@@ -1270,10 +1271,11 @@ Run:
 ```bash
 pnpm --dir server build
 pnpm --dir server sync:agent-mcp-docs
+pnpm --dir server sync:agent-mcp-prompt
 pnpm --dir server sync:open-api
 ```
 
-Expected: commands exit 0. Generated MCP docs include `findTripCandidates`; generated OpenAPI includes `AgentFindTripCandidatesToolRequestDto` and `AgentFindTripCandidatesToolResponseDto`.
+Expected: commands exit 0. Generated MCP docs include `findTripCandidates`; generated OpenAPI includes `AgentFindTripCandidatesToolRequestDto` and `AgentFindTripCandidatesToolResponseDto`. If the generated prompt module changes, the diff should be limited to the contract-owned tool list adding `mcp_gallery_findTripCandidates`; do not add trip-album workflow instructions in Slice 5.
 
 - [ ] **Step 2: Verify generated files do not expose raw trip asset IDs**
 
@@ -1292,7 +1294,7 @@ Run:
 
 ```bash
 git status --short
-git add docs/superpowers/generated/pi-agent-mcp-tools.md open-api/immich-openapi-specs.json open-api/typescript-sdk/src/index.ts mobile/openapi/lib mobile/openapi/test mobile/openapi/doc 2>/dev/null || true
+git add docs/superpowers/generated/pi-agent-mcp-tools.md agent-runner/src/generated/gallery-mcp-prompt-cheat-sheet.mjs open-api/immich-openapi-specs.json open-api/typescript-sdk/src/index.ts mobile/openapi/lib mobile/openapi/test mobile/openapi/doc 2>/dev/null || true
 git commit -m "docs: regenerate trip candidate tool artifacts"
 ```
 
@@ -1349,7 +1351,7 @@ Expected: no raw trip candidate response fields are found. References to interna
 ## Plan Self-Review
 
 - Spec coverage: The plan covers candidate summaries and handles, no raw asset IDs, empty success, duplicate/stack counts, validation errors, boundary values, same-session handle expiry, inaccessible asset filtering, multi-country materialization, and handle count alignment.
-- Scope control: The plan does not modify runner prompt behavior, propose albums, add proactive suggestions, add geocoding, or add a new source-ref kind.
+- Scope control: The plan does not add handwritten runner prompt trip-flow behavior, propose albums, add proactive suggestions, add geocoding, or add a new source-ref kind. The generated runner prompt module may change only to keep the contract-owned tool list in sync.
 - TDD: DTO, contract, service, controller/MCP/registry tests are written and run red before implementation.
 - Edge cases: Unknown place results stay successful empty arrays, invalid DTO inputs fail validation, approved retries are supported, zero-result searches create no trip handles, and materialized inaccessible assets are removed before handle creation.
 - Type consistency: The new enum, DTO schemas, MCP read-tool union, registry order, controller route, MCP dispatch, and service method all use `FindTripCandidates`.
