@@ -442,6 +442,7 @@ const tripCandidateHandlers = ({
   },
   expectedPlaceHint = 'USA',
   expectedAlbumName = 'USA Trip',
+  expectedSelectionHandleId,
   expectedHighlightCount = 10,
   selectedAssetCount = expectedHighlightCount,
   planResponse,
@@ -500,6 +501,9 @@ const tripCandidateHandlers = ({
     name: 'proposeAlbumFromSelection',
     handle: (args, request) => {
       assert.equal(args.albumName, expectedAlbumName);
+      if (expectedSelectionHandleId) {
+        assert.equal(args.selectionHandleId, expectedSelectionHandleId);
+      }
       if (planError) {
         return {
           body: {
@@ -1070,6 +1074,130 @@ describe('e2e runtime', () => {
         toolCallId: '00000000-0000-4000-8000-000000000999',
       },
     ]);
+  });
+
+  it('resumes a strict recent-trip album after the user selects a candidate label', async () => {
+    const candidates = [
+      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 90 }),
+      makeTripCandidateSummary({
+        title: 'Recent trip to California, USA',
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        score: 88,
+      }),
+    ];
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates,
+        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+        expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    const followUp = await collectEvents(runtime, 'Use California');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(calls[1].body.params.arguments.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+    assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
+    assert.match(followUp.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('pauses strict recent-trip planning when a candidate follow-up requires approval', async () => {
+    const candidates = [
+      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 90 }),
+      makeTripCandidateSummary({
+        title: 'Recent trip to California, USA',
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        score: 88,
+      }),
+    ];
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates,
+        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+        expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+        planResponse: {
+          status: 'approval-required',
+          toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+        },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    const followUp = await collectEvents(runtime, 'Use California');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(followUp, [
+      {
+        type: 'tool-approval-needed',
+        sessionId: gallerySessionId,
+        runnerSessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000999',
+      },
+    ]);
+  });
+
+  it('renames a pending strict recent-trip album from the follow-up', async () => {
+    const candidates = [
+      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
+      makeTripCandidateSummary({
+        title: 'Recent trip to California, USA',
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+      }),
+    ];
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates,
+        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+        expectedAlbumName: 'West Coast',
+        expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    await collectEvents(runtime, 'Use California called West Coast');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(calls[1].body.params.arguments.albumName, 'West Coast');
+  });
+
+  it('asks the user to rerun after pending strict trip choices expire', async () => {
+    let nowMs = 1000;
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates: [
+          makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
+          makeTripCandidateSummary({
+            title: 'Recent trip to California, USA',
+            dedupeKey: 'trip:ca',
+            placeLabels: ['California, USA'],
+          }),
+        ],
+        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation, now: () => nowMs });
+    await runtime.createSession(createSessionBody());
+
+    await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    nowMs += 10 * 60 * 1000 + 1;
+    const followUp = await collectEvents(runtime, 'first one');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(followUp.at(-1).content.blocks[0].text, /expired/i);
+    assert.match(followUp.at(-1).content.blocks[0].text, /rerun the recent trip album request/i);
   });
 
   it('does not pause strict recent-trip planning when proposal approval has no tool call id', async () => {
