@@ -24,9 +24,7 @@ export const suggestDuplicateByMetadata = <T>(
     return undefined;
   }
 
-  let duplicateAssets = [...assets].toSorted(
-    (a, b) => (getFileSizeInByte(a) ?? 0) - (getFileSizeInByte(b) ?? 0),
-  );
+  let duplicateAssets = [...assets].toSorted((a, b) => (getFileSizeInByte(a) ?? 0) - (getFileSizeInByte(b) ?? 0));
   const largestFileSize = getFileSizeInByte(duplicateAssets.at(-1)!) ?? 0;
   duplicateAssets = duplicateAssets.filter((asset) => (getFileSizeInByte(asset) ?? 0) === largestFileSize);
 

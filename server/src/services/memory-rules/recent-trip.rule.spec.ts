@@ -461,7 +461,11 @@ describe(RecentTripMemoryRule.name, () => {
       ]),
     };
 
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
+    const rule = new RecentTripMemoryRule(
+      assetRepository as never,
+      memoryRepository as never,
+      tripCandidateService as never,
+    );
 
     await expect(
       rule.evaluate({
@@ -510,7 +514,11 @@ describe(RecentTripMemoryRule.name, () => {
       ]),
     };
 
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
+    const rule = new RecentTripMemoryRule(
+      assetRepository as never,
+      memoryRepository as never,
+      tripCandidateService as never,
+    );
     const [candidate] = await rule.evaluate({
       ownerId: 'user-1',
       target: DateTime.fromISO('2026-04-23', { zone: 'utc' }),
@@ -569,7 +577,11 @@ describe(RecentTripMemoryRule.name, () => {
       ]),
     };
 
-    const rule = new RecentTripMemoryRule(assetRepository as never, memoryRepository as never, tripCandidateService as never);
+    const rule = new RecentTripMemoryRule(
+      assetRepository as never,
+      memoryRepository as never,
+      tripCandidateService as never,
+    );
 
     await expect(
       rule.evaluate({
