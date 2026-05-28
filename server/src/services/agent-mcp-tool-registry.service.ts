@@ -136,6 +136,11 @@ const propertyDescriptions = {
   fields:
     'Optional metadata field groups for summary samples, metadata rows, itemRef samples, or legacy readAssetMetadata custom reads: type, dates, location, camera, tags, rating, filename, favorite, visibility.',
   sampleSize: 'Maximum summary or selection metadata sample rows from 0 to 25. Use 0 to disable samples.',
+  placeHint:
+    'Optional place label such as a country, state, or city. Matching is metadata-only; no geocoding is performed.',
+  targetDate: 'Optional ISO date-time used as the recent-trip lookback anchor. Defaults to now.',
+  lookbackDays: 'How far back to search for trip candidates. Defaults to 180 and accepts 1 to 365.',
+  maxCandidates: 'Maximum trip candidates to return. Defaults to 3 and accepts 1 to 10.',
   toolCallId: 'Use only for an approved retry after Gallery approves a pending read request.',
   summary: 'A human-readable plan summary describing what Gallery should review.',
   operations: 'The reviewable Gallery operations to propose or revise. Do not apply changes directly.',
@@ -219,6 +224,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       title: 'Search assets',
       description: `Search the photo library by mode, metadata filters, text query, page, order, and result limit.${approvedRequestInstruction}`,
       schema: AgentReadToolRequestSchemas[AgentToolName.SearchAssets],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
+      name: AgentToolName.FindTripCandidates,
+      title: 'Find trip candidates',
+      description: `Find likely recent trip candidates and return album-ready selection handles.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.FindTripCandidates],
       annotations: readToolAnnotations,
     }),
     defineTool({

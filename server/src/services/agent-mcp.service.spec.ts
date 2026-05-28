@@ -187,6 +187,7 @@ const expectNoMcpDownstreamServicesCalled = (
 ) => {
   expect(toolService.resolveAssetSearchFilters).not.toHaveBeenCalled();
   expect(toolService.searchAssets).not.toHaveBeenCalled();
+  expect(toolService.findTripCandidates).not.toHaveBeenCalled();
   expect(toolService.readSelectionMetadata).not.toHaveBeenCalled();
   expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
   expect(toolService.readAssetPreviews).not.toHaveBeenCalled();
@@ -515,6 +516,18 @@ describe(AgentMcpService.name, () => {
       },
       serviceMethod: 'searchAssets' as const,
       serviceResult: { status: 'success', toolCall: null, assets: [], nextPage: null },
+    },
+    {
+      toolName: AgentToolName.FindTripCandidates,
+      args: { placeHint: 'USA', maxCandidates: 2 },
+      expectedArgs: { placeHint: 'USA', lookbackDays: 180, maxCandidates: 2 },
+      serviceMethod: 'findTripCandidates' as const,
+      serviceResult: {
+        status: 'success',
+        toolCall: null,
+        summary: 'No trip candidates found matching "USA".',
+        candidates: [],
+      },
     },
     {
       toolName: AgentToolName.ReadSelectionMetadata,
@@ -875,6 +888,16 @@ describe(AgentMcpService.name, () => {
       toolName: AgentToolName.ReadSpace,
       serviceMethod: 'readSpace' as const,
       serviceResult: { status: 'success', toolCall: null, space: { id: factory.uuid(), assetIds: [] } },
+    },
+    {
+      toolName: AgentToolName.FindTripCandidates,
+      serviceMethod: 'findTripCandidates' as const,
+      serviceResult: {
+        status: 'success',
+        toolCall: null,
+        summary: 'No trip candidates found.',
+        candidates: [],
+      },
     },
   ])('passes approved retry toolCallId only for $toolName', async ({ toolName, serviceMethod, serviceResult }) => {
     const toolCallId = factory.uuid();
@@ -1457,6 +1480,12 @@ describe(AgentMcpService.name, () => {
       expectedPath: 'limit',
       toolName: AgentToolName.SearchAssets,
     },
+    {
+      name: 'invalid trip candidate maxCandidates',
+      args: { maxCandidates: 0 },
+      expectedPath: 'maxCandidates',
+      toolName: AgentToolName.FindTripCandidates,
+    },
   ])('returns isError tool result for malformed arguments: $name', async ({ args, expectedPath, toolName }) => {
     const response = (await sut.handle(
       auth,
@@ -1469,6 +1498,7 @@ describe(AgentMcpService.name, () => {
       path: expectedPath,
     });
     expect(toolService.searchAssets).not.toHaveBeenCalled();
+    expect(toolService.findTripCandidates).not.toHaveBeenCalled();
     expect(toolService.readAssetMetadata).not.toHaveBeenCalled();
     expect(toolService.readAlbum).not.toHaveBeenCalled();
     expect(toolService.listSpaces).not.toHaveBeenCalled();
