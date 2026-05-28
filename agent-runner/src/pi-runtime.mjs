@@ -13,6 +13,7 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
+import { matchStrictWorkflow, runCreateRecentTripAlbumWorkflow } from './strict-workflows.mjs';
 
 const protocolVersion = '2026-05-14';
 const runnerBehaviorPrompt = [
@@ -114,6 +115,77 @@ export const redactSecret = (message, secret) => {
 
 const redactSecrets = (message, secrets) =>
   secrets.reduce((redacted, secret) => redactSecret(redacted, secret), message);
+
+const extractMcpTextContent = (result) =>
+  result?.content
+    ?.filter((part) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('\n')
+    .trim() ?? '';
+
+const parseGalleryMcpToolResult = (result, name) => {
+  if (result?.isError) {
+    throw new Error(`Gallery MCP tool ${name} returned an error`);
+  }
+
+  if (result?.structuredContent !== undefined) {
+    return result.structuredContent;
+  }
+
+  const text = extractMcpTextContent(result);
+  if (text.length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Invalid Gallery MCP tool result JSON for ${name}`);
+  }
+};
+
+const createGalleryMcpClient = ({ gateway, fetch: fetchImplementation }) => {
+  let nextId = 1;
+
+  return {
+    async call(name, args, { signal } = {}) {
+      const id = nextId++;
+      const response = await fetchImplementation(gateway.url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${gateway.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'tools/call',
+          params: { name, arguments: args ?? {} },
+        }),
+        signal,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`Gallery MCP request for ${name} failed with status ${response.status}`);
+      }
+
+      let envelope;
+      try {
+        envelope = text.length === 0 ? {} : JSON.parse(text);
+      } catch (error) {
+        throw new Error(`Invalid Gallery MCP JSON-RPC response for ${name}`);
+      }
+
+      if (envelope?.error) {
+        const code = envelope.error.code === undefined ? 'unknown' : envelope.error.code;
+        throw new Error(`Gallery MCP JSON-RPC error ${code} for ${name}`);
+      }
+
+      return parseGalleryMcpToolResult(envelope?.result, name);
+    },
+  };
+};
 
 const textPromptFromContent = (content) =>
   content?.blocks
@@ -522,6 +594,32 @@ const sanitizedErrorMessageWithSecrets = (error, secrets) => {
 const sanitizeSessionError = (error, entry) =>
   sanitizedErrorMessageWithSecrets(error, [entry.credentialSecret, entry.mcpToken]);
 
+const appendStrictWorkflowTranscript = (session, prompt, assistantText) => {
+  if (!Array.isArray(session.messages)) {
+    return;
+  }
+
+  session.messages.push({ role: 'user', content: [{ type: 'text', text: prompt }] });
+  if (assistantText) {
+    session.messages.push({ role: 'assistant', content: [{ type: 'text', text: assistantText }] });
+  }
+};
+
+const strictCompletedEvent = ({ gallerySessionId, runnerSessionId, text }) => ({
+  type: 'assistant-message-completed',
+  sessionId: gallerySessionId,
+  runnerSessionId,
+  providerMessageId: null,
+  content: { blocks: [{ type: 'text', text }] },
+});
+
+const strictApprovalEvent = ({ gallerySessionId, runnerSessionId, toolCallId }) => ({
+  type: 'tool-approval-needed',
+  sessionId: gallerySessionId,
+  runnerSessionId,
+  toolCallId,
+});
+
 const createMcpSessionWorkspace = async (gallerySessionId) => {
   const sessionHash = createHash('sha256').update(String(gallerySessionId)).digest('hex').slice(0, 24);
   const workspace = join(runtimeSessionRoot, `${sessionHash}-${randomUUID()}`);
@@ -652,7 +750,11 @@ const applyPendingProviderRegistrations = (resourceLoader, modelRegistry) => {
   }
 };
 
-export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDependencies.ai } = {}) => {
+export const createPiRuntime = ({
+  sdk = defaultDependencies.sdk,
+  ai = defaultDependencies.ai,
+  fetch: fetchImplementation = fetch,
+} = {}) => {
   const sessions = new Map();
   const createSessionQueues = new Map();
 
@@ -775,6 +877,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
             gallerySessionId: body.gallerySessionId,
             credentialSecret: body.credential.secret,
             mcpToken: mcpGateway?.token,
+            mcpGateway,
             sessionWorkspace,
             model: body.model,
             session,
@@ -816,6 +919,52 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         throw new Error('Runner session already has an active message stream');
       }
       entry.inFlight = true;
+      const promptText = textPromptFromContent(content);
+      const strictWorkflow = matchStrictWorkflow(promptText);
+      if (strictWorkflow.kind === 'create_recent_trip_album' && entry.mcpGateway) {
+        const strictAbortController = new AbortController();
+        const abortStrictStream = () => {
+          strictAbortController.abort();
+        };
+        entry.abortActiveStream = abortStrictStream;
+        try {
+          const workflowResult = await runCreateRecentTripAlbumWorkflow({
+            client: createGalleryMcpClient({ gateway: entry.mcpGateway, fetch: fetchImplementation }),
+            workflow: strictWorkflow,
+            signal: strictAbortController.signal,
+          });
+
+          if (workflowResult.status === 'approval_required') {
+            yield strictApprovalEvent({
+              gallerySessionId,
+              runnerSessionId,
+              toolCallId: workflowResult.toolCallId,
+            });
+            return;
+          }
+
+          appendStrictWorkflowTranscript(entry.session, promptText, workflowResult.text);
+          yield strictCompletedEvent({
+            gallerySessionId,
+            runnerSessionId,
+            text: workflowResult.text,
+          });
+          return;
+        } catch (error) {
+          yield {
+            type: 'runner-error',
+            sessionId: gallerySessionId,
+            runnerSessionId,
+            message: sanitizeSessionError(error, entry),
+          };
+          return;
+        } finally {
+          if (entry.abortActiveStream === abortStrictStream) {
+            entry.abortActiveStream = undefined;
+          }
+          entry.inFlight = false;
+        }
+      }
 
       let sequence = 0;
       const pendingEvents = [];
@@ -899,7 +1048,7 @@ export const createPiRuntime = ({ sdk = defaultDependencies.sdk, ai = defaultDep
         promptPromise = Promise.resolve()
           .then(() => {
             compactGalleryToolTranscript(entry.session);
-            return entry.session.prompt(textPromptFromContent(content));
+            return entry.session.prompt(promptText);
           })
           .then(() => {
             if (aborted) {
