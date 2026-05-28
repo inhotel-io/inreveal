@@ -71,113 +71,113 @@ Expected: PASS. If the local medium-test database is unavailable, report the blo
 Append this `describe` block after `getMemoryLocationClusters` and before `getMemoryAssetsForLocation`:
 
 ```ts
-  describe('getMemoryLocationDayBuckets', () => {
-    it('should group previewable timeline assets by UTC day, country, state, and city', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
+describe('getMemoryLocationDayBuckets', () => {
+  it('should group previewable timeline assets by UTC day, country, state, and city', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
 
-      const addAsset = async ({
-        localDateTime,
-        country,
-        state = null,
-        city,
-        visibility = AssetVisibility.Timeline,
-        withPreview = true,
-      }: {
-        localDateTime: Date;
-        country: string | null;
-        state?: string | null;
-        city: string | null;
-        visibility?: AssetVisibility;
-        withPreview?: boolean;
-      }) => {
-        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime });
-        await Promise.all([
-          ctx.newExif({ assetId: asset.id, country, state, city }),
-          withPreview
-            ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
-            : null,
-        ]);
-      };
+    const addAsset = async ({
+      localDateTime,
+      country,
+      state = null,
+      city,
+      visibility = AssetVisibility.Timeline,
+      withPreview = true,
+    }: {
+      localDateTime: Date;
+      country: string | null;
+      state?: string | null;
+      city: string | null;
+      visibility?: AssetVisibility;
+      withPreview?: boolean;
+    }) => {
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime });
+      await Promise.all([
+        ctx.newExif({ assetId: asset.id, country, state, city }),
+        withPreview
+          ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+          : null,
+      ]);
+    };
 
-      await addAsset({
-        localDateTime: new Date('2026-04-15T09:00:00Z'),
+    await addAsset({
+      localDateTime: new Date('2026-04-15T09:00:00Z'),
+      country: 'France',
+      state: 'Ile-de-France',
+      city: 'Paris',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-15T17:00:00Z'),
+      country: 'France',
+      state: 'Ile-de-France',
+      city: 'Paris',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-16T10:00:00Z'),
+      country: 'France',
+      state: 'Auvergne-Rhone-Alpes',
+      city: 'Lyon',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-17T10:00:00Z'),
+      country: 'Italy',
+      state: 'Lazio',
+      city: 'Rome',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-18T10:00:00Z'),
+      country: 'France',
+      city: 'Paris',
+      withPreview: false,
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-19T10:00:00Z'),
+      country: null,
+      city: null,
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-20T10:00:00Z'),
+      country: 'France',
+      city: 'Nice',
+      visibility: AssetVisibility.Archive,
+    });
+
+    await expect(
+      sut.getMemoryLocationDayBuckets(user.id, {
+        takenAfter: new Date('2026-04-01T00:00:00Z'),
+        takenBefore: new Date('2026-04-30T23:59:59Z'),
+      }),
+    ).resolves.toEqual([
+      {
+        localDate: new Date('2026-04-15T00:00:00.000Z'),
         country: 'France',
         state: 'Ile-de-France',
         city: 'Paris',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-15T17:00:00Z'),
-        country: 'France',
-        state: 'Ile-de-France',
-        city: 'Paris',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-16T10:00:00Z'),
+        assetCount: 2,
+        firstDate: new Date('2026-04-15T09:00:00.000Z'),
+        lastDate: new Date('2026-04-15T17:00:00.000Z'),
+      },
+      {
+        localDate: new Date('2026-04-16T00:00:00.000Z'),
         country: 'France',
         state: 'Auvergne-Rhone-Alpes',
         city: 'Lyon',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-17T10:00:00Z'),
+        assetCount: 1,
+        firstDate: new Date('2026-04-16T10:00:00.000Z'),
+        lastDate: new Date('2026-04-16T10:00:00.000Z'),
+      },
+      {
+        localDate: new Date('2026-04-17T00:00:00.000Z'),
         country: 'Italy',
         state: 'Lazio',
         city: 'Rome',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-18T10:00:00Z'),
-        country: 'France',
-        city: 'Paris',
-        withPreview: false,
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-19T10:00:00Z'),
-        country: null,
-        city: null,
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-20T10:00:00Z'),
-        country: 'France',
-        city: 'Nice',
-        visibility: AssetVisibility.Archive,
-      });
-
-      await expect(
-        sut.getMemoryLocationDayBuckets(user.id, {
-          takenAfter: new Date('2026-04-01T00:00:00Z'),
-          takenBefore: new Date('2026-04-30T23:59:59Z'),
-        }),
-      ).resolves.toEqual([
-        {
-          localDate: new Date('2026-04-15T00:00:00.000Z'),
-          country: 'France',
-          state: 'Ile-de-France',
-          city: 'Paris',
-          assetCount: 2,
-          firstDate: new Date('2026-04-15T09:00:00.000Z'),
-          lastDate: new Date('2026-04-15T17:00:00.000Z'),
-        },
-        {
-          localDate: new Date('2026-04-16T00:00:00.000Z'),
-          country: 'France',
-          state: 'Auvergne-Rhone-Alpes',
-          city: 'Lyon',
-          assetCount: 1,
-          firstDate: new Date('2026-04-16T10:00:00.000Z'),
-          lastDate: new Date('2026-04-16T10:00:00.000Z'),
-        },
-        {
-          localDate: new Date('2026-04-17T00:00:00.000Z'),
-          country: 'Italy',
-          state: 'Lazio',
-          city: 'Rome',
-          assetCount: 1,
-          firstDate: new Date('2026-04-17T10:00:00.000Z'),
-          lastDate: new Date('2026-04-17T10:00:00.000Z'),
-        },
-      ]);
-    });
+        assetCount: 1,
+        firstDate: new Date('2026-04-17T10:00:00.000Z'),
+        lastDate: new Date('2026-04-17T10:00:00.000Z'),
+      },
+    ]);
   });
+});
 ```
 
 - [ ] **Step 2: Run repository test red**
@@ -337,10 +337,10 @@ const setup = () => {
 Then update existing tests to use `setup()` and make recent data come from `getMemoryLocationDayBuckets`. For the first high-confidence test, keep the existing baseline assertion and replace the recent assertion with:
 
 ```ts
-    expect(assetRepository.getMemoryLocationDayBuckets).toHaveBeenCalledWith('user-1', {
-      takenAfter: new Date('2026-03-24T00:00:00.000Z'),
-      takenBefore: new Date('2026-04-23T23:59:59.999Z'),
-    });
+expect(assetRepository.getMemoryLocationDayBuckets).toHaveBeenCalledWith('user-1', {
+  takenAfter: new Date('2026-03-24T00:00:00.000Z'),
+  takenBefore: new Date('2026-04-23T23:59:59.999Z'),
+});
 ```
 
 Use these recent day buckets for the existing service tests so their current assertions remain meaningful:
@@ -396,33 +396,33 @@ assetRepository.getMemoryLocationDayBuckets
 Add this fallback regression test after the existing high-confidence test:
 
 ```ts
-  it('falls back to recent location clusters when day buckets are unavailable', async () => {
-    const assetRepository = {
-      getMemoryLocationClusters: vi
-        .fn()
-        .mockResolvedValueOnce([cluster({ country: 'Germany', city: 'Berlin', assetCount: 20, dayCount: 12 })])
-        .mockResolvedValueOnce([cluster({ country: 'France', city: 'Paris', assetCount: 9, dayCount: 3 })]),
-    };
-    const service = new TripCandidateService(assetRepository);
+it('falls back to recent location clusters when day buckets are unavailable', async () => {
+  const assetRepository = {
+    getMemoryLocationClusters: vi
+      .fn()
+      .mockResolvedValueOnce([cluster({ country: 'Germany', city: 'Berlin', assetCount: 20, dayCount: 12 })])
+      .mockResolvedValueOnce([cluster({ country: 'France', city: 'Paris', assetCount: 9, dayCount: 3 })]),
+  };
+  const service = new TripCandidateService(assetRepository);
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-      lookbackDays: 30,
-    });
-
-    expect(assetRepository.getMemoryLocationClusters).toHaveBeenNthCalledWith(2, 'user-1', {
-      takenAfter: new Date('2026-03-24T00:00:00.000Z'),
-      takenBefore: new Date('2026-04-23T23:59:59.999Z'),
-    });
-    expect(candidate).toMatchObject({
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-17',
-      title: 'Recent trip to Paris, France',
-      subtitle: '9 photos over 3 days',
-      confidence: 'high',
-      placeKey: 'france:paris',
-    });
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
+    lookbackDays: 30,
   });
+
+  expect(assetRepository.getMemoryLocationClusters).toHaveBeenNthCalledWith(2, 'user-1', {
+    takenAfter: new Date('2026-03-24T00:00:00.000Z'),
+    takenBefore: new Date('2026-04-23T23:59:59.999Z'),
+  });
+  expect(candidate).toMatchObject({
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-17',
+    title: 'Recent trip to Paris, France',
+    subtitle: '9 photos over 3 days',
+    confidence: 'high',
+    placeKey: 'france:paris',
+  });
+});
 ```
 
 - [ ] **Step 2: Add failing window tests**
@@ -430,193 +430,197 @@ Add this fallback regression test after the existing high-confidence test:
 Append these tests to `TripCandidateService.name`:
 
 ```ts
-  it('merges adjacent travel days into one multi-city candidate with deduplicated labels', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-15', country: 'France', state: 'Ile-de-France', city: 'Paris', assetCount: 3 }),
-      dayBucket({ localDate: '2026-04-16', country: 'France', state: 'Auvergne-Rhone-Alpes', city: 'Lyon', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-17', country: 'France', state: 'Ile-de-France', city: 'Paris', assetCount: 2 }),
-    ]);
+it('merges adjacent travel days into one multi-city candidate with deduplicated labels', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-15', country: 'France', state: 'Ile-de-France', city: 'Paris', assetCount: 3 }),
+    dayBucket({
+      localDate: '2026-04-16',
+      country: 'France',
+      state: 'Auvergne-Rhone-Alpes',
+      city: 'Lyon',
+      assetCount: 4,
+    }),
+    dayBucket({ localDate: '2026-04-17', country: 'France', state: 'Ile-de-France', city: 'Paris', assetCount: 2 }),
+  ]);
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-    });
-
-    expect(candidate).toMatchObject({
-      dedupeKey: 'trip:france:paris+france:lyon:2026-04-15:2026-04-17',
-      title: 'Recent trip to France',
-      subtitle: '9 photos over 3 days',
-      countries: ['France'],
-      states: ['Ile-de-France', 'Auvergne-Rhone-Alpes'],
-      cities: ['Paris', 'Lyon'],
-      assetCount: 9,
-      dayCount: 3,
-      placeKey: 'france:paris+france:lyon',
-      placeLabel: 'France',
-      source: {
-        places: [
-          { country: 'France', state: 'Ile-de-France', city: 'Paris' },
-          { country: 'France', state: 'Auvergne-Rhone-Alpes', city: 'Lyon' },
-        ],
-        placeLabels: ['Paris, France', 'Lyon, France'],
-      },
-    });
-    expect(candidate?.takenAfter).toEqual(new Date('2026-04-15T09:00:00Z'));
-    expect(candidate?.takenBefore).toEqual(new Date('2026-04-17T17:00:00Z'));
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
   });
 
-  it('allows one no-photo day inside one cross-border trip', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
-    ]);
+  expect(candidate).toMatchObject({
+    dedupeKey: 'trip:france:paris+france:lyon:2026-04-15:2026-04-17',
+    title: 'Recent trip to France',
+    subtitle: '9 photos over 3 days',
+    countries: ['France'],
+    states: ['Ile-de-France', 'Auvergne-Rhone-Alpes'],
+    cities: ['Paris', 'Lyon'],
+    assetCount: 9,
+    dayCount: 3,
+    placeKey: 'france:paris+france:lyon',
+    placeLabel: 'France',
+    source: {
+      places: [
+        { country: 'France', state: 'Ile-de-France', city: 'Paris' },
+        { country: 'France', state: 'Auvergne-Rhone-Alpes', city: 'Lyon' },
+      ],
+      placeLabels: ['Paris, France', 'Lyon, France'],
+    },
+  });
+  expect(candidate?.takenAfter).toEqual(new Date('2026-04-15T09:00:00Z'));
+  expect(candidate?.takenBefore).toEqual(new Date('2026-04-17T17:00:00Z'));
+});
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-    });
+it('allows one no-photo day inside one cross-border trip', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
+  ]);
 
-    expect(candidate).toMatchObject({
-      dedupeKey: 'trip:france:paris+italy:rome:2026-04-15:2026-04-17',
-      title: 'Recent trip to France and Italy',
-      subtitle: '8 photos over 2 days',
-      countries: ['France', 'Italy'],
-      cities: ['Paris', 'Rome'],
-      assetCount: 8,
-      dayCount: 2,
-      placeKey: 'france:paris+italy:rome',
-      placeLabel: 'France and Italy',
-      source: {
-        places: [
-          { country: 'France', state: null, city: 'Paris' },
-          { country: 'Italy', state: null, city: 'Rome' },
-        ],
-        placeLabels: ['Paris, France', 'Rome, Italy'],
-      },
-    });
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
   });
 
-  it('keeps source places distinct when the same city and country appear in different states', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({
-        localDate: '2026-04-15',
-        country: 'USA',
-        state: 'Illinois',
-        city: 'Springfield',
-        assetCount: 4,
-      }),
-      dayBucket({
-        localDate: '2026-04-16',
-        country: 'USA',
-        state: 'Massachusetts',
-        city: 'Springfield',
-        assetCount: 4,
-      }),
-    ]);
+  expect(candidate).toMatchObject({
+    dedupeKey: 'trip:france:paris+italy:rome:2026-04-15:2026-04-17',
+    title: 'Recent trip to France and Italy',
+    subtitle: '8 photos over 2 days',
+    countries: ['France', 'Italy'],
+    cities: ['Paris', 'Rome'],
+    assetCount: 8,
+    dayCount: 2,
+    placeKey: 'france:paris+italy:rome',
+    placeLabel: 'France and Italy',
+    source: {
+      places: [
+        { country: 'France', state: null, city: 'Paris' },
+        { country: 'Italy', state: null, city: 'Rome' },
+      ],
+      placeLabels: ['Paris, France', 'Rome, Italy'],
+    },
+  });
+});
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-    });
+it('keeps source places distinct when the same city and country appear in different states', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({
+      localDate: '2026-04-15',
+      country: 'USA',
+      state: 'Illinois',
+      city: 'Springfield',
+      assetCount: 4,
+    }),
+    dayBucket({
+      localDate: '2026-04-16',
+      country: 'USA',
+      state: 'Massachusetts',
+      city: 'Springfield',
+      assetCount: 4,
+    }),
+  ]);
 
-    expect(candidate).toMatchObject({
-      dedupeKey: 'trip:usa:illinois:springfield+usa:massachusetts:springfield:2026-04-15:2026-04-16',
-      states: ['Illinois', 'Massachusetts'],
-      cities: ['Springfield'],
-      placeKey: 'usa:illinois:springfield+usa:massachusetts:springfield',
-      source: {
-        places: [
-          { country: 'USA', state: 'Illinois', city: 'Springfield' },
-          { country: 'USA', state: 'Massachusetts', city: 'Springfield' },
-        ],
-        placeLabels: ['Springfield, Illinois, USA', 'Springfield, Massachusetts, USA'],
-      },
-    });
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
   });
 
-  it('does not treat an in-window home photo day as a no-photo gap', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-16', country: 'Germany', city: 'Berlin', assetCount: 6 }),
-      dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-18', country: 'Italy', city: 'Rome', assetCount: 4 }),
-    ]);
+  expect(candidate).toMatchObject({
+    dedupeKey: 'trip:usa:illinois:springfield+usa:massachusetts:springfield:2026-04-15:2026-04-16',
+    states: ['Illinois', 'Massachusetts'],
+    cities: ['Springfield'],
+    placeKey: 'usa:illinois:springfield+usa:massachusetts:springfield',
+    source: {
+      places: [
+        { country: 'USA', state: 'Illinois', city: 'Springfield' },
+        { country: 'USA', state: 'Massachusetts', city: 'Springfield' },
+      ],
+      placeLabels: ['Springfield, Illinois, USA', 'Springfield, Massachusetts, USA'],
+    },
+  });
+});
 
-    const candidates = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-      maxCandidates: 3,
-    });
+it('does not treat an in-window home photo day as a no-photo gap', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-16', country: 'Germany', city: 'Berlin', assetCount: 6 }),
+    dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-18', country: 'Italy', city: 'Rome', assetCount: 4 }),
+  ]);
 
-    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
-      'trip:italy:rome:2026-04-17:2026-04-18',
-    ]);
+  const candidates = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
+    maxCandidates: 3,
   });
 
-  it('keeps clearly separate trips as separate candidates', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-01', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-02', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-08', country: 'Italy', city: 'Rome', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-09', country: 'Italy', city: 'Rome', assetCount: 4 }),
-    ]);
+  expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual(['trip:italy:rome:2026-04-17:2026-04-18']);
+});
 
-    const candidates = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-      maxCandidates: 3,
-    });
+it('keeps clearly separate trips as separate candidates', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-01', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-02', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-08', country: 'Italy', city: 'Rome', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-09', country: 'Italy', city: 'Rome', assetCount: 4 }),
+  ]);
 
-    expect(candidates).toHaveLength(2);
-    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
-      'trip:italy:rome:2026-04-08:2026-04-09',
-      'trip:france:paris:2026-04-01:2026-04-02',
-    ]);
+  const candidates = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
+    maxCandidates: 3,
   });
 
-  it('separates trips to the same place when a larger date gap divides them', async () => {
-    const { assetRepository, service } = setup();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-01', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-02', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-10', country: 'France', city: 'Paris', assetCount: 5 }),
-      dayBucket({ localDate: '2026-04-11', country: 'France', city: 'Paris', assetCount: 4 }),
-    ]);
+  expect(candidates).toHaveLength(2);
+  expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
+    'trip:italy:rome:2026-04-08:2026-04-09',
+    'trip:france:paris:2026-04-01:2026-04-02',
+  ]);
+});
 
-    const candidates = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-      maxCandidates: 3,
-    });
+it('separates trips to the same place when a larger date gap divides them', async () => {
+  const { assetRepository, service } = setup();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-01', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-02', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-10', country: 'France', city: 'Paris', assetCount: 5 }),
+    dayBucket({ localDate: '2026-04-11', country: 'France', city: 'Paris', assetCount: 4 }),
+  ]);
 
-    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
-      'trip:france:paris:2026-04-10:2026-04-11',
-      'trip:france:paris:2026-04-01:2026-04-02',
-    ]);
+  const candidates = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
+    maxCandidates: 3,
   });
+
+  expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
+    'trip:france:paris:2026-04-10:2026-04-11',
+    'trip:france:paris:2026-04-01:2026-04-02',
+  ]);
+});
 ```
 
 - [ ] **Step 3: Run service tests red**
@@ -681,28 +685,30 @@ type TravelWindow = {
 In `findRecentTripCandidates`, replace the existing `Promise.all` with:
 
 ```ts
-    const recentRange = {
-      takenAfter: recentFrom.toJSDate(),
-      takenBefore: target.toJSDate(),
-    };
-    const recentPromise = this.assetRepository.getMemoryLocationDayBuckets
-      ? this.assetRepository.getMemoryLocationDayBuckets(ownerId, recentRange)
-      : this.assetRepository.getMemoryLocationClusters(ownerId, recentRange);
+const recentRange = {
+  takenAfter: recentFrom.toJSDate(),
+  takenBefore: target.toJSDate(),
+};
+const recentPromise = this.assetRepository.getMemoryLocationDayBuckets
+  ? this.assetRepository.getMemoryLocationDayBuckets(ownerId, recentRange)
+  : this.assetRepository.getMemoryLocationClusters(ownerId, recentRange);
 
-    const [baseline, recent] = await Promise.all([
-      this.assetRepository.getMemoryLocationClusters(ownerId, {
-        takenAfter: baselineFrom.toJSDate(),
-        takenBefore: baselineTo.toJSDate(),
-      }),
-      recentPromise,
-    ]);
+const [baseline, recent] = await Promise.all([
+  this.assetRepository.getMemoryLocationClusters(ownerId, {
+    takenAfter: baselineFrom.toJSDate(),
+    takenBefore: baselineTo.toJSDate(),
+  }),
+  recentPromise,
+]);
 
-    const home = this.resolveHomeBaseline(baseline);
-    const candidates = this.assetRepository.getMemoryLocationDayBuckets
-      ? this.findWindowCandidates(recent as MemoryLocationDayBucket[], home)
-      : this.findClusterCandidates(recent as MemoryLocationCluster[], home);
+const home = this.resolveHomeBaseline(baseline);
+const candidates = this.assetRepository.getMemoryLocationDayBuckets
+  ? this.findWindowCandidates(recent as MemoryLocationDayBucket[], home)
+  : this.findClusterCandidates(recent as MemoryLocationCluster[], home);
 
-    return candidates.toSorted((left, right) => right.score - left.score || right.takenAfter.getTime() - left.takenAfter.getTime()).slice(0, maxCandidates);
+return candidates
+  .toSorted((left, right) => right.score - left.score || right.takenAfter.getTime() - left.takenAfter.getTime())
+  .slice(0, maxCandidates);
 ```
 
 - [ ] **Step 4: Preserve Slice 1 cluster fallback**
