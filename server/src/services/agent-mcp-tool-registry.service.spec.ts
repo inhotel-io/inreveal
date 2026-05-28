@@ -8,6 +8,7 @@ import z from 'zod';
 const expectedToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.FindTripCandidates,
   AgentToolName.ReadSelectionMetadata,
   AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
@@ -33,6 +34,7 @@ const expectedToolNames = [
 const expectedReadToolNames = [
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
+  AgentToolName.FindTripCandidates,
   AgentToolName.ReadSelectionMetadata,
   AgentToolName.CurateSelection,
   AgentToolName.ReadAssetMetadata,
@@ -307,6 +309,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     const metadata = toolsByName.get(AgentToolName.ReadAssetMetadata)?.inputSchema;
     const selectionMetadata = toolsByName.get(AgentToolName.ReadSelectionMetadata)?.inputSchema;
     const curation = toolsByName.get(AgentToolName.CurateSelection)?.inputSchema;
+    const tripCandidates = toolsByName.get(AgentToolName.FindTripCandidates)?.inputSchema;
     const search = toolsByName.get(AgentToolName.SearchAssets)?.inputSchema;
     const searchProperties = search?.properties as Record<string, { description?: string }> | undefined;
     const searchFiltersDescription = searchProperties?.filters?.description;
@@ -357,6 +360,24 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('sample'),
       }),
     });
+    expect(tripCandidates?.properties).toMatchObject({
+      placeHint: expect.objectContaining({
+        description: expect.stringContaining('Optional place label'),
+      }),
+      targetDate: expect.objectContaining({
+        description: expect.stringContaining('recent-trip lookback anchor'),
+      }),
+      lookbackDays: expect.objectContaining({
+        description: expect.stringContaining('Defaults to 180'),
+      }),
+      maxCandidates: expect.objectContaining({
+        description: expect.stringContaining('Defaults to 3'),
+      }),
+      toolCallId: expect.objectContaining({
+        description: expect.stringContaining('approved retry'),
+      }),
+    });
+    expect(tripCandidates?.properties).not.toHaveProperty('assetIds');
 
     const metadataFieldSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataField') : undefined;
     const metadataDetailSchema = metadata ? getSchemaDefinition(metadata, 'AgentAssetMetadataDetail') : undefined;

@@ -1,6 +1,8 @@
 import { DECORATORS } from '@nestjs/swagger/dist/constants';
 import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import {
+  AgentFindTripCandidatesToolRequestDto,
+  AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -93,6 +95,7 @@ describe(AgentToolController.name, () => {
 
   it.each([
     ['executeAgentSearchAssets', AgentSearchAssetsToolResponseDto, 'AgentSearchAssetsToolResponseDto'],
+    ['findTripCandidates', AgentFindTripCandidatesToolResponseDto, 'AgentFindTripCandidatesToolResponseDto'],
     ['readAssetMetadata', AgentReadAssetMetadataToolResponseDto, 'AgentReadAssetMetadataToolResponseDto'],
     ['readAssetPreviews', AgentReadAssetPreviewsToolResponseDto, 'AgentReadAssetPreviewsToolResponseDto'],
     ['readAssetOriginals', AgentReadAssetOriginalsToolResponseDto, 'AgentReadAssetOriginalsToolResponseDto'],
@@ -168,6 +171,17 @@ describe(AgentToolController.name, () => {
         fields: [],
       } satisfies AgentSearchAssetsToolRequestDto,
       invalidBody: { limit: 0 },
+    },
+    {
+      path: 'find-trip-candidates',
+      serviceMethod: 'findTripCandidates' as const,
+      body: { placeHint: 'USA', maxCandidates: 2 },
+      expectedDto: {
+        placeHint: 'USA',
+        lookbackDays: 180,
+        maxCandidates: 2,
+      } satisfies AgentFindTripCandidatesToolRequestDto,
+      invalidBody: { maxCandidates: 0 },
     },
     {
       path: 'read-asset-previews',
