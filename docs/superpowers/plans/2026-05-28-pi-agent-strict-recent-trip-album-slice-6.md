@@ -56,6 +56,7 @@ Not included in this slice:
 ## Task 1: Strict Workflow State Helpers And Candidate Executor
 
 **Files:**
+
 - Modify: `agent-runner/src/strict-workflows.mjs`
 - Modify: `agent-runner/src/strict-workflows.test.mjs`
 
@@ -64,147 +65,159 @@ Not included in this slice:
 Append these tests inside `describe('create_recent_trip_album workflow execution', ...)` in `agent-runner/src/strict-workflows.test.mjs`.
 
 ```js
-  it('builds pending candidate-selection state with labels and handles', () => {
-    const candidates = [
+it('builds pending candidate-selection state with labels and handles', () => {
+  const candidates = [
+    makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+    makeTripCandidate({
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+    }),
+  ];
+
+  const pending = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates,
+    nowMs: 1000,
+  });
+
+  assert.equal(pending.kind, 'create_recent_trip_album_candidate_selection');
+  assert.equal(pending.createdAtMs, 1000);
+  assert.deepEqual(
+    pending.candidates.map((candidate) => candidate.label),
+    ['New York, USA', 'California, USA'],
+  );
+  assert.deepEqual(
+    pending.candidates.map((candidate) => candidate.dedupeKey),
+    ['trip:ny', 'trip:ca'],
+  );
+  assert.equal(pending.candidates[1].candidate.selectionHandle.id, '00000000-0000-4000-8000-000000000930');
+});
+
+it('resolves a pending candidate follow-up by label and album rename', () => {
+  const pending = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates: [
       makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
       makeTripCandidate({
         dedupeKey: 'trip:ca',
         placeLabels: ['California, USA'],
         selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
       }),
-    ];
-
-    const pending = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates,
-      nowMs: 1000,
-    });
-
-    assert.equal(pending.kind, 'create_recent_trip_album_candidate_selection');
-    assert.equal(pending.createdAtMs, 1000);
-    assert.deepEqual(pending.candidates.map((candidate) => candidate.label), ['New York, USA', 'California, USA']);
-    assert.deepEqual(pending.candidates.map((candidate) => candidate.dedupeKey), ['trip:ny', 'trip:ca']);
-    assert.equal(pending.candidates[1].candidate.selectionHandle.id, '00000000-0000-4000-8000-000000000930');
+    ],
+    nowMs: 1000,
   });
 
-  it('resolves a pending candidate follow-up by label and album rename', () => {
-    const pending = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates: [
-        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
-        makeTripCandidate({
-          dedupeKey: 'trip:ca',
-          placeLabels: ['California, USA'],
-          selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
-        }),
-      ],
-      nowMs: 1000,
-    });
-
-    const resolved = resolveRecentTripCandidateSelection({
-      pending,
-      prompt: 'Use California called West Coast',
-      nowMs: 2000,
-    });
-
-    assert.equal(resolved.status, 'matched');
-    assert.equal(resolved.workflow.albumName, 'West Coast');
-    assert.equal(resolved.candidate.dedupeKey, 'trip:ca');
+  const resolved = resolveRecentTripCandidateSelection({
+    pending,
+    prompt: 'Use California called West Coast',
+    nowMs: 2000,
   });
 
-  it('resolves ordinal and yes follow-ups without exposing ids', () => {
-    const single = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates: [makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] })],
-      nowMs: 1000,
-    });
-    const multiple = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates: [
-        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
-        makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
-      ],
-      nowMs: 1000,
-    });
+  assert.equal(resolved.status, 'matched');
+  assert.equal(resolved.workflow.albumName, 'West Coast');
+  assert.equal(resolved.candidate.dedupeKey, 'trip:ca');
+});
 
-    assert.equal(resolveRecentTripCandidateSelection({ pending: single, prompt: 'yes', nowMs: 2000 }).candidate.dedupeKey, 'trip:ny');
-    assert.equal(resolveRecentTripCandidateSelection({ pending: multiple, prompt: 'second one', nowMs: 2000 }).candidate.dedupeKey, 'trip:ca');
+it('resolves ordinal and yes follow-ups without exposing ids', () => {
+  const single = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates: [makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] })],
+    nowMs: 1000,
+  });
+  const multiple = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates: [
+      makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+      makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+    ],
+    nowMs: 1000,
   });
 
-  it('expires pending candidate-selection state instead of guessing', () => {
-    const pending = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates: [makeTripCandidate()],
-      nowMs: 1000,
-    });
+  assert.equal(
+    resolveRecentTripCandidateSelection({ pending: single, prompt: 'yes', nowMs: 2000 }).candidate.dedupeKey,
+    'trip:ny',
+  );
+  assert.equal(
+    resolveRecentTripCandidateSelection({ pending: multiple, prompt: 'second one', nowMs: 2000 }).candidate.dedupeKey,
+    'trip:ca',
+  );
+});
 
-    const resolved = resolveRecentTripCandidateSelection({
-      pending,
-      prompt: 'first one',
-      nowMs: 1000 + strictWorkflowPendingTtlMs + 1,
-    });
-
-    assert.equal(resolved.status, 'expired');
-    assert.match(resolved.text, /rerun the recent trip album request/i);
+it('expires pending candidate-selection state instead of guessing', () => {
+  const pending = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates: [makeTripCandidate()],
+    nowMs: 1000,
   });
 
-  it('asks again when a pending candidate follow-up is ambiguous', () => {
-    const pending = createRecentTripCandidateSelectionState({
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      candidates: [
-        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
-        makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
-      ],
-      nowMs: 1000,
-    });
-
-    const resolved = resolveRecentTripCandidateSelection({ pending, prompt: 'that one', nowMs: 2000 });
-
-    assert.equal(resolved.status, 'needs_input');
-    assert.match(resolved.text, /New York, USA/i);
-    assert.match(resolved.text, /California, USA/i);
-    assert.doesNotMatch(resolved.text, /00000000-0000-4000/i);
+  const resolved = resolveRecentTripCandidateSelection({
+    pending,
+    prompt: 'first one',
+    nowMs: 1000 + strictWorkflowPendingTtlMs + 1,
   });
 
-  it('plans from a stored pending candidate without rerunning trip detection', async () => {
-    const { client, calls } = createWorkflowClient();
-    const candidate = makeTripCandidate({
-      dedupeKey: 'trip:ca',
-      placeLabels: ['California, USA'],
-      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
-    });
+  assert.equal(resolved.status, 'expired');
+  assert.match(resolved.text, /rerun the recent trip album request/i);
+});
 
-    const result = await runCreateRecentTripAlbumCandidateWorkflow({
-      client,
-      workflow: { kind: 'create_recent_trip_album', albumName: 'West Coast', placeHint: 'USA' },
-      candidate,
-    });
-
-    assert.equal(result.status, 'planned');
-    assert.equal(calls.map((call) => call.name).join(','), 'proposeAlbumFromSelection');
-    assert.equal(calls[0].args.albumName, 'West Coast');
-    assert.equal(calls[0].args.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+it('asks again when a pending candidate follow-up is ambiguous', () => {
+  const pending = createRecentTripCandidateSelectionState({
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    candidates: [
+      makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+      makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+    ],
+    nowMs: 1000,
   });
 
-  it('returns candidate context when strict planning needs approval', async () => {
-    const { client } = createWorkflowClient({
-      planResult: {
-        status: 'approval-required',
-        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-      },
-    });
+  const resolved = resolveRecentTripCandidateSelection({ pending, prompt: 'that one', nowMs: 2000 });
 
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
+  assert.equal(resolved.status, 'needs_input');
+  assert.match(resolved.text, /New York, USA/i);
+  assert.match(resolved.text, /California, USA/i);
+  assert.doesNotMatch(resolved.text, /00000000-0000-4000/i);
+});
 
-    assert.equal(result.status, 'approval_required');
-    assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
-    assert.equal(result.candidate.dedupeKey, 'trip:usa:new-york:2026-05-03:2026-05-12');
-    assert.equal(result.selectionHandleId, tripCandidateHandleId);
-    assert.equal(result.assetCount, 28);
+it('plans from a stored pending candidate without rerunning trip detection', async () => {
+  const { client, calls } = createWorkflowClient();
+  const candidate = makeTripCandidate({
+    dedupeKey: 'trip:ca',
+    placeLabels: ['California, USA'],
+    selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
   });
+
+  const result = await runCreateRecentTripAlbumCandidateWorkflow({
+    client,
+    workflow: { kind: 'create_recent_trip_album', albumName: 'West Coast', placeHint: 'USA' },
+    candidate,
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(calls.map((call) => call.name).join(','), 'proposeAlbumFromSelection');
+  assert.equal(calls[0].args.albumName, 'West Coast');
+  assert.equal(calls[0].args.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+});
+
+it('returns candidate context when strict planning needs approval', async () => {
+  const { client } = createWorkflowClient({
+    planResult: {
+      status: 'approval-required',
+      toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+    },
+  });
+
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+  });
+
+  assert.equal(result.status, 'approval_required');
+  assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
+  assert.equal(result.candidate.dedupeKey, 'trip:usa:new-york:2026-05-03:2026-05-12');
+  assert.equal(result.selectionHandleId, tripCandidateHandleId);
+  assert.equal(result.assetCount, 28);
+});
 ```
 
 - [ ] **Step 2: Run tests and verify red**
@@ -266,10 +279,7 @@ const choiceTextForCandidate = (choice) =>
     .filter((value) => value.length > 0);
 
 const normalizedSelectionPrompt = (prompt) =>
-  normalizeChoiceText(stripExplicitAlbumNameClause(String(prompt ?? ''))).replace(
-    /^(?:use|choose|select|pick)\s+/,
-    '',
-  );
+  normalizeChoiceText(stripExplicitAlbumNameClause(String(prompt ?? ''))).replace(/^(?:use|choose|select|pick)\s+/, '');
 ```
 
 Add exports:
@@ -289,11 +299,17 @@ export const resolveRecentTripCandidateSelection = ({
   ttlMs = strictWorkflowPendingTtlMs,
 }) => {
   if (pending?.kind !== 'create_recent_trip_album_candidate_selection') {
-    return { status: 'missing', text: 'I no longer have pending recent trip choices. Please rerun the recent trip album request.' };
+    return {
+      status: 'missing',
+      text: 'I no longer have pending recent trip choices. Please rerun the recent trip album request.',
+    };
   }
 
   if (nowMs - pending.createdAtMs > ttlMs) {
-    return { status: 'expired', text: 'Those pending trip choices expired. Please rerun the recent trip album request.' };
+    return {
+      status: 'expired',
+      text: 'Those pending trip choices expired. Please rerun the recent trip album request.',
+    };
   }
 
   const requestedAlbumName = explicitAlbumNameFromPrompt(prompt);
@@ -361,12 +377,16 @@ export const runCreateRecentTripAlbumCandidateWorkflow = async ({
   let planResult = approvedPlanResult;
   if (!planResult) {
     try {
-      planResult = await client.call('proposeAlbumFromSelection', {
-        summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
-        albumName: workflow.albumName,
-        description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
-        selectionHandleId,
-      }, { signal });
+      planResult = await client.call(
+        'proposeAlbumFromSelection',
+        {
+          summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
+          albumName: workflow.albumName,
+          description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
+          selectionHandleId,
+        },
+        { signal },
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return workflowResult('failed', safeFailureText(message), { candidate, selectionHandleId, assetCount });
@@ -398,6 +418,7 @@ Expected: PASS after runtime tests are still unchanged only if no missing import
 ## Task 2: E2E Runtime Candidate Follow-Up Continuation
 
 **Files:**
+
 - Modify: `agent-runner/src/e2e-runtime.mjs`
 - Modify: `agent-runner/src/e2e-runtime.test.mjs`
 
@@ -408,84 +429,88 @@ In `agent-runner/src/e2e-runtime.test.mjs`, update the import if needed by imple
 Append these tests near the existing strict recent-trip e2e tests:
 
 ```js
-  it('resumes a strict recent-trip album after the user selects a candidate label', async () => {
-    const candidates = [
-      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 90 }),
-      makeTripCandidateSummary({
-        title: 'Recent trip to California, USA',
-        dedupeKey: 'trip:ca',
-        placeLabels: ['California, USA'],
-        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
-        score: 88,
-      }),
-    ];
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        candidates,
-        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('resumes a strict recent-trip album after the user selects a candidate label', async () => {
+  const candidates = [
+    makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny', score: 90 }),
+    makeTripCandidateSummary({
+      title: 'Recent trip to California, USA',
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+      score: 88,
+    }),
+  ];
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    await collectEvents(runtime, 'Create an album for my recent trip to USA');
-    const followUp = await collectEvents(runtime, 'Use California');
+  await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const followUp = await collectEvents(runtime, 'Use California');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.equal(calls[1].body.params.arguments.selectionHandleId, '00000000-0000-4000-8000-000000000930');
-    assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
-    assert.match(followUp.at(-1).content.blocks[0].text, /Review the plan before applying it/);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.equal(calls[1].body.params.arguments.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+  assert.equal(calls[1].body.params.arguments.albumName, 'USA Trip');
+  assert.match(followUp.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+});
 
-  it('renames a pending strict recent-trip album from the follow-up', async () => {
-    const candidates = [
-      makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
-      makeTripCandidateSummary({
-        title: 'Recent trip to California, USA',
-        dedupeKey: 'trip:ca',
-        placeLabels: ['California, USA'],
-        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
-      }),
-    ];
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        candidates,
-        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-        expectedAlbumName: 'West Coast',
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('renames a pending strict recent-trip album from the follow-up', async () => {
+  const candidates = [
+    makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
+    makeTripCandidateSummary({
+      title: 'Recent trip to California, USA',
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+    }),
+  ];
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      expectedAlbumName: 'West Coast',
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    await collectEvents(runtime, 'Create an album for my recent trip to USA');
-    await collectEvents(runtime, 'Use California called West Coast');
+  await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  await collectEvents(runtime, 'Use California called West Coast');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.equal(calls[1].body.params.arguments.albumName, 'West Coast');
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.equal(calls[1].body.params.arguments.albumName, 'West Coast');
+});
 
-  it('asks the user to rerun after pending strict trip choices expire', async () => {
-    let nowMs = 1000;
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        candidates: [
-          makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
-          makeTripCandidateSummary({ title: 'Recent trip to California, USA', dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
-        ],
-        recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation, now: () => nowMs });
-    await runtime.createSession(createSessionBody());
+it('asks the user to rerun after pending strict trip choices expire', async () => {
+  let nowMs = 1000;
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      candidates: [
+        makeTripCandidateSummary({ title: 'Recent trip to New York, USA', dedupeKey: 'trip:ny' }),
+        makeTripCandidateSummary({
+          title: 'Recent trip to California, USA',
+          dedupeKey: 'trip:ca',
+          placeLabels: ['California, USA'],
+        }),
+      ],
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation, now: () => nowMs });
+  await runtime.createSession(createSessionBody());
 
-    await collectEvents(runtime, 'Create an album for my recent trip to USA');
-    nowMs += 10 * 60 * 1000 + 1;
-    const followUp = await collectEvents(runtime, 'first one');
+  await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  nowMs += 10 * 60 * 1000 + 1;
+  const followUp = await collectEvents(runtime, 'first one');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(followUp.at(-1).content.blocks[0].text, /expired/i);
-    assert.match(followUp.at(-1).content.blocks[0].text, /rerun the recent trip album request/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(followUp.at(-1).content.blocks[0].text, /expired/i);
+  assert.match(followUp.at(-1).content.blocks[0].text, /rerun the recent trip album request/i);
+});
 ```
 
 - [ ] **Step 2: Run tests and verify red**
@@ -551,15 +576,15 @@ At the start of `sendMessage`, after `prompt` and before `metadataPrompt`, resol
 In the existing strict workflow block, after `runCreateRecentTripAlbumWorkflow`, store pending candidate state:
 
 ```js
-        if (workflowResult.status === 'needs_input' && Array.isArray(workflowResult.candidates)) {
-          entry.pendingStrictWorkflow = createRecentTripCandidateSelectionState({
-            workflow: strictWorkflow,
-            candidates: workflowResult.candidates,
-            nowMs: now(),
-          });
-        } else if (workflowResult.status !== 'approval_required') {
-          entry.pendingStrictWorkflow = undefined;
-        }
+if (workflowResult.status === 'needs_input' && Array.isArray(workflowResult.candidates)) {
+  entry.pendingStrictWorkflow = createRecentTripCandidateSelectionState({
+    workflow: strictWorkflow,
+    candidates: workflowResult.candidates,
+    nowMs: now(),
+  });
+} else if (workflowResult.status !== 'approval_required') {
+  entry.pendingStrictWorkflow = undefined;
+}
 ```
 
 Keep the existing approval pause behavior unchanged for e2e.
@@ -577,6 +602,7 @@ Expected: PASS for e2e and no regression in existing highlight paths.
 ## Task 3: Production Pi Runtime Candidate And Approval Continuation
 
 **Files:**
+
 - Modify: `agent-runner/src/pi-runtime.mjs`
 - Modify: `agent-runner/src/pi-runtime.test.mjs`
 
@@ -592,169 +618,205 @@ Before appending the tests, update the existing `createStrictWorkflowFetch` help
 and in the `proposeAlbumFromSelection` branch replace the fixed assertions with:
 
 ```js
-      assert.equal(args.albumName, expectedAlbumName);
-      assert.equal(args.selectionHandleId, expectedSelectionHandleId);
+assert.equal(args.albumName, expectedAlbumName);
+assert.equal(args.selectionHandleId, expectedSelectionHandleId);
 ```
 
 Append these tests near the strict production tests in `agent-runner/src/pi-runtime.test.mjs`:
 
 ```js
-  it('resumes a production strict recent-trip album after candidate selection without provider prompting', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const candidates = [
+it('resumes a production strict recent-trip album after candidate selection without provider prompting', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+  });
+  const candidates = [
+    makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+    makeStrictTripCandidate({
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+    }),
+  ];
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+    candidates,
+    recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+  });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+  const followUp = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        messageId: '00000000-0000-4000-8000-000000000201',
+        content: { blocks: [{ type: 'text', text: 'Use California' }] },
+      }),
+    ),
+  );
+
+  assert.deepEqual(calls.prompts, []);
+  assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.equal(mcpCalls[1].body.params.arguments.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+  assert.match(followUp.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+});
+
+it('renames a production pending strict recent-trip album from the follow-up', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+  });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+    candidates: [
       makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
       makeStrictTripCandidate({
         dedupeKey: 'trip:ca',
         placeLabels: ['California, USA'],
         selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
       }),
-    ];
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
-      candidates,
-      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
-    const followUp = await collect(
-      runtime.sendMessage(createMessageRequest({
-        messageId: '00000000-0000-4000-8000-000000000201',
-        content: { blocks: [{ type: 'text', text: 'Use California' }] },
-      })),
-    );
-
-    assert.deepEqual(calls.prompts, []);
-    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.equal(mcpCalls[1].body.params.arguments.selectionHandleId, '00000000-0000-4000-8000-000000000930');
-    assert.match(followUp.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+    ],
+    recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    expectedAlbumName: 'West Coast',
+    expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
   });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('renames a production pending strict recent-trip album from the follow-up', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
-      candidates: [
-        makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
-        makeStrictTripCandidate({
-          dedupeKey: 'trip:ca',
-          placeLabels: ['California, USA'],
-          selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
-        }),
-      ],
-      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-      expectedAlbumName: 'West Coast',
-      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
-    await collect(
-      runtime.sendMessage(createMessageRequest({
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
         messageId: '00000000-0000-4000-8000-000000000201',
         content: { blocks: [{ type: 'text', text: 'Use California called West Coast' }] },
-      })),
-    );
+      }),
+    ),
+  );
 
-    assert.deepEqual(calls.prompts, []);
-    assert.equal(mcpCalls[1].body.params.arguments.albumName, 'West Coast');
+  assert.deepEqual(calls.prompts, []);
+  assert.equal(mcpCalls[1].body.params.arguments.albumName, 'West Coast');
+});
+
+it('asks to rerun when a production pending strict trip selection expires', async () => {
+  let nowMs = 1000;
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+    candidates: [
+      makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+      makeStrictTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+    ],
+    recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+  });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation, now: () => nowMs });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('asks to rerun when a production pending strict trip selection expires', async () => {
-    let nowMs = 1000;
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
-      candidates: [
-        makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
-        makeStrictTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
-      ],
-      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation, now: () => nowMs });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
-    nowMs += 10 * 60 * 1000 + 1;
-    const followUp = await collect(
-      runtime.sendMessage(createMessageRequest({
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+  nowMs += 10 * 60 * 1000 + 1;
+  const followUp = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
         messageId: '00000000-0000-4000-8000-000000000201',
         content: { blocks: [{ type: 'text', text: 'first one' }] },
-      })),
-    );
-
-    assert.deepEqual(calls.prompts, []);
-    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(followUp.at(-1).content.blocks[0].text, /expired/i);
-    assert.match(followUp.at(-1).content.blocks[0].text, /rerun the recent trip album request/i);
-  });
-
-  it('resumes approved strict planning without provider prompting', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
-      planResponse: {
-        status: 'approval-required',
-        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-      },
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
-    const resumed = await collect(
-      runtime.resumeSession({
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-        approvalDecision: 'approved',
-        toolResult: { status: 'success', plan: { id: strictTripPlanId } },
       }),
-    );
+    ),
+  );
 
-    assert.deepEqual(calls.prompts, []);
-    assert.equal(calls.continues, 0);
-    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.equal(resumed.at(-1).type, 'assistant-message-completed');
-    assert.match(resumed.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  assert.deepEqual(calls.prompts, []);
+  assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(followUp.at(-1).content.blocks[0].text, /expired/i);
+  assert.match(followUp.at(-1).content.blocks[0].text, /rerun the recent trip album request/i);
+});
+
+it('resumes approved strict planning without provider prompting', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+    planResponse: {
+      status: 'approval-required',
+      toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+    },
+  });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('resumes denied strict planning approval without provider prompting', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { fetchImplementation } = createStrictWorkflowFetch({
-      planResponse: {
-        status: 'approval-required',
-        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-      },
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
-    const resumed = await collect(
-      runtime.resumeSession({
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        gallerySessionId: '00000000-0000-4000-8000-000000000100',
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-        approvalDecision: 'denied',
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
       }),
-    );
+    ),
+  );
+  const resumed = await collect(
+    runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+      approvalDecision: 'approved',
+      toolResult: { status: 'success', plan: { id: strictTripPlanId } },
+    }),
+  );
 
-    assert.deepEqual(calls.prompts, []);
-    assert.equal(calls.continues, 0);
-    assert.equal(resumed.at(-1).type, 'assistant-message-completed');
-    assert.match(resumed.at(-1).content.blocks[0].text, /approval was denied/i);
-    assert.doesNotMatch(resumed.at(-1).content.blocks[0].text, /Review the plan/i);
+  assert.deepEqual(calls.prompts, []);
+  assert.equal(calls.continues, 0);
+  assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.equal(resumed.at(-1).type, 'assistant-message-completed');
+  assert.match(resumed.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+});
+
+it('resumes denied strict planning approval without provider prompting', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { fetchImplementation } = createStrictWorkflowFetch({
+    planResponse: {
+      status: 'approval-required',
+      toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+    },
+  });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+  await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+  const resumed = await collect(
+    runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+      approvalDecision: 'denied',
+    }),
+  );
+
+  assert.deepEqual(calls.prompts, []);
+  assert.equal(calls.continues, 0);
+  assert.equal(resumed.at(-1).type, 'assistant-message-completed');
+  assert.match(resumed.at(-1).content.blocks[0].text, /approval was denied/i);
+  assert.doesNotMatch(resumed.at(-1).content.blocks[0].text, /Review the plan/i);
+});
 ```
 
 - [ ] **Step 2: Run tests and verify red**
@@ -829,7 +891,7 @@ Add `pendingStrictWorkflow: undefined` to session entries.
 Add a small local helper inside `createPiRuntime` before `return { ... }`:
 
 ```js
-  const strictMcpClient = (entry) => createGalleryMcpClient({ gateway: entry.mcpGateway, fetch: fetchImplementation });
+const strictMcpClient = (entry) => createGalleryMcpClient({ gateway: entry.mcpGateway, fetch: fetchImplementation });
 ```
 
 In `sendMessage`, before the normal strict prompt branch, resolve candidate-selection state when the prompt does not match a new strict request. Use a strict `AbortController` and `entry.abortActiveStream` just like the strict new-request path:
@@ -959,6 +1021,7 @@ Expected: PASS. Production strict continuations bypass provider prompting, exist
 ## Task 4: Final Scope And Drift Checks
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-05-28-pi-agent-strict-recent-trip-album-design.md`
 - Modify: `docs/superpowers/plans/2026-05-28-pi-agent-strict-recent-trip-album-slice-6.md`
 

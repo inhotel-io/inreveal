@@ -43,6 +43,7 @@ Not included:
 ## Task 1: Strict Recent Trip Success Regression
 
 **Files:**
+
 - Modify: `server/src/services/agent-runner-flow.integration.spec.ts`
 
 - [ ] **Step 1: Add the failing integration test and helper references**
@@ -56,155 +57,155 @@ import type { TripCandidate } from 'src/services/trip-candidate.service';
 Add this test near the top of `describe('Pi agent runner flow harness', () => {`, before the existing South Africa regression:
 
 ```ts
-  it('creates a strict recent-trip album plan from the trip candidate handle', async () => {
-    const harness = setup();
-    const tripAssetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
-    const { candidate } = configureRecentTripCandidateHarness(harness, { assetIds: tripAssetIds });
-    let tripCandidateSelectionHandleId: string | undefined;
+it('creates a strict recent-trip album plan from the trip candidate handle', async () => {
+  const harness = setup();
+  const tripAssetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+  const { candidate } = configureRecentTripCandidateHarness(harness, { assetIds: tripAssetIds });
+  let tripCandidateSelectionHandleId: string | undefined;
 
-    harness.configureRunnerMessage(async function* ({ body }) {
-      const prompt = body.content.blocks
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n');
-      expect(prompt).toBe('Create an album for my recent trip to USA');
-
-      const tripResult = getMcpToolResult(
-        await harness.mcpService.handle(
-          harness.auth,
-          body.gallerySessionId,
-          makeMcpToolCallRequest(AgentToolName.FindTripCandidates, { placeHint: 'USA' }),
-        ),
-      );
-      expect(tripResult.isError).not.toBe(true);
-      const tripContent = tripResult.structuredContent as {
-        recommendation: { action: string; candidateDedupeKey?: string };
-        candidates: Array<{
-          dedupeKey: string;
-          selectionHandle: { id: string; assetCount: number };
-        }>;
-      };
-      expect(tripContent.recommendation).toMatchObject({
-        action: 'use_top_candidate',
-        candidateDedupeKey: candidate.dedupeKey,
-      });
-      expect(tripContent.candidates).toHaveLength(1);
-      tripCandidateSelectionHandleId = tripContent.candidates[0].selectionHandle.id;
-      expect(tripContent.candidates[0].selectionHandle.assetCount).toBe(tripAssetIds.length);
-
-      const created = getMcpToolResult(
-        await harness.mcpService.handle(
-          harness.auth,
-          body.gallerySessionId,
-          makeMcpToolCallRequest(AgentToolName.ProposeAlbumFromSelection, {
-            summary: `Create USA Trip with ${tripAssetIds.length} trip assets from New York, USA.`,
-            albumName: 'USA Trip',
-            description: 'Album-ready trip selection from New York, USA.',
-            selectionHandleId: tripCandidateSelectionHandleId,
-          }),
-        ),
-      );
-      expect(created.isError).not.toBe(true);
-      expect((created.structuredContent as { plan: { id: string } }).plan.id).toEqual(expect.any(String));
-
-      yield {
-        type: 'assistant-message-completed',
-        sessionId: body.gallerySessionId,
-        runnerSessionId: 'runner-session-1',
-        providerMessageId: 'provider-message-strict-trip-plan',
-        content: {
-          blocks: [
-            {
-              type: 'text',
-              text: `I found a likely New York, USA trip from May 3-12, 2026 and proposed USA Trip with ${tripAssetIds.length} assets. Review the plan before applying it.`,
-            },
-          ],
-        },
-      };
-    });
-
-    const session = await harness.sessionService.create(harness.auth, {
-      providerCredentialId: '00000000-0000-4000-8000-000000000201',
-      model: 'gpt-5.1',
-      permissionPreset: AgentPermissionPreset.VisualOrganizer,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      initialContext: { entrypoint: 'assistant-page' },
-    });
-
-    await harness.messageService.appendUserMessage(harness.auth, session.id, {
-      content: {
-        blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }],
-      },
-    });
-
-    await waitFor(async () => {
-      const messages = await harness.messageService.getMessages(harness.auth, session.id);
-      const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
-      expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForPlanReview);
-      expect(messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            role: AgentMessageRole.Assistant,
-            providerMessageId: 'provider-message-strict-trip-plan',
-            content: {
-              blocks: [
-                expect.objectContaining({
-                  type: 'text',
-                  text: expect.stringMatching(/May 3-12, 2026.*4 assets.*Review the plan/i),
-                }),
-              ],
-            },
-          }),
-        ]),
-      );
-    });
-
-    expect(tripCandidateSelectionHandleId).toEqual(expect.any(String));
-    expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).toEqual([
-      AgentToolName.FindTripCandidates,
-      AgentToolName.ProposeAlbumFromSelection,
-    ]);
-    expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).not.toContain(AgentToolName.SearchAssets);
-    expect(harness.searchRepository.searchMetadata).not.toHaveBeenCalled();
-    expect(harness.searchRepository.searchSmart).not.toHaveBeenCalled();
-
-    expect(harness.selectionHandles.handles).toHaveLength(1);
-    expect(harness.selectionHandles.handles[0]).toMatchObject({
-      id: tripCandidateSelectionHandleId,
-      assetIds: tripAssetIds,
-      assetCount: tripAssetIds.length,
-    });
-
-    expect(harness.operationPlans.plans).toHaveLength(1);
-    const [plan] = harness.operationPlans.plans;
-    expect(plan.status).toBe(AgentOperationPlanStatus.Proposed);
-    expect(plan.operations).toHaveLength(2);
-    expect(plan.operations[0]).toMatchObject({
-      type: AgentOperationType.AlbumCreate,
-      targetKind: AgentOperationTargetKind.NewAlbum,
-      temporaryTargetId: 'tmp-album-from-selection',
-      payload: { albumName: 'USA Trip', description: 'Album-ready trip selection from New York, USA.' },
-    });
-    expect(plan.operations[1]).toMatchObject({
-      type: AgentOperationType.AlbumAddAssets,
-      targetKind: AgentOperationTargetKind.NewAlbum,
-      temporaryTargetId: 'tmp-album-from-selection',
-      assetIds: tripAssetIds,
-      payload: {},
-    });
-    expect(plan.operations[1]).not.toHaveProperty('assetSelectionHandleId');
-
-    expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('operation-plan-ready');
-
-    const assistantMessages = await harness.messageService.getMessages(harness.auth, session.id);
-    const assistantText = assistantMessages
-      .filter((message) => message.role === AgentMessageRole.Assistant)
-      .flatMap((message) => message.content.blocks)
+  harness.configureRunnerMessage(async function* ({ body }) {
+    const prompt = body.content.blocks
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join('\n');
-    expect(assistantText).not.toMatch(/rough dates|start and end|what dates|date range before/i);
+    expect(prompt).toBe('Create an album for my recent trip to USA');
+
+    const tripResult = getMcpToolResult(
+      await harness.mcpService.handle(
+        harness.auth,
+        body.gallerySessionId,
+        makeMcpToolCallRequest(AgentToolName.FindTripCandidates, { placeHint: 'USA' }),
+      ),
+    );
+    expect(tripResult.isError).not.toBe(true);
+    const tripContent = tripResult.structuredContent as {
+      recommendation: { action: string; candidateDedupeKey?: string };
+      candidates: Array<{
+        dedupeKey: string;
+        selectionHandle: { id: string; assetCount: number };
+      }>;
+    };
+    expect(tripContent.recommendation).toMatchObject({
+      action: 'use_top_candidate',
+      candidateDedupeKey: candidate.dedupeKey,
+    });
+    expect(tripContent.candidates).toHaveLength(1);
+    tripCandidateSelectionHandleId = tripContent.candidates[0].selectionHandle.id;
+    expect(tripContent.candidates[0].selectionHandle.assetCount).toBe(tripAssetIds.length);
+
+    const created = getMcpToolResult(
+      await harness.mcpService.handle(
+        harness.auth,
+        body.gallerySessionId,
+        makeMcpToolCallRequest(AgentToolName.ProposeAlbumFromSelection, {
+          summary: `Create USA Trip with ${tripAssetIds.length} trip assets from New York, USA.`,
+          albumName: 'USA Trip',
+          description: 'Album-ready trip selection from New York, USA.',
+          selectionHandleId: tripCandidateSelectionHandleId,
+        }),
+      ),
+    );
+    expect(created.isError).not.toBe(true);
+    expect((created.structuredContent as { plan: { id: string } }).plan.id).toEqual(expect.any(String));
+
+    yield {
+      type: 'assistant-message-completed',
+      sessionId: body.gallerySessionId,
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-strict-trip-plan',
+      content: {
+        blocks: [
+          {
+            type: 'text',
+            text: `I found a likely New York, USA trip from May 3-12, 2026 and proposed USA Trip with ${tripAssetIds.length} assets. Review the plan before applying it.`,
+          },
+        ],
+      },
+    };
   });
+
+  const session = await harness.sessionService.create(harness.auth, {
+    providerCredentialId: '00000000-0000-4000-8000-000000000201',
+    model: 'gpt-5.1',
+    permissionPreset: AgentPermissionPreset.VisualOrganizer,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    initialContext: { entrypoint: 'assistant-page' },
+  });
+
+  await harness.messageService.appendUserMessage(harness.auth, session.id, {
+    content: {
+      blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }],
+    },
+  });
+
+  await waitFor(async () => {
+    const messages = await harness.messageService.getMessages(harness.auth, session.id);
+    const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+    expect(reloadedSession?.status).toBe(AgentSessionStatus.WaitingForPlanReview);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: AgentMessageRole.Assistant,
+          providerMessageId: 'provider-message-strict-trip-plan',
+          content: {
+            blocks: [
+              expect.objectContaining({
+                type: 'text',
+                text: expect.stringMatching(/May 3-12, 2026.*4 assets.*Review the plan/i),
+              }),
+            ],
+          },
+        }),
+      ]),
+    );
+  });
+
+  expect(tripCandidateSelectionHandleId).toEqual(expect.any(String));
+  expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).toEqual([
+    AgentToolName.FindTripCandidates,
+    AgentToolName.ProposeAlbumFromSelection,
+  ]);
+  expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).not.toContain(AgentToolName.SearchAssets);
+  expect(harness.searchRepository.searchMetadata).not.toHaveBeenCalled();
+  expect(harness.searchRepository.searchSmart).not.toHaveBeenCalled();
+
+  expect(harness.selectionHandles.handles).toHaveLength(1);
+  expect(harness.selectionHandles.handles[0]).toMatchObject({
+    id: tripCandidateSelectionHandleId,
+    assetIds: tripAssetIds,
+    assetCount: tripAssetIds.length,
+  });
+
+  expect(harness.operationPlans.plans).toHaveLength(1);
+  const [plan] = harness.operationPlans.plans;
+  expect(plan.status).toBe(AgentOperationPlanStatus.Proposed);
+  expect(plan.operations).toHaveLength(2);
+  expect(plan.operations[0]).toMatchObject({
+    type: AgentOperationType.AlbumCreate,
+    targetKind: AgentOperationTargetKind.NewAlbum,
+    temporaryTargetId: 'tmp-album-from-selection',
+    payload: { albumName: 'USA Trip', description: 'Album-ready trip selection from New York, USA.' },
+  });
+  expect(plan.operations[1]).toMatchObject({
+    type: AgentOperationType.AlbumAddAssets,
+    targetKind: AgentOperationTargetKind.NewAlbum,
+    temporaryTargetId: 'tmp-album-from-selection',
+    assetIds: tripAssetIds,
+    payload: {},
+  });
+  expect(plan.operations[1]).not.toHaveProperty('assetSelectionHandleId');
+
+  expect(harness.websocketEvents.map(({ event }) => event.type)).toContain('operation-plan-ready');
+
+  const assistantMessages = await harness.messageService.getMessages(harness.auth, session.id);
+  const assistantText = assistantMessages
+    .filter((message) => message.role === AgentMessageRole.Assistant)
+    .flatMap((message) => message.content.blocks)
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+  expect(assistantText).not.toMatch(/rough dates|start and end|what dates|date range before/i);
+});
 ```
 
 This test intentionally references `configureRecentTripCandidateHarness` before it exists.
@@ -310,6 +311,7 @@ Expected: PASS for the new test and existing file.
 ## Task 2: Strict Recent Trip Failed Planning Regression
 
 **Files:**
+
 - Modify: `server/src/services/agent-runner-flow.integration.spec.ts`
 
 - [ ] **Step 1: Add the failing failed-planning test**
@@ -317,97 +319,97 @@ Expected: PASS for the new test and existing file.
 Add this test after the success regression:
 
 ```ts
-  it('does not show a strict recent-trip plan card or success copy when planning fails', async () => {
-    const harness = setup();
-    const tripAssetIds = [newUuid(), newUuid()];
-    configureRecentTripCandidateHarness(harness, { assetIds: tripAssetIds });
+it('does not show a strict recent-trip plan card or success copy when planning fails', async () => {
+  const harness = setup();
+  const tripAssetIds = [newUuid(), newUuid()];
+  configureRecentTripCandidateHarness(harness, { assetIds: tripAssetIds });
 
-    harness.configureRunnerMessage(async function* ({ body }) {
-      const tripResult = getMcpToolResult(
-        await harness.mcpService.handle(
-          harness.auth,
-          body.gallerySessionId,
-          makeMcpToolCallRequest(AgentToolName.FindTripCandidates, { placeHint: 'USA' }),
-        ),
-      );
-      expect(tripResult.isError).not.toBe(true);
+  harness.configureRunnerMessage(async function* ({ body }) {
+    const tripResult = getMcpToolResult(
+      await harness.mcpService.handle(
+        harness.auth,
+        body.gallerySessionId,
+        makeMcpToolCallRequest(AgentToolName.FindTripCandidates, { placeHint: 'USA' }),
+      ),
+    );
+    expect(tripResult.isError).not.toBe(true);
 
-      const denied = getMcpToolResult(
-        await harness.mcpService.handle(
-          harness.auth,
-          body.gallerySessionId,
-          makeMcpToolCallRequest(AgentToolName.ProposeAlbumFromSelection, {
-            summary: 'Create USA Trip with an invalid trip handle.',
-            albumName: 'USA Trip',
-            description: 'Album-ready trip selection from New York, USA.',
-            selectionHandleId: '00000000-0000-4000-8000-000000009999',
-          }),
-        ),
-      );
-      expect(denied.isError).toBe(true);
+    const denied = getMcpToolResult(
+      await harness.mcpService.handle(
+        harness.auth,
+        body.gallerySessionId,
+        makeMcpToolCallRequest(AgentToolName.ProposeAlbumFromSelection, {
+          summary: 'Create USA Trip with an invalid trip handle.',
+          albumName: 'USA Trip',
+          description: 'Album-ready trip selection from New York, USA.',
+          selectionHandleId: '00000000-0000-4000-8000-000000009999',
+        }),
+      ),
+    );
+    expect(denied.isError).toBe(true);
 
-      yield {
-        type: 'assistant-message-completed',
-        sessionId: body.gallerySessionId,
-        runnerSessionId: 'runner-session-1',
-        providerMessageId: 'provider-message-strict-trip-failed-plan',
-        content: {
-          blocks: [
-            {
-              type: 'text',
-              text: 'I could not create a reviewable album plan. Please try again or provide a more specific date range or place.',
-            },
-          ],
-        },
-      };
-    });
-
-    const session = await harness.sessionService.create(harness.auth, {
-      providerCredentialId: '00000000-0000-4000-8000-000000000201',
-      model: 'gpt-5.1',
-      permissionPreset: AgentPermissionPreset.VisualOrganizer,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      initialContext: { entrypoint: 'assistant-page' },
-    });
-
-    await harness.messageService.appendUserMessage(harness.auth, session.id, {
+    yield {
+      type: 'assistant-message-completed',
+      sessionId: body.gallerySessionId,
+      runnerSessionId: 'runner-session-1',
+      providerMessageId: 'provider-message-strict-trip-failed-plan',
       content: {
-        blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }],
+        blocks: [
+          {
+            type: 'text',
+            text: 'I could not create a reviewable album plan. Please try again or provide a more specific date range or place.',
+          },
+        ],
       },
-    });
-
-    await waitFor(async () => {
-      const messages = await harness.messageService.getMessages(harness.auth, session.id);
-      expect(messages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            role: AgentMessageRole.Assistant,
-            providerMessageId: 'provider-message-strict-trip-failed-plan',
-          }),
-        ]),
-      );
-    });
-
-    const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
-    expect(reloadedSession?.status).toBe(AgentSessionStatus.Interrupted);
-    expect(harness.operationPlans.plans).toHaveLength(0);
-    expect(harness.websocketEvents.map(({ event }) => event.type)).not.toContain('operation-plan-ready');
-    expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).toEqual([
-      AgentToolName.FindTripCandidates,
-      AgentToolName.ProposeAlbumFromSelection,
-    ]);
-    expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).not.toContain(AgentToolName.SearchAssets);
-
-    const assistantMessages = await harness.messageService.getMessages(harness.auth, session.id);
-    const assistantText = assistantMessages
-      .filter((message) => message.role === AgentMessageRole.Assistant)
-      .flatMap((message) => message.content.blocks)
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
-    expect(assistantText).toMatch(/could not create a reviewable album plan/i);
-    expect(assistantText).not.toMatch(/plan is ready|I created|I proposed|Review the plan/i);
+    };
   });
+
+  const session = await harness.sessionService.create(harness.auth, {
+    providerCredentialId: '00000000-0000-4000-8000-000000000201',
+    model: 'gpt-5.1',
+    permissionPreset: AgentPermissionPreset.VisualOrganizer,
+    approvalMode: AgentApprovalMode.PlanOnly,
+    initialContext: { entrypoint: 'assistant-page' },
+  });
+
+  await harness.messageService.appendUserMessage(harness.auth, session.id, {
+    content: {
+      blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }],
+    },
+  });
+
+  await waitFor(async () => {
+    const messages = await harness.messageService.getMessages(harness.auth, session.id);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: AgentMessageRole.Assistant,
+          providerMessageId: 'provider-message-strict-trip-failed-plan',
+        }),
+      ]),
+    );
+  });
+
+  const reloadedSession = await harness.sessions.getById(harness.auth.user.id, session.id);
+  expect(reloadedSession?.status).toBe(AgentSessionStatus.Interrupted);
+  expect(harness.operationPlans.plans).toHaveLength(0);
+  expect(harness.websocketEvents.map(({ event }) => event.type)).not.toContain('operation-plan-ready');
+  expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).toEqual([
+    AgentToolName.FindTripCandidates,
+    AgentToolName.ProposeAlbumFromSelection,
+  ]);
+  expect(harness.toolCalls.toolCalls.map((toolCall) => toolCall.toolName)).not.toContain(AgentToolName.SearchAssets);
+
+  const assistantMessages = await harness.messageService.getMessages(harness.auth, session.id);
+  const assistantText = assistantMessages
+    .filter((message) => message.role === AgentMessageRole.Assistant)
+    .flatMap((message) => message.content.blocks)
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+  expect(assistantText).toMatch(/could not create a reviewable album plan/i);
+  expect(assistantText).not.toMatch(/plan is ready|I created|I proposed|Review the plan/i);
+});
 ```
 
 - [ ] **Step 2: Run the test and verify red**

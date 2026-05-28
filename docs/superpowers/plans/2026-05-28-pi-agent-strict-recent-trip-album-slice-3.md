@@ -48,6 +48,7 @@ Not included in this slice:
 ## Task 1: Deterministic Recent Trip Album Workflow Execution
 
 **Files:**
+
 - Modify: `agent-runner/src/strict-workflows.mjs`
 - Modify: `agent-runner/src/strict-workflows.test.mjs`
 - Modify: `agent-runner/src/e2e-runtime.mjs`
@@ -79,13 +80,11 @@ const makeTripCandidate = (overrides = {}) => ({
 
 const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendation, planResult } = {}) => {
   const calls = [];
-  const resolvedRecommendation =
-    recommendation ??
-    {
-      action: 'use_top_candidate',
-      candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
-      reason: 'The only readable trip candidate is high confidence.',
-    };
+  const resolvedRecommendation = recommendation ?? {
+    action: 'use_top_candidate',
+    candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+    reason: 'The only readable trip candidate is high confidence.',
+  };
 
   const client = {
     async call(name, args) {

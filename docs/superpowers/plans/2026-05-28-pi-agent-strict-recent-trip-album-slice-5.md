@@ -56,6 +56,7 @@ Not included in this slice:
 ## Task 1: Production Strict Workflow Routing
 
 **Files:**
+
 - Modify: `agent-runner/src/pi-runtime.mjs`
 - Modify: `agent-runner/src/pi-runtime.test.mjs`
 
@@ -156,115 +157,130 @@ const createStrictWorkflowFetch = ({
 Append these tests inside `describe('pi runtime adapter', ...)` near the existing message-streaming tests:
 
 ```js
-  it('routes strict recent-trip album prompts through MCP before provider orchestration', async () => {
-    const { sdk, ai, calls, session } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
-
-    const events = await collect(
-      runtime.sendMessage(
-        createMessageRequest({
-          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
-        }),
-      ),
-    );
-
-    assert.equal(calls.prompts.length, 0);
-    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(mcpCalls.map((call) => call.body.method), ['tools/call', 'tools/call']);
-    assert.equal(mcpCalls[0].headers.Authorization, 'Bearer mcp-token-secret');
-    assert.equal(events.length, 1);
-    assert.equal(events[0].type, 'assistant-message-completed');
-    assert.equal(events[0].sessionId, '00000000-0000-4000-8000-000000000100');
-    assert.equal(events[0].runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
-    assert.equal(events[0].providerMessageId, null);
-    assert.match(events[0].content.blocks[0].text, /May 3-12, 2026/);
-    assert.match(events[0].content.blocks[0].text, /28 assets/);
-    assert.match(events[0].content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
-    assert.match(events[0].content.blocks[0].text, /Review the plan before applying it/);
-    assert.equal(session.messages.some((message) => message.role === 'user' && message.content[0].text.includes('recent trip to USA')), true);
-    assert.equal(session.messages.some((message) => message.role === 'assistant' && message.content[0].text.includes('Review the plan')), true);
+it('routes strict recent-trip album prompts through MCP before provider orchestration', async () => {
+  const { sdk, ai, calls, session } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('leaves unsupported prompts on open provider orchestration', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+  const events = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
 
-    const events = await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] } })));
+  assert.equal(calls.prompts.length, 0);
+  assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.deepEqual(
+    mcpCalls.map((call) => call.body.method),
+    ['tools/call', 'tools/call'],
+  );
+  assert.equal(mcpCalls[0].headers.Authorization, 'Bearer mcp-token-secret');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'assistant-message-completed');
+  assert.equal(events[0].sessionId, '00000000-0000-4000-8000-000000000100');
+  assert.equal(events[0].runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
+  assert.equal(events[0].providerMessageId, null);
+  assert.match(events[0].content.blocks[0].text, /May 3-12, 2026/);
+  assert.match(events[0].content.blocks[0].text, /28 assets/);
+  assert.match(events[0].content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
+  assert.match(events[0].content.blocks[0].text, /Review the plan before applying it/);
+  assert.equal(
+    session.messages.some(
+      (message) => message.role === 'user' && message.content[0].text.includes('recent trip to USA'),
+    ),
+    true,
+  );
+  assert.equal(
+    session.messages.some(
+      (message) => message.role === 'assistant' && message.content[0].text.includes('Review the plan'),
+    ),
+    true,
+  );
+});
 
-    assert.deepEqual(mcpCalls, []);
-    assert.deepEqual(calls.prompts, ['Organize my photos.']);
-    assert.equal(events.at(-1).type, 'assistant-message-completed');
+it('leaves unsupported prompts on open provider orchestration', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('keeps a strict handled Pi runner session usable for a later open prompt', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { fetchImplementation } = createStrictWorkflowFetch();
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+  const events = await collect(
+    runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] } })),
+  );
 
-    const strictEvents = await collect(
-      runtime.sendMessage(
-        createMessageRequest({
-          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
-        }),
-      ),
-    );
-    const openEvents = await collect(
-      runtime.sendMessage(
-        createMessageRequest({
-          messageId: '00000000-0000-4000-8000-000000000201',
-          content: { blocks: [{ type: 'text', text: 'How many albums do I have?' }] },
-        }),
-      ),
-    );
+  assert.deepEqual(mcpCalls, []);
+  assert.deepEqual(calls.prompts, ['Organize my photos.']);
+  assert.equal(events.at(-1).type, 'assistant-message-completed');
+});
 
-    assert.equal(strictEvents.at(-1).type, 'assistant-message-completed');
-    assert.deepEqual(calls.prompts, ['How many albums do I have?']);
-    assert.equal(openEvents.at(-1).type, 'assistant-message-completed');
+it('keeps a strict handled Pi runner session usable for a later open prompt', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { fetchImplementation } = createStrictWorkflowFetch();
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
 
-  it('pauses production strict recent-trip planning when the proposal needs approval', async () => {
-    const { sdk, ai, calls } = createFakeDependencies({
-      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
-    });
-    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
-      planResponse: {
-        status: 'approval-required',
-        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-      },
-    });
-    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+  const strictEvents = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+  const openEvents = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        messageId: '00000000-0000-4000-8000-000000000201',
+        content: { blocks: [{ type: 'text', text: 'How many albums do I have?' }] },
+      }),
+    ),
+  );
 
-    const events = await collect(
-      runtime.sendMessage(
-        createMessageRequest({
-          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
-        }),
-      ),
-    );
+  assert.equal(strictEvents.at(-1).type, 'assistant-message-completed');
+  assert.deepEqual(calls.prompts, ['How many albums do I have?']);
+  assert.equal(openEvents.at(-1).type, 'assistant-message-completed');
+});
 
-    assert.equal(calls.prompts.length, 0);
-    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(events, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: '00000000-0000-4000-8000-000000000100',
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-      },
-    ]);
+it('pauses production strict recent-trip planning when the proposal needs approval', async () => {
+  const { sdk, ai, calls } = createFakeDependencies({
+    mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
   });
+  const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+    planResponse: {
+      status: 'approval-required',
+      toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+    },
+  });
+  const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+  const events = await collect(
+    runtime.sendMessage(
+      createMessageRequest({
+        content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+      }),
+    ),
+  );
+
+  assert.equal(calls.prompts.length, 0);
+  assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.deepEqual(events, [
+    {
+      type: 'tool-approval-needed',
+      sessionId: '00000000-0000-4000-8000-000000000100',
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+    },
+  ]);
+});
 ```
 
 - [x] **Step 1a: Add strict hardening regression tests**
@@ -354,7 +370,9 @@ const createGalleryMcpClient = ({ gateway, fetch: fetchImplementation }) => {
       const text = await response.text();
       if (!response.ok) {
         const bodyDetails = text.length === 0 ? '' : `: ${text}`;
-        throw new Error(redactSecret(`Gallery MCP request failed with status ${response.status}${bodyDetails}`, gateway.token));
+        throw new Error(
+          redactSecret(`Gallery MCP request failed with status ${response.status}${bodyDetails}`, gateway.token),
+        );
       }
 
       let envelope;
@@ -474,13 +492,13 @@ Inside `sendMessage`, immediately after `entry.inFlight = true;`, add:
 Then replace the provider prompt call later in `sendMessage`:
 
 ```js
-            return entry.session.prompt(textPromptFromContent(content));
+return entry.session.prompt(textPromptFromContent(content));
 ```
 
 with:
 
 ```js
-            return entry.session.prompt(promptText);
+return entry.session.prompt(promptText);
 ```
 
 Important control-flow requirement: this strict fast path must run before `entry.session.subscribe(...)` so no provider deltas or provider prompt happen for strict handled turns. The existing provider path `finally` must continue to clear `entry.inFlight`; the strict fast path clears it in its own `finally`.

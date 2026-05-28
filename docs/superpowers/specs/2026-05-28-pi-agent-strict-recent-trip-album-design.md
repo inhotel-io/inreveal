@@ -24,10 +24,10 @@ not enough.
 - `findTripCandidates` found one USA trip candidate with 85 assets and a valid
   selection handle.
 - Pi ignored that handle and ran a separate metadata search for `country:
-  "USA"` over a broad date window.
+"USA"` over a broad date window.
 - That search returned a zero-asset selection handle.
 - Planning tools rejected the empty source with `Search source did not match
-  any assets`.
+any assets`.
 - No row was created in `agent_operation_plan`, but the assistant still told the
   user that a reviewable plan had been created.
 
@@ -285,7 +285,7 @@ Tests:
 - Matches `Make an album for my recent trip`.
 - Matches explicit album names.
 - Splits combined place and album-name clauses, for example `recent trip to USA
-  called Spring Break`.
+called Spring Break`.
 - Extracts `USA`, `United States`, and `U.S.` as the same place hint.
 - Omits the place hint when extraction is uncertain.
 - Rejects highlight requests containing `top`, `best`, or `highlights`.
@@ -373,26 +373,26 @@ Tests:
 
 The final implementation is not complete until these cases have explicit tests:
 
-| Case | Expected behavior |
-| ---- | ----------------- |
-| Clear USA candidate | Create plan from candidate handle. |
-| Clear no-place candidate | Create `Recent Trip` plan from candidate handle. |
-| Explicit album name | Preserve user-provided name. |
-| Combined place and name | Parse `recent trip to USA called Spring Break` as USA source plus Spring Break album name. |
-| Multiple close candidates | Ask one choice question with labels. |
-| No candidate | Ask for one concrete date/place source. |
-| Low-confidence `none` recommendation | Ask for one concrete source. |
-| Recommendation key mismatch | Do not fall back to the first candidate; ask or surface a detector inconsistency. |
-| Candidate missing handle | Explain that an album-ready selection was unavailable. |
-| Zero selected assets | Do not create a plan. |
-| Planning denied/error | Do not claim plan creation. |
-| Approval required | Pause for Gallery approval. |
-| Approval resumed | Continue the same strict workflow from stored state. |
-| Highlight wording | Do not route to this strict workflow. |
-| Unsupported prompt | Fall back to open Pi orchestration. |
-| Duplicate/stack exclusion counts | Mention them only after successful plan creation. |
-| Gateway/provider secret in error | Redact before persisting or streaming. |
-| Follow-up candidate selection | Resume from stored candidate state. |
+| Case                                 | Expected behavior                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Clear USA candidate                  | Create plan from candidate handle.                                                         |
+| Clear no-place candidate             | Create `Recent Trip` plan from candidate handle.                                           |
+| Explicit album name                  | Preserve user-provided name.                                                               |
+| Combined place and name              | Parse `recent trip to USA called Spring Break` as USA source plus Spring Break album name. |
+| Multiple close candidates            | Ask one choice question with labels.                                                       |
+| No candidate                         | Ask for one concrete date/place source.                                                    |
+| Low-confidence `none` recommendation | Ask for one concrete source.                                                               |
+| Recommendation key mismatch          | Do not fall back to the first candidate; ask or surface a detector inconsistency.          |
+| Candidate missing handle             | Explain that an album-ready selection was unavailable.                                     |
+| Zero selected assets                 | Do not create a plan.                                                                      |
+| Planning denied/error                | Do not claim plan creation.                                                                |
+| Approval required                    | Pause for Gallery approval.                                                                |
+| Approval resumed                     | Continue the same strict workflow from stored state.                                       |
+| Highlight wording                    | Do not route to this strict workflow.                                                      |
+| Unsupported prompt                   | Fall back to open Pi orchestration.                                                        |
+| Duplicate/stack exclusion counts     | Mention them only after successful plan creation.                                          |
+| Gateway/provider secret in error     | Redact before persisting or streaming.                                                     |
+| Follow-up candidate selection        | Resume from stored candidate state.                                                        |
 
 ## Acceptance Criteria
 
