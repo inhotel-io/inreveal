@@ -79,3 +79,124 @@ export const matchStrictWorkflow = (prompt) => {
     ? { kind: 'create_recent_trip_album', albumName, placeHint }
     : { kind: 'create_recent_trip_album', albumName };
 };
+
+const assertCreateRecentTripWorkflow = (workflow) => {
+  if (workflow?.kind !== 'create_recent_trip_album') {
+    throw new Error('runCreateRecentTripAlbumWorkflow requires a create_recent_trip_album workflow');
+  }
+};
+
+const tripCandidateDateRange = (candidate) => {
+  const after = new Date(candidate.takenAfter);
+  const before = new Date(candidate.takenBefore);
+  const month = after.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+  return `${month} ${after.getUTCDate()}-${before.getUTCDate()}, ${before.getUTCFullYear()}`;
+};
+
+const tripCandidateLabel = (candidate) =>
+  Array.isArray(candidate.placeLabels) && candidate.placeLabels.length > 0
+    ? candidate.placeLabels.join(' and ')
+    : candidate.title?.replace(/^Recent trip to\s+/i, '') || candidate.subtitle || 'that trip';
+
+const tripDuplicateParts = (candidate) => {
+  const duplicateCount = candidate.excludedDuplicateCount ?? 0;
+  const stackCount = candidate.excludedStackChildCount ?? 0;
+  const parts = [];
+  if (duplicateCount > 0) {
+    parts.push(`${duplicateCount} known duplicate variant${duplicateCount === 1 ? '' : 's'}`);
+  }
+  if (stackCount > 0) {
+    parts.push(`${stackCount} stack child${stackCount === 1 ? '' : 'ren'}`);
+  }
+  return parts;
+};
+
+const duplicateExclusionText = (candidate) => {
+  const parts = tripDuplicateParts(candidate);
+  return parts.length > 0 ? ` I skipped ${parts.join(' and ')}.` : '';
+};
+
+const duplicateDescriptionText = (candidate) => {
+  const parts = tripDuplicateParts(candidate);
+  return parts.length > 0 ? ` ${parts.join(' and ')} were excluded when detected.` : '';
+};
+
+const extractPlanId = (toolResult) =>
+  typeof toolResult?.planId === 'string'
+    ? toolResult.planId
+    : typeof toolResult?.plan?.id === 'string'
+      ? toolResult.plan.id
+      : undefined;
+
+const workflowResult = (status, text, extra = {}) => ({ status, text, ...extra });
+
+export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow }) => {
+  assertCreateRecentTripWorkflow(workflow);
+
+  const tripResult = await client.call(
+    'findTripCandidates',
+    workflow.placeHint ? { placeHint: workflow.placeHint } : {},
+  );
+  const candidates = Array.isArray(tripResult.candidates) ? tripResult.candidates : [];
+  const recommendation = tripResult.recommendation;
+
+  if (recommendation?.action === 'none' || candidates.length === 0) {
+    return workflowResult(
+      'needs_input',
+      'I could not find a likely recent trip from the available date and location metadata. Which date range or place should I use for the album?',
+    );
+  }
+
+  if (recommendation?.action === 'ask_user') {
+    const labels = candidates.map(tripCandidateLabel).slice(0, 5).join('; ');
+    return workflowResult(
+      'needs_input',
+      candidates.length === 1
+        ? `I found one possible recent trip: ${labels}. Should I use it, or would you prefer to give me a date range or place?`
+        : `I found multiple possible recent trips: ${labels}. Which one should I use?`,
+      { candidates },
+    );
+  }
+
+  const candidateDedupeKey = recommendation?.candidateDedupeKey;
+  const candidate =
+    typeof candidateDedupeKey === 'string'
+      ? candidates.find((item) => item?.dedupeKey === candidateDedupeKey)
+      : undefined;
+
+  if (!candidate) {
+    return workflowResult(
+      'needs_input',
+      'Gallery found trip candidates, but the recommended trip could not match an available candidate. Which date range or place should I use for the album?',
+    );
+  }
+
+  const selectionHandleId = candidate.selectionHandle?.id;
+  if (!selectionHandleId) {
+    return workflowResult(
+      'needs_input',
+      'I found a trip candidate but could not get an album-ready selection handle. Please try again or give me a date range.',
+    );
+  }
+
+  const assetCount = candidate.selectionHandle.assetCount ?? candidate.albumAssetCount ?? 0;
+  const label = tripCandidateLabel(candidate);
+  const planResult = await client.call('proposeAlbumFromSelection', {
+    summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
+    albumName: workflow.albumName,
+    description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
+    selectionHandleId,
+  });
+
+  return workflowResult(
+    'planned',
+    `I found a likely ${label} trip from ${tripCandidateDateRange(candidate)} and proposed ${workflow.albumName} with ${assetCount} assets.${duplicateExclusionText(candidate)} Review the plan before applying it.`,
+    {
+      planId: extractPlanId(planResult),
+      planResult,
+      candidate,
+      selectionHandleId,
+      assetCount,
+    },
+  );
+};
