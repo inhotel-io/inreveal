@@ -651,6 +651,42 @@ Add tests:
     }
   });
 
+  it('findTripCandidates drops fully unreadable materialized candidates without leaking their metadata', async () => {
+    const auth = AuthFactory.create();
+    const unreadableAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const candidate = makeTripCandidate({
+      title: 'Recent trip to Hidden City, USA',
+      placeLabel: 'Hidden City, USA',
+      cities: ['Hidden City'],
+      source: {
+        kind: 'tripCandidate',
+        dedupeKey: 'trip:usa:hidden-city:2026-04-15:2026-04-16',
+        takenAfter: new Date('2026-04-15T09:00:00.000Z'),
+        takenBefore: new Date('2026-04-16T17:00:00.000Z'),
+        places: [{ country: 'USA', state: 'Hidden', city: 'Hidden City' }],
+        placeLabels: ['Hidden City, USA'],
+      },
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([candidate]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection([unreadableAssetId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+
+    const result = await sut.findTripCandidates(auth, session.id, { placeHint: 'USA', lookbackDays: 180, maxCandidates: 3 });
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'success',
+      summary: 'No trip candidates found matching "USA".',
+      candidates: [],
+    }));
+    expect(JSON.stringify(result)).not.toContain('Hidden City');
+    expect(toolCallRepository.transitionWithSessionLimit).not.toHaveBeenCalled();
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
   it('findTripCandidates materializes multi-place trip candidate sources without converting them to search filters', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid()];
@@ -892,7 +928,10 @@ Add descriptor near `searchAssetsDescriptor()`:
         const materializedCandidates = [];
 
         for (const candidate of candidates) {
-          materializedCandidates.push(await this.materializeTripCandidateAssetsForTool(auth, session, candidate));
+          const materializedCandidate = await this.materializeTripCandidateAssetsForTool(auth, session, candidate);
+          if (materializedCandidate.assetIds.length > 0) {
+            materializedCandidates.push(materializedCandidate);
+          }
         }
         await this.reserveTripCandidateHandleAssetCount(auth, session, toolCallId, materializedCandidates);
 
