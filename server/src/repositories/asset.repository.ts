@@ -169,6 +169,31 @@ export interface MemoryLocationDayBucket {
   lastDate: Date;
 }
 
+export interface TripCandidateAssetPlace {
+  country: string;
+  state?: string | null;
+  city?: string | null;
+}
+
+export interface TripCandidateAssetSource {
+  takenAfter: Date;
+  takenBefore: Date;
+  places: TripCandidateAssetPlace[];
+}
+
+export interface TripCandidateAssetRow {
+  id: string;
+  localDateTime: Date;
+  country: string | null;
+  state: string | null;
+  city: string | null;
+  duplicateId: string | null;
+  stackId: string | null;
+  stackPrimaryAssetId: string | null;
+  fileSizeInByte: number | null;
+  exifValueCount: number;
+}
+
 interface AssetExploreFieldOptions {
   maxFields: number;
   minAssetsPerField: number;
@@ -215,6 +240,31 @@ const distinctLocked = <T extends LockableProperty[] | null>(eb: ExpressionBuild
   sql<T>`nullif(array(select distinct unnest(${eb.ref('asset_exif.lockedProperties')} || ${columns})), '{}')`;
 
 const agentDirectReadVisibilities = [AssetVisibility.Timeline, AssetVisibility.Archive, AssetVisibility.Locked];
+
+const tripCandidateExifValueCount = sql<number>`(
+  (nullif(asset_exif.make, '') is not null)::int +
+  (nullif(asset_exif.model, '') is not null)::int +
+  ((asset_exif."exifImageWidth" is not null) and (asset_exif."exifImageWidth" <> 0))::int +
+  ((asset_exif."exifImageHeight" is not null) and (asset_exif."exifImageHeight" <> 0))::int +
+  ((asset_exif."fileSizeInByte" is not null) and (asset_exif."fileSizeInByte" <> 0))::int +
+  (nullif(asset_exif.orientation, '') is not null)::int +
+  (asset_exif."dateTimeOriginal" is not null)::int +
+  (asset_exif."modifyDate" is not null)::int +
+  (nullif(asset_exif."timeZone", '') is not null)::int +
+  (nullif(asset_exif."lensModel", '') is not null)::int +
+  ((asset_exif."fNumber" is not null) and (asset_exif."fNumber" <> 0))::int +
+  ((asset_exif."focalLength" is not null) and (asset_exif."focalLength" <> 0))::int +
+  ((asset_exif.iso is not null) and (asset_exif.iso <> 0))::int +
+  (nullif(asset_exif."exposureTime", '') is not null)::int +
+  ((asset_exif.latitude is not null) and (asset_exif.latitude <> 0))::int +
+  ((asset_exif.longitude is not null) and (asset_exif.longitude <> 0))::int +
+  (nullif(asset_exif.city, '') is not null)::int +
+  (nullif(asset_exif.state, '') is not null)::int +
+  (nullif(asset_exif.country, '') is not null)::int +
+  (nullif(asset_exif.description, '') is not null)::int +
+  (nullif(asset_exif."projectionType", '') is not null)::int +
+  ((asset_exif.rating is not null) and (asset_exif.rating <> 0))::int
+)::int`;
 
 const getBoundingCircle = (bbox: BoundingBox) => {
   const { west, south, east, north } = bbox;
@@ -858,6 +908,112 @@ export class AssetRepository {
       .orderBy('localDate', 'asc')
       .orderBy('assetCount', 'desc')
       .execute();
+  }
+
+  @GenerateSql({
+    params: [
+      DummyValue.UUID,
+      {
+        takenAfter: DummyValue.DATE,
+        takenBefore: DummyValue.DATE,
+        places: [{ country: DummyValue.STRING, state: DummyValue.STRING, city: DummyValue.STRING }],
+      },
+    ],
+  })
+  getTripCandidateAssets(ownerId: string, { takenAfter, takenBefore, places }: TripCandidateAssetSource) {
+    if (places.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .leftJoin('stack', 'stack.id', 'asset.stackId')
+      .select([
+        'asset.id',
+        'asset.localDateTime',
+        'asset_exif.country',
+        'asset_exif.state',
+        'asset_exif.city',
+        'asset.duplicateId',
+        'asset.stackId',
+        'stack.primaryAssetId as stackPrimaryAssetId',
+        sql<number | null>`asset_exif."fileSizeInByte"::float8`.as('fileSizeInByte'),
+        tripCandidateExifValueCount.as('exifValueCount'),
+      ])
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '>=', takenAfter)
+      .where('asset.localDateTime', '<=', takenBefore)
+      .where((eb) =>
+        eb.or(
+          places.map((place) =>
+            eb.and([
+              eb('asset_exif.country', '=', place.country),
+              ...(place.state === undefined
+                ? []
+                : [place.state === null ? eb('asset_exif.state', 'is', null) : eb('asset_exif.state', '=', place.state)]),
+              ...(place.city === undefined
+                ? []
+                : [place.city === null ? eb('asset_exif.city', 'is', null) : eb('asset_exif.city', '=', place.city)]),
+            ]),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .orderBy('asset.localDateTime', 'asc')
+      .orderBy('asset.id', 'asc')
+      .execute() as Promise<TripCandidateAssetRow[]>;
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  getDuplicateGroupAssets(ownerId: string, duplicateIds: string[]) {
+    if (duplicateIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .leftJoin('stack', 'stack.id', 'asset.stackId')
+      .select([
+        'asset.id',
+        'asset.localDateTime',
+        'asset_exif.country',
+        'asset_exif.state',
+        'asset_exif.city',
+        'asset.duplicateId',
+        'asset.stackId',
+        'stack.primaryAssetId as stackPrimaryAssetId',
+        sql<number | null>`asset_exif."fileSizeInByte"::float8`.as('fileSizeInByte'),
+        tripCandidateExifValueCount.as('exifValueCount'),
+      ])
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.duplicateId', 'in', duplicateIds)
+      .where('asset.duplicateId', 'is not', null)
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .orderBy('asset.localDateTime', 'asc')
+      .orderBy('asset.id', 'asc')
+      .execute() as Promise<TripCandidateAssetRow[]>;
   }
 
   @GenerateSql({

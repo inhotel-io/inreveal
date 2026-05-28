@@ -840,6 +840,211 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  describe('getTripCandidateAssets', () => {
+    it('should materialize previewable timeline assets for trip source places with stack and duplicate metadata', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const addAsset = async ({
+        localDateTime,
+        country,
+        state = null,
+        city,
+        duplicateId = null,
+        fileSizeInByte = 100,
+        exif = {},
+        visibility = AssetVisibility.Timeline,
+        withPreview = true,
+      }: {
+        localDateTime: Date;
+        country: string | null;
+        state?: string | null;
+        city: string | null;
+        duplicateId?: string | null;
+        fileSizeInByte?: number | null;
+        exif?: {
+          description?: string;
+          projectionType?: string;
+          rating?: number;
+          timeZone?: string;
+        };
+        visibility?: AssetVisibility;
+        withPreview?: boolean;
+      }) => {
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime, duplicateId });
+        await Promise.all([
+          ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte, ...exif }),
+          withPreview
+            ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+            : null,
+        ]);
+        return asset;
+      };
+
+      const duplicateId = factory.uuid();
+      const primary = await addAsset({
+        localDateTime: new Date('2026-04-15T09:00:00Z'),
+        country: 'France',
+        state: 'Ile-de-France',
+        city: 'Paris',
+        duplicateId,
+        fileSizeInByte: 300,
+        exif: { description: 'A photo', projectionType: 'EQUIRECTANGULAR', rating: 0, timeZone: 'UTC' },
+      });
+      const stackChild = await addAsset({
+        localDateTime: new Date('2026-04-15T10:00:00Z'),
+        country: 'France',
+        state: 'Ile-de-France',
+        city: 'Paris',
+        fileSizeInByte: 200,
+      });
+      await ctx.newStack({ ownerId: user.id }, [primary.id, stackChild.id]);
+      await addAsset({
+        localDateTime: new Date('2026-04-16T09:00:00Z'),
+        country: 'Italy',
+        state: 'Lazio',
+        city: 'Rome',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-17T09:00:00Z'),
+        country: 'France',
+        city: 'Paris',
+        withPreview: false,
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-18T09:00:00Z'),
+        country: 'France',
+        city: 'Nice',
+      });
+      await addAsset({
+        localDateTime: new Date('2026-04-15T09:00:00Z'),
+        country: 'France',
+        city: 'Paris',
+        visibility: AssetVisibility.Archive,
+      });
+
+      await expect(
+        sut.getTripCandidateAssets(user.id, {
+          takenAfter: new Date('2026-04-15T00:00:00Z'),
+          takenBefore: new Date('2026-04-16T23:59:59Z'),
+          places: [
+            { country: 'France', state: 'Ile-de-France', city: 'Paris' },
+            { country: 'Italy', state: 'Lazio', city: 'Rome' },
+          ],
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          id: primary.id,
+          duplicateId,
+          stackPrimaryAssetId: primary.id,
+          fileSizeInByte: 300,
+          exifValueCount: 7,
+        }),
+        expect.objectContaining({
+          id: stackChild.id,
+          stackPrimaryAssetId: primary.id,
+          fileSizeInByte: 200,
+        }),
+        expect.objectContaining({
+          country: 'Italy',
+          state: 'Lazio',
+          city: 'Rome',
+          stackId: null,
+          stackPrimaryAssetId: null,
+        }),
+      ]);
+    });
+
+    it('should support explicit null and omitted optional place filters', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const addAsset = async (country: string, state: string | null, city: string | null) => {
+        const { asset } = await ctx.newAsset({
+          ownerId: user.id,
+          visibility: AssetVisibility.Timeline,
+          localDateTime: new Date('2026-04-15T09:00:00Z'),
+        });
+        await Promise.all([
+          ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte: 100 }),
+          ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }),
+        ]);
+        return asset;
+      };
+
+      const franceUnknown = await addAsset('France', null, null);
+      await addAsset('France', null, 'Paris');
+      const italyRome = await addAsset('Italy', 'Lazio', 'Rome');
+      const italyMilan = await addAsset('Italy', 'Lombardy', 'Milan');
+
+      const result = await sut.getTripCandidateAssets(user.id, {
+        takenAfter: new Date('2026-04-15T00:00:00Z'),
+        takenBefore: new Date('2026-04-15T23:59:59Z'),
+        places: [
+          { country: 'France', state: null, city: null },
+          { country: 'Italy' },
+        ],
+      });
+
+      expect(result.map(({ id }) => id).toSorted()).toEqual(
+        [franceUnknown.id, italyMilan.id, italyRome.id].toSorted(),
+      );
+    });
+
+    it('should return duplicate group assets for owned timeline previewable assets only', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { user: otherUser } = await ctx.newUser();
+      const duplicateId = factory.uuid();
+
+      const addAsset = async (ownerId: string, withPreview = true, visibility = AssetVisibility.Timeline) => {
+        const { asset } = await ctx.newAsset({
+          ownerId,
+          visibility,
+          duplicateId,
+          localDateTime: new Date('2026-04-15T09:00:00Z'),
+        });
+        await Promise.all([
+          ctx.newExif({ assetId: asset.id, country: 'France', city: 'Paris', fileSizeInByte: 100 }),
+          withPreview ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }) : null,
+        ]);
+        return asset;
+      };
+
+      const first = await addAsset(user.id);
+      const second = await addAsset(user.id);
+      const stackedPrimary = await addAsset(user.id);
+      const { asset: stackChild } = await ctx.newAsset({
+        ownerId: user.id,
+        visibility: AssetVisibility.Timeline,
+        localDateTime: new Date('2026-04-15T10:00:00Z'),
+      });
+      await Promise.all([
+        ctx.newExif({ assetId: stackChild.id, country: 'France', city: 'Paris', fileSizeInByte: 90 }),
+        ctx.newAssetFile({ assetId: stackChild.id, type: AssetFileType.Preview, path: `${stackChild.id}.jpg` }),
+      ]);
+      await ctx.newStack({ ownerId: user.id }, [stackedPrimary.id, stackChild.id]);
+      await addAsset(user.id, false);
+      await addAsset(user.id, true, AssetVisibility.Archive);
+      await addAsset(otherUser.id);
+
+      const result = await sut.getDuplicateGroupAssets(user.id, [duplicateId]);
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: first.id, duplicateId }),
+          expect.objectContaining({ id: second.id, duplicateId }),
+          expect.objectContaining({
+            id: stackedPrimary.id,
+            duplicateId,
+            stackPrimaryAssetId: stackedPrimary.id,
+          }),
+        ]),
+      );
+      expect(result).toHaveLength(3);
+    });
+  });
+
   describe('getMemoryAssetsForLocation', () => {
     it('should return previewable timeline assets for the requested country and city, including city=null', async () => {
       const { ctx, sut } = setup();
