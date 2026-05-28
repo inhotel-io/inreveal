@@ -73,8 +73,7 @@ const tripCandidateLookupMode: AgentMcpArgumentMode = {
   description: 'Find likely recent trip candidates and album-ready selection handles.',
   requiredFields: [],
   forbiddenFields: ['toolCallId'],
-  whenToUse:
-    'Use before planning trip albums or trip highlight albums, with placeHint when the user names a place.',
+  whenToUse: 'Use before planning trip albums or trip highlight albums, with placeHint when the user names a place.',
 };
 
 const tripCandidateApprovedRetryMode: AgentMcpArgumentMode = {
@@ -796,7 +795,7 @@ const findTripCandidatesContract: AgentMcpToolContract<AgentToolName.FindTripCan
   title: 'Find trip candidates',
   description: 'Find likely recent trip candidates from existing date and location metadata.',
   usage:
-    'Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.',
+    'Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. Follow recommendation.action: use_top_candidate means use candidateDedupeKey, ask_user means ask one question with candidate labels, and none means ask for one concrete source before planning. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.',
   argumentModes: [tripCandidateLookupMode, tripCandidateApprovedRetryMode],
   examples: [
     {
