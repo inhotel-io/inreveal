@@ -5,12 +5,12 @@ import {
   MemoryLocationDayBucket,
   TripCandidateAssetRow,
 } from 'src/repositories/asset.repository';
+import type { TripPlaceHint } from 'src/services/trip-place-hint';
+import { parseTripPlaceHint, tripPlaceMatchesHint } from 'src/services/trip-place-hint';
 import { suggestDuplicateByMetadata } from 'src/utils/duplicate';
 
 type TripCandidateRepository = Pick<AssetRepository, 'getMemoryLocationClusters'> &
-  Partial<
-    Pick<AssetRepository, 'getMemoryLocationDayBuckets' | 'getTripCandidateAssets' | 'getDuplicateGroupAssets'>
-  >;
+  Partial<Pick<AssetRepository, 'getMemoryLocationDayBuckets' | 'getTripCandidateAssets' | 'getDuplicateGroupAssets'>>;
 
 type HomeBaseline = { cluster?: MemoryLocationCluster; ambiguous: boolean };
 
@@ -31,6 +31,7 @@ export interface TripCandidateRequest {
   lookbackDays?: number;
   baselineDays?: number;
   maxCandidates?: number;
+  placeHint?: string;
 }
 
 export interface TripCandidateSource {
@@ -84,7 +85,14 @@ export class TripCandidateService {
     lookbackDays = 30,
     baselineDays = 90,
     maxCandidates = 3,
+    placeHint,
   }: TripCandidateRequest): Promise<TripCandidate[]> {
+    const parsedPlaceHint = parseTripPlaceHint(placeHint);
+    if (parsedPlaceHint.status === 'invalid') {
+      return [];
+    }
+    const matchedPlaceHint = parsedPlaceHint.status === 'valid' ? parsedPlaceHint.hint : undefined;
+
     const target = DateTime.fromJSDate(targetDate ?? new Date(), { zone: 'utc' }).endOf('day');
     const recentFrom = target.minus({ days: lookbackDays }).startOf('day');
     const baselineFrom = recentFrom.minus({ days: baselineDays });
@@ -105,8 +113,12 @@ export class TripCandidateService {
 
     const home = this.resolveHomeBaseline(baseline);
     const candidates = Array.isArray(dayBuckets)
-      ? this.findWindowCandidates(dayBuckets, home)
-      : this.findClusterCandidates(await this.assetRepository.getMemoryLocationClusters(ownerId, recentRange), home);
+      ? this.findWindowCandidates(dayBuckets, home, matchedPlaceHint)
+      : this.findClusterCandidates(
+          await this.assetRepository.getMemoryLocationClusters(ownerId, recentRange),
+          home,
+          matchedPlaceHint,
+        );
 
     const albumReadyCandidates = await Promise.all(
       candidates.map((candidate) => this.withAlbumReadyCounts(ownerId, candidate)),
@@ -146,22 +158,32 @@ export class TripCandidateService {
     return { cluster: home?.country ? home : undefined, ambiguous };
   }
 
-  private findClusterCandidates(recent: MemoryLocationCluster[], home: HomeBaseline): TripCandidate[] {
+  private findClusterCandidates(
+    recent: MemoryLocationCluster[],
+    home: HomeBaseline,
+    placeHint?: TripPlaceHint,
+  ): TripCandidate[] {
     return recent
       .filter((item) => this.isQualifyingCluster(item))
-      .filter((item) => !home.cluster || home.ambiguous || this.isAwayFromHome(item, home.cluster))
-      .map((item) => this.toClusterTripCandidate(item, home.ambiguous ? 'low' : 'high'));
+      .filter((item) => !placeHint || this.matchesPlaceHint(item, placeHint))
+      .filter((item) => !!placeHint || !home.cluster || home.ambiguous || this.isAwayFromHome(item, home.cluster))
+      .map((item) => this.toClusterTripCandidate(item, this.getPlaceConfidence(item, home, placeHint)));
   }
 
-  private findWindowCandidates(recent: MemoryLocationDayBucket[], home: HomeBaseline): TripCandidate[] {
+  private findWindowCandidates(
+    recent: MemoryLocationDayBucket[],
+    home: HomeBaseline,
+    placeHint?: TripPlaceHint,
+  ): TripCandidate[] {
     const qualifyingBuckets = recent
       .filter((item) => this.isQualifyingTravelBucket(item))
+      .filter((item) => !placeHint || this.matchesPlaceHint(item, placeHint))
       .toSorted(
         (left, right) => left.localDate.getTime() - right.localDate.getTime() || right.assetCount - left.assetCount,
       );
     const blockedGapDayKeys = new Set<string>();
     const travelBuckets = qualifyingBuckets.filter((item) => {
-      if (this.isTravelBucket(item, home)) {
+      if (placeHint || this.isTravelBucket(item, home)) {
         return true;
       }
 
@@ -171,7 +193,61 @@ export class TripCandidateService {
 
     return this.buildTravelWindows(travelBuckets, blockedGapDayKeys)
       .filter((window) => window.assetCount >= 7 && window.dayKeys.size >= 2)
-      .map((window) => this.toWindowTripCandidate(window, home.ambiguous ? 'low' : 'high'));
+      .map((window) => this.toWindowTripCandidate(window, this.getWindowConfidence(window, home, placeHint)));
+  }
+
+  private matchesPlaceHint(
+    place: { country: string | null; state?: string | null; city: string | null },
+    hint: TripPlaceHint,
+  ) {
+    return tripPlaceMatchesHint(place, hint);
+  }
+
+  private getWindowConfidence(
+    window: TravelWindow,
+    home: HomeBaseline,
+    placeHint?: TripPlaceHint,
+  ): TripCandidateConfidence {
+    if (home.ambiguous) {
+      return 'low';
+    }
+
+    if (placeHint && window.places.some((place) => this.overlapsHomePlace(place, home.cluster))) {
+      return 'medium';
+    }
+
+    return 'high';
+  }
+
+  private getPlaceConfidence(
+    place: { country: string | null; city: string | null },
+    home: HomeBaseline,
+    placeHint?: TripPlaceHint,
+  ): TripCandidateConfidence {
+    if (home.ambiguous) {
+      return 'low';
+    }
+
+    if (placeHint && this.overlapsHomePlace(place, home.cluster)) {
+      return 'medium';
+    }
+
+    return 'high';
+  }
+
+  private overlapsHomePlace(
+    place: { country: string | null; city?: string | null },
+    home?: { country: string | null; city: string | null },
+  ) {
+    if (!home?.country || place.country !== home.country) {
+      return false;
+    }
+
+    if (home.city && place.city) {
+      return place.city === home.city;
+    }
+
+    return true;
   }
 
   private isQualifyingTravelBucket(item: MemoryLocationDayBucket) {
@@ -182,7 +258,10 @@ export class TripCandidateService {
     return !home.cluster || home.ambiguous || this.isAwayFromHome(item, home.cluster);
   }
 
-  private buildTravelWindows(buckets: MemoryLocationDayBucket[], blockedGapDayKeys = new Set<string>()): TravelWindow[] {
+  private buildTravelWindows(
+    buckets: MemoryLocationDayBucket[],
+    blockedGapDayKeys = new Set<string>(),
+  ): TravelWindow[] {
     const windows: TravelWindow[] = [];
     let current: TravelWindow | undefined;
     let lastDay: DateTime | undefined;
@@ -553,6 +632,14 @@ export class TripCandidateService {
 
   private scoreCandidate(item: { assetCount: number; dayCount: number }, confidence: TripCandidateConfidence) {
     const baseScore = 50 + item.dayCount * 5 + Math.min(item.assetCount, 20);
-    return confidence === 'low' ? Math.max(1, baseScore - 20) : baseScore;
+    if (confidence === 'low') {
+      return Math.max(1, baseScore - 20);
+    }
+
+    if (confidence === 'medium') {
+      return Math.max(1, baseScore - 10);
+    }
+
+    return baseScore;
   }
 }
