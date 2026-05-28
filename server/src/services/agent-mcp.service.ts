@@ -3,6 +3,7 @@ import { serverVersion } from 'src/constants';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import type {
   AgentCurateSelectionToolRequestDto,
+  AgentFindTripCandidatesToolRequestDto,
   AgentListAlbumsToolRequestDto,
   AgentListSpacesToolRequestDto,
   AgentReadAlbumToolRequestDto,
@@ -62,6 +63,7 @@ export class AgentMcpService {
   private readonly readToolNames = new Set<AgentToolName>([
     AgentToolName.ResolveAssetSearchFilters,
     AgentToolName.SearchAssets,
+    AgentToolName.FindTripCandidates,
     AgentToolName.ReadSelectionMetadata,
     AgentToolName.CurateSelection,
     AgentToolName.ReadAssetMetadata,
@@ -552,6 +554,9 @@ export class AgentMcpService {
       }
       case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto as AgentSearchAssetsToolRequestDto);
+      }
+      case AgentToolName.FindTripCandidates: {
+        return this.toolService.findTripCandidates(auth, sessionId, dto as AgentFindTripCandidatesToolRequestDto);
       }
       case AgentToolName.ReadSelectionMetadata: {
         return this.toolService.readSelectionMetadata(auth, sessionId, dto as AgentReadSelectionMetadataToolRequestDto);
