@@ -764,7 +764,10 @@ export class AgentToolService {
         const materializedCandidates: MaterializedAgentTripCandidate[] = [];
 
         for (const candidate of candidates) {
-          materializedCandidates.push(await this.materializeTripCandidateForTool(auth, session, candidate));
+          const materializedCandidate = await this.materializeTripCandidateForTool(auth, session, candidate);
+          if (materializedCandidate.assetIds.length > 0) {
+            materializedCandidates.push(materializedCandidate);
+          }
         }
 
         const assetCount = materializedCandidates.reduce((total, candidate) => total + candidate.assetIds.length, 0);
