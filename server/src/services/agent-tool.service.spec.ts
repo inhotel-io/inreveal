@@ -569,6 +569,43 @@ describe(AgentToolService.name, () => {
     expect(selectionHandleRepository.create).not.toHaveBeenCalled();
   });
 
+  it('findTripCandidates drops fully unreadable materialized candidates before reserving counts or returning metadata', async () => {
+    const auth = AuthFactory.create();
+    const unreadableAssetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([
+      makeTripCandidate({
+        title: 'Hidden City',
+        placeLabel: 'Hidden City, USA',
+        source: {
+          ...makeTripCandidate().source,
+          placeLabels: ['Hidden City, USA'],
+        },
+      }),
+    ]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection([unreadableAssetId]));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set());
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set());
+
+    const result = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'USA',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        summary: 'No trip candidates found matching "USA".',
+        candidates: [],
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain('Hidden City');
+    expect(toolCallRepository.transitionWithSessionLimit).not.toHaveBeenCalled();
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
   it('findTripCandidates filters unreadable materialized assets and aligns albumAssetCount with the handle count', async () => {
     const auth = AuthFactory.create();
     const readableAssetId = newUuid();
