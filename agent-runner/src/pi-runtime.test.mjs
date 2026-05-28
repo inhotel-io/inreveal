@@ -600,12 +600,25 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.loaders[0].systemPrompt.includes('Except for best/highlight requests during Slice 2'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('Technical metadata: search ids first'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('searchAssets returns selection handles'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('metadata-only trip album requests'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), true);
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes(
+        'For recent trip album requests, call mcp_gallery_findTripCandidates before asking for dates',
+      ),
+      true,
+    );
+    assert.equal(calls.loaders[0].systemPrompt.includes('Follow findTripCandidates.recommendation.action'), true);
+    assert.equal(
+      calls.loaders[0].systemPrompt.includes(
+        'Generic trip albums pass candidate selectionHandle.id directly to mcp_gallery_proposeAlbumFromSelection',
+      ),
+      true,
+    );
+    assert.equal(calls.loaders[0].systemPrompt.includes('explicit top/best/highlights default to 10'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('use mcp_gallery_searchAssets with location and taken-date metadata'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('use readAssetMetadata only for specific non-search asset details'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), true);
-    assert.equal(calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'), true);
+    assert.equal(calls.loaders[0].systemPrompt.includes('do not call mcp_gallery_readAssetPreviews or mcp_gallery_readAssetOriginals'), false);
+    assert.equal(calls.loaders[0].systemPrompt.includes('If a metadata-only trip search returns more than 250 candidate assets'), false);
+    assert.equal(calls.loaders[0].systemPrompt.includes('ask one concise follow-up question to narrow the date range or location'), false);
     assert.equal(calls.loaders[0].systemPrompt.includes('A chat-only answer is not enough for album creation requests'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('factual questions about albums, photo counts'), true);
     assert.equal(calls.loaders[0].systemPrompt.includes('use Gallery MCP read tools before answering'), true);
