@@ -1,7 +1,12 @@
 import { AssetResponseDto } from 'src/dtos/asset-response.dto';
 import { ExifResponseSchema } from 'src/dtos/exif.dto';
 import { AssetType, AssetVisibility } from 'src/enum';
-import { getExifCount, suggestDuplicate, suggestDuplicateByMetadata, suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
+import {
+  getExifCount,
+  suggestDuplicate,
+  suggestDuplicateByMetadata,
+  suggestDuplicateKeepAssetIds,
+} from 'src/utils/duplicate';
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
