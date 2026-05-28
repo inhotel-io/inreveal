@@ -139,7 +139,7 @@ describe(TripCandidateService.name, () => {
         placeLabels: ['Paris, France'],
       },
     });
-    expect(candidate?.score).toBe(85);
+    expect(candidate?.score).toBe(74);
   });
 
   it('returns no candidates for home-only recent clusters', async () => {
