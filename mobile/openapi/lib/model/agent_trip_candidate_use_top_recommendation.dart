@@ -18,7 +18,7 @@ class AgentTripCandidateUseTopRecommendation {
     required this.reason,
   });
 
-  AgentTripCandidateUseTopRecommendationActionEnum action;
+  AgentTripCandidateUseTopRecommendationAction action;
 
   String candidateDedupeKey;
 
@@ -57,7 +57,7 @@ class AgentTripCandidateUseTopRecommendation {
       final json = value.cast<String, dynamic>();
 
       return AgentTripCandidateUseTopRecommendation(
-        action: AgentTripCandidateUseTopRecommendationActionEnum.fromJson(json[r'action'])!,
+        action: AgentTripCandidateUseTopRecommendationAction.fromJson(json[r'action'])!,
         candidateDedupeKey: mapValueOfType<String>(json, r'candidateDedupeKey')!,
         reason: mapValueOfType<String>(json, r'reason')!,
       );
@@ -112,75 +112,4 @@ class AgentTripCandidateUseTopRecommendation {
     'reason',
   };
 }
-
-
-class AgentTripCandidateUseTopRecommendationActionEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentTripCandidateUseTopRecommendationActionEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const useTopCandidate = AgentTripCandidateUseTopRecommendationActionEnum._(r'use_top_candidate');
-
-  /// List of all possible values in this [enum][AgentTripCandidateUseTopRecommendationActionEnum].
-  static const values = <AgentTripCandidateUseTopRecommendationActionEnum>[
-    useTopCandidate,
-  ];
-
-  static AgentTripCandidateUseTopRecommendationActionEnum? fromJson(dynamic value) => AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer().decode(value);
-
-  static List<AgentTripCandidateUseTopRecommendationActionEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentTripCandidateUseTopRecommendationActionEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentTripCandidateUseTopRecommendationActionEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentTripCandidateUseTopRecommendationActionEnum] to String,
-/// and [decode] dynamic data back to [AgentTripCandidateUseTopRecommendationActionEnum].
-class AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer {
-  factory AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer() => _instance ??= const AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer._();
-
-  const AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer._();
-
-  String encode(AgentTripCandidateUseTopRecommendationActionEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentTripCandidateUseTopRecommendationActionEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentTripCandidateUseTopRecommendationActionEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'use_top_candidate': return AgentTripCandidateUseTopRecommendationActionEnum.useTopCandidate;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer] instance.
-  static AgentTripCandidateUseTopRecommendationActionEnumTypeTransformer? _instance;
-}
-
 

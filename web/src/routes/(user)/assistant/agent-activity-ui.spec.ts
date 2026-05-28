@@ -591,6 +591,7 @@ describe('agent activity UI helpers', () => {
   it.each([
     [AgentToolName.ResolveAssetSearchFilters, 'search', 'Resolving filters', 'Matched search filters'],
     [AgentToolName.SearchAssets, 'search', 'Searching photos', 'Found matching photos'],
+    [AgentToolName.FindTripCandidates, 'search', 'Finding trip candidates', 'Found likely trips'],
     [AgentToolName.ReadSelectionMetadata, 'metadata', 'Reading selection details', 'Read selection details'],
     [AgentToolName.CurateSelection, 'search', 'Narrowing photo selection', 'Narrowed photo selection'],
     [AgentToolName.ReadAssetMetadata, 'metadata', 'Reading photo details', 'Read details for photos'],
