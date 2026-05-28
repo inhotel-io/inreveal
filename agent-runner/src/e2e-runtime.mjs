@@ -35,6 +35,13 @@ const deltaEvent = ({ gallerySessionId, runnerSessionId, text }) => ({
   sequence: 1,
 });
 
+const toolApprovalNeededEvent = ({ gallerySessionId, runnerSessionId, toolCallId }) => ({
+  type: 'tool-approval-needed',
+  sessionId: gallerySessionId,
+  runnerSessionId,
+  toolCallId,
+});
+
 const redactGatewayToken = (message, gateway) => {
   const token = gateway?.token;
   if (!token) {
@@ -841,6 +848,15 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
       const strictWorkflow = matchStrictWorkflow(prompt);
       if (strictWorkflow.kind === 'create_recent_trip_album') {
         const workflowResult = await runCreateRecentTripAlbumWorkflow({ client, workflow: strictWorkflow });
+        if (workflowResult.status === 'approval_required') {
+          yield toolApprovalNeededEvent({
+            gallerySessionId,
+            runnerSessionId,
+            toolCallId: workflowResult.toolCallId,
+          });
+          return;
+        }
+
         yield completedEvent({
           gallerySessionId,
           runnerSessionId,

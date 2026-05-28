@@ -130,7 +130,66 @@ const extractPlanId = (toolResult) =>
 
 const workflowResult = (status, text, extra = {}) => ({ status, text, ...extra });
 
-export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow }) => {
+const redactSensitiveText = (value) =>
+  String(value)
+    .replace(/\bAuthorization:\s*Bearer\s+\S+/gi, 'Authorization: Bearer [redacted]')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/\bapi[_-]?key\s*[=:]\s*\S+/gi, (match) => match.replace(/\S+$/u, '[redacted]'))
+    .replace(/\bapi-key\s+\S+/gi, 'api-key [redacted]')
+    .replace(/\bpassword\s*[=:]\s*\S+/gi, (match) => match.replace(/\S+$/u, '[redacted]'))
+    .replace(/\bsecret\s*[=:]\s*\S+/gi, (match) => match.replace(/\S+$/u, '[redacted]'))
+    .replace(/\bsecret\s+value\s+\S+/gi, 'secret value [redacted]')
+    .replace(/\bsecret[-_][A-Za-z0-9_-]+\b/gi, '[redacted]')
+    .replace(/\btoken\s+[A-Za-z0-9._-]+\b/gi, 'token [redacted]');
+
+const safeFailureText = (message) =>
+  `I could not create a reviewable album plan. ${redactSensitiveText(
+    message ?? 'Please try again or provide a more specific date range or place.',
+  ).trim()}`;
+
+const planFailureReason = (planResult) =>
+  planResult?.reason ?? planResult?.error ?? planResult?.message ?? `Planning returned status ${planResult?.status ?? 'unknown'}.`;
+
+const plannedResult = ({ planResult, candidate, workflow, label, assetCount, selectionHandleId }) => {
+  if (planResult?.status === 'approval-required') {
+    const toolCallId = planResult.toolCall?.id;
+    if (typeof toolCallId === 'string' && toolCallId.length > 0) {
+      return workflowResult('approval_required', '', { toolCallId, planResult });
+    }
+
+    return workflowResult(
+      'failed',
+      safeFailureText('The planning tool requested approval without a usable tool call id.'),
+      { planResult, candidate },
+    );
+  }
+
+  if (planResult?.status && planResult.status !== 'success') {
+    return workflowResult('failed', safeFailureText(planFailureReason(planResult)), { planResult, candidate });
+  }
+
+  const planId = extractPlanId(planResult);
+  if (!planId) {
+    return workflowResult('failed', safeFailureText('The planning tool did not return a persisted plan id.'), {
+      planResult,
+      candidate,
+    });
+  }
+
+  return workflowResult(
+    'planned',
+    `I found a likely ${label} trip from ${tripCandidateDateRange(candidate)} and proposed ${workflow.albumName} with ${assetCount} assets.${duplicateExclusionText(candidate)} Review the plan before applying it.`,
+    {
+      planId,
+      planResult,
+      candidate,
+      selectionHandleId,
+      assetCount,
+    },
+  );
+};
+
+export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, approvedPlanResult }) => {
   assertCreateRecentTripWorkflow(workflow);
 
   const tripResult = await client.call(
@@ -180,23 +239,29 @@ export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow }) => 
   }
 
   const assetCount = candidate.selectionHandle.assetCount ?? candidate.albumAssetCount ?? 0;
-  const label = tripCandidateLabel(candidate);
-  const planResult = await client.call('proposeAlbumFromSelection', {
-    summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
-    albumName: workflow.albumName,
-    description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
-    selectionHandleId,
-  });
+  if (assetCount <= 0) {
+    return workflowResult(
+      'needs_input',
+      'I found the recommended trip, but it found no album-ready assets. Which date range or place should I use instead?',
+      { candidate },
+    );
+  }
 
-  return workflowResult(
-    'planned',
-    `I found a likely ${label} trip from ${tripCandidateDateRange(candidate)} and proposed ${workflow.albumName} with ${assetCount} assets.${duplicateExclusionText(candidate)} Review the plan before applying it.`,
-    {
-      planId: extractPlanId(planResult),
-      planResult,
-      candidate,
-      selectionHandleId,
-      assetCount,
-    },
-  );
+  const label = tripCandidateLabel(candidate);
+  let planResult;
+  try {
+    planResult =
+      approvedPlanResult ??
+      (await client.call('proposeAlbumFromSelection', {
+        summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
+        albumName: workflow.albumName,
+        description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
+        selectionHandleId,
+      }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return workflowResult('failed', safeFailureText(message), { candidate, selectionHandleId, assetCount });
+  }
+
+  return plannedResult({ planResult, candidate, workflow, label, assetCount, selectionHandleId });
 };

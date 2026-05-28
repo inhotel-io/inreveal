@@ -444,6 +444,8 @@ const tripCandidateHandlers = ({
   expectedAlbumName = 'USA Trip',
   expectedHighlightCount = 10,
   selectedAssetCount = expectedHighlightCount,
+  planResponse,
+  planError,
 } = {}) => [
   {
     name: 'findTripCandidates',
@@ -498,12 +500,22 @@ const tripCandidateHandlers = ({
     name: 'proposeAlbumFromSelection',
     handle: (args, request) => {
       assert.equal(args.albumName, expectedAlbumName);
+      if (planError) {
+        return {
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            error: planError,
+          },
+        };
+      }
+
       return {
         body: {
           jsonrpc: '2.0',
           id: request.id,
           result: {
-            structuredContent: {
+            structuredContent: planResponse ?? {
               status: 'success',
               summary: 'Stored proposed album from selection.',
               plan: { id: '00000000-0000-4000-8000-000000000923' },
@@ -988,6 +1000,167 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /could not find a likely recent trip/i);
     assert.match(events.at(-1).content.blocks[0].text, /date range or place/i);
     assert.doesNotMatch(events.at(-1).content.blocks[0].text, /Review the plan/i);
+  });
+
+  it('does not claim a strict recent-trip plan when planning returns no plan id', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planResponse: { status: 'success', summary: 'Stored proposal without a plan id.' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.match(events.at(-1).content.blocks[0].text, /could not create a reviewable album plan/i);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('does not claim a strict recent-trip plan when planning is denied', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planResponse: { status: 'denied', reason: 'Search source did not match any assets' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.match(events.at(-1).content.blocks[0].text, /Search source did not match any assets/i);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('does not plan a strict recent-trip album for a zero-asset candidate handle', async () => {
+    const zeroCandidate = makeTripCandidateSummary({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } });
+    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers({ candidates: [zeroCandidate] }));
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /found no album-ready assets/i);
+  });
+
+  it('pauses strict recent-trip planning when proposal approval is required', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planResponse: {
+          status: 'approval-required',
+          toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+        },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(events, [
+      {
+        type: 'tool-approval-needed',
+        sessionId: gallerySessionId,
+        runnerSessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000999',
+      },
+    ]);
+  });
+
+  it('does not pause strict recent-trip planning when proposal approval has no tool call id', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planResponse: {
+          status: 'approval-required',
+          toolCall: { id: '' },
+        },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    const text = events.at(-1).content.blocks[0].text;
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(text, /could not create a reviewable album plan/i);
+    assert.doesNotMatch(text, /plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('returns safe strict recent-trip failure text when planning JSON-RPC errors', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planError: {
+          code: -32001,
+          message: `gateway token ${token} secret-value rejected`,
+        },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    const text = events.at(-1).content.blocks[0].text;
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.match(text, /\[redacted\]/);
+    assert.doesNotMatch(text, new RegExp(token));
+    assert.doesNotMatch(text, /secret-value|plan is ready|I created|I proposed|Review the plan/i);
+  });
+
+  it('redacts credential-shaped strict recent-trip JSON-RPC errors', async () => {
+    const rawValues = [
+      'auth-token-123',
+      'bearer-token-456',
+      'query-api-key-789',
+      'header-api-key-abc',
+      'spaced-api-key-def',
+      'password-value-123',
+      'password-value-456',
+      'secret-equals-123',
+      'secret-colon-456',
+      'secret-word-789',
+      'token-word-abc',
+      'secret-value-extra',
+    ];
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        planError: {
+          code: -32001,
+          message: [
+            'Authorization: Bearer auth-token-123',
+            'Bearer bearer-token-456',
+            'api_key=query-api-key-789',
+            'apiKey: header-api-key-abc',
+            'api-key spaced-api-key-def',
+            'password=password-value-123',
+            'password: password-value-456',
+            'secret=secret-equals-123',
+            'secret: secret-colon-456',
+            'secret value secret-word-789',
+            'token token-word-abc',
+            'secret-value-extra',
+          ].join(' '),
+        },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+    const text = events.at(-1).content.blocks[0].text;
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.match(text, /\[redacted\]/);
+    for (const rawValue of rawValues) {
+      assert.equal(text.includes(rawValue), false, rawValue);
+    }
+    assert.doesNotMatch(text, /plan is ready|I created|I proposed|Review the plan/i);
   });
 
   it('creates USA trip highlights through search handle, curation handle, and selection plan without raw ids', async () => {
