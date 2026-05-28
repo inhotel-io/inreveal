@@ -1,3 +1,5 @@
+import { matchStrictWorkflow, runCreateRecentTripAlbumWorkflow } from './strict-workflows.mjs';
+
 const protocolVersion = '2026-05-14';
 const inaccessibleAssetId = '00000000-0000-4000-8000-000000000014';
 const e2eToolNames = ['mcp:gallery'];
@@ -835,6 +837,17 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch } = {}) =>
       });
       const prompt = getPromptText(content);
       const metadataPrompt = parseMetadataPrompt(prompt);
+
+      const strictWorkflow = matchStrictWorkflow(prompt);
+      if (strictWorkflow.kind === 'create_recent_trip_album') {
+        const workflowResult = await runCreateRecentTripAlbumWorkflow({ client, workflow: strictWorkflow });
+        yield completedEvent({
+          gallerySessionId,
+          runnerSessionId,
+          text: workflowResult.text,
+        });
+        return;
+      }
 
       if (metadataPrompt?.kind === 'place-name') {
         yield completedEvent({
