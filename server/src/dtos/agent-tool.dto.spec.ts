@@ -504,6 +504,41 @@ describe('Agent tool DTOs', () => {
     it('publishes the typed response DTO name', () => {
       expect(AgentFindTripCandidatesToolResponseDto.name).toBe('AgentFindTripCandidatesToolResponseDto');
     });
+
+    it('accepts trip candidate response recommendations and requires a top candidate key for auto-use', () => {
+      const successResponse = {
+        status: 'success',
+        toolCall: makeEncodedToolCall(),
+        summary: 'Found 1 trip candidate matching "USA".',
+        recommendation: {
+          action: 'use_top_candidate',
+          candidateDedupeKey: 'trip:usa:new-york:2026-04-15:2026-04-16',
+          reason: 'The only readable trip candidate is high confidence.',
+        },
+        candidates: [],
+        resultSize: makeResultSize(),
+      };
+
+      expect(AgentFindTripCandidatesToolResponseDto.schema.safeParse(successResponse).success).toBe(true);
+
+      const missingKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
+        ...successResponse,
+        recommendation: { action: 'use_top_candidate', reason: 'Missing key.' },
+      });
+      expectIssue(missingKey, ['recommendation', 'candidateDedupeKey'], 'Invalid input');
+
+      const noneWithKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
+        ...successResponse,
+        recommendation: { action: 'none', candidateDedupeKey: 'trip:usa', reason: 'No match.' },
+      });
+      expectIssue(noneWithKey, ['recommendation'], 'Unrecognized key');
+
+      const askUserWithKey = AgentFindTripCandidatesToolResponseDto.schema.safeParse({
+        ...successResponse,
+        recommendation: { action: 'ask_user', candidateDedupeKey: 'trip:usa', reason: 'Multiple matches.' },
+      });
+      expectIssue(askUserWithKey, ['recommendation'], 'Unrecognized key');
+    });
   });
 
   describe(AgentSearchAssetsToolRequestDto.name, () => {
