@@ -258,8 +258,6 @@ class ApiClient {
           return AgentFindTripCandidatesToolDeniedResponse.fromJson(value);
         case 'AgentFindTripCandidatesToolRequestDto':
           return AgentFindTripCandidatesToolRequestDto.fromJson(value);
-        case 'AgentFindTripCandidatesToolRequestDtoTargetDate':
-          return AgentFindTripCandidatesToolRequestDtoTargetDate.fromJson(value);
         case 'AgentFindTripCandidatesToolResponseDto':
           return AgentFindTripCandidatesToolResponseDto.fromJson(value);
         case 'AgentFindTripCandidatesToolSuccessResponse':

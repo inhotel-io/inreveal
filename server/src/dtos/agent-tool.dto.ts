@@ -476,10 +476,18 @@ type AgentFindTripCandidatesToolRequestOutput = {
 };
 
 const AgentTripTargetDateSchema = z
-  .union([isoDatetimeToDate, isoDateToDate])
+  .string()
+  .refine((value) => isoDatetimeToDate.safeParse(value).success || isoDateToDate.safeParse(value).success, {
+    message: 'Invalid input: expected ISO date (YYYY-MM-DD) or ISO datetime string',
+  })
+  .transform((value) => {
+    const datetime = isoDatetimeToDate.safeParse(value);
+    return datetime.success ? datetime.data : isoDateToDate.parse(value);
+  })
   .refine((targetDate) => targetDate.getTime() <= Date.now() + MAX_TRIP_TARGET_DATE_FUTURE_MS, {
     message: 'targetDate must not be more than one day in the future',
-  });
+  })
+  .meta({ example: '2024-01-01' });
 
 const AgentFindTripCandidatesToolRequestSchema = z
   .strictObject({
