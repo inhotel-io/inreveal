@@ -12,7 +12,7 @@ import {
   AssetTypeSchema,
   AssetVisibilitySchema,
 } from 'src/enum';
-import { isoDatetimeToDate } from 'src/validation';
+import { isoDateToDate, isoDatetimeToDate } from 'src/validation';
 import z from 'zod';
 
 const MAX_ASSET_IDS_PER_TOOL_CALL = 10_000;
@@ -29,6 +29,14 @@ const MAX_RESOLVE_FILTER_NAME_LENGTH = 120;
 const DEFAULT_SEARCH_MODE = 'metadata';
 const DEFAULT_SEARCH_ORDER = 'desc';
 const DEFAULT_SEARCH_PAGE = 1;
+const DEFAULT_TRIP_LOOKBACK_DAYS = 180;
+const MIN_TRIP_LOOKBACK_DAYS = 1;
+const MAX_TRIP_LOOKBACK_DAYS = 365;
+const DEFAULT_TRIP_MAX_CANDIDATES = 3;
+const MIN_TRIP_MAX_CANDIDATES = 1;
+const MAX_TRIP_MAX_CANDIDATES = 10;
+const MAX_TRIP_PLACE_HINT_LENGTH = 80;
+const MAX_TRIP_TARGET_DATE_FUTURE_MS = 24 * 60 * 60 * 1000;
 const searchTextModes = new Set(['smart', 'description', 'ocr', 'filename']);
 const uuid = z.uuidv4();
 const summary = z.string().trim().min(1).max(1000);
@@ -459,6 +467,56 @@ const AgentSearchAssetsToolRequestSchema = z
   })
   .meta({ id: 'AgentSearchAssetsToolRequestDto' });
 
+type AgentFindTripCandidatesToolRequestOutput = {
+  placeHint?: string;
+  targetDate?: Date;
+  lookbackDays?: number;
+  maxCandidates?: number;
+  toolCallId?: string;
+};
+
+const AgentTripTargetDateSchema = z
+  .union([isoDatetimeToDate, isoDateToDate])
+  .refine((targetDate) => targetDate.getTime() <= Date.now() + MAX_TRIP_TARGET_DATE_FUTURE_MS, {
+    message: 'targetDate must not be more than one day in the future',
+  });
+
+const AgentFindTripCandidatesToolRequestSchema = z
+  .strictObject({
+    placeHint: z.string().trim().min(1).max(MAX_TRIP_PLACE_HINT_LENGTH).optional(),
+    targetDate: AgentTripTargetDateSchema.optional(),
+    lookbackDays: z.number().int().min(MIN_TRIP_LOOKBACK_DAYS).max(MAX_TRIP_LOOKBACK_DAYS).optional(),
+    maxCandidates: z.number().int().min(MIN_TRIP_MAX_CANDIDATES).max(MAX_TRIP_MAX_CANDIDATES).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const hasTripSearchFields =
+      value.placeHint !== undefined ||
+      value.targetDate !== undefined ||
+      value.lookbackDays !== undefined ||
+      value.maxCandidates !== undefined;
+
+    if (value.toolCallId && hasTripSearchFields) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either trip search fields or toolCallId, not both',
+      });
+    }
+  })
+  .transform((value): AgentFindTripCandidatesToolRequestOutput => {
+    if (value.toolCallId) {
+      return value;
+    }
+
+    return {
+      ...(value.placeHint === undefined ? {} : { placeHint: value.placeHint }),
+      ...(value.targetDate === undefined ? {} : { targetDate: value.targetDate }),
+      lookbackDays: value.lookbackDays ?? DEFAULT_TRIP_LOOKBACK_DAYS,
+      maxCandidates: value.maxCandidates ?? DEFAULT_TRIP_MAX_CANDIDATES,
+    };
+  })
+  .meta({ id: 'AgentFindTripCandidatesToolRequestDto' });
+
 const AgentResolveAssetSearchFiltersScopeSchema = z
   .strictObject({
     spaceId: uuid.optional(),
@@ -593,6 +651,7 @@ const AgentSearchUsersToolRequestSchema = z
 
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
+  [AgentToolName.FindTripCandidates]: AgentFindTripCandidatesToolRequestSchema,
   [AgentToolName.ReadSelectionMetadata]: AgentReadSelectionMetadataToolRequestSchema,
   [AgentToolName.CurateSelection]: AgentCurateSelectionToolRequestSchema,
   [AgentToolName.ResolveAssetSearchFilters]: AgentResolveAssetSearchFiltersToolRequestSchema,
@@ -900,6 +959,44 @@ const AgentCurateSelectionToolResponseSchema = z
   ])
   .meta({ id: 'AgentCurateSelectionToolResponseDto' });
 
+const AgentTripCandidateSummarySchema = z
+  .strictObject({
+    dedupeKey: z.string().trim().min(1).max(300),
+    title: z.string().trim().min(1).max(300),
+    subtitle: z.string().trim().min(1).max(300),
+    countries: z.array(z.string().trim().min(1)).max(20),
+    states: z.array(z.string().trim().min(1)).max(50),
+    cities: z.array(z.string().trim().min(1)).max(50),
+    takenAfter: isoDatetimeToDate,
+    takenBefore: isoDatetimeToDate,
+    assetCount: z.number().int().min(0),
+    albumAssetCount: z.number().int().min(0),
+    excludedDuplicateCount: z.number().int().min(0),
+    excludedStackChildCount: z.number().int().min(0),
+    dayCount: z.number().int().min(0),
+    score: z.number().int().min(0),
+    confidence: z.enum(['high', 'medium', 'low']),
+    placeLabels: z.array(z.string().trim().min(1).max(300)).max(50),
+    selectionHandle: AgentSearchAssetsSelectionHandleSchema,
+  })
+  .meta({ id: 'AgentTripCandidateSummary' });
+
+const AgentFindTripCandidatesToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentFindTripCandidatesToolApprovalRequiredResponse'),
+    deniedResponse('AgentFindTripCandidatesToolDeniedResponse'),
+    z
+      .strictObject({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        summary,
+        candidates: z.array(AgentTripCandidateSummarySchema).max(MAX_TRIP_MAX_CANDIDATES),
+        resultSize: AgentToolResultSizeSchema,
+      })
+      .meta({ id: 'AgentFindTripCandidatesToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentFindTripCandidatesToolResponseDto' });
+
 const AgentSearchAssetsToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentSearchAssetsToolApprovalRequiredResponse'),
@@ -1097,6 +1194,9 @@ export class AgentReadSelectionMetadataToolRequestDto extends createZodDto(
 ) {}
 export class AgentCurateSelectionToolRequestDto extends createZodDto(AgentCurateSelectionToolRequestSchema) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
+export class AgentFindTripCandidatesToolRequestDto extends createZodDto(
+  AgentFindTripCandidatesToolRequestSchema,
+) {}
 export class AgentResolveAssetSearchFiltersToolRequestDto extends createZodDto(
   AgentResolveAssetSearchFiltersToolRequestSchema,
 ) {}
@@ -1130,6 +1230,11 @@ export const AgentSearchAssetsToolResponseDto = namedZodDto(
   AgentSearchAssetsToolResponseSchema,
 );
 export type AgentSearchAssetsToolResponseDto = z.output<typeof AgentSearchAssetsToolResponseSchema>;
+export const AgentFindTripCandidatesToolResponseDto = namedZodDto(
+  'AgentFindTripCandidatesToolResponseDto',
+  AgentFindTripCandidatesToolResponseSchema,
+);
+export type AgentFindTripCandidatesToolResponseDto = z.output<typeof AgentFindTripCandidatesToolResponseSchema>;
 export const AgentResolveAssetSearchFiltersToolResponseDto = namedZodDto(
   'AgentResolveAssetSearchFiltersToolResponseDto',
   AgentResolveAssetSearchFiltersToolResponseSchema,
