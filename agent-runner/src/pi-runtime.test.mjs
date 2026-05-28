@@ -73,6 +73,11 @@ const withTimeout = async (promise, milliseconds = 250) =>
     }),
   ]);
 
+const rejectAfter = (milliseconds, message) =>
+  new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+
 const waitForCondition = async (condition, milliseconds = 250) => {
   const deadline = Date.now() + milliseconds;
   while (!condition()) {
@@ -282,6 +287,94 @@ const collect = async (stream) => {
     events.push(event);
   }
   return events;
+};
+
+const strictTripCandidateHandleId = '00000000-0000-4000-8000-000000000921';
+const strictTripPlanId = '00000000-0000-4000-8000-000000000923';
+
+const makeStrictTripCandidate = (overrides = {}) => ({
+  dedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+  title: 'Recent trip to New York, USA',
+  subtitle: '28 photos over 10 days',
+  takenAfter: '2026-05-03T00:00:00.000Z',
+  takenBefore: '2026-05-12T23:59:59.000Z',
+  albumAssetCount: 28,
+  excludedDuplicateCount: 3,
+  excludedStackChildCount: 1,
+  placeLabels: ['New York, USA'],
+  selectionHandle: {
+    id: strictTripCandidateHandleId,
+    sourceRef: `asset-source:search:${strictTripCandidateHandleId}`,
+    assetCount: 28,
+  },
+  ...overrides,
+});
+
+const createStrictWorkflowFetch = ({
+  candidates = [makeStrictTripCandidate()],
+  recommendation = {
+    action: 'use_top_candidate',
+    candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+    reason: 'The only readable trip candidate is high confidence.',
+  },
+  planResponse = {
+    status: 'success',
+    summary: 'Stored proposed album from selection.',
+    plan: { id: strictTripPlanId },
+  },
+} = {}) => {
+  const calls = [];
+  const fetchImplementation = async (url, init) => {
+    const body = init?.body ? JSON.parse(init.body) : {};
+    calls.push({ url: String(url), headers: init?.headers, body });
+    const requestId = body.id;
+    const name = body?.params?.name;
+    const args = body?.params?.arguments ?? {};
+
+    if (name === 'findTripCandidates') {
+      assert.deepEqual(args, { placeHint: 'USA' });
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: requestId,
+          result: {
+            structuredContent: {
+              status: 'success',
+              summary: `Found ${candidates.length} trip candidate(s) matching "USA".`,
+              recommendation,
+              candidates,
+            },
+          },
+        }),
+      );
+    }
+
+    if (name === 'proposeAlbumFromSelection') {
+      assert.equal(args.albumName, 'USA Trip');
+      assert.equal(args.selectionHandleId, strictTripCandidateHandleId);
+      assert.equal(JSON.stringify(args).includes('assetIds'), false);
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: requestId,
+          result: {
+            structuredContent: planResponse,
+          },
+        }),
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: requestId,
+        error: { code: -32601, message: `Unexpected tool ${name}` },
+      }),
+      { status: 200 },
+    );
+  };
+
+  return { calls, fetchImplementation };
 };
 
 describe('pi runtime adapter', () => {
@@ -942,6 +1035,305 @@ describe('pi runtime adapter', () => {
         content: { blocks: [{ type: 'text', text: 'I can help.' }] },
       },
     ]);
+  });
+
+  it('routes strict recent-trip album prompts through MCP before provider orchestration', async () => {
+    const { sdk, ai, calls, session } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(mcpCalls.map((call) => call.body.method), ['tools/call', 'tools/call']);
+    assert.equal(mcpCalls[0].headers.Authorization, 'Bearer mcp-token-secret');
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, 'assistant-message-completed');
+    assert.equal(events[0].sessionId, '00000000-0000-4000-8000-000000000100');
+    assert.equal(events[0].runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
+    assert.equal(events[0].providerMessageId, null);
+    assert.match(events[0].content.blocks[0].text, /May 3-12, 2026/);
+    assert.match(events[0].content.blocks[0].text, /28 assets/);
+    assert.match(events[0].content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
+    assert.match(events[0].content.blocks[0].text, /Review the plan before applying it/);
+    assert.equal(session.messages.some((message) => message.role === 'user' && message.content[0].text.includes('recent trip to USA')), true);
+    assert.equal(session.messages.some((message) => message.role === 'assistant' && message.content[0].text.includes('Review the plan')), true);
+  });
+
+  it('leaves unsupported prompts on open provider orchestration', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Organize my photos.' }] } })));
+
+    assert.deepEqual(mcpCalls, []);
+    assert.deepEqual(calls.prompts, ['Organize my photos.']);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+  });
+
+  it('keeps a strict handled Pi runner session usable for a later open prompt', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { fetchImplementation } = createStrictWorkflowFetch();
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const strictEvents = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+    const openEvents = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          messageId: '00000000-0000-4000-8000-000000000201',
+          content: { blocks: [{ type: 'text', text: 'How many albums do I have?' }] },
+        }),
+      ),
+    );
+
+    assert.equal(strictEvents.at(-1).type, 'assistant-message-completed');
+    assert.deepEqual(calls.prompts, ['How many albums do I have?']);
+    assert.equal(openEvents.at(-1).type, 'assistant-message-completed');
+  });
+
+  it('pauses production strict recent-trip planning when the proposal needs approval', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      planResponse: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(events, [
+      {
+        type: 'tool-approval-needed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000999',
+      },
+    ]);
+  });
+
+  it('aborts an active strict MCP call on dispose and allows a new session', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    let firstCall = true;
+    let abortedSignal;
+    const abortSeen = createDeferred();
+    const fetchImplementation = async (_url, init) => {
+      if (firstCall) {
+        firstCall = false;
+        abortedSignal = init.signal;
+        init.signal.addEventListener('abort', () => abortSeen.resolve(init.signal.aborted), { once: true });
+        await Promise.race([abortSeen.promise, rejectAfter(250, 'strict MCP call was not aborted')]);
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { structuredContent: {} } }));
+      }
+
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            structuredContent: {
+              status: 'success',
+              recommendation: { action: 'none' },
+              candidates: [],
+            },
+          },
+        }),
+      );
+    };
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const streamPromise = collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+    await waitForCondition(() => abortedSignal !== undefined);
+
+    await runtime.disposeSession('pi-00000000-0000-4000-8000-000000000100');
+    assert.equal(await withTimeout(abortSeen.promise), true);
+    assert.equal(abortedSignal.aborted, true);
+    await withTimeout(streamPromise);
+
+    const created = await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+
+    assert.equal(created.runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
+    assert.equal(calls.createAgentSession.length, 2);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(events.at(-1).content.blocks[0].text, /could not find a likely recent trip/i);
+  });
+
+  for (const [name, response] of [
+    [
+      'HTTP non-OK body',
+      new Response('Bearer other-secret api_key=raw-key', { status: 503 }),
+    ],
+    ['invalid JSON response', new Response('not json Bearer other-secret api_key=raw-key')],
+    [
+      'JSON-RPC error message',
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: { code: -32001, message: 'Bearer other-secret api_key=raw-key' },
+        }),
+      ),
+    ],
+    [
+      'MCP isError text',
+      new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { isError: true, content: [{ type: 'text', text: 'Bearer other-secret api_key=raw-key' }] },
+        }),
+      ),
+    ],
+  ]) {
+    it(`uses generic strict MCP errors for ${name}`, async () => {
+      const { sdk, ai } = createFakeDependencies({
+        mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+      });
+      const runtime = createPiRuntime({ sdk, ai, fetch: async () => response.clone() });
+      await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+      const events = await collect(
+        runtime.sendMessage(
+          createMessageRequest({
+            content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+          }),
+        ),
+      );
+      const serialized = JSON.stringify(events);
+
+      assert.equal(serialized.includes('other-secret'), false);
+      assert.equal(serialized.includes('raw-key'), false);
+      assert.equal(serialized.includes('Bearer [redacted]'), false);
+      assert.equal(events.at(-1).type, 'runner-error');
+      assert.match(events.at(-1).message, /Gallery MCP/i);
+    });
+
+    it(`uses generic user-facing strict planning errors for ${name}`, async () => {
+      const { sdk, ai } = createFakeDependencies({
+        mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+      });
+      let callCount = 0;
+      const runtime = createPiRuntime({
+        sdk,
+        ai,
+        fetch: async (_url, init) => {
+          callCount += 1;
+          if (callCount === 1) {
+            const body = JSON.parse(init.body);
+            return new Response(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: body.id,
+                result: {
+                  structuredContent: {
+                    status: 'success',
+                    recommendation: {
+                      action: 'use_top_candidate',
+                      candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+                    },
+                    candidates: [makeStrictTripCandidate()],
+                  },
+                },
+              }),
+            );
+          }
+          return response.clone();
+        },
+      });
+      await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+      const events = await collect(
+        runtime.sendMessage(
+          createMessageRequest({
+            content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+          }),
+        ),
+      );
+      const serialized = JSON.stringify(events);
+
+      assert.equal(serialized.includes('other-secret'), false);
+      assert.equal(serialized.includes('raw-key'), false);
+      assert.equal(events.at(-1).type, 'assistant-message-completed');
+      assert.match(events.at(-1).content.blocks[0].text, /could not create a reviewable album plan/i);
+      assert.match(events.at(-1).content.blocks[0].text, /Gallery MCP/i);
+    });
+  }
+
+  it('uses generic assistant text for structured planning tool failures', async () => {
+    const { sdk, ai } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { fetchImplementation } = createStrictWorkflowFetch({
+      planResponse: { status: 'error', message: 'Bearer other-secret api_key=raw-key raw tool detail' },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] },
+        }),
+      ),
+    );
+    const text = events.at(-1).content.blocks[0].text;
+
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(text, /could not create a reviewable album plan/i);
+    assert.match(text, /planning tool returned status "error" for proposeAlbumFromSelection/i);
+    assert.doesNotMatch(text, /other-secret|raw-key|raw tool detail/i);
+    assert.doesNotMatch(text, /plan is ready|I created|I proposed|Review the plan/i);
   });
 
   it('streams multiple Pi text chunks in order before completion', async () => {

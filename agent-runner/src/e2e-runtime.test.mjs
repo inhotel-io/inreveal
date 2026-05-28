@@ -1021,7 +1021,7 @@ describe('e2e runtime', () => {
   it('does not claim a strict recent-trip plan when planning is denied', async () => {
     const { calls, fetchImplementation } = createFetch(
       tripCandidateHandlers({
-        planResponse: { status: 'denied', reason: 'Search source did not match any assets' },
+        planResponse: { status: 'denied', reason: 'Search source did not match any assets raw tool detail' },
       }),
     );
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
@@ -1030,7 +1030,8 @@ describe('e2e runtime', () => {
     const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
     assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.match(events.at(-1).content.blocks[0].text, /Search source did not match any assets/i);
+    assert.match(events.at(-1).content.blocks[0].text, /planning tool returned status "denied" for proposeAlbumFromSelection/i);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /Search source did not match any assets|raw tool detail/i);
     assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
   });
 

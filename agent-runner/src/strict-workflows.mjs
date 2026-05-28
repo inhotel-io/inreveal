@@ -148,7 +148,7 @@ const safeFailureText = (message) =>
   ).trim()}`;
 
 const planFailureReason = (planResult) =>
-  planResult?.reason ?? planResult?.error ?? planResult?.message ?? `Planning returned status ${planResult?.status ?? 'unknown'}.`;
+  `The planning tool returned status "${planResult?.status ?? 'unknown'}" for proposeAlbumFromSelection.`;
 
 const plannedResult = ({ planResult, candidate, workflow, label, assetCount, selectionHandleId }) => {
   if (planResult?.status === 'approval-required') {
@@ -189,12 +189,13 @@ const plannedResult = ({ planResult, candidate, workflow, label, assetCount, sel
   );
 };
 
-export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, approvedPlanResult }) => {
+export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, approvedPlanResult, signal }) => {
   assertCreateRecentTripWorkflow(workflow);
 
   const tripResult = await client.call(
     'findTripCandidates',
     workflow.placeHint ? { placeHint: workflow.placeHint } : {},
+    { signal },
   );
   const candidates = Array.isArray(tripResult.candidates) ? tripResult.candidates : [];
   const recommendation = tripResult.recommendation;
@@ -257,7 +258,7 @@ export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, appro
         albumName: workflow.albumName,
         description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
         selectionHandleId,
-      }));
+      }, { signal }));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return workflowResult('failed', safeFailureText(message), { candidate, selectionHandleId, assetCount });
