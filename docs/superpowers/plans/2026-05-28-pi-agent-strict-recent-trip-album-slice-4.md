@@ -55,6 +55,7 @@ Not included in this slice:
 ## Task 1: Strict Workflow Failure Gates
 
 **Files:**
+
 - Modify: `agent-runner/src/strict-workflows.mjs`
 - Modify: `agent-runner/src/strict-workflows.test.mjs`
 - Modify: `agent-runner/src/e2e-runtime.mjs`
@@ -65,99 +66,99 @@ Not included in this slice:
 Append these tests to `agent-runner/src/strict-workflows.test.mjs` inside the existing `describe('create_recent_trip_album workflow execution', ...)` block:
 
 ```js
-  it('does not emit success copy when planning succeeds without a persisted plan id', async () => {
-    const { client, calls } = createWorkflowClient({
-      planResult: { status: 'success', summary: 'Stored proposal but no id.' },
-    });
-
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
-
-    assert.equal(result.status, 'failed');
-    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
-    assert.match(result.text, /could not create a reviewable album plan/i);
+it('does not emit success copy when planning succeeds without a persisted plan id', async () => {
+  const { client, calls } = createWorkflowClient({
+    planResult: { status: 'success', summary: 'Stored proposal but no id.' },
   });
 
-  it('does not emit success copy when planning is denied', async () => {
-    const { client } = createWorkflowClient({
-      planResult: { status: 'denied', reason: 'Search source did not match any assets' },
-    });
-
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
-
-    assert.equal(result.status, 'failed');
-    assert.match(result.text, /Search source did not match any assets/i);
-    assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
   });
 
-  it('does not call planning for a zero-asset candidate handle', async () => {
-    const { client, calls } = createWorkflowClient({
-      candidates: [makeTripCandidate({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } })],
-    });
+  assert.equal(result.status, 'failed');
+  assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+  assert.match(result.text, /could not create a reviewable album plan/i);
+});
 
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
-
-    assert.equal(result.status, 'needs_input');
-    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
-    assert.match(result.text, /found no album-ready assets/i);
+it('does not emit success copy when planning is denied', async () => {
+  const { client } = createWorkflowClient({
+    planResult: { status: 'denied', reason: 'Search source did not match any assets' },
   });
 
-  it('returns approval_required without assistant success text', async () => {
-    const { client } = createWorkflowClient({
-      planResult: {
-        status: 'approval-required',
-        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-      },
-    });
-
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
-
-    assert.equal(result.status, 'approval_required');
-    assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
-    assert.equal(result.text, '');
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
   });
 
-  it('accepts an approved planning result through the same plan-id gate', async () => {
-    const { client, calls } = createWorkflowClient();
+  assert.equal(result.status, 'failed');
+  assert.match(result.text, /Search source did not match any assets/i);
+  assert.doesNotMatch(result.text, /plan is ready|I created|I proposed|Review the plan/i);
+});
 
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-      approvedPlanResult: { status: 'success', planId: tripPlanId },
-    });
-
-    assert.equal(result.status, 'planned');
-    assert.equal(result.planId, tripPlanId);
-    assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
-    assert.match(result.text, /Review the plan before applying it/);
+it('does not call planning for a zero-asset candidate handle', async () => {
+  const { client, calls } = createWorkflowClient({
+    candidates: [makeTripCandidate({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } })],
   });
 
-  it('returns safe failure text when planning throws a redacted tool error', async () => {
-    const { client } = createWorkflowClient({
-      planError: new Error('Gallery MCP JSON-RPC error -32001: token [redacted] was rejected'),
-    });
-
-    const result = await runCreateRecentTripAlbumWorkflow({
-      client,
-      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
-    });
-
-    assert.equal(result.status, 'failed');
-    assert.match(result.text, /\[redacted\]/);
-    assert.doesNotMatch(result.text, /token abc123|secret-value|plan is ready|I created|I proposed|Review the plan/i);
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
   });
+
+  assert.equal(result.status, 'needs_input');
+  assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
+  assert.match(result.text, /found no album-ready assets/i);
+});
+
+it('returns approval_required without assistant success text', async () => {
+  const { client } = createWorkflowClient({
+    planResult: {
+      status: 'approval-required',
+      toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+    },
+  });
+
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+  });
+
+  assert.equal(result.status, 'approval_required');
+  assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
+  assert.equal(result.text, '');
+});
+
+it('accepts an approved planning result through the same plan-id gate', async () => {
+  const { client, calls } = createWorkflowClient();
+
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    approvedPlanResult: { status: 'success', planId: tripPlanId },
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(result.planId, tripPlanId);
+  assert.equal(calls.map((call) => call.name).join(','), 'findTripCandidates');
+  assert.match(result.text, /Review the plan before applying it/);
+});
+
+it('returns safe failure text when planning throws a redacted tool error', async () => {
+  const { client } = createWorkflowClient({
+    planError: new Error('Gallery MCP JSON-RPC error -32001: token [redacted] was rejected'),
+  });
+
+  const result = await runCreateRecentTripAlbumWorkflow({
+    client,
+    workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.text, /\[redacted\]/);
+  assert.doesNotMatch(result.text, /token abc123|secret-value|plan is ready|I created|I proposed|Review the plan/i);
+});
 ```
 
 Update the local `createWorkflowClient` helper to accept `planError`. Its `proposeAlbumFromSelection` branch must `throw planError` when provided before returning `planResult`.
@@ -167,95 +168,95 @@ Update the local `createWorkflowClient` helper to accept `planError`. Its `propo
 Append these tests in `agent-runner/src/e2e-runtime.test.mjs` near the existing recent-trip tests:
 
 ```js
-  it('does not claim a strict recent-trip plan when planning returns no plan id', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        planResponse: { status: 'success', summary: 'Stored proposal without a plan id.' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('does not claim a strict recent-trip plan when planning returns no plan id', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      planResponse: { status: 'success', summary: 'Stored proposal without a plan id.' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.match(events.at(-1).content.blocks[0].text, /could not create a reviewable album plan/i);
-    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.match(events.at(-1).content.blocks[0].text, /could not create a reviewable album plan/i);
+  assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
+});
 
-  it('does not claim a strict recent-trip plan when planning is denied', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        planResponse: { status: 'denied', reason: 'Search source did not match any assets' },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('does not claim a strict recent-trip plan when planning is denied', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      planResponse: { status: 'denied', reason: 'Search source did not match any assets' },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.match(events.at(-1).content.blocks[0].text, /Search source did not match any assets/i);
-    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.match(events.at(-1).content.blocks[0].text, /Search source did not match any assets/i);
+  assert.doesNotMatch(events.at(-1).content.blocks[0].text, /plan is ready|I created|I proposed|Review the plan/i);
+});
 
-  it('does not plan a strict recent-trip album for a zero-asset candidate handle', async () => {
-    const zeroCandidate = makeTripCandidateSummary({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } });
-    const { calls, fetchImplementation } = createFetch(tripCandidateHandlers({ candidates: [zeroCandidate] }));
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+it('does not plan a strict recent-trip album for a zero-asset candidate handle', async () => {
+  const zeroCandidate = makeTripCandidateSummary({ selectionHandle: { id: tripCandidateHandleId, assetCount: 0 } });
+  const { calls, fetchImplementation } = createFetch(tripCandidateHandlers({ candidates: [zeroCandidate] }));
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
-    assert.match(events.at(-1).content.blocks[0].text, /found no album-ready assets/i);
-  });
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+  assert.match(events.at(-1).content.blocks[0].text, /found no album-ready assets/i);
+});
 
-  it('pauses strict recent-trip planning when proposal approval is required', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        planResponse: {
-          status: 'approval-required',
-          toolCall: { id: '00000000-0000-4000-8000-000000000999' },
-        },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
-
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
-
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(events, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: gallerySessionId,
-        runnerSessionId,
-        toolCallId: '00000000-0000-4000-8000-000000000999',
+it('pauses strict recent-trip planning when proposal approval is required', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      planResponse: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
       },
-    ]);
-  });
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
 
-  it('returns safe strict recent-trip failure text when planning JSON-RPC errors', async () => {
-    const { calls, fetchImplementation } = createFetch(
-      tripCandidateHandlers({
-        planError: {
-          code: -32001,
-          message: `gateway token ${token} secret-value rejected`,
-        },
-      }),
-    );
-    const runtime = createE2eRuntime({ fetch: fetchImplementation });
-    await runtime.createSession(createSessionBody());
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
-    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
-    const text = events.at(-1).content.blocks[0].text;
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.deepEqual(events, [
+    {
+      type: 'tool-approval-needed',
+      sessionId: gallerySessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+    },
+  ]);
+});
 
-    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.match(text, /\[redacted\]/);
-    assert.doesNotMatch(text, new RegExp(token));
-    assert.doesNotMatch(text, /secret-value|plan is ready|I created|I proposed|Review the plan/i);
-  });
+it('returns safe strict recent-trip failure text when planning JSON-RPC errors', async () => {
+  const { calls, fetchImplementation } = createFetch(
+    tripCandidateHandlers({
+      planError: {
+        code: -32001,
+        message: `gateway token ${token} secret-value rejected`,
+      },
+    }),
+  );
+  const runtime = createE2eRuntime({ fetch: fetchImplementation });
+  await runtime.createSession(createSessionBody());
+
+  const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+  const text = events.at(-1).content.blocks[0].text;
+
+  assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+  assert.match(text, /\[redacted\]/);
+  assert.doesNotMatch(text, new RegExp(token));
+  assert.doesNotMatch(text, /secret-value|plan is ready|I created|I proposed|Review the plan/i);
+});
 ```
 
 Update `tripCandidateHandlers` signature to accept `planResponse` and `planError`, and make the `proposeAlbumFromSelection` handler return either the explicit response or a JSON-RPC error when provided:
@@ -268,16 +269,16 @@ Update `tripCandidateHandlers` signature to accept `planResponse` and `planError
 and inside the handler, before the normal `body` return:
 
 ```js
-        if (planError) {
-          return {
-            status: 200,
-            body: {
-              jsonrpc: '2.0',
-              id: request.id,
-              error: planError,
-            },
-          };
-        }
+if (planError) {
+  return {
+    status: 200,
+    body: {
+      jsonrpc: '2.0',
+      id: request.id,
+      error: planError,
+    },
+  };
+}
 ```
 
 Then keep the success body configurable:
@@ -319,34 +320,34 @@ Then update `runCreateRecentTripAlbumWorkflow`:
 - Before planning, after `assetCount` is computed:
 
 ```js
-  if (assetCount <= 0) {
-    return workflowResult(
-      'needs_input',
-      'I found a likely recent trip, but it had no album-ready assets after duplicate and stack exclusions. Which date range or place should I use instead?',
-    );
-  }
+if (assetCount <= 0) {
+  return workflowResult(
+    'needs_input',
+    'I found a likely recent trip, but it had no album-ready assets after duplicate and stack exclusions. Which date range or place should I use instead?',
+  );
+}
 ```
 
 Use an approved result if provided; otherwise wrap only the planning call in a `try/catch` so JSON-RPC/tool failures return `failed` instead of escaping through the runtime:
 
 ```js
-  let planResult = approvedPlanResult;
-  if (!planResult) {
-    try {
-      planResult = await client.call('proposeAlbumFromSelection', {
-        summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
-        albumName: workflow.albumName,
-        description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
-        selectionHandleId,
-      });
-    } catch (error) {
-      return workflowResult('failed', failedPlanText({ error: error?.message ?? String(error) }), {
-        candidate,
-        selectionHandleId,
-        assetCount,
-      });
-    }
+let planResult = approvedPlanResult;
+if (!planResult) {
+  try {
+    planResult = await client.call('proposeAlbumFromSelection', {
+      summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
+      albumName: workflow.albumName,
+      description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
+      selectionHandleId,
+    });
+  } catch (error) {
+    return workflowResult('failed', failedPlanText({ error: error?.message ?? String(error) }), {
+      candidate,
+      selectionHandleId,
+      assetCount,
+    });
   }
+}
 ```
 
 Important: preserve already-redacted messages from `createE2eMcpClient`; do not log or reintroduce raw tokens/secrets into returned assistant text.
@@ -360,34 +361,34 @@ export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, appro
 - Immediately after `planResult`:
 
 ```js
-  if (planResult?.status === 'approval-required') {
-    return workflowResult('approval_required', '', {
-      toolCallId: planResult.toolCall?.id,
-      planResult,
-      candidate,
-      selectionHandleId,
-      assetCount,
-    });
-  }
+if (planResult?.status === 'approval-required') {
+  return workflowResult('approval_required', '', {
+    toolCallId: planResult.toolCall?.id,
+    planResult,
+    candidate,
+    selectionHandleId,
+    assetCount,
+  });
+}
 
-  if (planResult?.status && planResult.status !== 'success') {
-    return workflowResult('failed', failedPlanText(planResult), {
-      planResult,
-      candidate,
-      selectionHandleId,
-      assetCount,
-    });
-  }
+if (planResult?.status && planResult.status !== 'success') {
+  return workflowResult('failed', failedPlanText(planResult), {
+    planResult,
+    candidate,
+    selectionHandleId,
+    assetCount,
+  });
+}
 
-  const planId = extractPlanId(planResult);
-  if (!planId) {
-    return workflowResult('failed', failedPlanText(planResult), {
-      planResult,
-      candidate,
-      selectionHandleId,
-      assetCount,
-    });
-  }
+const planId = extractPlanId(planResult);
+if (!planId) {
+  return workflowResult('failed', failedPlanText(planResult), {
+    planResult,
+    candidate,
+    selectionHandleId,
+    assetCount,
+  });
+}
 ```
 
 - In the final `planned` result, use the precomputed `planId`.
