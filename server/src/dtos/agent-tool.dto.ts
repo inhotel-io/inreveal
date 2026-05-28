@@ -981,6 +981,24 @@ const AgentTripCandidateSummarySchema = z
   })
   .meta({ id: 'AgentTripCandidateSummary' });
 
+const AgentTripCandidateRecommendationSchema = z
+  .discriminatedUnion('action', [
+    z
+      .strictObject({
+        action: z.literal('use_top_candidate'),
+        candidateDedupeKey: z.string().trim().min(1).max(300),
+        reason: z.string().trim().min(1).max(300),
+      })
+      .meta({ id: 'AgentTripCandidateUseTopRecommendation' }),
+    z
+      .strictObject({
+        action: z.enum(['ask_user', 'none']),
+        reason: z.string().trim().min(1).max(300),
+      })
+      .meta({ id: 'AgentTripCandidateNonAutoRecommendation' }),
+  ])
+  .meta({ id: 'AgentTripCandidateRecommendation' });
+
 const AgentFindTripCandidatesToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentFindTripCandidatesToolApprovalRequiredResponse'),
@@ -990,6 +1008,7 @@ const AgentFindTripCandidatesToolResponseSchema = z
         status: z.literal('success'),
         toolCall: AgentToolCallResponseSchema,
         summary,
+        recommendation: AgentTripCandidateRecommendationSchema,
         candidates: z.array(AgentTripCandidateSummarySchema).max(MAX_TRIP_MAX_CANDIDATES),
         resultSize: AgentToolResultSizeSchema,
       })
@@ -1194,9 +1213,7 @@ export class AgentReadSelectionMetadataToolRequestDto extends createZodDto(
 ) {}
 export class AgentCurateSelectionToolRequestDto extends createZodDto(AgentCurateSelectionToolRequestSchema) {}
 export class AgentSearchAssetsToolRequestDto extends createZodDto(AgentSearchAssetsToolRequestSchema) {}
-export class AgentFindTripCandidatesToolRequestDto extends createZodDto(
-  AgentFindTripCandidatesToolRequestSchema,
-) {}
+export class AgentFindTripCandidatesToolRequestDto extends createZodDto(AgentFindTripCandidatesToolRequestSchema) {}
 export class AgentResolveAssetSearchFiltersToolRequestDto extends createZodDto(
   AgentResolveAssetSearchFiltersToolRequestSchema,
 ) {}

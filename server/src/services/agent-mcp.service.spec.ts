@@ -47,6 +47,11 @@ const makeParsedPlanningRequest = () => ({
   operations: [makeParsedAlbumCreateOperation()],
 });
 
+const noTripCandidateRecommendation = {
+  action: 'none' as const,
+  reason: 'No readable trip candidates matched the request.',
+};
+
 const makePlanningServiceResult = (planId = factory.uuid()) => ({
   status: 'success',
   plan: {
@@ -526,6 +531,7 @@ describe(AgentMcpService.name, () => {
         status: 'success',
         toolCall: null,
         summary: 'No trip candidates found matching "USA".',
+        recommendation: noTripCandidateRecommendation,
         candidates: [],
       },
     },
@@ -896,6 +902,7 @@ describe(AgentMcpService.name, () => {
         status: 'success',
         toolCall: null,
         summary: 'No trip candidates found.',
+        recommendation: noTripCandidateRecommendation,
         candidates: [],
       },
     },
