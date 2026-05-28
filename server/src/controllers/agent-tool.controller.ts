@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
+  AgentFindTripCandidatesToolRequestDto,
+  AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
   AgentListSpacesToolRequestDto,
@@ -50,6 +52,23 @@ export class AgentToolController {
     @Body() dto: AgentSearchAssetsToolRequestDto,
   ): Promise<AgentSearchAssetsToolResponseDto> {
     return this.service.searchAssets(auth, id, dto);
+  }
+
+  @Post('tools/find-trip-candidates')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentFindTripCandidatesToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal findTripCandidates agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved trip candidate lookup tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  findTripCandidates(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentFindTripCandidatesToolRequestDto,
+  ): Promise<AgentFindTripCandidatesToolResponseDto> {
+    return this.service.findTripCandidates(auth, id, dto);
   }
 
   @Post('tools/read-asset-metadata')
