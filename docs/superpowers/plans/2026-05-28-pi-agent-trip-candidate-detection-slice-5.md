@@ -679,6 +679,91 @@ Add tests:
     expect(tripCandidateService.materializeAlbumReadySelection).toHaveBeenCalledWith(auth.user.id, source);
     expect(searchRepository.searchMetadata).not.toHaveBeenCalled();
   });
+
+  it('findTripCandidates denies before creating handles when materialized assets exceed the per-tool limit', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ limits: { maxAssetsPerToolCall: 1 } }),
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+
+    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'denied',
+      reason: 'Requested asset count exceeds per-tool limit',
+    }));
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('findTripCandidates reserves the materialized handle asset count before creating handles', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const calls: string[] = [];
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    toolCallRepository.transitionWithSessionLimit.mockImplementation(async (...args) => {
+      calls.push('reserve');
+      const dto = args[3] as Partial<AgentToolCall>;
+      return { status: 'transitioned', toolCall: makeToolCall({ ...dto, sessionId: session.id }) };
+    });
+    selectionHandleRepository.create.mockImplementation(async (dto) => {
+      calls.push('handle');
+      return makeCurateHandle(session, auth.user.id, dto.assetIds, { sourceToolCallId: dto.sourceToolCallId });
+    });
+
+    await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
+
+    expect(toolCallRepository.transitionWithSessionLimit).toHaveBeenCalledWith(
+      session.id,
+      expect.any(String),
+      AgentToolCallStatus.Executing,
+      expect.objectContaining({ assetCount: 2, albumCount: 0 }),
+      AgentToolDataClass.Metadata,
+      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+    );
+    expect(calls).toEqual(['reserve', 'handle']);
+  });
+
+  it('findTripCandidates returns denied and creates no handles when actual materialized assets exceed the session limit', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const deniedToolCall = makeToolCall({
+      sessionId: session.id,
+      toolName: AgentToolName.FindTripCandidates,
+      status: AgentToolCallStatus.Denied,
+      error: `Session policy allows at most ${session.permissionPlanSnapshot.limits.maxAssetsPerSession} assets per session`,
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    toolCallRepository.transitionWithSessionLimit.mockResolvedValue({
+      status: 'limit-exceeded',
+      toolCall: deniedToolCall,
+    });
+
+    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'denied',
+      reason: `Session policy allows at most ${session.permissionPlanSnapshot.limits.maxAssetsPerSession} assets per session`,
+    }));
+    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
+  });
 ```
 
 - [ ] **Step 2: Run service tests red**
@@ -791,7 +876,7 @@ Add descriptor near `searchAssetsDescriptor()`:
           lookbackDays: request.lookbackDays ?? 180,
           maxCandidates: request.maxCandidates ?? 3,
         }) as AgentToolFindTripCandidatesRequestMetadata,
-      requestedAssetCount: (request) => request.maxCandidates ?? 3,
+      requestedAssetCount: () => 0,
       requestedAlbumCount: () => 0,
       perToolLimit: (plan) => plan.limits.maxAssetsPerToolCall,
       perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
@@ -804,10 +889,16 @@ Add descriptor near `searchAssetsDescriptor()`:
           lookbackDays: request.lookbackDays,
           maxCandidates: request.maxCandidates,
         });
-        const mappedCandidates = [];
+        const materializedCandidates = [];
 
         for (const candidate of candidates) {
-          mappedCandidates.push(await this.materializeTripCandidateForTool(auth, session, toolCallId, candidate));
+          materializedCandidates.push(await this.materializeTripCandidateAssetsForTool(auth, session, candidate));
+        }
+        await this.reserveTripCandidateHandleAssetCount(auth, session, toolCallId, materializedCandidates);
+
+        const mappedCandidates = [];
+        for (const materializedCandidate of materializedCandidates) {
+          mappedCandidates.push(await this.createTripCandidateHandleResult(auth, session, toolCallId, materializedCandidate));
         }
 
         return {
@@ -859,20 +950,81 @@ type AgentTripCandidateToolResult = {
   placeLabels: string[];
   selectionHandle: AgentSearchAssetsSelectionHandleResult;
 };
+
+type MaterializedTripCandidateToolSelection = {
+  candidate: TripCandidate;
+  assetIds: string[];
+};
 ```
 
 Add helpers:
 
 ```ts
-  private async materializeTripCandidateForTool(
+  private async materializeTripCandidateAssetsForTool(
     auth: AuthDto,
     session: AgentSession,
-    toolCallId: string,
     candidate: TripCandidate,
-  ): Promise<AgentTripCandidateToolResult> {
+  ): Promise<MaterializedTripCandidateToolSelection> {
     const selection = await this.tripCandidateService.materializeAlbumReadySelection(auth.user.id, candidate.source);
     const readableIds = await this.getReadableAssetIds(auth, session.permissionPlanSnapshot, selection.assetIds);
     const assetIds = selection.assetIds.filter((assetId) => readableIds.has(assetId));
+
+    return { candidate, assetIds };
+  }
+
+  private async reserveTripCandidateHandleAssetCount(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    materializedCandidates: MaterializedTripCandidateToolSelection[],
+  ): Promise<void> {
+    const assetCount = materializedCandidates.reduce((total, { assetIds }) => total + assetIds.length, 0);
+    if (assetCount > session.permissionPlanSnapshot.limits.maxAssetsPerToolCall) {
+      throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
+    }
+
+    if (assetCount === 0 || session.permissionPlanSnapshot.limits.maxAssetsPerSession === Number.MAX_SAFE_INTEGER) {
+      return;
+    }
+
+    const reservation = await this.toolCallRepository.transitionWithSessionLimit(
+      session.id,
+      toolCallId,
+      AgentToolCallStatus.Executing,
+      {
+        status: AgentToolCallStatus.Executing,
+        approvalDecision: AgentToolApprovalDecision.Approved,
+        responseSummary: 'Tool call execution started',
+        redactedResponseMetadata: null,
+        assetCount,
+        albumCount: 0,
+        completedAt: null,
+        error: null,
+      },
+      AgentToolDataClass.Metadata,
+      session.permissionPlanSnapshot.limits.maxAssetsPerSession,
+    );
+
+    await this.sessionRepository.update(auth.user.id, session.id, { status: AgentSessionStatus.Running });
+
+    if (reservation.status === 'stale') {
+      throw new BadRequestException('Agent tool call is already executing or completed');
+    }
+
+    if (reservation.status === 'limit-exceeded') {
+      throw new AgentToolRecordedDeniedError(
+        this.getSessionLimitReason(session.permissionPlanSnapshot.limits.maxAssetsPerSession),
+        reservation.toolCall,
+      );
+    }
+  }
+
+  private async createTripCandidateHandleResult(
+    auth: AuthDto,
+    session: AgentSession,
+    toolCallId: string,
+    { candidate, assetIds }: MaterializedTripCandidateToolSelection,
+  ): Promise<AgentTripCandidateToolResult> {
     const handle = await this.selectionHandleRepository.create({
       sessionId: session.id,
       userId: auth.user.id,
