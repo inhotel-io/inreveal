@@ -1,4 +1,5 @@
 import { TripCandidateService } from 'src/services/trip-candidate.service';
+import { TRIP_PLACE_HINT_MAX_LENGTH } from 'src/services/trip-place-hint';
 
 const cluster = ({
   country,
@@ -392,9 +393,7 @@ describe(TripCandidateService.name, () => {
       maxCandidates: 3,
     });
 
-    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual([
-      'trip:italy:rome:2026-04-17:2026-04-18',
-    ]);
+    expect(candidates.map((candidate) => candidate.dedupeKey)).toEqual(['trip:italy:rome:2026-04-17:2026-04-18']);
   });
 
   it('keeps clearly separate trips as separate candidates', async () => {
@@ -446,6 +445,143 @@ describe(TripCandidateService.name, () => {
     ]);
   });
 
+  it('matches USA place hints against accepted country metadata equivalents', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({
+        localDate: '2026-04-15',
+        country: 'United States of America',
+        state: 'New York',
+        city: 'New York',
+        assetCount: 4,
+      }),
+      dayBucket({
+        localDate: '2026-04-16',
+        country: 'United States of America',
+        state: 'New York',
+        city: 'New York',
+        assetCount: 4,
+      }),
+    ]);
+
+    const [candidate] = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      placeHint: 'USA',
+    });
+
+    expect(candidate).toMatchObject({
+      title: 'Recent trip to New York, United States of America',
+      countries: ['United States of America'],
+      cities: ['New York'],
+      confidence: 'high',
+    });
+  });
+
+  it('filters trip windows by city hints without geocoding', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-17', country: 'Italy', city: 'Rome', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-18', country: 'Italy', city: 'Rome', assetCount: 4 }),
+    ]);
+
+    const candidates = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      maxCandidates: 3,
+      placeHint: 'Paris',
+    });
+
+    expect(candidates.map(({ dedupeKey }) => dedupeKey)).toEqual(['trip:france:paris:2026-04-15:2026-04-16']);
+  });
+
+  it('returns no candidates for unknown place hints instead of throwing', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
+    ]);
+
+    await expect(
+      service.findRecentTripCandidates({
+        ownerId: 'user-1',
+        targetDate: new Date('2026-04-23T12:00:00Z'),
+        placeHint: 'Atlantis',
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('allows place hints to find home-city trips with medium confidence', async () => {
+    const { assetRepository, service } = setup();
+    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+    ]);
+    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+      dayBucket({ localDate: '2026-04-15', country: 'Germany', city: 'Berlin', assetCount: 4 }),
+      dayBucket({ localDate: '2026-04-16', country: 'Germany', city: 'Berlin', assetCount: 4 }),
+    ]);
+
+    const [candidate] = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      placeHint: 'Berlin',
+    });
+
+    expect(candidate).toMatchObject({
+      title: 'Recent trip to Berlin, Germany',
+      assetCount: 8,
+      dayCount: 2,
+      confidence: 'medium',
+      score: 58,
+    });
+  });
+
+  it('rejects overlong place hints before repository calls', async () => {
+    const { assetRepository, service } = setup();
+
+    await expect(
+      service.findRecentTripCandidates({
+        ownerId: 'user-1',
+        placeHint: 'x'.repeat(TRIP_PLACE_HINT_MAX_LENGTH + 1),
+      }),
+    ).resolves.toEqual([]);
+
+    expect(assetRepository.getMemoryLocationClusters).not.toHaveBeenCalled();
+    expect(assetRepository.getMemoryLocationDayBuckets).not.toHaveBeenCalled();
+  });
+
+  it('filters fallback recent clusters by place hints when day buckets are unavailable', async () => {
+    const assetRepository = {
+      getMemoryLocationClusters: vi
+        .fn()
+        .mockResolvedValueOnce([cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 })])
+        .mockResolvedValueOnce([
+          cluster({ country: 'France', city: 'Paris', assetCount: 8, dayCount: 2 }),
+          cluster({ country: 'Italy', city: 'Rome', assetCount: 8, dayCount: 2 }),
+        ]),
+    };
+    const service = new TripCandidateService(assetRepository);
+
+    const candidates = await service.findRecentTripCandidates({
+      ownerId: 'user-1',
+      targetDate: new Date('2026-04-23T12:00:00Z'),
+      placeHint: 'Rome',
+    });
+
+    expect(candidates.map(({ dedupeKey }) => dedupeKey)).toEqual(['trip:italy:rome:2026-04-15:2026-04-17']);
+  });
+
   it('exposes album-ready counts on generic trip candidates without returning asset ids', async () => {
     const { assetRepository, service } = setupWithAlbumReady();
     assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
@@ -489,7 +625,7 @@ describe(TripCandidateService.name, () => {
       dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
       dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
     ]);
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce(undefined);
+    assetRepository.getTripCandidateAssets.mockImplementationOnce(async () => {});
 
     const [candidate] = await service.findRecentTripCandidates({
       ownerId: 'user-1',
@@ -507,10 +643,12 @@ describe(TripCandidateService.name, () => {
   it('keeps all duplicate variants when duplicate group hydration is unavailable', async () => {
     const assetRepository = {
       getMemoryLocationClusters: vi.fn(),
-      getTripCandidateAssets: vi.fn().mockResolvedValue([
-        tripAsset({ id: 'small', duplicateId: 'dup-1', fileSizeInByte: 100 }),
-        tripAsset({ id: 'large', duplicateId: 'dup-1', fileSizeInByte: 200 }),
-      ]),
+      getTripCandidateAssets: vi
+        .fn()
+        .mockResolvedValue([
+          tripAsset({ id: 'small', duplicateId: 'dup-1', fileSizeInByte: 100 }),
+          tripAsset({ id: 'large', duplicateId: 'dup-1', fileSizeInByte: 200 }),
+        ]),
     };
     const service = new TripCandidateService(assetRepository);
     const source = {
