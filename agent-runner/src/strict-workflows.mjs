@@ -98,6 +98,138 @@ const tripCandidateLabel = (candidate) =>
     ? candidate.placeLabels.join(' and ')
     : candidate.title?.replace(/^Recent trip to\s+/i, '') || candidate.subtitle || 'that trip';
 
+export const strictWorkflowPendingTtlMs = 10 * 60 * 1000;
+
+const optionalString = (value) => (typeof value === 'string' && value.length > 0 ? value : undefined);
+const optionalNumber = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+
+const compactPlaceLabels = (placeLabels) =>
+  Array.isArray(placeLabels) ? placeLabels.filter((label) => typeof label === 'string' && label.length > 0).slice(0, 5) : [];
+
+const compactSelectionHandle = (selectionHandle) => {
+  const id = optionalString(selectionHandle?.id);
+  if (!id) {
+    return undefined;
+  }
+
+  const assetCount = optionalNumber(selectionHandle?.assetCount);
+  return assetCount === undefined ? { id } : { id, assetCount };
+};
+
+const createRecentTripContinuationCandidate = (candidate) => ({
+  dedupeKey: optionalString(candidate?.dedupeKey),
+  title: optionalString(candidate?.title),
+  subtitle: optionalString(candidate?.subtitle),
+  takenAfter: optionalString(candidate?.takenAfter),
+  takenBefore: optionalString(candidate?.takenBefore),
+  albumAssetCount: optionalNumber(candidate?.albumAssetCount),
+  excludedDuplicateCount: optionalNumber(candidate?.excludedDuplicateCount),
+  excludedStackChildCount: optionalNumber(candidate?.excludedStackChildCount),
+  placeLabels: compactPlaceLabels(candidate?.placeLabels),
+  selectionHandle: compactSelectionHandle(candidate?.selectionHandle),
+});
+
+const candidateChoiceLabel = (candidate, index) => {
+  const continuationCandidate = createRecentTripContinuationCandidate(candidate);
+  return {
+    index: index + 1,
+    dedupeKey: continuationCandidate.dedupeKey,
+    label: tripCandidateLabel(continuationCandidate),
+    candidate: continuationCandidate,
+  };
+};
+
+const normalizeChoiceText = (value) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const explicitAlbumNameFromPrompt = (prompt) => {
+  const explicit = String(prompt ?? '').match(explicitAlbumNamePattern);
+  return explicit ? cleanAlbumName(explicit[1] ?? explicit[2] ?? explicit[3]) : undefined;
+};
+
+const ordinalChoice = (prompt) => {
+  const text = normalizeChoiceText(prompt);
+  if (/\b(?:1|first)\b/.test(text)) return 1;
+  if (/\b(?:2|second)\b/.test(text)) return 2;
+  if (/\b(?:3|third)\b/.test(text)) return 3;
+  if (/\b(?:4|fourth)\b/.test(text)) return 4;
+  if (/\b(?:5|fifth)\b/.test(text)) return 5;
+  return undefined;
+};
+
+const yesChoicePattern = /^(?:yes|yeah|yep|use it|use that|that one|ok|okay)$/i;
+
+const choiceTextForCandidate = (choice) =>
+  [choice.label, choice.candidate.title, choice.candidate.subtitle, ...(choice.candidate.placeLabels ?? [])]
+    .filter((value) => typeof value === 'string' && value.length > 0)
+    .flatMap((value) => [value, ...value.split(',')])
+    .map(normalizeChoiceText)
+    .filter((value) => value.length > 0);
+
+const normalizedSelectionPrompt = (prompt) =>
+  normalizeChoiceText(stripExplicitAlbumNameClause(String(prompt ?? ''))).replace(
+    /^(?:use|choose|select|pick)\s+/,
+    '',
+  );
+
+export const createRecentTripCandidateSelectionState = ({ workflow, candidates, nowMs = Date.now() }) => ({
+  kind: 'create_recent_trip_album_candidate_selection',
+  workflow,
+  createdAtMs: nowMs,
+  candidates: candidates.map(candidateChoiceLabel).slice(0, 5),
+});
+
+export const resolveRecentTripCandidateSelection = ({
+  pending,
+  prompt,
+  nowMs = Date.now(),
+  ttlMs = strictWorkflowPendingTtlMs,
+}) => {
+  if (pending?.kind !== 'create_recent_trip_album_candidate_selection') {
+    return {
+      status: 'missing',
+      text: 'I no longer have pending recent trip choices. Please rerun the recent trip album request.',
+    };
+  }
+
+  if (nowMs - pending.createdAtMs > ttlMs) {
+    return { status: 'expired', text: 'Those pending trip choices expired. Please rerun the recent trip album request.' };
+  }
+
+  const requestedAlbumName = explicitAlbumNameFromPrompt(prompt);
+  const normalizedPrompt = normalizedSelectionPrompt(prompt);
+  let choice;
+  const ordinal = ordinalChoice(prompt);
+  if (ordinal !== undefined) {
+    choice = pending.candidates.find((candidate) => candidate.index === ordinal);
+  } else if (pending.candidates.length === 1 && yesChoicePattern.test(String(prompt ?? '').trim())) {
+    choice = pending.candidates[0];
+  } else if (normalizedPrompt.length > 0) {
+    const matches = pending.candidates.filter((candidate) =>
+      choiceTextForCandidate(candidate).some(
+        (label) => normalizedPrompt.includes(label) || label.includes(normalizedPrompt),
+      ),
+    );
+    if (matches.length === 1) {
+      choice = matches[0];
+    }
+  }
+
+  if (!choice) {
+    const labels = pending.candidates.map((candidate) => candidate.label).join('; ');
+    return { status: 'needs_input', text: `Which recent trip should I use: ${labels}?` };
+  }
+
+  return {
+    status: 'matched',
+    workflow: requestedAlbumName ? { ...pending.workflow, albumName: requestedAlbumName } : pending.workflow,
+    candidate: choice.candidate,
+  };
+};
+
 const tripDuplicateParts = (candidate) => {
   const duplicateCount = candidate.excludedDuplicateCount ?? 0;
   const stackCount = candidate.excludedStackChildCount ?? 0;
@@ -154,7 +286,7 @@ const plannedResult = ({ planResult, candidate, workflow, label, assetCount, sel
   if (planResult?.status === 'approval-required') {
     const toolCallId = planResult.toolCall?.id;
     if (typeof toolCallId === 'string' && toolCallId.length > 0) {
-      return workflowResult('approval_required', '', { toolCallId, planResult });
+      return workflowResult('approval_required', '', { toolCallId, planResult, candidate, selectionHandleId, assetCount });
     }
 
     return workflowResult(
@@ -231,7 +363,20 @@ export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, appro
     );
   }
 
-  const selectionHandleId = candidate.selectionHandle?.id;
+  return runCreateRecentTripAlbumCandidateWorkflow({ client, workflow, candidate, approvedPlanResult, signal });
+};
+
+export const runCreateRecentTripAlbumCandidateWorkflow = async ({
+  client,
+  workflow,
+  candidate,
+  approvedPlanResult,
+  signal,
+}) => {
+  assertCreateRecentTripWorkflow(workflow);
+
+  const continuationCandidate = createRecentTripContinuationCandidate(candidate);
+  const selectionHandleId = continuationCandidate?.selectionHandle?.id;
   if (!selectionHandleId) {
     return workflowResult(
       'needs_input',
@@ -239,30 +384,38 @@ export const runCreateRecentTripAlbumWorkflow = async ({ client, workflow, appro
     );
   }
 
-  const assetCount = candidate.selectionHandle.assetCount ?? candidate.albumAssetCount ?? 0;
+  const assetCount = continuationCandidate.selectionHandle.assetCount ?? continuationCandidate.albumAssetCount ?? 0;
   if (assetCount <= 0) {
     return workflowResult(
       'needs_input',
       'I found the recommended trip, but it found no album-ready assets. Which date range or place should I use instead?',
-      { candidate },
+      { candidate: continuationCandidate },
     );
   }
 
-  const label = tripCandidateLabel(candidate);
-  let planResult;
+  const label = tripCandidateLabel(continuationCandidate);
+  let planResult = approvedPlanResult;
   try {
     planResult =
-      approvedPlanResult ??
-      (await client.call('proposeAlbumFromSelection', {
-        summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
-        albumName: workflow.albumName,
-        description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(candidate)}`,
-        selectionHandleId,
-      }, { signal }));
+      planResult ??
+      (await client.call(
+        'proposeAlbumFromSelection',
+        {
+          summary: `Create ${workflow.albumName} with ${assetCount} trip assets from ${label}.`,
+          albumName: workflow.albumName,
+          description: `Album-ready trip selection from ${label}.${duplicateDescriptionText(continuationCandidate)}`,
+          selectionHandleId,
+        },
+        { signal },
+      ));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return workflowResult('failed', safeFailureText(message), { candidate, selectionHandleId, assetCount });
+    return workflowResult('failed', safeFailureText(message), {
+      candidate: continuationCandidate,
+      selectionHandleId,
+      assetCount,
+    });
   }
 
-  return plannedResult({ planResult, candidate, workflow, label, assetCount, selectionHandleId });
+  return plannedResult({ planResult, candidate: continuationCandidate, workflow, label, assetCount, selectionHandleId });
 };

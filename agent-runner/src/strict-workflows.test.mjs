@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { matchStrictWorkflow, runCreateRecentTripAlbumWorkflow } from './strict-workflows.mjs';
+import {
+  createRecentTripCandidateSelectionState,
+  matchStrictWorkflow,
+  resolveRecentTripCandidateSelection,
+  runCreateRecentTripAlbumCandidateWorkflow,
+  runCreateRecentTripAlbumWorkflow,
+  strictWorkflowPendingTtlMs,
+} from './strict-workflows.mjs';
 
 describe('strict workflow router', () => {
   it('matches a USA recent-trip album request', () => {
@@ -168,6 +175,175 @@ const createWorkflowClient = ({ candidates = [makeTripCandidate()], recommendati
 };
 
 describe('create_recent_trip_album workflow execution', () => {
+  it('builds pending candidate-selection state with labels and handles', () => {
+    const candidates = [
+      makeTripCandidate({
+        dedupeKey: 'trip:ny',
+        placeLabels: ['New York, USA'],
+        rawAssetIds: ['00000000-0000-4000-8000-000000000111'],
+        internalToolDetail: 'must-not-be-stored',
+      }),
+      makeTripCandidate({
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        assets: [{ id: '00000000-0000-4000-8000-000000000222' }],
+      }),
+    ];
+
+    const pending = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates,
+      nowMs: 1000,
+    });
+
+    assert.equal(pending.kind, 'create_recent_trip_album_candidate_selection');
+    assert.equal(pending.createdAtMs, 1000);
+    assert.deepEqual(pending.candidates.map((candidate) => candidate.label), ['New York, USA', 'California, USA']);
+    assert.deepEqual(pending.candidates.map((candidate) => candidate.dedupeKey), ['trip:ny', 'trip:ca']);
+    assert.deepEqual(pending.candidates[1].candidate.selectionHandle, {
+      id: '00000000-0000-4000-8000-000000000930',
+      assetCount: 14,
+    });
+    const serialized = JSON.stringify(pending);
+    assert.doesNotMatch(serialized, /must-not-be-stored/);
+    assert.doesNotMatch(serialized, /rawAssetIds|assets|sourceRef/);
+  });
+
+  it('resolves a pending candidate follow-up by label and album rename', () => {
+    const pending = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [
+        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeTripCandidate({
+          dedupeKey: 'trip:ca',
+          placeLabels: ['California, USA'],
+          selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        }),
+      ],
+      nowMs: 1000,
+    });
+
+    const resolved = resolveRecentTripCandidateSelection({
+      pending,
+      prompt: 'Use California called West Coast',
+      nowMs: 2000,
+    });
+
+    assert.equal(resolved.status, 'matched');
+    assert.equal(resolved.workflow.albumName, 'West Coast');
+    assert.equal(resolved.candidate.dedupeKey, 'trip:ca');
+  });
+
+  it('resolves ordinal and yes follow-ups without exposing ids', () => {
+    const single = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] })],
+      nowMs: 1000,
+    });
+    const multiple = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [
+        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+      ],
+      nowMs: 1000,
+    });
+
+    assert.equal(resolveRecentTripCandidateSelection({ pending: single, prompt: 'yes', nowMs: 2000 }).candidate.dedupeKey, 'trip:ny');
+    assert.equal(resolveRecentTripCandidateSelection({ pending: multiple, prompt: 'second one', nowMs: 2000 }).candidate.dedupeKey, 'trip:ca');
+  });
+
+  it('expires pending candidate-selection state instead of guessing', () => {
+    const pending = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [makeTripCandidate()],
+      nowMs: 1000,
+    });
+
+    const resolved = resolveRecentTripCandidateSelection({
+      pending,
+      prompt: 'first one',
+      nowMs: 1000 + strictWorkflowPendingTtlMs + 1,
+    });
+
+    assert.equal(resolved.status, 'expired');
+    assert.match(resolved.text, /rerun the recent trip album request/i);
+  });
+
+  it('asks again when a pending candidate follow-up is ambiguous', () => {
+    const pending = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [
+        makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+      ],
+      nowMs: 1000,
+    });
+
+    const resolved = resolveRecentTripCandidateSelection({ pending, prompt: 'that one', nowMs: 2000 });
+
+    assert.equal(resolved.status, 'needs_input');
+    assert.match(resolved.text, /New York, USA/i);
+    assert.match(resolved.text, /California, USA/i);
+    assert.doesNotMatch(resolved.text, /00000000-0000-4000/i);
+  });
+
+  it('asks again for empty or punctuation-only pending candidate follow-ups', () => {
+    const pending = createRecentTripCandidateSelectionState({
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+      candidates: [makeTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] })],
+      nowMs: 1000,
+    });
+
+    for (const prompt of ['', '   ', '???']) {
+      const resolved = resolveRecentTripCandidateSelection({ pending, prompt, nowMs: 2000 });
+
+      assert.equal(resolved.status, 'needs_input', prompt);
+      assert.match(resolved.text, /New York, USA/i);
+    }
+  });
+
+  it('plans from a stored pending candidate without rerunning trip detection', async () => {
+    const { client, calls } = createWorkflowClient();
+    const candidate = makeTripCandidate({
+      dedupeKey: 'trip:ca',
+      placeLabels: ['California, USA'],
+      selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+    });
+
+    const result = await runCreateRecentTripAlbumCandidateWorkflow({
+      client,
+      workflow: { kind: 'create_recent_trip_album', albumName: 'West Coast', placeHint: 'USA' },
+      candidate,
+    });
+
+    assert.equal(result.status, 'planned');
+    assert.equal(calls.map((call) => call.name).join(','), 'proposeAlbumFromSelection');
+    assert.equal(calls[0].args.albumName, 'West Coast');
+    assert.equal(calls[0].args.selectionHandleId, '00000000-0000-4000-8000-000000000930');
+  });
+
+  it('returns candidate context when strict planning needs approval', async () => {
+    const { client } = createWorkflowClient({
+      planResult: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+
+    const result = await runCreateRecentTripAlbumWorkflow({
+      client,
+      workflow: matchStrictWorkflow('Create an album for my recent trip to USA'),
+    });
+
+    assert.equal(result.status, 'approval_required');
+    assert.equal(result.toolCallId, '00000000-0000-4000-8000-000000000999');
+    assert.equal(result.candidate.dedupeKey, 'trip:usa:new-york:2026-05-03:2026-05-12');
+    assert.equal(result.selectionHandleId, tripCandidateHandleId);
+    assert.equal(result.assetCount, 28);
+  });
+
   it('plans from the recommended candidate handle without search or raw asset ids', async () => {
     const { client, calls } = createWorkflowClient();
 
