@@ -68,6 +68,7 @@ const DEFAULT_TRIP_MAX_CANDIDATES = 3;
 const MIN_TRIP_MAX_CANDIDATES = 1;
 const MAX_TRIP_MAX_CANDIDATES = 10;
 const MAX_TRIP_PLACE_HINT_LENGTH = 80;
+const MAX_TRIP_TARGET_DATE_FUTURE_MS = 24 * 60 * 60 * 1000;
 ```
 
 Add `AgentToolName.FindTripCandidates = 'findTripCandidates'` in `server/src/enum.ts` immediately after `SearchAssets`.
@@ -159,18 +160,44 @@ Add this `describe` block before the search-assets DTO tests:
       expectIssue(parseFindTripCandidatesRequest({ maxCandidates: 11 }), ['maxCandidates'], 'Too big');
     });
 
-    it('accepts targetDate and trims placeHint', () => {
-      const result = parseFindTripCandidatesRequest({
+    it('accepts ISO date or datetime targetDate values and trims placeHint', () => {
+      const dateOnlyResult = parseFindTripCandidatesRequest({
+        targetDate: '2026-05-27',
+        placeHint: '  USA  ',
+      });
+      const datetimeResult = parseFindTripCandidatesRequest({
         targetDate: '2026-05-27T12:00:00.000Z',
         placeHint: '  USA  ',
       });
 
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data).toMatchObject({
+      expect(dateOnlyResult.success).toBe(true);
+      if (dateOnlyResult.success) {
+        expect(dateOnlyResult.data).toMatchObject({
+          targetDate: new Date('2026-05-27'),
+          placeHint: 'USA',
+        });
+      }
+      expect(datetimeResult.success).toBe(true);
+      if (datetimeResult.success) {
+        expect(datetimeResult.data).toMatchObject({
           targetDate: new Date('2026-05-27T12:00:00.000Z'),
           placeHint: 'USA',
         });
+      }
+    });
+
+    it('rejects targetDate more than one day in the future', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-27T12:00:00.000Z'));
+      try {
+        expect(parseFindTripCandidatesRequest({ targetDate: '2026-05-28T12:00:00.000Z' }).success).toBe(true);
+        expectIssue(
+          parseFindTripCandidatesRequest({ targetDate: '2026-05-28T12:00:00.001Z' }),
+          ['targetDate'],
+          'targetDate must not be more than one day in the future',
+        );
+      } finally {
+        vi.useRealTimers();
       }
     });
 
@@ -221,7 +248,13 @@ In `server/src/enum.ts`, add:
 
 after `SearchAssets`.
 
-In `server/src/dtos/agent-tool.dto.ts`:
+In `server/src/dtos/agent-tool.dto.ts`, import both date codecs:
+
+```ts
+import { isoDateToDate, isoDatetimeToDate } from 'src/validation';
+```
+
+Then:
 
 1. Add the trip constants from "Constants And Shapes".
 2. Add request schema:
@@ -235,10 +268,16 @@ type AgentFindTripCandidatesToolRequestOutput = {
   toolCallId?: string;
 };
 
+const AgentTripTargetDateSchema = z
+  .union([isoDatetimeToDate, isoDateToDate])
+  .refine((targetDate) => targetDate.getTime() <= Date.now() + MAX_TRIP_TARGET_DATE_FUTURE_MS, {
+    message: 'targetDate must not be more than one day in the future',
+  });
+
 const AgentFindTripCandidatesToolRequestSchema = z
   .strictObject({
     placeHint: z.string().trim().min(1).max(MAX_TRIP_PLACE_HINT_LENGTH).optional(),
-    targetDate: isoDatetimeToDate.optional(),
+    targetDate: AgentTripTargetDateSchema.optional(),
     lookbackDays: z.number().int().min(MIN_TRIP_LOOKBACK_DAYS).max(MAX_TRIP_LOOKBACK_DAYS).optional(),
     maxCandidates: z.number().int().min(MIN_TRIP_MAX_CANDIDATES).max(MAX_TRIP_MAX_CANDIDATES).optional(),
     toolCallId: uuid.optional(),
@@ -318,6 +357,8 @@ export type AgentToolFindTripCandidatesRequestMetadata = {
   maxCandidates: number;
 };
 ```
+
+Add `AgentToolFindTripCandidatesRequestMetadata` to the `AgentToolRequestMetadata` union so persisted/redacted request metadata accepts the new tool.
 
 In `server/src/types/agent-mcp-contract.types.ts`, add `AgentToolName.FindTripCandidates` to `AgentMcpReadToolName` after `SearchAssets`.
 
