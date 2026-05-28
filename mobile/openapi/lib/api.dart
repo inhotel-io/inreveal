@@ -114,7 +114,6 @@ part 'model/agent_explicit_assets_asset_source_input.dart';
 part 'model/agent_find_trip_candidates_tool_approval_required_response.dart';
 part 'model/agent_find_trip_candidates_tool_denied_response.dart';
 part 'model/agent_find_trip_candidates_tool_request_dto.dart';
-part 'model/agent_find_trip_candidates_tool_request_dto_target_date.dart';
 part 'model/agent_find_trip_candidates_tool_response_dto.dart';
 part 'model/agent_find_trip_candidates_tool_success_response.dart';
 part 'model/agent_list_albums_tool_approval_required_response.dart';
