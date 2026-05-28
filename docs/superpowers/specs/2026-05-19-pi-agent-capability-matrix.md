@@ -69,6 +69,54 @@ represented as operation plans and applied by Gallery after user review.
 - **Needs new tool**: cannot be reliable with the current MCP surface.
 - **Out of scope**: intentionally unsupported until product policy changes.
 
+## Flow Ownership Matrix
+
+Flow ownership defines whether Pi may freely choose MCP tool sequencing or
+whether Gallery owns the workflow for a productized capability.
+
+- **Strict**: Gallery code owns the procedure. Pi may fill user-facing slots
+  such as names, place hints, counts, or final copy, but it cannot choose a
+  different tool sequence once the supported intent matches.
+- **Hybrid**: Pi may use open exploration to resolve a source, target, or
+  subjective choice, then Gallery owns the write-plan procedure.
+- **Open read flow**: Pi may choose read/search tools flexibly because the task
+  is exploratory and non-mutating.
+- **Open discovery, strict plan**: Pi may inspect and suggest candidates, but
+  any write action still goes through deterministic plan creation.
+
+Hard invariants apply to every flow: no claimed plan unless a persisted plan id
+exists, no direct write tools, no large raw asset ID lists in model-facing
+responses, selection handles for asset sets, and recoverable tool mistakes
+retried only when the correction is mechanical.
+
+| Capability                         | Flow ownership              | Workflow or boundary                                                                                                  |
+| ---------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Create recent trip album           | Strict                      | `create_recent_trip_album` handles recent-trip detection, candidate choice, and album plan creation from the handle. See [strict recent trip album design](./2026-05-28-pi-agent-strict-recent-trip-album-design.md). |
+| Add photos to existing album       | Hybrid                      | Pi may resolve the source; Gallery owns album lookup, duplicate-safe add semantics, and plan creation.                |
+| Remove wrong photos from album     | Hybrid                      | Strict when metadata-identifiable; open discovery when visual or subjective matching is required.                     |
+| Rename or describe album           | Strict                      | Direct album-detail update plan; preserve unspecified fields.                                                         |
+| Set album cover                    | Hybrid                      | Pi or Gallery may inspect bounded candidates; Gallery owns cover plan creation and validation.                        |
+| Create shared space                | Strict                      | Space create and optional add-assets plan with temporary target validation.                                           |
+| Add/remove photos in space         | Hybrid                      | Pi may resolve source assets; Gallery owns space membership plan creation.                                            |
+| Update space details               | Strict                      | Direct space-detail update plan; preserve assets and members.                                                        |
+| Add or remove space members        | Strict                      | Gallery owns user lookup, role defaults, membership validation, and plan creation.                                    |
+| Change space member roles          | Strict                      | Gallery owns role transition validation and plan creation.                                                            |
+| People-based organization          | Hybrid                      | Pi may resolve names and filters; Gallery owns the destination action plan.                                           |
+| Natural-language filtered search   | Open read flow              | Pi may explore filters and summarize results, while handles remain the asset-set boundary.                            |
+| Mark favorites                     | Hybrid                      | Open curation for subjective "best"; strict favorite plan once a bounded source exists.                              |
+| Archive assets                     | Strict when metadata-bound  | Metadata-identifiable archive requests use deterministic search-to-plan creation.                                     |
+| Add or remove tags                 | Strict                      | Tag action plan from resolved source and tag payload.                                                                 |
+| Batch asset metadata edits         | Strict                      | Explicit supported fields use deterministic field validation, before/after review metadata, and plan creation.       |
+| Rotate images                      | Hybrid                      | Strict for explicit targets and angle; open discovery for "sideways" detection.                                      |
+| Answer album/library questions     | Open read flow              | Pi may use read/search tools and answer without write planning.                                                       |
+| Summarize a proposed plan          | Strict                      | Summary must be generated from a persisted plan.                                                                      |
+| Revise a plan                      | Strict                      | Revision must replace a persisted plan and never apply it.                                                            |
+| “Best photos” curation             | Hybrid                      | Open bounded curation; strict resulting album, favorite, archive, tag, or metadata plan.                             |
+| Visual cleanup                     | Open discovery, strict plan | Candidate inspection remains suggestive; any mutation requires a reviewable plan.                                    |
+| Recent upload organization         | Strict when bounded         | Upload/date bounded requests use deterministic handle-to-plan creation.                                               |
+| Screenshot/document cleanup        | Hybrid                      | Metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation.     |
+| Story/memory albums                | Hybrid                      | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                 |
+
 ## Core Capability Matrix
 
 | Capability                       | User prompt examples                                                        | Tier                                      | Current path                                                                                                                                                                                                                 | Required user-visible behavior                                                                                                                                              | Regression scenarios                                                                                                                                                                                                          |
@@ -84,7 +132,7 @@ represented as operation plans and applied by Gallery after user review.
 | Add or remove space members      | “Invite Alex to the Family space.”                                          | Solid now                                 | `listSpaces`, `searchUsers`, `readSpace`, propose `space.addMembers` or `space.removeMembers`.                                                                                                                               | Shows who will be added or removed, their role, and the target space before apply.                                                                                          | Unique user match; ambiguous user query; user already a member; removing non-member; removing self is rejected; last-owner removal blocked.                                                                                   |
 | Change space member roles        | “Make Alex an editor in Family.”                                            | Solid now                                 | `listSpaces`, `searchUsers`, `readSpace`, propose `space.updateMemberRole`.                                                                                                                                                  | Shows the current and proposed role and requires plan approval before changing permissions.                                                                                 | Viewer to editor; editor to viewer; no-op role change; ambiguous user; demoting self is rejected; last-owner demotion blocked.                                                                                                |
 | People-based organization        | “Add photos of Alex to a Family album.”                                     | Solid now                                 | `resolveAssetSearchFilters` for person/space names, `searchAssets` with `personIds` or `spaceId` + `spacePersonIds`, then propose album/space/tag/favorite/archive/rotate operations.                                        | Clarifies ambiguous people, shows selected assets before apply, and keeps chat open after apply.                                                                            | Global person; shared-space person; same-name ambiguity; no matching assets; mixed people + tag + date filters.                                                                                                               |
-| Natural-language filtered search | “Find photos of Alex in Berlin from last summer that are not in any album.” | Solid now                                 | `resolveAssetSearchFilters` for names, then `searchAssets` with metadata, smart, OCR, description, or filename mode plus structured filters and pagination.                                                                  | Shows approval when needed, summarizes bounded results, asks to narrow large result sets, and feeds concrete asset IDs into reviewable plans.                               | People + place + date + unalbumed; 5-star videos by country; OCR invoice screenshots; smart search inside a Family space; Sony camera date filters.                                                                           |
+| Natural-language filtered search | “Find photos of Alex in Berlin from last summer that are not in any album.” | Solid now                                 | `resolveAssetSearchFilters` for names, then `searchAssets` with metadata, smart, OCR, description, or filename mode plus structured filters and pagination.                                                                  | Shows approval when needed, summarizes bounded results, asks to narrow large result sets, and feeds selection handles or declarative sources into reviewable plans.         | People + place + date + unalbumed; 5-star videos by country; OCR invoice screenshots; smart search inside a Family space; Sony camera date filters.                                                                           |
 | Mark favorites                   | “Favorite the best photos from Portugal.”                                   | Constrained now                           | Search by metadata and/or previews, propose `asset.setFavorite`.                                                                                                                                                             | If “best” is subjective, activity preview should show inspection and the plan should be easy to review visually.                                                            | Metadata-only favorite request; preview-based curation; permission denied for previews; large candidate set.                                                                                                                  |
 | Archive assets                   | “Archive old screenshots from 2024.”                                        | Solid now for metadata-identifiable cases | Search date/media/tag metadata, propose `asset.setArchive`.                                                                                                                                                                  | States that assets move to archive, not trash/delete, and shows affected count.                                                                                             | Exact metadata filters; no matches; mixed photos/videos; user revises plan to exclude items.                                                                                                                                  |
 | Add or remove tags               | “Tag these Berlin photos as Travel.”                                        | Solid now                                 | Search/read metadata, propose `asset.addTag` or `asset.removeTag`.                                                                                                                                                           | Shows tag name or existing tag id resolution and selected assets.                                                                                                           | New tag by name; existing tag removal; ambiguous tag names if exposed; invalid payload with both tag id and name rejected.                                                                                                    |
@@ -178,11 +226,11 @@ Use these prompts as manual and automated acceptance scenarios:
 26. “Pick the best photos from my library.”
 27. “Suggest 20 highlights from this album.”
 28. “Suggest highlights from last weekend.”
+29. “Create an album for my recent trip to USA.”
 
 ## Next Steps
 
 1. Turn the “solid now” rows into an automated assistant regression suite.
 2. Add prompt/docs examples for each smoke prompt so smaller models learn the
    intended tool sequence.
-3. Decide whether the next capability expansion should be semantic duplicate
-   cleanup or quality scoring.
+3. Test the first strict workflow with `create_recent_trip_album`.
