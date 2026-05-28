@@ -322,6 +322,8 @@ const createStrictWorkflowFetch = ({
     summary: 'Stored proposed album from selection.',
     plan: { id: strictTripPlanId },
   },
+  expectedAlbumName = 'USA Trip',
+  expectedSelectionHandleId = strictTripCandidateHandleId,
 } = {}) => {
   const calls = [];
   const fetchImplementation = async (url, init) => {
@@ -350,8 +352,8 @@ const createStrictWorkflowFetch = ({
     }
 
     if (name === 'proposeAlbumFromSelection') {
-      assert.equal(args.albumName, 'USA Trip');
-      assert.equal(args.selectionHandleId, strictTripCandidateHandleId);
+      assert.equal(args.albumName, expectedAlbumName);
+      assert.equal(args.selectionHandleId, expectedSelectionHandleId);
       assert.equal(JSON.stringify(args).includes('assetIds'), false);
       return new Response(
         JSON.stringify({
@@ -1145,6 +1147,206 @@ describe('pi runtime adapter', () => {
         toolCallId: '00000000-0000-4000-8000-000000000999',
       },
     ]);
+  });
+
+  it('resumes a production strict recent-trip album after candidate selection without provider prompting', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const candidates = [
+      makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+      makeStrictTripCandidate({
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+      }),
+    ];
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    const events = await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Use California' }] } })));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(events.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('does not plan from a blank pending production strict candidate follow-up', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      recommendation: { action: 'ask_user', reason: 'Confirm the only possible recent trip.' },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    const events = await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: '???' }] } })));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /Which recent trip should I use/i);
+  });
+
+  it('renames a pending production strict recent-trip album from the follow-up', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      candidates: [
+        makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeStrictTripCandidate({
+          dedupeKey: 'trip:ca',
+          placeLabels: ['California, USA'],
+          selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        }),
+      ],
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      expectedAlbumName: 'West Coast',
+      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Use California called West Coast' }] } })));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(mcpCalls[1].body.params.arguments.albumName, 'West Coast');
+  });
+
+  it('asks the production user to rerun after pending strict trip choices expire', async () => {
+    let nowMs = 1000;
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      candidates: [
+        makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeStrictTripCandidate({ dedupeKey: 'trip:ca', placeLabels: ['California, USA'] }),
+      ],
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation, now: () => nowMs });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    nowMs += 10 * 60 * 1000 + 1;
+    const events = await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'first one' }] } })));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /expired/i);
+  });
+
+  it('resumes an approved production strict recent-trip plan without provider prompting', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      planResponse: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    const events = await collect(runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+      approvalDecision: 'approved',
+      toolResult: { status: 'success', plan: { id: strictTripPlanId } },
+    }));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(calls.continues, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.match(events.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('pauses again when an approved strict recent-trip resume unexpectedly needs approval', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      planResponse: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    const events = await collect(runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+      approvalDecision: 'approved',
+      toolResult: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000998' },
+      },
+    }));
+    const deniedEvents = await collect(runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000998',
+      approvalDecision: 'denied',
+      toolResult: { status: 'denied' },
+    }));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(calls.continues, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.deepEqual(events, [
+      {
+        type: 'tool-approval-needed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000998',
+      },
+    ]);
+    assert.match(deniedEvents.at(-1).content.blocks[0].text, /approval was denied/i);
+  });
+
+  it('resumes a denied production strict recent-trip plan without provider prompting', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { fetchImplementation } = createStrictWorkflowFetch({
+      planResponse: {
+        status: 'approval-required',
+        toolCall: { id: '00000000-0000-4000-8000-000000000999' },
+      },
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    await collect(runtime.sendMessage(createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } })));
+    const events = await collect(runtime.resumeSession({
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      gallerySessionId: '00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+      approvalDecision: 'denied',
+      toolResult: { status: 'denied' },
+    }));
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(calls.continues, 0);
+    assert.match(events.at(-1).content.blocks[0].text, /approval was denied/i);
   });
 
   it('aborts an active strict MCP call on dispose and allows a new session', async () => {

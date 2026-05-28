@@ -348,6 +348,11 @@ Tests:
 - A follow-up with an explicit album name can rename the pending strict plan.
 - Expired or missing pending state asks the user to rerun the request rather
   than guessing.
+- `approval-required` stores strict workflow state keyed by `toolCallId`.
+- An approved strict planning result resumes through deterministic strict
+  workflow code, validates the approved plan id, and does not call the provider.
+- A denied strict planning approval clears pending state and emits deterministic
+  failure copy without calling the provider.
 
 ### Slice 7: End-To-End Regression
 
