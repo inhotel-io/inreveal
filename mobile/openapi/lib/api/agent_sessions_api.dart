@@ -432,6 +432,67 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Execute the internal findTripCandidates agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved trip candidate lookup tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentFindTripCandidatesToolRequestDto] agentFindTripCandidatesToolRequestDto (required):
+  Future<Response> findTripCandidatesWithHttpInfo(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/find-trip-candidates'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentFindTripCandidatesToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal findTripCandidates agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved trip candidate lookup tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentFindTripCandidatesToolRequestDto] agentFindTripCandidatesToolRequestDto (required):
+  Future<AgentFindTripCandidatesToolResponseDto?> findTripCandidates(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto,) async {
+    final response = await findTripCandidatesWithHttpInfo(id, agentFindTripCandidatesToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentFindTripCandidatesToolResponseDto',) as AgentFindTripCandidatesToolResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve an agent session
   ///
   /// Retrieve an AI agent session by ID. The current user must own this session.

@@ -67,42 +67,47 @@ Expected: PASS.
 In `server/src/utils/duplicate.spec.ts`, update the import to include `suggestDuplicateByMetadata`:
 
 ```ts
-import { getExifCount, suggestDuplicate, suggestDuplicateByMetadata, suggestDuplicateKeepAssetIds } from 'src/utils/duplicate';
+import {
+  getExifCount,
+  suggestDuplicate,
+  suggestDuplicateByMetadata,
+  suggestDuplicateKeepAssetIds,
+} from 'src/utils/duplicate';
 ```
 
 Add this `describe` block after the existing `suggestDuplicate` tests and before `suggestDuplicateKeepAssetIds`:
 
 ```ts
-  describe('suggestDuplicateByMetadata', () => {
-    it('keeps the largest file size and uses exif count as a tie breaker for non-DTO rows', () => {
-      const rows = [
-        { id: 'small-more-exif', fileSizeInByte: 100, exifValueCount: 8 },
-        { id: 'large-less-exif', fileSizeInByte: 200, exifValueCount: 1 },
-        { id: 'large-more-exif', fileSizeInByte: 200, exifValueCount: 4 },
-      ];
+describe('suggestDuplicateByMetadata', () => {
+  it('keeps the largest file size and uses exif count as a tie breaker for non-DTO rows', () => {
+    const rows = [
+      { id: 'small-more-exif', fileSizeInByte: 100, exifValueCount: 8 },
+      { id: 'large-less-exif', fileSizeInByte: 200, exifValueCount: 1 },
+      { id: 'large-more-exif', fileSizeInByte: 200, exifValueCount: 4 },
+    ];
 
-      expect(
-        suggestDuplicateByMetadata(rows, {
-          getFileSizeInByte: (row) => row.fileSizeInByte,
-          getExifCount: (row) => row.exifValueCount,
-        })?.id,
-      ).toBe('large-more-exif');
-    });
-
-    it('treats missing file size and exif values as zero', () => {
-      const rows = [
-        { id: 'empty', fileSizeInByte: null, exifValueCount: null },
-        { id: 'with-file-size', fileSizeInByte: 50, exifValueCount: null },
-      ];
-
-      expect(
-        suggestDuplicateByMetadata(rows, {
-          getFileSizeInByte: (row) => row.fileSizeInByte,
-          getExifCount: (row) => row.exifValueCount,
-        })?.id,
-      ).toBe('with-file-size');
-    });
+    expect(
+      suggestDuplicateByMetadata(rows, {
+        getFileSizeInByte: (row) => row.fileSizeInByte,
+        getExifCount: (row) => row.exifValueCount,
+      })?.id,
+    ).toBe('large-more-exif');
   });
+
+  it('treats missing file size and exif values as zero', () => {
+    const rows = [
+      { id: 'empty', fileSizeInByte: null, exifValueCount: null },
+      { id: 'with-file-size', fileSizeInByte: 50, exifValueCount: null },
+    ];
+
+    expect(
+      suggestDuplicateByMetadata(rows, {
+        getFileSizeInByte: (row) => row.fileSizeInByte,
+        getExifCount: (row) => row.exifValueCount,
+      })?.id,
+    ).toBe('with-file-size');
+  });
+});
 ```
 
 - [ ] **Step 2: Run utility tests red**
@@ -133,9 +138,7 @@ export const suggestDuplicateByMetadata = <T>(
     return undefined;
   }
 
-  let duplicateAssets = [...assets].toSorted(
-    (a, b) => (getFileSizeInByte(a) ?? 0) - (getFileSizeInByte(b) ?? 0),
-  );
+  let duplicateAssets = [...assets].toSorted((a, b) => (getFileSizeInByte(a) ?? 0) - (getFileSizeInByte(b) ?? 0));
   const largestFileSize = getFileSizeInByte(duplicateAssets.at(-1)!) ?? 0;
   duplicateAssets = duplicateAssets.filter((asset) => (getFileSizeInByte(asset) ?? 0) === largestFileSize);
 
@@ -182,205 +185,207 @@ Expected: PASS. Existing duplicate utility tests must still pass.
 Append this `describe` block after `getMemoryLocationDayBuckets` in `server/test/medium/specs/repositories/asset.repository.spec.ts`:
 
 ```ts
-  describe('getTripCandidateAssets', () => {
-    it('should materialize previewable timeline assets for trip source places with stack and duplicate metadata', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
+describe('getTripCandidateAssets', () => {
+  it('should materialize previewable timeline assets for trip source places with stack and duplicate metadata', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
 
-      const addAsset = async ({
-        localDateTime,
-        country,
-        state = null,
-        city,
-        duplicateId = null,
-        fileSizeInByte = 100,
-        exif = {},
-        visibility = AssetVisibility.Timeline,
-        withPreview = true,
-      }: {
-        localDateTime: Date;
-        country: string | null;
-        state?: string | null;
-        city: string | null;
-        duplicateId?: string | null;
-        fileSizeInByte?: number | null;
-        exif?: {
-          description?: string;
-          projectionType?: string;
-          rating?: number;
-          timeZone?: string;
-        };
-        visibility?: AssetVisibility;
-        withPreview?: boolean;
-      }) => {
-        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime, duplicateId });
-        await Promise.all([
-          ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte, ...exif }),
-          withPreview
-            ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
-            : null,
-        ]);
-        return asset;
+    const addAsset = async ({
+      localDateTime,
+      country,
+      state = null,
+      city,
+      duplicateId = null,
+      fileSizeInByte = 100,
+      exif = {},
+      visibility = AssetVisibility.Timeline,
+      withPreview = true,
+    }: {
+      localDateTime: Date;
+      country: string | null;
+      state?: string | null;
+      city: string | null;
+      duplicateId?: string | null;
+      fileSizeInByte?: number | null;
+      exif?: {
+        description?: string;
+        projectionType?: string;
+        rating?: number;
+        timeZone?: string;
       };
+      visibility?: AssetVisibility;
+      withPreview?: boolean;
+    }) => {
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility, localDateTime, duplicateId });
+      await Promise.all([
+        ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte, ...exif }),
+        withPreview
+          ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+          : null,
+      ]);
+      return asset;
+    };
 
-      const duplicateId = factory.uuid();
-      const primary = await addAsset({
-        localDateTime: new Date('2026-04-15T09:00:00Z'),
-        country: 'France',
-        state: 'Ile-de-France',
-        city: 'Paris',
+    const duplicateId = factory.uuid();
+    const primary = await addAsset({
+      localDateTime: new Date('2026-04-15T09:00:00Z'),
+      country: 'France',
+      state: 'Ile-de-France',
+      city: 'Paris',
+      duplicateId,
+      fileSizeInByte: 300,
+      exif: { description: 'A photo', projectionType: 'EQUIRECTANGULAR', rating: 0, timeZone: 'UTC' },
+    });
+    const stackChild = await addAsset({
+      localDateTime: new Date('2026-04-15T10:00:00Z'),
+      country: 'France',
+      state: 'Ile-de-France',
+      city: 'Paris',
+      fileSizeInByte: 200,
+    });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, stackChild.id]);
+    await addAsset({
+      localDateTime: new Date('2026-04-16T09:00:00Z'),
+      country: 'Italy',
+      state: 'Lazio',
+      city: 'Rome',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-17T09:00:00Z'),
+      country: 'France',
+      city: 'Paris',
+      withPreview: false,
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-18T09:00:00Z'),
+      country: 'France',
+      city: 'Nice',
+    });
+    await addAsset({
+      localDateTime: new Date('2026-04-15T09:00:00Z'),
+      country: 'France',
+      city: 'Paris',
+      visibility: AssetVisibility.Archive,
+    });
+
+    await expect(
+      sut.getTripCandidateAssets(user.id, {
+        takenAfter: new Date('2026-04-15T00:00:00Z'),
+        takenBefore: new Date('2026-04-16T23:59:59Z'),
+        places: [
+          { country: 'France', state: 'Ile-de-France', city: 'Paris' },
+          { country: 'Italy', state: 'Lazio', city: 'Rome' },
+        ],
+      }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        id: primary.id,
         duplicateId,
+        stackPrimaryAssetId: primary.id,
         fileSizeInByte: 300,
-        exif: { description: 'A photo', projectionType: 'EQUIRECTANGULAR', rating: 0, timeZone: 'UTC' },
-      });
-      const stackChild = await addAsset({
-        localDateTime: new Date('2026-04-15T10:00:00Z'),
-        country: 'France',
-        state: 'Ile-de-France',
-        city: 'Paris',
+        exifValueCount: 7,
+      }),
+      expect.objectContaining({
+        id: stackChild.id,
+        stackPrimaryAssetId: primary.id,
         fileSizeInByte: 200,
-      });
-      await ctx.newStack({ ownerId: user.id }, [primary.id, stackChild.id]);
-      await addAsset({
-        localDateTime: new Date('2026-04-16T09:00:00Z'),
+      }),
+      expect.objectContaining({
         country: 'Italy',
         state: 'Lazio',
         city: 'Rome',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-17T09:00:00Z'),
-        country: 'France',
-        city: 'Paris',
-        withPreview: false,
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-18T09:00:00Z'),
-        country: 'France',
-        city: 'Nice',
-      });
-      await addAsset({
-        localDateTime: new Date('2026-04-15T09:00:00Z'),
-        country: 'France',
-        city: 'Paris',
-        visibility: AssetVisibility.Archive,
-      });
+        stackId: null,
+        stackPrimaryAssetId: null,
+      }),
+    ]);
+  });
 
-      await expect(
-        sut.getTripCandidateAssets(user.id, {
-          takenAfter: new Date('2026-04-15T00:00:00Z'),
-          takenBefore: new Date('2026-04-16T23:59:59Z'),
-          places: [
-            { country: 'France', state: 'Ile-de-France', city: 'Paris' },
-            { country: 'Italy', state: 'Lazio', city: 'Rome' },
-          ],
-        }),
-      ).resolves.toEqual([
-        expect.objectContaining({
-          id: primary.id,
-          duplicateId,
-          stackPrimaryAssetId: primary.id,
-          fileSizeInByte: 300,
-          exifValueCount: 7,
-        }),
-        expect.objectContaining({
-          id: stackChild.id,
-          stackPrimaryAssetId: primary.id,
-          fileSizeInByte: 200,
-        }),
-        expect.objectContaining({
-          country: 'Italy',
-          state: 'Lazio',
-          city: 'Rome',
-          stackId: null,
-          stackPrimaryAssetId: null,
-        }),
-      ]);
-    });
+  it('should support explicit null and omitted optional place filters', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
 
-    it('should support explicit null and omitted optional place filters', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-
-      const addAsset = async (country: string, state: string | null, city: string | null) => {
-        const { asset } = await ctx.newAsset({
-          ownerId: user.id,
-          visibility: AssetVisibility.Timeline,
-          localDateTime: new Date('2026-04-15T09:00:00Z'),
-        });
-        await Promise.all([
-          ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte: 100 }),
-          ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }),
-        ]);
-        return asset;
-      };
-
-      const franceUnknown = await addAsset('France', null, null);
-      await addAsset('France', null, 'Paris');
-      const italyRome = await addAsset('Italy', 'Lazio', 'Rome');
-      const italyMilan = await addAsset('Italy', 'Lombardy', 'Milan');
-
-      const result = await sut.getTripCandidateAssets(user.id, {
-        takenAfter: new Date('2026-04-15T00:00:00Z'),
-        takenBefore: new Date('2026-04-15T23:59:59Z'),
-        places: [
-          { country: 'France', state: null, city: null },
-          { country: 'Italy' },
-        ],
-      });
-
-      expect(result.map(({ id }) => id).toSorted()).toEqual(
-        [franceUnknown.id, italyMilan.id, italyRome.id].toSorted(),
-      );
-    });
-
-    it('should return duplicate group assets for owned timeline previewable assets only', async () => {
-      const { ctx, sut } = setup();
-      const { user } = await ctx.newUser();
-      const { user: otherUser } = await ctx.newUser();
-      const duplicateId = factory.uuid();
-
-      const addAsset = async (ownerId: string, withPreview = true, visibility = AssetVisibility.Timeline) => {
-        const { asset } = await ctx.newAsset({ ownerId, visibility, duplicateId, localDateTime: new Date('2026-04-15T09:00:00Z') });
-        await Promise.all([
-          ctx.newExif({ assetId: asset.id, country: 'France', city: 'Paris', fileSizeInByte: 100 }),
-          withPreview ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }) : null,
-        ]);
-        return asset;
-      };
-
-      const first = await addAsset(user.id);
-      const second = await addAsset(user.id);
-      const stackedPrimary = await addAsset(user.id);
-      const { asset: stackChild } = await ctx.newAsset({
+    const addAsset = async (country: string, state: string | null, city: string | null) => {
+      const { asset } = await ctx.newAsset({
         ownerId: user.id,
         visibility: AssetVisibility.Timeline,
-        localDateTime: new Date('2026-04-15T10:00:00Z'),
+        localDateTime: new Date('2026-04-15T09:00:00Z'),
       });
       await Promise.all([
-        ctx.newExif({ assetId: stackChild.id, country: 'France', city: 'Paris', fileSizeInByte: 90 }),
-        ctx.newAssetFile({ assetId: stackChild.id, type: AssetFileType.Preview, path: `${stackChild.id}.jpg` }),
+        ctx.newExif({ assetId: asset.id, country, state, city, fileSizeInByte: 100 }),
+        ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }),
       ]);
-      await ctx.newStack({ ownerId: user.id }, [stackedPrimary.id, stackChild.id]);
-      await addAsset(user.id, false);
-      await addAsset(user.id, true, AssetVisibility.Archive);
-      await addAsset(otherUser.id);
+      return asset;
+    };
 
-      const result = await sut.getDuplicateGroupAssets(user.id, [duplicateId]);
+    const franceUnknown = await addAsset('France', null, null);
+    await addAsset('France', null, 'Paris');
+    const italyRome = await addAsset('Italy', 'Lazio', 'Rome');
+    const italyMilan = await addAsset('Italy', 'Lombardy', 'Milan');
 
-      expect(result).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: first.id, duplicateId }),
-          expect.objectContaining({ id: second.id, duplicateId }),
-          expect.objectContaining({
-            id: stackedPrimary.id,
-            duplicateId,
-            stackPrimaryAssetId: stackedPrimary.id,
-          }),
-        ]),
-      );
-      expect(result).toHaveLength(3);
+    const result = await sut.getTripCandidateAssets(user.id, {
+      takenAfter: new Date('2026-04-15T00:00:00Z'),
+      takenBefore: new Date('2026-04-15T23:59:59Z'),
+      places: [{ country: 'France', state: null, city: null }, { country: 'Italy' }],
     });
+
+    expect(result.map(({ id }) => id).toSorted()).toEqual([franceUnknown.id, italyMilan.id, italyRome.id].toSorted());
   });
+
+  it('should return duplicate group assets for owned timeline previewable assets only', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const duplicateId = factory.uuid();
+
+    const addAsset = async (ownerId: string, withPreview = true, visibility = AssetVisibility.Timeline) => {
+      const { asset } = await ctx.newAsset({
+        ownerId,
+        visibility,
+        duplicateId,
+        localDateTime: new Date('2026-04-15T09:00:00Z'),
+      });
+      await Promise.all([
+        ctx.newExif({ assetId: asset.id, country: 'France', city: 'Paris', fileSizeInByte: 100 }),
+        withPreview
+          ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` })
+          : null,
+      ]);
+      return asset;
+    };
+
+    const first = await addAsset(user.id);
+    const second = await addAsset(user.id);
+    const stackedPrimary = await addAsset(user.id);
+    const { asset: stackChild } = await ctx.newAsset({
+      ownerId: user.id,
+      visibility: AssetVisibility.Timeline,
+      localDateTime: new Date('2026-04-15T10:00:00Z'),
+    });
+    await Promise.all([
+      ctx.newExif({ assetId: stackChild.id, country: 'France', city: 'Paris', fileSizeInByte: 90 }),
+      ctx.newAssetFile({ assetId: stackChild.id, type: AssetFileType.Preview, path: `${stackChild.id}.jpg` }),
+    ]);
+    await ctx.newStack({ ownerId: user.id }, [stackedPrimary.id, stackChild.id]);
+    await addAsset(user.id, false);
+    await addAsset(user.id, true, AssetVisibility.Archive);
+    await addAsset(otherUser.id);
+
+    const result = await sut.getDuplicateGroupAssets(user.id, [duplicateId]);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: first.id, duplicateId }),
+        expect.objectContaining({ id: second.id, duplicateId }),
+        expect.objectContaining({
+          id: stackedPrimary.id,
+          duplicateId,
+          stackPrimaryAssetId: stackedPrimary.id,
+        }),
+      ]),
+    );
+    expect(result).toHaveLength(3);
+  });
+});
 ```
 
 - [ ] **Step 2: Run repository tests red**
@@ -649,248 +654,250 @@ const setupWithAlbumReady = () => {
 Append these tests to `TripCandidateService.name`:
 
 ```ts
-  it('exposes album-ready counts on generic trip candidates without returning asset ids', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
-    ]);
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
-      tripAsset({ id: 'asset-1' }),
-      tripAsset({ id: 'asset-2' }),
-      tripAsset({ id: 'asset-3' }),
-      tripAsset({ id: 'asset-4' }),
-      tripAsset({ id: 'asset-5' }),
-      tripAsset({ id: 'asset-6' }),
-      tripAsset({ id: 'asset-7' }),
-      tripAsset({ id: 'asset-8' }),
-    ]);
+it('exposes album-ready counts on generic trip candidates without returning asset ids', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
+  ]);
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
+    tripAsset({ id: 'asset-1' }),
+    tripAsset({ id: 'asset-2' }),
+    tripAsset({ id: 'asset-3' }),
+    tripAsset({ id: 'asset-4' }),
+    tripAsset({ id: 'asset-5' }),
+    tripAsset({ id: 'asset-6' }),
+    tripAsset({ id: 'asset-7' }),
+    tripAsset({ id: 'asset-8' }),
+  ]);
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-    });
-
-    expect(candidate).toMatchObject({
-      assetCount: 8,
-      albumAssetCount: 8,
-      excludedDuplicateCount: 0,
-      excludedStackChildCount: 0,
-    });
-    expect(candidate).not.toHaveProperty('assetIds');
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
   });
 
-  it('leaves generic candidate counts unchanged when album asset hydration returns a non-array', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
-      cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
-    ]);
-    assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
-      dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
-      dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
-    ]);
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce(undefined);
+  expect(candidate).toMatchObject({
+    assetCount: 8,
+    albumAssetCount: 8,
+    excludedDuplicateCount: 0,
+    excludedStackChildCount: 0,
+  });
+  expect(candidate).not.toHaveProperty('assetIds');
+});
 
-    const [candidate] = await service.findRecentTripCandidates({
-      ownerId: 'user-1',
-      targetDate: new Date('2026-04-23T12:00:00Z'),
-    });
+it('leaves generic candidate counts unchanged when album asset hydration returns a non-array', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  assetRepository.getMemoryLocationClusters.mockResolvedValueOnce([
+    cluster({ country: 'Germany', city: 'Berlin', assetCount: 30, dayCount: 20 }),
+  ]);
+  assetRepository.getMemoryLocationDayBuckets.mockResolvedValueOnce([
+    dayBucket({ localDate: '2026-04-15', country: 'France', city: 'Paris', assetCount: 4 }),
+    dayBucket({ localDate: '2026-04-16', country: 'France', city: 'Paris', assetCount: 4 }),
+  ]);
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce(undefined);
 
-    expect(candidate).toMatchObject({
-      assetCount: 8,
-      albumAssetCount: 8,
-      excludedDuplicateCount: 0,
-      excludedStackChildCount: 0,
-    });
+  const [candidate] = await service.findRecentTripCandidates({
+    ownerId: 'user-1',
+    targetDate: new Date('2026-04-23T12:00:00Z'),
   });
 
-  it('keeps all duplicate variants when duplicate group hydration is unavailable', async () => {
-    const assetRepository = {
-      getMemoryLocationClusters: vi.fn(),
-      getTripCandidateAssets: vi.fn().mockResolvedValue([
+  expect(candidate).toMatchObject({
+    assetCount: 8,
+    albumAssetCount: 8,
+    excludedDuplicateCount: 0,
+    excludedStackChildCount: 0,
+  });
+});
+
+it('keeps all duplicate variants when duplicate group hydration is unavailable', async () => {
+  const assetRepository = {
+    getMemoryLocationClusters: vi.fn(),
+    getTripCandidateAssets: vi
+      .fn()
+      .mockResolvedValue([
         tripAsset({ id: 'small', duplicateId: 'dup-1', fileSizeInByte: 100 }),
         tripAsset({ id: 'large', duplicateId: 'dup-1', fileSizeInByte: 200 }),
       ]),
-    };
-    const service = new TripCandidateService(assetRepository);
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
+  };
+  const service = new TripCandidateService(assetRepository);
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
-      assetIds: ['small', 'large'],
-      assetCount: 2,
-      albumAssetCount: 2,
-      excludedDuplicateCount: 0,
-      excludedStackChildCount: 0,
-      hydrated: true,
-    });
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
+    assetIds: ['small', 'large'],
+    assetCount: 2,
+    albumAssetCount: 2,
+    excludedDuplicateCount: 0,
+    excludedStackChildCount: 0,
+    hydrated: true,
   });
+});
 
-  it('materializes album-ready selections by keeping one duplicate variant when the full group is inside the trip', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
-    const duplicateRows = [
-      tripAsset({ id: 'small', duplicateId: 'dup-1', fileSizeInByte: 100, exifValueCount: 8 }),
-      tripAsset({ id: 'large', duplicateId: 'dup-1', fileSizeInByte: 200, exifValueCount: 1 }),
-    ];
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
-      ...duplicateRows,
-      tripAsset({ id: 'asset-3' }),
-      tripAsset({ id: 'asset-4' }),
-    ]);
-    assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
+it('materializes album-ready selections by keeping one duplicate variant when the full group is inside the trip', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
+  const duplicateRows = [
+    tripAsset({ id: 'small', duplicateId: 'dup-1', fileSizeInByte: 100, exifValueCount: 8 }),
+    tripAsset({ id: 'large', duplicateId: 'dup-1', fileSizeInByte: 200, exifValueCount: 1 }),
+  ];
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
+    ...duplicateRows,
+    tripAsset({ id: 'asset-3' }),
+    tripAsset({ id: 'asset-4' }),
+  ]);
+  assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
-      assetIds: ['large', 'asset-3', 'asset-4'],
-      assetCount: 4,
-      albumAssetCount: 3,
-      excludedDuplicateCount: 1,
-      excludedStackChildCount: 0,
-      hydrated: true,
-    });
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
+    assetIds: ['large', 'asset-3', 'asset-4'],
+    assetCount: 4,
+    albumAssetCount: 3,
+    excludedDuplicateCount: 1,
+    excludedStackChildCount: 0,
+    hydrated: true,
   });
+});
 
-  it('keeps partial-overlap duplicate groups intact unless the full group is inside the trip', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
-      tripAsset({ id: 'in-trip', duplicateId: 'dup-1', fileSizeInByte: 100 }),
-      tripAsset({ id: 'asset-2' }),
-    ]);
-    assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce([
-      tripAsset({ id: 'in-trip', duplicateId: 'dup-1', fileSizeInByte: 100 }),
-      tripAsset({ id: 'outside-trip', duplicateId: 'dup-1', fileSizeInByte: 300 }),
-    ]);
+it('keeps partial-overlap duplicate groups intact unless the full group is inside the trip', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
+    tripAsset({ id: 'in-trip', duplicateId: 'dup-1', fileSizeInByte: 100 }),
+    tripAsset({ id: 'asset-2' }),
+  ]);
+  assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce([
+    tripAsset({ id: 'in-trip', duplicateId: 'dup-1', fileSizeInByte: 100 }),
+    tripAsset({ id: 'outside-trip', duplicateId: 'dup-1', fileSizeInByte: 300 }),
+  ]);
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
-      assetIds: ['in-trip', 'asset-2'],
-      assetCount: 2,
-      albumAssetCount: 2,
-      excludedDuplicateCount: 0,
-      excludedStackChildCount: 0,
-      hydrated: true,
-    });
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
+    assetIds: ['in-trip', 'asset-2'],
+    assetCount: 2,
+    albumAssetCount: 2,
+    excludedDuplicateCount: 0,
+    excludedStackChildCount: 0,
+    hydrated: true,
   });
+});
 
-  it('excludes stack children only when the stack primary is inside the trip', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
-      tripAsset({ id: 'primary', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
-      tripAsset({ id: 'child', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
-      tripAsset({ id: 'orphan-child', stackId: 'stack-2', stackPrimaryAssetId: 'outside-primary' }),
-    ]);
+it('excludes stack children only when the stack primary is inside the trip', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
+    tripAsset({ id: 'primary', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
+    tripAsset({ id: 'child', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
+    tripAsset({ id: 'orphan-child', stackId: 'stack-2', stackPrimaryAssetId: 'outside-primary' }),
+  ]);
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
-      assetIds: ['primary', 'orphan-child'],
-      assetCount: 3,
-      albumAssetCount: 2,
-      excludedDuplicateCount: 0,
-      excludedStackChildCount: 1,
-      hydrated: true,
-    });
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
+    assetIds: ['primary', 'orphan-child'],
+    assetCount: 3,
+    albumAssetCount: 2,
+    excludedDuplicateCount: 0,
+    excludedStackChildCount: 1,
+    hydrated: true,
   });
+});
 
-  it('distinguishes duplicate and stack-child exclusion counts without mutating assets', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
-    const duplicateRows = [
-      tripAsset({ id: 'dup-small', duplicateId: 'dup-1', fileSizeInByte: 100 }),
-      tripAsset({ id: 'dup-large', duplicateId: 'dup-1', fileSizeInByte: 200 }),
-    ];
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
-      ...duplicateRows,
-      tripAsset({ id: 'primary', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
-      tripAsset({ id: 'child', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
-    ]);
-    assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
+it('distinguishes duplicate and stack-child exclusion counts without mutating assets', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
+  const duplicateRows = [
+    tripAsset({ id: 'dup-small', duplicateId: 'dup-1', fileSizeInByte: 100 }),
+    tripAsset({ id: 'dup-large', duplicateId: 'dup-1', fileSizeInByte: 200 }),
+  ];
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce([
+    ...duplicateRows,
+    tripAsset({ id: 'primary', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
+    tripAsset({ id: 'child', stackId: 'stack-1', stackPrimaryAssetId: 'primary' }),
+  ]);
+  assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toMatchObject({
-      assetIds: ['dup-large', 'primary'],
-      excludedDuplicateCount: 1,
-      excludedStackChildCount: 1,
-      hydrated: true,
-    });
-    expect(assetRepository.getTripCandidateAssets).toHaveBeenCalledTimes(1);
-    expect(assetRepository.getDuplicateGroupAssets).toHaveBeenCalledWith('user-1', ['dup-1']);
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toMatchObject({
+    assetIds: ['dup-large', 'primary'],
+    excludedDuplicateCount: 1,
+    excludedStackChildCount: 1,
+    hydrated: true,
   });
+  expect(assetRepository.getTripCandidateAssets).toHaveBeenCalledTimes(1);
+  expect(assetRepository.getDuplicateGroupAssets).toHaveBeenCalledWith('user-1', ['dup-1']);
+});
 
-  it('deduplicates stack primaries after excluding stack children from a full duplicate group', async () => {
-    const { assetRepository, service } = setupWithAlbumReady();
-    const source = {
-      kind: 'tripCandidate' as const,
-      dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
-      takenAfter: new Date('2026-04-15T00:00:00Z'),
-      takenBefore: new Date('2026-04-16T23:59:59Z'),
-      places: [{ country: 'France', city: 'Paris' }],
-      placeLabels: ['Paris, France'],
-    };
-    const duplicateRows = [
-      tripAsset({
-        id: 'stack-primary',
-        duplicateId: 'dup-1',
-        stackId: 'stack-1',
-        stackPrimaryAssetId: 'stack-primary',
-        fileSizeInByte: 300,
-      }),
-      tripAsset({
-        id: 'stack-child',
-        duplicateId: 'dup-1',
-        stackId: 'stack-1',
-        stackPrimaryAssetId: 'stack-primary',
-        fileSizeInByte: 500,
-      }),
-      tripAsset({ id: 'standalone', duplicateId: 'dup-1', fileSizeInByte: 200 }),
-    ];
-    assetRepository.getTripCandidateAssets.mockResolvedValueOnce(duplicateRows);
-    assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
+it('deduplicates stack primaries after excluding stack children from a full duplicate group', async () => {
+  const { assetRepository, service } = setupWithAlbumReady();
+  const source = {
+    kind: 'tripCandidate' as const,
+    dedupeKey: 'trip:france:paris:2026-04-15:2026-04-16',
+    takenAfter: new Date('2026-04-15T00:00:00Z'),
+    takenBefore: new Date('2026-04-16T23:59:59Z'),
+    places: [{ country: 'France', city: 'Paris' }],
+    placeLabels: ['Paris, France'],
+  };
+  const duplicateRows = [
+    tripAsset({
+      id: 'stack-primary',
+      duplicateId: 'dup-1',
+      stackId: 'stack-1',
+      stackPrimaryAssetId: 'stack-primary',
+      fileSizeInByte: 300,
+    }),
+    tripAsset({
+      id: 'stack-child',
+      duplicateId: 'dup-1',
+      stackId: 'stack-1',
+      stackPrimaryAssetId: 'stack-primary',
+      fileSizeInByte: 500,
+    }),
+    tripAsset({ id: 'standalone', duplicateId: 'dup-1', fileSizeInByte: 200 }),
+  ];
+  assetRepository.getTripCandidateAssets.mockResolvedValueOnce(duplicateRows);
+  assetRepository.getDuplicateGroupAssets.mockResolvedValueOnce(duplicateRows);
 
-    await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
-      assetIds: ['stack-primary'],
-      assetCount: 3,
-      albumAssetCount: 1,
-      excludedDuplicateCount: 1,
-      excludedStackChildCount: 1,
-      hydrated: true,
-    });
+  await expect(service.materializeAlbumReadySelection('user-1', source)).resolves.toEqual({
+    assetIds: ['stack-primary'],
+    assetCount: 3,
+    albumAssetCount: 1,
+    excludedDuplicateCount: 1,
+    excludedStackChildCount: 1,
+    hydrated: true,
   });
+});
 ```
 
 - [ ] **Step 2: Run service tests red**
@@ -927,12 +934,7 @@ Update `TripCandidateRepository`:
 
 ```ts
 type TripCandidateRepository = Pick<AssetRepository, 'getMemoryLocationClusters'> &
-  Partial<
-    Pick<
-      AssetRepository,
-      'getMemoryLocationDayBuckets' | 'getTripCandidateAssets' | 'getDuplicateGroupAssets'
-    >
-  >;
+  Partial<Pick<AssetRepository, 'getMemoryLocationDayBuckets' | 'getTripCandidateAssets' | 'getDuplicateGroupAssets'>>;
 ```
 
 Add:
@@ -955,13 +957,13 @@ Add `excludedStackChildCount: number;` to `TripCandidate`.
 After building candidates in `findRecentTripCandidates`, replace the return block with:
 
 ```ts
-    const albumReadyCandidates = await Promise.all(
-      candidates.map((candidate) => this.withAlbumReadyCounts(ownerId, candidate)),
-    );
+const albumReadyCandidates = await Promise.all(
+  candidates.map((candidate) => this.withAlbumReadyCounts(ownerId, candidate)),
+);
 
-    return albumReadyCandidates
-      .toSorted((left, right) => right.score - left.score || right.takenAfter.getTime() - left.takenAfter.getTime())
-      .slice(0, maxCandidates);
+return albumReadyCandidates
+  .toSorted((left, right) => right.score - left.score || right.takenAfter.getTime() - left.takenAfter.getTime())
+  .slice(0, maxCandidates);
 ```
 
 Add:
