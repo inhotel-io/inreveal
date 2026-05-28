@@ -1,8 +1,16 @@
 import { DateTime } from 'luxon';
-import { AssetRepository, MemoryLocationCluster, MemoryLocationDayBucket } from 'src/repositories/asset.repository';
+import {
+  AssetRepository,
+  MemoryLocationCluster,
+  MemoryLocationDayBucket,
+  TripCandidateAssetRow,
+} from 'src/repositories/asset.repository';
+import { suggestDuplicateByMetadata } from 'src/utils/duplicate';
 
 type TripCandidateRepository = Pick<AssetRepository, 'getMemoryLocationClusters'> &
-  Partial<Pick<AssetRepository, 'getMemoryLocationDayBuckets'>>;
+  Partial<
+    Pick<AssetRepository, 'getMemoryLocationDayBuckets' | 'getTripCandidateAssets' | 'getDuplicateGroupAssets'>
+  >;
 
 type HomeBaseline = { cluster?: MemoryLocationCluster; ambiguous: boolean };
 
@@ -46,12 +54,22 @@ export interface TripCandidate {
   assetCount: number;
   albumAssetCount: number;
   excludedDuplicateCount: number;
+  excludedStackChildCount: number;
   dayCount: number;
   score: number;
   confidence: TripCandidateConfidence;
   source: TripCandidateSource;
   placeKey: string;
   placeLabel: string;
+}
+
+export interface TripCandidateAlbumSelection {
+  assetIds: string[];
+  assetCount: number;
+  albumAssetCount: number;
+  excludedDuplicateCount: number;
+  excludedStackChildCount: number;
+  hydrated: boolean;
 }
 
 export class TripCandidateService {
@@ -90,9 +108,31 @@ export class TripCandidateService {
       ? this.findWindowCandidates(dayBuckets, home)
       : this.findClusterCandidates(await this.assetRepository.getMemoryLocationClusters(ownerId, recentRange), home);
 
-    return candidates
+    const albumReadyCandidates = await Promise.all(
+      candidates.map((candidate) => this.withAlbumReadyCounts(ownerId, candidate)),
+    );
+
+    return albumReadyCandidates
       .toSorted((left, right) => right.score - left.score || right.takenAfter.getTime() - left.takenAfter.getTime())
       .slice(0, maxCandidates);
+  }
+
+  private async withAlbumReadyCounts(ownerId: string, candidate: TripCandidate): Promise<TripCandidate> {
+    if (!this.assetRepository.getTripCandidateAssets) {
+      return candidate;
+    }
+
+    const selection = await this.materializeAlbumReadySelection(ownerId, candidate.source);
+    if (!selection.hydrated) {
+      return candidate;
+    }
+
+    return {
+      ...candidate,
+      albumAssetCount: selection.albumAssetCount,
+      excludedDuplicateCount: selection.excludedDuplicateCount,
+      excludedStackChildCount: selection.excludedStackChildCount,
+    };
   }
 
   private resolveHomeBaseline(baseline: MemoryLocationCluster[]): HomeBaseline {
@@ -250,6 +290,7 @@ export class TripCandidateService {
       assetCount: item.assetCount,
       albumAssetCount: item.assetCount,
       excludedDuplicateCount: 0,
+      excludedStackChildCount: 0,
       dayCount: item.dayCount,
       score,
       confidence,
@@ -297,6 +338,7 @@ export class TripCandidateService {
       assetCount: window.assetCount,
       albumAssetCount: window.assetCount,
       excludedDuplicateCount: 0,
+      excludedStackChildCount: 0,
       dayCount,
       score,
       confidence,
@@ -311,6 +353,137 @@ export class TripCandidateService {
       placeKey,
       placeLabel,
     };
+  }
+
+  async materializeAlbumReadySelection(
+    ownerId: string,
+    source: TripCandidateSource,
+  ): Promise<TripCandidateAlbumSelection> {
+    if (!this.assetRepository.getTripCandidateAssets) {
+      return {
+        assetIds: [],
+        assetCount: 0,
+        albumAssetCount: 0,
+        excludedDuplicateCount: 0,
+        excludedStackChildCount: 0,
+        hydrated: false,
+      };
+    }
+
+    const sourceAssets = await this.assetRepository.getTripCandidateAssets(ownerId, {
+      takenAfter: source.takenAfter,
+      takenBefore: source.takenBefore,
+      places: source.places,
+    });
+    if (!Array.isArray(sourceAssets)) {
+      return {
+        assetIds: [],
+        assetCount: 0,
+        albumAssetCount: 0,
+        excludedDuplicateCount: 0,
+        excludedStackChildCount: 0,
+        hydrated: false,
+      };
+    }
+
+    const sourceIds = new Set(sourceAssets.map(({ id }) => id));
+    const { assets: stackFilteredAssets, excludedStackChildCount } = this.excludeStackChildren(sourceAssets, sourceIds);
+    const { assetIds, excludedDuplicateCount } = await this.excludeDuplicateVariants(
+      ownerId,
+      stackFilteredAssets,
+      sourceIds,
+    );
+
+    return {
+      assetIds,
+      assetCount: sourceAssets.length,
+      albumAssetCount: assetIds.length,
+      excludedDuplicateCount,
+      excludedStackChildCount,
+      hydrated: true,
+    };
+  }
+
+  private excludeStackChildren(assets: TripCandidateAssetRow[], sourceIds: Set<string>) {
+    const kept: TripCandidateAssetRow[] = [];
+    let excludedStackChildCount = 0;
+
+    for (const asset of assets) {
+      const isStackChild = !!asset.stackId && !!asset.stackPrimaryAssetId && asset.id !== asset.stackPrimaryAssetId;
+      if (isStackChild && sourceIds.has(asset.stackPrimaryAssetId!)) {
+        excludedStackChildCount++;
+        continue;
+      }
+
+      kept.push(asset);
+    }
+
+    return { assets: kept, excludedStackChildCount };
+  }
+
+  private async excludeDuplicateVariants(ownerId: string, assets: TripCandidateAssetRow[], sourceIds: Set<string>) {
+    const duplicateIds = this.uniqueValues(
+      assets.map((asset) => asset.duplicateId).filter((duplicateId): duplicateId is string => !!duplicateId),
+    );
+    if (!this.assetRepository.getDuplicateGroupAssets || duplicateIds.length === 0) {
+      return { assetIds: assets.map(({ id }) => id), excludedDuplicateCount: 0 };
+    }
+
+    const groupAssets = await this.assetRepository.getDuplicateGroupAssets(ownerId, duplicateIds);
+    if (!Array.isArray(groupAssets)) {
+      return { assetIds: assets.map(({ id }) => id), excludedDuplicateCount: 0 };
+    }
+
+    const assetsByDuplicateId = this.groupByDuplicateId(assets);
+    const fullGroupsByDuplicateId = this.groupByDuplicateId(groupAssets);
+    const excludedIds = new Set<string>();
+
+    for (const [duplicateId, candidateGroup] of assetsByDuplicateId) {
+      const fullGroup = fullGroupsByDuplicateId.get(duplicateId) ?? [];
+      if (
+        candidateGroup.length <= 1 ||
+        fullGroup.length <= 1 ||
+        !this.isFullDuplicateGroupInsideSource(fullGroup, sourceIds)
+      ) {
+        continue;
+      }
+
+      const keeper = suggestDuplicateByMetadata(candidateGroup, {
+        getFileSizeInByte: (asset) => asset.fileSizeInByte,
+        getExifCount: (asset) => asset.exifValueCount,
+      });
+      if (!keeper) {
+        continue;
+      }
+
+      for (const asset of candidateGroup) {
+        if (asset.id !== keeper.id) {
+          excludedIds.add(asset.id);
+        }
+      }
+    }
+
+    return {
+      assetIds: assets.filter(({ id }) => !excludedIds.has(id)).map(({ id }) => id),
+      excludedDuplicateCount: excludedIds.size,
+    };
+  }
+
+  private groupByDuplicateId(assets: TripCandidateAssetRow[]) {
+    const groups = new Map<string, TripCandidateAssetRow[]>();
+    for (const asset of assets) {
+      if (!asset.duplicateId) {
+        continue;
+      }
+
+      groups.set(asset.duplicateId, [...(groups.get(asset.duplicateId) ?? []), asset]);
+    }
+
+    return groups;
+  }
+
+  private isFullDuplicateGroupInsideSource(fullGroup: TripCandidateAssetRow[], sourceIds: Set<string>) {
+    return fullGroup.every(({ id }) => sourceIds.has(id));
   }
 
   private labelWindow(countries: string[], cities: string[]): string {
