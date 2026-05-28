@@ -22830,6 +22830,9 @@
             "maxItems": 10,
             "type": "array"
           },
+          "recommendation": {
+            "$ref": "#/components/schemas/AgentTripCandidateRecommendation"
+          },
           "resultSize": {
             "$ref": "#/components/schemas/AgentToolResultSize"
           },
@@ -22850,6 +22853,7 @@
         },
         "required": [
           "candidates",
+          "recommendation",
           "resultSize",
           "status",
           "summary",
@@ -28876,6 +28880,38 @@
         ],
         "type": "object"
       },
+      "AgentTripCandidateNonAutoRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "ask_user",
+              "none"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "AgentTripCandidateRecommendation": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentTripCandidateUseTopRecommendation"
+          },
+          {
+            "$ref": "#/components/schemas/AgentTripCandidateNonAutoRecommendation"
+          }
+        ]
+      },
       "AgentTripCandidateSummary": {
         "additionalProperties": false,
         "properties": {
@@ -28999,6 +29035,33 @@
           "takenAfter",
           "takenBefore",
           "title"
+        ],
+        "type": "object"
+      },
+      "AgentTripCandidateUseTopRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "use_top_candidate"
+            ],
+            "type": "string"
+          },
+          "candidateDedupeKey": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "candidateDedupeKey",
+          "reason"
         ],
         "type": "object"
       },

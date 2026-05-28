@@ -743,7 +743,7 @@ MCP tool name: `findTripCandidates`
 
 Find likely recent trip candidates from existing date and location metadata.
 
-Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.
+Use this first for requests like "create an album for my recent trip to USA". Returns compact candidates and selectionHandle.id values without raw asset IDs. Follow recommendation.action: use_top_candidate means use candidateDedupeKey, ask_user means ask one question with candidate labels, and none means ask for one concrete source before planning. For generic trip albums, pass the selected candidate selectionHandle.id to proposeAlbumFromSelection. For explicit highlights requests, pass it to curateSelection first. Do not ask for dates before trying this tool unless the user has already narrowed the request.
 
 Argument modes:
 
