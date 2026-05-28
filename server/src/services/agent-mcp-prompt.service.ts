@@ -52,7 +52,15 @@ export class AgentMcpPromptService {
   generatePromptCheatSheet(): string {
     const examples = this.listPromptExamples();
     const contracts = this.contractService.listToolContracts();
-    const toolList = contracts.map((contract) => this.toPiToolName(contract.name)).join(',');
+    const toolList = contracts
+      .filter(
+        (contract) =>
+          ![AgentToolName.ProposeAlbumFromSelection, AgentToolName.ProposeAssetBatchFromSelection].includes(
+            contract.name,
+          ),
+      )
+      .map((contract) => this.toPiToolName(contract.name))
+      .join(',');
     const albumSourceSearch = this.getPromptExample(
       examples,
       AgentToolName.ProposeAlbumFromSearch,
@@ -92,10 +100,11 @@ export class AgentMcpPromptService {
         `Recoverable: wrong_id_domain needs_clarification choiceRefs.`,
         this.renderSafetyGuidance(contracts),
         this.renderApprovalRetryGuidance(metadataContract, retryMode),
-        'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata selectionHandleId itemRef; readAssetMetadata legacy exact non-search IDs only; bounded handle-first searches may use limit up to 1000; samples stay small; if truncated/hasMore, page/ask.',
-        'Curation: handle->curateSelection targetCount strategy->use selectionHandle.id/sourceRef.',
+        'Progressive: resolve names -> search handle {"detail":"handle"}; samples {"detail":"summary","fields":["dates","location"]}; readSelectionMetadata itemRef; readAssetMetadata legacy exact non-search IDs only; limit up to 1000; if truncated/hasMore, page/ask.',
+        'Curation: handle->curateSelection targetCount strategy->selectionHandle.id/sourceRef.',
         'After curateSelection: use proposeAlbumFromSelection or proposeAssetBatchFromSelection with selectionHandle.id; do not copy asset IDs.',
-        'provider planning rejects raw assetIds; assetSelectionHandleId; assetSource.selectionHandle/search/previousSearch. Gallery materializes IDs server-side; assetSource.explicitAssets internal-only/rejected.',
+        'Trip albums: findTripCandidates first;recommendation.action use_top_candidate ask_user none;generic handle->proposeAlbumFromSelection;highlights default 10->curateSelection;dup/stack exclusions;never asset IDs.',
+        'provider planning rejects raw assetIds; assetSelectionHandleId or assetSource.selectionHandle/search/previousSearch. Gallery materializes IDs server-side; assetSource.explicitAssets rejected.',
         'Resolve names before searchAssets{"tags":["Travel"]}',
         'Resolver fidelity: copy resolvedFilters. Missing/ambiguous: ask.',
         `Shared-space people: {"filters":{"spaceId":"<space.id from listSpaces/readSpace>","spacePersonIds":["<spacePersonIds value from resolveAssetSearchFilters>"]}}`,
@@ -104,7 +113,7 @@ export class AgentMcpPromptService {
         `Space lookup:${this.toPiToolName(AgentToolName.ListSpaces)}->${this.toPiToolName(AgentToolName.ReadSpace)}.`,
         'Space: no matching space: ask. No matching assets/no photos/none in space: explain. assetIdsTruncated false: exclude already in space; only remove already in space; true:narrow.',
         'Details: space.updateDetails spaceName, description, color. Same name/description/color: no-op. Never update thumbnails/pets/faces/linked libraries/delete spaces.',
-        `Low-level planning uses handles/sources: album.create temporaryTargetId; album.addAssets; space.addAssets/removeAssets {"targetKind":"existing_space"}`,
+        `Low-level planning uses handles/sources album.create temporaryTargetId album.addAssets space.addAssets/removeAssets {"targetKind":"existing_space"}`,
         this.renderValidationRecoveryGuidance(validationMistake),
       ].join('\n'),
     );
@@ -245,7 +254,7 @@ export class AgentMcpPromptService {
       throw new Error(`Missing MCP prompt approval retry contract for ${contract.name}`);
     }
 
-    return `${contract.approvalRetry.instruction} Retry uses only {"${contract.approvalRetry.field}":"<approved-toolCallId>"}; omit old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
+    return `${contract.approvalRetry.instruction} Retry uses only <approved-toolCallId>; omit old request fields: ${retryMode.forbiddenFields.join(', ')}.`;
   }
 
   private renderSafetyGuidance(contracts: AgentMcpToolContract[]): string {
@@ -266,7 +275,7 @@ export class AgentMcpPromptService {
       throw new Error('Missing MCP prompt validation recovery mistake with example guidance');
     }
 
-    return `Validation: retry once if correction is obvious; exampleArguments; retry with corrected arguments. Retry mcp_gallery_proposeAlbumOperations with exact <selectionHandle.id from searchAssets>. approval-required pauses. Not an internal Gallery issue on first failure; if corrected retry fails again, explain missing/blocked. ${mistake.hint}`;
+    return `retry once if correction is obvious; exampleArguments; retry with corrected arguments. Retry mcp_gallery_proposeAlbumOperations with exact <selectionHandle.id from searchAssets>. approval-required pauses. Not an internal Gallery issue on first failure; if corrected retry fails again, explain missing/blocked. ${mistake.hint}`;
   }
 
   private sanitizePrompt(prompt: string): string {
