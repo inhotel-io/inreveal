@@ -62,7 +62,7 @@ describe('OpenInAppBanner', () => {
     await tick();
     expect(screen.getByRole('region', { name: 'open_in_app_banner_aria_label' })).toBeInTheDocument();
     const openLink = screen.getByRole('link', { name: 'open_in_app_banner_open' });
-    expect(openLink).toHaveAttribute('href', expect.stringMatching(/^immich:\/\/asset\?id=/));
+    expect(openLink).toHaveAttribute('href', expect.stringMatching(/^noodle-gallery:\/\/asset\?id=/));
   });
 
   it('renders nothing when path does not match a deep-link route', async () => {
