@@ -953,7 +953,11 @@ export class AssetRepository {
               eb('asset_exif.country', '=', place.country),
               ...(place.state === undefined
                 ? []
-                : [place.state === null ? eb('asset_exif.state', 'is', null) : eb('asset_exif.state', '=', place.state)]),
+                : [
+                    place.state === null
+                      ? eb('asset_exif.state', 'is', null)
+                      : eb('asset_exif.state', '=', place.state),
+                  ]),
               ...(place.city === undefined
                 ? []
                 : [place.city === null ? eb('asset_exif.city', 'is', null) : eb('asset_exif.city', '=', place.city)]),
