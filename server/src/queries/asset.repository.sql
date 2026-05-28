@@ -268,6 +268,143 @@ order by
   "localDate" asc,
   "assetCount" desc
 
+-- AssetRepository.getTripCandidateAssets
+select
+  "asset"."id",
+  "asset"."localDateTime",
+  "asset_exif"."country",
+  "asset_exif"."state",
+  "asset_exif"."city",
+  "asset"."duplicateId",
+  "asset"."stackId",
+  "stack"."primaryAssetId" as "stackPrimaryAssetId",
+  asset_exif."fileSizeInByte"::float8 as "fileSizeInByte",
+  (
+    (nullif(asset_exif.make, '') is not null)::int + (nullif(asset_exif.model, '') is not null)::int + (
+      (asset_exif."exifImageWidth" is not null)
+      and (asset_exif."exifImageWidth" <> 0)
+    )::int + (
+      (asset_exif."exifImageHeight" is not null)
+      and (asset_exif."exifImageHeight" <> 0)
+    )::int + (
+      (asset_exif."fileSizeInByte" is not null)
+      and (asset_exif."fileSizeInByte" <> 0)
+    )::int + (nullif(asset_exif.orientation, '') is not null)::int + (asset_exif."dateTimeOriginal" is not null)::int + (asset_exif."modifyDate" is not null)::int + (nullif(asset_exif."timeZone", '') is not null)::int + (nullif(asset_exif."lensModel", '') is not null)::int + (
+      (asset_exif."fNumber" is not null)
+      and (asset_exif."fNumber" <> 0)
+    )::int + (
+      (asset_exif."focalLength" is not null)
+      and (asset_exif."focalLength" <> 0)
+    )::int + (
+      (asset_exif.iso is not null)
+      and (asset_exif.iso <> 0)
+    )::int + (nullif(asset_exif."exposureTime", '') is not null)::int + (
+      (asset_exif.latitude is not null)
+      and (asset_exif.latitude <> 0)
+    )::int + (
+      (asset_exif.longitude is not null)
+      and (asset_exif.longitude <> 0)
+    )::int + (nullif(asset_exif.city, '') is not null)::int + (nullif(asset_exif.state, '') is not null)::int + (nullif(asset_exif.country, '') is not null)::int + (nullif(asset_exif.description, '') is not null)::int + (
+      nullif(asset_exif."projectionType", '') is not null
+    )::int + (
+      (asset_exif.rating is not null)
+      and (asset_exif.rating <> 0)
+    )::int
+  )::int as "exifValueCount"
+from
+  "asset"
+  inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+  left join "stack" on "stack"."id" = "asset"."stackId"
+where
+  "asset"."ownerId" = $1
+  and "asset"."visibility" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."localDateTime" >= $3
+  and "asset"."localDateTime" <= $4
+  and (
+    "asset_exif"."country" = $5
+    and "asset_exif"."state" = $6
+    and "asset_exif"."city" = $7
+  )
+  and exists (
+    select
+      "asset_file"."assetId"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = $8
+  )
+order by
+  "asset"."localDateTime" asc,
+  "asset"."id" asc
+
+-- AssetRepository.getDuplicateGroupAssets
+select
+  "asset"."id",
+  "asset"."localDateTime",
+  "asset_exif"."country",
+  "asset_exif"."state",
+  "asset_exif"."city",
+  "asset"."duplicateId",
+  "asset"."stackId",
+  "stack"."primaryAssetId" as "stackPrimaryAssetId",
+  asset_exif."fileSizeInByte"::float8 as "fileSizeInByte",
+  (
+    (nullif(asset_exif.make, '') is not null)::int + (nullif(asset_exif.model, '') is not null)::int + (
+      (asset_exif."exifImageWidth" is not null)
+      and (asset_exif."exifImageWidth" <> 0)
+    )::int + (
+      (asset_exif."exifImageHeight" is not null)
+      and (asset_exif."exifImageHeight" <> 0)
+    )::int + (
+      (asset_exif."fileSizeInByte" is not null)
+      and (asset_exif."fileSizeInByte" <> 0)
+    )::int + (nullif(asset_exif.orientation, '') is not null)::int + (asset_exif."dateTimeOriginal" is not null)::int + (asset_exif."modifyDate" is not null)::int + (nullif(asset_exif."timeZone", '') is not null)::int + (nullif(asset_exif."lensModel", '') is not null)::int + (
+      (asset_exif."fNumber" is not null)
+      and (asset_exif."fNumber" <> 0)
+    )::int + (
+      (asset_exif."focalLength" is not null)
+      and (asset_exif."focalLength" <> 0)
+    )::int + (
+      (asset_exif.iso is not null)
+      and (asset_exif.iso <> 0)
+    )::int + (nullif(asset_exif."exposureTime", '') is not null)::int + (
+      (asset_exif.latitude is not null)
+      and (asset_exif.latitude <> 0)
+    )::int + (
+      (asset_exif.longitude is not null)
+      and (asset_exif.longitude <> 0)
+    )::int + (nullif(asset_exif.city, '') is not null)::int + (nullif(asset_exif.state, '') is not null)::int + (nullif(asset_exif.country, '') is not null)::int + (nullif(asset_exif.description, '') is not null)::int + (
+      nullif(asset_exif."projectionType", '') is not null
+    )::int + (
+      (asset_exif.rating is not null)
+      and (asset_exif.rating <> 0)
+    )::int
+  )::int as "exifValueCount"
+from
+  "asset"
+  inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+  left join "stack" on "stack"."id" = "asset"."stackId"
+where
+  "asset"."ownerId" = $1
+  and "asset"."visibility" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."duplicateId" in ($3)
+  and "asset"."duplicateId" is not null
+  and exists (
+    select
+      "asset_file"."assetId"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = $4
+  )
+order by
+  "asset"."localDateTime" asc,
+  "asset"."id" asc
+
 -- AssetRepository.getMemoryAssetsForLocation
 select
   "asset"."id",
