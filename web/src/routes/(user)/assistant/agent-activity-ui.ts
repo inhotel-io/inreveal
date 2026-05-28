@@ -114,6 +114,12 @@ const toolActivityDefinitions: Partial<Record<AgentToolName, ToolActivityDefinit
     completedSummary: 'Found matching photos',
     coalesceKey: 'search-assets',
   },
+  [AgentToolName.FindTripCandidates]: {
+    kind: 'search',
+    title: 'Finding trip candidates',
+    completedSummary: 'Found likely trips',
+    coalesceKey: 'find-trip-candidates',
+  },
   [AgentToolName.ReadSelectionMetadata]: {
     kind: 'metadata',
     title: 'Reading selection details',
