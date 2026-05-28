@@ -231,6 +231,43 @@ group by
 order by
   "assetCount" desc
 
+-- AssetRepository.getMemoryLocationDayBuckets
+select
+  date_trunc('day', asset."localDateTime" at time zone 'UTC') at time zone 'UTC' as "localDate",
+  "asset_exif"."country" as "country",
+  "asset_exif"."state" as "state",
+  "asset_exif"."city" as "city",
+  count(*)::int as "assetCount",
+  min(asset."localDateTime") as "firstDate",
+  max(asset."localDateTime") as "lastDate"
+from
+  "asset"
+  inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+where
+  "asset"."ownerId" = $1
+  and "asset"."visibility" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."localDateTime" >= $3
+  and "asset"."localDateTime" <= $4
+  and "asset_exif"."country" is not null
+  and exists (
+    select
+      "asset_file"."assetId"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = $5
+  )
+group by
+  date_trunc('day', asset."localDateTime" at time zone 'UTC') at time zone 'UTC',
+  "asset_exif"."country",
+  "asset_exif"."state",
+  "asset_exif"."city"
+order by
+  "localDate" asc,
+  "assetCount" desc
+
 -- AssetRepository.getMemoryAssetsForLocation
 select
   "asset"."id",

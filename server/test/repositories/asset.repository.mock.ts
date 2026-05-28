@@ -15,6 +15,7 @@ export const newAssetRepositoryMock = (): Mocked<RepositoryInterface<AssetReposi
     getByDayOfYear: vitest.fn(),
     getMemoryAssetsForPerson: vitest.fn(),
     getMemoryLocationClusters: vitest.fn(),
+    getMemoryLocationDayBuckets: vitest.fn(),
     getMemoryAssetsForLocation: vitest.fn(),
     getByIds: vitest.fn().mockResolvedValue([]),
     getByIdsWithAllRelationsButStacks: vitest.fn().mockResolvedValue([]),
