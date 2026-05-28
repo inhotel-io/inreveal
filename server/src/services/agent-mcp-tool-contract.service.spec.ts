@@ -378,6 +378,10 @@ describe(AgentMcpToolContractService.name, () => {
     expect(tripContract?.description).toMatch(/trip/i);
     expect(tripContract?.usage).toMatch(/selectionHandle/i);
     expect(tripContract?.usage).toMatch(/proposeAlbumFromSelection/i);
+    expect(tripContract?.usage).toMatch(/recommendation\.action/i);
+    expect(tripContract?.usage).toMatch(/use_top_candidate/i);
+    expect(tripContract?.usage).toMatch(/ask_user/i);
+    expect(tripContract?.usage).toMatch(/none/i);
     expect(tripContract?.examples.some((example) => example.arguments.placeHint === 'USA')).toBe(true);
     expect(tripContract?.commonMistakes.map(({ id }) => id)).toContain('trip-candidates-mixed-tool-call-id');
   });
