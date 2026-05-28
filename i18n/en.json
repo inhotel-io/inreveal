@@ -693,6 +693,7 @@
   "assistant_agent_tool_data_class_plan": "Plan",
   "assistant_agent_tool_data_class_previews": "Previews",
   "assistant_agent_tool_name_curateSelection": "Curate selection",
+  "assistant_agent_tool_name_findTripCandidates": "Find trip candidates",
   "assistant_agent_tool_name_listAlbums": "List albums",
   "assistant_agent_tool_name_listSpaces": "List spaces",
   "assistant_agent_tool_name_proposeAddAssetsToAlbumFromSearch": "Propose album additions from search",
