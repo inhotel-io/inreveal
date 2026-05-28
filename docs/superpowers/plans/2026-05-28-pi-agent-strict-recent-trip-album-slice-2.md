@@ -43,6 +43,7 @@ Not included in this slice:
 ## Task 1: Strict Recent Trip Workflow Router
 
 **Files:**
+
 - Create: `agent-runner/src/strict-workflows.mjs`
 - Create: `agent-runner/src/strict-workflows.test.mjs`
 
