@@ -954,6 +954,24 @@ describe('e2e runtime', () => {
     assert.match(events.at(-1).content.blocks[0].text, /\?$/);
   });
 
+  it('asks about one possible trip when the trip tool asks for confirmation on a single candidate', async () => {
+    const { calls, fetchImplementation } = createFetch(
+      tripCandidateHandlers({
+        candidates: [makeTripCandidateSummary({ confidence: 'medium' })],
+        recommendation: { action: 'ask_user', reason: 'The best matching trip candidate is not high confidence.' },
+      }),
+    );
+    const runtime = createE2eRuntime({ fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody());
+
+    const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
+
+    assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates');
+    assert.match(events.at(-1).content.blocks[0].text, /New York, USA/i);
+    assert.doesNotMatch(events.at(-1).content.blocks[0].text, /multiple possible recent trips/i);
+    assert.match(events.at(-1).content.blocks[0].text, /\?$/);
+  });
+
   it('does not plan when no trip candidate is found and asks for one concrete source', async () => {
     const { calls, fetchImplementation } = createFetch(
       tripCandidateHandlers({
