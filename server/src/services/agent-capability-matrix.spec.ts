@@ -79,7 +79,11 @@ describe('Pi agent capability matrix', () => {
 
   it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
     const markdown = readMatrix();
-    const constrainedMatrix = sectionBetween(markdown, '## High-Value Constrained Capabilities', '## Needs New MCP Tool');
+    const constrainedMatrix = sectionBetween(
+      markdown,
+      '## High-Value Constrained Capabilities',
+      '## Needs New MCP Tool',
+    );
 
     const bestPhotosRow = constrainedMatrix.split('\n').find((line) => line.includes('“Best photos” curation'));
 
