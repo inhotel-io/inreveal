@@ -54,6 +54,7 @@ Modify:
   - Pass `maxMinutesArg = 20` when invoking Flutter.
 - `mobile/lib/domain/services/background_worker.service.dart`
   - Use `BackgroundBackupLoop`, record background backup status, keep downloader recovery, keep branded/iOS behavior.
+  - Make `_handleCleanup`'s `_cancellationToken.complete()` idempotent (guard with `isCompleted`) so the bounded-timeout path cannot abort teardown.
 - `mobile/lib/domain/models/store.model.dart`
   - Add `backgroundBackupStatus<String>._(1014)`.
 - `mobile/lib/services/background_upload.service.dart`
@@ -66,7 +67,9 @@ Modify:
 - `mobile/lib/pages/backup/drift_backup.page.dart`
   - Show `BackgroundBackupHealthBanner` near the backup controls.
 - `i18n/en.json`
-  - Add explicit strings for delayed, stale, and blocked backup warnings.
+  - Add explicit strings for delayed, stale, blocked, and reminder backup warnings (sorted alphabetically).
+- `mobile/lib/generated/` (codegen translation loader)
+  - Regenerated via `make translation` after editing `i18n/en.json`; the mobile app loads strings from this codegen, not the raw JSON.
 - Existing tests:
   - `mobile/test/providers/backup/drift_backup_provider_test.dart`
   - `mobile/test/services/background_upload.service_test.dart`
@@ -288,6 +291,68 @@ void main() {
     expect(calls.where((call) => call.startsWith('severe:Failed to complete iOS background upload')), hasLength(1));
     expect(calls, contains('cleanup'));
   });
+
+  // Regression for the shared-token hazard: the worker wires the loop with the
+  // SAME `_cancellationToken` that `_handleCleanup` also completes. On the
+  // bounded Android path the timeout fires (loop completes the token), then the
+  // `finally` runs cleanup, which must ALSO be able to "complete" the token
+  // without throwing or aborting teardown. This test models that real wiring:
+  // the timeout completes the token, and `cleanup` completes it again behind an
+  // `isCompleted` guard (mirroring the guarded production cleanup). The loop's
+  // own completion must therefore be idempotent and cleanup must still run to
+  // the end.
+  test('runs cleanup to completion when the timeout already completed the shared token', () {
+    fakeAsync((async) {
+      final calls = <String>[];
+      final cancellationToken = Completer<void>();
+      final backupGate = Completer<void>();
+      var cleanupFinished = false;
+      final loop = BackgroundBackupLoop(
+        syncAssets: ({Duration? hashTimeout}) async => true,
+        handleBackup: () async {
+          calls.add('backup-start');
+          await backupGate.future;
+          calls.add('backup-end');
+        },
+        cleanup: () async {
+          calls.add('cleanup-start');
+          // Mirrors the guarded completion in _handleCleanup; must be a no-op
+          // when the timeout already completed the token, and must NOT throw.
+          if (!cancellationToken.isCompleted) {
+            cancellationToken.complete();
+          }
+          cleanupFinished = true;
+          calls.add('cleanup-end');
+        },
+        cancellationToken: cancellationToken,
+        logInfo: calls.add,
+        logWarning: (message) => calls.add('warning:$message'),
+        logSevere: (message, error, stackTrace) => calls.add('severe:$message:$error'),
+      );
+
+      unawaited(
+        loop.run(
+          hashTimeout: const Duration(minutes: 3),
+          backupTimeout: const Duration(minutes: 19),
+          debugLabel: 'Android background upload',
+        ),
+      );
+
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 19));
+      async.flushMicrotasks();
+      expect(cancellationToken.isCompleted, isTrue);
+
+      // Backup observes cancellation and returns; cleanup must run fully.
+      backupGate.complete();
+      async.flushMicrotasks();
+
+      expect(cleanupFinished, isTrue);
+      expect(calls, containsAllInOrder(['backup-end', 'cleanup-start', 'cleanup-end']));
+      // No `severe:` entry means cleanup did not throw on the double-complete.
+      expect(calls.where((call) => call.startsWith('severe:')), isEmpty);
+    });
+  });
 }
 ```
 
@@ -384,7 +449,7 @@ Modify `mobile/lib/domain/services/background_worker.service.dart`:
 import 'package:immich_mobile/domain/services/background_backup_loop.dart';
 ```
 
-Replace the separate Android/iOS loop bodies with:
+Replace the linear bodies of `onAndroidUpload` and `onIosUpload` (today each is a single `try/finally` sync → backup → cleanup sequence — there are no loops yet; the iOS body currently uses `backupFuture.timeout(onTimeout: () {})` which never touches `_cancellationToken`) with:
 
 ```dart
   @override
@@ -426,6 +491,24 @@ Keep this existing line in `init()`:
 ```dart
       scheduleBackgroundDownloaderRecovery();
 ```
+
+**Make cleanup token-completion idempotent (required — fixes the shared-token double-complete).**
+
+The new bounded path means the timer in `BackgroundBackupLoop` completes `_cancellationToken` on timeout (the Android path passes this same token to `foregroundUploadService.uploadCandidates(...)` as its cancel signal). The existing `_handleCleanup` *also* completes the same token, unguarded, at `background_worker.service.dart:187`:
+
+```dart
+      _cancellationToken.complete();
+```
+
+After a timeout this throws `StateError: Future already completed`. The throw is swallowed by the `try/catch` at the bottom of `_handleCleanup`, but it aborts the rest of teardown — `Store.dispose()`, `LogService.I.dispose()`, `workerManagerPatch.dispose()`, `nativeSyncApi.cancelHashing()`, and `backgroundSyncManager.cancel()` (the lines after 187) never run on any timed-out background run. Guard it:
+
+```dart
+      if (!_cancellationToken.isCompleted) {
+        _cancellationToken.complete();
+      }
+```
+
+Both the loop (already guarded) and cleanup now complete the token at most once. The new Step 1 test `runs cleanup to completion when the timeout already completed the shared token` reproduces this exact wiring at the loop seam and proves cleanup runs end-to-end without throwing. (A full `BackgroundWorkerBgService` unit test is impractical — the service boots Drift, the logger DB, and a `ProviderContainer` in `init()` — so the loop seam test plus this guard are the regression coverage for the integration. Note `_ref` is a `ProviderContainer?`, not a `Ref?`.)
 
 - [ ] **Step 5: Run the focused test and confirm it passes**
 
@@ -531,8 +614,10 @@ In `mobile/android/app/src/main/kotlin/app/alextran/immich/background/Background
 with:
 
 ```kotlin
-    flutterApi?.onAndroidUpload(maxMinutesArg = 20) { handleHostResult(it) }
+    flutterApi?.onAndroidUpload(maxMinutesArg = 20L) { handleHostResult(it) }
 ```
+
+Use the `20L` long literal: Pigeon maps Dart `int?` to a Kotlin `Long?` parameter, and Kotlin does not implicitly widen `Int` to `Long`, so `20` alone fails to compile. Cross-check the exact literal/value against upstream commit `8f4b0fce49` when porting.
 
 - [ ] **Step 5: Verify the mobile-only scope**
 
@@ -574,6 +659,18 @@ git commit -m "fix(mobile): bound Android background backup runtime"
 - Modify: `mobile/lib/providers/backup/drift_backup.provider.dart`
 
 - [ ] **Step 1: Add failing tests for both backup groups**
+
+First ensure the test file imports everything these snippets use (several are not currently imported there):
+
+```dart
+import 'package:flutter/foundation.dart'; // debugDefaultTargetPlatformOverride, TargetPlatform
+import 'package:immich_mobile/constants/constants.dart'; // kBackupGroup, kBackupLivePhotoGroup
+import 'package:immich_mobile/services/background_upload.service.dart'; // UploadTaskMetadata
+// background_downloader provides UploadTask, BaseDirectory, TaskProgressUpdate, TaskStatusUpdate, TaskStatus
+import 'package:background_downloader/background_downloader.dart';
+```
+
+`UploadTaskMetadata` is defined in `background_upload.service.dart` (not the provider), with fields `localAssetId`, `isLivePhotos`, `livePhotoVideoId` and `fromJson`/`toJson`.
 
 Append these tests to `mobile/test/providers/backup/drift_backup_provider_test.dart`:
 
@@ -1075,6 +1172,8 @@ class BackgroundBackupStatus {
 }
 ```
 
+> **Health semantics note (intentional):** `deriveHealth` treats a recent background *wake* as activity, so a device the OS keeps waking reads `healthy` even if uploads are failing, until the wake itself ages past the warning/stale thresholds. This matches the design ("Healthy: recent wake or upload success") and is deliberately conservative — it avoids nagging users whose backup is merely momentarily failing. The cost is that a *persistently* failing-but-waking device is not flagged until the failure also stops the wakes or the thresholds elapse. If a future slice needs to flag "waking but never succeeding," add a derived `degraded` state keyed on `lastUploadEnqueueAt` without a following `lastUploadSuccessAt` beyond a threshold; it is out of scope here.
+
 - [ ] **Step 4: Add the Store key**
 
 In `mobile/lib/domain/models/store.model.dart`, replace:
@@ -1188,6 +1287,25 @@ void main() {
     expect((await sut.read()).lastReminderAt, now);
     expect((await sut.read()).shouldShowReminder(now: now), isFalse);
   });
+
+  test('serializes concurrent record calls without clobbering fields', () async {
+    await sut.recordUploadEnqueue(candidateCount: 5);
+
+    // Fire success and an unrelated failure "at the same time" (no await between
+    // them). With serialization the success timestamp must survive and the
+    // candidate count reset must hold even though a failure is recorded after.
+    await Future.wait([sut.recordUploadSuccess(), sut.recordFailure(BackgroundBackupFailureReason.uploadFailed)]);
+
+    final status = await sut.read();
+    expect(status.lastUploadSuccessAt, now, reason: 'success write must not be lost to an interleaved failure write');
+    expect(status.lastCandidateCount, 0);
+    // Last-writer-wins on the reason is acceptable; assert it is one of the two
+    // legitimate terminal values, never a stale leftover from before.
+    expect(
+      status.lastBackgroundFailureReason,
+      anyOf(BackgroundBackupFailureReason.none, BackgroundBackupFailureReason.uploadFailed),
+    );
+  });
 }
 ```
 
@@ -1225,6 +1343,15 @@ class BackgroundBackupStatusService {
   final StoreService store;
   final DateTime Function() _now;
 
+  // Background-downloader status callbacks (recordUploadSuccess / recordFailure)
+  // fire once per completed task and each does a read-modify-write of one JSON
+  // blob. Without serialization two callbacks can both read the old status and
+  // the second write clobbers the first (e.g. a late recordFailure dropping a
+  // just-written lastUploadSuccessAt). Chain every mutation through a single
+  // tail future so reads always observe the previous write.
+  Future<void> _writeTail = Future.value();
+
+  // `read()` is intentionally NOT serialized — it is a pure load with no write.
   Future<BackgroundBackupStatus> read() async {
     final raw = store.tryGet(StoreKey.backgroundBackupStatus);
     if (raw == null || raw.isEmpty) {
@@ -1233,14 +1360,20 @@ class BackgroundBackupStatusService {
     return BackgroundBackupStatus.fromJson(jsonDecode(raw) as Map<String, dynamic>);
   }
 
-  Future<void> write(BackgroundBackupStatus status) {
-    return store.put(StoreKey.backgroundBackupStatus, jsonEncode(status.toJson())).then((_) {});
+  /// Serializes a read-modify-write so concurrent record* calls cannot clobber.
+  Future<void> _mutate(BackgroundBackupStatus Function(BackgroundBackupStatus current) update) {
+    final next = _writeTail.then((_) async {
+      final current = await read();
+      await store.put(StoreKey.backgroundBackupStatus, jsonEncode(update(current).toJson()));
+    });
+    // Keep the tail alive even if one mutation throws.
+    _writeTail = next.catchError((_) {});
+    return next;
   }
 
-  Future<void> recordWake(BackgroundBackupSchedulerKind schedulerKind) async {
-    final status = await read();
-    await write(
-      status.copyWith(
+  Future<void> recordWake(BackgroundBackupSchedulerKind schedulerKind) {
+    return _mutate(
+      (current) => current.copyWith(
         lastBackgroundWakeAt: _now(),
         lastSuccessfulSchedulerKind: schedulerKind,
         lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
@@ -1248,15 +1381,13 @@ class BackgroundBackupStatusService {
     );
   }
 
-  Future<void> recordCandidateCount(int count) async {
-    final status = await read();
-    await write(status.copyWith(lastLocalPhotoScanAt: _now(), lastCandidateCount: count));
+  Future<void> recordCandidateCount(int count) {
+    return _mutate((current) => current.copyWith(lastLocalPhotoScanAt: _now(), lastCandidateCount: count));
   }
 
-  Future<void> recordUploadEnqueue({required int candidateCount}) async {
-    final status = await read();
-    await write(
-      status.copyWith(
+  Future<void> recordUploadEnqueue({required int candidateCount}) {
+    return _mutate(
+      (current) => current.copyWith(
         lastUploadEnqueueAt: _now(),
         lastCandidateCount: candidateCount,
         lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
@@ -1264,10 +1395,9 @@ class BackgroundBackupStatusService {
     );
   }
 
-  Future<void> recordUploadSuccess() async {
-    final status = await read();
-    await write(
-      status.copyWith(
+  Future<void> recordUploadSuccess() {
+    return _mutate(
+      (current) => current.copyWith(
         lastUploadSuccessAt: _now(),
         lastCandidateCount: 0,
         lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
@@ -1275,17 +1405,17 @@ class BackgroundBackupStatusService {
     );
   }
 
-  Future<void> recordFailure(BackgroundBackupFailureReason reason) async {
-    final status = await read();
-    await write(status.copyWith(lastBackgroundFailureReason: reason));
+  Future<void> recordFailure(BackgroundBackupFailureReason reason) {
+    return _mutate((current) => current.copyWith(lastBackgroundFailureReason: reason));
   }
 
-  Future<void> markReminderShown() async {
-    final status = await read();
-    await write(status.copyWith(lastReminderAt: _now()));
+  Future<void> markReminderShown() {
+    return _mutate((current) => current.copyWith(lastReminderAt: _now()));
   }
 }
 ```
+
+> Note: the `copyWith` in the model uses `??` fallbacks, so it can never *clear* a field back to `null`. That is intentional here — every recorded field is monotonic (latest-wins timestamps, latest reason). `recordUploadSuccess` resets `lastCandidateCount` to `0` and the reason to `none` via explicit non-null values, which `copyWith` accepts.
 
 - [ ] **Step 4: Add mock for future provider tests**
 
@@ -1447,14 +1577,11 @@ In `mobile/test/services/background_upload.service_test.dart`, import:
 
 ```dart
 import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
-import 'package:immich_mobile/services/background_backup_status.service.dart';
 ```
 
-Add a mock class near the top:
+(`background_backup_status.service.dart` does not need importing here for the mock — see next note.)
 
-```dart
-class MockBackgroundBackupStatusService extends Mock implements BackgroundBackupStatusService {}
-```
+Do **not** declare a local `MockBackgroundBackupStatusService` in this file. It already imports `../domain/service.mock.dart` (for `MockAppSettingsService`), and Task 6 adds `MockBackgroundBackupStatusService` there. Declaring a second one in this file is a duplicate definition and will not compile. Use the shared mock from `service.mock.dart`.
 
 Add a field:
 
@@ -1478,9 +1605,15 @@ Pass it to `BackgroundUploadService` in `setUp()`:
       mockBackgroundBackupStatusService,
 ```
 
-Append tests:
+Append tests. Note the callback-capture pattern: `BackgroundUploadService` registers its status handler by **assigning** `_uploadRepository.onUploadStatus = _onUploadCallback` in its constructor (`background_upload.service.dart:109`), and `_onUploadCallback` calls the `_handleTaskStatusUpdate` we are editing. A `mocktail` mock does **not** echo a value written to a field, so `mockUploadRepository.onUploadStatus` reads back as `null` and `onUploadStatus!(...)` would throw a null-check error. Instead, capture the function the service assigned and invoke that. (The existing `setUp` also assigns a no-op to `onUploadStatus` *after* construction, so capture `.first` — the constructor's real callback.)
 
 ```dart
+  // Returns the status callback the service registered during construction.
+  void Function(TaskStatusUpdate) capturedStatusCallback() {
+    return verify(() => mockUploadRepository.onUploadStatus = captureAny()).captured.first
+        as void Function(TaskStatusUpdate);
+  }
+
   group('background backup status recording', () {
     test('records candidate count and enqueue count when candidates are queued', () async {
       final asset = LocalAssetStub.image1;
@@ -1527,8 +1660,9 @@ Append tests:
         group: kBackupGroup,
       );
 
-      mockUploadRepository.onUploadStatus!(TaskStatusUpdate(successTask, TaskStatus.complete));
-      mockUploadRepository.onUploadStatus!(TaskStatusUpdate(failureTask, TaskStatus.failed));
+      final onStatus = capturedStatusCallback();
+      onStatus(TaskStatusUpdate(successTask, TaskStatus.complete));
+      onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
       await pumpEventQueue();
 
       verify(() => mockBackgroundBackupStatusService.recordUploadSuccess()).called(1);
@@ -1549,7 +1683,7 @@ Append tests:
         ).toJson(),
       );
 
-      mockUploadRepository.onUploadStatus!(TaskStatusUpdate(motionTask, TaskStatus.complete));
+      capturedStatusCallback()(TaskStatusUpdate(motionTask, TaskStatus.complete));
       await pumpEventQueue();
 
       verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
@@ -1696,9 +1830,16 @@ In `onIosUpload`, before `_backgroundLoop`, add:
     await _backupEventRecorder?.recordIosWake(isRefresh: isRefresh);
 ```
 
-Replace the top of `_handleBackup` so the worker records a deterministic skip reason before returning:
+Integrate the preflight recorder into `_handleBackup` **without dropping the existing `if (_isCleanedUp) return;` guard, the `runZonedGuarded` wrapper, or the `Platform.isIOS` dispatch**. The body lives inside the existing closure; only the enabled/user checks change. The closure becomes:
 
 ```dart
+  Future<void> _handleBackup() async {
+    await runZonedGuarded(
+      () async {
+        if (_isCleanedUp) {
+          return;
+        }
+
         final backupEnabled = _isBackupEnabled;
         final currentUser = _ref?.read(currentUserProvider);
         await _backupEventRecorder?.recordBackupPreflight(
@@ -1715,13 +1856,31 @@ Replace the top of `_handleBackup` so the worker records a deterministic skip re
           _logger.warning("No current user found. Skipping backup from background");
           return;
         }
+
+        if (Platform.isIOS) {
+          return _ref?.read(driftBackupProvider.notifier).startBackupWithURLSession(currentUser.id);
+        }
+
+        return _ref
+            ?.read(foregroundUploadServiceProvider)
+            .uploadCandidates(currentUser.id, _cancellationToken, useSequentialUpload: true);
+      },
+      (error, stack) {
+        dPrint(() => "Error in backup zone $error, $stack");
+      },
+    );
+  }
 ```
 
-In `_syncAssets`, when `isSuccess` is false:
+In `_syncAssets`, record remote-sync failure right after `isSuccess` is computed (`background_worker.service.dart:247`), before the `_isCleanedUp` early-return at line 248, so the reason is captured even when cleanup races in:
 
 ```dart
+    final isSuccess = await _ref?.read(backgroundSyncProvider).syncRemote() ?? false;
     if (!isSuccess) {
       await _backupEventRecorder?.recordRemoteSyncResult(false);
+    }
+    if (_isCleanedUp) {
+      return isSuccess;
     }
 ```
 
@@ -1858,16 +2017,20 @@ Expected: FAIL because `background_backup_health_banner.dart` does not exist.
 
 - [ ] **Step 3: Add i18n strings**
 
-Add these keys to `i18n/en.json` near existing backup strings:
+Add these keys to `i18n/en.json` (repo root, NOT `mobile/`). The file is sorted alphabetically and `prettier-plugin-sort-json` is enforced, so insert each key in its correct alphabetical position among the existing flat `backup_*` keys (they begin around `backup_album_selection_page_*`). The `backup_background_reminder_*` keys are used by the Task 9 reminder notification; adding them here keeps the reminder localized and consistent with the banner.
 
 ```json
-  "backup_background_stale_title": "Background backup has not run recently",
-  "backup_background_stale_body": "Open Gallery to resume backup. iOS may stop background work after the app is force-quit.",
-  "backup_background_warning_title": "Background backup is delayed",
-  "backup_background_warning_body": "Gallery has not checked for new photos in the background recently.",
-  "backup_background_blocked_title": "Background backup needs attention",
   "backup_background_blocked_body": "Open Gallery to resume backup. iOS and Android can stop scheduled work after force-quit or battery restrictions.",
+  "backup_background_blocked_title": "Background backup needs attention",
+  "backup_background_reminder_body": "Open Gallery to resume backup.",
+  "backup_background_reminder_title": "Background backup has not run recently",
+  "backup_background_stale_body": "Open Gallery to resume backup. iOS may stop background work after the app is force-quit.",
+  "backup_background_stale_title": "Background backup has not run recently",
+  "backup_background_warning_body": "Gallery has not checked for new photos in the background recently.",
+  "backup_background_warning_title": "Background backup is delayed",
 ```
+
+> Run `cd i18n && pnpm run format:fix` (or `make translation` below) to confirm the keys land in sorted order; an unsorted `en.json` fails CI.
 
 - [ ] **Step 4: Create the banner widget**
 
@@ -1965,7 +2128,20 @@ In the body where selected albums are shown, place the banner after `BackupToggl
                   const BackgroundBackupHealthBanner(),
 ```
 
-- [ ] **Step 6: Run widget tests**
+- [ ] **Step 6: Regenerate mobile translation codegen (required for the real app)**
+
+The mobile app loads translations through `CodegenLoader` (`mobile/lib/generated/codegen_loader.g.dart`), generated from root `i18n/en.json` — it does **not** read `en.json` at runtime. Without regeneration, `.t()` returns the raw key (the banner would display `backup_background_stale_title` literally). Regenerate:
+
+```bash
+cd mobile
+make translation
+```
+
+This runs `pnpm --prefix ../i18n run format:fix` (sorts `en.json`) then `dart run easy_localization:generate -S ../i18n` (rewrites the codegen loader). Commit the regenerated `mobile/lib/generated/*.g.dart` alongside `en.json`.
+
+> The widget test in Step 1 asserts on the raw key strings (e.g. `find.text('backup_background_stale_title')`) because EasyLocalization is uninitialized under `flutter_test`, so `.t()` returns the key. That means the test passes with or without regeneration — it verifies which message *slot* shows, not the translated copy. Regeneration is still required for the shipped app, so do not skip this step.
+
+- [ ] **Step 7: Run widget tests**
 
 Run:
 
@@ -1977,12 +2153,12 @@ flutter test test/widgets/backup/background_backup_health_banner_test.dart
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 Run:
 
 ```bash
-git add i18n/en.json mobile/lib/widgets/backup/background_backup_health_banner.dart mobile/lib/pages/backup/drift_backup.page.dart mobile/test/widgets/backup/background_backup_health_banner_test.dart
+git add i18n/en.json mobile/lib/generated mobile/lib/widgets/backup/background_backup_health_banner.dart mobile/lib/pages/backup/drift_backup.page.dart mobile/test/widgets/backup/background_backup_health_banner_test.dart
 git commit -m "feat(mobile): show stale background backup status"
 ```
 
@@ -2023,19 +2199,24 @@ void main() {
       },
     );
     when(() => statusService.markReminderShown()).thenAnswer((_) async {});
+    when(() => statusService.recordFailure(any())).thenAnswer((_) async {});
   });
 
-  test('shows reminder for stale status when rate limit allows it', () async {
+  // `.t()` returns the raw key when EasyLocalization is uninitialized (see
+  // _translateHelper's try/catch), so assert on keys, not translated copy.
+  test('infers blocked, records osPrevented, and reminds for a stale status', () async {
     final status = BackgroundBackupStatus(lastBackgroundWakeAt: DateTime.now().subtract(const Duration(days: 8)));
     when(() => statusService.read()).thenAnswer((_) async => status);
 
     await sut.maybeShowReminder();
 
-    expect(notifications.single.title, 'Background backup has not run recently');
+    expect(notifications.single.title, 'backup_background_reminder_title');
+    expect(notifications.single.body, 'backup_background_reminder_body');
+    verify(() => statusService.recordFailure(BackgroundBackupFailureReason.osPrevented)).called(1);
     verify(() => statusService.markReminderShown()).called(1);
   });
 
-  test('shows reminder for blocked status when rate limit allows it', () async {
+  test('reminds for an already-blocked status without re-inferring osPrevented', () async {
     final status = BackgroundBackupStatus(
       lastBackgroundWakeAt: DateTime.now().subtract(const Duration(days: 8)),
       lastBackgroundFailureReason: BackgroundBackupFailureReason.osPrevented,
@@ -2044,7 +2225,8 @@ void main() {
 
     await sut.maybeShowReminder();
 
-    expect(notifications.single.title, 'Background backup has not run recently');
+    expect(notifications.single.title, 'backup_background_reminder_title');
+    verifyNever(() => statusService.recordFailure(any()));
     verify(() => statusService.markReminderShown()).called(1);
   });
 
@@ -2055,6 +2237,7 @@ void main() {
     await sut.maybeShowReminder();
 
     expect(notifications, isEmpty);
+    verifyNever(() => statusService.recordFailure(any()));
     verifyNever(() => statusService.markReminderShown());
   });
 
@@ -2093,6 +2276,7 @@ Create `mobile/lib/services/background_backup_reminder.service.dart`:
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
 
 typedef BackgroundBackupNotificationSender = Future<void> Function({
@@ -2156,7 +2340,21 @@ class BackgroundBackupReminderService {
   Future<void> maybeShowReminder({DateTime? now}) async {
     final currentTime = now ?? DateTime.now();
     final status = await statusService.read();
-    final health = status.deriveHealth(now: currentTime);
+    var health = status.deriveHealth(now: currentTime);
+
+    // Infer OS-prevented background execution. If backup went stale (no
+    // background wake/upload within the stale threshold) and there is no more
+    // specific recorded cause, conclude the OS stopped running us in the
+    // background and only the foreground open recovered. This is the ONE place
+    // `blocked` becomes reachable in production. It self-clears: once a backup
+    // pass refreshes the activity timestamps below the stale threshold, derive
+    // returns healthy/pending again regardless of the stored reason.
+    if (health == BackgroundBackupHealth.stale &&
+        status.lastBackgroundFailureReason == BackgroundBackupFailureReason.none) {
+      await statusService.recordFailure(BackgroundBackupFailureReason.osPrevented);
+      health = BackgroundBackupHealth.blocked;
+    }
+
     if ((health != BackgroundBackupHealth.stale && health != BackgroundBackupHealth.blocked) ||
         !status.shouldShowReminder(now: currentTime)) {
       return;
@@ -2164,8 +2362,8 @@ class BackgroundBackupReminderService {
 
     await showNotification(
       id: notificationId,
-      title: 'Background backup has not run recently',
-      body: 'Open Gallery to resume backup.',
+      title: 'backup_background_reminder_title'.t(),
+      body: 'backup_background_reminder_body'.t(),
     );
     await statusService.markReminderShown();
   }
@@ -2180,11 +2378,19 @@ In `mobile/lib/providers/app_life_cycle.provider.dart`, import:
 import 'package:immich_mobile/services/background_backup_reminder.service.dart';
 ```
 
-In `_resumeBackup()`, after the existing `await _safeRun(_ref.read(driftBackupProvider.notifier).startBackup(currentUser.id), "handleBackupResume");` line, add:
+In `_resumeBackup()`, check the reminder **before** `startBackup`, and `await` it. Ordering matters: `startBackup` (via `uploadBackupCandidates`) records `lastUploadEnqueueAt`, which makes `deriveHealth` return `pending`/`healthy`; if the reminder ran after, it could never observe the stale/blocked state that the foreground open just recovered from. Awaiting (rather than `unawaited`) also keeps the reminder's status read ahead of `startBackup`'s writes. The block becomes:
 
 ```dart
-        unawaited(_ref.read(backgroundBackupReminderServiceProvider).maybeShowReminder());
+      if (currentUser != null) {
+        await _safeRun(
+          _ref.read(backgroundBackupReminderServiceProvider).maybeShowReminder(),
+          "backgroundBackupReminder",
+        );
+        await _safeRun(_ref.read(driftBackupProvider.notifier).startBackup(currentUser.id), "handleBackupResume");
+      }
 ```
+
+`_safeRun` already swallows/logs errors, so a notification-permission failure cannot block the resume backup.
 
 - [ ] **Step 5: Run reminder tests**
 
@@ -2206,6 +2412,26 @@ Run:
 git add mobile/lib/services/background_backup_reminder.service.dart mobile/lib/providers/app_life_cycle.provider.dart mobile/test/services/background_backup_reminder.service_test.dart
 git commit -m "feat(mobile): remind when background backup is stale"
 ```
+
+#### Failure-reason detection scope (read before implementing)
+
+`BackgroundBackupFailureReason` defines more reasons than this slice actively detects. Be honest about which are wired so the health states are not dead code:
+
+| Reason | Recorded by | Health effect |
+| --- | --- | --- |
+| `backupDisabled`, `noCurrentUser` | worker preflight (Task 7) | informational; recent wake still derives healthy |
+| `remoteSyncFailed` | `_syncAssets` on sync failure (Task 7) | keeps state non-healthy; ages into `stale` |
+| `uploadFailed` | upload status callback (Task 7) | keeps state non-healthy; ages into `stale` |
+| `osPrevented` | foreground-resume inference (Task 9) | **the path that makes `blocked` reachable** |
+| `none` | cleared on wake/enqueue/success | — |
+
+**Explicitly out of scope for this slice (modeled, not detected):** `photosPermissionDenied`, `backgroundRefreshUnavailable`, `noNetwork`. They require seams this plan does not build:
+
+- `photosPermissionDenied` — would need a permission read in the worker preflight (no verified seam wired here).
+- `backgroundRefreshUnavailable` — iOS-only; needs a native `UIApplication.backgroundRefreshStatus` getter over a method channel.
+- `noNetwork` — needs connectivity classification of a sync/upload failure rather than the generic `remoteSyncFailed`/`uploadFailed`.
+
+These reasons stay in the model (with serialization + derivation coverage in Task 11) so a later slice can wire detection without a migration. Critically, **omitting their detection is not a false-healthy bug**: the underlying failures still surface — they prevent upload success, so the activity timestamps age out and `deriveHealth` returns `stale` (then `blocked` via the resume inference). Task 11's `keeps recoverable no-network state stale instead of falsely healthy` test pins this guarantee. Do not claim these reasons are surfaced with specific messaging; they are not in this slice.
 
 ---
 
