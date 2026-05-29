@@ -13,6 +13,8 @@ class SearchApiRepository extends ApiRepository {
 
   SearchApi get _api => _apiService.searchApi;
 
+  List<String> _tagIdsForSearch(SearchFilter filter) => filter.tagIds ?? const <String>[];
+
   Future<SearchResponseDto?> search(SearchFilter filter, int page) {
     AssetTypeEnum? type;
     if (filter.mediaType.index == AssetType.image.index) {
@@ -23,37 +25,11 @@ class SearchApiRepository extends ApiRepository {
 
     if ((filter.context != null && filter.context!.isNotEmpty) ||
         (filter.assetId != null && filter.assetId!.isNotEmpty)) {
-      return _api.searchSmart(
-        SmartSearchDto(
-          query: filter.context,
-          queryAssetId: filter.assetId,
-          language: filter.language,
-          country: filter.location.country,
-          state: filter.location.state,
-          city: filter.location.city,
-          make: filter.camera.make,
-          model: filter.camera.model,
-          takenAfter: filter.date.takenAfter,
-          takenBefore: filter.date.takenBefore,
-          visibility: filter.display.isArchive ? AssetVisibility.archive : AssetVisibility.timeline,
-          rating: filter.rating.rating,
-          isFavorite: filter.display.isFavorite ? true : null,
-          isNotInAlbum: filter.display.isNotInAlbum ? true : null,
-          personIds: filter.people.map((e) => e.id).toList(),
-          tagIds: filter.tagIds,
-          type: type,
-          page: page,
-          size: 100,
-        ),
-      );
-    }
-
-    return _api.searchAssets(
-      MetadataSearchDto(
-        originalFileName: filter.filename != null && filter.filename!.isNotEmpty ? filter.filename : null,
+      final dto = SmartSearchDto(
+        query: filter.context,
+        queryAssetId: filter.assetId,
+        language: filter.language,
         country: filter.location.country,
-        description: filter.description != null && filter.description!.isNotEmpty ? filter.description : null,
-        ocr: filter.ocr != null && filter.ocr!.isNotEmpty ? filter.ocr : null,
         state: filter.location.state,
         city: filter.location.city,
         make: filter.camera.make,
@@ -65,12 +41,36 @@ class SearchApiRepository extends ApiRepository {
         isFavorite: filter.display.isFavorite ? true : null,
         isNotInAlbum: filter.display.isNotInAlbum ? true : null,
         personIds: filter.people.map((e) => e.id).toList(),
-        tagIds: filter.tagIds,
+        tagIds: _tagIdsForSearch(filter),
         type: type,
         page: page,
-        size: 1000,
-      ),
+        size: 100,
+      );
+      return _api.searchSmart(filter.display.isUntagged ? _ExplicitNullTagIdsSmartSearchDto(dto) : dto);
+    }
+
+    final dto = MetadataSearchDto(
+      originalFileName: filter.filename != null && filter.filename!.isNotEmpty ? filter.filename : null,
+      country: filter.location.country,
+      description: filter.description != null && filter.description!.isNotEmpty ? filter.description : null,
+      ocr: filter.ocr != null && filter.ocr!.isNotEmpty ? filter.ocr : null,
+      state: filter.location.state,
+      city: filter.location.city,
+      make: filter.camera.make,
+      model: filter.camera.model,
+      takenAfter: filter.date.takenAfter,
+      takenBefore: filter.date.takenBefore,
+      visibility: filter.display.isArchive ? AssetVisibility.archive : AssetVisibility.timeline,
+      rating: filter.rating.rating,
+      isFavorite: filter.display.isFavorite ? true : null,
+      isNotInAlbum: filter.display.isNotInAlbum ? true : null,
+      personIds: filter.people.map((e) => e.id).toList(),
+      tagIds: _tagIdsForSearch(filter),
+      type: type,
+      page: page,
+      size: 1000,
     );
+    return _api.searchAssets(filter.display.isUntagged ? _ExplicitNullTagIdsMetadataSearchDto(dto) : dto);
   }
 
   Future<List<String>?> getSearchSuggestions(
@@ -94,4 +94,24 @@ class SearchApiRepository extends ApiRepository {
 
     return List<String>.from(jsonDecode(utf8.decode(response.bodyBytes)) as List);
   }
+}
+
+// The generated DTOs omit null fields, but the search API uses explicit
+// `tagIds: null` to mean "assets without tags".
+class _ExplicitNullTagIdsMetadataSearchDto extends MetadataSearchDto {
+  final MetadataSearchDto _delegate;
+
+  _ExplicitNullTagIdsMetadataSearchDto(this._delegate) : super(tagIds: null);
+
+  @override
+  Map<String, dynamic> toJson() => _delegate.toJson()..[r'tagIds'] = null;
+}
+
+class _ExplicitNullTagIdsSmartSearchDto extends SmartSearchDto {
+  final SmartSearchDto _delegate;
+
+  _ExplicitNullTagIdsSmartSearchDto(this._delegate) : super(tagIds: null);
+
+  @override
+  Map<String, dynamic> toJson() => _delegate.toJson()..[r'tagIds'] = null;
 }
