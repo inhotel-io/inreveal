@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -32,10 +33,12 @@ void main() {
   late MockDriftBackupRepository mockBackupRepository;
   late MockAppSettingsService mockAppSettingsService;
   late MockAssetMediaRepository mockAssetMediaRepository;
+  late MockBackgroundBackupStatusService mockBackgroundBackupStatusService;
   late Drift db;
 
   setUpAll(() async {
     registerFallbackValue(AppSettingsEnum.useCellularForUploadPhotos);
+    registerFallbackValue(BackgroundBackupFailureReason.none);
 
     TestWidgetsFlutterBinding.ensureInitialized();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -56,9 +59,16 @@ void main() {
     mockBackupRepository = MockDriftBackupRepository();
     mockAppSettingsService = MockAppSettingsService();
     mockAssetMediaRepository = MockAssetMediaRepository();
+    mockBackgroundBackupStatusService = MockBackgroundBackupStatusService();
 
     when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(false);
     when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(false);
+    when(() => mockBackgroundBackupStatusService.recordCandidateCount(any())).thenAnswer((_) async {});
+    when(
+      () => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: any(named: 'candidateCount')),
+    ).thenAnswer((_) async {});
+    when(() => mockBackgroundBackupStatusService.recordUploadSuccess()).thenAnswer((_) async {});
+    when(() => mockBackgroundBackupStatusService.recordFailure(any())).thenAnswer((_) async {});
 
     sut = BackgroundUploadService(
       mockUploadRepository,
@@ -67,6 +77,7 @@ void main() {
       mockBackupRepository,
       mockAppSettingsService,
       mockAssetMediaRepository,
+      mockBackgroundBackupStatusService,
     );
 
     mockUploadRepository.onUploadStatus = (_) {};
@@ -75,6 +86,92 @@ void main() {
 
   tearDown(() {
     sut.dispose();
+  });
+
+  // Returns the status callback the service registered during construction.
+  void Function(TaskStatusUpdate) capturedStatusCallback() {
+    return verify(() => mockUploadRepository.onUploadStatus = captureAny()).captured.first
+        as void Function(TaskStatusUpdate);
+  }
+
+  group('background backup status recording', () {
+    test('records candidate count and enqueue count when candidates are queued', () async {
+      final asset = LocalAssetStub.image1;
+      final mockEntity = MockAssetEntity();
+      final mockFile = File('/path/to/file.jpg');
+
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [asset]);
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => mockFile);
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => 'asset.jpg');
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((_) async => [true]);
+
+      await sut.uploadBackupCandidates('user-1');
+
+      verify(() => mockBackgroundBackupStatusService.recordCandidateCount(1)).called(1);
+      verify(() => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: 1)).called(1);
+    });
+
+    test('records zero candidate count when no candidates exist', () async {
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => []);
+
+      await sut.uploadBackupCandidates('user-1');
+
+      verify(() => mockBackgroundBackupStatusService.recordCandidateCount(0)).called(1);
+      verifyNever(
+        () => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: any(named: 'candidateCount')),
+      );
+    });
+
+    test('records upload success and failure from background downloader callbacks', () async {
+      final successTask = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final failureTask = UploadTask(
+        taskId: 'asset-2',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-2.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+
+      final onStatus = capturedStatusCallback();
+      onStatus(TaskStatusUpdate(successTask, TaskStatus.complete));
+      onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
+      await pumpEventQueue();
+
+      verify(() => mockBackgroundBackupStatusService.recordUploadSuccess()).called(1);
+      verify(
+        () => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed),
+      ).called(1);
+    });
+
+    test('does not record logical upload success for Live Photo motion completion', () async {
+      final motionTask = UploadTask(
+        taskId: 'asset-live',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.mov',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+        metaData: const UploadTaskMetadata(
+          localAssetId: 'asset-live',
+          isLivePhotos: true,
+          livePhotoVideoId: '',
+        ).toJson(),
+      );
+
+      capturedStatusCallback()(TaskStatusUpdate(motionTask, TaskStatus.complete));
+      await pumpEventQueue();
+
+      verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
+    });
   });
 
   group('enqueueTasks', () {
@@ -349,6 +446,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
@@ -400,6 +498,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutAndroid.dispose());
 
@@ -441,6 +540,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
@@ -482,6 +582,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
