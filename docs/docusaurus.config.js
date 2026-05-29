@@ -160,17 +160,17 @@ const config = {
             title: 'Upstream',
             items: [
               {
-                label: 'Noodle Gallery',
+                label: 'Immich',
                 href: 'https://immich.app',
               },
               {
-                label: 'Noodle Gallery Docs',
+                label: 'Immich Docs',
                 href: 'https://docs.immich.app',
               },
             ],
           },
         ],
-        copyright: `Gallery is a fork of Noodle Gallery, available as open source under the terms of the GNU AGPL v3 License.`,
+        copyright: `Gallery is a fork of Immich, available as open source under the terms of the GNU AGPL v3 License.`,
       },
       prism: {
         theme: prism.themes.github,

@@ -6,8 +6,8 @@
 	<string>$(CUSTOM_GROUP_ID)</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>de.opennoodle.gallery.background.refreshUpload</string>
-		<string>de.opennoodle.gallery.background.processingUpload</string>
+		<string>app.alextran.immich.background.refreshUpload</string>
+		<string>app.alextran.immich.background.processingUpload</string>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -74,7 +74,7 @@
 		<string>zh</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>noodle-gallery</string>
+	<string>immich_mobile</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -101,7 +101,6 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>immich</string>
-				<string>noodle-gallery</string>
 			</array>
 		</dict>
 	</array>

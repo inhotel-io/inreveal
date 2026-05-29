@@ -34,7 +34,7 @@
     userInteraction.aboutInfo = info;
     userInteraction.versions = versions;
   });
-  let isMain = $derived(info?.sourceRef === 'main' && info.repository === 'open-noodle/gallery');
+  let isMain = $derived(info?.sourceRef === 'main' && info.repository === 'immich-app/immich');
   let version = $derived(
     $serverVersion ? `v${$serverVersion.major}.${$serverVersion.minor}.${$serverVersion.patch}` : null,
   );
@@ -51,7 +51,7 @@
       return;
     }
 
-    return { availableVersion, releaseUrl: `https://github.com/open-noodle/gallery/releases/tag/${availableVersion}` };
+    return { availableVersion, releaseUrl: `https://github.com/immich-app/immich/releases/tag/${availableVersion}` };
   };
 
   const releaseInfo = $derived(getReleaseInfo(releaseManager.value));

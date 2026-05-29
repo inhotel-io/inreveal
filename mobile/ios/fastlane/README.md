@@ -47,14 +47,6 @@ iOS Manual Release
 
 iOS Build Only (no TestFlight upload)
 
-### ios local_build_signed
-
-```sh
-[bundle exec] fastlane ios local_build_signed
-```
-
-iOS Local Signed Build Only (production bundle IDs, no upload)
-
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

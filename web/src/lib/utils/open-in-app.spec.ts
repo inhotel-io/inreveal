@@ -6,18 +6,18 @@ const UUID2 = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 
 describe('pathToDeepLink', () => {
   it.each([
-    [`/photos/${UUID}`, `noodle-gallery://asset?id=${UUID}`],
-    [`/albums/${UUID}`, `noodle-gallery://album?id=${UUID}`],
-    [`/albums/${UUID}/${UUID2}`, `noodle-gallery://asset?id=${UUID2}`],
-    [`/people/${UUID}`, `noodle-gallery://people?id=${UUID}`],
-    [`/memory/${UUID}`, `noodle-gallery://memory?id=${UUID}`],
-    [`/memory`, `noodle-gallery://memory`],
-    [`/spaces/${UUID}`, `noodle-gallery://space?id=${UUID}`],
-    [`/spaces/${UUID}/photos/${UUID2}`, `noodle-gallery://asset?id=${UUID2}`],
+    [`/photos/${UUID}`, `immich://asset?id=${UUID}`],
+    [`/albums/${UUID}`, `immich://album?id=${UUID}`],
+    [`/albums/${UUID}/${UUID2}`, `immich://asset?id=${UUID2}`],
+    [`/people/${UUID}`, `immich://people?id=${UUID}`],
+    [`/memory/${UUID}`, `immich://memory?id=${UUID}`],
+    [`/memory`, `immich://memory`],
+    [`/spaces/${UUID}`, `immich://space?id=${UUID}`],
+    [`/spaces/${UUID}/photos/${UUID2}`, `immich://asset?id=${UUID2}`],
     // Trailing slashes (server redirects, hand-pasted URLs)
-    [`/photos/${UUID}/`, `noodle-gallery://asset?id=${UUID}`],
-    [`/spaces/${UUID}/`, `noodle-gallery://space?id=${UUID}`],
-    [`/memory/`, `noodle-gallery://memory`],
+    [`/photos/${UUID}/`, `immich://asset?id=${UUID}`],
+    [`/spaces/${UUID}/`, `immich://space?id=${UUID}`],
+    [`/memory/`, `immich://memory`],
   ])('maps %s → %s', (path, expected) => {
     expect(pathToDeepLink(path)).toBe(expected);
   });
@@ -86,7 +86,7 @@ describe('isEligible', () => {
     expect(isEligible(baseOpts)).toEqual({
       eligible: true,
       platform: 'ios',
-      deepLink: `noodle-gallery://asset?id=${UUID_LOCAL}`,
+      deepLink: `immich://asset?id=${UUID_LOCAL}`,
     });
   });
 

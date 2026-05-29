@@ -74,7 +74,7 @@ jobs:
             fi
           done < <(find server/src/schema/migrations-gallery -maxdepth 1 -type f -name '*.ts' | sort)
 
-          UPSTREAM_TAG=v$(jq -r .upstream.version branding/config.json)
+          UPSTREAM_TAG=v$(jq -r .version server/package.json)
           upstream_migrations=$(mktemp)
           trap 'rm -f "$upstream_migrations"' EXIT
           gh api "repos/immich-app/immich/git/trees/${UPSTREAM_TAG}:server/src/schema/migrations" \
@@ -229,8 +229,8 @@ jobs:
           # Step 3: determine upstream Immich version
           ############################################################
 
-          UPSTREAM_TAG=v$(jq -r .upstream.version branding/config.json)
-          echo "Testing revert against upstream Immich ${UPSTREAM_TAG} (from branding/config.json)"
+          UPSTREAM_TAG=v$(jq -r .version server/package.json)
+          echo "Testing revert against upstream Immich ${UPSTREAM_TAG} (from server/package.json)"
           echo "Gallery image: ${GALLERY_IMAGE}"
 
           ############################################################

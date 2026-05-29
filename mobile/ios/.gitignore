@@ -35,8 +35,3 @@ Runner/GeneratedPluginRegistrant.*
 fastlane/report.xml
 Gemfile.lock
 certs/
-certificate.p12
-distribution.cer
-distribution.pem
-ios_dist.key
-*.mobileprovision

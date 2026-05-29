@@ -29,15 +29,17 @@
     <p>{$t('official_immich_resources')}</p>
     <div class="flex flex-col gap-2 mt-5">
       {@render link(
-        'https://github.com/open-noodle/gallery/tree/main/docs',
+        `https://docs.${info.version}.archive.immich.app/overview/introduction`,
         mdiInformationOutline,
         $t('documentation'),
       )}
 
-      {@render link('https://github.com/open-noodle/gallery', mdiGithub, $t('source'))}
+      {@render link('https://github.com/immich-app/immich/', mdiGithub, $t('source'))}
+
+      {@render link('https://discord.immich.app', siDiscord, $t('discord'))}
 
       {@render link(
-        'https://github.com/open-noodle/gallery/issues/new/choose',
+        'https://github.com/immich-app/immich/issues/new/choose',
         mdiBugOutline,
         $t('bugs_and_feature_requests'),
       )}

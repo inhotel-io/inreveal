@@ -94,7 +94,6 @@
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="immich" />
-        <data android:scheme="noodle-gallery" />
       </intent-filter>
 
       <!-- my.immich.app deep link -->
@@ -106,19 +105,19 @@
         <data android:scheme="https" />
 
         <data
-          android:host="my.noodle.gallery"
+          android:host="my.immich.app"
           android:path="/" />
         <data
-          android:host="my.noodle.gallery"
+          android:host="my.immich.app"
           android:pathPrefix="/albums/" />
         <data
-          android:host="my.noodle.gallery"
+          android:host="my.immich.app"
           android:pathPrefix="/people/" />
         <data
-          android:host="my.noodle.gallery"
+          android:host="my.immich.app"
           android:path="/memory" />
         <data
-          android:host="my.noodle.gallery"
+          android:host="my.immich.app"
           android:pathPrefix="/photos/" />
       </intent-filter>
     </activity>
@@ -131,7 +130,7 @@
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="de.opennoodle.gallery" android:pathPrefix="/oauth-callback" />
+        <data android:scheme="app.immich" android:pathPrefix="/oauth-callback" />
       </intent-filter>
     </activity>
     <!-- Don't delete the meta-data below.
