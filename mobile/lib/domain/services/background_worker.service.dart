@@ -6,6 +6,7 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/constants.dart';
+import 'package:immich_mobile/domain/services/background_backup_loop.dart';
 import 'package:immich_mobile/domain/services/log.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
@@ -108,47 +109,35 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
 
   @override
   Future<void> onAndroidUpload() async {
-    _logger.info('Android background processing started');
-    final sw = Stopwatch()..start();
-    try {
-      if (!await _syncAssets(hashTimeout: Duration(minutes: _isBackupEnabled ? 3 : 6))) {
-        _logger.warning("Remote sync did not complete successfully, skipping backup");
-        return;
-      }
-      await _handleBackup();
-    } catch (error, stack) {
-      _logger.severe("Failed to complete Android background processing", error, stack);
-    } finally {
-      sw.stop();
-      _logger.info("Android background processing completed in ${sw.elapsed.inSeconds}s");
-      await _cleanup();
-    }
+    final hashTimeout = Duration(minutes: _isBackupEnabled ? 3 : 6);
+    return _backgroundLoop(
+      hashTimeout: hashTimeout,
+      backupTimeout: null,
+      debugLabel: 'Android background upload',
+    );
   }
 
   @override
   Future<void> onIosUpload(bool isRefresh, int? maxSeconds) async {
-    _logger.info('iOS background upload started with maxSeconds: ${maxSeconds}s');
-    final sw = Stopwatch()..start();
-    try {
-      final timeout = isRefresh ? const Duration(seconds: 5) : Duration(minutes: _isBackupEnabled ? 3 : 6);
-      if (!await _syncAssets(hashTimeout: timeout)) {
-        _logger.warning("Remote sync did not complete successfully, skipping backup");
-        return;
-      }
+    final hashTimeout = isRefresh ? const Duration(seconds: 5) : Duration(minutes: _isBackupEnabled ? 3 : 6);
+    final backupTimeout = maxSeconds != null ? Duration(seconds: maxSeconds - 1) : null;
+    return _backgroundLoop(hashTimeout: hashTimeout, backupTimeout: backupTimeout, debugLabel: 'iOS background upload');
+  }
 
-      final backupFuture = _handleBackup();
-      if (maxSeconds != null) {
-        await backupFuture.timeout(Duration(seconds: maxSeconds - 1), onTimeout: () {});
-      } else {
-        await backupFuture;
-      }
-    } catch (error, stack) {
-      _logger.severe("Failed to complete iOS background upload", error, stack);
-    } finally {
-      sw.stop();
-      _logger.info("iOS background upload completed in ${sw.elapsed.inSeconds}s");
-      await _cleanup();
-    }
+  Future<void> _backgroundLoop({
+    required Duration hashTimeout,
+    required Duration? backupTimeout,
+    required String debugLabel,
+  }) {
+    return BackgroundBackupLoop(
+      syncAssets: _syncAssets,
+      handleBackup: _handleBackup,
+      cleanup: _cleanup,
+      cancellationToken: _cancellationToken,
+      logInfo: _logger.info,
+      logWarning: _logger.warning,
+      logSevere: _logger.severe,
+    ).run(hashTimeout: hashTimeout, backupTimeout: backupTimeout, debugLabel: debugLabel);
   }
 
   @override
@@ -184,7 +173,9 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
       _ref?.dispose();
       _ref = null;
 
-      _cancellationToken.complete();
+      if (!_cancellationToken.isCompleted) {
+        _cancellationToken.complete();
+      }
       _logger.info("Cleaning up background worker");
 
       final cleanupFutures = [
