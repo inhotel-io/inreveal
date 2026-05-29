@@ -108,11 +108,12 @@ class BackgroundWorkerBgService extends BackgroundWorkerFlutterApi {
   }
 
   @override
-  Future<void> onAndroidUpload() async {
+  Future<void> onAndroidUpload(int? maxMinutes) async {
     final hashTimeout = Duration(minutes: _isBackupEnabled ? 3 : 6);
+    final backupTimeout = maxMinutes != null ? Duration(minutes: maxMinutes - 1) : null;
     return _backgroundLoop(
       hashTimeout: hashTimeout,
-      backupTimeout: null,
+      backupTimeout: backupTimeout,
       debugLabel: 'Android background upload',
     );
   }
