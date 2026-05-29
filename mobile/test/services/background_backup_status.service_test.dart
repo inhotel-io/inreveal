@@ -89,4 +89,17 @@ void main() {
       anyOf(BackgroundBackupFailureReason.none, BackgroundBackupFailureReason.uploadFailed),
     );
   });
+
+  test('recordFailure persists explicit edge-case reasons', () async {
+    for (final reason in [
+      BackgroundBackupFailureReason.photosPermissionDenied,
+      BackgroundBackupFailureReason.backgroundRefreshUnavailable,
+      BackgroundBackupFailureReason.noNetwork,
+      BackgroundBackupFailureReason.osPrevented,
+    ]) {
+      await sut.recordFailure(reason);
+
+      expect((await sut.read()).lastBackgroundFailureReason, reason);
+    }
+  });
 }

@@ -621,4 +621,64 @@ void main() {
       expect(metadata[0]['value']['iCloudId'], equals('cloud-id-livephoto'));
     });
   });
+
+  group('cellular upload restrictions', () {
+    Future<UploadTask> buildTaskFor(LocalAsset asset) async {
+      final mockEntity = MockAssetEntity();
+      final mockFile = File('/path/to/${asset.name}');
+
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => mockFile);
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+
+      final task = await sut.getUploadTask(asset);
+      expect(task, isNotNull);
+      return task!;
+    }
+
+    test('sets requiresWiFi true for photos when cellular photo upload is disabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(false);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for photos when cellular photo upload is enabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(true);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isFalse);
+    });
+
+    test('sets requiresWiFi true for videos when cellular video upload is disabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(false);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for videos when cellular video upload is enabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(true);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isFalse);
+    });
+  });
 }

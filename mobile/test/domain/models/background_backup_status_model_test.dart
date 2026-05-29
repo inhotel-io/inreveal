@@ -74,4 +74,28 @@ void main() {
       isTrue,
     );
   });
+
+  test('serializes failure reasons used for required edge cases', () {
+    for (final reason in [
+      BackgroundBackupFailureReason.photosPermissionDenied,
+      BackgroundBackupFailureReason.backgroundRefreshUnavailable,
+      BackgroundBackupFailureReason.noNetwork,
+      BackgroundBackupFailureReason.osPrevented,
+    ]) {
+      final status = BackgroundBackupStatus(lastBackgroundFailureReason: reason);
+      final decoded = BackgroundBackupStatus.fromJson(status.toJson());
+
+      expect(decoded.lastBackgroundFailureReason, reason);
+    }
+  });
+
+  test('keeps recoverable no-network state stale instead of falsely healthy', () {
+    final now = DateTime.utc(2026, 5, 29, 12);
+    final status = BackgroundBackupStatus(
+      lastBackgroundWakeAt: now.subtract(const Duration(days: 8)),
+      lastBackgroundFailureReason: BackgroundBackupFailureReason.noNetwork,
+    );
+
+    expect(status.deriveHealth(now: now), BackgroundBackupHealth.stale);
+  });
 }
