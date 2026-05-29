@@ -19,6 +19,10 @@ Create:
   - Contains the timeout/cancellation behavior from upstream commit `8f4b0fce49`.
 - `mobile/test/domain/services/background_backup_loop_test.dart`
   - Unit tests for sync/backup order, timeout cancellation, cleanup, and failure handling.
+- `mobile/lib/domain/services/background_backup_event_recorder.dart`
+  - A pure Dart recorder that maps worker wake/preflight/sync outcomes to persisted backup-health events.
+- `mobile/test/domain/services/background_backup_event_recorder_test.dart`
+  - Unit tests for worker event mapping without booting a background isolate.
 - `mobile/lib/domain/models/background_backup_status.model.dart`
   - JSON-serializable model and enums for persisted background backup health.
 - `mobile/lib/services/background_backup_status.service.dart`
@@ -28,9 +32,15 @@ Create:
 - `mobile/test/services/background_backup_status.service_test.dart`
   - Store-backed service tests using in-memory Drift.
 - `mobile/lib/widgets/backup/background_backup_health_banner.dart`
-  - Small in-app status banner for warning/stale background backup states.
+  - Small in-app status banner for warning, stale, and blocked background backup states.
 - `mobile/test/widgets/backup/background_backup_health_banner_test.dart`
   - Widget tests for hidden/visible status messages.
+- `mobile/lib/services/background_backup_reminder.service.dart`
+  - Optional stale-background-backup reminder notification with a test seam around platform notification delivery.
+- `mobile/test/services/background_backup_reminder.service_test.dart`
+  - Unit tests for stale-only reminder delivery and rate limiting.
+- `mobile/test/platform/background_worker_native_files_test.dart`
+  - Static native-boundary regression tests for branded iOS task IDs and Android WorkManager constraints/triggers.
 
 Modify:
 
@@ -56,7 +66,7 @@ Modify:
 - `mobile/lib/pages/backup/drift_backup.page.dart`
   - Show `BackgroundBackupHealthBanner` near the backup controls.
 - `i18n/en.json`
-  - Add explicit strings for stale backup warning and last-check details.
+  - Add explicit strings for delayed, stale, and blocked backup warnings.
 - Existing tests:
   - `mobile/test/providers/backup/drift_backup_provider_test.dart`
   - `mobile/test/services/background_upload.service_test.dart`
@@ -378,12 +388,11 @@ Replace the separate Android/iOS loop bodies with:
 
 ```dart
   @override
-  Future<void> onAndroidUpload(int? maxMinutes) async {
+  Future<void> onAndroidUpload() async {
     final hashTimeout = Duration(minutes: _isBackupEnabled ? 3 : 6);
-    final backupTimeout = maxMinutes != null ? Duration(minutes: maxMinutes - 1) : null;
     return _backgroundLoop(
       hashTimeout: hashTimeout,
-      backupTimeout: backupTimeout,
+      backupTimeout: null,
       debugLabel: 'Android background upload',
     );
   }
@@ -425,9 +434,10 @@ Run:
 ```bash
 cd mobile
 flutter test test/domain/services/background_backup_loop_test.dart
+dart analyze lib/domain/services/background_worker.service.dart
 ```
 
-Expected: PASS.
+Expected: PASS and no analyzer errors. Task 2 must leave the branch compileable; Android's `maxMinutes` API change happens in Task 3.
 
 - [ ] **Step 6: Commit**
 
@@ -450,9 +460,24 @@ git commit -m "fix(mobile): add bounded background backup loop"
 - Modify: `mobile/android/app/src/main/kotlin/app/alextran/immich/background/BackgroundWorker.kt`
 - Modify: `mobile/lib/domain/services/background_worker.service.dart`
 
-- [ ] **Step 1: Write the failing Dart compile check**
+- [ ] **Step 1: Create the failing API-usage check**
 
-Before changing Pigeon, run the loop test plus analyzer target that compiles `BackgroundWorkerBgService.onAndroidUpload(int?)` usage:
+First, change only `mobile/lib/domain/services/background_worker.service.dart` so Android receives and applies the upstream runtime bound:
+
+```dart
+  @override
+  Future<void> onAndroidUpload(int? maxMinutes) async {
+    final hashTimeout = Duration(minutes: _isBackupEnabled ? 3 : 6);
+    final backupTimeout = maxMinutes != null ? Duration(minutes: maxMinutes - 1) : null;
+    return _backgroundLoop(
+      hashTimeout: hashTimeout,
+      backupTimeout: backupTimeout,
+      debugLabel: 'Android background upload',
+    );
+  }
+```
+
+Then run:
 
 ```bash
 cd mobile
@@ -464,6 +489,7 @@ Expected:
 
 - The test passes from Task 2.
 - `dart analyze` FAILS because generated `BackgroundWorkerFlutterApi` still declares `onAndroidUpload()` without `int? maxMinutes`.
+- Do not commit this temporary failing state.
 
 - [ ] **Step 2: Update the Pigeon source**
 
@@ -807,6 +833,16 @@ void main() {
     );
   });
 
+  test('derives blocked when OS prevented background execution for a stale interval', () {
+    final now = DateTime.utc(2026, 5, 29, 12);
+    final status = BackgroundBackupStatus(
+      lastBackgroundWakeAt: now.subtract(const Duration(days: 8)),
+      lastBackgroundFailureReason: BackgroundBackupFailureReason.osPrevented,
+    );
+
+    expect(status.deriveHealth(now: now), BackgroundBackupHealth.blocked);
+  });
+
   test('derives pending when candidates were found recently', () {
     final now = DateTime.utc(2026, 5, 29, 12);
     final status = BackgroundBackupStatus(
@@ -876,6 +912,7 @@ enum BackgroundBackupHealth {
   pending,
   warning,
   stale,
+  blocked,
 }
 
 class BackgroundBackupStatus {
@@ -938,6 +975,9 @@ class BackgroundBackupStatus {
 
     final age = now.difference(lastActivityAt);
     if (age >= staleThreshold) {
+      if (lastBackgroundFailureReason == BackgroundBackupFailureReason.osPrevented) {
+        return BackgroundBackupHealth.blocked;
+      }
       return BackgroundBackupHealth.stale;
     }
     if (age >= warningThreshold) {
@@ -1287,12 +1327,121 @@ git commit -m "feat(mobile): persist background backup health"
 ### Task 7: Record Background Backup Health from Worker and Upload Flow
 
 **Files:**
+- Create: `mobile/lib/domain/services/background_backup_event_recorder.dart`
+- Create: `mobile/test/domain/services/background_backup_event_recorder_test.dart`
 - Modify: `mobile/lib/domain/services/background_worker.service.dart`
 - Modify: `mobile/lib/services/background_upload.service.dart`
 - Modify: `mobile/test/services/background_upload.service_test.dart`
-- Modify: `mobile/test/domain/services/background_backup_loop_test.dart`
 
-- [ ] **Step 1: Add failing upload status tests**
+- [ ] **Step 1: Add failing worker event-recorder tests**
+
+Create `mobile/test/domain/services/background_backup_event_recorder_test.dart`:
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
+import 'package:immich_mobile/domain/services/background_backup_event_recorder.dart';
+import 'package:immich_mobile/services/background_backup_status.service.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockBackgroundBackupStatusService extends Mock implements BackgroundBackupStatusService {}
+
+void main() {
+  late MockBackgroundBackupStatusService statusService;
+  late BackgroundBackupEventRecorder sut;
+
+  setUp(() {
+    statusService = MockBackgroundBackupStatusService();
+    sut = BackgroundBackupEventRecorder(statusService);
+    when(() => statusService.recordWake(any())).thenAnswer((_) async {});
+    when(() => statusService.recordFailure(any())).thenAnswer((_) async {});
+  });
+
+  test('records iOS refresh and processing wakes distinctly', () async {
+    await sut.recordIosWake(isRefresh: true);
+    await sut.recordIosWake(isRefresh: false);
+
+    verify(() => statusService.recordWake(BackgroundBackupSchedulerKind.iosRefresh)).called(1);
+    verify(() => statusService.recordWake(BackgroundBackupSchedulerKind.iosProcessing)).called(1);
+  });
+
+  test('records Android background wake', () async {
+    await sut.recordAndroidWake();
+
+    verify(() => statusService.recordWake(BackgroundBackupSchedulerKind.androidBackground)).called(1);
+  });
+
+  test('records backup-disabled and no-user skip reasons', () async {
+    await sut.recordBackupPreflight(backupEnabled: false, hasCurrentUser: true);
+    await sut.recordBackupPreflight(backupEnabled: true, hasCurrentUser: false);
+
+    verify(() => statusService.recordFailure(BackgroundBackupFailureReason.backupDisabled)).called(1);
+    verify(() => statusService.recordFailure(BackgroundBackupFailureReason.noCurrentUser)).called(1);
+  });
+
+  test('records remote sync failure but not success', () async {
+    await sut.recordRemoteSyncResult(false);
+    await sut.recordRemoteSyncResult(true);
+
+    verify(() => statusService.recordFailure(BackgroundBackupFailureReason.remoteSyncFailed)).called(1);
+  });
+}
+```
+
+- [ ] **Step 2: Run the event-recorder tests and confirm failure**
+
+Run:
+
+```bash
+cd mobile
+flutter test test/domain/services/background_backup_event_recorder_test.dart
+```
+
+Expected: FAIL because `background_backup_event_recorder.dart` does not exist.
+
+- [ ] **Step 3: Implement the event recorder**
+
+Create `mobile/lib/domain/services/background_backup_event_recorder.dart`:
+
+```dart
+import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
+import 'package:immich_mobile/services/background_backup_status.service.dart';
+
+class BackgroundBackupEventRecorder {
+  const BackgroundBackupEventRecorder(this._statusService);
+
+  final BackgroundBackupStatusService _statusService;
+
+  Future<void> recordIosWake({required bool isRefresh}) {
+    return _statusService.recordWake(
+      isRefresh ? BackgroundBackupSchedulerKind.iosRefresh : BackgroundBackupSchedulerKind.iosProcessing,
+    );
+  }
+
+  Future<void> recordAndroidWake() {
+    return _statusService.recordWake(BackgroundBackupSchedulerKind.androidBackground);
+  }
+
+  Future<void> recordBackupPreflight({required bool backupEnabled, required bool hasCurrentUser}) {
+    if (!backupEnabled) {
+      return _statusService.recordFailure(BackgroundBackupFailureReason.backupDisabled);
+    }
+    if (!hasCurrentUser) {
+      return _statusService.recordFailure(BackgroundBackupFailureReason.noCurrentUser);
+    }
+    return Future.value();
+  }
+
+  Future<void> recordRemoteSyncResult(bool success) {
+    if (success) {
+      return Future.value();
+    }
+    return _statusService.recordFailure(BackgroundBackupFailureReason.remoteSyncFailed);
+  }
+}
+```
+
+- [ ] **Step 4: Add failing upload status tests**
 
 In `mobile/test/services/background_upload.service_test.dart`, import:
 
@@ -1385,10 +1534,30 @@ Append tests:
       verify(() => mockBackgroundBackupStatusService.recordUploadSuccess()).called(1);
       verify(() => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed)).called(1);
     });
+
+    test('does not record logical upload success for Live Photo motion completion', () async {
+      final motionTask = UploadTask(
+        taskId: 'asset-live',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.mov',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+        metaData: const UploadTaskMetadata(
+          localAssetId: 'asset-live',
+          isLivePhotos: true,
+          livePhotoVideoId: '',
+        ).toJson(),
+      );
+
+      mockUploadRepository.onUploadStatus!(TaskStatusUpdate(motionTask, TaskStatus.complete));
+      await pumpEventQueue();
+
+      verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
+    });
   });
 ```
 
-- [ ] **Step 2: Run the upload service tests and confirm failure**
+- [ ] **Step 5: Run the upload service tests and confirm failure**
 
 Run:
 
@@ -1399,7 +1568,7 @@ flutter test test/services/background_upload.service_test.dart
 
 Expected: FAIL because `BackgroundUploadService` does not accept or call `BackgroundBackupStatusService`.
 
-- [ ] **Step 3: Inject status service into background upload service**
+- [ ] **Step 6: Inject status service into background upload service**
 
 In `mobile/lib/services/background_upload.service.dart`, add imports:
 
@@ -1436,7 +1605,7 @@ Add field:
 
 Update all test-only constructor calls in `mobile/test/services/background_upload.service_test.dart` to pass `mockBackgroundBackupStatusService`.
 
-- [ ] **Step 4: Record candidate and enqueue status**
+- [ ] **Step 7: Record candidate and enqueue status**
 
 In `uploadBackupCandidates`, after candidates are loaded:
 
@@ -1452,13 +1621,31 @@ After successful enqueue call:
       await _backgroundBackupStatusService.recordUploadEnqueue(candidateCount: tasks.length);
 ```
 
-- [ ] **Step 5: Record success and failure from status updates**
+- [ ] **Step 8: Record success and failure from status updates**
+
+Before `_handleTaskStatusUpdate`, add a local guard so Live Photo motion uploads do not falsely mark the logical asset as successfully backed up:
+
+```dart
+  bool _isLivePhotoMotionTask(Task task) {
+    if (task.group != kBackupGroup || task.metaData.isEmpty) {
+      return false;
+    }
+
+    try {
+      return UploadTaskMetadata.fromJson(task.metaData).isLivePhotos;
+    } catch (_) {
+      return false;
+    }
+  }
+```
 
 In `_handleTaskStatusUpdate`, add cases:
 
 ```dart
       case TaskStatus.complete:
-        unawaited(_backgroundBackupStatusService.recordUploadSuccess());
+        if (!_isLivePhotoMotionTask(update.task)) {
+          unawaited(_backgroundBackupStatusService.recordUploadSuccess());
+        }
         unawaited(_handleLivePhoto(update));
 
         if (CurrentPlatform.isIOS) {
@@ -1479,74 +1666,92 @@ In `_handleTaskStatusUpdate`, add cases:
         break;
 ```
 
-- [ ] **Step 6: Record worker wake and early exits**
+- [ ] **Step 9: Record worker wake and early exits through the event recorder**
 
 In `mobile/lib/domain/services/background_worker.service.dart`, import:
 
 ```dart
-import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
+import 'package:immich_mobile/domain/services/background_backup_event_recorder.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
+```
+
+Add a helper getter:
+
+```dart
+  BackgroundBackupEventRecorder? get _backupEventRecorder {
+    final statusService = _ref?.read(backgroundBackupStatusServiceProvider);
+    return statusService == null ? null : BackgroundBackupEventRecorder(statusService);
+  }
 ```
 
 In `onAndroidUpload`, before `_backgroundLoop`, add:
 
 ```dart
-    await _ref?.read(backgroundBackupStatusServiceProvider).recordWake(BackgroundBackupSchedulerKind.androidBackground);
+    await _backupEventRecorder?.recordAndroidWake();
 ```
 
 In `onIosUpload`, before `_backgroundLoop`, add:
 
 ```dart
-    await _ref
-        ?.read(backgroundBackupStatusServiceProvider)
-        .recordWake(isRefresh ? BackgroundBackupSchedulerKind.iosRefresh : BackgroundBackupSchedulerKind.iosProcessing);
+    await _backupEventRecorder?.recordIosWake(isRefresh: isRefresh);
 ```
 
-In `_handleBackup`, before returning when backup is disabled:
+Replace the top of `_handleBackup` so the worker records a deterministic skip reason before returning:
 
 ```dart
-          await _ref?.read(backgroundBackupStatusServiceProvider).recordFailure(BackgroundBackupFailureReason.backupDisabled);
-```
+        final backupEnabled = _isBackupEnabled;
+        final currentUser = _ref?.read(currentUserProvider);
+        await _backupEventRecorder?.recordBackupPreflight(
+          backupEnabled: backupEnabled,
+          hasCurrentUser: currentUser != null,
+        );
 
-Before returning when `currentUser == null`:
+        if (!backupEnabled) {
+          _logger.info("Backup is disabled. Skipping backup routine");
+          return;
+        }
 
-```dart
-          await _ref?.read(backgroundBackupStatusServiceProvider).recordFailure(BackgroundBackupFailureReason.noCurrentUser);
+        if (currentUser == null) {
+          _logger.warning("No current user found. Skipping backup from background");
+          return;
+        }
 ```
 
 In `_syncAssets`, when `isSuccess` is false:
 
 ```dart
     if (!isSuccess) {
-      await _ref?.read(backgroundBackupStatusServiceProvider).recordFailure(BackgroundBackupFailureReason.remoteSyncFailed);
+      await _backupEventRecorder?.recordRemoteSyncResult(false);
     }
 ```
 
-- [ ] **Step 7: Run focused tests**
+- [ ] **Step 10: Run focused tests**
 
 Run:
 
 ```bash
 cd mobile
 dart format lib/domain/services/background_worker.service.dart lib/services/background_upload.service.dart test/services/background_upload.service_test.dart
+dart format lib/domain/services/background_backup_event_recorder.dart test/domain/services/background_backup_event_recorder_test.dart
 flutter test test/services/background_upload.service_test.dart
 flutter test test/domain/services/background_backup_loop_test.dart
+flutter test test/domain/services/background_backup_event_recorder_test.dart
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 11: Commit**
 
 Run:
 
 ```bash
-git add mobile/lib/domain/services/background_worker.service.dart mobile/lib/services/background_upload.service.dart mobile/test/services/background_upload.service_test.dart
+git add mobile/lib/domain/services/background_backup_event_recorder.dart mobile/test/domain/services/background_backup_event_recorder_test.dart mobile/lib/domain/services/background_worker.service.dart mobile/lib/services/background_upload.service.dart mobile/test/services/background_upload.service_test.dart
 git commit -m "feat(mobile): record background backup health events"
 ```
 
 ---
 
-### Task 8: Add Stale Backup Banner
+### Task 8: Add Stale and Blocked Backup Banner
 
 **Files:**
 - Create: `mobile/lib/widgets/backup/background_backup_health_banner.dart`
@@ -1600,10 +1805,10 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: Scaffold(body: BackgroundBackupHealthBanner()))));
 
     expect(find.byType(BackgroundBackupHealthBanner), findsOneWidget);
-    expect(find.textContaining('Background backup has not run'), findsNothing);
+    expect(find.textContaining('backup_background_'), findsNothing);
   });
 
-  testWidgets('shows stale status with last check details', (tester) async {
+  testWidgets('shows stale status', (tester) async {
     await Store.put(
       StoreKey.backgroundBackupStatus,
       jsonEncode(
@@ -1617,8 +1822,25 @@ void main() {
 
     await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: Scaffold(body: BackgroundBackupHealthBanner()))));
 
-    expect(find.textContaining('Background backup has not run recently'), findsOneWidget);
-    expect(find.textContaining('Open Gallery to resume backup'), findsOneWidget);
+    expect(find.text('backup_background_stale_title'), findsOneWidget);
+    expect(find.text('backup_background_stale_body'), findsOneWidget);
+  });
+
+  testWidgets('shows blocked status when the OS prevented background execution', (tester) async {
+    await Store.put(
+      StoreKey.backgroundBackupStatus,
+      jsonEncode(
+        BackgroundBackupStatus(
+          lastBackgroundWakeAt: DateTime.now().subtract(const Duration(days: 8)),
+          lastBackgroundFailureReason: BackgroundBackupFailureReason.osPrevented,
+        ).toJson(),
+      ),
+    );
+
+    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: Scaffold(body: BackgroundBackupHealthBanner()))));
+
+    expect(find.text('backup_background_blocked_title'), findsOneWidget);
+    expect(find.text('backup_background_blocked_body'), findsOneWidget);
   });
 }
 ```
@@ -1643,6 +1865,8 @@ Add these keys to `i18n/en.json` near existing backup strings:
   "backup_background_stale_body": "Open Gallery to resume backup. iOS may stop background work after the app is force-quit.",
   "backup_background_warning_title": "Background backup is delayed",
   "backup_background_warning_body": "Gallery has not checked for new photos in the background recently.",
+  "backup_background_blocked_title": "Background backup needs attention",
+  "backup_background_blocked_body": "Open Gallery to resume backup. iOS and Android can stop scheduled work after force-quit or battery restrictions.",
 ```
 
 - [ ] **Step 4: Create the banner widget**
@@ -1671,13 +1895,17 @@ class BackgroundBackupHealthBanner extends ConsumerWidget {
         }
 
         final health = status.deriveHealth(now: DateTime.now());
-        if (health != BackgroundBackupHealth.warning && health != BackgroundBackupHealth.stale) {
+        if (health != BackgroundBackupHealth.warning &&
+            health != BackgroundBackupHealth.stale &&
+            health != BackgroundBackupHealth.blocked) {
           return const SizedBox.shrink();
         }
 
-        final isStale = health == BackgroundBackupHealth.stale;
-        final title = isStale ? 'backup_background_stale_title'.t() : 'backup_background_warning_title'.t();
-        final body = isStale ? 'backup_background_stale_body'.t() : 'backup_background_warning_body'.t();
+        final (title, body) = switch (health) {
+          BackgroundBackupHealth.blocked => ('backup_background_blocked_title'.t(), 'backup_background_blocked_body'.t()),
+          BackgroundBackupHealth.stale => ('backup_background_stale_title'.t(), 'backup_background_stale_body'.t()),
+          _ => ('backup_background_warning_title'.t(), 'backup_background_warning_body'.t()),
+        };
 
         return Padding(
           padding: const EdgeInsets.only(top: 12),
@@ -1807,6 +2035,19 @@ void main() {
     verify(() => statusService.markReminderShown()).called(1);
   });
 
+  test('shows reminder for blocked status when rate limit allows it', () async {
+    final status = BackgroundBackupStatus(
+      lastBackgroundWakeAt: DateTime.now().subtract(const Duration(days: 8)),
+      lastBackgroundFailureReason: BackgroundBackupFailureReason.osPrevented,
+    );
+    when(() => statusService.read()).thenAnswer((_) async => status);
+
+    await sut.maybeShowReminder();
+
+    expect(notifications.single.title, 'Background backup has not run recently');
+    verify(() => statusService.markReminderShown()).called(1);
+  });
+
   test('does not show reminder for healthy status', () async {
     final status = BackgroundBackupStatus(lastBackgroundWakeAt: DateTime.now());
     when(() => statusService.read()).thenAnswer((_) async => status);
@@ -1862,9 +2103,29 @@ typedef BackgroundBackupNotificationSender = Future<void> Function({
 
 final backgroundBackupReminderServiceProvider = Provider<BackgroundBackupReminderService>((ref) {
   final plugin = FlutterLocalNotificationsPlugin();
+  var notificationsInitialized = false;
+
+  Future<void> ensureNotificationsInitialized() async {
+    if (notificationsInitialized) {
+      return;
+    }
+
+    final initialized = await plugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(),
+      ),
+    );
+    notificationsInitialized = initialized ?? true;
+  }
+
   return BackgroundBackupReminderService(
     statusService: ref.watch(backgroundBackupStatusServiceProvider),
-    showNotification: ({required int id, required String title, required String body}) {
+    showNotification: ({required int id, required String title, required String body}) async {
+      await ensureNotificationsInitialized();
+      if (!notificationsInitialized) {
+        return;
+      }
       return plugin.show(
         id,
         title,
@@ -1896,7 +2157,8 @@ class BackgroundBackupReminderService {
     final currentTime = now ?? DateTime.now();
     final status = await statusService.read();
     final health = status.deriveHealth(now: currentTime);
-    if (health != BackgroundBackupHealth.stale || !status.shouldShowReminder(now: currentTime)) {
+    if ((health != BackgroundBackupHealth.stale && health != BackgroundBackupHealth.blocked) ||
+        !status.shouldShowReminder(now: currentTime)) {
       return;
     }
 
@@ -2062,7 +2324,209 @@ git commit -m "test(mobile): cover background downloader recovery edges"
 
 ---
 
-### Task 11: Focused and Wide Verification
+### Task 11: Add Required Edge-Case Coverage
+
+**Files:**
+- Create: `mobile/test/platform/background_worker_native_files_test.dart`
+- Modify: `mobile/test/domain/models/background_backup_status_model_test.dart`
+- Modify: `mobile/test/services/background_backup_status.service_test.dart`
+- Modify: `mobile/test/services/background_upload.service_test.dart`
+
+- [ ] **Step 1: Add native boundary regression tests**
+
+Create `mobile/test/platform/background_worker_native_files_test.dart`:
+
+```dart
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('iOS background worker derives branded task identifiers from permitted identifiers', () {
+    final source = File('ios/Runner/Background/BackgroundWorkerApiImpl.swift').readAsStringSync();
+
+    expect(source, contains('BGTaskSchedulerPermittedIdentifiers'));
+    expect(source, contains('hasSuffix(".refreshUpload")'));
+    expect(source, contains('hasSuffix(".processingUpload")'));
+    expect(source, contains('BGAppRefreshTaskRequest(identifier: refreshTaskID)'));
+    expect(source, contains('BGProcessingTaskRequest(identifier: processingTaskID)'));
+  });
+
+  test('Android background worker preserves media triggers, charging constraint, and periodic worker', () {
+    final source = File(
+      'android/app/src/main/kotlin/app/alextran/immich/background/BackgroundWorkerApiImpl.kt',
+    ).readAsStringSync();
+
+    expect(source, contains('addContentUriTrigger(MediaStore.Images.Media.INTERNAL_CONTENT_URI'));
+    expect(source, contains('addContentUriTrigger(MediaStore.Images.Media.EXTERNAL_CONTENT_URI'));
+    expect(source, contains('addContentUriTrigger(MediaStore.Video.Media.INTERNAL_CONTENT_URI'));
+    expect(source, contains('addContentUriTrigger(MediaStore.Video.Media.EXTERNAL_CONTENT_URI'));
+    expect(source, contains('setRequiresCharging(settings.requiresCharging)'));
+    expect(source, contains('setRequiresBatteryNotLow(true)'));
+    expect(source, contains('PeriodicWorkRequestBuilder<PeriodicWorker>'));
+  });
+}
+```
+
+- [ ] **Step 2: Run native boundary tests**
+
+Run:
+
+```bash
+cd mobile
+flutter test test/platform/background_worker_native_files_test.dart
+```
+
+Expected: PASS. These are characterization tests for existing native behavior; if one fails, fix only the affected mobile native file and keep the fix mobile-only.
+
+- [ ] **Step 3: Add explicit failure-reason persistence coverage**
+
+Append to `mobile/test/services/background_backup_status.service_test.dart`:
+
+```dart
+  test('recordFailure persists explicit edge-case reasons', () async {
+    for (final reason in [
+      BackgroundBackupFailureReason.photosPermissionDenied,
+      BackgroundBackupFailureReason.backgroundRefreshUnavailable,
+      BackgroundBackupFailureReason.noNetwork,
+      BackgroundBackupFailureReason.osPrevented,
+    ]) {
+      await sut.recordFailure(reason);
+
+      expect((await sut.read()).lastBackgroundFailureReason, reason);
+    }
+  });
+```
+
+Append to `mobile/test/domain/models/background_backup_status_model_test.dart`:
+
+```dart
+  test('serializes failure reasons used for required edge cases', () {
+    for (final reason in [
+      BackgroundBackupFailureReason.photosPermissionDenied,
+      BackgroundBackupFailureReason.backgroundRefreshUnavailable,
+      BackgroundBackupFailureReason.noNetwork,
+      BackgroundBackupFailureReason.osPrevented,
+    ]) {
+      final status = BackgroundBackupStatus(lastBackgroundFailureReason: reason);
+      final decoded = BackgroundBackupStatus.fromJson(status.toJson());
+
+      expect(decoded.lastBackgroundFailureReason, reason);
+    }
+  });
+
+  test('keeps recoverable no-network state stale instead of falsely healthy', () {
+    final now = DateTime.utc(2026, 5, 29, 12);
+    final status = BackgroundBackupStatus(
+      lastBackgroundWakeAt: now.subtract(const Duration(days: 8)),
+      lastBackgroundFailureReason: BackgroundBackupFailureReason.noNetwork,
+    );
+
+    expect(status.deriveHealth(now: now), BackgroundBackupHealth.stale);
+  });
+```
+
+- [ ] **Step 4: Run failure-reason tests**
+
+Run:
+
+```bash
+cd mobile
+flutter test test/domain/models/background_backup_status_model_test.dart test/services/background_backup_status.service_test.dart
+```
+
+Expected: PASS. If this fails, fix only `BackgroundBackupStatus` serialization or `BackgroundBackupStatusService.recordFailure`.
+
+- [ ] **Step 5: Add Wi-Fi/cellular restriction tests**
+
+Append to `mobile/test/services/background_upload.service_test.dart`:
+
+```dart
+  group('cellular upload restrictions', () {
+    Future<UploadTask> buildTaskFor(LocalAsset asset) async {
+      final mockEntity = MockAssetEntity();
+      final mockFile = File('/path/to/${asset.name}');
+
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => mockFile);
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+
+      final task = await sut.getUploadTask(asset);
+      expect(task, isNotNull);
+      return task!;
+    }
+
+    test('sets requiresWiFi true for photos when cellular photo upload is disabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(false);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for photos when cellular photo upload is enabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(true);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isFalse);
+    });
+
+    test('sets requiresWiFi true for videos when cellular video upload is disabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(false);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for videos when cellular video upload is enabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(true);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isFalse);
+    });
+  });
+```
+
+- [ ] **Step 6: Run required edge-case tests**
+
+Run:
+
+```bash
+cd mobile
+dart format test/platform/background_worker_native_files_test.dart test/domain/models/background_backup_status_model_test.dart test/services/background_backup_status.service_test.dart test/services/background_upload.service_test.dart
+flutter test test/platform/background_worker_native_files_test.dart test/domain/models/background_backup_status_model_test.dart test/services/background_backup_status.service_test.dart test/services/background_upload.service_test.dart
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+Run:
+
+```bash
+git add mobile/test/platform/background_worker_native_files_test.dart mobile/test/domain/models/background_backup_status_model_test.dart mobile/test/services/background_backup_status.service_test.dart mobile/test/services/background_upload.service_test.dart
+git commit -m "test(mobile): cover background backup edge cases"
+```
+
+---
+
+### Task 12: Focused and Wide Verification
 
 **Files:**
 - Read: all changed files
@@ -2076,12 +2540,14 @@ Run:
 cd mobile
 flutter test \
   test/domain/services/background_backup_loop_test.dart \
+  test/domain/services/background_backup_event_recorder_test.dart \
   test/domain/models/background_backup_status_model_test.dart \
   test/services/background_backup_status.service_test.dart \
   test/services/background_backup_reminder.service_test.dart \
   test/providers/backup/drift_backup_provider_test.dart \
   test/services/background_upload.service_test.dart \
   test/repositories/upload_repository_test.dart \
+  test/platform/background_worker_native_files_test.dart \
   test/utils/background_downloader_recovery_test.dart \
   test/widgets/backup/background_backup_health_banner_test.dart
 ```
@@ -2096,6 +2562,7 @@ Run:
 cd mobile
 dart analyze \
   lib/domain/services/background_backup_loop.dart \
+  lib/domain/services/background_backup_event_recorder.dart \
   lib/domain/services/background_worker.service.dart \
   lib/domain/models/background_backup_status.model.dart \
   lib/services/background_backup_status.service.dart \
@@ -2130,7 +2597,7 @@ git diff --name-only origin/main...HEAD | rg -n '^(server|open-api|e2e|machine-l
 
 Expected: no output caused by this implementation. If older PR changes touch non-mobile files, confirm they predate this plan and are already intentional for the branch.
 
-- [ ] **Step 5: Run the broader mobile test suite if time permits**
+- [ ] **Step 5: Run the broader mobile test suite**
 
 Run:
 
@@ -2154,7 +2621,7 @@ If no fixes were needed, do not create a commit.
 
 ---
 
-### Task 12: Manual Device Checks
+### Task 13: Manual Device Checks
 
 **Files:**
 - Modify only if manual checks expose a bug already covered by an added failing test
