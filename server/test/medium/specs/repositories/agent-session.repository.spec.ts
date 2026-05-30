@@ -315,6 +315,51 @@ describe(AgentSessionRepository.name, () => {
     expect(cleared).toMatchObject({ id: session.id, title: null });
   });
 
+  it('round-trips workflow state by owner and clears it with null', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const session = await sut.create({
+      userId: user.id,
+      providerCredentialId: null,
+      credentialSnapshot,
+      modelSnapshot,
+      permissionPreset: AgentPermissionPreset.Careful,
+      permissionPlanSnapshot,
+      approvalMode: AgentApprovalMode.Strict,
+      runnerEndpoint: null,
+      runnerSessionId: null,
+      runnerCapabilitiesSnapshot: null,
+      initialContextSnapshot,
+    });
+
+    await expect(sut.getById(user.id, session.id)).resolves.toMatchObject({ id: session.id, workflowState: null });
+
+    const workflowState = {
+      workflowKind: 'create_recent_trip_album',
+      kind: 'selection',
+      continuation: {
+        kind: 'create_recent_trip_album_candidate_selection',
+        createdAtMs: 1_747_216_800_000,
+        candidates: [{ index: 1, dedupeKey: 'trip:usa', label: 'Recent trip to USA' }],
+      },
+    };
+
+    const stored = await sut.setWorkflowState(user.id, session.id, workflowState);
+    expect(stored).toMatchObject({ id: session.id, workflowState });
+    expect(stored.updateId).not.toBe(session.updateId);
+
+    await expect(sut.getById(user.id, session.id)).resolves.toMatchObject({ id: session.id, workflowState });
+
+    // Ownership is enforced: another user cannot mutate workflow state.
+    await expect(sut.setWorkflowState(otherUser.id, session.id, null)).rejects.toThrow();
+    await expect(sut.getById(user.id, session.id)).resolves.toMatchObject({ id: session.id, workflowState });
+
+    const cleared = await sut.setWorkflowState(user.id, session.id, null);
+    expect(cleared).toMatchObject({ id: session.id, workflowState: null });
+    await expect(sut.getById(user.id, session.id)).resolves.toMatchObject({ id: session.id, workflowState: null });
+  });
+
   it('deletes sessions by owner and reports whether a row was removed', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
