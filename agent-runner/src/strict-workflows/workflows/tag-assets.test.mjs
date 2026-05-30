@@ -122,4 +122,15 @@ describe('tag_assets execution', () => {
     const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 10 photos', tagName: 'Travel' } });
     assert.equal(outcome.status, 'failed');
   });
+
+  it('returns needs_input for an ambiguous source entity (no proposeAssetBatchFromSelection)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'ambiguous', choices: [{ value: 'a', label: 'Alex Smith' }, { value: 'b', label: 'Alex Jones' }], message: '' },
+      ],
+    });
+    const outcome = await wf.run({ client, slots: { tagName: 'Family', sourceDescription: 'photos of Alex' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'), false);
+  });
 });
