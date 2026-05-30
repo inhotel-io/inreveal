@@ -13,6 +13,13 @@
 // L3 activity summaries are scrubbed of slot values, so we never assert exact
 // slots here (that's L1's job). `none` is asserted for negatives — the agent
 // must NOT fabricate a strict workflow for questions/chatter/unsupported intents.
+import config from '../config.mjs';
+
+// Membership/role plan-proposed is asserted only on the local seeded stack (known
+// members + a seeded non-owner). Against personal (single user = owner), those
+// scenarios assert routing only.
+const SEEDED = config.l3.seeded;
+
 export default [
   // --- routing: the agent reaches the right strict workflow -----------------
   {
@@ -80,6 +87,24 @@ export default [
     prompt: 'tag my newest 20 photos as "eval-l3"',
     expect: { kind: 'tag_assets' },
   },
+  {
+    id: 'l3.recall.space.describe',
+    category: 'l3.recall',
+    prompt: 'set the description on the {space} space to Shared memories',
+    expect: { kind: 'rename_or_describe_space' },
+  },
+  {
+    id: 'l3.recall.members.add',
+    category: 'l3.recall',
+    prompt: 'add {user} to the {space} space as editor',
+    expect: { kind: 'manage_space_members' },
+  },
+  {
+    id: 'l3.recall.role',
+    category: 'l3.recall',
+    prompt: 'make {user} an editor in the {space} space',
+    expect: { kind: 'change_member_role' },
+  },
 
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
@@ -139,6 +164,14 @@ export default [
     category: 'l3.negatives',
     prompt: 'remove the Travel tag from my newest 20',
     expect: { kind: 'none' },
+  },
+  {
+    // Adding photos to a space is unsupported; the photo-source guard keeps it out
+    // of manage_space_members (routes to add_photos or none, never a member op).
+    id: 'l3.neg.space.add-photos',
+    category: 'l3.negatives',
+    prompt: 'add my newest 20 photos to the {space} space',
+    expect: { anyKind: ['none', 'add_photos_to_album'] },
   },
 
   // --- plan-proposed: end-to-end against a real library ---------------------
@@ -202,6 +235,34 @@ export default [
     category: 'l3.plan',
     prompt: 'tag my newest 20 photos as "eval-l3"',
     expect: { kind: 'tag_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // rename_or_describe_space end-to-end: proposes space.updateDetails setting a
+    // description on a discovered {space} — proposed, never applied. Works on any
+    // instance that has a space.
+    id: 'l3.plan.describe.space',
+    category: 'l3.plan',
+    prompt: 'set the description on the {space} space to L3 eval note',
+    expect: { kind: 'rename_or_describe_space', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // manage_space_members end-to-end. plan-proposed only on the local seeded stack
+    // (a {user} not already in {space}); routing-only on personal (single user).
+    id: 'l3.plan.members.add',
+    category: 'l3.plan',
+    prompt: 'add {user} to the {space} space as editor',
+    expect: { kind: 'manage_space_members', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
+    // change_member_role end-to-end. plan-proposed only on the local seeded stack
+    // (a {user} who IS a member with a different role); routing-only on personal.
+    id: 'l3.plan.role.make',
+    category: 'l3.plan',
+    prompt: 'make {user} an editor in the {space} space',
+    expect: { kind: 'change_member_role', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
 

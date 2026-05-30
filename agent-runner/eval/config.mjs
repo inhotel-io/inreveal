@@ -46,5 +46,9 @@ export default {
     // session settles (a fast regex route can settle before its event flushes).
     settleGraceMs: Number(process.env.EVAL_L3_GRACE_MS ?? 4000),
     keepSessions: process.env.EVAL_L3_KEEP_SESSIONS === '1',
+    // Set on the local seeded dev stack (known members + a seeded non-owner) so
+    // membership/role L3 scenarios assert plan-proposed. Off against personal
+    // (unknowable member set / single user) → those assert routing-only.
+    seeded: process.env.EVAL_L3_SEEDED === '1',
   },
 };
