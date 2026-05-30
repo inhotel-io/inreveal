@@ -116,4 +116,10 @@ export default [
     prompt: 'rotate my newest 5 photos 90 counterclockwise',
     expect: { kind: 'rotate_assets', slots: { angle: 270, sourceDescription: 'my newest 5 photos' } },
   },
+  {
+    id: 'slots.cover.index',
+    category: 'slots',
+    prompt: 'set the cover of the Family album to the 3rd photo',
+    expect: { kind: 'set_album_cover', slots: { albumRef: 'Family', coverRef: /3rd|third/i } },
+  },
 ];

@@ -69,6 +69,35 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'set_album_cover',
+    flow: 'strict',
+    title: 'Set album cover',
+    classifierDescription:
+      'User wants to set the cover photo of an existing album to a specific photo identified by position (first, last, or Nth).',
+    positiveExamples: Object.freeze([
+      'Set the cover of the Family album to the first photo',
+      'Make the Family album cover the 3rd photo',
+      'Set the cover of my Italy album to the last photo',
+    ]),
+    negativeExamples: Object.freeze([
+      'Pick a better cover for the Family album',
+      'Change the cover photo on my Italy album',
+      'Rename the Family album to Family 2026',
+    ]),
+    slots: Object.freeze({
+      albumRef: Object.freeze({ type: 'string', required: true, description: 'The album whose cover to set.' }),
+      coverRef: Object.freeze({ type: 'string', required: true, description: 'Which photo becomes the cover (first/last/Nth).' }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums', 'readAlbum']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Set album cover',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Pi resolves the album + an explicit photo position; Gallery owns the album.setCover plan (cover rides in the asset selection).',
+    }),
+  }),
+  Object.freeze({
     kind: 'add_photos_to_album',
     flow: 'hybrid',
     title: 'Add photos to existing album',
