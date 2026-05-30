@@ -15,6 +15,9 @@
     "l3.recall.add.newest20": 1,
     "l3.recall.trip.lisbon.llm": 1,
     "l3.recall.describe.italy": 1,
+    "l3.recall.archive": 1,
+    "l3.recall.favorite": 1,
+    "l3.recall.tag": 1,
     "l3.neg.count": 1,
     "l3.neg.thanks": 1,
     "l3.neg.favorite": 1,
@@ -22,9 +25,14 @@
     "l3.neg.subjective": 1,
     "l3.neg.where": 1,
     "l3.neg.delete": 1,
+    "l3.neg.archive.subjective": 1,
+    "l3.neg.tag.removal": 1,
     "l3.plan.trip.usa": 1,
     "l3.plan.describe.discovered": 1,
     "l3.plan.add.recency": 1,
+    "l3.plan.archive.recency": 1,
+    "l3.plan.favorite.recency": 1,
+    "l3.plan.tag.recency": 1,
     "l3.multiturn.trip.recover": 1
   }
 }
