@@ -7,6 +7,10 @@ const manifest = [
     kind: 'create_recent_trip_album',
     flow: 'strict',
     classifierDescription: 'User wants an album built from a recent trip.',
+    slots: {
+      albumName: { type: 'string', required: false, description: 'Explicit album name if the user gave one.' },
+      placeHint: { type: 'string', required: false, description: 'Place text to bias trip detection.' },
+    },
     positiveExamples: ['Create an album for my recent trip to USA'],
     negativeExamples: ['Add my recent trip photos to Family'],
   },
@@ -135,10 +139,28 @@ describe('intent classifier', () => {
     assert.match(prompt, /none/);
   });
 
+  it('names the exact slot keys in the prompt so the model does not invent them', () => {
+    // Regression guard: a real local model (Qwen3-Coder) otherwise returns keys
+    // like trip_location/trip_timeframe, which parseSlots rejects -> recall miss.
+    const prompt = buildClassifierPrompt(manifest);
+    assert.match(prompt, /albumName/);
+    assert.match(prompt, /placeHint/);
+    assert.match(prompt, /EXACT keys/);
+    assert.match(prompt, /never invent (?:keys|new keys)/i);
+  });
+
   it('classifies imperative requests as actionable and pure acknowledgements as not', () => {
     assert.equal(looksActionable('put my Japan trip into an album'), true);
     assert.equal(looksActionable('Organize my photos.'), true);
     assert.equal(looksActionable('thanks, that looks great'), false);
     assert.equal(looksActionable(''), false);
+  });
+
+  it('admits photo-domain paraphrases with uncommon verbs (recall over cost)', () => {
+    // These were dropped by the old verb-only heuristic before reaching the LLM.
+    assert.equal(looksActionable('throw the pics from our Italy getaway into a new album'), true);
+    assert.equal(looksActionable('stick my newest 20 photos into the Family album'), true);
+    // Still rejects pure chatter with no verb, domain noun, or question.
+    assert.equal(looksActionable('the weather is lovely today'), false);
   });
 });
