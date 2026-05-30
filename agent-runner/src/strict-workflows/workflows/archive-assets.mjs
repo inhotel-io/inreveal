@@ -96,6 +96,9 @@ export const archiveAssetsWorkflow = () => ({
     if (resolution.status === 'handoff') {
       return handoffOpen({ reason: resolution.reason });
     }
+    if (resolution.status === 'needs_input') {
+      return needsInput({ text: resolution.text });
+    }
     if (resolution.status === 'empty') {
       return needsInput({
         text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,

@@ -389,3 +389,89 @@ describe('isCleanSource', () => {
     });
   }
 });
+
+describe('resolveAssetSource — entity ambiguity / not-found', () => {
+  it('returns needs_input for an ambiguous person (no searchAssets call)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'ambiguous', choices: [{ value: 'p1', label: 'Alex Smith' }, { value: 'p2', label: 'Alex Jones' }], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.ok(/which.*Alex/i.test(result.text), `text should match /which.*Alex/i but got: ${result.text}`);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('returns needs_input for a not-found tag (no searchAssets call)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'tag', query: 'Trvel', status: 'not_found', choices: [], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos tagged Trvel', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.ok(/could not find.*tag.*Trvel/i.test(result.text), `text should match /could not find.*tag.*Trvel/i but got: ${result.text}`);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('returns needs_input for mixed matched + not-found (text mentions not-found, no searchAssets)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' },
+        { kind: 'tag', query: 'Trvel', status: 'not_found', choices: [], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex tagged Trvel', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.ok(result.text.includes('Trvel'), `text should mention "Trvel" but got: ${result.text}`);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('returns a single needs_input for two ambiguous entities (text mentions both)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'ambiguous', choices: [{ value: 'a', label: 'Alex Smith' }], message: '' },
+        { kind: 'tag', query: 'Travel', status: 'ambiguous', choices: [{ value: 't', label: 'Travel 2024' }], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex tagged Travel', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.ok(/Alex/i.test(result.text), `text should mention "Alex" but got: ${result.text}`);
+    assert.ok(/Travel/i.test(result.text), `text should mention "Travel" but got: ${result.text}`);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('all-matched proceeds to resolved (regression guard)', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { personIds: ['per-1'] },
+      resolveResults: [{ kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' }],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { personIds: ['per-1'] });
+  });
+
+  it('ambiguous-vs-empty distinction: matched person with zero photos → empty (not needs_input)', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { personIds: ['per-1'] },
+      resolveResults: [{ kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' }],
+      handleAssetCount: 0,
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'empty');
+  });
+
+  it('needs_input copy carries NO ids (labels and queries only)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'ambiguous', choices: [{ value: 'p1', label: 'Alex Smith' }, { value: 'p2', label: 'Alex Jones' }], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.equal(result.text.includes('p1'), false);
+    assert.equal(result.text.includes('p2'), false);
+  });
+});

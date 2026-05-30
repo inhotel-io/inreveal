@@ -7,6 +7,7 @@
 // resolveAssetSource(...) -> { status: 'resolved', selectionHandleId, assetCount }
 //                          | { status: 'empty' }
 //                          | { status: 'handoff', reason }
+//                          | { status: 'needs_input', text }   // ambiguous / not-found named entity
 //
 // Clean-source gate: a source resolves only when it is composed ENTIRELY of
 // recency / date / generic-noun / filler tokens. Any substantive residual (a
@@ -237,6 +238,37 @@ const mergeResultSearchFilters = (results) => {
   return merged;
 };
 
+// Human nouns for needs_input copy. Copy uses choice LABELS / queries only — never
+// ids or raw choice payloads (model-facing-arg safety invariant).
+const RESOLVE_KIND_NOUN = {
+  person: 'person', tag: 'tag', album: 'album', space: 'space',
+  cameraMake: 'camera', cameraModel: 'camera', lensModel: 'lens',
+};
+
+const joinList = (items) => {
+  const list = items.filter(Boolean);
+  if (list.length <= 1) {
+    return list[0] ?? '';
+  }
+  return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+};
+
+const ambiguousNeedsInputText = (results) => {
+  const phrases = results.map((result) => {
+    const labels = (result.choices ?? []).map((choice) => choice?.label).filter(Boolean);
+    const suffix = labels.length > 0 ? ` (${joinList(labels)})` : '';
+    return `"${result.query}"${suffix}`;
+  });
+  return `Which did you mean for ${joinList(phrases)}?`;
+};
+
+const notFoundNeedsInputText = (results) => {
+  const phrases = results.map(
+    (result) => `a ${RESOLVE_KIND_NOUN[result.kind] ?? result.kind} called "${result.query}"`,
+  );
+  return `I could not find ${joinList(phrases)}. Could you say which one you mean?`;
+};
+
 // --- clean-source gate ------------------------------------------------------
 
 // Generic media nouns are filler (a recency/date source can carry them).
@@ -330,9 +362,20 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     let resolvedFilters = {};
     if (Object.keys(nameRequest).length > 0) {
       const resolution = await client.call('resolveAssetSearchFilters', nameRequest, { signal });
+      const results = resolution?.results ?? [];
+      // Never guess: any ambiguous or not-found entity asks for input instead of
+      // trusting a partial/empty resolvedFilters.
+      const ambiguous = results.filter((result) => result?.status === 'ambiguous');
+      if (ambiguous.length > 0) {
+        return { status: 'needs_input', text: ambiguousNeedsInputText(ambiguous) };
+      }
+      const notFound = results.filter((result) => result?.status === 'not_found');
+      if (notFound.length > 0) {
+        return { status: 'needs_input', text: notFoundNeedsInputText(notFound) };
+      }
       resolvedFilters = resolution?.resolvedFilters ?? {};
       if (Object.keys(resolvedFilters).length === 0) {
-        resolvedFilters = mergeResultSearchFilters(resolution?.results);
+        resolvedFilters = mergeResultSearchFilters(results);
       }
     }
     filters = {
