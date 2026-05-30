@@ -70,6 +70,16 @@ describe('manage_space_members router & slots', () => {
     assert.equal(wf.match('add the tag Spring Break to my newest 50 photos'), undefined);
   });
 
+  it('declines a photo-source member capture even when a space is named', () => {
+    // "add <photos> to the X space" must not be read as adding members.
+    assert.equal(wf.match('add my newest 20 photos to the Family space'), undefined);
+    assert.equal(wf.match('remove my screenshots from the Family space'), undefined);
+    // A real member add still matches.
+    assert.deepEqual(wf.match('add Alex to the Family space'), {
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family' },
+    });
+  });
+
   it('returns undefined for an empty prompt', () => {
     assert.equal(wf.match(''), undefined);
   });
@@ -87,6 +97,20 @@ describe('manage_space_members router & slots', () => {
       wf.parseSlots({ action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'admin' }).role,
       'owner',
     );
+  });
+
+  it('parseSlots infers the action from the prompt verb when the slot is missing', () => {
+    // The LLM routed "invite Alex to the Family space" but omitted action.
+    assert.equal(
+      wf.parseSlots({ memberQueries: ['Alex'], spaceRef: 'Family' }, 'invite Alex to the Family space').action,
+      'add',
+    );
+    assert.equal(
+      wf.parseSlots({ memberQueries: ['Bob'], spaceRef: 'Family' }, 'kick Bob from the Family space').action,
+      'remove',
+    );
+    // No add/remove signal anywhere → still null.
+    assert.equal(wf.parseSlots({ memberQueries: ['Alex'], spaceRef: 'Family' }, 'the Family space'), null);
   });
 
   it('parseSlots accepts an LLM and/comma member string', () => {

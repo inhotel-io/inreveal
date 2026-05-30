@@ -24,4 +24,14 @@ export default [
   // Subjective / out-of-scope arms of the new batch workflows -> none (decline) -
   { id: 'neg.archive.subjective', category: 'negatives', prompt: 'archive the best ones', expect: { kind: 'none' } },
   { id: 'neg.tag.removal', category: 'negatives', prompt: 'remove the Travel tag from my newest 20', expect: { kind: 'none' } },
+
+  // Space workflows: questions and the photo-vs-member disambiguation ---------
+  { id: 'neg.space.question', category: 'negatives', prompt: 'who has access to the Family space?', expect: { kind: 'none' } },
+  {
+    // Adding photos to a space is unsupported; it must NOT become a member op.
+    id: 'neg.space.add-photos',
+    category: 'negatives',
+    prompt: 'add my newest 20 photos to the Family space',
+    expect: { anyKind: ['none', 'add_photos_to_album'] },
+  },
 ];
