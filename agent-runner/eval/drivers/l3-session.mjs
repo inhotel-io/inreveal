@@ -49,6 +49,8 @@ export const createL3Driver = ({ gallery, l3 }) => {
   let authHeader = null;
   let resolved = null; // { credentialId, model }
   let albumNameCache; // undefined=unresolved, string=name, null=no album found
+  let spaceNameCache; // {space} discovery cache
+  let userNameCache; // {user} discovery cache
 
   const api = async (method, path, body) => {
     const res = await fetch(`${baseUrl}${path}`, {
@@ -183,6 +185,51 @@ export const createL3Driver = ({ gallery, l3 }) => {
     return name ? prompt.replaceAll('{album}', name) : prompt;
   };
 
+  // Read-only `{space}` discovery: pick the most-populated shared space (most
+  // likely to yield a clean describe/membership plan). Cached.
+  const resolveSpaceName = async () => {
+    if (spaceNameCache !== undefined) return spaceNameCache;
+    try {
+      const spaces = await api('GET', '/shared-spaces');
+      const ranked = [...(spaces ?? [])].sort(
+        (a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0) || (b.assetCount ?? 0) - (a.assetCount ?? 0),
+      );
+      spaceNameCache = ranked[0]?.name ?? null;
+    } catch {
+      spaceNameCache = null;
+    }
+    return spaceNameCache;
+  };
+
+  // Read-only `{user}` discovery: pick a user by name. On the local seeded stack
+  // env-prep ensures a non-owner exists; on personal this is the owner (fine for
+  // routing-only membership/role scenarios). Cached.
+  const resolveUserName = async () => {
+    if (userNameCache !== undefined) return userNameCache;
+    try {
+      const users = await api('GET', '/users');
+      userNameCache = (users ?? []).map((u) => u?.name).find((name) => typeof name === 'string' && name.trim()) ?? null;
+    } catch {
+      userNameCache = null;
+    }
+    return userNameCache;
+  };
+
+  // Apply every read-only discovery token in turn; each leaves its token if the
+  // instance has no matching data (a missing-data signal, not a routing miss).
+  const substituteTokens = async (prompt) => {
+    let next = await substituteAlbum(prompt);
+    if (next.includes('{space}')) {
+      const name = await resolveSpaceName();
+      if (name) next = next.replaceAll('{space}', name);
+    }
+    if (next.includes('{user}')) {
+      const name = await resolveUserName();
+      if (name) next = next.replaceAll('{user}', name);
+    }
+    return next;
+  };
+
   // Scan the (accumulating) activity-event list for a session, returning the
   // latest router decision + workflow outcome and the running outcome count.
   // Also records any success-gate block for the read-only safety audit.
@@ -226,7 +273,7 @@ export const createL3Driver = ({ gallery, l3 }) => {
   };
 
   const runTurn = async (sessionId, prompt, baseOutcomeCount) => {
-    await postMessage(sessionId, await substituteAlbum(prompt));
+    await postMessage(sessionId, await substituteTokens(prompt));
 
     const deadline = Date.now() + settleTimeoutMs;
     let routerKv = null;
