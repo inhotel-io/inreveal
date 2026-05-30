@@ -24,8 +24,17 @@ describe('create_album_from_source router & slots', () => {
     });
   });
 
-  it('declines a recent-trip source (owned by the trip workflow)', () => {
-    assert.equal(wf.match('make an album for my recent trip'), undefined);
+  it('declines trip-like sources (owned by the trip workflow)', () => {
+    // These overlap the trip workflow; decline so they fall through to the LLM → trip.
+    for (const prompt of [
+      'make an album for my recent trip',
+      'build an album out of my weekend in Lisbon',
+      'make an album from my trip to Portugal',
+      'assemble an album for our recent road trip',
+      'gather my vacation photos from Spain into an album',
+    ]) {
+      assert.equal(wf.match(prompt), undefined, prompt);
+    }
   });
 
   it('declines a subjective source', () => {

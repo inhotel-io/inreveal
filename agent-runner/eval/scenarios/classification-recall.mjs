@@ -255,4 +255,38 @@ export default [
     prompt: "change Bob's role to viewer in Trips",
     expect: { kind: 'change_member_role', slotsSurvive: true, slots: { role: 'viewer', spaceRef: 'Trips' } },
   },
+
+  // create_album_from_source ------------------------------------------------
+  {
+    id: 'recall.createalbum.canonical',
+    category: 'recall',
+    prompt: 'make an album of my newest 50 photos',
+    expect: { kind: 'create_album_from_source', slotsSurvive: true, slots: { sourceDescription: /newest 50 photos/i } },
+  },
+  {
+    id: 'recall.createalbum.named',
+    category: 'recall',
+    prompt: 'create an album from my 2024 photos called Best of 2024',
+    expect: { kind: 'create_album_from_source', slotsSurvive: true, slots: { albumName: /best of 2024/i } },
+  },
+  {
+    id: 'recall.createalbum.llm',
+    category: 'recall',
+    prompt: 'put my newest 50 photos into a brand new album',
+    expect: { kind: 'create_album_from_source', slotsSurvive: true },
+  },
+  {
+    // Disambiguation: a recent-trip album stays with the trip workflow.
+    id: 'recall.createalbum.trip-disambig',
+    category: 'recall',
+    prompt: 'create an album for my recent trip to USA',
+    expect: { kind: 'create_recent_trip_album', slotsSurvive: true },
+  },
+  {
+    // Disambiguation: adding to an EXISTING album stays with add_photos.
+    id: 'recall.createalbum.add-disambig',
+    category: 'recall',
+    prompt: 'add my newest 20 photos to Family',
+    expect: { kind: 'add_photos_to_album', slotsSurvive: true },
+  },
 ];

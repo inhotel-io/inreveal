@@ -134,6 +134,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`         |
 | `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
 | `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
+| `create_album_from_source` | Hybrid | `searchAssets`                                            | `proposeAlbumFromSelection`      |
 
 <!-- generated:workflows:end -->
 
