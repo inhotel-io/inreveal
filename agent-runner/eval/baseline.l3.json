@@ -4,7 +4,8 @@
   "byCategory": {
     "l3.recall": 1,
     "l3.negatives": 1,
-    "l3.plan": 1
+    "l3.plan": 1,
+    "l3.multiturn": 1
   },
   "scenarioScores": {
     "l3.recall.trip.usa": 1,
@@ -21,6 +22,8 @@
     "l3.neg.subjective": 1,
     "l3.neg.where": 1,
     "l3.neg.delete": 1,
-    "l3.plan.trip.usa": 1
+    "l3.plan.trip.usa": 1,
+    "l3.plan.describe.discovered": 1,
+    "l3.multiturn.trip.recover": 1
   }
 }
