@@ -151,7 +151,7 @@
     "planTool": "proposeAssetBatchFromSelection",
     "supportsContinuation": false,
     "matrixRow": {
-      "capability": "Archive or unarchive photos",
+      "capability": "Archive assets",
       "tier": "Solid now",
       "workflowOrBoundary": "Pi resolves a recency/date/type source; Gallery owns the batch archive plan from the handle."
     }
@@ -189,7 +189,7 @@
     "planTool": "proposeAssetBatchFromSelection",
     "supportsContinuation": false,
     "matrixRow": {
-      "capability": "Favorite or unfavorite photos",
+      "capability": "Mark favorites",
       "tier": "Solid now",
       "workflowOrBoundary": "Pi resolves a recency/date/type source; Gallery owns the batch favorite plan from the handle."
     }
@@ -227,7 +227,7 @@
     "planTool": "proposeAssetBatchFromSelection",
     "supportsContinuation": false,
     "matrixRow": {
-      "capability": "Tag photos (add)",
+      "capability": "Add or remove tags",
       "tier": "Solid now",
       "workflowOrBoundary": "Add-only; Pi resolves the source; Gallery owns the batch tag-add plan from the handle."
     }
@@ -270,7 +270,7 @@
     "planTool": "proposeAlbumOperations",
     "supportsContinuation": false,
     "matrixRow": {
-      "capability": "Rename or describe space",
+      "capability": "Update space details",
       "tier": "Solid now",
       "workflowOrBoundary": "Direct space-detail update plan; preserve unspecified fields."
     }
@@ -365,7 +365,7 @@
     "planTool": "proposeAlbumOperations",
     "supportsContinuation": false,
     "matrixRow": {
-      "capability": "Change a space member's role",
+      "capability": "Change space member roles",
       "tier": "Solid now",
       "workflowOrBoundary": "Resolve the member; guard owner/self/no-op; propose the role-change plan."
     }
