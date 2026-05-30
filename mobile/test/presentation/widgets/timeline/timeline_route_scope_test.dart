@@ -32,6 +32,7 @@ String _anchorLabel(TimelineZoomAnchor anchor) {
     TimelineZoomAnchorNone() => 'none',
     TimelineZoomYearAnchor(:final year) => 'year:$year',
     TimelineZoomMonthAnchor(:final year, :final month) => 'month:$year-$month',
+    TimelineZoomDateAnchor(:final date) => 'date:$date',
   };
 }
 

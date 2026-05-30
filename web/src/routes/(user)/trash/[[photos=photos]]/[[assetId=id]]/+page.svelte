@@ -17,11 +17,8 @@
   import { getTrashActions } from '$lib/services/trash.service';
   import { handlePromiseError } from '$lib/utils';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import {
-    getTimelineBucketZoomTarget,
-    getTimelineZoomScopeOptions,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -34,11 +31,9 @@
   let timelineManager = $state<TimelineManager>() as TimelineManager;
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   const baseTimelineOptions = { isTrashed: true };
   const options = $derived({
     ...baseTimelineOptions,
-    ...getTimelineZoomScopeOptions(timelineZoomScope),
     grouping: timelineGrouping,
   });
   const hideGroupingControls = $derived(
@@ -58,9 +53,9 @@
   };
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -75,7 +70,6 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   const { Empty, RestoreAll } = $derived(getTrashActions($t));

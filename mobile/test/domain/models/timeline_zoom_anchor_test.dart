@@ -35,4 +35,16 @@ void main() {
     expect(TimelineZoomAnchor.month(year: 2025, month: 1), isA<TimelineZoomMonthAnchor>());
     expect(TimelineZoomAnchor.month(year: 2025, month: 12), isA<TimelineZoomMonthAnchor>());
   });
+
+  test('date anchor stores the target date', () {
+    final date = DateTime(2017, 11, 15);
+    final anchor = TimelineZoomAnchor.date(date);
+
+    expect(anchor.isEmpty, isFalse);
+    expect(anchor, isA<TimelineZoomDateAnchor>());
+    expect((anchor as TimelineZoomDateAnchor).date, date);
+    expect(anchor, TimelineZoomAnchor.date(date));
+    expect(anchor, isNot(TimelineZoomAnchor.date(DateTime(2017, 11, 16))));
+    expect(anchor.toString(), 'TimelineZoomAnchor.date($date)');
+  });
 }

@@ -32,11 +32,8 @@
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { getTagActions } from '$lib/services/tag.service';
   import TimelineRouteGroupingBar from '$lib/components/timeline/TimelineRouteGroupingBar.svelte';
-  import {
-    getTimelineBucketZoomTarget,
-    getTimelineZoomScopeOptions,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { joinPaths, TreeNode } from '$lib/utils/tree-utils';
   import { AssetVisibility, getAllTags, type TagResponseDto } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider, Text } from '@immich/ui';
@@ -57,7 +54,6 @@
   let timelineManager = $state<TimelineManager>() as TimelineManager;
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   // Tags can belong to a space's owner while the tagged assets are only reachable
   // through the shared space. Opt into shared-space assets (which requires an explicit
   // timeline visibility) so non-admin members actually see photos under a tag (#647).
@@ -69,7 +65,6 @@
   });
   const options = $derived({
     ...baseTimelineOptions,
-    ...getTimelineZoomScopeOptions(timelineZoomScope),
     grouping: timelineGrouping,
   });
 
@@ -85,9 +80,9 @@
   };
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -102,7 +97,6 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   registerSelectionContext({

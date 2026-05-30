@@ -166,6 +166,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
   int? _restoreAssetIndex;
   TimelineZoomAnchor? _scheduledZoomAnchor;
   TimelineZoomAnchor? _resolvingZoomAnchor;
+  List<Segment>? _lastRenderedSegments;
 
   @override
   void initState() {
@@ -189,6 +190,8 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _requestScrollDrain();
     });
+
+    ref.listenManual(settingsProvider.select((settings) => settings.get(Setting.groupAssetsBy)), _onGroupingChanged);
   }
 
   @override
@@ -244,6 +247,39 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
 
   void _onMultiSelectionToggled(_, bool isEnabled) {
     EventStream.shared.emit(MultiSelectToggleEvent(isEnabled));
+  }
+
+  // When the grouping granularity changes (e.g. via the grouping selector),
+  // anchor the rebuilt timeline to the date currently at the top of the viewport
+  // so the user keeps their place instead of jumping to the most recent content.
+  void _onGroupingChanged(int? previous, int next) {
+    if (previous == null || previous == next) {
+      return;
+    }
+    // A card-tap drilldown sets an explicit year/month anchor right before it
+    // changes the grouping; don't overwrite it with a position-derived anchor.
+    if (!ref.read(timelineZoomAnchorProvider).isEmpty) {
+      return;
+    }
+    final segments = _lastRenderedSegments;
+    if (segments == null) {
+      return;
+    }
+    final date = _currentTopVisibleDate(segments);
+    if (date == null) {
+      return;
+    }
+    ref.read(timelineZoomAnchorProvider.notifier).setDate(date);
+  }
+
+  DateTime? _currentTopVisibleDate(List<Segment> segments) {
+    if (segments.isEmpty || !_scrollController.hasClients) {
+      return null;
+    }
+    final offset = _scrollController.offset.clamp(0.0, _scrollController.position.maxScrollExtent);
+    final segment = segments.findByOffset(offset) ?? segments.firstOrNull;
+    final bucket = segment?.bucket;
+    return bucket is TimeBucket ? bucket.date : null;
   }
 
   int? _getCurrentAssetIndex(List<Segment> segments) {
@@ -505,6 +541,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
               ],
             ),
         onData: (segments) {
+          _lastRenderedSegments = segments;
           final activeGroupBy =
               ref.watch(timelineArgsProvider).groupBy ??
               GroupAssetsBy.values[ref.watch(settingsProvider).get(Setting.groupAssetsBy)];

@@ -70,8 +70,8 @@
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,
-    getTimelineZoomScopeOptions,
   } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { AlbumUserRole, getAlbumInfo, updateAlbumInfo, type AlbumResponseDto } from '@immich/sdk';
   import {
     ActionButton,
@@ -113,7 +113,6 @@
   let pickerFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let albumPersonNames = new SvelteMap<string, string>();
   let albumTagNames = new SvelteMap<string, string>();
   let pickerPersonNames = new SvelteMap<string, string>();
@@ -270,7 +269,6 @@
       viewMode = AlbumPageViewMode.VIEW;
       timelineGrouping = 'day';
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
       oldAt = null;
     }
   });
@@ -345,9 +343,7 @@
       album.order ?? authManager.preferences.albums.defaultAssetOrder,
       albumFilters,
     );
-    return isBrowseTimeline
-      ? { ...albumOptions, ...getTimelineZoomScopeOptions(timelineZoomScope), grouping: timelineGrouping }
-      : albumOptions;
+    return isBrowseTimeline ? { ...albumOptions, grouping: timelineGrouping } : albumOptions;
   });
 
   const isShared = $derived(viewMode === AlbumPageViewMode.SELECT_ASSETS ? false : album.albumUsers.length > 0);
@@ -392,9 +388,9 @@
   );
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -409,13 +405,11 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   function clearAlbumTemporalFilter() {
     albumFilters = clearTimelineTemporalFilter(albumFilters);
     temporalAnchor = undefined;
-    timelineZoomScope = undefined;
   }
 
   const onSharedLinkCreate = async () => {
@@ -551,7 +545,6 @@
               onClearAll={() => {
                 albumFilters = clearFilters(albumFilters);
                 temporalAnchor = undefined;
-                timelineZoomScope = undefined;
               }}
             />
           {/if}
@@ -572,7 +565,6 @@
                   } else {
                     albumFilters = clearFilters(albumFilters);
                     temporalAnchor = undefined;
-                    timelineZoomScope = undefined;
                   }
                 }}
               >

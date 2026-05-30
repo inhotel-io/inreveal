@@ -44,11 +44,8 @@
   import { isExternalUrl } from '$lib/utils/navigation';
   import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
-  import {
-    getTimelineBucketZoomTarget,
-    getTimelineZoomScopeOptions,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import {
     AssetVisibility,
     detachScopedPerson,
@@ -88,7 +85,6 @@
   let timelineManager = $state<TimelineManager>() as TimelineManager;
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let numberOfAssets = $derived(timelineManager?.isInitialized ? timelineManager.assetCount : data.statistics.assets);
   const baseTimelineOptions = $derived({
     visibility: AssetVisibility.Timeline,
@@ -97,7 +93,6 @@
   });
   const options = $derived({
     ...baseTimelineOptions,
-    ...getTimelineZoomScopeOptions(timelineZoomScope),
     grouping: timelineGrouping,
   });
 
@@ -365,9 +360,9 @@
   };
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
@@ -382,7 +377,6 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   const onPersonUpdate = async (response: PersonResponseDto) => {

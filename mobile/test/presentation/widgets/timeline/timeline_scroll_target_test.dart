@@ -90,6 +90,32 @@ void main() {
     );
   });
 
+  test('findTimelineZoomAnchorSegment resolves a date anchor by month fallback in month grouping', () {
+    final segments = [
+      _segment(DateTime(2026, 1), 0, 100),
+      _segment(DateTime(2017, 11), 100, 200),
+      _segment(DateTime(2016, 5), 200, 300),
+    ];
+
+    expect(
+      findTimelineZoomAnchorSegment(segments, TimelineZoomAnchor.date(DateTime(2017, 11, 15)), GroupAssetsBy.month),
+      segments[1],
+    );
+  });
+
+  test('findTimelineZoomAnchorSegment resolves a date anchor by year fallback in year grouping', () {
+    final segments = [
+      _segment(DateTime(2026), 0, 100),
+      _segment(DateTime(2020), 100, 200),
+      _segment(DateTime(2018), 200, 300),
+    ];
+
+    expect(
+      findTimelineZoomAnchorSegment(segments, TimelineZoomAnchor.date(DateTime(2020, 8, 1)), GroupAssetsBy.year),
+      segments[1],
+    );
+  });
+
   test('findTimelineZoomAnchorSegment ignores non-time bucket segments', () {
     final segments = [_nonTimeSegment(0, 100), _segment(DateTime(2025, 3), 100, 200)];
 

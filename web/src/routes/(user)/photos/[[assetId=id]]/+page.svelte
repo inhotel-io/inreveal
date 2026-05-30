@@ -77,8 +77,8 @@
     getTimelineBucketZoomTarget,
     type ActivatableTimelineBucket,
     getTimelineManagerTimeBuckets,
-    getTimelineZoomScopeOptions,
   } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
   import {
     AssetTypeEnum,
@@ -119,7 +119,6 @@
   };
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let committedQuery = $state(initialSearchState.query);
   let lastHandledSearchState = $state(`${initialSearchState.query}:${initialSearchState.sortOrder}:${page.url.search}`);
   let pendingFilterUrlSync = $state<
@@ -129,7 +128,6 @@
   const showSearchResults = $derived(committedQuery.trim().length > 0);
   const options = $derived({
     ...buildPhotosTimelineOptions(filters),
-    ...getTimelineZoomScopeOptions(timelineZoomScope),
     grouping: timelineGrouping,
   });
   $effect(() => {
@@ -435,7 +433,6 @@
 
     if (temporalChanged) {
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
     }
 
     syncFilterUrl(nextFilters);
@@ -453,20 +450,18 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleRemoveActiveFilter(type: string, id?: string) {
     const nextFilters = handlePhotosRemoveFilter(filters, type, id);
     if (type === 'timeline') {
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
     }
     filters = nextFilters;
     syncFilterUrl(nextFilters);
@@ -475,7 +470,6 @@
   function handleClearAllFilters() {
     const nextFilters = clearFilters(filters);
     temporalAnchor = undefined;
-    timelineZoomScope = undefined;
     filters = nextFilters;
     if (!committedQuery.trim()) {
       syncFilterUrl(nextFilters);

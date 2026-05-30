@@ -68,8 +68,8 @@
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,
-    getTimelineZoomScopeOptions,
   } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import {
     addAssets,
     bulkAddAssets,
@@ -158,7 +158,6 @@
       lastHandledSearchState = `${nextSearchState.query}:${nextSearchState.sortOrder}:${page.url.search}`;
       timelineGrouping = 'day';
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
       heroCollapsed = loadHeroCollapsed(data.space.id);
       panelOpen = false;
       viewMode = 'view';
@@ -203,7 +202,6 @@
   };
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
-  let timelineZoomScope = $state<TimelineTemporalAnchor | undefined>();
   let personNames = new SvelteMap<string, string>();
   let tagNames = new SvelteMap<string, string>();
   consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
@@ -424,7 +422,6 @@
     const nextFilters = handleSpaceRemoveFilter(filters, type, id);
     if (type === 'timeline') {
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
     }
     filters = nextFilters;
     syncFilterUrl(nextFilters);
@@ -459,7 +456,6 @@
     }
     return {
       ...buildSpaceTimelineOptions(space.id, filters),
-      ...getTimelineZoomScopeOptions(timelineZoomScope),
       grouping: timelineGrouping,
     };
   });
@@ -543,7 +539,6 @@
   const openSelectCover = () => {
     timelineGrouping = 'day';
     temporalAnchor = undefined;
-    timelineZoomScope = undefined;
     viewMode = 'select-cover';
   };
 
@@ -844,7 +839,6 @@
 
     if (temporalChanged) {
       temporalAnchor = undefined;
-      timelineZoomScope = undefined;
     }
 
     syncFilterUrl(nextFilters);
@@ -862,19 +856,17 @@
 
     timelineGrouping = result.grouping;
     temporalAnchor = result.anchor;
-    timelineZoomScope = result.anchor;
   }
 
   function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
     timelineGrouping = grouping;
-    temporalAnchor = undefined;
-    timelineZoomScope = undefined;
+    temporalAnchor = anchor;
   }
 
   function handleClearAllFilters() {
     const nextFilters = clearFilters(filters);
     temporalAnchor = undefined;
-    timelineZoomScope = undefined;
     filters = nextFilters;
     if (!committedSearchQuery.trim()) {
       syncFilterUrl(nextFilters);

@@ -25,6 +25,12 @@ void main() {
     expect(container.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
   });
 
+  test('stores date anchors', () {
+    final date = DateTime(2017, 11, 15);
+    container.read(timelineZoomAnchorProvider.notifier).setDate(date);
+    expect(container.read(timelineZoomAnchorProvider), TimelineZoomAnchor.date(date));
+  });
+
   test('clears pending anchors', () {
     container.read(timelineZoomAnchorProvider.notifier).setMonth(year: 2025, month: 3);
     container.read(timelineZoomAnchorProvider.notifier).clear();

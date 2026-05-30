@@ -9,6 +9,8 @@ class TimelineZoomAnchorNotifier extends Notifier<TimelineZoomAnchor> {
 
   void setMonth({required int year, required int month}) => state = TimelineZoomAnchor.month(year: year, month: month);
 
+  void setDate(DateTime date) => state = TimelineZoomAnchor.date(date);
+
   void clear() => state = const TimelineZoomAnchor.none();
 }
 

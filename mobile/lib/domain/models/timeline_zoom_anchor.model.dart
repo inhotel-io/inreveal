@@ -10,6 +10,8 @@ sealed class TimelineZoomAnchor {
     return TimelineZoomMonthAnchor._(year: year, month: month);
   }
 
+  const factory TimelineZoomAnchor.date(DateTime date) = TimelineZoomDateAnchor;
+
   bool get isEmpty => this is TimelineZoomAnchorNone;
 }
 
@@ -55,4 +57,22 @@ final class TimelineZoomMonthAnchor extends TimelineZoomAnchor {
 
   @override
   String toString() => 'TimelineZoomAnchor.month(year: $year, month: $month)';
+}
+
+/// Anchors the timeline to a specific date and resolves to the closest matching
+/// segment in whatever grouping is active (day, then month, then year). Used to
+/// preserve the visible position when the grouping granularity changes.
+final class TimelineZoomDateAnchor extends TimelineZoomAnchor {
+  const TimelineZoomDateAnchor(this.date);
+
+  final DateTime date;
+
+  @override
+  bool operator ==(Object other) => other is TimelineZoomDateAnchor && other.date == date;
+
+  @override
+  int get hashCode => Object.hash(TimelineZoomDateAnchor, date);
+
+  @override
+  String toString() => 'TimelineZoomAnchor.date($date)';
 }

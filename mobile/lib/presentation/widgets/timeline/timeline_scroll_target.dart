@@ -35,6 +35,9 @@ Segment? findTimelineZoomAnchorSegment(List<Segment> segments, TimelineZoomAncho
     TimelineZoomMonthAnchor(:final year, :final month) when groupBy == GroupAssetsBy.day => segments.firstWhereOrNull(
       (segment) => _matchesDate(segment, (segmentDate) => segmentDate.year == year && segmentDate.month == month),
     ),
+    // A date anchor preserves the visible position across grouping changes, so it
+    // resolves to the closest matching segment (day -> month -> year) in any grouping.
+    TimelineZoomDateAnchor(:final date) => findTimelineScrollTargetSegment(segments, date),
     _ => null,
   };
 }

@@ -258,8 +258,8 @@ describe('Tags page timeline grouping', () => {
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"tagId":"tag-with-assets"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"month"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenAfter":"2015-01-01"');
-      expect(screen.getByTestId('timeline-options')).toHaveTextContent('"takenBefore":"2015-12-31"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenAfter"');
+      expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
       expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('{"year":2015}');
     });

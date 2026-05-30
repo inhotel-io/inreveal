@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { scrollTimelineToTemporalAnchor } from './timeline-anchor';
+import { getTimelineTopVisibleAnchor, scrollTimelineToTemporalAnchor } from './timeline-anchor';
 import type { TimelineManager } from './timeline-manager.svelte';
 
 function buildManager(timelineManager: Partial<TimelineManager>) {
@@ -107,5 +107,76 @@ describe('scrollTimelineToTemporalAnchor', () => {
 
     expect(didScroll).toBe(false);
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('scrolls a month-precision anchor to the matching year bucket when grouping year', () => {
+    const scrollTo = vi.fn();
+    let scrollTop = 0;
+    const timelineManager = buildManager({
+      grouping: 'year',
+      timelineBuckets: [{ date: { year: 2017 }, top: 480, height: 296 }] as TimelineManager['timelineBuckets'],
+      viewportHeight: 600,
+      maxScroll: 2000,
+      get scrollTop() {
+        return scrollTop;
+      },
+      scrollTo: vi.fn((top: number) => {
+        scrollTo(top);
+        scrollTop = top;
+      }),
+    });
+
+    const didScroll = scrollTimelineToTemporalAnchor(timelineManager, { year: 2017, month: 11 });
+
+    expect(didScroll).toBe(true);
+    expect(scrollTo).toHaveBeenCalledWith(480);
+  });
+});
+
+describe('getTimelineTopVisibleAnchor', () => {
+  it('returns the month at the top of the viewport in day grouping', () => {
+    const timelineManager = buildManager({
+      isInitialized: true,
+      grouping: 'day',
+      scrollTop: 400,
+      months: [
+        { yearMonth: { year: 2026, month: 2 }, top: 0, height: 300 },
+        { yearMonth: { year: 2017, month: 11 }, top: 300, height: 300 },
+      ] as TimelineManager['months'],
+    });
+
+    expect(getTimelineTopVisibleAnchor(timelineManager)).toEqual({ year: 2017, month: 11 });
+  });
+
+  it('returns the month bucket at the top in month grouping', () => {
+    const timelineManager = buildManager({
+      isInitialized: true,
+      grouping: 'month',
+      scrollTop: 350,
+      timelineBuckets: [
+        { date: { year: 2026, month: 2 }, top: 0, height: 296 },
+        { date: { year: 2020, month: 8 }, top: 296, height: 296 },
+      ] as TimelineManager['timelineBuckets'],
+    });
+
+    expect(getTimelineTopVisibleAnchor(timelineManager)).toEqual({ year: 2020, month: 8 });
+  });
+
+  it('returns a year-only anchor at the top in year grouping', () => {
+    const timelineManager = buildManager({
+      isInitialized: true,
+      grouping: 'year',
+      scrollTop: 350,
+      timelineBuckets: [
+        { date: { year: 2026 }, top: 0, height: 296 },
+        { date: { year: 2020 }, top: 296, height: 296 },
+      ] as TimelineManager['timelineBuckets'],
+    });
+
+    expect(getTimelineTopVisibleAnchor(timelineManager)).toEqual({ year: 2020 });
+  });
+
+  it('returns undefined when the timeline is not initialized', () => {
+    expect(getTimelineTopVisibleAnchor(buildManager({ isInitialized: false }))).toBeUndefined();
   });
 });

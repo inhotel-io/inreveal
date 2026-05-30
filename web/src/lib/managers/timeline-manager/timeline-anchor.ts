@@ -7,7 +7,11 @@ type TimelineTemporalAnchorTarget = {
 };
 
 function matchesAnchorDate(date: TimelineBucketDate, anchor: TimelineTemporalAnchor) {
-  return date.year === anchor.year && (anchor.month === undefined || date.month === anchor.month);
+  // A bucket without a month (year overview) matches on the year alone, so a
+  // month-precision anchor still resolves when the grouping is coarser than the anchor.
+  return (
+    date.year === anchor.year && (anchor.month === undefined || date.month === undefined || date.month === anchor.month)
+  );
 }
 
 function targetIsInViewport(timelineManager: TimelineManager, target: TimelineTemporalAnchorTarget): boolean {
@@ -44,6 +48,40 @@ export function getTimelineTemporalAnchorTarget(
   }
 
   return { top: bucket.top, height: bucket.height };
+}
+
+/**
+ * The date currently at the top of the viewport, expressed as a temporal anchor
+ * for the active grouping. Used to preserve the visible position when the user
+ * changes the grouping granularity, so the rebuilt timeline can scroll back to it
+ * instead of jumping to the most recent content.
+ */
+export function getTimelineTopVisibleAnchor(timelineManager: TimelineManager): TimelineTemporalAnchor | undefined {
+  if (!timelineManager?.isInitialized) {
+    return undefined;
+  }
+
+  const { scrollTop } = timelineManager;
+
+  if (timelineManager.grouping === 'day') {
+    const months = timelineManager.months;
+    if (!months || months.length === 0) {
+      return undefined;
+    }
+    const month = months.find((month) => scrollTop >= month.top && scrollTop < month.top + month.height) ?? months[0];
+    return { year: month.yearMonth.year, month: month.yearMonth.month };
+  }
+
+  const buckets = timelineManager.timelineBuckets;
+  if (!buckets || buckets.length === 0) {
+    return undefined;
+  }
+  const bucket =
+    buckets.find((bucket) => scrollTop >= bucket.top && scrollTop < bucket.top + bucket.height) ?? buckets[0];
+
+  return bucket.date.month === undefined
+    ? { year: bucket.date.year }
+    : { year: bucket.date.year, month: bucket.date.month };
 }
 
 export function scrollTimelineToTemporalAnchor(
