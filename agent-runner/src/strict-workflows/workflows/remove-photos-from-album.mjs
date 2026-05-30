@@ -1,5 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
-import { handoffOpen } from '../protocol.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'remove_photos_from_album';
 
@@ -12,6 +13,14 @@ const normalizeAlbumRef = (value) =>
     .replace(/^(?:the|my|this|that)\s+/i, '')
     .replace(/\s+album$/i, '')
     .trim();
+
+const resolveAlbum = async ({ client, albumRef, signal }) => {
+  const ref = normalizeAlbumRef(albumRef);
+  const result = await client.call('listAlbums', {}, { signal });
+  const albums = Array.isArray(result?.albums) ? result.albums : [];
+  const matches = albums.filter((album) => clean(album?.albumName).toLowerCase() === ref.toLowerCase());
+  return { ref, albums, matches };
+};
 
 const tripSourcePattern = /\brecent\s+trip\b/i;
 
@@ -65,8 +74,67 @@ export const removePhotosFromAlbumWorkflow = () => ({
     return { albumRef, sourceDescription };
   },
 
-  // Execution lands in Slice 11.
-  async run() {
-    return handoffOpen({ reason: 'remove_photos_from_album execution is implemented in Slice 11.' });
+  async run({ client, slots, signal }) {
+    const sourceDescription = cleanSource(slots?.sourceDescription);
+
+    // 1. Resolve the target album (none/ambiguous → ask).
+    const { ref, matches } = await resolveAlbum({ client, albumRef: slots?.albumRef, signal });
+    if (matches.length === 0) {
+      return needsInput({ text: `I could not find an album called "${ref}". Which album do you mean?` });
+    }
+    if (matches.length > 1) {
+      return needsInput({ text: `Multiple albums are called "${ref}". Which one do you mean?` });
+    }
+    const album = matches[0];
+    const albumName = clean(album.albumName) || ref;
+
+    // 2. Resolve the source into a selection handle (shared resolver).
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'needs_input') {
+      return needsInput({ text: resolution.text });
+    }
+    // EMPTY-REMOVAL SAFETY: never propose removing nothing (a silent no-op).
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}" to remove from the "${albumName}" album. Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 3. Propose the removal via the selection handle. No raw asset ids reach the model.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAlbumOperations',
+        {
+          summary: `Remove matching photos from "${albumName}".`,
+          operations: [
+            {
+              type: 'album.removeAssets',
+              targetKind: 'existing_album',
+              targetId: album.id,
+              assetSource: { kind: 'selectionHandle', selectionHandleId },
+            },
+          ],
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    return gatePlanResult({
+      planResult,
+      successText: `I prepared a plan to remove ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'} from the "${albumName}" album. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, albumName, assetCount },
+    });
   },
 });
