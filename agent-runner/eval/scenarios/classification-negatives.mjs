@@ -107,4 +107,20 @@ export default [
     prompt: 'rotate my newest 20 photos 45 clockwise',
     expect: { kind: 'none' },
   },
+
+  // set_album_cover boundaries -----------------------------------------------
+  {
+    // Subjective cover reference — no explicit position.
+    id: 'neg.cover.subjective',
+    category: 'negatives',
+    prompt: 'pick a better cover for the Family album',
+    expect: { kind: 'none' },
+  },
+  {
+    // Cover reference unspecified — no "to <position>".
+    id: 'neg.cover.unspecified',
+    category: 'negatives',
+    prompt: 'change the cover photo on my Italy album',
+    expect: { kind: 'none' },
+  },
 ];
