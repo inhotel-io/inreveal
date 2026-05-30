@@ -1,13 +1,23 @@
 import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
+import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
+import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
+import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
 // runtime edit. Registering here makes a workflow both regex-routable (each
 // `match`) AND visible to the LLM classifier (via `listWorkflows`/manifest).
+//
+// Order matters for the regex fast-path (first match wins): `add_photos_to_album`
+// stays LAST so its "add <source> to <album>" pattern never steals the more
+// specific "add the tag <tag> to <source>" form owned by `tag_assets`.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   renameOrDescribeAlbumWorkflow,
+  archiveAssetsWorkflow,
+  favoriteAssetsWorkflow,
+  tagAssetsWorkflow,
   addPhotosToAlbumWorkflow,
 ]);
 
