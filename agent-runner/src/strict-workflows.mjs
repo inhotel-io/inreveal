@@ -67,12 +67,20 @@ export const matchStrictWorkflow = (prompt) => {
     return unsupported;
   }
 
+  // `nonGenericPattern`/`highlightPattern` are fast-path CONSERVATISM guards, not
+  // a terminal "unsupported" verdict (Slice 4): a declined `match` now flows into
+  // the LLM classifier, which picks the dominant intent or returns `none`. They
+  // stay so the regex fast-path never over-matches compound prompts (e.g.
+  // "...and add them to Family") before the classifier sees them. Both run on the
+  // album-name-stripped text so an explicit name like "called Travel Tag" — whose
+  // words ("tag") would otherwise trip `nonGenericPattern` — still matches here.
+  const requestText = stripExplicitAlbumNameClause(text);
   if (
     !creationPhrasePattern.test(text) ||
     !albumPattern.test(text) ||
     !recentTripPattern.test(text) ||
-    highlightPattern.test(stripExplicitAlbumNameClause(text)) ||
-    nonGenericPattern.test(text) ||
+    highlightPattern.test(requestText) ||
+    nonGenericPattern.test(requestText) ||
     questionOnlyPattern.test(text)
   ) {
     return unsupported;
