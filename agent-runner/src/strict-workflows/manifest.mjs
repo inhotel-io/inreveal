@@ -305,6 +305,35 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'rotate_assets',
+    flow: 'hybrid',
+    title: 'Rotate photos',
+    classifierDescription:
+      'User wants to rotate a metadata-describable set of photos by an EXPLICIT angle (90, 180, or 270 degrees, clockwise or counterclockwise).',
+    positiveExamples: Object.freeze([
+      'Rotate my newest 20 photos 90 clockwise',
+      'Flip my newest 5 photos upside down',
+      'Rotate my 2024 photos 180',
+    ]),
+    negativeExamples: Object.freeze([
+      'Rotate the sideways photos clockwise',
+      'Rotate the best ones 90 clockwise',
+      'Rotate my newest 20 photos 45 clockwise',
+    ]),
+    slots: Object.freeze({
+      angle: Object.freeze({ type: 'number', required: true, description: 'Rotation angle: 90, 180, or 270.' }),
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos to rotate.' }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Rotate assets',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Pi resolves the source + explicit angle; Gallery owns the batch rotate plan from the handle.',
+    }),
+  }),
+  Object.freeze({
     kind: 'rename_or_describe_space',
     flow: 'strict',
     title: 'Rename or describe space',

@@ -373,4 +373,21 @@ export default [
     expect: { kind: 'create_space_from_source', planProposed: true },
     threshold: 0.5,
   },
+
+  // --- rotate_assets routing + plan-proposed --------------------------------
+  {
+    id: 'l3.recall.rotate',
+    category: 'l3.recall',
+    prompt: 'rotate my newest 20 photos 90 clockwise',
+    expect: { kind: 'rotate_assets' },
+  },
+  {
+    // rotate_assets end-to-end: recency → batch asset.rotate plan — proposed,
+    // never applied. Data-dependent; threshold 0.5 tolerates variance.
+    id: 'l3.plan.rotate.recency',
+    category: 'l3.plan',
+    prompt: 'rotate my newest 20 photos 90 clockwise',
+    expect: { kind: 'rotate_assets', planProposed: true },
+    threshold: 0.5,
+  },
 ];
