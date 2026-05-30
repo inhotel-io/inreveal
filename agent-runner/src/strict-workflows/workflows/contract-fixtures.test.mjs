@@ -210,3 +210,131 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
     assert.equal(rating5.selectionHandle.id, 'handle-1');
   });
 });
+
+describe('makeContractClient — asset.updateMetadata action', () => {
+  it('KNOWN_BATCH_ACTION_TYPES includes asset.updateMetadata', () => {
+    assert.equal(KNOWN_BATCH_ACTION_TYPES.has('asset.updateMetadata'), true);
+  });
+
+  it('accepts a valid description string', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', description: 'Berlin weekend' },
+      selectionHandleId: 'h',
+    });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('accepts an empty string description (clears the field)', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', description: '' },
+      selectionHandleId: 'h',
+    });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('accepts rating:5 and rating:null', async () => {
+    const client = makeContractClient();
+    const r5 = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', rating: 5 },
+      selectionHandleId: 'h',
+    });
+    assert.equal(r5.plan.id, 'plan-1');
+    const rNull = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', rating: null },
+      selectionHandleId: 'h',
+    });
+    assert.equal(rNull.plan.id, 'plan-1');
+  });
+
+  it('accepts latitude + longitude pair', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', latitude: 48.8566, longitude: 2.3522 },
+      selectionHandleId: 'h',
+    });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('accepts dateTimeRelative non-zero', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', {
+      action: { type: 'asset.updateMetadata', dateTimeRelative: 120 },
+      selectionHandleId: 'h',
+    });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('rejects when no metadata field is supplied', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.updateMetadata' }, selectionHandleId: 'h' }),
+      /at least one metadata field/i,
+    );
+  });
+
+  it('rejects latitude without longitude', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.updateMetadata', latitude: 48.8 }, selectionHandleId: 'h' }),
+      /both latitude and longitude/i,
+    );
+  });
+
+  it('rejects longitude without latitude', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.updateMetadata', longitude: 2.3 }, selectionHandleId: 'h' }),
+      /both latitude and longitude/i,
+    );
+  });
+
+  it('rejects dateTimeOriginal + dateTimeRelative together', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAssetBatchFromSelection', {
+          action: { type: 'asset.updateMetadata', dateTimeOriginal: '2024-01-01T00:00:00.000Z', dateTimeRelative: 120 },
+          selectionHandleId: 'h',
+        }),
+      /dateTimeOriginal or dateTimeRelative/i,
+    );
+  });
+
+  it('rejects dateTimeRelative:0 as the sole field (no-op)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAssetBatchFromSelection', {
+          action: { type: 'asset.updateMetadata', dateTimeRelative: 0 },
+          selectionHandleId: 'h',
+        }),
+      /no-op|dateTimeRelative/i,
+    );
+  });
+
+  it('rejects out-of-range rating values', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.updateMetadata', rating: 0 }, selectionHandleId: 'h' }),
+      /rating/i,
+    );
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.updateMetadata', rating: 6 }, selectionHandleId: 'h' }),
+      /rating/i,
+    );
+  });
+
+  it('rejects an unknown field (placeName) — strictObject', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAssetBatchFromSelection', {
+          action: { type: 'asset.updateMetadata', description: 'Paris', placeName: 'Paris' },
+          selectionHandleId: 'h',
+        }),
+      /unknown|placeName/i,
+    );
+  });
+});

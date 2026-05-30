@@ -83,6 +83,52 @@ const validateResolveRequest = (args) => {
   }
 };
 
+const UPDATE_METADATA_FIELDS = new Set([
+  'description', 'rating', 'dateTimeOriginal', 'dateTimeRelative', 'timeZone', 'latitude', 'longitude',
+]);
+
+// Mirror AgentAssetBatch asset.updateMetadata: flat strictObject + the 4 cross-field
+// rules + per-field bounds, so a wrong-shape live call also throws here.
+const validateUpdateMetadataAction = (action) => {
+  for (const key of Object.keys(action)) {
+    if (key !== 'type' && !UPDATE_METADATA_FIELDS.has(key)) {
+      fail(`unknown asset.updateMetadata field "${key}"`);
+    }
+  }
+  const supplied = [...UPDATE_METADATA_FIELDS].filter((field) => action[field] !== undefined);
+  if (supplied.length === 0) fail('asset.updateMetadata requires at least one metadata field');
+  if (action.description !== undefined && (typeof action.description !== 'string' || action.description.length > 1000)) {
+    fail('asset.updateMetadata description must be a string of at most 1000 chars');
+  }
+  if (action.rating !== undefined && action.rating !== null) {
+    const r = action.rating;
+    if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 5) {
+      fail('asset.updateMetadata rating must be an integer 1..5 or null');
+    }
+  }
+  if (action.dateTimeRelative !== undefined && (typeof action.dateTimeRelative !== 'number' || !Number.isInteger(action.dateTimeRelative))) {
+    fail('asset.updateMetadata dateTimeRelative must be an integer');
+  }
+  if (action.timeZone !== undefined && (typeof action.timeZone !== 'string' || action.timeZone.trim().length === 0)) {
+    fail('asset.updateMetadata timeZone must be a non-empty IANA time zone');
+  }
+  if (action.latitude !== undefined && (typeof action.latitude !== 'number' || action.latitude < -90 || action.latitude > 90)) {
+    fail('asset.updateMetadata latitude must be between -90 and 90');
+  }
+  if (action.longitude !== undefined && (typeof action.longitude !== 'number' || action.longitude < -180 || action.longitude > 180)) {
+    fail('asset.updateMetadata longitude must be between -180 and 180');
+  }
+  if (action.dateTimeOriginal !== undefined && action.dateTimeRelative !== undefined) {
+    fail('asset.updateMetadata: choose dateTimeOriginal or dateTimeRelative, not both');
+  }
+  if (action.dateTimeRelative === 0 && supplied.length === 1) {
+    fail('asset.updateMetadata dateTimeRelative: 0 is a no-op unless another field changes');
+  }
+  if (Number(action.latitude !== undefined) + Number(action.longitude !== undefined) === 1) {
+    fail('asset.updateMetadata requires both latitude and longitude');
+  }
+};
+
 // Validate proposeAssetBatchFromSelection.action against the real union shape.
 const validateBatchAction = (action) => {
   if (!action || typeof action !== 'object') fail('action is required');
@@ -93,6 +139,9 @@ const validateBatchAction = (action) => {
   if (type === 'asset.addTag') {
     const provided = Number(action.tagName !== undefined) + Number(action.tagId !== undefined);
     if (provided !== 1) fail('asset.addTag requires exactly one of tagName or tagId');
+  }
+  if (type === 'asset.updateMetadata') {
+    validateUpdateMetadataAction(action);
   }
 };
 
