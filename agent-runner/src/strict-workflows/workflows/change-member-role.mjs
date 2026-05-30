@@ -1,9 +1,19 @@
+import { failed, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
+
 // change_member_role (strict): "make <user> an editor/viewer in <space>" /
 // "change <user>'s role to <role> in <space>". The role word is the gate, so a
-// non-role "make X … in Y" never matches. Execution + registration land in later
-// slices. This module is the router half.
+// non-role "make X … in Y" never matches.
+//
+// Guards (deterministic): promotion to owner is refused (updateMemberRole accepts
+// editor/viewer only); changing the OWNER's role is blocked (the deterministic
+// proxy for self-demotion + last-owner demotion; server backstop: "Pi cannot
+// remove or demote the owner"); a no-op (current == requested) never plans; a
+// non-member asks for input.
 
 const KIND = 'change_member_role';
+
+const roleArticle = (role) => (role === 'editor' ? 'an editor' : 'a viewer');
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -78,5 +88,107 @@ export const changeMemberRoleWorkflow = () => ({
       return null;
     }
     return { memberQuery, role, spaceRef };
+  },
+
+  async run({ client, slots, signal }) {
+    const requestedRole = clean(slots?.role).toLowerCase();
+    const memberQuery = clean(slots?.memberQuery);
+
+    // Owner is not assignable via a role change.
+    if (requestedRole === 'owner') {
+      return needsInput({
+        text: "I can set a member's role to editor or viewer, not owner. Which role should I use?",
+      });
+    }
+
+    // 1. Resolve the space (none/ambiguous → ask).
+    const ref = normalizeSpaceRef(slots?.spaceRef);
+    let listed;
+    try {
+      listed = await client.call('listSpaces', {}, { signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The space lookup tool failed.') });
+    }
+    const spaces = Array.isArray(listed?.spaces) ? listed.spaces : [];
+    const spaceMatches = spaces.filter((space) => clean(space?.name).toLowerCase() === ref.toLowerCase());
+    if (spaceMatches.length === 0) {
+      return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
+    }
+    if (spaceMatches.length > 1) {
+      return needsInput({ text: `Multiple spaces are called "${ref}". Which one do you mean?` });
+    }
+    const spaceSummary = spaceMatches[0];
+    const spaceName = clean(spaceSummary.name) || ref;
+
+    // 2. Read the current members (with roles) for the guards.
+    let detail;
+    try {
+      detail = await client.call('readSpace', { spaceId: spaceSummary.id }, { signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The space lookup tool failed.') });
+    }
+    const space = detail?.space ?? detail ?? {};
+    const members = Array.isArray(space.members) ? space.members : [];
+    const memberById = new Map(members.map((member) => [member.userId, member]));
+
+    // 3. Resolve the target member to exactly one user.
+    let res;
+    try {
+      res = await client.call('searchUsers', { query: memberQuery }, { signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The user lookup tool failed.') });
+    }
+    const users = Array.isArray(res?.users) ? res.users : [];
+    if (users.length === 0) {
+      return needsInput({ text: `I could not find anyone matching "${memberQuery}". Who do you mean?` });
+    }
+    if (users.length > 1) {
+      return needsInput({ text: `More than one person matches "${memberQuery}". Who do you mean?` });
+    }
+    const user = users[0];
+    const displayName = clean(user.name) || memberQuery;
+
+    // 4. Guards from the readSpace member set.
+    const member = memberById.get(user.userId);
+    if (!member) {
+      return needsInput({ text: `${displayName} is not a member of the "${spaceName}" space.` });
+    }
+    const currentRole = clean(member.role).toLowerCase();
+    if (currentRole === 'owner') {
+      // Owner = the deterministic proxy for self / last owner; never plan this.
+      return needsInput({ text: `I can't change the role of the owner of the "${spaceName}" space.` });
+    }
+    if (currentRole === requestedRole) {
+      return needsInput({ text: `${displayName} is already ${roleArticle(requestedRole)} in the "${spaceName}" space.` });
+    }
+
+    // 5. Propose and gate on a persisted plan id.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAlbumOperations',
+        {
+          summary: 'Update a space member role.',
+          operations: [
+            {
+              type: 'space.updateMemberRole',
+              summary: 'Update a space member role.',
+              targetKind: 'existing_space',
+              targetId: spaceSummary.id,
+              payload: { userIds: [user.userId], role: requestedRole },
+            },
+          ],
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    return gatePlanResult({
+      planResult,
+      successText: `I prepared a plan to make ${displayName} ${roleArticle(requestedRole)} in the "${spaceName}" space. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, target: spaceName, label: requestedRole },
+    });
   },
 });
