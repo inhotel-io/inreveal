@@ -103,4 +103,15 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.negativeExamples.length > 0);
     assert.ok(entry.matrixRow.capability);
   });
+
+  it('describes set_album_cover as a strict workflow with its tools', () => {
+    const entry = getWorkflowManifestEntry('set_album_cover');
+    assert.equal(entry.flow, 'strict');
+    assert.equal(entry.planTool, 'proposeAlbumOperations');
+    assert.deepEqual(entry.requiredReadTools, ['listAlbums', 'readAlbum']);
+    assert.equal(entry.supportsContinuation, false);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
 });
