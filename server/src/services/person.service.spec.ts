@@ -2261,7 +2261,8 @@ describe(PersonService.name, () => {
         facesRecognizedAt: expect.any(Date),
       });
       const facesRecognizedAt = mocks.asset.upsertJobStatus.mock.calls[0][0].facesRecognizedAt as Date;
-      expect(facesRecognizedAt.getTime()).toBeGreaterThan(start);
+      // >= (not >) so a same-millisecond stamp doesn't flake; still proves the value is current.
+      expect(facesRecognizedAt.getTime()).toBeGreaterThanOrEqual(start);
     });
 
     it('should not write facesRecognizedAt or queue recognition when ML face detection throws', async () => {
