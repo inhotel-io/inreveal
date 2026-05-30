@@ -130,7 +130,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: 'Archive or unarchive photos',
+      capability: 'Archive assets',
       tier: 'Solid now',
       workflowOrBoundary:
         'Pi resolves a recency/date/type source; Gallery owns the batch archive plan from the handle.',
@@ -167,7 +167,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: 'Favorite or unfavorite photos',
+      capability: 'Mark favorites',
       tier: 'Solid now',
       workflowOrBoundary:
         'Pi resolves a recency/date/type source; Gallery owns the batch favorite plan from the handle.',
@@ -201,7 +201,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: 'Tag photos (add)',
+      capability: 'Add or remove tags',
       tier: 'Solid now',
       workflowOrBoundary: 'Add-only; Pi resolves the source; Gallery owns the batch tag-add plan from the handle.',
     }),
@@ -231,7 +231,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAlbumOperations',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: 'Rename or describe space',
+      capability: 'Update space details',
       tier: 'Solid now',
       workflowOrBoundary: 'Direct space-detail update plan; preserve unspecified fields.',
     }),
@@ -298,7 +298,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAlbumOperations',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: "Change a space member's role",
+      capability: 'Change space member roles',
       tier: 'Solid now',
       workflowOrBoundary: 'Resolve the member; guard owner/self/no-op; propose the role-change plan.',
     }),
