@@ -331,6 +331,26 @@ export default [
     expect: { kind: 'remove_photos_from_album' },
   },
 
+  // manage_space_assets --------------------------------------------------------
+  {
+    id: 'recall.spaceassets.add',
+    category: 'recall',
+    prompt: 'add my newest 20 photos to the Family space',
+    expect: { kind: 'manage_space_assets', slotsSurvive: true, slots: { action: 'add', spaceRef: 'Family' } },
+  },
+  {
+    id: 'recall.spaceassets.put',
+    category: 'recall',
+    prompt: 'put my newest 20 photos into the Family space',
+    expect: { kind: 'manage_space_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.spaceassets.takeout',
+    category: 'recall',
+    prompt: 'take my newest 20 photos out of the Family space',
+    expect: { kind: 'manage_space_assets', slotsSurvive: true },
+  },
+
   // entity-source variants (resolveAssetSearchFilters path) -------------------
   {
     id: 'recall.archive.entity',
