@@ -72,10 +72,16 @@ const validateBatchAction = (action) => {
 
 // space.updateDetails payload is a strictObject with ≥1 of these (mirrors the DTO).
 const KNOWN_SPACE_DETAILS_KEYS = new Set(['spaceName', 'description', 'color']);
+// Only editor/viewer are assignable to a member (owner is not).
+const ASSIGNABLE_SPACE_ROLES = new Set(['editor', 'viewer']);
+
+const requireExistingSpaceTarget = (op) => {
+  if (op.targetKind !== 'existing_space') fail(`${op.type} requires targetKind "existing_space"`);
+  if (!op.targetId) fail(`${op.type} requires targetId`);
+};
 
 const validateSpaceUpdateDetails = (op) => {
-  if (op.targetKind !== 'existing_space') fail('space.updateDetails requires targetKind "existing_space"');
-  if (!op.targetId) fail('space.updateDetails requires targetId');
+  requireExistingSpaceTarget(op);
   if (!op.payload || typeof op.payload !== 'object') fail('space.updateDetails requires a payload object');
   const keys = Object.keys(op.payload);
   for (const key of keys) {
@@ -84,11 +90,33 @@ const validateSpaceUpdateDetails = (op) => {
   if (keys.length === 0) fail('space.updateDetails requires spaceName, description, or color');
 };
 
+const validateSpaceAddMembers = (op) => {
+  requireExistingSpaceTarget(op);
+  const members = op.payload?.members;
+  if (!Array.isArray(members) || members.length === 0) fail('space.addMembers requires a non-empty payload.members');
+  for (const member of members) {
+    if (!member?.userId) fail('space.addMembers member requires userId');
+    if (!ASSIGNABLE_SPACE_ROLES.has(member.role)) fail(`space.addMembers member role must be editor or viewer`);
+  }
+};
+
+const validateSpaceRemoveMembers = (op) => {
+  requireExistingSpaceTarget(op);
+  const userIds = op.payload?.userIds;
+  if (!Array.isArray(userIds) || userIds.length === 0) fail('space.removeMembers requires a non-empty payload.userIds');
+};
+
+const SPACE_OP_VALIDATORS = {
+  'space.updateDetails': validateSpaceUpdateDetails,
+  'space.addMembers': validateSpaceAddMembers,
+  'space.removeMembers': validateSpaceRemoveMembers,
+};
+
 const validateOperations = (operations) => {
   if (!Array.isArray(operations) || operations.length === 0) fail('operations must be a non-empty array');
   for (const op of operations) {
     if (!op || !KNOWN_OPERATION_TYPES.has(op.type)) fail(`unknown operation type "${op?.type}"`);
-    if (op.type === 'space.updateDetails') validateSpaceUpdateDetails(op);
+    SPACE_OP_VALIDATORS[op.type]?.(op);
   }
 };
 
@@ -123,7 +151,7 @@ export const makeContractClient = (config = {}) => {
   const {
     albums = [{ id: 'alb-1', albumName: 'Family' }],
     spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
-    users = [{ id: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
+    users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
     handleAssetCount = 20,
   } = config;
   const calls = [];
@@ -136,7 +164,13 @@ export const makeContractClient = (config = {}) => {
       if (!space) fail(`space not found: ${args?.spaceId}`);
       return { ...space, members: space.members ?? [] };
     },
-    searchUsers: () => ({ users }),
+    // Mirror the real searchUsers: filter by query (substring on name/email) so
+    // distinct queries resolve distinct users, and ambiguity/not-found are testable.
+    searchUsers: (args) => {
+      const q = String(args?.query ?? '').trim().toLowerCase();
+      if (!q) return { users };
+      return { users: users.filter((u) => `${u.name ?? ''} ${u.email ?? ''}`.toLowerCase().includes(q)) };
+    },
     resolveAssetSearchFilters: (args) => {
       if (args && 'query' in args) fail("resolveAssetSearchFilters: unrecognized key 'query'");
       return { resolvedFilters: {} };
