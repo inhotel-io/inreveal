@@ -74,14 +74,16 @@ export default [
 
   // --- plan-proposed: end-to-end against a real library ---------------------
   // Routes to the trip workflow AND proposes a reviewable plan (never applied).
-  // The no-place form picks the top detectable trip candidate, so it only needs
-  // the library to contain any geotagged trip — the most robust plan probe.
+  // A PLACE-specified trip is the robust plan probe: the no-place form ("my most
+  // recent trip") is correctly ambiguous on a many-trip library and the agent
+  // returns needs_input rather than guessing (verified live) — so we assert the
+  // plan on a place-qualified prompt the library can satisfy unambiguously.
   {
-    id: 'l3.plan.recent-trip',
+    id: 'l3.plan.trip.usa',
     category: 'l3.plan',
-    prompt: 'Make an album for my most recent trip',
+    prompt: 'Create an album for my recent trip to USA',
     expect: { kind: 'create_recent_trip_album', planProposed: true },
-    // Needs library data; tolerate model variance across repeats.
+    // Needs library data; tolerate variance across repeats.
     threshold: 0.5,
   },
 ];
