@@ -128,14 +128,22 @@ export default [
     // setting a description on a REAL album — proposed, never applied. `{album}`
     // resolves read-only to the user's most-populated album. Exercises the
     // describe-slot value capture all the way to a persisted plan.
-    // NOTE: an add_photos plan scenario was intentionally NOT added — on the
-    // current build the recency source ("newest 20") fails in the workflow's
-    // resolveAssetSearchFilters call, so add stays routing-only (l3.recall.add.*)
-    // until that's fixed. Don't assert a known-broken path as "expected".
     id: 'l3.plan.describe.discovered',
     category: 'l3.plan',
     prompt: 'set the description on the {album} album to Favorite memories',
     expect: { kind: 'rename_or_describe_album', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // add_photos_to_album end-to-end, recency arm: "newest N" resolves via a
+    // bounded metadata search (newest-first) into a selection handle and proposes
+    // a duplicate-safe album.addAssets — proposed, never applied. `{album}` is a
+    // real album. (This is the path the resolveAssetSearchFilters bug broke; it
+    // now exercises the Option-1 recency fix end-to-end.)
+    id: 'l3.plan.add.recency',
+    category: 'l3.plan',
+    prompt: 'add my newest 20 photos to {album}',
+    expect: { kind: 'add_photos_to_album', planProposed: true },
     threshold: 0.5,
   },
 

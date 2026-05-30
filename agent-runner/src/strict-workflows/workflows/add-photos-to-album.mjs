@@ -28,6 +28,27 @@ const ADD_PATTERN = /\badd\s+(?<source>.+?)\s+to\s+(?<albumRef>[^.?!]+?)(?:\s+al
 const tripSourcePattern = /\brecent\s+trip\b/i;
 const declinesAddFastPath = (source) => tripSourcePattern.test(source) || SUBJECTIVE_PATTERN.test(source);
 
+// A recency source ("newest/latest/last/most recent N") is the one metadata
+// source this strict path can resolve deterministically: newest-first, capped to
+// N, via a plain metadata search (no filters, no free-text query). It requires
+// an explicit count so we never guess how many. Date / location / semantic
+// sources need filters this workflow cannot extract from free text and hand off
+// to open orchestration instead.
+const RECENCY_PATTERN = /\b(?:newest|latest|last|most\s+recent|recent)\b/i;
+const COUNT_PATTERN = /\b(\d{1,4})\b/;
+const MAX_RECENCY_LIMIT = 1000;
+const parseRecencyLimit = (source) => {
+  if (!RECENCY_PATTERN.test(source)) {
+    return undefined;
+  }
+  const match = COUNT_PATTERN.exec(source);
+  if (!match) {
+    return undefined;
+  }
+  const count = Number(match[1]);
+  return Number.isInteger(count) && count >= 1 ? Math.min(count, MAX_RECENCY_LIMIT) : undefined;
+};
+
 const resolveAlbum = async ({ client, albumRef, signal }) => {
   const ref = normalizeAlbumRef(albumRef);
   const result = await client.call('listAlbums', {}, { signal });
@@ -83,15 +104,26 @@ export const addPhotosToAlbumWorkflow = () => ({
       });
     }
 
-    // 3. Resolve the source through the bounded read whitelist into a handle.
-    let filters;
+    // 3. Only a recency source is deterministically resolvable here. Date,
+    //    location, and semantic sources need filters this strict path cannot
+    //    extract from free text, so they hand off to open orchestration (the LLM
+    //    composes the searchAssets call) rather than fail or fabricate a search.
+    const recencyLimit = parseRecencyLimit(sourceDescription);
+    if (recencyLimit === undefined) {
+      return handoffOpen({
+        reason: `Source "${sourceDescription}" needs filters this workflow cannot resolve from metadata alone.`,
+      });
+    }
+
+    // 4. Resolve the recency source into a selection handle via a bounded
+    //    metadata search (newest-first, capped to N). No free-text query: the
+    //    metadata search mode does not accept one, and there are no named
+    //    entities to resolve, so resolveAssetSearchFilters is not used.
     let handleResult;
     try {
-      const resolved = await client.call('resolveAssetSearchFilters', { query: sourceDescription }, { signal });
-      filters = resolved?.filters ?? resolved?.resolvedFilters ?? {};
       handleResult = await client.call(
         'searchAssets',
-        { query: sourceDescription, filters, detail: 'handle' },
+        { mode: 'metadata', order: 'desc', limit: recencyLimit, detail: 'handle' },
         { signal },
       );
     } catch (error) {
@@ -108,7 +140,7 @@ export const addPhotosToAlbumWorkflow = () => ({
       });
     }
 
-    // 4. Propose a duplicate-safe add via the selection handle (server owns the
+    // 5. Propose a duplicate-safe add via the selection handle (server owns the
     // duplicate-safe semantics). No raw asset ids ever reach the model.
     let planResult;
     try {
