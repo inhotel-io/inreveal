@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { makeContractClient } from './contract-fixtures.mjs';
 import { updateAssetMetadataWorkflow } from './update-asset-metadata.mjs';
 
 const wf = updateAssetMetadataWorkflow();
@@ -149,5 +150,231 @@ describe('update_asset_metadata parseSlots', () => {
       wf.parseSlots({ field: 'description', description: 'Berlin weekend', sourceDescription: 'my newest 20 photos' }),
       { sourceDescription: 'my newest 20 photos', payload: { description: 'Berlin weekend' } },
     );
+  });
+});
+
+describe('update_asset_metadata execution', () => {
+  it('description run: plans batch with flat asset.updateMetadata action', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { description: 'Berlin weekend' } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', description: 'Berlin weekend' });
+    assert.equal(propose.args.selectionHandleId, 'handle-1');
+    assert.equal(JSON.stringify(client.calls).includes('assetIds'), false);
+  });
+
+  it('rating run: plans with flat rating action', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', rating: 5 });
+  });
+
+  it('clear-rating: action includes rating:null', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: null } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', rating: null });
+  });
+
+  it('clear-description: action includes description:empty string, does not throw', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { description: '' } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', description: '' });
+  });
+
+  it('timezone: action includes timeZone field', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { timeZone: 'Europe/Berlin' } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', timeZone: 'Europe/Berlin' });
+  });
+
+  it('location: action includes latitude and longitude', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { latitude: 48.8566, longitude: 2.3522 } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', latitude: 48.8566, longitude: 2.3522 });
+  });
+
+  it('date-absolute: action has dateTimeOriginal matching 1998-06, status planned', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { dateTimeOriginal: '1998-06-15T00:00:00.000Z' } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.match(propose.args.action.dateTimeOriginal, /^1998-06/);
+  });
+
+  it('relative-shift: action has dateTimeRelative===120', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { dateTimeRelative: 120 } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.equal(propose.args.action.dateTimeRelative, 120);
+  });
+
+  it('date SOURCE + field: search uses date filters, action carries rating', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my photos from 2024', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'planned');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', rating: 5 });
+  });
+
+  it('success copy: description run text mentions "set the description" and "Berlin weekend"', async () => {
+    const client = makeContractClient();
+    const descOutcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { description: 'Berlin weekend' } },
+    });
+    assert.match(descOutcome.text, /set the description/);
+    assert.ok(descOutcome.text.includes('Berlin weekend'));
+
+    const ratingClient = makeContractClient();
+    const ratingOutcome = await wf.run({
+      client: ratingClient,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.match(ratingOutcome.text, /rating/);
+    assert.ok(ratingOutcome.text.includes('5'));
+
+    const tzClient = makeContractClient();
+    const tzOutcome = await wf.run({
+      client: tzClient,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { timeZone: 'Europe/Berlin' } },
+    });
+    assert.match(tzOutcome.text, /timezone/i);
+    assert.ok(tzOutcome.text.includes('Europe/Berlin'));
+  });
+
+  it('handoff: subjective source → handoff_open, propose NOT called', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'the best ones', payload: { description: 'X' } },
+    });
+    assert.equal(outcome.status, 'handoff_open');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'),
+      false,
+    );
+  });
+
+  it('empty: zero-count handle → needs_input, propose NOT called', async () => {
+    const client = makeContractClient({ handleAssetCount: 0 });
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'),
+      false,
+    );
+  });
+
+  it('half-coordinate defensive: only latitude provided → needs_input, no tool calls', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { latitude: 48.8 } },
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.match(outcome.text, /latitude.*longitude|longitude.*latitude/i);
+    assert.equal(client.calls.length, 0);
+  });
+
+  it('gate: plan without persisted id → failed, no success copy', async () => {
+    const client = makeContractClient({ planResult: { status: 'success', plan: {} } });
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'failed');
+    assert.equal(/prepared|set the/i.test(outcome.text), false);
+  });
+
+  it('search throws → failed', async () => {
+    const client = {
+      calls: [],
+      async call(name) {
+        this.calls.push({ name });
+        if (name === 'searchAssets') throw new Error('network error');
+        throw new Error(`unexpected ${name}`);
+      },
+    };
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'failed');
+  });
+
+  it('propose throws → failed', async () => {
+    const base = makeContractClient();
+    const client = {
+      calls: base.calls,
+      async call(name, args) {
+        if (name === 'proposeAssetBatchFromSelection') {
+          base.calls.push({ name, args });
+          throw new Error('propose exploded');
+        }
+        return base.call(name, args);
+      },
+    };
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', payload: { rating: 5 } },
+    });
+    assert.equal(outcome.status, 'failed');
+  });
+
+  it('singular/plural: 1 photo → text contains "1 photo" not "1 photos"', async () => {
+    const client = makeContractClient({ handleAssetCount: 1 });
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 1 photo', payload: { rating: 5 } },
+    });
+    assert.ok(outcome.text.includes('1 photo'));
+    assert.equal(outcome.text.includes('1 photos'), false);
   });
 });
