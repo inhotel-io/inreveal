@@ -10,6 +10,7 @@ import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs
 import { removePhotosFromAlbumWorkflow } from './workflows/remove-photos-from-album.mjs';
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
+import { setAlbumCoverWorkflow } from './workflows/set-album-cover.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
@@ -45,6 +46,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   createSpaceFromSourceWorkflow,
   renameOrDescribeSpaceWorkflow,
   renameOrDescribeAlbumWorkflow,
+  setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
