@@ -41,6 +41,19 @@ describe('favorite_assets router & slots', () => {
     assert.equal(wf.match('I really like my photos'), undefined);
   });
 
+  it('owns "add <source> to [my] favorites" (favorite, not an album add)', () => {
+    assert.deepEqual(wf.match('add my newest 20 photos to my favorites'), {
+      slots: { favorite: true, sourceDescription: 'my newest 20 photos' },
+    });
+    assert.deepEqual(wf.match('add my newest 20 photos to favorites'), {
+      slots: { favorite: true, sourceDescription: 'my newest 20 photos' },
+    });
+  });
+
+  it('does not steal "add <source> to my Favorites album" (that is an album add)', () => {
+    assert.equal(wf.match('add my newest 20 to my Favorites album'), undefined);
+  });
+
   it('strips trailing punctuation and rejects empty prompt', () => {
     assert.deepEqual(wf.match('favorite my photos.'), {
       slots: { favorite: true, sourceDescription: 'my photos' },
