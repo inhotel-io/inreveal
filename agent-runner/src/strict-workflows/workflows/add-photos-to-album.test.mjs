@@ -119,4 +119,15 @@ describe('add_photos_to_album HybridWorkflow', () => {
       false,
     );
   });
+
+  it('returns needs_input for a not-found source entity (no proposeAlbumOperations)', async () => {
+    const client = fakeClient({
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'not_found', choices: [], message: '' },
+      ],
+    });
+    const outcome = await wf.run({ client, slots: { albumRef: 'Family', sourceDescription: 'photos of Alex' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(client.calls.some((c) => c.name === 'proposeAlbumOperations'), false);
+  });
 });
