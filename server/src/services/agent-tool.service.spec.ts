@@ -553,6 +553,42 @@ describe(AgentToolService.name, () => {
     vi.useRealTimers();
   });
 
+  it('does not deny findTripCandidates when a candidate exceeds the per-tool asset limit (handle-based discovery)', async () => {
+    // A real trip routinely has more photos than maxAssetsPerToolCall. Because it is
+    // returned as a selection handle (compact summary, not raw assets to the model),
+    // the per-call asset limit must not block discovery — otherwise large trips, the
+    // common case, become impossible to album.
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const auth = AuthFactory.create();
+    // 150 > fixture maxAssetsPerToolCall (100), but < maxAssetsPerSession (1000).
+    const bigAssetIds = Array.from({ length: 150 }, () => newUuid());
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const candidate = makeTripCandidate();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    tripCandidateService.findRecentTripCandidates.mockResolvedValue([candidate]);
+    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(bigAssetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(bigAssetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(bigAssetIds));
+
+    const result = await sut.findTripCandidates(auth, session.id, {
+      placeHint: 'New York',
+      lookbackDays: 180,
+      maxCandidates: 3,
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0].selectionHandle.assetCount).toBe(150);
+    // Still handle-based: no raw asset ids leak into the model-facing result.
+    expect(JSON.stringify(result)).not.toContain(bigAssetIds[0]);
+    vi.useRealTimers();
+  });
+
   it('findTripCandidates returns empty success without creating handles when no candidate matches', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
@@ -715,34 +751,6 @@ describe(AgentToolService.name, () => {
         selectionHandle: expect.objectContaining({ assetCount: 1 }),
       });
     }
-  });
-
-  it('findTripCandidates denies materialized selections that exceed the per-tool asset limit before creating handles', async () => {
-    const auth = AuthFactory.create();
-    const assetIds = [newUuid(), newUuid()];
-    const session = makeSession({
-      userId: auth.user.id,
-      approvalMode: AgentApprovalMode.PlanOnly,
-      permissionPlanSnapshot: makePlan({
-        limits: { ...permissionPlanSnapshot.limits, maxAssetsPerToolCall: 1 },
-      }),
-    });
-
-    sessionRepository.getById.mockResolvedValue(session);
-    tripCandidateService.findRecentTripCandidates.mockResolvedValue([makeTripCandidate()]);
-    tripCandidateService.materializeAlbumReadySelection.mockResolvedValue(makeTripSelection(assetIds));
-    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
-    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
-
-    const result = await sut.findTripCandidates(auth, session.id, { lookbackDays: 180, maxCandidates: 1 });
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        status: 'denied',
-        reason: expect.stringContaining('Requested asset count exceeds per-tool limit'),
-      }),
-    );
-    expect(selectionHandleRepository.create).not.toHaveBeenCalled();
   });
 
   it('findTripCandidates reserves the filtered asset count before creating handles and denies session overflow', async () => {
