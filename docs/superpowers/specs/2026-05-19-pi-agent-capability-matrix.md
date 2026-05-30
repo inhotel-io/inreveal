@@ -117,6 +117,18 @@ retried only when the correction is mechanical.
 | Screenshot/document cleanup      | Hybrid                      | Metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation.                                                                                                     |
 | Story/memory albums              | Hybrid                      | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                                                                                                                 |
 
+<!-- generated:workflows:start -->
+
+### Implemented strict/hybrid workflows
+
+Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do not edit by hand; run `pnpm --dir server sync:agent-capabilities`.
+
+| Kind                       | Flow   | Required read tools  | Plan tool                   |
+| -------------------------- | ------ | -------------------- | --------------------------- |
+| `create_recent_trip_album` | Strict | `findTripCandidates` | `proposeAlbumFromSelection` |
+
+<!-- generated:workflows:end -->
+
 ## Core Capability Matrix
 
 | Capability                       | User prompt examples                                                        | Tier                                      | Current path                                                                                                                                                                                                                 | Required user-visible behavior                                                                                                                                              | Regression scenarios                                                                                                                                                                                                          |
