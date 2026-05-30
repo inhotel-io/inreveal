@@ -1,0 +1,82 @@
+import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
+
+// favorite_assets (hybrid): "favorite/unfavorite <source>" → a batch
+// asset.setFavorite over a resolved selection handle. This module is the router
+// half (match + parseSlots); execution and registration land in later slices.
+
+const KIND = 'favorite_assets';
+
+const clean = (value) => (typeof value === 'string' ? value.trim() : '');
+const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+
+// Polarity from a boolean (regex/JSON LLM slot) or a string.
+const coerceFavorite = (value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const text = clean(value).toLowerCase();
+  if (['true', 'favorite', 'favourite', 'favorited', 'fave', 'like', 'liked', 'yes'].includes(text)) {
+    return true;
+  }
+  if (['false', 'unfavorite', 'unfavourite', 'unfave', 'unlike', 'disliked', 'no'].includes(text)) {
+    return false;
+  }
+  return undefined;
+};
+
+const tripSourcePattern = /\brecent\s+trip\b/i;
+const declinesSourceFastPath = (source) => SUBJECTIVE_PATTERN.test(source) || tripSourcePattern.test(source);
+
+// `\bfavou?rite` has no boundary inside "unfavorite" (n→f), so FAVORITE never
+// matches an unfavorite prompt; the false-polarity patterns are tried first
+// anyway. "like"/"unlike" are anchored to the start so a mid-sentence "like"
+// ("photos like these") is not coerced into a favorite.
+const UNFAVORITE_PATTERN = /\bun-?favou?rite\s+(?<source>.+)$/i;
+const REMOVE_FAV_FROM_PATTERN =
+  /\bremove\s+(?:the\s+)?(?:favou?rite|fave)\s+(?:status\s+)?(?:from|on|of)\s+(?<source>.+)$/i;
+const OUT_OF_FAVS_PATTERN = /\bremove\s+(?<source>.+?)\s+from\s+(?:my\s+)?favou?rites\b/i;
+const UNLIKE_PATTERN = /^\s*(?:please\s+)?unlike\s+(?<source>.+)$/i;
+const FAVORITE_PATTERN = /\bfavou?rite\s+(?<source>.+)$/i;
+const LIKE_PATTERN = /^\s*(?:please\s+)?like\s+(?<source>.+)$/i;
+
+const POLARITY_PATTERNS = [
+  [UNFAVORITE_PATTERN, false],
+  [REMOVE_FAV_FROM_PATTERN, false],
+  [OUT_OF_FAVS_PATTERN, false],
+  [UNLIKE_PATTERN, false],
+  [FAVORITE_PATTERN, true],
+  [LIKE_PATTERN, true],
+];
+
+export const favoriteAssetsWorkflow = () => ({
+  kind: KIND,
+  flow: 'hybrid',
+
+  match(prompt) {
+    const text = clean(prompt);
+    if (!text) {
+      return undefined;
+    }
+    for (const [pattern, favorite] of POLARITY_PATTERNS) {
+      const m = pattern.exec(text);
+      if (m?.groups?.source) {
+        const sourceDescription = cleanSource(m.groups.source);
+        if (!sourceDescription || declinesSourceFastPath(sourceDescription)) {
+          return undefined;
+        }
+        return { slots: { favorite, sourceDescription } };
+      }
+    }
+    return undefined;
+  },
+
+  parseSlots(rawSlots) {
+    const sourceDescription = cleanSource(rawSlots?.sourceDescription);
+    if (!sourceDescription) {
+      return null;
+    }
+    // Default to favorite when polarity is omitted (the workflow's primary action).
+    const favorite = coerceFavorite(rawSlots?.favorite) ?? true;
+    return { favorite, sourceDescription };
+  },
+});
