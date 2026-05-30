@@ -423,4 +423,18 @@ export default [
     prompt: 'flip my newest 5 photos upside down',
     expect: { kind: 'rotate_assets', slotsSurvive: true },
   },
+
+  // set_album_cover -----------------------------------------------------------
+  {
+    id: 'recall.cover.index',
+    category: 'recall',
+    prompt: 'set the cover of the Family album to the 3rd photo',
+    expect: { kind: 'set_album_cover', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
+  {
+    id: 'recall.cover.first',
+    category: 'recall',
+    prompt: 'make the Family album cover the first photo',
+    expect: { kind: 'set_album_cover', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
 ];

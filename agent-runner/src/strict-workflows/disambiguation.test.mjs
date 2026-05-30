@@ -67,6 +67,9 @@ const CASES = [
   // rotate_assets (explicit angle required; subjective source → none)
   ['rotate my newest 20 photos 90 clockwise', 'rotate_assets'],
   ['flip my newest 5 photos upside down', 'rotate_assets'],
+  // set_album_cover
+  ['set the cover of the Family album to the 3rd photo', 'set_album_cover'],
+  ['make the Family album cover the first photo', 'set_album_cover'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],

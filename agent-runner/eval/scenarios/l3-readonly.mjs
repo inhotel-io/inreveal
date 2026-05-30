@@ -390,4 +390,29 @@ export default [
     expect: { kind: 'rotate_assets', planProposed: true },
     threshold: 0.5,
   },
+
+  // --- set_album_cover routing + plan-proposed ------------------------------
+  {
+    id: 'l3.recall.cover',
+    category: 'l3.recall',
+    prompt: 'set the cover of the {album} album to the first photo',
+    expect: { kind: 'set_album_cover' },
+  },
+  {
+    // set_album_cover end-to-end: first photo → album.setCover plan — proposed,
+    // never applied. Data-dependent (needs a real album with at least 1 asset);
+    // threshold 0.5 tolerates variance on an empty stack.
+    id: 'l3.plan.cover.index',
+    category: 'l3.plan',
+    prompt: 'set the cover of the {album} album to the first photo',
+    expect: { kind: 'set_album_cover', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // Subjective cover reference declines at the regex fast-path.
+    id: 'l3.neg.cover.subjective',
+    category: 'l3.negatives',
+    prompt: 'pick a better cover for {album}',
+    expect: { kind: 'none' },
+  },
 ];
