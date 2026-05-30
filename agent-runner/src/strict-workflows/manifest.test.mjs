@@ -41,4 +41,10 @@ describe('strict/hybrid workflow manifest', () => {
     const mirror = JSON.parse(readFileSync(mirrorPath, 'utf8'));
     assert.deepEqual(mirror, JSON.parse(JSON.stringify(WORKFLOW_MANIFEST)));
   });
+
+  it('lists resolveAssetSearchFilters for every entity-source workflow', () => {
+    for (const kind of ['add_photos_to_album', 'archive_assets', 'favorite_assets', 'tag_assets', 'create_album_from_source']) {
+      assert.ok(getWorkflowManifestEntry(kind).requiredReadTools.includes('resolveAssetSearchFilters'), kind);
+    }
+  });
 });

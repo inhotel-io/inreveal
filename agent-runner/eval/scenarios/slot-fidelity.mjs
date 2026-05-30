@@ -80,4 +80,10 @@ export default [
     prompt: 'make an album of my newest 50 photos',
     expect: { kind: 'create_album_from_source', slots: { sourceDescription: 'my newest 50 photos', albumName: 'New Album' } },
   },
+  {
+    id: 'slots.archive.entity',
+    category: 'slots',
+    prompt: 'archive my Berlin photos',
+    expect: { kind: 'archive_assets', slots: { archived: true, sourceDescription: 'my Berlin photos' } },
+  },
 ];
