@@ -188,6 +188,16 @@ describe('resolveAssetSource', () => {
     assert.deepEqual(search.args, { mode: 'metadata', order: 'desc', limit: 20, detail: 'handle' });
   });
 
+  it('hands off an absurd recency count (> 4 digits is not a count → unbounded)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'newest 99999 photos', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(
+      client.calls.some((c) => c.name === 'searchAssets'),
+      false,
+    );
+  });
+
   it('reports empty when the recency source resolves to zero assets', async () => {
     const client = makeContractClient({ handleAssetCount: 0 });
     const result = await resolveAssetSource({ client, sourceDescription: 'newest 10 photos' });

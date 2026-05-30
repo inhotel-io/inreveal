@@ -254,4 +254,14 @@ Use these prompts as manual and automated acceptance scenarios:
 1. Turn the “solid now” rows into an automated assistant regression suite.
 2. Add prompt/docs examples for each smoke prompt so smaller models learn the
    intended tool sequence.
-3. Test the first strict workflow with `create_recent_trip_album`.
+3. The batch-action (`archive_assets`, `favorite_assets`, `tag_assets`),
+   space-detail/membership (`rename_or_describe_space`, `manage_space_members`,
+   `change_member_role`), and general `create_album_from_source` workflows now ship
+   on top of `create_recent_trip_album`, `rename_or_describe_album`, and
+   `add_photos_to_album`, each with L1 (component) + L3 (live, read-only) eval
+   coverage and a shared metadata source-resolver (recency + relative dates + media
+   type, behind a clean-source precision gate).
+4. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
+   `needs_input` rather than a durable continuation — a follow-up could add
+   candidate-resume like the trip workflow. Named-entity / location / semantic
+   sources still hand off (a later spec may integrate `resolveAssetSearchFilters`).
