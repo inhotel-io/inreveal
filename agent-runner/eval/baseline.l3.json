@@ -1,0 +1,26 @@
+{
+  "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
+  "overall": 1,
+  "byCategory": {
+    "l3.recall": 1,
+    "l3.negatives": 1,
+    "l3.plan": 1
+  },
+  "scenarioScores": {
+    "l3.recall.trip.usa": 1,
+    "l3.recall.trip.noplace": 1,
+    "l3.recall.trip.uncommon-verb": 1,
+    "l3.recall.rename": 1,
+    "l3.recall.add.newest20": 1,
+    "l3.recall.trip.lisbon.llm": 1,
+    "l3.recall.describe.italy": 1,
+    "l3.neg.count": 1,
+    "l3.neg.thanks": 1,
+    "l3.neg.favorite": 1,
+    "l3.neg.search": 1,
+    "l3.neg.subjective": 1,
+    "l3.neg.where": 1,
+    "l3.neg.delete": 1,
+    "l3.plan.trip.usa": 1
+  }
+}

@@ -45,6 +45,23 @@ export default [
     prompt: 'add my newest 20 photos to Family',
     expect: { kind: 'add_photos_to_album' },
   },
+  {
+    // Heavy paraphrase with no trip keyword for the regex fast-path — forces the
+    // LIVE model classifier (via=llm), unlike the canonical prompts above.
+    id: 'l3.recall.trip.lisbon.llm',
+    category: 'l3.recall',
+    prompt: 'put together an album from our weekend away in Lisbon',
+    expect: { kind: 'create_recent_trip_album' },
+  },
+  {
+    // The describe variant (vs rename) — end-to-end coverage of the describe
+    // slot path. Routing happens before any album lookup, so it holds whether or
+    // not an "Italy album" exists.
+    id: 'l3.recall.describe.italy',
+    category: 'l3.recall',
+    prompt: 'set the description on my Italy album to Summer 2026 memories',
+    expect: { kind: 'rename_or_describe_album' },
+  },
 
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
@@ -69,6 +86,26 @@ export default [
     id: 'l3.neg.search',
     category: 'l3.negatives',
     prompt: 'find my Sony photos from May',
+    expect: { kind: 'none' },
+  },
+  {
+    id: 'l3.neg.subjective',
+    category: 'l3.negatives',
+    prompt: 'show me the good ones',
+    expect: { kind: 'none' },
+  },
+  {
+    id: 'l3.neg.where',
+    category: 'l3.negatives',
+    prompt: 'where were these taken?',
+    expect: { kind: 'none' },
+  },
+  {
+    // Unsupported AND destructive — the strict router must not fabricate a
+    // workflow for it (there is no delete workflow); it falls to open handling.
+    id: 'l3.neg.delete',
+    category: 'l3.negatives',
+    prompt: 'delete all my screenshots',
     expect: { kind: 'none' },
   },
 
