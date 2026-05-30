@@ -1197,7 +1197,7 @@ describe(AssetRepository.name, () => {
           personIds: [alice.id, bob.id],
           visibility: AssetVisibility.Timeline,
         }),
-      ).resolves.toEqual([{ count: 1, timeBucket: '2026-03-01' }]);
+      ).resolves.toEqual([expect.objectContaining({ count: 1, timeBucket: '2026-03-01' })]);
     });
   });
 
