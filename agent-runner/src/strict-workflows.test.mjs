@@ -141,13 +141,13 @@ describe('strict router classifier path for declined fast-path matches', () => {
   it('does not run the trip workflow when the classifier returns a competing intent', async () => {
     // A declined fast-path match (competing prompt) now flows to the LLM. An
     // unknown/competing intent the manifest does not list must NOT be coerced
-    // into the trip workflow (manage_space_members is an unimplemented kind).
+    // into the trip workflow (`delete_album` is not an implemented strict kind).
     const classifier = buildClassifier(async () => ({
-      workflow: 'manage_space_members',
+      workflow: 'delete_album',
       slots: {},
       confidence: 'high',
     }));
-    const decision = await classifier.classify('Manage the members of my recent trip space');
+    const decision = await classifier.classify('Delete the photos from my recent trip and start over');
     assert.equal(decision.kind, 'none');
   });
 

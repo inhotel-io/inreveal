@@ -231,5 +231,143 @@
       "tier": "Solid now",
       "workflowOrBoundary": "Add-only; Pi resolves the source; Gallery owns the batch tag-add plan from the handle."
     }
+  },
+  {
+    "kind": "rename_or_describe_space",
+    "flow": "strict",
+    "title": "Rename or describe space",
+    "classifierDescription": "User wants to rename a shared space and/or change its description, leaving members and assets unchanged.",
+    "positiveExamples": [
+      "Rename the Family space to Family 2026",
+      "Set the description on the Trips space to Our adventures",
+      "Change the description on my Family space"
+    ],
+    "negativeExamples": [
+      "Rename the Family album to Family 2026",
+      "Add Alex to the Family space",
+      "Make Alex an editor in Family"
+    ],
+    "slots": {
+      "spaceRef": {
+        "type": "string",
+        "required": true,
+        "description": "How the user referred to the space."
+      },
+      "newName": {
+        "type": "string",
+        "required": false,
+        "description": "New space name, if renaming."
+      },
+      "description": {
+        "type": "string",
+        "required": false,
+        "description": "New description, if setting one."
+      }
+    },
+    "requiredReadTools": [
+      "listSpaces"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Rename or describe space",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Direct space-detail update plan; preserve unspecified fields."
+    }
+  },
+  {
+    "kind": "manage_space_members",
+    "flow": "strict",
+    "title": "Add or remove space members",
+    "classifierDescription": "User wants to add or remove members of a shared space, optionally with a role.",
+    "positiveExamples": [
+      "Add Alex to the Family space as editor",
+      "Add Sam and Jo to the Trips space",
+      "Remove Bob from the Family space"
+    ],
+    "negativeExamples": [
+      "Add my newest 20 photos to the Family space",
+      "Make Alex an editor in Family",
+      "Rename the Family space to Family 2026"
+    ],
+    "slots": {
+      "action": {
+        "type": "string",
+        "required": true,
+        "description": "add or remove."
+      },
+      "memberQueries": {
+        "type": "array",
+        "required": true,
+        "description": "Member names or emails to add or remove."
+      },
+      "spaceRef": {
+        "type": "string",
+        "required": true,
+        "description": "How the user referred to the space."
+      },
+      "role": {
+        "type": "string",
+        "required": false,
+        "description": "editor or viewer (default viewer on add)."
+      }
+    },
+    "requiredReadTools": [
+      "listSpaces",
+      "readSpace",
+      "searchUsers"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Add or remove space members",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Resolve members; guard owner/self/last-owner removal; propose the membership plan."
+    }
+  },
+  {
+    "kind": "change_member_role",
+    "flow": "strict",
+    "title": "Change a space member's role",
+    "classifierDescription": "User wants to change a shared-space member's role to editor or viewer.",
+    "positiveExamples": [
+      "Make Alex an editor in the Family space",
+      "Change Bob's role to viewer in Trips",
+      "Make Sam a viewer in Family"
+    ],
+    "negativeExamples": [
+      "Add Alex to the Family space",
+      "Remove Bob from the Family space",
+      "Rename the Family space to Family 2026"
+    ],
+    "slots": {
+      "memberQuery": {
+        "type": "string",
+        "required": true,
+        "description": "The member name or email."
+      },
+      "role": {
+        "type": "string",
+        "required": true,
+        "description": "editor or viewer."
+      },
+      "spaceRef": {
+        "type": "string",
+        "required": true,
+        "description": "How the user referred to the space."
+      }
+    },
+    "requiredReadTools": [
+      "listSpaces",
+      "readSpace",
+      "searchUsers"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Change a space member's role",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Resolve the member; guard owner/self/no-op; propose the role-change plan."
+    }
   }
 ]

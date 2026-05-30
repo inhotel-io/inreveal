@@ -28,6 +28,13 @@ const normalizeSpaceRef = (value) =>
 
 const mentionsSpace = (ref) => /\bspace\b/i.test(clean(ref));
 
+// A members capture that reads like a photo source ("my newest 20 photos") is NOT
+// a member list — decline so "add <photos> to the X space" never becomes a member
+// op (there is no add-photos-to-space workflow; it falls through to open handling).
+const PHOTO_SOURCE_RE =
+  /\b(?:photos?|pics?|pictures?|images?|videos?|clips?|screenshots?|snaps?|shots?|newest|latest|most\s+recent)\b/i;
+const looksLikePhotoSource = (text) => PHOTO_SOURCE_RE.test(clean(text));
+
 const ROLE_SYNONYMS = {
   editor: 'editor',
   edit: 'editor',
@@ -58,6 +65,19 @@ const normalizeMemberQueries = (value) => {
   return splitMembers(value);
 };
 
+// Infer add/remove from the prompt verb when the LLM omits/garbles the action
+// slot (e.g. it routes "invite Alex to the Family space" but sets no action).
+const inferActionFromPrompt = (prompt) => {
+  const text = clean(prompt).toLowerCase();
+  if (/\b(?:remove|kick|take\s+off|drop|delete|revoke)\b/.test(text)) {
+    return 'remove';
+  }
+  if (/\b(?:add|invite|include|share\s+with)\b/.test(text)) {
+    return 'add';
+  }
+  return undefined;
+};
+
 const ADD_PATTERN = /\badd\s+(?<members>.+?)\s+to\s+(?<rest>.+)$/i;
 const REMOVE_PATTERN = /\bremove\s+(?<members>.+?)\s+from\s+(?<rest>.+)$/i;
 
@@ -86,8 +106,14 @@ export const manageSpaceMembersWorkflow = () => ({
       const spaceRef = normalizeSpaceRef(rest);
       const memberQueries = splitMembers(add.groups.members);
       // Gate: a space membership op mentions a "space" OR carries an explicit role,
-      // so "add <photos> to <album>" / "add the tag … to …" fall through.
-      if ((mentionsSpace(rest) || role) && spaceRef && memberQueries.length) {
+      // so "add <photos> to <album>" / "add the tag … to …" fall through. A photo-ish
+      // member capture (e.g. "my newest 20 photos") also declines.
+      if (
+        (mentionsSpace(rest) || role) &&
+        spaceRef &&
+        memberQueries.length &&
+        !looksLikePhotoSource(add.groups.members)
+      ) {
         return { slots: { action: 'add', memberQueries, spaceRef, ...(role ? { role } : {}) } };
       }
     }
@@ -97,7 +123,7 @@ export const manageSpaceMembersWorkflow = () => ({
       const rest = remove.groups.rest;
       const spaceRef = normalizeSpaceRef(rest);
       const memberQueries = splitMembers(remove.groups.members);
-      if (mentionsSpace(rest) && spaceRef && memberQueries.length) {
+      if (mentionsSpace(rest) && spaceRef && memberQueries.length && !looksLikePhotoSource(remove.groups.members)) {
         return { slots: { action: 'remove', memberQueries, spaceRef } };
       }
     }
@@ -105,8 +131,11 @@ export const manageSpaceMembersWorkflow = () => ({
     return undefined;
   },
 
-  parseSlots(rawSlots) {
-    const action = clean(rawSlots?.action).toLowerCase();
+  parseSlots(rawSlots, prompt) {
+    let action = clean(rawSlots?.action).toLowerCase();
+    if (action !== 'add' && action !== 'remove') {
+      action = inferActionFromPrompt(prompt);
+    }
     if (action !== 'add' && action !== 'remove') {
       return null;
     }

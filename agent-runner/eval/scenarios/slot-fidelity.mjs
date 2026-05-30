@@ -62,4 +62,16 @@ export default [
     prompt: 'tag my newest 20 as "Spring Break"',
     expect: { kind: 'tag_assets', slots: { tagName: 'Spring Break', sourceDescription: 'my newest 20' } },
   },
+  {
+    id: 'slots.members.role-default',
+    category: 'slots',
+    prompt: 'add Alex to the Family space',
+    expect: { kind: 'manage_space_members', slots: { action: 'add', role: 'viewer', spaceRef: 'Family' } },
+  },
+  {
+    id: 'slots.role.synonym',
+    category: 'slots',
+    prompt: 'make Alex a contributor in Family',
+    expect: { kind: 'change_member_role', slots: { role: 'editor', spaceRef: 'Family' } },
+  },
 ];

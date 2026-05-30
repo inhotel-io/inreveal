@@ -206,6 +206,103 @@ export const WORKFLOW_MANIFEST = Object.freeze([
       workflowOrBoundary: 'Add-only; Pi resolves the source; Gallery owns the batch tag-add plan from the handle.',
     }),
   }),
+  Object.freeze({
+    kind: 'rename_or_describe_space',
+    flow: 'strict',
+    title: 'Rename or describe space',
+    classifierDescription:
+      'User wants to rename a shared space and/or change its description, leaving members and assets unchanged.',
+    positiveExamples: Object.freeze([
+      'Rename the Family space to Family 2026',
+      'Set the description on the Trips space to Our adventures',
+      'Change the description on my Family space',
+    ]),
+    negativeExamples: Object.freeze([
+      'Rename the Family album to Family 2026',
+      'Add Alex to the Family space',
+      'Make Alex an editor in Family',
+    ]),
+    slots: Object.freeze({
+      spaceRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the space.' }),
+      newName: Object.freeze({ type: 'string', required: false, description: 'New space name, if renaming.' }),
+      description: Object.freeze({ type: 'string', required: false, description: 'New description, if setting one.' }),
+    }),
+    requiredReadTools: Object.freeze(['listSpaces']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Rename or describe space',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Direct space-detail update plan; preserve unspecified fields.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'manage_space_members',
+    flow: 'strict',
+    title: 'Add or remove space members',
+    classifierDescription: 'User wants to add or remove members of a shared space, optionally with a role.',
+    positiveExamples: Object.freeze([
+      'Add Alex to the Family space as editor',
+      'Add Sam and Jo to the Trips space',
+      'Remove Bob from the Family space',
+    ]),
+    negativeExamples: Object.freeze([
+      'Add my newest 20 photos to the Family space',
+      'Make Alex an editor in Family',
+      'Rename the Family space to Family 2026',
+    ]),
+    slots: Object.freeze({
+      action: Object.freeze({ type: 'string', required: true, description: 'add or remove.' }),
+      memberQueries: Object.freeze({
+        type: 'array',
+        required: true,
+        description: 'Member names or emails to add or remove.',
+      }),
+      spaceRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the space.' }),
+      role: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'editor or viewer (default viewer on add).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['listSpaces', 'readSpace', 'searchUsers']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Add or remove space members',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Resolve members; guard owner/self/last-owner removal; propose the membership plan.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'change_member_role',
+    flow: 'strict',
+    title: "Change a space member's role",
+    classifierDescription: "User wants to change a shared-space member's role to editor or viewer.",
+    positiveExamples: Object.freeze([
+      'Make Alex an editor in the Family space',
+      "Change Bob's role to viewer in Trips",
+      'Make Sam a viewer in Family',
+    ]),
+    negativeExamples: Object.freeze([
+      'Add Alex to the Family space',
+      'Remove Bob from the Family space',
+      'Rename the Family space to Family 2026',
+    ]),
+    slots: Object.freeze({
+      memberQuery: Object.freeze({ type: 'string', required: true, description: 'The member name or email.' }),
+      role: Object.freeze({ type: 'string', required: true, description: 'editor or viewer.' }),
+      spaceRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the space.' }),
+    }),
+    requiredReadTools: Object.freeze(['listSpaces', 'readSpace', 'searchUsers']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: "Change a space member's role",
+      tier: 'Solid now',
+      workflowOrBoundary: 'Resolve the member; guard owner/self/no-op; propose the role-change plan.',
+    }),
+  }),
 ]);
 
 const byKind = new Map(WORKFLOW_MANIFEST.map((entry) => [entry.kind, entry]));
