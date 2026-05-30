@@ -64,7 +64,7 @@ void main() {
   test('rate limits reminders to one per day', () {
     final now = DateTime.utc(2026, 5, 29, 12);
 
-    expect(BackgroundBackupStatus(lastReminderAt: null).shouldShowReminder(now: now), isTrue);
+    expect(const BackgroundBackupStatus(lastReminderAt: null).shouldShowReminder(now: now), isTrue);
     expect(
       BackgroundBackupStatus(lastReminderAt: now.subtract(const Duration(hours: 12))).shouldShowReminder(now: now),
       isFalse,

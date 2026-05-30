@@ -81,6 +81,7 @@ Modify:
 ### Task 1: Upstream Mobile-Only Intake Gate
 
 **Files:**
+
 - Read: `mobile/lib/domain/services/background_worker.service.dart`
 - Read: `mobile/android/app/src/main/kotlin/app/alextran/immich/background/BackgroundWorker.kt`
 - Read: `mobile/pigeon/background_worker_api.dart`
@@ -142,6 +143,7 @@ Expected: no new changes from this task.
 ### Task 2: Add a TDD Seam for the Bounded Background Loop
 
 **Files:**
+
 - Create: `mobile/test/domain/services/background_backup_loop_test.dart`
 - Create: `mobile/lib/domain/services/background_backup_loop.dart`
 - Modify: `mobile/lib/domain/services/background_worker.service.dart`
@@ -494,7 +496,7 @@ Keep this existing line in `init()`:
 
 **Make cleanup token-completion idempotent (required — fixes the shared-token double-complete).**
 
-The new bounded path means the timer in `BackgroundBackupLoop` completes `_cancellationToken` on timeout (the Android path passes this same token to `foregroundUploadService.uploadCandidates(...)` as its cancel signal). The existing `_handleCleanup` *also* completes the same token, unguarded, at `background_worker.service.dart:187`:
+The new bounded path means the timer in `BackgroundBackupLoop` completes `_cancellationToken` on timeout (the Android path passes this same token to `foregroundUploadService.uploadCandidates(...)` as its cancel signal). The existing `_handleCleanup` _also_ completes the same token, unguarded, at `background_worker.service.dart:187`:
 
 ```dart
       _cancellationToken.complete();
@@ -536,6 +538,7 @@ git commit -m "fix(mobile): add bounded background backup loop"
 ### Task 3: Port the Mobile-Only Android `maxMinutes` Upstream Fix
 
 **Files:**
+
 - Modify: `mobile/pigeon/background_worker_api.dart`
 - Modify generated: `mobile/lib/platform/background_worker_api.g.dart`
 - Modify generated: `mobile/ios/Runner/Background/BackgroundWorker.g.swift`
@@ -655,6 +658,7 @@ git commit -m "fix(mobile): bound Android background backup runtime"
 ### Task 4: Fix Live Photo Background Completion as One Logical Asset
 
 **Files:**
+
 - Modify: `mobile/test/providers/backup/drift_backup_provider_test.dart`
 - Modify: `mobile/lib/providers/backup/drift_backup.provider.dart`
 
@@ -878,6 +882,7 @@ git commit -m "fix(mobile): treat live photo background upload as one backup ite
 ### Task 5: Add Persisted Background Backup Status Model
 
 **Files:**
+
 - Create: `mobile/lib/domain/models/background_backup_status.model.dart`
 - Create: `mobile/test/domain/models/background_backup_status_model_test.dart`
 - Modify: `mobile/lib/domain/models/store.model.dart`
@@ -1172,7 +1177,7 @@ class BackgroundBackupStatus {
 }
 ```
 
-> **Health semantics note (intentional):** `deriveHealth` treats a recent background *wake* as activity, so a device the OS keeps waking reads `healthy` even if uploads are failing, until the wake itself ages past the warning/stale thresholds. This matches the design ("Healthy: recent wake or upload success") and is deliberately conservative — it avoids nagging users whose backup is merely momentarily failing. The cost is that a *persistently* failing-but-waking device is not flagged until the failure also stops the wakes or the thresholds elapse. If a future slice needs to flag "waking but never succeeding," add a derived `degraded` state keyed on `lastUploadEnqueueAt` without a following `lastUploadSuccessAt` beyond a threshold; it is out of scope here.
+> **Health semantics note (intentional):** `deriveHealth` treats a recent background _wake_ as activity, so a device the OS keeps waking reads `healthy` even if uploads are failing, until the wake itself ages past the warning/stale thresholds. This matches the design ("Healthy: recent wake or upload success") and is deliberately conservative — it avoids nagging users whose backup is merely momentarily failing. The cost is that a _persistently_ failing-but-waking device is not flagged until the failure also stops the wakes or the thresholds elapse. If a future slice needs to flag "waking but never succeeding," add a derived `degraded` state keyed on `lastUploadEnqueueAt` without a following `lastUploadSuccessAt` beyond a threshold; it is out of scope here.
 
 - [ ] **Step 4: Add the Store key**
 
@@ -1215,6 +1220,7 @@ git commit -m "feat(mobile): add background backup status model"
 ### Task 6: Add Store-Backed Background Backup Status Service
 
 **Files:**
+
 - Create: `mobile/lib/services/background_backup_status.service.dart`
 - Create: `mobile/test/services/background_backup_status.service_test.dart`
 - Modify: `mobile/test/domain/service.mock.dart`
@@ -1415,7 +1421,7 @@ class BackgroundBackupStatusService {
 }
 ```
 
-> Note: the `copyWith` in the model uses `??` fallbacks, so it can never *clear* a field back to `null`. That is intentional here — every recorded field is monotonic (latest-wins timestamps, latest reason). `recordUploadSuccess` resets `lastCandidateCount` to `0` and the reason to `none` via explicit non-null values, which `copyWith` accepts.
+> Note: the `copyWith` in the model uses `??` fallbacks, so it can never _clear_ a field back to `null`. That is intentional here — every recorded field is monotonic (latest-wins timestamps, latest reason). `recordUploadSuccess` resets `lastCandidateCount` to `0` and the reason to `none` via explicit non-null values, which `copyWith` accepts.
 
 - [ ] **Step 4: Add mock for future provider tests**
 
@@ -1457,6 +1463,7 @@ git commit -m "feat(mobile): persist background backup health"
 ### Task 7: Record Background Backup Health from Worker and Upload Flow
 
 **Files:**
+
 - Create: `mobile/lib/domain/services/background_backup_event_recorder.dart`
 - Create: `mobile/test/domain/services/background_backup_event_recorder_test.dart`
 - Modify: `mobile/lib/domain/services/background_worker.service.dart`
@@ -1605,7 +1612,7 @@ Pass it to `BackgroundUploadService` in `setUp()`:
       mockBackgroundBackupStatusService,
 ```
 
-Append tests. Note the callback-capture pattern: `BackgroundUploadService` registers its status handler by **assigning** `_uploadRepository.onUploadStatus = _onUploadCallback` in its constructor (`background_upload.service.dart:109`), and `_onUploadCallback` calls the `_handleTaskStatusUpdate` we are editing. A `mocktail` mock does **not** echo a value written to a field, so `mockUploadRepository.onUploadStatus` reads back as `null` and `onUploadStatus!(...)` would throw a null-check error. Instead, capture the function the service assigned and invoke that. (The existing `setUp` also assigns a no-op to `onUploadStatus` *after* construction, so capture `.first` — the constructor's real callback.)
+Append tests. Note the callback-capture pattern: `BackgroundUploadService` registers its status handler by **assigning** `_uploadRepository.onUploadStatus = _onUploadCallback` in its constructor (`background_upload.service.dart:109`), and `_onUploadCallback` calls the `_handleTaskStatusUpdate` we are editing. A `mocktail` mock does **not** echo a value written to a field, so `mockUploadRepository.onUploadStatus` reads back as `null` and `onUploadStatus!(...)` would throw a null-check error. Instead, capture the function the service assigned and invoke that. (The existing `setUp` also assigns a no-op to `onUploadStatus` _after_ construction, so capture `.first` — the constructor's real callback.)
 
 ```dart
   // Returns the status callback the service registered during construction.
@@ -1913,6 +1920,7 @@ git commit -m "feat(mobile): record background backup health events"
 ### Task 8: Add Stale and Blocked Backup Banner
 
 **Files:**
+
 - Create: `mobile/lib/widgets/backup/background_backup_health_banner.dart`
 - Create: `mobile/test/widgets/backup/background_backup_health_banner_test.dart`
 - Modify: `mobile/lib/pages/backup/drift_backup.page.dart`
@@ -2139,7 +2147,7 @@ make translation
 
 This runs `pnpm --prefix ../i18n run format:fix` (sorts `en.json`) then `dart run easy_localization:generate -S ../i18n` (rewrites the codegen loader). Commit the regenerated `mobile/lib/generated/*.g.dart` alongside `en.json`.
 
-> The widget test in Step 1 asserts on the raw key strings (e.g. `find.text('backup_background_stale_title')`) because EasyLocalization is uninitialized under `flutter_test`, so `.t()` returns the key. That means the test passes with or without regeneration — it verifies which message *slot* shows, not the translated copy. Regeneration is still required for the shipped app, so do not skip this step.
+> The widget test in Step 1 asserts on the raw key strings (e.g. `find.text('backup_background_stale_title')`) because EasyLocalization is uninitialized under `flutter_test`, so `.t()` returns the key. That means the test passes with or without regeneration — it verifies which message _slot_ shows, not the translated copy. Regeneration is still required for the shipped app, so do not skip this step.
 
 - [ ] **Step 7: Run widget tests**
 
@@ -2167,6 +2175,7 @@ git commit -m "feat(mobile): show stale background backup status"
 ### Task 9: Add Reminder Rate Limiting Without Server Changes
 
 **Files:**
+
 - Create: `mobile/lib/services/background_backup_reminder.service.dart`
 - Create: `mobile/test/services/background_backup_reminder.service_test.dart`
 - Modify: `mobile/lib/providers/app_life_cycle.provider.dart`
@@ -2417,13 +2426,13 @@ git commit -m "feat(mobile): remind when background backup is stale"
 
 `BackgroundBackupFailureReason` defines more reasons than this slice actively detects. Be honest about which are wired so the health states are not dead code:
 
-| Reason | Recorded by | Health effect |
-| --- | --- | --- |
-| `backupDisabled`, `noCurrentUser` | worker preflight (Task 7) | informational; recent wake still derives healthy |
-| `remoteSyncFailed` | `_syncAssets` on sync failure (Task 7) | keeps state non-healthy; ages into `stale` |
-| `uploadFailed` | upload status callback (Task 7) | keeps state non-healthy; ages into `stale` |
-| `osPrevented` | foreground-resume inference (Task 9) | **the path that makes `blocked` reachable** |
-| `none` | cleared on wake/enqueue/success | — |
+| Reason                            | Recorded by                            | Health effect                                    |
+| --------------------------------- | -------------------------------------- | ------------------------------------------------ |
+| `backupDisabled`, `noCurrentUser` | worker preflight (Task 7)              | informational; recent wake still derives healthy |
+| `remoteSyncFailed`                | `_syncAssets` on sync failure (Task 7) | keeps state non-healthy; ages into `stale`       |
+| `uploadFailed`                    | upload status callback (Task 7)        | keeps state non-healthy; ages into `stale`       |
+| `osPrevented`                     | foreground-resume inference (Task 9)   | **the path that makes `blocked` reachable**      |
+| `none`                            | cleared on wake/enqueue/success        | —                                                |
 
 **Explicitly out of scope for this slice (modeled, not detected):** `photosPermissionDenied`, `backgroundRefreshUnavailable`, `noNetwork`. They require seams this plan does not build:
 
@@ -2438,6 +2447,7 @@ These reasons stay in the model (with serialization + derivation coverage in Tas
 ### Task 10: Preserve Existing iOS URLSession and Notification Regressions
 
 **Files:**
+
 - Modify: `mobile/test/repositories/upload_repository_test.dart`
 - Modify: `mobile/test/utils/background_downloader_recovery_test.dart`
 - Modify: `mobile/test/services/background_upload.service_test.dart`
@@ -2553,6 +2563,7 @@ git commit -m "test(mobile): cover background downloader recovery edges"
 ### Task 11: Add Required Edge-Case Coverage
 
 **Files:**
+
 - Create: `mobile/test/platform/background_worker_native_files_test.dart`
 - Modify: `mobile/test/domain/models/background_backup_status_model_test.dart`
 - Modify: `mobile/test/services/background_backup_status.service_test.dart`
@@ -2755,6 +2766,7 @@ git commit -m "test(mobile): cover background backup edge cases"
 ### Task 12: Focused and Wide Verification
 
 **Files:**
+
 - Read: all changed files
 - Modify only if a verification failure exposes a bug covered by the existing tests
 
@@ -2850,6 +2862,7 @@ If no fixes were needed, do not create a commit.
 ### Task 13: Manual Device Checks
 
 **Files:**
+
 - Modify only if manual checks expose a bug already covered by an added failing test
 
 - [ ] **Step 1: Build/install iOS debug build using saved local procedure**
