@@ -91,4 +91,20 @@ export default [
     prompt: 'create a space of the best photos from last weekend',
     expect: { kind: 'none' },
   },
+
+  // rotate_assets boundaries -------------------------------------------------
+  {
+    // Subjective source declines — no metadata-describable set.
+    id: 'neg.rotate.subjective',
+    category: 'negatives',
+    prompt: 'rotate the best ones 90 clockwise',
+    expect: { kind: 'none' },
+  },
+  {
+    // Bad angle (45 not in {90,180,270}) — declines.
+    id: 'neg.rotate.badangle',
+    category: 'negatives',
+    prompt: 'rotate my newest 20 photos 45 clockwise',
+    expect: { kind: 'none' },
+  },
 ];
