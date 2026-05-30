@@ -141,9 +141,22 @@ Deterministic source classes (cumulative; combine where present):
 - **Subjective** ("best/good/nice/blurry/…") → `handoff`.
 - **Anything else** (people/tags/albums/locations/cameras/semantic) → `handoff`.
 
+**Clean-source gate (precision).** A source resolves only when it is composed
+**entirely** of recognized recency / date / (type, once Slice 4 lands) tokens plus
+filler/stopwords. If any substantive residual remains after consuming those (a
+place like "Berlin", a name, a tag), the source has an unresolvable qualifier and
+**hands off** — it does NOT resolve by the recognized part alone. This prevents
+over-resolution: "archive my Berlin photos from last weekend" hands off (never
+"archive ALL of last weekend"), and "newest 20 Berlin photos" hands off rather
+than newest-20-globally. The gate errs toward handoff (a false handoff just defers
+to the LLM; a false resolve would be a wrong, over-broad plan). Generic media
+nouns ("photos/pics/pictures/snaps/shots") are filler; type-specific nouns
+("videos/images/clips") are substantive until Slice 4 makes them a `type` filter.
+
 It **never** calls `resolveAssetSearchFilters` with a free-text `query` and never
 sends `query` to metadata-mode `searchAssets` (the bugs Slice 1 pins). The
-date/type parsing is pure and unit-tested without a live server.
+date/type parsing and the clean-source gate are pure and unit-tested without a
+live server.
 
 ### Workflow registry & manifest
 
