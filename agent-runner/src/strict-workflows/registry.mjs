@@ -1,8 +1,15 @@
+import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
+import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
-// runtime edit. Slice 7 adds more factories here.
-const WORKFLOW_FACTORIES = Object.freeze([createRecentTripAlbumWorkflow]);
+// runtime edit. Registering here makes a workflow both regex-routable (each
+// `match`) AND visible to the LLM classifier (via `listWorkflows`/manifest).
+const WORKFLOW_FACTORIES = Object.freeze([
+  createRecentTripAlbumWorkflow,
+  renameOrDescribeAlbumWorkflow,
+  addPhotosToAlbumWorkflow,
+]);
 
 // Regex-only fallback classifier, used when no LLM classifier is injected
 // (e2e-runtime, dispatcher unit tests). Keeps `classify` deterministic and
