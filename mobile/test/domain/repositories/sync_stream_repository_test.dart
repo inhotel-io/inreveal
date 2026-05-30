@@ -26,24 +26,27 @@ SyncAssetV1 _createAsset({
   String ownerId = 'user-1',
   int? width,
   int? height,
+  AssetTypeEnum type = AssetTypeEnum.IMAGE,
+  AssetVisibility visibility = AssetVisibility.timeline,
+  String? livePhotoVideoId,
 }) {
   return SyncAssetV1(
     id: id,
     checksum: checksum,
     originalFileName: fileName,
-    type: AssetTypeEnum.IMAGE,
+    type: type,
     ownerId: ownerId,
     isFavorite: false,
     fileCreatedAt: DateTime(2024, 1, 1),
     fileModifiedAt: DateTime(2024, 1, 1),
     localDateTime: DateTime(2024, 1, 1),
-    visibility: AssetVisibility.timeline,
+    visibility: visibility,
     width: width,
     height: height,
     deletedAt: null,
     duration: null,
     libraryId: null,
-    livePhotoVideoId: null,
+    livePhotoVideoId: livePhotoVideoId,
     stackId: null,
     thumbhash: null,
     isEdited: false,
@@ -183,6 +186,35 @@ void main() {
 
       expect(result.width, equals(existingWidth), reason: 'Width should remain as originally set');
       expect(result.height, equals(existingHeight), reason: 'Height should remain as originally set');
+    });
+  });
+
+  group('SyncStreamRepository - Live photos', () {
+    test('hides motion asset when an uploaded still references it', () async {
+      await sut.updateUsersV1([_createUser()]);
+
+      final motion = _createAsset(
+        id: 'motion-1',
+        checksum: 'motion-checksum',
+        fileName: 'IMG_7052.MOV',
+        type: AssetTypeEnum.VIDEO,
+        visibility: AssetVisibility.timeline,
+      );
+      await sut.updateAssetsV1([motion]);
+
+      final still = _createAsset(
+        id: 'still-1',
+        checksum: 'still-checksum',
+        fileName: 'IMG_7052.HEIC',
+        livePhotoVideoId: motion.id,
+      );
+      await sut.updateAssetsV1([still], debugLabel: 'websocket-batch');
+
+      final motionRow = await (db.remoteAssetEntity.select()..where((tbl) => tbl.id.equals(motion.id))).getSingle();
+      final stillRow = await (db.remoteAssetEntity.select()..where((tbl) => tbl.id.equals(still.id))).getSingle();
+
+      expect(stillRow.livePhotoVideoId, motion.id);
+      expect(motionRow.visibility.name, 'hidden');
     });
   });
 
@@ -987,11 +1019,7 @@ void main() {
     await sut.updateMemoriesV1([
       SyncMemoryV1(
         createdAt: DateTime(2026, 4, 23),
-        data: {
-          'ruleId': 'birthday',
-          'title': 'Happy birthday, Alice',
-          'subtitle': 'Photos from different years',
-        },
+        data: {'ruleId': 'birthday', 'title': 'Happy birthday, Alice', 'subtitle': 'Photos from different years'},
         deletedAt: null,
         hideAt: DateTime(2026, 4, 23, 23, 59),
         id: 'memory-rule-1',

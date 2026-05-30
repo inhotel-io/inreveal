@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:background_downloader/background_downloader.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -30,10 +33,12 @@ void main() {
   late MockDriftBackupRepository mockBackupRepository;
   late MockAppSettingsService mockAppSettingsService;
   late MockAssetMediaRepository mockAssetMediaRepository;
+  late MockBackgroundBackupStatusService mockBackgroundBackupStatusService;
   late Drift db;
 
   setUpAll(() async {
     registerFallbackValue(AppSettingsEnum.useCellularForUploadPhotos);
+    registerFallbackValue(BackgroundBackupFailureReason.none);
 
     TestWidgetsFlutterBinding.ensureInitialized();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -54,9 +59,16 @@ void main() {
     mockBackupRepository = MockDriftBackupRepository();
     mockAppSettingsService = MockAppSettingsService();
     mockAssetMediaRepository = MockAssetMediaRepository();
+    mockBackgroundBackupStatusService = MockBackgroundBackupStatusService();
 
     when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(false);
     when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(false);
+    when(() => mockBackgroundBackupStatusService.recordCandidateCount(any())).thenAnswer((_) async {});
+    when(
+      () => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: any(named: 'candidateCount')),
+    ).thenAnswer((_) async {});
+    when(() => mockBackgroundBackupStatusService.recordUploadSuccess()).thenAnswer((_) async {});
+    when(() => mockBackgroundBackupStatusService.recordFailure(any())).thenAnswer((_) async {});
 
     sut = BackgroundUploadService(
       mockUploadRepository,
@@ -65,6 +77,7 @@ void main() {
       mockBackupRepository,
       mockAppSettingsService,
       mockAssetMediaRepository,
+      mockBackgroundBackupStatusService,
     );
 
     mockUploadRepository.onUploadStatus = (_) {};
@@ -73,6 +86,258 @@ void main() {
 
   tearDown(() {
     sut.dispose();
+  });
+
+  // Returns the status callback the service registered during construction.
+  void Function(TaskStatusUpdate) capturedStatusCallback() {
+    return verify(() => mockUploadRepository.onUploadStatus = captureAny()).captured.first
+        as void Function(TaskStatusUpdate);
+  }
+
+  group('background backup status recording', () {
+    test('records candidate count and enqueue count when candidates are queued', () async {
+      final asset = LocalAssetStub.image1;
+      final mockEntity = MockAssetEntity();
+      final mockFile = File('/path/to/file.jpg');
+
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [asset]);
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => mockFile);
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => 'asset.jpg');
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((_) async => [true]);
+
+      await sut.uploadBackupCandidates('user-1');
+
+      verify(() => mockBackgroundBackupStatusService.recordCandidateCount(1)).called(1);
+      verify(() => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: 1)).called(1);
+    });
+
+    test('records zero candidate count when no candidates exist', () async {
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => []);
+
+      await sut.uploadBackupCandidates('user-1');
+
+      verify(() => mockBackgroundBackupStatusService.recordCandidateCount(0)).called(1);
+      verifyNever(
+        () => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: any(named: 'candidateCount')),
+      );
+    });
+
+    test('records upload success and failure from background downloader callbacks', () async {
+      final successTask = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final failureTask = UploadTask(
+        taskId: 'asset-2',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-2.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+
+      final onStatus = capturedStatusCallback();
+      onStatus(TaskStatusUpdate(successTask, TaskStatus.complete));
+      onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
+      await pumpEventQueue();
+
+      verify(() => mockBackgroundBackupStatusService.recordUploadSuccess()).called(1);
+      verify(
+        () => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed),
+      ).called(1);
+    });
+
+    test('does not record logical upload success for Live Photo motion completion', () async {
+      final motionTask = UploadTask(
+        taskId: 'asset-live',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.mov',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+        metaData: const UploadTaskMetadata(
+          localAssetId: 'asset-live',
+          isLivePhotos: true,
+          livePhotoVideoId: '',
+        ).toJson(),
+      );
+
+      capturedStatusCallback()(TaskStatusUpdate(motionTask, TaskStatus.complete));
+      await pumpEventQueue();
+
+      verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
+    });
+  });
+
+  group('enqueueTasks', () {
+    test('posts the configured running notification on iOS after successful enqueue', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true]);
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true]);
+      verifyInOrder([
+        () => mockUploadRepository.disableHoldingQueue(),
+        () => mockUploadRepository.enqueueBackgroundAll(tasks),
+        () => mockUploadRepository.restoreDefaultHoldingQueue(),
+        () => mockUploadRepository.updateNotification(task, TaskStatus.enqueued),
+      ]);
+    });
+
+    test('restores the default holding queue when iOS enqueue throws', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenThrow(Exception('enqueue failed'));
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+
+      await expectLater(sut.enqueueTasks(tasks), throwsA(isA<Exception>()));
+
+      verifyInOrder([
+        () => mockUploadRepository.disableHoldingQueue(),
+        () => mockUploadRepository.enqueueBackgroundAll(tasks),
+        () => mockUploadRepository.restoreDefaultHoldingQueue(),
+      ]);
+      verifyNever(() => mockUploadRepository.updateNotification(task, any()));
+    });
+
+    test('uses the existing holding queue configuration on Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true]);
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true]);
+      verifyNever(() => mockUploadRepository.disableHoldingQueue());
+      verifyNever(() => mockUploadRepository.restoreDefaultHoldingQueue());
+      verifyNever(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued));
+    });
+
+    test('posts notifications only for successful iOS enqueue results in a batch', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task1 = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-1.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final task2 = UploadTask(
+        taskId: 'asset-2',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-2.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final task3 = UploadTask(
+        taskId: 'asset-3',
+        url: 'http://test-server.com/assets',
+        filename: 'asset-3.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task1, task2, task3];
+
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true, false, true]);
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.updateNotification(task1, TaskStatus.enqueued)).thenAnswer((_) async {});
+      when(() => mockUploadRepository.updateNotification(task3, TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true, false, true]);
+      verify(() => mockUploadRepository.updateNotification(task1, TaskStatus.enqueued)).called(1);
+      verifyNever(() => mockUploadRepository.updateNotification(task2, TaskStatus.enqueued));
+      verify(() => mockUploadRepository.updateNotification(task3, TaskStatus.enqueued)).called(1);
+    });
+
+    test('does not post a notification for failed iOS enqueue', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [false]);
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [false]);
+      verifyNever(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued));
+    });
+
+    test('does not post early enqueue notifications on Android', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final task = UploadTask(
+        taskId: 'asset-1',
+        url: 'http://test-server.com/assets',
+        filename: 'asset.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      );
+      final tasks = [task];
+
+      when(() => mockUploadRepository.enqueueBackgroundAll(tasks)).thenAnswer((_) async => [true]);
+
+      final result = await sut.enqueueTasks(tasks);
+
+      expect(result, [true]);
+      verifyNever(() => mockUploadRepository.updateNotification(task, TaskStatus.enqueued));
+    });
   });
 
   group('getUploadTask', () {
@@ -181,6 +446,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
@@ -232,6 +498,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutAndroid.dispose());
 
@@ -273,6 +540,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
@@ -314,6 +582,7 @@ void main() {
         mockBackupRepository,
         mockAppSettingsService,
         mockAssetMediaRepository,
+        mockBackgroundBackupStatusService,
       );
       addTearDown(() => sutWithV24.dispose());
 
@@ -350,6 +619,66 @@ void main() {
       expect(metadata, hasLength(1));
       expect(metadata[0]['key'], equals('mobile-app'));
       expect(metadata[0]['value']['iCloudId'], equals('cloud-id-livephoto'));
+    });
+  });
+
+  group('cellular upload restrictions', () {
+    Future<UploadTask> buildTaskFor(LocalAsset asset) async {
+      final mockEntity = MockAssetEntity();
+      final mockFile = File('/path/to/${asset.name}');
+
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => mockFile);
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+
+      final task = await sut.getUploadTask(asset);
+      expect(task, isNotNull);
+      return task!;
+    }
+
+    test('sets requiresWiFi true for photos when cellular photo upload is disabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(false);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for photos when cellular photo upload is enabled', () async {
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadPhotos)).thenReturn(true);
+
+      final task = await buildTaskFor(LocalAssetStub.image1);
+
+      expect(task.requiresWiFi, isFalse);
+    });
+
+    test('sets requiresWiFi true for videos when cellular video upload is disabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(false);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isTrue);
+    });
+
+    test('sets requiresWiFi false for videos when cellular video upload is enabled', () async {
+      final video = LocalAssetStub.image1.copyWith(
+        id: 'video-1',
+        name: 'video.mov',
+        type: AssetType.video,
+        playbackStyle: AssetPlaybackStyle.video,
+      );
+      when(() => mockAppSettingsService.getSetting(AppSettingsEnum.useCellularForUploadVideos)).thenReturn(true);
+
+      final task = await buildTaskFor(video);
+
+      expect(task.requiresWiFi, isFalse);
     });
   });
 }

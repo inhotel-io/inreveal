@@ -15,6 +15,7 @@ import 'package:immich_mobile/providers/notification_permission.provider.dart';
 import 'package:immich_mobile/providers/server_info.provider.dart';
 import 'package:immich_mobile/providers/websocket.provider.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
+import 'package:immich_mobile/services/background_backup_reminder.service.dart';
 import 'package:logging/logging.dart';
 
 enum AppLifeCycleEnum { active, inactive, paused, resumed, detached, hidden }
@@ -155,9 +156,10 @@ class AppLifeCycleNotifier extends StateNotifier<AppLifeCycleEnum> {
       final currentUser = Store.tryGet(StoreKey.currentUser);
       if (currentUser != null) {
         await _safeRun(
-          _ref.read(driftBackupProvider.notifier).startForegroundBackup(currentUser.id),
-          "handleBackupResume",
+          _ref.read(backgroundBackupReminderServiceProvider).maybeShowReminder(),
+          "backgroundBackupReminder",
         );
+        await _safeRun(_ref.read(driftBackupProvider.notifier).startBackup(currentUser.id), "handleBackupResume");
       }
     }
   }
@@ -205,7 +207,9 @@ class AppLifeCycleNotifier extends StateNotifier<AppLifeCycleEnum> {
 
   Future<void> _performPause() {
     if (_ref.read(authProvider).isAuthenticated) {
-      _ref.read(driftBackupProvider.notifier).stopForegroundBackup();
+      if (!CurrentPlatform.isIOS) {
+        _ref.read(driftBackupProvider.notifier).stopForegroundBackup();
+      }
 
       _ref.read(websocketProvider.notifier).disconnect();
     }

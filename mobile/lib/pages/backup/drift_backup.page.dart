@@ -19,6 +19,7 @@ import 'package:immich_mobile/providers/sync_status.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/backup/backup_info_card.dart';
+import 'package:immich_mobile/widgets/backup/background_backup_health_banner.dart';
 import 'package:logging/logging.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -96,7 +97,7 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
         Logger("DriftBackupPage").warning("Remote sync did not complete successfully, skipping backup");
         return;
       }
-      await backupNotifier.startForegroundBackup(currentUser.id);
+      await backupNotifier.startBackup(currentUser.id);
     }
 
     return Scaffold(
@@ -137,9 +138,10 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
                     onStart: () async => await startBackup(),
                     onStop: () {
                       syncSuccess = null;
-                      backupNotifier.stopForegroundBackup();
+                      unawaited(backupNotifier.stopBackup());
                     },
                   ),
+                  const BackgroundBackupHealthBanner(),
                   switch (error) {
                     BackupError.none => const SizedBox.shrink(),
                     BackupError.syncFailed => Padding(
