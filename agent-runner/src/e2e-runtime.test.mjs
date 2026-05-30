@@ -1066,14 +1066,17 @@ describe('e2e runtime', () => {
     const events = await collectEvents(runtime, 'Create an album for my recent trip to USA');
 
     assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(events, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: gallerySessionId,
-        runnerSessionId,
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-      },
-    ]);
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ['workflow-state-update', 'tool-approval-needed'],
+    );
+    assert.equal(events[0].workflowState.kind, 'approval');
+    assert.deepEqual(events.at(-1), {
+      type: 'tool-approval-needed',
+      sessionId: gallerySessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+    });
   });
 
   it('resumes a strict recent-trip album after the user selects a candidate label', async () => {
@@ -1135,14 +1138,17 @@ describe('e2e runtime', () => {
     const followUp = await collectEvents(runtime, 'Use California');
 
     assert.equal(calls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(followUp, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: gallerySessionId,
-        runnerSessionId,
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-      },
-    ]);
+    assert.deepEqual(
+      followUp.map((event) => event.type),
+      ['workflow-state-update', 'tool-approval-needed'],
+    );
+    assert.equal(followUp[0].workflowState.kind, 'approval');
+    assert.deepEqual(followUp.at(-1), {
+      type: 'tool-approval-needed',
+      sessionId: gallerySessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+    });
   });
 
   it('renames a pending strict recent-trip album from the follow-up', async () => {

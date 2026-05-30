@@ -19,6 +19,7 @@ import type {
   AgentModelSnapshot,
   AgentPermissionPlanSnapshot,
   AgentRunnerCapabilitiesSnapshot,
+  AgentWorkflowStateSnapshot,
 } from 'src/types/agent-session.types';
 
 @Index({ columns: ['userId'] })
@@ -58,6 +59,9 @@ export class AgentSessionTable {
 
   @Column({ type: 'jsonb', nullable: true })
   runnerCapabilitiesSnapshot!: AgentRunnerCapabilitiesSnapshot;
+
+  @Column({ type: 'jsonb', nullable: true })
+  workflowState!: AgentWorkflowStateSnapshot;
 
   @Column({ default: AgentSessionStatus.Created })
   status!: Generated<AgentSessionStatus>;

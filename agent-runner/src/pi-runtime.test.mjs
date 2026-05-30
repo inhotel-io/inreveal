@@ -1262,14 +1262,19 @@ describe('pi runtime adapter', () => {
 
     assert.equal(calls.prompts.length, 0);
     assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(events, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: '00000000-0000-4000-8000-000000000100',
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        toolCallId: '00000000-0000-4000-8000-000000000999',
-      },
-    ]);
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ['workflow-state-update', 'tool-approval-needed'],
+    );
+    const stateEvent = events.find((event) => event.type === 'workflow-state-update');
+    assert.equal(stateEvent.workflowState.kind, 'approval');
+    assert.doesNotMatch(JSON.stringify(stateEvent.workflowState), /sourceRef|assetIds/);
+    assert.deepEqual(events.at(-1), {
+      type: 'tool-approval-needed',
+      sessionId: '00000000-0000-4000-8000-000000000100',
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000999',
+    });
   });
 
   it('resumes a production strict recent-trip album after candidate selection without provider prompting', async () => {
@@ -1434,14 +1439,19 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.prompts.length, 0);
     assert.equal(calls.continues, 0);
     assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
-    assert.deepEqual(events, [
-      {
-        type: 'tool-approval-needed',
-        sessionId: '00000000-0000-4000-8000-000000000100',
-        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
-        toolCallId: '00000000-0000-4000-8000-000000000998',
-      },
-    ]);
+    // The approval resume first clears the rehydrated pending state, then re-persists the new approval blob.
+    assert.deepEqual(
+      events.map((event) => event.type),
+      ['workflow-state-update', 'workflow-state-update', 'tool-approval-needed'],
+    );
+    assert.equal(events[0].workflowState, null);
+    assert.equal(events[1].workflowState.kind, 'approval');
+    assert.deepEqual(events.at(-1), {
+      type: 'tool-approval-needed',
+      sessionId: '00000000-0000-4000-8000-000000000100',
+      runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+      toolCallId: '00000000-0000-4000-8000-000000000998',
+    });
     assert.match(deniedEvents.at(-1).content.blocks[0].text, /approval was denied/i);
   });
 
@@ -1470,6 +1480,195 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.prompts.length, 0);
     assert.equal(calls.continues, 0);
     assert.match(events.at(-1).content.blocks[0].text, /approval was denied/i);
+  });
+
+  it('emits a scrubbed workflow-state-update event when a strict trip turn pauses for selection', async () => {
+    const { sdk, ai } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const { fetchImplementation } = createStrictWorkflowFetch({
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      candidates: [
+        makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+        makeStrictTripCandidate({
+          dedupeKey: 'trip:ca',
+          placeLabels: ['California, USA'],
+          selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+        }),
+      ],
+    });
+
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const turn1 = await collect(
+      runtime.sendMessage(
+        createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } }),
+      ),
+    );
+
+    const stateEvent = turn1.find((event) => event.type === 'workflow-state-update');
+    assert.ok(stateEvent, 'expected a workflow-state-update event');
+    assert.ok(stateEvent.workflowState, 'expected a non-null pending workflow blob');
+    assert.equal(stateEvent.sessionId, '00000000-0000-4000-8000-000000000100');
+    assert.equal(stateEvent.runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
+    // The persisted blob is scrubbed: no raw asset ids or source refs.
+    assert.doesNotMatch(JSON.stringify(stateEvent.workflowState), /sourceRef|assetIds/);
+  });
+
+  it('rehydrates pending workflow state after a simulated runtime restart', async () => {
+    const { sdk: sdkA, ai: aiA } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const candidates = [
+      makeStrictTripCandidate({ dedupeKey: 'trip:ny', placeLabels: ['New York, USA'] }),
+      makeStrictTripCandidate({
+        dedupeKey: 'trip:ca',
+        placeLabels: ['California, USA'],
+        selectionHandle: { id: '00000000-0000-4000-8000-000000000930', assetCount: 14 },
+      }),
+    ];
+    const fetchA = createStrictWorkflowFetch({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+    });
+
+    // Turn 1 on runtime A: ask_user -> emits workflow-state-update with the pending blob.
+    const runtimeA = createPiRuntime({ sdk: sdkA, ai: aiA, fetch: fetchA.fetchImplementation });
+    await runtimeA.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const turn1 = await collect(
+      runtimeA.sendMessage(
+        createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } }),
+      ),
+    );
+    const stateEvent = turn1.find((event) => event.type === 'workflow-state-update');
+    assert.ok(stateEvent.workflowState);
+    assert.doesNotMatch(JSON.stringify(stateEvent.workflowState), /sourceRef|assetIds/);
+
+    // Turn 2 on a fresh runtime B (cold Map), seeded with the persisted state from the request.
+    const { sdk: sdkB, ai: aiB } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const fetchB = createStrictWorkflowFetch({
+      candidates,
+      recommendation: { action: 'ask_user', reason: 'Multiple plausible trip candidates are close together.' },
+      expectedSelectionHandleId: '00000000-0000-4000-8000-000000000930',
+    });
+    const runtimeB = createPiRuntime({ sdk: sdkB, ai: aiB, fetch: fetchB.fetchImplementation });
+    await runtimeB.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const turn2 = await collect(
+      runtimeB.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'Use California' }] },
+          workflowState: stateEvent.workflowState,
+        }),
+      ),
+    );
+
+    assert.equal(turn2.at(-1).type, 'assistant-message-completed');
+    assert.match(turn2.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('rehydrates approval-pending state so resume works on a cold runtime', async () => {
+    const { sdk: sdkA, ai: aiA } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const approvalFetch = createStrictWorkflowFetch({
+      planResponse: { status: 'approval-required', toolCall: { id: '00000000-0000-4000-8000-000000000999' } },
+    });
+
+    // Turn 1 on runtime A: approval-required -> emits tool-approval-needed + workflow-state-update (approval blob).
+    const runtimeA = createPiRuntime({ sdk: sdkA, ai: aiA, fetch: approvalFetch.fetchImplementation });
+    await runtimeA.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const turn1 = await collect(
+      runtimeA.sendMessage(
+        createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } }),
+      ),
+    );
+    assert.ok(turn1.some((event) => event.type === 'tool-approval-needed'));
+    const stateEvent = turn1.find((event) => event.type === 'workflow-state-update');
+    assert.equal(stateEvent.workflowState.kind, 'approval');
+    assert.doesNotMatch(JSON.stringify(stateEvent.workflowState), /sourceRef|assetIds/);
+
+    // Approval resumes on a fresh runtime B, seeded only from the persisted blob (the approved plan result is supplied).
+    const { sdk: sdkB, ai: aiB } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const resumeFetch = createStrictWorkflowFetch();
+    const runtimeB = createPiRuntime({ sdk: sdkB, ai: aiB, fetch: resumeFetch.fetchImplementation });
+    await runtimeB.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const resumed = await collect(
+      runtimeB.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000999',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success', plan: { id: strictTripPlanId } },
+        workflowState: stateEvent.workflowState,
+      }),
+    );
+
+    assert.equal(resumed.at(-1).type, 'assistant-message-completed');
+    assert.match(resumed.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('fails deterministically when a rehydrated approval resumes against a stale selection handle', async () => {
+    const { sdk: sdkA, ai: aiA } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const approvalFetch = createStrictWorkflowFetch({
+      planResponse: { status: 'approval-required', toolCall: { id: '00000000-0000-4000-8000-000000000999' } },
+    });
+
+    const runtimeA = createPiRuntime({ sdk: sdkA, ai: aiA, fetch: approvalFetch.fetchImplementation });
+    await runtimeA.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const turn1 = await collect(
+      runtimeA.sendMessage(
+        createMessageRequest({ content: { blocks: [{ type: 'text', text: 'Create an album for my recent trip to USA' }] } }),
+      ),
+    );
+    const stateEvent = turn1.find((event) => event.type === 'workflow-state-update');
+    assert.equal(stateEvent.workflowState.kind, 'approval');
+
+    // Cold runtime B: the approved plan was NOT supplied, so resume re-validates the selection
+    // handle through proposeAlbumFromSelection, which now reports the handle is stale/invalid.
+    const { sdk: sdkB, ai: aiB } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    const staleFetchCalls = [];
+    const staleFetch = async (url, init) => {
+      const body = init?.body ? JSON.parse(init.body) : {};
+      staleFetchCalls.push(body?.params?.name);
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: body.id,
+          result: {
+            structuredContent: {
+              status: 'error',
+              summary: 'The referenced selection handle has expired and can no longer be used.',
+            },
+          },
+        }),
+      );
+    };
+    const runtimeB = createPiRuntime({ sdk: sdkB, ai: aiB, fetch: staleFetch });
+    await runtimeB.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+    const resumed = await collect(
+      runtimeB.resumeSession({
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        gallerySessionId: '00000000-0000-4000-8000-000000000100',
+        toolCallId: '00000000-0000-4000-8000-000000000999',
+        approvalDecision: 'approved',
+        workflowState: stateEvent.workflowState,
+      }),
+    );
+
+    assert.equal(staleFetchCalls.join(','), 'proposeAlbumFromSelection');
+    assert.equal(resumed.at(-1).type, 'assistant-message-completed');
+    // Deterministic failure copy, not a false success.
+    assert.doesNotMatch(resumed.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+    assert.match(resumed.at(-1).content.blocks[0].text, /could not|expired|stale|no longer|error/i);
   });
 
   it('aborts an active strict MCP call on dispose and allows a new session', async () => {
