@@ -106,10 +106,19 @@ const validateSpaceRemoveMembers = (op) => {
   if (!Array.isArray(userIds) || userIds.length === 0) fail('space.removeMembers requires a non-empty payload.userIds');
 };
 
+const validateSpaceUpdateMemberRole = (op) => {
+  requireExistingSpaceTarget(op);
+  const userIds = op.payload?.userIds;
+  if (!Array.isArray(userIds) || userIds.length === 0)
+    fail('space.updateMemberRole requires a non-empty payload.userIds');
+  if (!ASSIGNABLE_SPACE_ROLES.has(op.payload?.role)) fail('space.updateMemberRole role must be editor or viewer');
+};
+
 const SPACE_OP_VALIDATORS = {
   'space.updateDetails': validateSpaceUpdateDetails,
   'space.addMembers': validateSpaceAddMembers,
   'space.removeMembers': validateSpaceRemoveMembers,
+  'space.updateMemberRole': validateSpaceUpdateMemberRole,
 };
 
 const validateOperations = (operations) => {
