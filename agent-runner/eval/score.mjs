@@ -23,6 +23,9 @@ const classificationPass = (decision, expect) => {
   if (decision.kind === 'none') return true; // negative assertion: "none" is the whole check
   if (expect.slotsSurvive && decision.parsedSlots === null) return false;
   if (expect.slots && !slotMatches(decision.parsedSlots, expect.slots)) return false;
+  // L3 plan-proposed assertion: did the strict workflow actually propose a
+  // (never-applied) plan? Only checked when the scenario opts in.
+  if (expect.planProposed !== undefined && Boolean(decision.planProposed) !== expect.planProposed) return false;
   return true;
 };
 
@@ -43,6 +46,7 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
   let attempts = 0;
   let passes = 0;
   let survived = 0;
+  let slotsTracked = false;
   let lastDetail;
 
   for (let i = 0; i < maxRuns; i++) {
@@ -56,7 +60,12 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
     } else {
       const decision = await driver.classify(sc.prompt);
       ok = classificationPass(decision, sc.expect);
-      if (decision.parsedSlots !== null) survived++;
+      // `undefined` means the layer can't observe slots (L3's scrubbed events);
+      // `null` means slots were rejected; an object means they survived.
+      if (decision.parsedSlots !== undefined) {
+        slotsTracked = true;
+        if (decision.parsedSlots !== null) survived++;
+      }
       deterministic = decision.via === 'regex' || decision.via === 'heuristic';
       lastDetail = {
         kind: decision.kind,
@@ -64,6 +73,8 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
         confidence: decision.confidence,
         slots: decision.slots,
         parsedSlots: decision.parsedSlots,
+        planProposed: decision.planProposed,
+        outcomeStatus: decision.outcomeStatus,
       };
     }
     attempts++;
@@ -82,7 +93,7 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
     passed: score >= threshold,
     threshold,
     attempts,
-    slotSurvival: isCopy ? null : survived / attempts,
+    slotSurvival: isCopy || !slotsTracked ? null : survived / attempts,
     meanLatencyMs: Math.round(avg(latencies)),
     detail: lastDetail,
     expect: sc.expect,
@@ -122,7 +133,9 @@ export const renderScorecard = (agg, results, meta) => {
   const lines = [];
   lines.push(`# Pi agent eval scorecard`);
   lines.push('');
-  lines.push(`model: \`${meta.model}\` @ ${meta.baseUrl}  ·  router=${meta.routerMode}  ·  runs=${meta.runs}`);
+  lines.push(
+    `${meta.layer ? `layer=${meta.layer}  ·  ` : ''}model: \`${meta.model}\` @ ${meta.baseUrl}  ·  router=${meta.routerMode}  ·  runs=${meta.runs}`,
+  );
   lines.push('');
   lines.push(`**overall ${pct(agg.overall)}**  ·  ${agg.passedCount}/${agg.total} scenarios passed`);
   lines.push('');
@@ -136,7 +149,12 @@ export const renderScorecard = (agg, results, meta) => {
     lines.push('');
     lines.push(`## Failures (${failures.length})`);
     for (const f of failures) {
-      const got = f.category === 'copy' ? JSON.stringify(f.detail?.text) : `kind=${f.detail?.kind} via=${f.detail?.via} parsedSlots=${JSON.stringify(f.detail?.parsedSlots)}`;
+      const d = f.detail ?? {};
+      const planBit = d.planProposed === undefined ? '' : ` planProposed=${d.planProposed} outcome=${d.outcomeStatus ?? '—'}`;
+      const got =
+        f.category === 'copy'
+          ? JSON.stringify(d.text)
+          : `kind=${d.kind} via=${d.via} parsedSlots=${JSON.stringify(d.parsedSlots)}${planBit}`;
       lines.push(`- \`${f.id}\` (${pct(f.score)} < ${pct(f.threshold)}) — "${f.prompt ?? f.id}"`);
       lines.push(`  - expect: ${showExpect(f.expect)}`);
       lines.push(`  - got: ${got}`);
