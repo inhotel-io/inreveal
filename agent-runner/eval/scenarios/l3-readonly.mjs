@@ -329,4 +329,22 @@ export default [
     expect: { kind: 'tag_assets', planProposed: true },
     threshold: 0.5,
   },
+
+  // --- remove_photos_from_album routing + plan-proposed ---------------------
+  {
+    id: 'l3.recall.remove',
+    category: 'l3.recall',
+    prompt: 'remove my newest 20 photos from {album}',
+    expect: { kind: 'remove_photos_from_album' },
+  },
+  {
+    // remove_photos_from_album end-to-end: recency → album.removeAssets plan —
+    // proposed, never applied. Data-dependent (needs a real album with removable
+    // matching assets); threshold 0.5 tolerates variance on an empty stack.
+    id: 'l3.plan.remove.recency',
+    category: 'l3.plan',
+    prompt: 'remove my newest 20 photos from {album}',
+    expect: { kind: 'remove_photos_from_album', planProposed: true },
+    threshold: 0.5,
+  },
 ];

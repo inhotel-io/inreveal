@@ -31,7 +31,9 @@ const TAKE_OUT_OF = /\btake\s+(?<source>.+)\s+out\s+of\s+(?<album>.+?)$/i;
 
 // "remove … from …" is shared by member removal, out-of-favorites, and tag removal.
 // Decline those so registry order + this gate keep the seam clean even in isolation.
-const albumIsOwnedElsewhere = (album) => /\bspaces?\b/i.test(album) || /\bfavou?rites?\b/i.test(album);
+// Also decline when the "album" slot contains trip language — that's a trip workflow prompt.
+const albumIsOwnedElsewhere = (album) =>
+  /\bspaces?\b/i.test(album) || /\bfavou?rites?\b/i.test(album) || tripSourcePattern.test(album);
 const sourceIsOwnedElsewhere = (source) =>
   SUBJECTIVE_PATTERN.test(source) || tripSourcePattern.test(source) || /\btags?\b/i.test(source);
 
