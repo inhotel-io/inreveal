@@ -137,7 +137,7 @@ Deterministic source classes (cumulative; combine where present):
 
 - **Recency** — "newest/latest/last N" → `searchAssets({ mode:'metadata', order:'desc', limit:N, detail:'handle' })` (already implemented in `add_photos_to_album`; extracted here).
 - **Relative date** — "from 2024", "in May 2024", "last weekend", "yesterday", "this month" → `{ takenAfter, takenBefore }` filters.
-- **Media type** — "photos"/"images"/"videos" → `{ type }` filter.
+- **Media type** — explicit type words only: "videos"/"clips"/"movies" → `{ type:'VIDEO' }`, "images" → `{ type:'IMAGE' }` (generic "photos"/"pics" stay no-type/all-media); combined with recency/date, never a bound on its own.
 - **Subjective** ("best/good/nice/blurry/…") → `handoff`.
 - **Anything else** (people/tags/albums/locations/cameras/semantic) → `handoff`.
 
@@ -345,17 +345,32 @@ live. (L2 is covered by per-workflow unit tests here, not a dedicated
 
 #### Slice 4: Resolver — media type
 
-- [ ] Add media-type parsing ("photos"/"pictures"/"images" → image,
-      "videos"/"clips" → video; absent → unset) combined with recency/date.
-      Non-type qualifiers stay handoff.
-- **Tests:** "my videos from last weekend" → `{ type:video, takenAfter/Before }`;
-  "newest 20 photos" → `{ type:image, order:desc, limit:20 }`; "screenshots" →
-  handoff (not a metadata type).
+- [ ] Add media-type parsing combined with recency/date. **Explicit type words
+      only:** `videos`/`video`/`clips`/`clip`/`movies`/`movie` → `VIDEO`;
+      `images`/`image` → `IMAGE`. The generic colloquial library words
+      (`photos`/`pics`/`pictures`/`snaps`/`shots`) stay **generic = no type filter**
+      (a person says "my photos" to mean their whole library, incl. videos) — this
+      is the Slice 3 decision (those are `GENERIC_NOUNS` filler) and **must not
+      regress**: recency-only `"my newest 20 photos"` keeps sending **no `filters`
+      key**. Type words become consumable by the clean-source gate; type alone is
+      **not** a bound (still needs recency/date), so `"my videos"` → handoff
+      (unbounded). Non-type qualifiers (`screenshots`, places, names) stay handoff.
+      Enum values are uppercase `AssetType` (`'IMAGE'`/`'VIDEO'`), matching
+      `filters.type` in the metadata `searchAssets` DTO (a `strictObject`).
+- **Tests:** `"my videos from last weekend"` → `filters:{ type:'VIDEO', takenAfter, takenBefore }`;
+  `"newest 20 images"` → `{ order:'desc', limit:20, filters:{ type:'IMAGE' } }`;
+  `"newest 20 photos"` → `{ order:'desc', limit:20 }` (**no `filters` key** —
+  photos generic, unchanged from Slice 3); `"my videos from 2024"` → recency-less,
+  `filters:{ type:'VIDEO', takenAfter:'2024-…', takenBefore:'2024-…' }`; `"my videos"`
+  (type only, no count/date) → handoff (unbounded); `"screenshots"` → handoff (not a
+  metadata type). The contract fixture rejects an unknown `filters` key and a
+  `filters.type` outside the `AssetType` enum (strictObject + enum fidelity).
 - **Acceptance:** resolver covers recency × date × type combinations
-  deterministically; everything else handoff. Note: because `add_photos_to_album`
-  now shares this resolver, it **also** gains date/type sources (e.g. "add my 2024
-  photos to X") for free — extend its existing L2 tests + L3 scenario to cover a
-  date source, and confirm no regression to its recency behavior.
+  deterministically; everything else handoff. Because `add_photos_to_album` now
+  shares this resolver, it **also** gains type sources for free — add an L2 case
+  ("add my videos from 2024 to X" → `album.addAssets` over a `type:'VIDEO'` +
+  2024-date handle) and confirm no regression to its recency-only behavior (still
+  no `filters` key). Date sources were already covered in Slice 3.
 
 ### Phase 1 — Batch asset actions
 

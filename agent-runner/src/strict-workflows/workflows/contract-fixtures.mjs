@@ -43,6 +43,16 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
 const SEARCH_DETAILS = new Set(['ids', 'handle', 'summary', 'metadata']);
 const SEARCH_TEXT_MODES = new Set(['smart', 'description', 'ocr', 'filename']);
 
+// metadata searchAssets.filters is a strictObject (server rejects unknown keys);
+// `type` is the AssetType enum. Mirror both so a wrong-shape filter throws here too.
+const KNOWN_ASSET_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'OTHER']);
+const KNOWN_SEARCH_FILTER_KEYS = new Set([
+  'takenAfter', 'takenBefore', 'createdAfter', 'createdBefore', 'updatedAfter', 'updatedBefore',
+  'city', 'state', 'country', 'make', 'model', 'lensModel', 'isFavorite', 'isNotInAlbum', 'type',
+  'rating', 'tagIds', 'tagMatchAny', 'albumIds', 'albumMatchAny', 'personIds', 'personMatchAny',
+  'spaceId', 'spacePersonIds', 'withSharedSpaces', 'visibility',
+]);
+
 const fail = (message) => {
   throw new Error(message);
 };
@@ -73,6 +83,15 @@ const validateSearchAssets = (args) => {
     fail(`query is only supported for smart/description/ocr/filename modes (mode=${mode}, e.g. metadata)`);
   }
   if (args.detail !== undefined && !SEARCH_DETAILS.has(args.detail)) fail(`invalid searchAssets detail "${args.detail}"`);
+  if (args.filters !== undefined) {
+    if (typeof args.filters !== 'object' || args.filters === null) fail('searchAssets filters must be an object');
+    for (const key of Object.keys(args.filters)) {
+      if (!KNOWN_SEARCH_FILTER_KEYS.has(key)) fail(`unknown searchAssets filter key "${key}"`);
+    }
+    if (args.filters.type !== undefined && !KNOWN_ASSET_TYPES.has(args.filters.type)) {
+      fail(`invalid searchAssets filter type "${args.filters.type}"`);
+    }
+  }
 };
 
 const ok = (config) => config.planResult ?? { status: 'success', plan: { id: 'plan-1' } };
