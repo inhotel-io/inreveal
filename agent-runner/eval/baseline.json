@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.988,
+  "overall": 1,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.778
+    "copy": 1
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -35,6 +35,13 @@
     "recall.tag.canonical": 1,
     "recall.tag.add-the-tag": 1,
     "recall.tag.uncommon-verb": 1,
+    "recall.space.rename": 1,
+    "recall.space.describe": 1,
+    "recall.members.add": 1,
+    "recall.members.remove": 1,
+    "recall.members.add.llm": 1,
+    "recall.role.make": 1,
+    "recall.role.possessive": 1,
     "neg.q.count": 1,
     "neg.q.biggest": 1,
     "neg.q.where": 1,
@@ -49,6 +56,8 @@
     "neg.unsup.delete": 1,
     "neg.archive.subjective": 1,
     "neg.tag.removal": 1,
+    "neg.space.question": 1,
+    "neg.space.add-photos": 1,
     "slots.usa.alias.unitedstates": 1,
     "slots.usa.alias.us-dot": 1,
     "slots.usa.alias.the-united-states": 1,
@@ -59,8 +68,10 @@
     "slots.archive.unarchive-polarity": 1,
     "slots.favorite.polarity": 1,
     "slots.tag.quoted-name": 1,
-    "copy.trip.usa.with-exclusions": 0.667,
-    "copy.trip.italy.no-exclusions": 0.667,
+    "slots.members.role-default": 1,
+    "slots.role.synonym": 1,
+    "copy.trip.usa.with-exclusions": 1,
+    "copy.trip.italy.no-exclusions": 1,
     "copy.trip.long-name": 1
   }
 }

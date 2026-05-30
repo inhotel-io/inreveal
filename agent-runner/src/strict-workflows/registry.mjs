@@ -1,23 +1,32 @@
 import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
 import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
+import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
+import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
+import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
 // runtime edit. Registering here makes a workflow both regex-routable (each
 // `match`) AND visible to the LLM classifier (via `listWorkflows`/manifest).
 //
-// Order matters for the regex fast-path (first match wins): `add_photos_to_album`
-// stays LAST so its "add <source> to <album>" pattern never steals the more
-// specific "add the tag <tag> to <source>" form owned by `tag_assets`.
+// Order matters for the regex fast-path (first match wins):
+//   - `rename_or_describe_space` BEFORE `rename_or_describe_album` so the strict
+//     `space`-keyword gate wins "rename the X space …" (album declines those).
+//   - `manage_space_members` / `change_member_role` BEFORE `add_photos_to_album`.
+//   - `add_photos_to_album` stays LAST so its "add <source> to <album>" pattern
+//     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
+  renameOrDescribeSpaceWorkflow,
   renameOrDescribeAlbumWorkflow,
   archiveAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
+  manageSpaceMembersWorkflow,
+  changeMemberRoleWorkflow,
   addPhotosToAlbumWorkflow,
 ]);
 
