@@ -37,9 +37,10 @@ describe('add_photos_to_album HybridWorkflow', () => {
   });
 
   it('caps the recency limit and parses varied phrasings', async () => {
+    // Sources are the *extracted* source (verb already stripped by the matcher).
     for (const [sourceDescription, expected] of [
-      ['stick my 50 most recent photos', 50],
-      ['add the last 10 pics', 10],
+      ['my 50 most recent photos', 50],
+      ['the last 10 pics', 10],
       ['latest 5 shots', 5],
       ['newest 5000 photos', 1000], // clamped to MAX_RECENCY_LIMIT
     ]) {
@@ -50,12 +51,24 @@ describe('add_photos_to_album HybridWorkflow', () => {
     }
   });
 
-  it('hands off non-recency metadata sources (date/location) to open orchestration', async () => {
-    for (const sourceDescription of ['my Berlin photos from last weekend', 'the photos I took yesterday', 'newest pics']) {
+  it('plans a date source via the shared resolver (date filters)', async () => {
+    const client = fakeClient();
+    const outcome = await wf.run({ client, slots: { albumRef: 'Family', sourceDescription: 'my photos from 2024' } });
+    assert.equal(outcome.status, 'planned');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+  });
+
+  it('hands off a qualified/unbounded source to open orchestration', async () => {
+    // location residual (gate), and a recency keyword with no count (unbounded) —
+    // both must NOT fabricate a metadata search.
+    for (const sourceDescription of ['my Berlin photos from last weekend', 'newest pics']) {
       const client = fakeClient();
       const outcome = await wf.run({ client, slots: { albumRef: 'Family', sourceDescription } });
       assert.equal(outcome.status, 'handoff_open', sourceDescription);
-      // No search, no plan — the strict path never guesses a metadata search here.
       assert.equal(
         client.calls.some((c) => c.name === 'searchAssets' || c.name === 'proposeAlbumOperations'),
         false,
