@@ -24,7 +24,7 @@ describe('FacialRecognitionConfigSchema suggestionMaxDistance', () => {
     expect(() => FacialRecognitionConfigSchema.parse({ ...base, suggestionMaxDistance: -1 })).toThrow();
   });
 
-  it('defaults suggestionMaxDistance to 0 (disabled)', () => {
-    expect(defaults.machineLearning.facialRecognition.suggestionMaxDistance).toBe(0);
+  it('defaults suggestionMaxDistance to 0.7 (enabled)', () => {
+    expect(defaults.machineLearning.facialRecognition.suggestionMaxDistance).toBe(0.7);
   });
 });

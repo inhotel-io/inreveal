@@ -6455,6 +6455,13 @@ describe(SharedSpaceService.name, () => {
       machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
     };
 
+    beforeEach(() => {
+      // Suggestions off for these naming tests; the suggestion-scan cases below opt in via `suggestionsEnabled`.
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+      });
+    });
+
     it('should require editor role', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
 
@@ -6884,6 +6891,13 @@ describe(SharedSpaceService.name, () => {
     const suggestionsEnabled = {
       machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
     };
+
+    beforeEach(() => {
+      // Suggestions off for these metadata tests; the suggestion-scan cases below opt in via `suggestionsEnabled`.
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+      });
+    });
 
     it('should run metadata backfill on the people backfill queue', () => {
       const config = new Reflector().get(MetadataKey.JobConfig, sut.handleSharedSpacePersonMetadataBackfill);

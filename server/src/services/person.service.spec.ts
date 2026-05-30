@@ -3129,6 +3129,9 @@ describe(PersonService.name, () => {
     });
 
     it('queues one metadata backfill when identity work completes without targeted face-match work', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+      });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
       (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({
