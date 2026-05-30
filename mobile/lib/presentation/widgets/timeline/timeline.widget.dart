@@ -22,6 +22,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/scrubber.widget.dart
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_drag_region.dart';
+import 'package:immich_mobile/providers/asset_viewer/scroll_to_date_notifier.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -168,6 +169,16 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
     _baseScaleFactor = _scaleFactor;
 
     ref.listenManual(multiSelectProvider.select((s) => s.isEnabled), _onMultiSelectionToggled);
+
+    // Drain any pending "view in timeline" request. It is latched in
+    // [scrollToDateNotifierProvider] so it survives this timeline being mounted
+    // fresh by the navigation (e.g. coming from a memory or a notification)
+    // before its segments have loaded.
+    scrollToDateNotifierProvider.addListener(_drainPendingScrollToDate);
+    ref.listenManual(timelineSegmentProvider, (_, __) => _drainPendingScrollToDate());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _drainPendingScrollToDate();
+    });
   }
 
   @override
@@ -192,8 +203,6 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
             .animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeInOut)
             .whenComplete(() => ref.read(timelineStateProvider.notifier).setScrubbing(false));
 
-      case ScrollToDateEvent scrollToDateEvent:
-        _scrollToDate(scrollToDateEvent.date);
       case TimelineReloadEvent():
         setState(() {});
       default:
@@ -247,12 +256,28 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
 
   @override
   void dispose() {
+    scrollToDateNotifierProvider.removeListener(_drainPendingScrollToDate);
     _scrollController.dispose();
     _eventSubscription?.cancel();
     super.dispose();
   }
 
+  void _drainPendingScrollToDate() {
+    if (scrollToDateNotifierProvider.value == null) return;
+    // Keep the request latched until segments are loaded; the segment listener
+    // calls this again once they arrive.
+    if (!ref.read(timelineSegmentProvider).hasValue) return;
+
+    final date = scrollToDateNotifierProvider.consume();
+    if (date == null) return;
+    // Defer until the grid (and the scroll controller) is laid out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToDate(date);
+    });
+  }
+
   void _scrollToDate(DateTime date) {
+    if (!_scrollController.hasClients) return;
     final asyncSegments = ref.read(timelineSegmentProvider);
     asyncSegments.whenData((segments) {
       // Find the segment that contains assets from the target date

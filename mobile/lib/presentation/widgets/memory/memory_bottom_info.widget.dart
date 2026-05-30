@@ -3,9 +3,8 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:immich_mobile/domain/models/events.model.dart';
 import 'package:immich_mobile/domain/models/memory.model.dart';
-import 'package:immich_mobile/domain/utils/event_stream.dart';
+import 'package:immich_mobile/providers/asset_viewer/scroll_to_date_notifier.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
 
 class DriftMemoryBottomInfo extends StatelessWidget {
@@ -42,7 +41,7 @@ class DriftMemoryBottomInfo extends StatelessWidget {
               onPressed: () async {
                 await context.maybePop();
                 await context.navigateTo(const TabShellRoute(children: [MainTimelineRoute()]));
-                EventStream.shared.emit(ScrollToDateEvent(fileCreatedDate));
+                scrollToDateNotifierProvider.scrollToDate(fileCreatedDate);
               },
               shape: const CircleBorder(),
               color: Colors.white.withValues(alpha: 0.2),
