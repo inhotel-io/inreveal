@@ -57,6 +57,31 @@ const fail = (message) => {
   throw new Error(message);
 };
 
+const KNOWN_RESOLVE_FILTER_KEYS = new Set([
+  'people', 'tags', 'albums', 'spaces', 'cameraMakes', 'cameraModels', 'lensModels', 'scope', 'toolCallId',
+]);
+const RESOLVE_NAME_LIST_KEYS = new Set([
+  'people', 'tags', 'albums', 'spaces', 'cameraMakes', 'cameraModels', 'lensModels',
+]);
+
+// Mirror the real strictObject request: reject unknown keys (incl. `query`) and the
+// resolverNameList caps (≤20 names/kind, ≤120 chars, non-empty strings).
+const validateResolveRequest = (args) => {
+  if (!args || typeof args !== 'object') fail('resolveAssetSearchFilters requires an object');
+  for (const key of Object.keys(args)) {
+    if (!KNOWN_RESOLVE_FILTER_KEYS.has(key)) fail(`resolveAssetSearchFilters: unrecognized key "${key}"`);
+  }
+  for (const key of RESOLVE_NAME_LIST_KEYS) {
+    if (args[key] === undefined) continue;
+    if (!Array.isArray(args[key]) || args[key].length === 0) fail(`resolveAssetSearchFilters: ${key} must be a non-empty array`);
+    if (args[key].length > 20) fail(`resolveAssetSearchFilters: ${key} exceeds 20 names`);
+    for (const name of args[key]) {
+      if (typeof name !== 'string' || name.trim().length === 0) fail(`resolveAssetSearchFilters: ${key} names must be non-empty strings`);
+      if (name.length > 120) fail(`resolveAssetSearchFilters: ${key} name exceeds 120 chars`);
+    }
+  }
+};
+
 // Validate proposeAssetBatchFromSelection.action against the real union shape.
 const validateBatchAction = (action) => {
   if (!action || typeof action !== 'object') fail('action is required');
@@ -162,6 +187,8 @@ export const makeContractClient = (config = {}) => {
     spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
     users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
     handleAssetCount = 20,
+    resolvedFilters,
+    resolveResults,
   } = config;
   const calls = [];
 
@@ -181,7 +208,12 @@ export const makeContractClient = (config = {}) => {
       return { users: users.filter((u) => `${u.name ?? ''} ${u.email ?? ''}`.toLowerCase().includes(q)) };
     },
     resolveAssetSearchFilters: (args) => {
-      if (args && 'query' in args) fail("resolveAssetSearchFilters: unrecognized key 'query'");
+      validateResolveRequest(args);
+      // Config-gated rich return for entity-resolution tests; default stays the legacy
+      // `{ resolvedFilters: {} }` so existing assertions and non-entity callers are unchanged.
+      if (resolvedFilters !== undefined || resolveResults !== undefined) {
+        return { resolvedFilters: resolvedFilters ?? {}, results: resolveResults ?? [] };
+      }
       return { resolvedFilters: {} };
     },
     searchAssets: (args) => {

@@ -22,7 +22,7 @@ const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 
 // Subjective/visual source terms Gallery cannot resolve from metadata alone.
 export const SUBJECTIVE_PATTERN =
-  /\b(?:best|good|nice|great|favou?rite|favou?rites|highlights?|blurry|bad|cute|pretty|beautiful|nicest|prettiest)\b/i;
+  /\b(?:best|good|nice|great|highlights?|blurry|bad|cute|pretty|beautiful|nicest|prettiest)\b/i;
 
 // Recency ("newest/latest/last/most recent N"): newest-first, capped to N. An
 // explicit count is required so we never guess how many.
@@ -212,6 +212,31 @@ export const parseEntitySource = (source) => {
   return Object.keys(result).length > 0 ? result : undefined;
 };
 
+// Map parser entity kinds → resolveAssetSearchFilters request fields (name-lookup only).
+const ENTITY_TO_RESOLVER_FIELD = { people: 'people', tags: 'tags', albums: 'albums', cameras: 'cameraMakes' };
+
+const buildResolverNameRequest = (entity) => {
+  const request = {};
+  for (const [entityKey, requestKey] of Object.entries(ENTITY_TO_RESOLVER_FIELD)) {
+    if (entity?.[entityKey]?.length) {
+      request[requestKey] = entity[entityKey];
+    }
+  }
+  return request;
+};
+
+// Fallback when resolvedFilters comes back empty but per-query results carry a
+// searchFilter (server omitted the merged object). Never used to broaden a search.
+const mergeResultSearchFilters = (results) => {
+  const merged = {};
+  for (const result of results ?? []) {
+    if (result?.searchFilter && typeof result.searchFilter === 'object') {
+      Object.assign(merged, result.searchFilter);
+    }
+  }
+  return merged;
+};
+
 // --- clean-source gate ------------------------------------------------------
 
 // Generic media nouns are filler (a recency/date source can carry them).
@@ -272,46 +297,64 @@ export const isCleanSource = (source) => {
 export const resolveAssetSource = async ({ client, sourceDescription, signal, now = new Date() }) => {
   const source = clean(sourceDescription);
 
-  // Subjective sources hand off — never plan a guess.
+  // Subjective sources hand off — never plan a guess. (Subjective beats entity.)
   if (SUBJECTIVE_PATTERN.test(source)) {
     return { status: 'handoff', reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.` };
   }
 
-  // Phase 0 (Slice 1): named-entity / direct-metadata sources are DETECTED here, but
-  // the resolution path (resolveAssetSearchFilters → searchAssets with entity filters)
-  // lands in Slice 2. Until then an entity source hands off rather than over-resolve by
-  // the recency/date part alone.
-  if (parseEntitySource(source)) {
-    return { status: 'handoff', reason: `Source "${source}" names an entity this workflow resolves in a later step.` };
-  }
-
+  const entity = parseEntitySource(source);
   const recencyLimit = parseRecencyLimit(source);
   const dateRange = parseDateRange(source, now);
   const mediaType = parseMediaType(source);
 
-  // Clean-source gate: an unresolvable qualifier (place/name/tag) hands off
-  // rather than over-resolve by the recognized recency/date/type part alone.
+  // Clean-source gate: an unconsumed residual (an unresolvable qualifier) hands off
+  // rather than over-resolve by the recognized part alone. Entity tokens are now
+  // consumable, so an entity source with no junk residual passes.
   if (!isCleanSource(source)) {
     return {
       status: 'handoff',
       reason: `Source "${source}" includes terms this workflow cannot resolve from metadata alone.`,
     };
   }
-  // Clean but unbounded (no count and no date) — nothing to bound a search by.
-  // Media type is a modifier, not a bound, so a type-only source hands off here.
-  if (recencyLimit === undefined && dateRange === undefined) {
-    return { status: 'handoff', reason: `Source "${source}" needs a count or date range this workflow can bound.` };
+
+  const dateFilters = dateRange
+    ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
+    : {};
+
+  let filters;
+  if (entity) {
+    // NAME-LOOKUP entities resolve to id-based filters via resolveAssetSearchFilters
+    // (structured args, never a free-text query). DIRECT metadata (place/rating/
+    // favorite/visibility) maps straight in. Everything merges into ONE filters object.
+    const nameRequest = buildResolverNameRequest(entity);
+    let resolvedFilters = {};
+    if (Object.keys(nameRequest).length > 0) {
+      const resolution = await client.call('resolveAssetSearchFilters', nameRequest, { signal });
+      resolvedFilters = resolution?.resolvedFilters ?? {};
+      if (Object.keys(resolvedFilters).length === 0) {
+        resolvedFilters = mergeResultSearchFilters(resolution?.results);
+      }
+    }
+    filters = {
+      ...dateFilters,
+      ...(mediaType ? { type: mediaType } : {}),
+      ...(entity.directFilters ?? {}),
+      ...resolvedFilters,
+    };
+    // Never an unbounded global plan: an entity that yields no usable filter AND no
+    // recency bound hands off rather than search everything.
+    if (Object.keys(filters).length === 0 && recencyLimit === undefined) {
+      return { status: 'handoff', reason: `Source "${source}" could not be resolved to a bounded search.` };
+    }
+  } else {
+    // Recency / date / type-only source (unchanged). Type is a modifier, not a bound,
+    // so a clean source with no count and no date hands off.
+    if (recencyLimit === undefined && dateRange === undefined) {
+      return { status: 'handoff', reason: `Source "${source}" needs a count or date range this workflow can bound.` };
+    }
+    filters = { ...dateFilters, ...(mediaType ? { type: mediaType } : {}) };
   }
 
-  // Resolve into a selection handle via a bounded metadata search (newest-first).
-  // Recency-only sends NO filters key; date/type sources add ISO takenAfter/Before
-  // and/or a `type` filter (AssetType enum: IMAGE/VIDEO).
-  const filters = {
-    ...(dateRange
-      ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
-      : {}),
-    ...(mediaType ? { type: mediaType } : {}),
-  };
   const hasFilters = Object.keys(filters).length > 0;
   const handleResult = await client.call(
     'searchAssets',
@@ -332,6 +375,5 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
   if (!selectionHandleId || assetCount === 0) {
     return { status: 'empty' };
   }
-
   return { status: 'resolved', selectionHandleId, assetCount };
 };
