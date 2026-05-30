@@ -78,9 +78,9 @@ describe('add_photos_to_album HybridWorkflow', () => {
   });
 
   it('hands off a qualified/unbounded source to open orchestration', async () => {
-    // location residual (gate), and a recency keyword with no count (unbounded) —
-    // both must NOT fabricate a metadata search.
-    for (const sourceDescription of ['my Berlin photos from last weekend', 'newest pics']) {
+    // Recency keyword with no count (unbounded) — must NOT fabricate a metadata search.
+    // ('my Berlin photos from last weekend' now RESOLVES via city+date filters — Slice 2.)
+    for (const sourceDescription of ['newest pics']) {
       const client = fakeClient();
       const outcome = await wf.run({ client, slots: { albumRef: 'Family', sourceDescription } });
       assert.equal(outcome.status, 'handoff_open', sourceDescription);

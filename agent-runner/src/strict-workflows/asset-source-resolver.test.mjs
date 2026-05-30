@@ -68,12 +68,12 @@ describe('resolveAssetSource', () => {
   });
 
   it('hands off an unbounded or qualified source (clean-source gate)', async () => {
+    // Entity cases ('Berlin photos from last weekend', 'newest 20 Berlin photos',
+    // 'photos of Alex from last week') intentionally moved to the entity-resolution
+    // describe block below — they now RESOLVE (Phase-0 behavior change).
     for (const source of [
       'newest photos', // recency keyword but no count → clean yet unbounded
       'my photos', // all filler, no recency/date bound
-      'Berlin photos from last weekend', // location residual qualifies the source
-      'newest 20 Berlin photos', // recency + location residual → must NOT resolve newest-20-globally
-      'photos of Alex from last week', // person residual
     ]) {
       const result = await resolveAssetSource({ client: makeContractClient(), sourceDescription: source, now: NOW });
       assert.equal(result.status, 'handoff', source);
@@ -226,6 +226,118 @@ describe('resolveAssetSource', () => {
       client.calls.some((c) => c.name === 'searchAssets'),
       false,
     );
+  });
+});
+
+describe('resolveAssetSource — named-entity sources', () => {
+  it('resolves "photos of Alex" via resolveAssetSearchFilters with people arg (no query)', async () => {
+    const client = makeContractClient({ resolvedFilters: { personIds: ['per-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.ok(resolveCall, 'resolveAssetSearchFilters must be called');
+    assert.deepEqual(resolveCall.args, { people: ['Alex'] });
+    assert.equal(resolveCall.args.query, undefined);
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args, { mode: 'metadata', order: 'desc', limit: 1000, filters: { personIds: ['per-1'] }, detail: 'handle' });
+  });
+
+  it('resolves "photos tagged Travel" via resolveAssetSearchFilters with tags arg', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos tagged Travel', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Travel'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { tagIds: ['tag-1'] });
+  });
+
+  it('resolves "photos in the Italy album" via resolveAssetSearchFilters with albums arg', async () => {
+    const client = makeContractClient({ resolvedFilters: { albumIds: ['alb-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos in the Italy album', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { albums: ['Italy'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { albumIds: ['alb-1'] });
+  });
+
+  it('resolves "my Sony photos" via resolveAssetSearchFilters with cameraMakes arg', async () => {
+    const client = makeContractClient({ resolvedFilters: { make: 'Sony' } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my Sony photos', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { cameraMakes: ['Sony'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { make: 'Sony' });
+  });
+
+  it('merges date range into entity filters ("photos of Alex from 2024")', async () => {
+    const client = makeContractClient({ resolvedFilters: { personIds: ['per-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex from 2024', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { people: ['Alex'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+      personIds: ['per-1'],
+    });
+  });
+
+  it('hands off "photos of Alex" with default client (empty resolvedFilters + no bound)', async () => {
+    const client = makeContractClient(); // no resolvedFilters config
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+});
+
+describe('resolveAssetSource — direct-metadata sources', () => {
+  it('resolves "my 5-star photos" via direct rating filter (no resolveAssetSearchFilters call)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my 5-star photos', now: NOW });
+    assert.equal(result.status, 'resolved');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { rating: 5 });
+  });
+
+  it('resolves "my Berlin photos from last weekend" via direct city + date filters (no resolver call)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my Berlin photos from last weekend', now: NOW });
+    assert.equal(result.status, 'resolved');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, {
+      city: 'Berlin',
+      takenAfter: '2026-05-09T00:00:00.000Z',
+      takenBefore: '2026-05-10T23:59:59.999Z',
+    });
+  });
+
+  it('resolves "my favorites from last weekend" via isFavorite + date (no resolver call)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my favorites from last weekend', now: NOW });
+    assert.equal(result.status, 'resolved');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, {
+      isFavorite: true,
+      takenAfter: '2026-05-09T00:00:00.000Z',
+      takenBefore: '2026-05-10T23:59:59.999Z',
+    });
+  });
+
+  it('resolves "newest 20 Berlin photos" with limit=20 and city filter (no resolver call)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'newest 20 Berlin photos', now: NOW });
+    assert.equal(result.status, 'resolved');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(searchCall.args.limit, 20);
+    assert.deepEqual(searchCall.args.filters, { city: 'Berlin' });
   });
 });
 
