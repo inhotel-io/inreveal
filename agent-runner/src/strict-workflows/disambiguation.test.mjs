@@ -52,6 +52,13 @@ const CASES = [
   ['set the description on the Family album to Summer 2026', 'rename_or_describe_album'],
   // place-name-only location edit → none (not a supported asset-metadata edit)
   ['set these photos to Paris', 'none'],
+  // remove_photos_from_album
+  ['remove my newest 20 photos from Family', 'remove_photos_from_album'],
+  ['take my newest 20 photos out of the Family album', 'remove_photos_from_album'],
+  ['remove my Berlin photos from last weekend from the Trips album', 'remove_photos_from_album'],
+  // collision guards (remove_photos_from_album must NOT steal these)
+  ['remove Bob from the Family space', 'manage_space_members'],
+  ['remove my newest 20 from my favorites', 'favorite_assets'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
