@@ -4,11 +4,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     flow: 'strict',
     title: 'Create recent trip album',
     classifierDescription:
-      'User wants a new album built from a recent trip detected from photo date/location metadata.',
+      'User wants a new album built from a recent trip, vacation, getaway, holiday, or road trip — detected from photo date/location metadata. A place + a travel word (trip/vacation/getaway/holiday) signals this even without the word "trip".',
     positiveExamples: Object.freeze([
       'Create an album for my recent trip to USA',
       'Make an album for my recent trip',
       'Put my Japan trip from last week into an album',
+      'Make an album from our recent getaway to the coast',
     ]),
     negativeExamples: Object.freeze([
       'Add my recent trip photos to Family',
@@ -126,6 +127,37 @@ export const WORKFLOW_MANIFEST = Object.freeze([
       tier: 'Solid now',
       workflowOrBoundary:
         'Pi resolves the album and source; Gallery owns the album.removeAssets plan from the handle (never an empty removal).',
+    }),
+  }),
+  Object.freeze({
+    kind: 'manage_space_assets',
+    flow: 'hybrid',
+    title: 'Add or remove photos in a space',
+    classifierDescription:
+      'User wants to add or remove a metadata-describable set of PHOTOS in a shared space (not members). Requires both a "space" target and a photo source.',
+    positiveExamples: Object.freeze([
+      'Add my newest 20 photos to the Family space',
+      'Remove my screenshots from the Family space',
+      'Put my 2024 photos into the Trips space',
+    ]),
+    negativeExamples: Object.freeze([
+      'Add Alex to the Family space',
+      'Add my newest 20 photos to Family',
+      'Add my newest 20 photos to the Trips album',
+    ]),
+    slots: Object.freeze({
+      action: Object.freeze({ type: 'string', required: true, description: 'add or remove.' }),
+      spaceRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the space.' }),
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos.' }),
+    }),
+    requiredReadTools: Object.freeze(['listSpaces', 'resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAddAssetsToSpaceFromSearch',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Add/remove photos in a space',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the space and source; Gallery owns the space add (from-search) / remove (space.removeAssets) plan from the handle.',
     }),
   }),
   Object.freeze({
