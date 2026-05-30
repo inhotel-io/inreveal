@@ -102,7 +102,8 @@ describe('create_album_from_source execution', () => {
   });
 
   it('hands off subjective and location sources without proposing', async () => {
-    for (const sourceDescription of ['the good ones', 'my Berlin photos']) {
+    // ('my Berlin photos' now RESOLVES via city direct filter — Slice 2.)
+    for (const sourceDescription of ['the good ones']) {
       const client = makeContractClient();
       const outcome = await wf.run({ client, slots: { sourceDescription, albumName: 'X' } });
       assert.equal(outcome.status, 'handoff_open', sourceDescription);
