@@ -207,30 +207,53 @@ everything from the read-only endpoints — no log scraping:
 
 Each new workflow ships an L3 scenario in `eval/scenarios/l3-readonly.mjs`, and the
 `baseline.l3.json` is re-`--accept`ed at the end of each phase. To make
-plan-proposed assertions robust against an unknown live library, source-based
-workflows use **recency** sources (self-contained: "newest N"), and target-based
-workflows use **read-only discovery** (the `{album}` token; an analogous
-`{space}` token for spaces). Where a plan needs data we can't guarantee (a known
-space member for role/membership), the L3 scenario stays **routing-only** and says
-so — never assert a plan a real library may not support.
+plan-proposed assertions robust, source-based workflows use **recency** sources
+(self-contained: "newest N"), and target-based workflows use **read-only
+discovery** (the `{album}` token; an analogous `{space}` token for spaces).
+
+**L3 environments (per-slice vs periodic — do NOT rc-personal per slice).** The
+local dev stack's agent-runner runs `node --watch src/server.mjs` over the
+bind-mounted working tree (`..:/usr/src/app`), so a workflow edit hot-reloads the
+runner with **no image build**. Use two tiers:
+
+- **Per-slice (inner loop) → local dev stack.** `make dev` + seed once (the
+  `env-prep` skill: photos with metadata, tags, shared spaces _with members and
+  multiple users_). Point the harness local:
+  `GALLERY_URL=http://localhost:2283/api`, a local token, and
+  `GALLERY_MODEL_URL=http://host.docker.internal:8080/v1` (the driver creates a
+  credential so the local runner reaches the host model). Edit → save → `--watch`
+  reloads → `pnpm eval:l3`. No rc, no build. This is where every slice's L3
+  verification runs during development.
+- **Periodic (confidence) → rc-personal.** At phase boundaries and before merge,
+  rc-N → personal to validate against the **real** library ("lots of data"). This
+  is the only place the 5–8 min build is justified.
+
+Because the **local seeded** stack has a _known_ member set, the membership/role
+workflows assert **plan-proposed there** (you control the seeded members), even
+though they stay routing-only against personal (where the member set is
+unknowable). So group 2 gets full R + P coverage via the local seeded stack.
 
 Per-workflow L3 coverage (R = routing asserted, P = plan-proposed asserted live):
 
 | Workflow                   | L3 coverage | Live plan probe                                                                          |
 | -------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| `archive_assets`           | R + P       | "archive my newest 20 photos" → `asset.setArchive`                                       |
+| `archive_assets`           | R + P       | "archive my newest 20 photos" → `asset.setArchive` (seeded or personal)                  |
 | `favorite_assets`          | R + P       | "favorite my newest 10 photos" → `asset.setFavorite`                                     |
 | `tag_assets`               | R + P       | `tag my newest 20 photos as "eval-l3"` → `asset.addTag`                                  |
 | `rename_or_describe_space` | R + P       | "set the description on the {space} space to …" → `space.updateDetails`                  |
-| `manage_space_members`     | R           | routing-only (member set is library-specific)                                            |
-| `change_member_role`       | R           | routing-only (member set is library-specific)                                            |
+| `manage_space_members`     | R + P\*     | "add {user} to the {space} space as editor" → `space.addMembers` (\*local seeded only)   |
+| `change_member_role`       | R + P\*     | "make {user} an editor in {space}" → `space.updateMemberRole` (\*local seeded only)      |
 | `create_album_from_source` | R + P       | "make an album of my newest 20 photos called eval-l3" → `album.create`+`album.addAssets` |
 | negatives (per group)      | R           | subjective/cross-intent → `matched=false` / no strict plan                               |
 
-The L3 driver gains a read-only `{space}` discovery helper (mirrors `{album}`):
-`GET /api/shared-spaces` (or the spaces list endpoint), pick a stable space, never
-mutate. Confirm that endpoint's real shape in the Group 2 L3 slice (same
-contract-first discipline as the tools).
+\* Membership/role plan-proposed asserts against the **local seeded** stack only
+(known members + a seeded non-owner via `{user}`/`{space}` discovery, never
+applied); the personal run asserts routing-only for these two.
+
+The L3 driver gains read-only `{space}` and `{user}` discovery helpers (mirroring
+`{album}`): pick a stable seeded space and a seeded non-owner user from the list
+endpoints, never mutate. Confirm those endpoints' real shapes in the Group 2 L3
+slice (same contract-first discipline as the tools).
 
 ## Test-Driven Development
 
@@ -312,7 +335,7 @@ checkbox syntax for impl-loop tracking.
 #### Slice 6: `archive_assets` execution
 
 - [ ] `run`: resolver → `proposeAssetBatchFromSelection({ action:
-    asset.setArchive{archived}, selectionHandleId })` → `gatePlanResult` → copy.
+  asset.setArchive{archived}, selectionHandleId })` → `gatePlanResult` → copy.
       `empty` → needs_input; `handoff` → handoffOpen; tool error → failed.
 - **Tests (contract fixtures):** recency source → `planned` with one
   `asset.setArchive` op, correct `archived`, handle id, no raw ids; subjective →
@@ -446,12 +469,19 @@ checkbox syntax for impl-loop tracking.
 
 #### Slice 20: Group 2 L3 read-only scenarios
 
-- [ ] L3 routing scenarios for all three; plan-proposed for a
-      `rename_or_describe_space` against a discovered real space (read-only space
-      discovery helper, analogous to album discovery); membership/role routing-only
-      (plan assertions need a known member set — keep tolerant). Never applied.
-- **Acceptance:** space workflows route correctly live; describe-space proposes a
-  real plan; audits clean.
+- [ ] Add read-only `{space}` and `{user}` discovery helpers to the L3 driver
+      (pick a stable seeded space + a seeded non-owner user from the list
+      endpoints; confirm the real endpoint shapes first — contract discipline).
+      L3 routing scenarios for all three workflows. Plan-proposed assertions:
+      `rename_or_describe_space` against `{space}` (works on any instance);
+      `manage_space_members` ("add {user} to {space} as editor") and
+      `change_member_role` ("make {user} an editor in {space}") assert
+      plan-proposed **against the local seeded stack only** (known members) and
+      routing-only against personal — gate the plan assertion on a config/env flag.
+      Never applied.
+- **Acceptance:** all three route correctly live; describe-space proposes a plan
+  on any instance; membership/role propose a plan on the seeded local stack;
+  no-apply + gate-block audits clean.
 
 ### Phase 3 — General album-from-source
 
@@ -567,10 +597,15 @@ Asserted across the slices above (full list, by theme):
 - L1 eval: recall/slot/negative scenarios for all seven pass against the local
   model at or above the committed baseline; cross-workflow disambiguation has no
   collisions in regex and LLM modes.
-- L3 eval (live, read-only): each workflow routes correctly; `archive_assets`,
-  `favorite_assets`, `tag_assets`, `create_album_from_source`, and
-  `rename_or_describe_space` each propose a real, never-applied plan; both audits
-  (no-apply, no gate-block) clean. Re-seed `baseline.l3.json`.
+- L3 eval (live, read-only): per-slice verification runs against the **local
+  seeded dev stack** (`node --watch` hot-reload, no build); rc-personal is reserved
+  for periodic real-data confidence at phase boundaries / pre-merge. Each workflow
+  routes correctly; `archive_assets`, `favorite_assets`, `tag_assets`,
+  `create_album_from_source`, and `rename_or_describe_space` propose a real,
+  never-applied plan on any instance; `manage_space_members` and
+  `change_member_role` propose a never-applied plan against the **local seeded**
+  stack (known members) and are routing-only against personal; both audits
+  (no-apply, no gate-block) clean. Re-seed `baseline.l3.json` per phase.
 - No new MCP tools or operation types; no apply-path changes; no fixture that
   ignores call args (every fixture validates against the real tool DTOs).
 - Adding the next workflow is a manifest entry + a workflow module + scenarios —
