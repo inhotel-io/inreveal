@@ -61,6 +61,9 @@ const CASES = [
   // collision guards (remove_photos_from_album must NOT steal these)
   ['remove Bob from the Family space', 'manage_space_members'],
   ['remove my newest 20 from my favorites', 'favorite_assets'],
+  // create_space_from_source vs create_album_from_source / manage_space_assets / manage_space_members
+  ['make a Family space of my newest 50 photos', 'create_space_from_source'],
+  ['create a shared space from my 2024 photos', 'create_space_from_source'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],

@@ -439,6 +439,36 @@ export const WORKFLOW_MANIFEST = Object.freeze([
       workflowOrBoundary: 'Pi resolves a recency/date/type source; Gallery owns album creation from the handle.',
     }),
   }),
+  Object.freeze({
+    kind: 'create_space_from_source',
+    flow: 'hybrid',
+    title: 'Create space from a source',
+    classifierDescription:
+      'User wants a NEW shared space built from a metadata-describable set of photos — not a new album, not an existing-space photo add, and not a member add.',
+    positiveExamples: Object.freeze([
+      'Make a Family space of my newest 50 photos',
+      'Create a shared space from my 2024 photos',
+      'Make a space of my newest 20 photos titled South Africa',
+    ]),
+    negativeExamples: Object.freeze([
+      'Make an album of my newest 50 photos',
+      'Add my newest 20 photos to the Family space',
+      'Rename the Family space to Family 2026',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos for the new space.' }),
+      spaceName: Object.freeze({ type: 'string', required: false, description: 'Space name (defaults to New Space).' }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeSpaceFromSearch',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Create space from a source',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the source; Gallery owns space creation from the wrapped selection handle (proposeSpaceFromSearch).',
+    }),
+  }),
 ]);
 
 const byKind = new Map(WORKFLOW_MANIFEST.map((entry) => [entry.kind, entry]));
