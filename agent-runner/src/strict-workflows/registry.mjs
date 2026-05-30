@@ -11,6 +11,7 @@ import { removePhotosFromAlbumWorkflow } from './workflows/remove-photos-from-al
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
+import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -48,6 +49,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
   updateAssetMetadataWorkflow,
+  rotateAssetsWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   removePhotosFromAlbumWorkflow,

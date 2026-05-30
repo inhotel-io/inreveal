@@ -211,6 +211,34 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
   });
 });
 
+describe('makeContractClient — asset.rotate action', () => {
+  it('rejects angle 45 with /angle/i error', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.rotate', angle: 45 }, selectionHandleId: 'h' }),
+      /angle/i,
+    );
+  });
+
+  it('accepts angle 90 and returns plan-1', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.rotate', angle: 90 }, selectionHandleId: 'h' });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('accepts angle 180 and returns plan-1', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.rotate', angle: 180 }, selectionHandleId: 'h' });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+
+  it('accepts angle 270 and returns plan-1', async () => {
+    const client = makeContractClient();
+    const res = await client.call('proposeAssetBatchFromSelection', { action: { type: 'asset.rotate', angle: 270 }, selectionHandleId: 'h' });
+    assert.equal(res.plan.id, 'plan-1');
+  });
+});
+
 describe('makeContractClient — asset.updateMetadata action', () => {
   it('KNOWN_BATCH_ACTION_TYPES includes asset.updateMetadata', () => {
     assert.equal(KNOWN_BATCH_ACTION_TYPES.has('asset.updateMetadata'), true);

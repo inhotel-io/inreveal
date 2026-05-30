@@ -64,6 +64,9 @@ const CASES = [
   // create_space_from_source vs create_album_from_source / manage_space_assets / manage_space_members
   ['make a Family space of my newest 50 photos', 'create_space_from_source'],
   ['create a shared space from my 2024 photos', 'create_space_from_source'],
+  // rotate_assets (explicit angle required; subjective source → none)
+  ['rotate my newest 20 photos 90 clockwise', 'rotate_assets'],
+  ['flip my newest 5 photos upside down', 'rotate_assets'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
