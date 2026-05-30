@@ -17,10 +17,12 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/download_status_floating_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/general_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/constants.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/scroll_drain.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/scrubber.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_drag_region.dart';
+import 'package:immich_mobile/providers/asset_viewer/scroll_to_date_notifier.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -163,6 +165,16 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
     _baseScaleFactor = _scaleFactor;
 
     ref.listenManual(multiSelectProvider.select((s) => s.isEnabled), _onMultiSelectionToggled);
+
+    // Drain any pending "view in timeline" request. It is latched in
+    // [scrollToDateNotifierProvider] so it survives this timeline being mounted
+    // fresh by the navigation (e.g. coming from a memory or a notification)
+    // before its segments have loaded and laid out.
+    scrollToDateNotifierProvider.addListener(_requestScrollDrain);
+    ref.listenManual(timelineSegmentProvider, (_, __) => _requestScrollDrain());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _requestScrollDrain();
+    });
   }
 
   @override
@@ -187,8 +199,6 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
             .animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeInOut)
             .whenComplete(() => ref.read(timelineStateProvider.notifier).setScrubbing(false));
 
-      case ScrollToDateEvent scrollToDateEvent:
-        _scrollToDate(scrollToDateEvent.date);
       case TimelineReloadEvent():
         setState(() {});
       default:
@@ -244,50 +254,85 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
 
   @override
   void dispose() {
+    scrollToDateNotifierProvider.removeListener(_requestScrollDrain);
     _scrollController.dispose();
     _eventSubscription?.cancel();
     super.dispose();
   }
 
-  void _scrollToDate(DateTime date) {
-    final asyncSegments = ref.read(timelineSegmentProvider);
-    asyncSegments.whenData((segments) {
-      // Find the segment that contains assets from the target date
-      final targetSegment = segments.firstWhereOrNull((segment) {
-        if (segment.bucket is TimeBucket) {
-          final segmentDate = (segment.bucket as TimeBucket).date;
-          // Check if the segment date matches the target date (year, month, day)
-          return segmentDate.year == date.year && segmentDate.month == date.month && segmentDate.day == date.day;
-        }
-        return false;
-      });
+  bool _scrollDrainScheduled = false;
+  int _scrollDrainAttempts = 0;
+  static const int _maxScrollDrainAttempts = 180;
 
-      // If exact date not found, try to find the closest month
-      final fallbackSegment =
-          targetSegment ??
-          segments.firstWhereOrNull((segment) {
-            if (segment.bucket is TimeBucket) {
-              final segmentDate = (segment.bucket as TimeBucket).date;
-              return segmentDate.year == date.year && segmentDate.month == date.month;
-            }
-            return false;
-          });
+  /// Ensures a single retry loop is running to apply a pending scroll request.
+  void _requestScrollDrain() {
+    if (scrollToDateNotifierProvider.value == null) return;
+    if (_scrollDrainScheduled) return;
+    _scrollDrainScheduled = true;
+    _scrollDrainAttempts = 0;
+    _attemptScrollDrain();
+  }
 
-      if (fallbackSegment != null) {
-        // Scroll to the segment with a small offset to show the header
-        final targetOffset = fallbackSegment.startOffset - 50;
-        ref.read(timelineStateProvider.notifier).setScrubbing(true);
-        _scrollController
-            .animateTo(
-              targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut,
-            )
-            .whenComplete(() => ref.read(timelineStateProvider.notifier).setScrubbing(false));
-      } else {
-        ref.read(timelineStateProvider.notifier).setScrubbing(false);
-      }
-    });
+  /// Retries every frame until the timeline can actually scroll to the latched
+  /// date (segments loaded, scroll view attached and laid out, matching segment
+  /// present), then consumes the request. This survives the timeline being
+  /// reloaded fresh by the navigation, where the scroll view is not yet laid out
+  /// for several frames (so an early scroll would clamp to the top).
+  void _attemptScrollDrain() {
+    if (!mounted) {
+      _scrollDrainScheduled = false;
+      return;
+    }
+
+    final date = scrollToDateNotifierProvider.value;
+    final segments = ref.read(timelineSegmentProvider).valueOrNull;
+    final laidOut = _scrollController.hasClients && _scrollController.position.hasContentDimensions;
+    final matched = date != null && segments != null && _findSegmentForDate(segments, date) != null;
+
+    final action = decideScrollDrain(
+      hasPending: date != null,
+      segmentsLoaded: segments != null,
+      laidOut: laidOut,
+      segmentMatched: matched,
+      attempts: _scrollDrainAttempts,
+      maxAttempts: _maxScrollDrainAttempts,
+    );
+
+    switch (action) {
+      case ScrollDrainAction.idle:
+        _scrollDrainScheduled = false;
+      case ScrollDrainAction.scroll:
+        _scrollToDate(date!, segments!);
+        scrollToDateNotifierProvider.consume();
+        _scrollDrainScheduled = false;
+      case ScrollDrainAction.giveUp:
+        // Budget exhausted: drop the request so it cannot leak into a later timeline.
+        scrollToDateNotifierProvider.consume();
+        _scrollDrainScheduled = false;
+      case ScrollDrainAction.retry:
+        _scrollDrainAttempts++;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _attemptScrollDrain());
+    }
+  }
+
+  Segment? _findSegmentForDate(List<Segment> segments, DateTime date) {
+    final dates = segments
+        .map((segment) => segment.bucket is TimeBucket ? (segment.bucket as TimeBucket).date : null)
+        .toList(growable: false);
+    final index = findMatchingSegmentIndex(dates, date);
+    return index == null ? null : segments[index];
+  }
+
+  void _scrollToDate(DateTime date, List<Segment> segments) {
+    final segment = _findSegmentForDate(segments, date);
+    if (segment == null) return;
+
+    final maxExtent = _scrollController.position.maxScrollExtent;
+    final targetOffset = (segment.startOffset - 50).clamp(0.0, maxExtent);
+    ref.read(timelineStateProvider.notifier).setScrubbing(true);
+    _scrollController
+        .animateTo(targetOffset, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut)
+        .whenComplete(() => ref.read(timelineStateProvider.notifier).setScrubbing(false));
   }
 
   // Drag selection methods
