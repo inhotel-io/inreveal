@@ -70,10 +70,25 @@ const validateBatchAction = (action) => {
   }
 };
 
+// space.updateDetails payload is a strictObject with ≥1 of these (mirrors the DTO).
+const KNOWN_SPACE_DETAILS_KEYS = new Set(['spaceName', 'description', 'color']);
+
+const validateSpaceUpdateDetails = (op) => {
+  if (op.targetKind !== 'existing_space') fail('space.updateDetails requires targetKind "existing_space"');
+  if (!op.targetId) fail('space.updateDetails requires targetId');
+  if (!op.payload || typeof op.payload !== 'object') fail('space.updateDetails requires a payload object');
+  const keys = Object.keys(op.payload);
+  for (const key of keys) {
+    if (!KNOWN_SPACE_DETAILS_KEYS.has(key)) fail(`unknown space.updateDetails payload key "${key}"`);
+  }
+  if (keys.length === 0) fail('space.updateDetails requires spaceName, description, or color');
+};
+
 const validateOperations = (operations) => {
   if (!Array.isArray(operations) || operations.length === 0) fail('operations must be a non-empty array');
   for (const op of operations) {
     if (!op || !KNOWN_OPERATION_TYPES.has(op.type)) fail(`unknown operation type "${op?.type}"`);
+    if (op.type === 'space.updateDetails') validateSpaceUpdateDetails(op);
   }
 };
 

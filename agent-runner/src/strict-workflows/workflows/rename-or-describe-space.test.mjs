@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { renameOrDescribeSpaceWorkflow } from './rename-or-describe-space.mjs';
+import { makeContractClient } from './contract-fixtures.mjs';
 
 const wf = renameOrDescribeSpaceWorkflow();
 
@@ -65,9 +66,91 @@ describe('rename_or_describe_space router & slots', () => {
     assert.equal(wf.parseSlots({ newName: 'X' }), null);
   });
 
-  it('is a router-only strict workflow this slice (no run yet)', () => {
+  it('is a strict workflow with an executable run', () => {
     assert.equal(wf.kind, 'rename_or_describe_space');
     assert.equal(wf.flow, 'strict');
-    assert.equal(typeof wf.run, 'undefined');
+    assert.equal(typeof wf.run, 'function');
+  });
+});
+
+describe('rename_or_describe_space execution', () => {
+  const familyClient = () => makeContractClient({ spaces: [{ id: 'spc-1', name: 'Family', members: [] }] });
+
+  it('renames a space and preserves its description (spaceName-only payload)', async () => {
+    const client = familyClient();
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Family', newName: 'Family 2026' } });
+    assert.equal(outcome.status, 'planned');
+    const ops = client.calls.find((c) => c.name === 'proposeAlbumOperations').args.operations;
+    assert.deepEqual(ops[0], {
+      type: 'space.updateDetails',
+      summary: 'Update space details.',
+      targetKind: 'existing_space',
+      targetId: 'spc-1',
+      payload: { spaceName: 'Family 2026' },
+    });
+  });
+
+  it('describes a space and preserves its name (description-only payload)', async () => {
+    const client = familyClient();
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Family', description: 'Our shared memories' } });
+    assert.equal(outcome.status, 'planned');
+    const ops = client.calls.find((c) => c.name === 'proposeAlbumOperations').args.operations;
+    assert.deepEqual(ops[0].payload, { description: 'Our shared memories' });
+  });
+
+  it('updates both name and description when both are set', async () => {
+    const client = familyClient();
+    const outcome = await wf.run({
+      client,
+      slots: { spaceRef: 'Family', newName: 'Family 2026', description: 'Our shared memories' },
+    });
+    assert.equal(outcome.status, 'planned');
+    const ops = client.calls.find((c) => c.name === 'proposeAlbumOperations').args.operations;
+    assert.deepEqual(ops[0].payload, { spaceName: 'Family 2026', description: 'Our shared memories' });
+  });
+
+  it('asks which space when the name is ambiguous (no propose)', async () => {
+    const client = makeContractClient({
+      spaces: [
+        { id: 'a', name: 'Family' },
+        { id: 'b', name: 'Family' },
+      ],
+    });
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Family', newName: 'X' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAlbumOperations'),
+      false,
+    );
+  });
+
+  it('asks for input when the space is unknown (no propose)', async () => {
+    const client = familyClient();
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Nope', newName: 'X' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAlbumOperations'),
+      false,
+    );
+  });
+
+  it('fails (gate) without success copy when the plan has no persisted id', async () => {
+    const client = makeContractClient({
+      spaces: [{ id: 'spc-1', name: 'Family', members: [] }],
+      planResult: { status: 'success', plan: {} },
+    });
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Family', newName: 'X' } });
+    assert.equal(outcome.status, 'failed');
+    assert.equal(/prepared/i.test(outcome.text), false);
+  });
+
+  it('asks for input (never a no-op plan) when neither field is set', async () => {
+    const client = familyClient();
+    const outcome = await wf.run({ client, slots: { spaceRef: 'Family' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAlbumOperations'),
+      false,
+    );
   });
 });
