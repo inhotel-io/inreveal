@@ -23,7 +23,29 @@ const defaultApprovalEvent = ({ toolCallId }) => ({
   toolCallId,
 });
 
+const defaultWorkflowStateEvent = ({ workflowState }) => ({
+  type: 'workflow-state-update',
+  workflowState,
+});
+
 const noop = () => {};
+
+// Durability (Slice 5): every pendingWorkflow set/clear is mirrored to a
+// `workflow-state-update` stream event so the server can persist the scrubbed
+// blob and rehydrate it on the next turn/approval. The in-memory Map stays a
+// write-through cache for the active turn; the server is the source of truth.
+//
+// A no-op clear (clearing when nothing was pending) emits nothing so the common
+// "planned" success path stays a single completed event with no redundant null
+// persistence churn.
+const withDurableSetPending = (getPending, setPending, emit, workflowStateEvent) => (next) => {
+  const hadPending = getPending() != null;
+  setPending(next);
+  if (next == null && !hadPending) {
+    return;
+  }
+  emit(workflowStateEvent({ workflowState: next ?? null }));
+};
 
 export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now, observe = noop }) => {
   const handleOutcome = ({ outcome, wf, emit, appendTranscript, setPending, prompt, completedEvent, approvalEvent }) => {
@@ -73,11 +95,13 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
     emit,
     appendTranscript,
     getPending,
-    setPending,
+    setPending: rawSetPending,
     signal,
     completedEvent = defaultCompletedEvent,
     approvalEvent = defaultApprovalEvent,
+    workflowStateEvent = defaultWorkflowStateEvent,
   }) => {
+    const setPending = withDurableSetPending(getPending, rawSetPending, emit, workflowStateEvent);
     const nowMs = now();
     const pending = getPending();
 
@@ -124,11 +148,13 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
     emit,
     appendTranscript,
     getPending,
-    setPending,
+    setPending: rawSetPending,
     signal,
     completedEvent = defaultCompletedEvent,
     approvalEvent = defaultApprovalEvent,
+    workflowStateEvent = defaultWorkflowStateEvent,
   }) => {
+    const setPending = withDurableSetPending(getPending, rawSetPending, emit, workflowStateEvent);
     const pending = getPending();
     if (!pending || pending.kind !== 'approval' || pending.toolCallId !== toolCallId) {
       return { handled: false }; // fall through to provider continue path

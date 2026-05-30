@@ -718,6 +718,23 @@ const strictApprovalEvent = ({ gallerySessionId, runnerSessionId, toolCallId }) 
   toolCallId,
 });
 
+const strictWorkflowStateEvent = ({ gallerySessionId, runnerSessionId, workflowState }) => ({
+  type: 'workflow-state-update',
+  sessionId: gallerySessionId,
+  runnerSessionId,
+  workflowState: workflowState ?? null,
+});
+
+// Durability (Slice 5): the server is the source of truth for pendingWorkflow.
+// A request's workflowState always wins over a stale in-memory Map value so a
+// fresh runtime (or a second instance) rehydrates the continuation/approval
+// state before routing the turn.
+const seedPendingWorkflow = (entry, workflowState) => {
+  if (workflowState !== undefined) {
+    entry.pendingWorkflow = workflowState ?? undefined;
+  }
+};
+
 const createMcpSessionWorkspace = async (gallerySessionId) => {
   const sessionHash = createHash('sha256').update(String(gallerySessionId)).digest('hex').slice(0, 24);
   const workspace = join(runtimeSessionRoot, `${sessionHash}-${randomUUID()}`);
@@ -1006,7 +1023,7 @@ export const createPiRuntime = ({
             inFlight: false,
             abortActiveStream: undefined,
             unsubscribe: undefined,
-            pendingWorkflow: undefined,
+            pendingWorkflow: body.workflowState ?? undefined,
             dispatcher: mcpGateway
               ? createWorkflowDispatcher({
                   registry,
@@ -1040,7 +1057,7 @@ export const createPiRuntime = ({
       });
     },
 
-    async *sendMessage({ runnerSessionId, gallerySessionId, messageId: _messageId, content }) {
+    async *sendMessage({ runnerSessionId, gallerySessionId, messageId: _messageId, content, workflowState }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
         throw new Error('Runner session not found; start a new assistant chat to reconnect.');
@@ -1049,6 +1066,7 @@ export const createPiRuntime = ({
         throw new Error('Runner session already has an active message stream');
       }
       entry.inFlight = true;
+      seedPendingWorkflow(entry, workflowState);
       const promptText = textPromptFromContent(content);
 
       if (entry.mcpGateway) {
@@ -1071,6 +1089,8 @@ export const createPiRuntime = ({
             },
             completedEvent: ({ text }) => strictCompletedEvent({ gallerySessionId, runnerSessionId, text }),
             approvalEvent: ({ toolCallId }) => strictApprovalEvent({ gallerySessionId, runnerSessionId, toolCallId }),
+            workflowStateEvent: ({ workflowState: nextWorkflowState }) =>
+              strictWorkflowStateEvent({ gallerySessionId, runnerSessionId, workflowState: nextWorkflowState }),
           });
           if (dispatch.handled) {
             yield* strictEvents;
@@ -1278,7 +1298,7 @@ export const createPiRuntime = ({
       }
     },
 
-    async *resumeSession({ runnerSessionId, gallerySessionId, toolCallId, approvalDecision, toolResult }) {
+    async *resumeSession({ runnerSessionId, gallerySessionId, toolCallId, approvalDecision, toolResult, workflowState }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
         throw new Error('Runner session not found; start a new assistant chat to reconnect.');
@@ -1287,6 +1307,7 @@ export const createPiRuntime = ({
         throw new Error('Runner session already has an active message stream');
       }
       entry.inFlight = true;
+      seedPendingWorkflow(entry, workflowState);
 
       if (entry.dispatcher) {
         const strictEvents = [];
@@ -1305,6 +1326,8 @@ export const createPiRuntime = ({
             completedEvent: ({ text }) => strictCompletedEvent({ gallerySessionId, runnerSessionId, text }),
             approvalEvent: ({ toolCallId: nextToolCallId }) =>
               strictApprovalEvent({ gallerySessionId, runnerSessionId, toolCallId: nextToolCallId }),
+            workflowStateEvent: ({ workflowState: nextWorkflowState }) =>
+              strictWorkflowStateEvent({ gallerySessionId, runnerSessionId, workflowState: nextWorkflowState }),
           });
           if (dispatch.handled) {
             yield* strictEvents;

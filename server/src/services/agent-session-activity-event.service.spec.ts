@@ -65,6 +65,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => ({
   runnerEndpoint: 'http://agent-runner:4477',
   runnerSessionId: 'runner-session',
   runnerCapabilitiesSnapshot: { protocolVersion: '2026-05-14', streaming: true, tools: [], models: [] },
+  workflowState: null,
   initialContextSnapshot: {},
   createdAt: new Date('2026-05-18T10:00:00.000Z'),
   updatedAt: new Date('2026-05-18T10:00:00.000Z'),
