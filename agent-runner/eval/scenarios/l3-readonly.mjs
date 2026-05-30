@@ -105,6 +105,12 @@ export default [
     prompt: 'make {user} an editor in the {space} space',
     expect: { kind: 'change_member_role' },
   },
+  {
+    id: 'l3.recall.createalbum',
+    category: 'l3.recall',
+    prompt: 'make an album of my newest 20 photos called eval-l3',
+    expect: { kind: 'create_album_from_source' },
+  },
 
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
@@ -263,6 +269,15 @@ export default [
     category: 'l3.plan',
     prompt: 'make {user} an editor in the {space} space',
     expect: { kind: 'change_member_role', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
+    // create_album_from_source end-to-end: recency → album.create + album.addAssets
+    // from the handle — proposed, never applied.
+    id: 'l3.plan.createalbum',
+    category: 'l3.plan',
+    prompt: 'make an album of my newest 20 photos called eval-l3',
+    expect: { kind: 'create_album_from_source', planProposed: true },
     threshold: 0.5,
   },
 
