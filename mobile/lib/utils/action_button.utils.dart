@@ -273,7 +273,7 @@ enum ActionButtonType {
             ? null
             : () async {
                 await buildContext.maybePop();
-                await buildContext.navigateTo(const TabShellRoute(children: [MainTimelineRoute()]));
+                await buildContext.navigateTo(const MainTimelineRoute());
                 scrollToDateNotifierProvider.scrollToDate(context.asset.createdAt);
               },
       ),

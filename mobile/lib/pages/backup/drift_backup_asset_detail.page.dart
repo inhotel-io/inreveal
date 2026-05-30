@@ -87,7 +87,7 @@ class DriftBackupAssetDetailPage extends ConsumerWidget {
                     ),
                     onTap: () async {
                       await context.maybePop();
-                      await context.navigateTo(const TabShellRoute(children: [MainTimelineRoute()]));
+                      await context.navigateTo(const MainTimelineRoute());
                       scrollToDateNotifierProvider.scrollToDate(asset.createdAt);
                     },
                   );
