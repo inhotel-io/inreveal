@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseDateRange, parseMediaType, resolveAssetSource } from './asset-source-resolver.mjs';
+import { isCleanSource, parseDateRange, parseEntitySource, parseMediaType, resolveAssetSource } from './asset-source-resolver.mjs';
 import { makeContractClient } from './workflows/contract-fixtures.mjs';
 
 // A Friday, for deterministic relative-date math.
@@ -217,4 +217,63 @@ describe('resolveAssetSource', () => {
       /boom/,
     );
   });
+
+  it('hands off "the best Berlin photos" (subjective beats entity, no search)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'the best Berlin photos', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(
+      client.calls.some((c) => c.name === 'searchAssets'),
+      false,
+    );
+  });
+});
+
+describe('parseEntitySource', () => {
+  for (const [input, expected] of [
+    ['photos of Alex', { people: ['Alex'] }],
+    ['my Berlin photos', { directFilters: { city: 'Berlin' } }],
+    ['photos from Paris', { directFilters: { city: 'Paris' } }],
+    ['photos tagged Travel', { tags: ['Travel'] }],
+    ['my Travel-tagged photos', { tags: ['Travel'] }],
+    ['photos in the Italy album', { albums: ['Italy'] }],
+    ['my Sony photos', { cameras: ['Sony'] }],
+    ['shot on Canon', { cameras: ['Canon'] }],
+    ['my 5-star photos', { directFilters: { rating: 5 } }],
+    ['rated 5', { directFilters: { rating: 5 } }],
+    ['my favorites', { directFilters: { isFavorite: true } }],
+    ['my favorite photos', { directFilters: { isFavorite: true } }],
+    ['my archived photos', { directFilters: { visibility: 'archive' } }],
+    ['my newest 20 photos', undefined],
+    ['the best ones', undefined],
+    ['photos from 2024', undefined],
+    ['my videos', undefined],
+    ['my photos', undefined],
+    ['rated 7', undefined],
+    ['my 7-star photos', undefined],
+    ['photos of ' + 'A'.repeat(121), undefined],
+  ]) {
+    it(`parseEntitySource(${JSON.stringify(input)}) → ${JSON.stringify(expected)}`, () => {
+      assert.deepEqual(parseEntitySource(input), expected);
+    });
+  }
+});
+
+describe('isCleanSource', () => {
+  for (const [input, expected] of [
+    ['my Berlin photos', true],
+    ['my Sony photos', true],
+    ['photos tagged Travel', true],
+    ['photos in the Italy album', true],
+    ['my 5-star photos', true],
+    ['my archived photos', true],
+    ['my newest 20 photos', true],
+    ['the best ones', false],
+    ['the best Berlin photos', false],
+    ['my screenshots', false],
+  ]) {
+    it(`isCleanSource(${JSON.stringify(input)}) → ${expected}`, () => {
+      assert.equal(isCleanSource(input), expected);
+    });
+  }
 });
