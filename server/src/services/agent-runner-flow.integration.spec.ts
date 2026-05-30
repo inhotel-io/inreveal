@@ -178,6 +178,7 @@ class InMemoryAgentSessionRepository {
       runnerEndpoint: dto.runnerEndpoint ?? null,
       runnerSessionId: dto.runnerSessionId ?? null,
       runnerCapabilitiesSnapshot: dto.runnerCapabilitiesSnapshot ?? null,
+      workflowState: dto.workflowState ?? null,
       status: dto.status ?? AgentSessionStatus.Created,
       initialContextSnapshot: dto.initialContextSnapshot ?? {},
       title: dto.title ?? null,

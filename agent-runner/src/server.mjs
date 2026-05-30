@@ -215,6 +215,10 @@ const validateMessageBody = (body) => {
     return 'content is required';
   }
 
+  if (body.workflowState !== undefined && body.workflowState !== null && typeof body.workflowState !== 'object') {
+    return 'workflowState must be an object or null';
+  }
+
   return undefined;
 };
 
@@ -237,6 +241,10 @@ const validateResumeBody = (body) => {
 
   if (body.toolResult !== undefined && (body.toolResult === null || typeof body.toolResult !== 'object')) {
     return 'toolResult must be an object';
+  }
+
+  if (body.workflowState !== undefined && body.workflowState !== null && typeof body.workflowState !== 'object') {
+    return 'workflowState must be an object or null';
   }
 
   return undefined;
@@ -345,6 +353,7 @@ export const startServer = ({
           gallerySessionId: body.gallerySessionId,
           messageId: body.messageId,
           content: body.content,
+          ...(body.workflowState === undefined ? {} : { workflowState: body.workflowState }),
         }),
         onRuntimeError: () =>
           sendSse(response, 'runner-error', {
@@ -397,6 +406,7 @@ export const startServer = ({
           toolCallId: body.toolCallId,
           approvalDecision: body.approvalDecision,
           toolResult: body.toolResult,
+          ...(body.workflowState === undefined ? {} : { workflowState: body.workflowState }),
         }),
         onRuntimeError: () =>
           sendSse(response, 'runner-error', {

@@ -13,6 +13,7 @@ type AgentSessionUpdate = Pick<
   'status' | 'endedAt' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
 >;
 type AgentSessionMetadataUpdate = Pick<Updateable<AgentSessionTable>, 'title'>;
+type AgentSessionWorkflowState = Updateable<AgentSessionTable>['workflowState'];
 type AgentSessionMarkRunning = Pick<
   Updateable<AgentSessionTable>,
   'status' | 'runnerEndpoint' | 'runnerSessionId' | 'runnerCapabilitiesSnapshot'
@@ -75,6 +76,16 @@ export class AgentSessionRepository {
     return this.db
       .updateTable('agent_session')
       .set(dto)
+      .where('userId', '=', userId)
+      .where('id', '=', asUuid(id))
+      .returning(columns.agentSession)
+      .executeTakeFirstOrThrow();
+  }
+
+  setWorkflowState(userId: string, id: string, workflowState: AgentSessionWorkflowState) {
+    return this.db
+      .updateTable('agent_session')
+      .set({ workflowState })
       .where('userId', '=', userId)
       .where('id', '=', asUuid(id))
       .returning(columns.agentSession)

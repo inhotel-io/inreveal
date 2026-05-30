@@ -436,6 +436,183 @@ describe(AgentRunnerService.name, () => {
     });
   });
 
+  it('persists a workflow-state-update event without surfacing it to the websocket', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Create an album for my recent trip.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Which recent trip should I use?' }] };
+    const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'selection', continuation: { foo: 'bar' } };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'workflow-state-update',
+          sessionId,
+          runnerSessionId,
+          workflowState,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: null,
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(sessionRepository.setWorkflowState).toHaveBeenCalledWith(userId, sessionId, workflowState);
+    expect(websocketRepository.clientSend).not.toHaveBeenCalledWith(
+      'on_agent_session_event',
+      userId,
+      expect.objectContaining({ type: 'workflow-state-update' }),
+    );
+  });
+
+  it('clears persisted workflow state when a workflow-state-update event carries null', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Use the first one.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'workflow-state-update',
+          sessionId,
+          runnerSessionId,
+          workflowState: null,
+        },
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: null,
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(sessionRepository.setWorkflowState).toHaveBeenCalledWith(userId, sessionId, null);
+  });
+
+  it('includes persisted workflow state in the message runner request', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Use the first one.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+    const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'selection', continuation: { foo: 'bar' } };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: null,
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running, workflowState } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(agentRunnerRepository.streamMessage).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 120_000,
+      body: { gallerySessionId: sessionId, messageId, content, workflowState },
+    });
+  });
+
+  it('includes persisted workflow state in the resume runner request', async () => {
+    const userId = '00000000-0000-4000-8000-000000000001';
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+    const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'approval', toolCallId: 'tc-1' };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamResume.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: null,
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running, workflowState } as never);
+
+    await sut.resumeAfterToolApproval({
+      userId,
+      sessionId,
+      runnerSessionId,
+      toolCallId: '00000000-0000-4000-8000-000000000333',
+      approvalDecision: 'approved',
+      toolResult: { status: 'success', plan: { id: 'plan-1' } },
+    });
+
+    expect(agentRunnerRepository.streamResume).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId,
+      timeoutMs: 120_000,
+      body: {
+        gallerySessionId: sessionId,
+        toolCallId: '00000000-0000-4000-8000-000000000333',
+        approvalDecision: 'approved',
+        toolResult: { status: 'success', plan: { id: 'plan-1' } },
+        workflowState,
+      },
+    });
+  });
+
   it('creates a start-processing activity event before dispatching a user message', async () => {
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
@@ -1701,8 +1878,10 @@ describe(AgentRunnerService.name, () => {
 
     expect(sut.isSessionDispatchActive(sessionId)).toBe(false);
     const first = sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
-    await Promise.resolve();
-    await Promise.resolve();
+    // Flush the pre-dispatch baseline/workflow-state reads before the runner stream opens.
+    while (agentRunnerRepository.streamMessage.mock.calls.length === 0) {
+      await Promise.resolve();
+    }
 
     expect(sut.isSessionDispatchActive(sessionId)).toBe(true);
     expect(agentRunnerRepository.streamMessage).toHaveBeenCalledTimes(1);
@@ -1759,7 +1938,10 @@ describe(AgentRunnerService.name, () => {
       content: { blocks: [{ type: 'text', text: 'Start.' }] },
     });
 
-    await Promise.resolve();
+    // Let the first dispatch open its (blocked) runner stream before resuming.
+    while (agentRunnerRepository.streamMessage.mock.calls.length === 0) {
+      await Promise.resolve();
+    }
 
     const resume = sut.resumeAfterToolApproval({
       userId,

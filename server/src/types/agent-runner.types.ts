@@ -40,6 +40,7 @@ export type AgentRunnerMessageRequest = {
   gallerySessionId: string;
   messageId: string;
   content: AgentMessageContent;
+  workflowState?: object | null;
 };
 
 export type AgentRunnerResumeRequest = {
@@ -47,6 +48,7 @@ export type AgentRunnerResumeRequest = {
   toolCallId?: string;
   approvalDecision?: 'approved' | 'denied';
   toolResult?: unknown;
+  workflowState?: object | null;
 };
 
 export type AgentRunnerActivityKind =
@@ -96,5 +98,11 @@ export type AgentRunnerStreamEvent =
       sessionId: string;
       runnerSessionId: string;
       message: string;
+    }
+  | {
+      type: 'workflow-state-update';
+      sessionId: string;
+      runnerSessionId: string;
+      workflowState: object | null;
     }
   | AgentRunnerActivityStreamEvent;

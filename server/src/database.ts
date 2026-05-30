@@ -581,6 +581,7 @@ export const columns = {
     'runnerEndpoint',
     'runnerSessionId',
     'runnerCapabilitiesSnapshot',
+    'workflowState',
     'status',
     'initialContextSnapshot',
     'title',
