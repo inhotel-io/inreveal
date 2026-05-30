@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch src/server.mjs",
     "start": "node src/server.mjs",
-    "test": "node --test 'src/**/*.test.mjs'"
+    "test": "node --test 'src/**/*.test.mjs'",
+    "eval": "node eval/run.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.74.0",
