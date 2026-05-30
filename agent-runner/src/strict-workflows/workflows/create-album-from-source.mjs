@@ -1,4 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 // create_album_from_source (hybrid): "make/create an album of/from <source>
 // [called <name>]" — the generic album-create the trip workflow does not cover.
@@ -49,5 +51,48 @@ export const createAlbumFromSourceWorkflow = () => ({
     }
     const albumName = cleanName(rawSlots?.albumName) || DEFAULT_NAME;
     return { sourceDescription, albumName };
+  },
+
+  async run({ client, slots, signal }) {
+    const albumName = cleanName(slots?.albumName) || DEFAULT_NAME;
+    const sourceDescription = clean(slots?.sourceDescription);
+
+    // 1. Resolve the source into a selection handle (shared resolver).
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 2. Propose a new album from the selection handle. No raw asset ids reach the
+    //    model — the handle is the only asset reference.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAlbumFromSelection',
+        { summary: `Create the "${albumName}" album.`, albumName, selectionHandleId },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    // 3. Gate on a persisted plan id before any success copy.
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeAlbumFromSelection',
+      successText: `I prepared a plan to create the "${albumName}" album with ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'}. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, albumName, assetCount },
+    });
   },
 });
