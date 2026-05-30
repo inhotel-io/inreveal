@@ -56,6 +56,12 @@ export type AgentRunnerActivityKind =
   | 'plan-composing'
   | 'apply-progress'
   | 'runner-recovery'
+  // Strict/hybrid workflow observability (Slice 6): debug/audit-only events from
+  // the runner's strict dispatcher. Not user chat; never enter the transcript.
+  | 'strict_router_decision'
+  | 'strict_workflow_outcome'
+  | 'strict_success_gate_block'
+  | 'strict_continuation'
   | 'unknown';
 
 export type AgentRunnerActivityStatus = 'running' | 'completed' | 'failed' | 'skipped';

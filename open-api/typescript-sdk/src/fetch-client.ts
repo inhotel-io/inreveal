@@ -10327,6 +10327,10 @@ export enum Kind {
     PlanComposing = "plan-composing",
     ApplyProgress = "apply-progress",
     RunnerRecovery = "runner-recovery",
+    StrictRouterDecision = "strict_router_decision",
+    StrictWorkflowOutcome = "strict_workflow_outcome",
+    StrictSuccessGateBlock = "strict_success_gate_block",
+    StrictContinuation = "strict_continuation",
     Unknown = "unknown"
 }
 export enum AgentSessionActivityEventSource {

@@ -10,6 +10,8 @@
 // and `approvalEvent` builders per call. The dispatcher never hard-codes a
 // workflow `kind` — adding a workflow is a registry entry, not a dispatcher edit.
 
+import { renderCopy } from './copy.mjs';
+
 const genericApprovalDeniedText =
   'The approval was denied, so no plan was created. Rerun the request to try again.';
 
@@ -47,16 +49,65 @@ const withDurableSetPending = (getPending, setPending, emit, workflowStateEvent)
   emit(workflowStateEvent({ workflowState: next ?? null }));
 };
 
-export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now, observe = noop }) => {
-  const handleOutcome = ({ outcome, wf, emit, appendTranscript, setPending, prompt, completedEvent, approvalEvent }) => {
+// Observability (Slice 6): the dispatcher emits structured events through an
+// injected `observe(event)` hook so router recall and the success gate are
+// measurable. `observe` defaults to a no-op, leaving earlier-slice tests and the
+// e2e runtime unaffected. Every event carries a `kind` discriminator and only
+// scrubbed, non-sensitive fields (no prompts, ids, or summaries).
+export const createWorkflowDispatcher = ({
+  registry,
+  buildClient,
+  now = Date.now,
+  observe = noop,
+  // Copy delegation (Slice 6). Default `template` reproduces today's strings
+  // exactly; `llm-polish` rephrases ONLY the scrubbed success summary. The
+  // success/failure decision is made deterministically before copy is rendered.
+  copyMode = 'template',
+  polish,
+} = {}) => {
+  // Render planned-arm copy and emit the success-gate observability event when a
+  // planned outcome lacks a planId (the original "claimed a plan that does not
+  // exist" bug class). Non-planned arms reuse the workflow's template text.
+  const renderOutcomeText = async (outcome) =>
+    renderCopy({
+      outcome,
+      mode: copyMode,
+      polish,
+      onGateBlock: () => observe({ kind: 'strict_success_gate_block', workflowKind: outcome?.successSummary?.workflowKind ?? null }),
+    });
+
+  const observeOutcome = ({ outcome, wf, fellBackToOpen }) => {
+    observe({
+      kind: 'strict_workflow_outcome',
+      workflowKind: wf?.kind ?? null,
+      status: outcome?.status ?? null,
+      planId: typeof outcome?.planId === 'string' ? outcome.planId : null,
+      toolCalls: typeof outcome?.toolCalls === 'number' ? outcome.toolCalls : null,
+      fellBackToOpen: Boolean(fellBackToOpen),
+    });
+  };
+
+  const handleOutcome = async ({
+    outcome,
+    wf,
+    emit,
+    appendTranscript,
+    setPending,
+    prompt,
+    completedEvent,
+    approvalEvent,
+  }) => {
     switch (outcome?.status) {
       case 'planned': {
-        appendTranscript(prompt, outcome.text);
+        const text = await renderOutcomeText(outcome);
+        observeOutcome({ outcome, wf });
+        appendTranscript(prompt, text);
         setPending(undefined);
-        emit(completedEvent({ text: outcome.text }));
+        emit(completedEvent({ text }));
         return { handled: true };
       }
       case 'needs_input': {
+        observeOutcome({ outcome, wf });
         if (outcome.continuation) {
           setPending({ workflowKind: wf.kind, kind: 'selection', continuation: outcome.continuation });
         } else {
@@ -67,6 +118,7 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
         return { handled: true };
       }
       case 'approval_required': {
+        observeOutcome({ outcome, wf });
         setPending({
           workflowKind: wf.kind,
           kind: 'approval',
@@ -77,6 +129,7 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
         return { handled: true };
       }
       case 'failed': {
+        observeOutcome({ outcome, wf });
         setPending(undefined);
         appendTranscript(prompt, outcome.text);
         emit(completedEvent({ text: outcome.text }));
@@ -84,6 +137,7 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
       }
       case 'handoff_open':
       default: {
+        observeOutcome({ outcome, wf, fellBackToOpen: true });
         setPending(undefined);
         return { handled: false };
       }
@@ -110,6 +164,7 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
       const wf = registry.getWorkflow(pending.workflowKind);
       const resolved = wf.resumeContinuation({ pending: pending.continuation, prompt, nowMs });
       if (resolved.status === 'matched') {
+        observe({ kind: 'strict_continuation', resumed: true, expired: false, missing: false });
         // Spec: the continuation-resolved path reuses run() with ctx.candidate
         // set — there is no separate run_continuation_candidate.
         const outcome = await wf.run({ client: buildClient(), ...resolved.ctx, signal, nowMs });
@@ -117,7 +172,8 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
       }
 
       setPending(resolved.status === 'needs_input' ? pending : undefined);
-      observe('strict_continuation', {
+      observe({
+        kind: 'strict_continuation',
         resumed: false,
         expired: resolved.status === 'expired',
         missing: resolved.status === 'missing',
@@ -127,6 +183,16 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
     }
 
     const decision = await registry.classify(prompt, { signal });
+    const matched = decision.kind !== 'none';
+    observe({
+      kind: 'strict_router_decision',
+      matched,
+      workflowKind: matched ? decision.kind : null,
+      via: decision.via ?? null,
+      confidence: decision.confidence ?? null,
+      latencyMs: Math.max(0, now() - nowMs),
+      fellBackToOpen: !matched,
+    });
     if (decision.kind === 'none') {
       return { handled: false };
     }
