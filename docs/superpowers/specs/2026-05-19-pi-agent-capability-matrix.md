@@ -131,6 +131,9 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `archive_assets`           | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
 | `favorite_assets`          | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
 | `tag_assets`               | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
+| `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`         |
+| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
+| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
 
 <!-- generated:workflows:end -->
 
