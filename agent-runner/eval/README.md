@@ -7,10 +7,19 @@ battery of real prompts so we can tell whether a change improved or regressed
 agent behavior.
 
 See the design: `docs/superpowers/specs/2026-05-29-pi-agent-smoke-eval-harness-design.md`.
-**L1** (this layer's daily driver) scores the classifier + copy against a local
-model with no Gallery. **L3** (`--layer L3`) drives the live Gallery `/agent/*`
-API read-only against a running stack. L2 (dispatcher + fixture MCP) is a future
-phase.
+
+### Layers (the `L1`/`L2`/`L3` legend)
+
+The numbers are **stack depth** — how much of the real system each layer drives:
+
+| Layer | aka | drives | needs |
+| --- | --- | --- | --- |
+| **L1** | component | the classifier + copy adapters | a local model only — no Gallery, no DB |
+| **L2** | workflow | the dispatcher + workflow `run()` with a *fake* MCP client | agent-runner code + model (no DB) — _not built yet_ |
+| **L3** | live | the real Gallery `/agent/*` API end-to-end, read-only | Gallery server + DB + runner + model |
+
+L1 is the daily driver (fast, runs anywhere). L3 (`--layer L3`) is the periodic
+"does it actually work against the running service" check.
 
 ## Run
 
@@ -98,8 +107,9 @@ and a model reachable **from the server** (not from this harness — L3 never ta
 to the model directly). Routing scenarios (`l3.recall`, `l3.negatives`) are
 data-independent; the `l3.plan` scenario needs a real library with a detectable
 trip, so it's meant for an instance with data and may not propose on an empty
-stack. `baseline.l3.json` is instance-specific — generate it per target, don't
-treat it like the committed L1 baseline.
+stack. `baseline.l3.json` is committed as a reference snapshot from the personal
+instance — it's instance-specific, so re-`--accept` it when you run against a
+different library rather than treating a diff as a regression.
 
 ## Baseline workflow
 
