@@ -355,4 +355,22 @@ export default [
     expect: { kind: 'remove_photos_from_album', planProposed: true },
     threshold: 0.5,
   },
+
+  // --- create_space_from_source routing + plan-proposed --------------------
+  {
+    id: 'l3.recall.createspace',
+    category: 'l3.recall',
+    prompt: 'make a Highlights space of my newest 20 photos',
+    expect: { kind: 'create_space_from_source' },
+  },
+  {
+    // LOAD-BEARING proof (Open Q3): selectionHandle assetSource expands to
+    // space.create + space.addAssets on the real server. Plan is proposed, never
+    // applied — no real space is created. threshold 0.5 tolerates library variance.
+    id: 'l3.plan.createspace',
+    category: 'l3.plan',
+    prompt: 'make a space of my newest 20 photos called eval-l3-space',
+    expect: { kind: 'create_space_from_source', planProposed: true },
+    threshold: 0.5,
+  },
 ];

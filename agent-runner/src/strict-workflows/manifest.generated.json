@@ -555,5 +555,44 @@
       "tier": "Solid now",
       "workflowOrBoundary": "Pi resolves a recency/date/type source; Gallery owns album creation from the handle."
     }
+  },
+  {
+    "kind": "create_space_from_source",
+    "flow": "hybrid",
+    "title": "Create space from a source",
+    "classifierDescription": "User wants a NEW shared space built from a metadata-describable set of photos — not a new album, not an existing-space photo add, and not a member add.",
+    "positiveExamples": [
+      "Make a Family space of my newest 50 photos",
+      "Create a shared space from my 2024 photos",
+      "Make a space of my newest 20 photos titled South Africa"
+    ],
+    "negativeExamples": [
+      "Make an album of my newest 50 photos",
+      "Add my newest 20 photos to the Family space",
+      "Rename the Family space to Family 2026"
+    ],
+    "slots": {
+      "sourceDescription": {
+        "type": "string",
+        "required": true,
+        "description": "Metadata description of the photos for the new space."
+      },
+      "spaceName": {
+        "type": "string",
+        "required": false,
+        "description": "Space name (defaults to New Space)."
+      }
+    },
+    "requiredReadTools": [
+      "resolveAssetSearchFilters",
+      "searchAssets"
+    ],
+    "planTool": "proposeSpaceFromSearch",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Create space from a source",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the source; Gallery owns space creation from the wrapped selection handle (proposeSpaceFromSearch)."
+    }
   }
 ]

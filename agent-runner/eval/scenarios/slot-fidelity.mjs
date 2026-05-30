@@ -104,4 +104,10 @@ export default [
     prompt: 'remove my newest 20 photos from the Family space',
     expect: { kind: 'manage_space_assets', slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } },
   },
+  {
+    id: 'slots.createspace.default-name',
+    category: 'slots',
+    prompt: 'create a space from my 2024 photos',
+    expect: { kind: 'create_space_from_source', slots: { sourceDescription: 'my 2024 photos' } },
+  },
 ];

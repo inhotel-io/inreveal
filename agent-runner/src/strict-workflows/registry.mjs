@@ -3,6 +3,7 @@ import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
 import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
 import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
+import { createSpaceFromSourceWorkflow } from './workflows/create-space-from-source.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { manageSpaceAssetsWorkflow } from './workflows/manage-space-assets.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
@@ -33,9 +34,14 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
 //   - `update_asset_metadata` after `rename_or_describe_*` so album/space describe
 //     wins their refs; it declines album/space refs.
+//   - `create_album_from_source` and `create_space_from_source` are grouped as
+//     create-verb workflows. `create_album_from_source` comes first so "album"
+//     prompts are not stolen; `create_space_from_source` immediately follows and
+//     its inline-name form discriminates via the "space" noun.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
+  createSpaceFromSourceWorkflow,
   renameOrDescribeSpaceWorkflow,
   renameOrDescribeAlbumWorkflow,
   archiveAssetsWorkflow,
