@@ -106,7 +106,9 @@ const CLASSIFY_TOOL_NAME = 'classify_intent';
 // forced tool-call's `arguments` off the returned message. No Gallery MCP tools
 // are present (separate from the agent session), the call is low-temperature,
 // and it is wrapped by the classifier so it never throws into the runtime.
-const createPiClassifyIntent =
+// Exported for the eval harness (eval/) so it can drive the REAL classify path
+// against a live provider. Not used elsewhere outside this module.
+export const createPiClassifyIntent =
   ({ ai, apiKey }) =>
   async ({ getModel: resolveModel, system, prompt, signal }) => {
     const model = resolveModel();
@@ -166,7 +168,8 @@ const POLISH_SYSTEM_PROMPT = [
   'Always make clear the plan still needs the user to review and apply it before any change happens.',
 ].join(' ');
 
-const createPiPolishCopy =
+// Exported for the eval harness (eval/) — see createPiClassifyIntent above.
+export const createPiPolishCopy =
   ({ ai, getModel, apiKey }) =>
   async (summary) => {
     const model = typeof getModel === 'function' ? getModel() : undefined;
