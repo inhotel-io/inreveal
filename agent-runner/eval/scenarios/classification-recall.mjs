@@ -109,4 +109,95 @@ export default [
     prompt: 'drop my beach pics into the Summer album',
     expect: { kind: 'add_photos_to_album', slotsSurvive: true, slots: { albumRef: /summer/i } },
   },
+
+  // archive_assets ----------------------------------------------------------
+  {
+    id: 'recall.archive.canonical',
+    category: 'recall',
+    prompt: 'archive my newest 50 photos',
+    expect: {
+      kind: 'archive_assets',
+      slotsSurvive: true,
+      slots: { archived: true, sourceDescription: /newest 50 photos/i },
+    },
+  },
+  {
+    id: 'recall.archive.unarchive',
+    category: 'recall',
+    prompt: 'move my last 10 photos out of the archive',
+    expect: {
+      kind: 'archive_assets',
+      slotsSurvive: true,
+      slots: { archived: false, sourceDescription: /last 10 photos/i },
+    },
+  },
+  {
+    id: 'recall.archive.uncommon-verb',
+    category: 'recall',
+    prompt: 'put my newest 20 photos in the archive',
+    expect: { kind: 'archive_assets', slotsSurvive: true },
+  },
+  {
+    // Routes at classify-time even though the resolver hands off "screenshots" at
+    // run-time — routing is the only thing L1 observes (relocated from negatives).
+    id: 'recall.archive.screenshots',
+    category: 'recall',
+    prompt: 'archive old screenshots from 2024',
+    expect: { kind: 'archive_assets', slotsSurvive: true },
+  },
+
+  // favorite_assets ---------------------------------------------------------
+  {
+    id: 'recall.favorite.canonical',
+    category: 'recall',
+    prompt: 'favorite my newest 10 photos',
+    expect: {
+      kind: 'favorite_assets',
+      slotsSurvive: true,
+      slots: { favorite: true, sourceDescription: /newest 10 photos/i },
+    },
+  },
+  {
+    id: 'recall.favorite.unfavorite',
+    category: 'recall',
+    prompt: 'unfavorite my last 5 photos',
+    expect: { kind: 'favorite_assets', slotsSurvive: true, slots: { favorite: false } },
+  },
+  {
+    // "add … to my favorites" is a favorite intent, owned by favorite_assets
+    // (not an album add) — see ADD_TO_FAVS_PATTERN.
+    id: 'recall.favorite.add-to-favorites',
+    category: 'recall',
+    prompt: 'add my newest 20 photos to my favorites',
+    expect: {
+      kind: 'favorite_assets',
+      slotsSurvive: true,
+      slots: { favorite: true, sourceDescription: /newest 20 photos/i },
+    },
+  },
+
+  // tag_assets --------------------------------------------------------------
+  {
+    id: 'recall.tag.canonical',
+    category: 'recall',
+    prompt: 'tag my newest 20 photos as Travel',
+    expect: {
+      kind: 'tag_assets',
+      slotsSurvive: true,
+      slots: { sourceDescription: /newest 20 photos/i, tagName: 'Travel' },
+    },
+  },
+  {
+    // Must NOT be stolen by add_photos_to_album's "add <source> to <album>".
+    id: 'recall.tag.add-the-tag',
+    category: 'recall',
+    prompt: 'add the tag Spring Break to my newest 50 photos',
+    expect: { kind: 'tag_assets', slotsSurvive: true, slots: { tagName: 'Spring Break' } },
+  },
+  {
+    id: 'recall.tag.uncommon-verb',
+    category: 'recall',
+    prompt: 'label my newest 20 photos Travel',
+    expect: { kind: 'tag_assets', slotsSurvive: true },
+  },
 ];
