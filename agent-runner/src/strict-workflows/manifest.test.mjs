@@ -81,4 +81,15 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.negativeExamples.length > 0);
     assert.ok(entry.matrixRow.capability);
   });
+
+  it('describes create_space_from_source as a hybrid workflow with its tools', () => {
+    const entry = getWorkflowManifestEntry('create_space_from_source');
+    assert.equal(entry.flow, 'hybrid');
+    assert.equal(entry.planTool, 'proposeSpaceFromSearch');
+    assert.ok(entry.requiredReadTools.includes('searchAssets'), 'requiredReadTools includes searchAssets');
+    assert.equal(entry.supportsContinuation, false);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
 });

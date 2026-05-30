@@ -376,4 +376,32 @@ export default [
     prompt: 'make an album of my Sony photos from May',
     expect: { kind: 'create_album_from_source', slotsSurvive: true, slots: { sourceDescription: /sony photos/i } },
   },
+
+  // create_space_from_source ------------------------------------------------
+  {
+    id: 'recall.createspace.canonical',
+    category: 'recall',
+    prompt: 'make a Family space of my newest 50 photos',
+    expect: { kind: 'create_space_from_source', slotsSurvive: true, slots: { spaceName: 'Family' } },
+  },
+  {
+    id: 'recall.createspace.named',
+    category: 'recall',
+    prompt: 'create a space from my newest 50 photos called Trips',
+    expect: { kind: 'create_space_from_source', slotsSurvive: true, slots: { spaceName: 'Trips' } },
+  },
+  {
+    // Disambiguation: an album source stays with create_album_from_source.
+    id: 'recall.createspace.album-disambig',
+    category: 'recall',
+    prompt: 'make an album of my newest 50 photos',
+    expect: { kind: 'create_album_from_source' },
+  },
+  {
+    // Disambiguation: a member add stays with manage_space_members.
+    id: 'recall.createspace.member-disambig',
+    category: 'recall',
+    prompt: 'add Alex to the Family space',
+    expect: { kind: 'manage_space_members' },
+  },
 ];
