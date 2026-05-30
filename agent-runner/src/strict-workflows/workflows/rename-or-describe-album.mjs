@@ -21,7 +21,7 @@ const normalizeAlbumRef = (value) =>
 const RENAME_PATTERN =
   /\b(?:rename|re-?name)\s+(?<albumRef>.+?)\s+to\s+(?<newName>.+?)(?:\s+and\s+(?:add|set|give\s+it)\s+(?:a\s+)?description.*)?$/i;
 const DESCRIBE_PATTERN =
-  /\b(?:change|set|update|add|edit)\s+(?:the\s+|a\s+|its\s+)?description\s+(?:on|of|for|to)\s+(?<albumRef>.+?)$/i;
+  /\b(?:change|set|update|add|edit)\s+(?:the\s+|a\s+|its\s+)?description\s+(?:on|of|for)\s+(?<albumRef>.+?)(?:\s+to\s+(?<description>.+))?$/i;
 
 // Conservative fast-path guard: a reference to loose photos ("recent trip
 // photos", "my pictures") is NOT an album. Declining here keeps prompts the
@@ -52,7 +52,8 @@ const tryDescribe = (prompt) => {
   if (!albumRef || looksLikeLooseAssetReference(albumRef)) {
     return undefined;
   }
-  return { albumRef };
+  const description = clean(match.groups.description).replace(/[.?!]+$/u, '').trim();
+  return description ? { albumRef, description } : { albumRef };
 };
 
 const resolveAlbum = async ({ client, albumRef, signal }) => {
@@ -78,7 +79,11 @@ export const renameOrDescribeAlbumWorkflow = () => ({
     }
     const describe = tryDescribe(text);
     if (describe) {
-      return { slots: { albumRef: describe.albumRef } };
+      const slots = { albumRef: describe.albumRef };
+      if (describe.description) {
+        slots.description = describe.description;
+      }
+      return { slots };
     }
     return undefined;
   },
