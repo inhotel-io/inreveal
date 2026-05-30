@@ -123,4 +123,35 @@ export default [
     // Needs library data; tolerate variance across repeats.
     threshold: 0.5,
   },
+  {
+    // rename_or_describe_album end-to-end (describe arm): proposes an album.update
+    // setting a description on a REAL album — proposed, never applied. `{album}`
+    // resolves read-only to the user's most-populated album. Exercises the
+    // describe-slot value capture all the way to a persisted plan.
+    // NOTE: an add_photos plan scenario was intentionally NOT added — on the
+    // current build the recency source ("newest 20") fails in the workflow's
+    // resolveAssetSearchFilters call, so add stays routing-only (l3.recall.add.*)
+    // until that's fixed. Don't assert a known-broken path as "expected".
+    id: 'l3.plan.describe.discovered',
+    category: 'l3.plan',
+    prompt: 'set the description on the {album} album to Favorite memories',
+    expect: { kind: 'rename_or_describe_album', planProposed: true },
+    threshold: 0.5,
+  },
+
+  // --- multi-turn: ask (needs_input) -> supply a place -> plan ---------------
+  // Turn 1 is correctly ambiguous: with no place and no single confident trip,
+  // the workflow asks for a place/dates rather than guessing (verified live).
+  // Turn 2 supplies a concrete place and the workflow proposes a plan. Tests the
+  // converse() path — a session recovering from needs_input and planning on the
+  // next turn (never applied). (The candidate-selection *resume* path — "the
+  // first one" — needs a place with several distinct trips, which is
+  // library-specific, so we exercise the robust place-recovery flow instead.)
+  {
+    id: 'l3.multiturn.trip.recover',
+    category: 'l3.multiturn',
+    turns: ['Make an album for my recent trip', 'Create an album for my recent trip to USA'],
+    expect: { kind: 'create_recent_trip_album', planProposed: true },
+    threshold: 0.5,
+  },
 ];
