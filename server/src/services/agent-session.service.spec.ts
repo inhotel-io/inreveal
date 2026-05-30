@@ -66,8 +66,8 @@ const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   assetScope: { owned: true, sharedSpaces: false, locked: false },
   writeScope: carefulWriteScope,
   limits: {
-    maxAssetsPerToolCall: 200,
-    maxAssetsPerSession: 2000,
+    maxAssetsPerToolCall: 1000,
+    maxAssetsPerSession: 10000,
     maxPreviewsPerToolCall: 0,
     maxPreviewsPerSession: 0,
     maxOriginalsPerToolCall: 0,
@@ -87,8 +87,8 @@ const visualOrganizerPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   assetScope: { owned: true, sharedSpaces: true, locked: false },
   writeScope: expandedWriteScope,
   limits: {
-    maxAssetsPerToolCall: 500,
-    maxAssetsPerSession: 5000,
+    maxAssetsPerToolCall: 2000,
+    maxAssetsPerSession: 20000,
     maxPreviewsPerToolCall: 100,
     maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 0,
@@ -108,8 +108,8 @@ const localPowerUserPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   assetScope: { owned: true, sharedSpaces: true, locked: false },
   writeScope: expandedWriteScope,
   limits: {
-    maxAssetsPerToolCall: 500,
-    maxAssetsPerSession: 5000,
+    maxAssetsPerToolCall: 5000,
+    maxAssetsPerSession: 50000,
     maxPreviewsPerToolCall: 100,
     maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 25,
