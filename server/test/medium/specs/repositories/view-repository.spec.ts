@@ -80,25 +80,18 @@ describe(ViewRepository.name, () => {
       expect(result).toContain(`/archive/2025/${role}-direct`);
     });
 
-    it.each(ALL_ROLES)(
-      'GRANT — space %s sees folders for assets in a library linked to the space',
-      async (role) => {
-        const { ctx, sut } = setup();
-        const { member } = await seedLinkedLibraryAsset(ctx, role, `/external/cam/${role}-lib/clip.jpg`);
+    it.each(ALL_ROLES)('GRANT — space %s sees folders for assets in a library linked to the space', async (role) => {
+      const { ctx, sut } = setup();
+      const { member } = await seedLinkedLibraryAsset(ctx, role, `/external/cam/${role}-lib/clip.jpg`);
 
-        const result = await sut.getUniqueOriginalPaths(member.id);
+      const result = await sut.getUniqueOriginalPaths(member.id);
 
-        expect(result).toContain(`/external/cam/${role}-lib`);
-      },
-    );
+      expect(result).toContain(`/external/cam/${role}-lib`);
+    });
 
     it('GRANT — member sees the folder even when showInTimeline is disabled', async () => {
       const { ctx, sut } = setup();
-      const { member, space } = await seedDirectSpaceAsset(
-        ctx,
-        SharedSpaceRole.Viewer,
-        '/archive/no-timeline/IMG.jpg',
-      );
+      const { member, space } = await seedDirectSpaceAsset(ctx, SharedSpaceRole.Viewer, '/archive/no-timeline/IMG.jpg');
       await ctx.database
         .updateTable('shared_space_member')
         .set({ showInTimeline: false })
