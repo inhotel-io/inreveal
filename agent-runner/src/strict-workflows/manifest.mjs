@@ -103,11 +103,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     flow: 'hybrid',
     title: 'Archive or unarchive photos',
     classifierDescription:
-      'User wants to archive or unarchive a metadata-describable set of photos (recency/date/type bound).',
+      'User wants to archive or unarchive a metadata-describable set of photos (recency/date/type bound) or a named entity (people, place, tag, camera, rating, favorites).',
     positiveExamples: Object.freeze([
       'Archive my newest 50 photos',
       'Unarchive my last 10 photos',
       'Move my 2024 videos out of the archive',
+      'Archive my Berlin photos',
     ]),
     negativeExamples: Object.freeze([
       'Archive the best photos from last weekend',
@@ -126,7 +127,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
         description: 'Metadata description of the photos to (un)archive.',
       }),
     }),
-    requiredReadTools: Object.freeze(['searchAssets']),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
@@ -140,11 +141,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     kind: 'favorite_assets',
     flow: 'hybrid',
     title: 'Favorite or unfavorite photos',
-    classifierDescription: 'User wants to favorite or unfavorite a metadata-describable set of photos.',
+    classifierDescription: 'User wants to favorite or unfavorite a metadata-describable set of photos or a named entity (people, place, tag, camera, rating, favorites).',
     positiveExamples: Object.freeze([
       'Favorite my newest 10 photos',
       'Unfavorite my last 5 photos',
       'Like my newest 20 photos',
+      'Favorite my 5-star photos',
     ]),
     negativeExamples: Object.freeze([
       'Favorite the best 3 photos from last weekend',
@@ -163,7 +165,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
         description: 'Metadata description of the photos to (un)favorite.',
       }),
     }),
-    requiredReadTools: Object.freeze(['searchAssets']),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
@@ -178,11 +180,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     flow: 'hybrid',
     title: 'Tag photos (add)',
     classifierDescription:
-      'User wants to add a tag to a metadata-describable set of photos (add-only; no tag removal).',
+      'User wants to add a tag to a metadata-describable set of photos (add-only; no tag removal) or a named entity (people, place, tag, camera, rating, favorites).',
     positiveExamples: Object.freeze([
       'Tag my newest 20 photos as Travel',
       'Add the tag Spring Break to my newest 50 photos',
       'Add the Travel tag to my last 10 photos',
+      'Tag photos of Alex as Family',
     ]),
     negativeExamples: Object.freeze([
       'Remove the Travel tag from my newest 20',
@@ -197,7 +200,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
       }),
       tagName: Object.freeze({ type: 'string', required: true, description: 'Tag name to add.' }),
     }),
-    requiredReadTools: Object.freeze(['searchAssets']),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
@@ -308,11 +311,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     flow: 'hybrid',
     title: 'Create album from a source',
     classifierDescription:
-      'User wants a NEW album built from a metadata-describable set of photos (recency/date/type), not a recent trip.',
+      'User wants a NEW album built from a metadata-describable set of photos (recency, date, type, or a named entity like people/tag/camera/rating/favorites), not a recent trip, vacation, or getaway.',
     positiveExamples: Object.freeze([
       'Make an album of my newest 50 photos',
       'Create an album from my 2024 photos called Best of 2024',
       'Build an album of my newest 100 photos',
+      'Make an album of my Sony photos',
     ]),
     negativeExamples: Object.freeze([
       'Create an album for my recent trip to USA',
@@ -331,7 +335,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
         description: 'Album name (defaults to New Album).',
       }),
     }),
-    requiredReadTools: Object.freeze(['searchAssets']),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
     planTool: 'proposeAlbumFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
