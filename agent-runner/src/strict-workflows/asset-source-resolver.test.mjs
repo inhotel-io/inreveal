@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { resolveAssetSource } from './asset-source-resolver.mjs';
+import { parseDateRange, resolveAssetSource } from './asset-source-resolver.mjs';
 import { makeContractClient } from './workflows/contract-fixtures.mjs';
+
+// A Friday, for deterministic relative-date math.
+const NOW = new Date('2026-05-15T12:00:00.000Z');
+const iso = (range) => (range ? { after: range.takenAfter.toISOString(), before: range.takenBefore.toISOString() } : range);
+
+describe('parseDateRange', () => {
+  for (const [phrase, after, before] of [
+    ['photos from 2024', '2024-01-01T00:00:00.000Z', '2024-12-31T23:59:59.999Z'],
+    ['in May 2024', '2024-05-01T00:00:00.000Z', '2024-05-31T23:59:59.999Z'],
+    ['yesterday', '2026-05-14T00:00:00.000Z', '2026-05-14T23:59:59.999Z'],
+    ['this month', '2026-05-01T00:00:00.000Z', '2026-05-31T23:59:59.999Z'],
+    ['last month', '2026-04-01T00:00:00.000Z', '2026-04-30T23:59:59.999Z'],
+    ['last week', '2026-05-04T00:00:00.000Z', '2026-05-10T23:59:59.999Z'],
+    ['last weekend', '2026-05-09T00:00:00.000Z', '2026-05-10T23:59:59.999Z'],
+  ]) {
+    it(`parses "${phrase}"`, () => {
+      assert.deepEqual(iso(parseDateRange(phrase, NOW)), { after, before });
+    });
+  }
+
+  it('returns undefined for unparseable or date-less phrases', () => {
+    assert.equal(parseDateRange('sometime recently', NOW), undefined);
+    assert.equal(parseDateRange('my newest 20 photos', NOW), undefined);
+    assert.equal(parseDateRange('newest 20', NOW), undefined); // "20" is not a year
+  });
+});
 
 describe('resolveAssetSource', () => {
   it('resolves a recency source via a bounded metadata search (no query)', async () => {
@@ -25,11 +51,61 @@ describe('resolveAssetSource', () => {
     );
   });
 
-  it('hands off a non-recency source (no count / date / location) for now', async () => {
-    for (const source of ['Berlin photos from last weekend', 'newest photos', 'photos I took yesterday']) {
-      const result = await resolveAssetSource({ client: makeContractClient(), sourceDescription: source });
+  it('hands off an unbounded or qualified source (clean-source gate)', async () => {
+    for (const source of [
+      'newest photos', // recency keyword but no count → clean yet unbounded
+      'my photos', // all filler, no recency/date bound
+      'Berlin photos from last weekend', // location residual qualifies the source
+      'newest 20 Berlin photos', // recency + location residual → must NOT resolve newest-20-globally
+      'my videos from 2024', // type-specific noun is substantive until Slice 4
+      'photos of Alex from last week', // person residual
+    ]) {
+      const result = await resolveAssetSource({ client: makeContractClient(), sourceDescription: source, now: NOW });
       assert.equal(result.status, 'handoff', source);
     }
+  });
+
+  it('resolves a clean date source into a metadata search with ISO date filters', async () => {
+    const client = makeContractClient({ handleAssetCount: 5 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my photos from 2024', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, {
+      mode: 'metadata',
+      order: 'desc',
+      limit: 1000,
+      filters: { takenAfter: '2024-01-01T00:00:00.000Z', takenBefore: '2024-12-31T23:59:59.999Z' },
+      detail: 'handle',
+    });
+  });
+
+  it('combines recency and date (limit + filters)', async () => {
+    const client = makeContractClient();
+    await resolveAssetSource({ client, sourceDescription: 'newest 20 photos from 2024', now: NOW });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(search.args.limit, 20);
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+  });
+
+  it('resolves a relative-date source ("photos I took yesterday")', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'the photos I took yesterday', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2026-05-14T00:00:00.000Z',
+      takenBefore: '2026-05-14T23:59:59.999Z',
+    });
+  });
+
+  it('keeps recency-only calls unchanged (no filters key)', async () => {
+    const client = makeContractClient();
+    await resolveAssetSource({ client, sourceDescription: 'my newest 20 photos', now: NOW });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, { mode: 'metadata', order: 'desc', limit: 20, detail: 'handle' });
   });
 
   it('reports empty when the recency source resolves to zero assets', async () => {
