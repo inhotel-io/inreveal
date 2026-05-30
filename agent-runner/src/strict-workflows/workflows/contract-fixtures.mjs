@@ -196,11 +196,26 @@ const SPACE_OP_VALIDATORS = {
   'space.updateMemberRole': validateSpaceUpdateMemberRole,
 };
 
+const validateAlbumRemoveAssets = (op) => {
+  if (op.targetKind !== 'existing_album') fail('album.removeAssets requires targetKind "existing_album"');
+  if (!op.targetId) fail('album.removeAssets requires targetId');
+  if (op.temporaryTargetId !== undefined) fail('album.removeAssets must not set temporaryTargetId');
+  const source = op.assetSource;
+  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
+    fail('album.removeAssets requires an assetSource selectionHandle');
+  }
+};
+
+const ALBUM_OP_VALIDATORS = {
+  'album.removeAssets': validateAlbumRemoveAssets,
+};
+
 const validateOperations = (operations) => {
   if (!Array.isArray(operations) || operations.length === 0) fail('operations must be a non-empty array');
   for (const op of operations) {
     if (!op || !KNOWN_OPERATION_TYPES.has(op.type)) fail(`unknown operation type "${op?.type}"`);
     SPACE_OP_VALIDATORS[op.type]?.(op);
+    ALBUM_OP_VALIDATORS[op.type]?.(op);
   }
 };
 
