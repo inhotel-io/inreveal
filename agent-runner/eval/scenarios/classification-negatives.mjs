@@ -82,4 +82,13 @@ export default [
     prompt: 'remove the best ones from Family',
     expect: { kind: 'none' },
   },
+
+  // create_space_from_source boundaries -------------------------------------
+  {
+    // Subjective space source declines — must not route to create_space_from_source.
+    id: 'neg.createspace.subjective',
+    category: 'negatives',
+    prompt: 'create a space of the best photos from last weekend',
+    expect: { kind: 'none' },
+  },
 ];
