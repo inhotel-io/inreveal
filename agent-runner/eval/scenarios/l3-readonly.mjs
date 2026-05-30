@@ -62,6 +62,24 @@ export default [
     prompt: 'set the description on my Italy album to Summer 2026 memories',
     expect: { kind: 'rename_or_describe_album' },
   },
+  {
+    id: 'l3.recall.archive',
+    category: 'l3.recall',
+    prompt: 'archive my newest 20 photos',
+    expect: { kind: 'archive_assets' },
+  },
+  {
+    id: 'l3.recall.favorite',
+    category: 'l3.recall',
+    prompt: 'favorite my newest 10 photos',
+    expect: { kind: 'favorite_assets' },
+  },
+  {
+    id: 'l3.recall.tag',
+    category: 'l3.recall',
+    prompt: 'tag my newest 20 photos as "eval-l3"',
+    expect: { kind: 'tag_assets' },
+  },
 
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
@@ -108,6 +126,20 @@ export default [
     prompt: 'delete all my screenshots',
     expect: { kind: 'none' },
   },
+  {
+    // Subjective archive source — declines (regex) / manifest negative (LLM).
+    id: 'l3.neg.archive.subjective',
+    category: 'l3.negatives',
+    prompt: 'archive the best ones',
+    expect: { kind: 'none' },
+  },
+  {
+    // Tag REMOVAL is out of scope (add-only) — must not route to tag_assets.
+    id: 'l3.neg.tag.removal',
+    category: 'l3.negatives',
+    prompt: 'remove the Travel tag from my newest 20',
+    expect: { kind: 'none' },
+  },
 
   // --- plan-proposed: end-to-end against a real library ---------------------
   // Routes to the trip workflow AND proposes a reviewable plan (never applied).
@@ -144,6 +176,32 @@ export default [
     category: 'l3.plan',
     prompt: 'add my newest 20 photos to {album}',
     expect: { kind: 'add_photos_to_album', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // archive_assets end-to-end: a recency source resolves to a selection handle
+    // and proposes a batch asset.setArchive — proposed, never applied.
+    id: 'l3.plan.archive.recency',
+    category: 'l3.plan',
+    prompt: 'archive my newest 20 photos',
+    expect: { kind: 'archive_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // favorite_assets end-to-end: recency → batch asset.setFavorite plan.
+    id: 'l3.plan.favorite.recency',
+    category: 'l3.plan',
+    prompt: 'favorite my newest 10 photos',
+    expect: { kind: 'favorite_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // tag_assets end-to-end: recency → batch asset.addTag plan (a distinctive tag
+    // name; the plan is proposed only, so no tag is created).
+    id: 'l3.plan.tag.recency',
+    category: 'l3.plan',
+    prompt: 'tag my newest 20 photos as "eval-l3"',
+    expect: { kind: 'tag_assets', planProposed: true },
     threshold: 0.5,
   },
 
