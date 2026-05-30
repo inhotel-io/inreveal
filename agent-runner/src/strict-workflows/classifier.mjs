@@ -22,10 +22,16 @@
 // stays out of the unit tests; the runtime injects the real adapter built on
 // `@earendil-works/pi-ai`'s one-shot `complete()` API.
 
-// Cheap imperative/creation-verb heuristic. Keeps pure-acknowledgement chatter
-// (e.g. "thanks, that looks great") off the LLM entirely.
+// Cheap heuristic that keeps pure-acknowledgement chatter (e.g. "thanks, that
+// looks great") off the LLM while letting any plausibly-actionable request
+// through. It leans PERMISSIVE on purpose: a false negative silently drops a
+// real request (recall miss), while a false positive costs only one tool-free
+// LLM call that safely returns `none`. So we admit on an action verb, a
+// photo-domain noun, or a question — and reject only when none of those appear.
 const actionableVerbPattern =
-  /\b(?:create|make|build|put|add|set|rename|name|call|tag|label|archive|move|organi[sz]e|sort|group|gather|collect|compile|assemble|turn|combine|merge|fill|describe|update|change|remove|delete|invite|share|manage)\b/i;
+  /\b(?:create|make|build|put|add|set|rename|name|call|tag|label|archive|move|organi[sz]e|sort|group|gather|collect|compile|assemble|turn|combine|merge|fill|describe|update|change|remove|delete|invite|share|manage|throw|stick|drop|toss|dump|chuck|slap|pop|load|import|pull|save|stash|file)\b/i;
+const domainNounPattern =
+  /\b(?:album|albums|photo|photos|pic|pics|picture|pictures|image|images|shot|shots|snap|snaps|space|spaces|favou?rite|favou?rites|highlight|highlights)\b/i;
 const questionPattern = /\?\s*$/;
 const acknowledgementPattern =
   /^\s*(?:thanks?(?:\s+you)?|thank you|great|cool|nice|awesome|perfect|ok(?:ay)?|sounds good|got it|looks good|that(?:'s| is) (?:great|perfect|fine))\b/i;
@@ -38,7 +44,7 @@ export const looksActionable = (prompt) => {
   if (acknowledgementPattern.test(text)) {
     return false;
   }
-  return actionableVerbPattern.test(text) || questionPattern.test(text);
+  return actionableVerbPattern.test(text) || domainNounPattern.test(text) || questionPattern.test(text);
 };
 
 // Structured-output contract returned by the classifier. `slots` is free-form
@@ -53,8 +59,15 @@ export const buildClassifierPrompt = (manifest) => {
   const entries = (manifest ?? []).map((entry) => {
     const positives = (entry.positiveExamples ?? []).map((example) => `    + ${example}`).join('\n');
     const negatives = (entry.negativeExamples ?? []).map((example) => `    - ${example}`).join('\n');
+    const slotKeys = Object.entries(entry.slots ?? {});
+    const slots = slotKeys.length
+      ? `  Slots — use these EXACT keys (omit any you cannot fill, never invent keys): ${slotKeys
+          .map(([key, schema]) => `${key} (${schema?.description ?? 'string'})`)
+          .join('; ')}`
+      : undefined;
     return [
       `- ${entry.kind}: ${entry.classifierDescription ?? ''}`.trimEnd(),
+      slots,
       positives ? `  Matches:\n${positives}` : undefined,
       negatives ? `  Does NOT match:\n${negatives}` : undefined,
     ]
@@ -73,7 +86,7 @@ export const buildClassifierPrompt = (manifest) => {
     '- Return "none" unless the message clearly maps to one workflow.',
     '- If the message blends multiple intents, pick the single dominant one, or "none" if unclear.',
     '- Only set confidence "high" when you are sure; otherwise use "low".',
-    '- Extract relevant slot values (e.g. an explicit album name, a place) as strings.',
+    '- For slots, use ONLY the exact slot keys listed under the chosen workflow; omit any you cannot fill and never invent new keys.',
     '- You have no tools and cannot take any action; you only label intent.',
   ].join('\n');
 };
