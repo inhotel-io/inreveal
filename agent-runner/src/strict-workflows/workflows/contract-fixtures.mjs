@@ -189,11 +189,22 @@ const validateSpaceUpdateMemberRole = (op) => {
   if (!ASSIGNABLE_SPACE_ROLES.has(op.payload?.role)) fail('space.updateMemberRole role must be editor or viewer');
 };
 
+const validateSpaceRemoveAssets = (op) => {
+  if (op.targetKind !== 'existing_space') fail('space.removeAssets requires targetKind "existing_space"');
+  if (!op.targetId) fail('space.removeAssets requires targetId');
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('space.removeAssets payload must be empty');
+  const source = op.assetSource;
+  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
+    fail('space.removeAssets requires an assetSource selectionHandle');
+  }
+};
+
 const SPACE_OP_VALIDATORS = {
   'space.updateDetails': validateSpaceUpdateDetails,
   'space.addMembers': validateSpaceAddMembers,
   'space.removeMembers': validateSpaceRemoveMembers,
   'space.updateMemberRole': validateSpaceUpdateMemberRole,
+  'space.removeAssets': validateSpaceRemoveAssets,
 };
 
 const validateAlbumRemoveAssets = (op) => {
@@ -297,6 +308,17 @@ export const makeContractClient = (config = {}) => {
     proposeAssetBatchFromSelection: (args) => {
       validateBatchAction(args?.action);
       if (!args?.selectionHandleId) fail('proposeAssetBatchFromSelection requires selectionHandleId');
+      return ok(config);
+    },
+    proposeAddAssetsToSpaceFromSearch: (args) => {
+      if (Boolean(args?.spaceId) === Boolean(args?.spaceName)) {
+        fail('proposeAddAssetsToSpaceFromSearch requires exactly one of spaceId or spaceName');
+      }
+      const source = args?.assetSource;
+      if (!source || typeof source !== 'object') fail('proposeAddAssetsToSpaceFromSearch requires an assetSource');
+      if (source.kind === 'selectionHandle' && !source.selectionHandleId) {
+        fail('selectionHandle assetSource requires selectionHandleId');
+      }
       return ok(config);
     },
     proposeAlbumOperations: (args) => {

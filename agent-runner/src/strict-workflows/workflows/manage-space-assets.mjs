@@ -1,5 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
-import { handoffOpen } from '../protocol.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'manage_space_assets';
 
@@ -40,6 +41,14 @@ const ADD_PATTERN = /\b(?:add|put|move|stick)\s+(?<source>.+)\s+(?:to|into)\s+(?
 const REMOVE_PATTERN = /\b(?:remove|take|pull)\s+(?<source>.+)\s+(?:from|out\s+of)\s+(?<space>.+?space)\b/i;
 
 const VALID_ACTIONS = new Set(['add', 'remove']);
+
+const resolveSpace = async ({ client, spaceRef, signal }) => {
+  const ref = normalizeSpaceRef(spaceRef);
+  const result = await client.call('listSpaces', {}, { signal });
+  const spaces = Array.isArray(result?.spaces) ? result.spaces : [];
+  const matches = spaces.filter((space) => clean(space?.name).toLowerCase() === ref.toLowerCase());
+  return { ref, spaces, matches };
+};
 
 const tryMatch = (prompt) => {
   let action;
@@ -96,8 +105,93 @@ export const manageSpaceAssetsWorkflow = () => ({
     return { action, spaceRef, sourceDescription };
   },
 
-  // Execution lands in Slice 14.
-  async run() {
-    return handoffOpen({ reason: 'manage_space_assets execution is implemented in Slice 14.' });
+  async run({ client, slots, signal }) {
+    const action = clean(slots?.action).toLowerCase();
+    const sourceDescription = cleanSource(slots?.sourceDescription);
+
+    // 1. Resolve the space (none/ambiguous → ask).
+    let ref, matches;
+    try {
+      ({ ref, matches } = await resolveSpace({ client, spaceRef: slots?.spaceRef, signal }));
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The space lookup failed.') });
+    }
+    if (matches.length === 0) {
+      return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
+    }
+    if (matches.length > 1) {
+      return needsInput({ text: `Multiple spaces are called "${ref}". Which one do you mean?` });
+    }
+    const space = matches[0];
+    const spaceName = clean(space.name) || ref;
+
+    // 2. Resolve the source into a selection handle.
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'needs_input') {
+      return needsInput({ text: resolution.text });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}" to ${action === 'remove' ? 'remove from' : 'add to'} the "${spaceName}" space. Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 3. Propose ADD (proposeAddAssetsToSpaceFromSearch, spaceId only) or REMOVE
+    //    (proposeAlbumOperations space.removeAssets). No raw asset ids reach the model.
+    let planResult;
+    let planTool;
+    try {
+      if (action === 'remove') {
+        planTool = 'proposeAlbumOperations';
+        planResult = await client.call(
+          'proposeAlbumOperations',
+          {
+            summary: `Remove matching photos from the "${spaceName}" space.`,
+            operations: [
+              {
+                type: 'space.removeAssets',
+                summary: 'Remove matching photos.',
+                targetKind: 'existing_space',
+                targetId: space.id,
+                assetSource: { kind: 'selectionHandle', selectionHandleId },
+                payload: {},
+              },
+            ],
+          },
+          { signal },
+        );
+      } else {
+        planTool = 'proposeAddAssetsToSpaceFromSearch';
+        planResult = await client.call(
+          'proposeAddAssetsToSpaceFromSearch',
+          {
+            summary: `Add matching photos to the "${spaceName}" space.`,
+            spaceId: space.id,
+            assetSource: { kind: 'selectionHandle', selectionHandleId },
+          },
+          { signal },
+        );
+      }
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    const verb = action === 'remove' ? 'remove' : 'add';
+    const preposition = action === 'remove' ? 'from' : 'to';
+    return gatePlanResult({
+      planResult,
+      planTool,
+      successText: `I prepared a plan to ${verb} ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'} ${preposition} the "${spaceName}" space. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, spaceName, assetCount, action },
+    });
   },
 });

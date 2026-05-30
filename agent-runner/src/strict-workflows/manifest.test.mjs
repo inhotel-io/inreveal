@@ -69,4 +69,16 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.negativeExamples.length > 0);
     assert.ok(entry.matrixRow.capability);
   });
+
+  it('describes manage_space_assets as a hybrid workflow with space and search tools', () => {
+    const entry = getWorkflowManifestEntry('manage_space_assets');
+    assert.equal(entry.flow, 'hybrid');
+    assert.ok(entry.planTool, 'planTool must be present');
+    assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
+    assert.ok(entry.requiredReadTools.includes('searchAssets'), 'requiredReadTools includes searchAssets');
+    assert.equal(entry.supportsContinuation, false);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
 });
