@@ -1,5 +1,6 @@
-import { SUBJECTIVE_PATTERN, parseDateRange } from '../asset-source-resolver.mjs';
-import { handoffOpen } from '../protocol.mjs';
+import { SUBJECTIVE_PATTERN, parseDateRange, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'update_asset_metadata';
 
@@ -182,6 +183,35 @@ const buildPayload = (rawSlots) => {
   return null;
 };
 
+// Field-specific before/after framing for the success copy + the plan summary target.
+const describeChange = (payload, assetCount) => {
+  const noun = assetCount === 1 ? 'photo' : 'photos';
+  const scope = `${assetCount} ${noun}`;
+  if (payload.description !== undefined) {
+    return payload.description === ''
+      ? { text: `clear the description on ${scope}`, target: 'description' }
+      : { text: `set the description on ${scope} to "${payload.description}"`, target: 'description' };
+  }
+  if (payload.rating !== undefined) {
+    return payload.rating === null
+      ? { text: `clear the rating on ${scope}`, target: 'rating' }
+      : { text: `set the rating on ${scope} to ${payload.rating} star${payload.rating === 1 ? '' : 's'}`, target: 'rating' };
+  }
+  if (payload.timeZone !== undefined) {
+    return { text: `set the timezone on ${scope} to ${payload.timeZone}`, target: 'timezone' };
+  }
+  if (payload.latitude !== undefined) {
+    return { text: `set the location on ${scope} to ${payload.latitude}, ${payload.longitude}`, target: 'location' };
+  }
+  if (payload.dateTimeOriginal !== undefined) {
+    return { text: `set the date on ${scope} to ${payload.dateTimeOriginal}`, target: 'date' };
+  }
+  if (payload.dateTimeRelative !== undefined) {
+    return { text: `shift the date on ${scope} by ${payload.dateTimeRelative} minutes`, target: 'date' };
+  }
+  return { text: `update metadata on ${scope}`, target: 'metadata' };
+};
+
 export const updateAssetMetadataWorkflow = () => ({
   kind: KIND,
   flow: 'hybrid',
@@ -204,8 +234,57 @@ export const updateAssetMetadataWorkflow = () => ({
     return payload ? { sourceDescription, payload } : null;
   },
 
-  // Execution lands in Slice 8.
-  async run() {
-    return handoffOpen({ reason: 'update_asset_metadata execution is implemented in Slice 8.' });
+  async run({ client, slots, signal }) {
+    const sourceDescription = clean(slots?.sourceDescription);
+    const payload = slots?.payload && typeof slots.payload === 'object' ? slots.payload : null;
+    if (!sourceDescription || !payload || Object.keys(payload).length === 0) {
+      return needsInput({ text: 'Tell me which photos to update and what to change.' });
+    }
+    // Defensive half-coordinate / place-name guard (parseSlots already prevents it).
+    if ((payload.latitude !== undefined) !== (payload.longitude !== undefined)) {
+      return needsInput({ text: 'I need both a latitude and a longitude to set a location.' });
+    }
+
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'needs_input') {
+      return needsInput({ text: resolution.text });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    const change = describeChange(payload, assetCount);
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAssetBatchFromSelection',
+        {
+          summary: `Update photo ${change.target}.`,
+          action: { type: 'asset.updateMetadata', ...payload },
+          selectionHandleId,
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeAssetBatchFromSelection',
+      successText: `I prepared a plan to ${change.text}. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, assetCount, target: change.target },
+    });
   },
 });
