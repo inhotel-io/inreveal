@@ -162,6 +162,7 @@ const makeSession = (overrides: Partial<AgentSession> = {}): AgentSession => {
     runnerEndpoint: 'https://runner.example.com/sessions',
     runnerSessionId: 'runner-session-id',
     runnerCapabilitiesSnapshot: { tools: ['album.create'] },
+    workflowState: null,
     status: AgentSessionStatus.Created,
     initialContextSnapshot,
     title: null,
@@ -972,7 +973,11 @@ describe(AgentSessionService.name, () => {
 
     expect(repository.getByUserId).toHaveBeenCalledWith(auth.user.id);
     expect(credentialService.getById).not.toHaveBeenCalled();
-    expect(result).toEqual(sessions.map(({ userId: _userId, updateId: _updateId, ...session }) => session));
+    expect(result).toEqual(
+      sessions.map(
+        ({ userId: _userId, updateId: _updateId, workflowState: _workflowState, ...session }) => session,
+      ),
+    );
   });
 
   it('gets owned session preserving stored snapshots without consulting current credential metadata', async () => {

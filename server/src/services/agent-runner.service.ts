@@ -269,7 +269,10 @@ export class AgentRunnerService {
         kind: AgentSessionActivityEventKind.StartProcessing,
         failureSummary: 'The assistant stopped while processing the message.',
       };
-      const baselineToolCallIds = await this.listToolCallIds(sessionId);
+      const [baselineToolCallIds, workflowState] = await Promise.all([
+        this.listToolCallIds(sessionId),
+        this.loadWorkflowState(userId, sessionId),
+      ]);
 
       this.createActivityEvent(userId, sessionId, {
         kind: AgentSessionActivityEventKind.StartProcessing,
@@ -284,7 +287,7 @@ export class AgentRunnerService {
           url: runnerUrl,
           runnerSessionId,
           timeoutMs: runnerMessageStreamTimeoutMs,
-          body: { gallerySessionId: sessionId, messageId, content },
+          body: { gallerySessionId: sessionId, messageId, content, ...(workflowState === undefined ? {} : { workflowState }) },
         }),
         emptyStreamMessage: 'Agent runner message stream ended before completion',
         cleanupContext: { activityContext, baselineToolCallIds, approvedToolResultFailed: false },
@@ -319,18 +322,22 @@ export class AgentRunnerService {
         throw new BadRequestException('Agent runner is not configured');
       }
 
+      const [baselineToolCallIds, workflowState] = await Promise.all([
+        this.listToolCallIds(sessionId),
+        this.loadWorkflowState(userId, sessionId),
+      ]);
       const body = {
         gallerySessionId: sessionId,
         ...(toolCallId ? { toolCallId } : {}),
         ...(approvalDecision ? { approvalDecision } : {}),
         ...(toolResult === undefined ? {} : { toolResult }),
+        ...(workflowState === undefined ? {} : { workflowState }),
       };
 
       const activityContext = {
         kind: AgentSessionActivityEventKind.RunnerRecovery,
         failureSummary: 'The assistant stopped while resuming after approval.',
       };
-      const baselineToolCallIds = await this.listToolCallIds(sessionId);
 
       this.createActivityEvent(userId, sessionId, {
         kind: AgentSessionActivityEventKind.RunnerRecovery,
@@ -387,6 +394,11 @@ export class AgentRunnerService {
 
       if (event.type === 'activity') {
         void this.createRunnerActivityEvent(userId, sessionId, event);
+        continue;
+      }
+
+      if (event.type === 'workflow-state-update') {
+        await this.persistWorkflowState(userId, sessionId, event.workflowState);
         continue;
       }
 
@@ -474,6 +486,24 @@ export class AgentRunnerService {
           : 'The assistant runner stopped while processing the message.',
       createdAt: this.toIsoNow(),
     });
+  }
+
+  private async loadWorkflowState(userId: string, sessionId: string): Promise<object | null | undefined> {
+    try {
+      const session = await this.sessionRepository.getById(userId, sessionId);
+      return session?.workflowState ?? undefined;
+    } catch {
+      // Rehydration is best-effort: a read failure must not block dispatching the turn.
+      return undefined;
+    }
+  }
+
+  private async persistWorkflowState(userId: string, sessionId: string, workflowState: object | null) {
+    try {
+      await this.sessionRepository.setWorkflowState(userId, sessionId, workflowState);
+    } catch {
+      // Workflow-state durability is best-effort and must not abort the active assistant stream.
+    }
   }
 
   private async listToolCallIds(sessionId: string): Promise<Set<string> | undefined> {
