@@ -297,8 +297,13 @@ const createFakeDependencies = ({ promptGate, sessionAbortGate, mcpToolNames = [
     },
   };
 
+  // Default classifier intent: 'none' so the LLM path is deterministic and never
+  // reaches a real provider. Recall tests override `ai.classifyIntent`. This is
+  // the minimal-perturbation way to keep the default 'hybrid' router mode while
+  // making existing tests deterministic (no real model call).
   const ai = {
     getModel: (provider, model) => (provider === 'openai' ? { provider, id: model, source: 'builtin' } : undefined),
+    classifyIntent: async () => ({ workflow: 'none', slots: {}, confidence: 'low' }),
   };
 
   return { sdk, ai, calls, session };
@@ -347,6 +352,7 @@ const createStrictWorkflowFetch = ({
   },
   expectedAlbumName = 'USA Trip',
   expectedSelectionHandleId = strictTripCandidateHandleId,
+  placeHint = 'USA',
 } = {}) => {
   const calls = [];
   const fetchImplementation = async (url, init) => {
@@ -357,7 +363,7 @@ const createStrictWorkflowFetch = ({
     const args = body?.params?.arguments ?? {};
 
     if (name === 'findTripCandidates') {
-      assert.deepEqual(args, { placeHint: 'USA' });
+      assert.deepEqual(args, { placeHint });
       return new Response(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -365,7 +371,7 @@ const createStrictWorkflowFetch = ({
           result: {
             structuredContent: {
               status: 'success',
-              summary: `Found ${candidates.length} trip candidate(s) matching "USA".`,
+              summary: `Found ${candidates.length} trip candidate(s) matching "${placeHint}".`,
               recommendation,
               candidates,
             },
@@ -1107,6 +1113,100 @@ describe('pi runtime adapter', () => {
 
     assert.deepEqual(mcpCalls, []);
     assert.deepEqual(calls.prompts, ['Organize my photos.']);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+  });
+
+  it('routes an LLM-classified paraphrase through the strict workflow (recall)', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    // The regex fast-path misses this paraphrase ("put my Japan trip ... into an
+    // album"); the classifier recovers it via structured output.
+    ai.classifyIntent = async () => ({
+      workflow: 'create_recent_trip_album',
+      slots: { placeHint: 'Japan' },
+      confidence: 'high',
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({
+      candidates: [makeStrictTripCandidate({ placeLabels: ['Kyoto, Japan'] })],
+      recommendation: {
+        action: 'use_top_candidate',
+        candidateDedupeKey: 'trip:usa:new-york:2026-05-03:2026-05-12',
+        reason: 'The only readable trip candidate is high confidence.',
+      },
+      expectedAlbumName: 'Japan Trip',
+      placeHint: 'Japan',
+    });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'put my Japan trip from last week into an album' }] },
+        }),
+      ),
+    );
+
+    assert.equal(calls.prompts.length, 0);
+    assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+    assert.match(events.at(-1).content.blocks[0].text, /Review the plan before applying it/);
+  });
+
+  it('falls through to the provider when STRICT_ROUTER_MODE=regex disables the LLM path', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    // Even with a high-confidence classifier result available, regex mode never
+    // calls it, so the paraphrase falls through to open orchestration.
+    ai.classifyIntent = async () => ({
+      workflow: 'create_recent_trip_album',
+      slots: { placeHint: 'Japan' },
+      confidence: 'high',
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch({ placeHint: 'Japan' });
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation, routerMode: 'regex' });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'put my Japan trip from last week into an album' }] },
+        }),
+      ),
+    );
+
+    assert.deepEqual(mcpCalls, []);
+    assert.deepEqual(calls.prompts, ['put my Japan trip from last week into an album']);
+    assert.equal(events.at(-1).type, 'assistant-message-completed');
+  });
+
+  it('falls through to the provider when classifier slots fail parseSlots', async () => {
+    const { sdk, ai, calls } = createFakeDependencies({
+      mcpToolNames: ['mcp_gallery_findTripCandidates', 'mcp_gallery_proposeAlbumFromSelection'],
+    });
+    // A known workflow but slots that normalize away to nothing (no usable name
+    // or place hint) → parseSlots returns null → fall through, no plan.
+    ai.classifyIntent = async () => ({
+      workflow: 'create_recent_trip_album',
+      slots: { placeHint: 'somewhere nice' },
+      confidence: 'high',
+    });
+    const { calls: mcpCalls, fetchImplementation } = createStrictWorkflowFetch();
+    const runtime = createPiRuntime({ sdk, ai, fetch: fetchImplementation });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'put my recent vacation somewhere nice into an album set' }] },
+        }),
+      ),
+    );
+
+    assert.deepEqual(mcpCalls, []);
+    assert.equal(calls.prompts.length, 1);
     assert.equal(events.at(-1).type, 'assistant-message-completed');
   });
 

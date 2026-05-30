@@ -1,4 +1,4 @@
-import { getModel } from '@earendil-works/pi-ai';
+import { complete, getModel, Type } from '@earendil-works/pi-ai';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -13,7 +13,9 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { galleryMcpPromptCheatSheet } from './generated/gallery-mcp-prompt-cheat-sheet.mjs';
+import { createIntentClassifier } from './strict-workflows/classifier.mjs';
 import { createWorkflowDispatcher } from './strict-workflows/dispatcher.mjs';
+import { WORKFLOW_MANIFEST } from './strict-workflows/manifest.mjs';
 import { createWorkflowRegistry } from './strict-workflows/registry.mjs';
 
 const protocolVersion = '2026-05-14';
@@ -79,7 +81,7 @@ const resolvePiMcpExtensionPath = () =>
   join(dirname(requireFromRuntime.resolve('pi-mcp-extension/package.json')), 'src/index.ts');
 
 const defaultDependencies = {
-  ai: { getModel },
+  ai: { getModel, complete, Type },
   sdk: {
     AuthStorage,
     createAgentSession,
@@ -89,6 +91,67 @@ const defaultDependencies = {
     SettingsManager,
   },
 };
+
+// The classifier's structured-output contract. The classifier returns this and
+// the dispatcher then runs each workflow's `parseSlots` over `slots`.
+const CLASSIFY_TOOL_NAME = 'classify_intent';
+
+// Real `@earendil-works/pi-ai` one-shot structured-output adapter.
+//
+// The SDK exposes NO `generateStructured` on the model handle returned by
+// `getModel(provider, model)` — that handle is a plain `Model<Api>` descriptor.
+// The real non-streaming entry point is `complete(model, context, options) =>
+// Promise<AssistantMessage>`. We force structured output by passing a single
+// `classify_intent` tool whose parameters mirror CLASSIFY_SCHEMA, then read the
+// forced tool-call's `arguments` off the returned message. No Gallery MCP tools
+// are present (separate from the agent session), the call is low-temperature,
+// and it is wrapped by the classifier so it never throws into the runtime.
+const createPiClassifyIntent =
+  ({ ai, apiKey }) =>
+  async ({ getModel: resolveModel, system, prompt, signal }) => {
+    const model = resolveModel();
+    if (!model) {
+      throw new Error('No model handle available for intent classification');
+    }
+
+    // Forward-compatible: if a future SDK adds a one-shot structured generate on
+    // the handle, prefer it. Today this path is unused (handles are plain data).
+    if (typeof model.generateStructured === 'function') {
+      return model.generateStructured({ system, input: prompt, temperature: 0, signal });
+    }
+
+    const Type = ai.Type;
+    const classifyTool = {
+      name: CLASSIFY_TOOL_NAME,
+      description: 'Report the single best-matching workflow intent for the user message.',
+      parameters: Type.Object({
+        workflow: Type.String({ description: 'Workflow kind, or "none".' }),
+        slots: Type.Record(Type.String(), Type.String(), {
+          description: 'Extracted slot values as strings.',
+        }),
+        confidence: Type.Union([Type.Literal('high'), Type.Literal('low')]),
+      }),
+    };
+
+    const message = await ai.complete(
+      model,
+      {
+        systemPrompt: system,
+        messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
+        tools: [classifyTool],
+      },
+      { temperature: 0, apiKey, signal },
+    );
+
+    const toolCall = Array.isArray(message?.content)
+      ? message.content.find((block) => block?.type === 'toolCall' && block.name === CLASSIFY_TOOL_NAME)
+      : undefined;
+    if (!toolCall) {
+      throw new Error('Classifier did not return a structured intent');
+    }
+
+    return toolCall.arguments;
+  };
 
 export const mapProviderType = (providerType, gallerySessionId) => {
   if (providerType === 'openai') {
@@ -790,10 +853,13 @@ export const createPiRuntime = ({
   ai = defaultDependencies.ai,
   fetch: fetchImplementation = fetch,
   now = () => Date.now(),
+  // Router mode: 'regex' | 'llm' | 'hybrid'. Default 'hybrid' (regex fast-path →
+  // LLM classify). Ops/tests can force 'regex' to disable the LLM path
+  // deterministically. (`routerModel` override is reserved, not implemented.)
+  routerMode = process.env.STRICT_ROUTER_MODE ?? 'hybrid',
 } = {}) => {
   const sessions = new Map();
   const createSessionQueues = new Map();
-  const registry = createWorkflowRegistry();
 
   const runSerializedCreateSession = async (runnerSessionId, operation) => {
     const previous = createSessionQueues.get(runnerSessionId) ?? Promise.resolve();
@@ -866,6 +932,25 @@ export const createPiRuntime = ({
           if (!model) {
             throw new Error(`Model ${body.model} is not available for provider ${providerName}`);
           }
+
+          // Build the per-session intent classifier behind the registry's
+          // `classify`. It reuses the session model handle + credential — no
+          // second auth path. Tests inject `ai.classifyIntent`; production uses
+          // the real one-shot `complete()` adapter. The classifier never throws
+          // into the runtime; uncertainty falls through to open orchestration.
+          const classifyIntent =
+            typeof ai.classifyIntent === 'function'
+              ? ai.classifyIntent
+              : createPiClassifyIntent({ ai, apiKey: body.credential.secret });
+          const baseWorkflows = createWorkflowRegistry().listWorkflows();
+          const classifier = createIntentClassifier({
+            getModel: () => model,
+            classifyIntent,
+            manifest: WORKFLOW_MANIFEST,
+            workflows: baseWorkflows,
+            mode: routerMode,
+          });
+          const registry = createWorkflowRegistry({ classifier });
 
           const { session } = await sdk.createAgentSession({
             cwd: mcpRuntime?.workspace ?? runtimePackageRoot,
