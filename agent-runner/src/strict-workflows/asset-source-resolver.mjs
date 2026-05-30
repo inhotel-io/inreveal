@@ -101,12 +101,34 @@ export const parseDateRange = (source, now = new Date()) => {
   return undefined;
 };
 
+// --- media type parsing (pure) ----------------------------------------------
+
+// Explicit type words only. The generic colloquial library words
+// (photos/pics/pictures/snaps/shots) are NOT types — "my photos" means the whole
+// library (incl. videos), so they stay filler (see GENERIC_NOUNS). A media type is
+// a modifier on a recency/date source, never a bound on its own (a type-only
+// source like "my videos" is unbounded → handoff via the unbounded gate below).
+const VIDEO_TYPE_RE = /\b(?:videos?|clips?|movies?)\b/i;
+const IMAGE_TYPE_RE = /\b(?:images?)\b/i;
+
+export const parseMediaType = (source) => {
+  const text = String(source ?? '');
+  if (VIDEO_TYPE_RE.test(text)) {
+    return 'VIDEO';
+  }
+  if (IMAGE_TYPE_RE.test(text)) {
+    return 'IMAGE';
+  }
+  return undefined;
+};
+
 // --- clean-source gate ------------------------------------------------------
 
-// Generic media nouns are filler (a recency/date source can carry them). Type-
-// specific nouns ("videos/images/clips") are NOT here — they remain substantive
-// until Slice 4 makes them a `type` filter, so a type-qualified source hands off.
+// Generic media nouns are filler (a recency/date source can carry them).
 const GENERIC_NOUNS = /\b(?:photos?|pics?|pictures?|snaps?|shots?)\b/gi;
+// Explicit type nouns are consumed by the gate too (they map to a `type` filter
+// via parseMediaType), so a type-qualified source is "clean".
+const TYPE_NOUNS = /\b(?:videos?|clips?|movies?|images?)\b/gi;
 const STOPWORDS =
   /\b(?:my|the|a|an|all|of|from|in|on|during|some|please|that|this|these|those|i|me|we|our|us|took|taken|and|to|with)\b/gi;
 const DATE_STRIP = new RegExp(
@@ -132,6 +154,7 @@ const isCleanSource = (source) => {
     .replace(RECENCY_PATTERN_G, ' ')
     .replace(/\b\d{1,4}\b/g, ' ')
     .replace(GENERIC_NOUNS, ' ')
+    .replace(TYPE_NOUNS, ' ')
     .replace(STOPWORDS, ' ')
     .replace(/[^a-z]+/g, ' ')
     .trim();
@@ -148,9 +171,10 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
 
   const recencyLimit = parseRecencyLimit(source);
   const dateRange = parseDateRange(source, now);
+  const mediaType = parseMediaType(source);
 
-  // Clean-source gate: an unresolvable qualifier (place/name/tag/type) hands off
-  // rather than over-resolve by the recognized recency/date part alone.
+  // Clean-source gate: an unresolvable qualifier (place/name/tag) hands off
+  // rather than over-resolve by the recognized recency/date/type part alone.
   if (!isCleanSource(source)) {
     return {
       status: 'handoff',
@@ -158,22 +182,28 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     };
   }
   // Clean but unbounded (no count and no date) — nothing to bound a search by.
+  // Media type is a modifier, not a bound, so a type-only source hands off here.
   if (recencyLimit === undefined && dateRange === undefined) {
     return { status: 'handoff', reason: `Source "${source}" needs a count or date range this workflow can bound.` };
   }
 
   // Resolve into a selection handle via a bounded metadata search (newest-first).
-  // Recency-only sends NO filters key; a date source adds ISO takenAfter/Before.
-  const filters = dateRange
-    ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
-    : undefined;
+  // Recency-only sends NO filters key; date/type sources add ISO takenAfter/Before
+  // and/or a `type` filter (AssetType enum: IMAGE/VIDEO).
+  const filters = {
+    ...(dateRange
+      ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
+      : {}),
+    ...(mediaType ? { type: mediaType } : {}),
+  };
+  const hasFilters = Object.keys(filters).length > 0;
   const handleResult = await client.call(
     'searchAssets',
     {
       mode: 'metadata',
       order: 'desc',
       limit: recencyLimit ?? MAX_RECENCY_LIMIT,
-      ...(filters ? { filters } : {}),
+      ...(hasFilters ? { filters } : {}),
       detail: 'handle',
     },
     { signal },

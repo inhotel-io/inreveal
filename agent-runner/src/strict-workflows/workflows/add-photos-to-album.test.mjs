@@ -62,6 +62,21 @@ describe('add_photos_to_album HybridWorkflow', () => {
     });
   });
 
+  it('plans a media-type source via the shared resolver (type + date filters)', async () => {
+    const client = fakeClient();
+    const outcome = await wf.run({ client, slots: { albumRef: 'Family', sourceDescription: 'my videos from 2024' } });
+    assert.equal(outcome.status, 'planned');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+      type: 'VIDEO',
+    });
+    const ops = client.calls.find((c) => c.name === 'proposeAlbumOperations').args.operations;
+    assert.equal(ops[0].type, 'album.addAssets');
+    assert.equal(ops[0].assetSource.selectionHandleId, 'handle-1');
+  });
+
   it('hands off a qualified/unbounded source to open orchestration', async () => {
     // location residual (gate), and a recency keyword with no count (unbounded) —
     // both must NOT fabricate a metadata search.
