@@ -40,6 +40,10 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.updateMetadata',
 ]);
 
+const KNOWN_SPACE_FROM_SEARCH_KEYS = new Set(['summary', 'spaceName', 'description', 'color', 'assetSource']);
+const KNOWN_AVATAR_COLORS = new Set(['primary', 'pink', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'gray', 'amber']);
+const KNOWN_ASSET_SOURCE_KINDS = new Set(['search', 'previousSearch', 'selectionHandle']);
+
 const SEARCH_DETAILS = new Set(['ids', 'handle', 'summary', 'metadata']);
 const SEARCH_TEXT_MODES = new Set(['smart', 'description', 'ocr', 'filename']);
 
@@ -328,6 +332,25 @@ export const makeContractClient = (config = {}) => {
     proposeAlbumFromSelection: (args) => {
       if (!args?.albumName) fail('proposeAlbumFromSelection requires albumName');
       if (!args?.selectionHandleId) fail('proposeAlbumFromSelection requires selectionHandleId');
+      return ok(config);
+    },
+    proposeSpaceFromSearch: (args) => {
+      if (!args || typeof args !== 'object') fail('proposeSpaceFromSearch requires an object');
+      for (const key of Object.keys(args)) {
+        if (!KNOWN_SPACE_FROM_SEARCH_KEYS.has(key)) fail(`proposeSpaceFromSearch: unknown key "${key}"`);
+      }
+      if (typeof args.spaceName !== 'string' || args.spaceName.trim().length === 0) {
+        fail('proposeSpaceFromSearch requires a non-empty spaceName');
+      }
+      const source = args.assetSource;
+      if (!source || typeof source !== 'object') fail('proposeSpaceFromSearch requires an assetSource');
+      if (!KNOWN_ASSET_SOURCE_KINDS.has(source.kind)) fail(`proposeSpaceFromSearch assetSource kind "${source.kind}" is invalid`);
+      if (source.kind === 'selectionHandle' && !source.selectionHandleId) {
+        fail('selectionHandle assetSource requires selectionHandleId');
+      }
+      if (args.color !== undefined && !KNOWN_AVATAR_COLORS.has(args.color)) {
+        fail(`proposeSpaceFromSearch color "${args.color}" is invalid`);
+      }
       return ok(config);
     },
   };
