@@ -153,6 +153,51 @@ const createPiClassifyIntent =
     return toolCall.arguments;
   };
 
+// Tool-free copy rephraser used by `copyMode: 'llm-polish'` (Slice 6). It is
+// passed ONLY the scrubbed success summary (no ids/handles/sourceRefs) and may
+// only REWORD — the success/failure decision and the "a plan exists" claim are
+// made deterministically by `renderCopy` before this runs. It has NO tools and
+// runs a single low-temperature `complete()` call. Any error propagates so
+// `renderCopy` falls back to the deterministic template.
+const POLISH_SYSTEM_PROMPT = [
+  'You rewrite a short status sentence for a photo album plan that has already been created and is awaiting user review.',
+  'You are given a scrubbed JSON summary. Rephrase it into one concise, friendly sentence.',
+  'You have no tools and take no actions. Do not invent details not present in the summary.',
+  'Always make clear the plan still needs the user to review and apply it before any change happens.',
+].join(' ');
+
+const createPiPolishCopy =
+  ({ ai, getModel, apiKey }) =>
+  async (summary) => {
+    const model = typeof getModel === 'function' ? getModel() : undefined;
+    if (!model) {
+      throw new Error('No model handle available for copy polish');
+    }
+
+    const message = await ai.complete(
+      model,
+      {
+        systemPrompt: POLISH_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: JSON.stringify(summary), timestamp: Date.now() }],
+        tools: [],
+      },
+      { temperature: 0.3, apiKey },
+    );
+
+    const text = Array.isArray(message?.content)
+      ? message.content
+          .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+          .map((block) => block.text)
+          .join('')
+          .trim()
+      : '';
+    if (!text) {
+      throw new Error('Copy polish returned empty text');
+    }
+
+    return text;
+  };
+
 export const mapProviderType = (providerType, gallerySessionId) => {
   if (providerType === 'openai') {
     return 'openai';
@@ -725,6 +770,110 @@ const strictWorkflowStateEvent = ({ gallerySessionId, runnerSessionId, workflowS
   workflowState: workflowState ?? null,
 });
 
+// Observability (Slice 6): the dispatcher's `observe(event)` events ride the
+// existing `activity` runner-event channel so the server projects them into the
+// debug/audit `agent_session_activity_event` table. They are NOT user chat and
+// never become assistant messages. We also write a structured JSON log line so
+// router recall and the success gate are measurable from logs alone.
+//
+// Activity summaries are scrubbed, bounded key=value strings — never prompts,
+// ids, or raw summaries. A planId is reported as present/missing, never echoed.
+const STRICT_OBSERVE_KINDS = new Set([
+  'strict_router_decision',
+  'strict_workflow_outcome',
+  'strict_success_gate_block',
+  'strict_continuation',
+]);
+
+const strictObserveStatus = (event) => {
+  if (event.kind === 'strict_success_gate_block') {
+    return 'failed';
+  }
+  if (event.kind === 'strict_workflow_outcome' && event.status === 'failed') {
+    return 'failed';
+  }
+  if (event.kind === 'strict_workflow_outcome' && event.fellBackToOpen) {
+    return 'skipped';
+  }
+  return 'completed';
+};
+
+const strictObserveSummary = (event) => {
+  const parts = [];
+  const push = (key, value) => {
+    if (value !== undefined && value !== null) {
+      parts.push(`${key}=${value}`);
+    }
+  };
+
+  switch (event.kind) {
+    case 'strict_router_decision': {
+      push('matched', event.matched);
+      push('workflow', event.workflowKind);
+      push('via', event.via);
+      push('confidence', event.confidence);
+      push('latencyMs', event.latencyMs);
+      break;
+    }
+    case 'strict_workflow_outcome': {
+      push('workflow', event.workflowKind);
+      push('status', event.status);
+      push('planId', event.planId ? 'present' : 'missing');
+      push('fellBackToOpen', event.fellBackToOpen);
+      break;
+    }
+    case 'strict_success_gate_block': {
+      push('workflow', event.workflowKind);
+      parts.push('blocked=missing-planId');
+      break;
+    }
+    case 'strict_continuation': {
+      push('resumed', event.resumed);
+      push('expired', event.expired);
+      push('missing', event.missing);
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  const summary = parts.join(' ');
+  return summary.length > 0 ? summary.slice(0, 240) : undefined;
+};
+
+const strictObserveActivityEvent = ({ gallerySessionId, runnerSessionId, event }) => {
+  const activityEvent = {
+    type: 'activity',
+    sessionId: gallerySessionId,
+    runnerSessionId,
+    kind: event.kind,
+    status: strictObserveStatus(event),
+  };
+  const summary = strictObserveSummary(event);
+  if (summary) {
+    activityEvent.summary = summary;
+  }
+  return activityEvent;
+};
+
+// Per-turn observe sink: writes a structured JSON log line and emits the
+// activity-shaped runner event so the server can persist it. `emit` pushes into
+// the active turn's strict event buffer.
+const createStrictObserve = ({ gallerySessionId, runnerSessionId, emit, log = console }) => (event) => {
+  if (!event || typeof event.kind !== 'string' || !STRICT_OBSERVE_KINDS.has(event.kind)) {
+    return;
+  }
+
+  try {
+    log.info?.(JSON.stringify({ msg: 'strict_workflow_observability', gallerySessionId, ...event }));
+  } catch {
+    // Observability logging must never break the turn.
+  }
+
+  emit(strictObserveActivityEvent({ gallerySessionId, runnerSessionId, event }));
+};
+
 // Durability (Slice 5): the server is the source of truth for pendingWorkflow.
 // A request's workflowState always wins over a stale in-memory Map value so a
 // fresh runtime (or a second instance) rehydrates the continuation/approval
@@ -874,6 +1023,13 @@ export const createPiRuntime = ({
   // LLM classify). Ops/tests can force 'regex' to disable the LLM path
   // deterministically. (`routerModel` override is reserved, not implemented.)
   routerMode = process.env.STRICT_ROUTER_MODE ?? 'hybrid',
+  // Copy mode: 'template' (default) reproduces today's deterministic success
+  // strings exactly; opt-in 'llm-polish' lets the session model REPHRASE only
+  // the scrubbed success summary (never the success/failure decision). Default
+  // behavior — and every existing test — stays identical to today.
+  copyMode = process.env.STRICT_COPY_MODE ?? 'template',
+  // Optional structured logger for observability events; defaults to console.
+  log = console,
 } = {}) => {
   const sessions = new Map();
   const createSessionQueues = new Map();
@@ -969,6 +1125,19 @@ export const createPiRuntime = ({
           });
           const registry = createWorkflowRegistry({ classifier });
 
+          // Tool-free copy rephraser for `copyMode: 'llm-polish'`. Tests may
+          // inject `ai.polishCopy`; production builds one from the session model
+          // handle. Only ever called by `renderCopy` with a scrubbed summary.
+          const polishCopy =
+            typeof ai.polishCopy === 'function'
+              ? ai.polishCopy
+              : createPiPolishCopy({ ai, getModel: () => model, apiKey: body.credential.secret });
+
+          // Per-session observe sink holder. The dispatcher's `observe` delegates
+          // to the active turn's sink (set in sendMessage/resumeSession) so each
+          // observability event is logged and emitted on the right stream.
+          const observeHolder = { current: () => {} };
+
           const { session } = await sdk.createAgentSession({
             cwd: mcpRuntime?.workspace ?? runtimePackageRoot,
             agentDir: runtimeAgentDir,
@@ -1024,11 +1193,15 @@ export const createPiRuntime = ({
             abortActiveStream: undefined,
             unsubscribe: undefined,
             pendingWorkflow: body.workflowState ?? undefined,
+            observeHolder,
             dispatcher: mcpGateway
               ? createWorkflowDispatcher({
                   registry,
                   buildClient: () => createGalleryMcpClient({ gateway: mcpGateway, fetch: fetchImplementation }),
                   now,
+                  copyMode,
+                  polish: polishCopy,
+                  observe: (event) => observeHolder.current(event),
                 })
               : undefined,
           });
@@ -1076,6 +1249,12 @@ export const createPiRuntime = ({
         };
         entry.abortActiveStream = abortStrictStream;
         const strictEvents = [];
+        entry.observeHolder.current = createStrictObserve({
+          gallerySessionId,
+          runnerSessionId,
+          emit: (event) => strictEvents.push(event),
+          log,
+        });
         try {
           const dispatch = await entry.dispatcher.routeTurn({
             prompt: promptText,
@@ -1105,6 +1284,7 @@ export const createPiRuntime = ({
           };
           return;
         } finally {
+          entry.observeHolder.current = () => {};
           if (entry.abortActiveStream === abortStrictStream) {
             entry.abortActiveStream = undefined;
           }
@@ -1311,6 +1491,12 @@ export const createPiRuntime = ({
 
       if (entry.dispatcher) {
         const strictEvents = [];
+        entry.observeHolder.current = createStrictObserve({
+          gallerySessionId,
+          runnerSessionId,
+          emit: (event) => strictEvents.push(event),
+          log,
+        });
         try {
           const dispatch = await entry.dispatcher.routeApproval({
             toolCallId,
@@ -1342,6 +1528,7 @@ export const createPiRuntime = ({
           };
           return;
         } finally {
+          entry.observeHolder.current = () => {};
           entry.inFlight = false;
         }
         // Not a strict approval resume: fall through to the provider continue path.
