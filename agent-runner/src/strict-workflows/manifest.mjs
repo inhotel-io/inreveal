@@ -210,6 +210,39 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'update_asset_metadata',
+    flow: 'hybrid',
+    title: 'Edit photo metadata',
+    classifierDescription:
+      'User wants to edit metadata (description/caption, star rating, capture date, time zone, or explicit lat+lng location) on a metadata-describable set of LOOSE photos — not an album or a space.',
+    positiveExamples: Object.freeze([
+      'Set the description on my newest 20 photos to Berlin weekend',
+      'Rate my newest 12 photos five stars',
+      'Set the timezone on my newest 20 photos to Europe/Berlin',
+    ]),
+    negativeExamples: Object.freeze([
+      'Set the description on the Family album to Summer 2026',
+      'Set the description on the Trips space to Our adventures',
+      'Set the location on these photos to Paris',
+    ]),
+    slots: Object.freeze({
+      field: Object.freeze({ type: 'string', required: true, description: 'description, rating, timeZone, location, or date.' }),
+      value: Object.freeze({ type: 'string', required: false, description: 'New value (text, 1-5 or clear for rating, IANA zone, ISO date).' }),
+      latitude: Object.freeze({ type: 'number', required: false, description: 'Latitude for a location edit (with longitude).' }),
+      longitude: Object.freeze({ type: 'number', required: false, description: 'Longitude for a location edit (with latitude).' }),
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos to edit.' }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Batch asset metadata edits',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves a loose-asset source and the field/value; Gallery owns the batch metadata-update plan from the handle.',
+    }),
+  }),
+  Object.freeze({
     kind: 'rename_or_describe_space',
     flow: 'strict',
     title: 'Rename or describe space',

@@ -41,4 +41,27 @@ export default [
     prompt: 'make an album of the best photos',
     expect: { kind: 'none' },
   },
+
+  // update_asset_metadata routing boundaries ---------------------------------
+  {
+    // Album describe stays with rename_or_describe_album (NOT update_asset_metadata).
+    id: 'neg.metadata.album',
+    category: 'negatives',
+    prompt: 'set the description on the Family album to Summer',
+    expect: { kind: 'rename_or_describe_album' },
+  },
+  {
+    // Place-name-only location edit is unsupported (no lat+lng) → none.
+    id: 'neg.metadata.placename',
+    category: 'negatives',
+    prompt: 'set the location on these photos to Paris',
+    expect: { kind: 'none' },
+  },
+  {
+    // Filename change is unsupported → none.
+    id: 'neg.metadata.filename',
+    category: 'negatives',
+    prompt: 'change the filename on these photos to beach.jpg',
+    expect: { kind: 'none' },
+  },
 ];

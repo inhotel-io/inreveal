@@ -32,6 +32,9 @@ const isLooseAssetSource = (source) => {
 const WORD_NUMBERS = { one: 1, two: 2, three: 3, four: 4, five: 5 };
 const CLEAR_WORDS = new Set(['clear', 'remove', 'delete', 'none', 'reset', 'no']);
 const parseRatingValue = (raw) => {
+  if (typeof raw === 'number') {
+    return Number.isInteger(raw) && raw >= 1 && raw <= 5 ? raw : undefined;
+  }
   const text = clean(raw).toLowerCase();
   if (WORD_NUMBERS[text] !== undefined) {
     return WORD_NUMBERS[text];

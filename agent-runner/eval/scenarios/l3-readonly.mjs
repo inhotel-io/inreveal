@@ -297,6 +297,21 @@ export default [
     threshold: 0.5,
   },
 
+  // --- update_asset_metadata routing + plan-proposed -----------------------
+  {
+    id: 'l3.recall.metadata.describe',
+    category: 'l3.recall',
+    prompt: 'set the description on my newest 20 photos to eval-l3',
+    expect: { kind: 'update_asset_metadata' },
+  },
+  {
+    id: 'l3.plan.metadata.recency',
+    category: 'l3.plan',
+    prompt: 'rate my newest 10 photos five stars',
+    expect: { kind: 'update_asset_metadata', planProposed: true },
+    threshold: 0.5,
+  },
+
   // --- entity-source routing + plan-proposed --------------------------------
   {
     id: 'l3.recall.archive.entity',
