@@ -1,47 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { addPhotosToAlbumWorkflow } from './add-photos-to-album.mjs';
+import { makeContractClient } from './contract-fixtures.mjs';
 
 const wf = addPhotosToAlbumWorkflow();
 
-// Contract-faithful fake client: it enforces the SAME shape constraints the real
-// server tools enforce, so a call the real server would reject also throws here.
-// (The previous fixture ignored args, which hid that the workflow sent a
-// free-text `query` to tools that don't accept one — add never planned live.)
-//   - resolveAssetSearchFilters is a strictObject with NO `query` field.
-//   - searchAssets metadata mode rejects `query`; `detail` is a fixed enum.
-const fakeClient = ({ albums = [{ id: 'alb-1', albumName: 'Family' }], handleAssetCount = 20, planResult } = {}) => {
-  const calls = [];
-  return {
-    calls,
-    async call(name, args) {
-      calls.push({ name, args });
-      if (name === 'listAlbums') {
-        return { albums };
-      }
-      if (name === 'resolveAssetSearchFilters') {
-        if (args && 'query' in args) {
-          throw new Error("resolveAssetSearchFilters: Unrecognized key(s) in object: 'query'");
-        }
-        return { resolvedFilters: {} };
-      }
-      if (name === 'searchAssets') {
-        const mode = args.mode ?? 'metadata';
-        if (mode === 'metadata' && args.query !== undefined) {
-          throw new Error('searchAssets: query is only supported for smart/description/ocr/filename modes');
-        }
-        if (args.detail !== undefined && !['ids', 'handle', 'summary', 'metadata'].includes(args.detail)) {
-          throw new Error(`searchAssets: invalid detail "${args.detail}"`);
-        }
-        return { selectionHandle: { id: 'handle-1', assetCount: handleAssetCount } };
-      }
-      if (name === 'proposeAlbumOperations') {
-        return planResult ?? { status: 'success', plan: { id: 'plan-1' } };
-      }
-      throw new Error(`unexpected ${name}`);
-    },
-  };
-};
+// Drive run() against the shared contract-faithful fake MCP client, which enforces
+// the real server tool DTO shapes (so a call the live server would reject also
+// throws here — the lesson from the recency bug this workflow shipped with).
+const fakeClient = makeContractClient;
 
 describe('add_photos_to_album HybridWorkflow', () => {
   it('resolves a recency source via a metadata search and proposes a duplicate-safe add', async () => {
