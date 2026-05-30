@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createAlbumFromSourceWorkflow } from './create-album-from-source.mjs';
+import { makeContractClient } from './contract-fixtures.mjs';
 
 const wf = createAlbumFromSourceWorkflow();
 
@@ -53,9 +54,84 @@ describe('create_album_from_source router & slots', () => {
     assert.equal(wf.parseSlots({ albumName: 'X' }), null);
   });
 
-  it('is a router-only hybrid workflow this slice (no run yet)', () => {
+  it('is a hybrid workflow with an executable run', () => {
     assert.equal(wf.kind, 'create_album_from_source');
     assert.equal(wf.flow, 'hybrid');
-    assert.equal(typeof wf.run, 'undefined');
+    assert.equal(typeof wf.run, 'function');
+  });
+});
+
+describe('create_album_from_source execution', () => {
+  it('plans an album from a recency selection handle (explicit name, no raw ids)', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 50 photos', albumName: 'Recent' } });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAlbumFromSelection');
+    assert.deepEqual(propose.args, {
+      summary: 'Create the "Recent" album.',
+      albumName: 'Recent',
+      selectionHandleId: 'handle-1',
+    });
+    assert.equal(JSON.stringify(client.calls).includes('assetIds'), false);
+  });
+
+  it('uses the default album name when none is given', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 50 photos' } });
+    assert.equal(outcome.status, 'planned');
+    assert.equal(client.calls.find((c) => c.name === 'proposeAlbumFromSelection').args.albumName, 'New Album');
+  });
+
+  it('plans a date source via the shared resolver', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my photos from 2024', albumName: 'X' } });
+    assert.equal(outcome.status, 'planned');
+    assert.deepEqual(client.calls.find((c) => c.name === 'searchAssets').args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+  });
+
+  it('hands off subjective and location sources without proposing', async () => {
+    for (const sourceDescription of ['the good ones', 'my Berlin photos']) {
+      const client = makeContractClient();
+      const outcome = await wf.run({ client, slots: { sourceDescription, albumName: 'X' } });
+      assert.equal(outcome.status, 'handoff_open', sourceDescription);
+      assert.equal(
+        client.calls.some((c) => c.name === 'proposeAlbumFromSelection'),
+        false,
+        sourceDescription,
+      );
+    }
+  });
+
+  it('asks for input when the source resolves to zero assets', async () => {
+    const client = makeContractClient({ handleAssetCount: 0 });
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 10 photos', albumName: 'X' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAlbumFromSelection'),
+      false,
+    );
+  });
+
+  it('fails (gate) without success copy when the plan has no persisted id', async () => {
+    const client = makeContractClient({ planResult: { status: 'success', plan: {} } });
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 10 photos', albumName: 'X' } });
+    assert.equal(outcome.status, 'failed');
+    assert.equal(/prepared|created/i.test(outcome.text), false);
+  });
+
+  it('fails when the search tool throws', async () => {
+    const client = {
+      calls: [],
+      async call(name) {
+        this.calls.push({ name });
+        if (name === 'searchAssets') throw new Error('boom');
+        throw new Error(`unexpected ${name}`);
+      },
+    };
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 10 photos', albumName: 'X' } });
+    assert.equal(outcome.status, 'failed');
   });
 });
