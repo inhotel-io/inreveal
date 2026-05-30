@@ -110,4 +110,10 @@ export default [
     prompt: 'create a space from my 2024 photos',
     expect: { kind: 'create_space_from_source', slots: { sourceDescription: 'my 2024 photos' } },
   },
+  {
+    id: 'slots.rotate.ccw-polarity',
+    category: 'slots',
+    prompt: 'rotate my newest 5 photos 90 counterclockwise',
+    expect: { kind: 'rotate_assets', slots: { angle: 270, sourceDescription: 'my newest 5 photos' } },
+  },
 ];

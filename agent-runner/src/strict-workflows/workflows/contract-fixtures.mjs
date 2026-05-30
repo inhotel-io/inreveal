@@ -147,6 +147,9 @@ const validateBatchAction = (action) => {
   if (type === 'asset.updateMetadata') {
     validateUpdateMetadataAction(action);
   }
+  if (type === 'asset.rotate') {
+    if (![90, 180, 270].includes(action.angle)) fail('asset.rotate angle must be 90, 180, or 270');
+  }
 };
 
 // space.updateDetails payload is a strictObject with ≥1 of these (mirrors the DTO).

@@ -404,4 +404,23 @@ export default [
     prompt: 'add Alex to the Family space',
     expect: { kind: 'manage_space_members' },
   },
+  // rotate_assets -------------------------------------------------------------
+  {
+    id: 'recall.rotate.canonical',
+    category: 'recall',
+    prompt: 'rotate my newest 20 photos 90 clockwise',
+    expect: { kind: 'rotate_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.rotate.ccw',
+    category: 'recall',
+    prompt: 'rotate my last 10 photos 90 counterclockwise',
+    expect: { kind: 'rotate_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.rotate.flip',
+    category: 'recall',
+    prompt: 'flip my newest 5 photos upside down',
+    expect: { kind: 'rotate_assets', slotsSurvive: true },
+  },
 ];
