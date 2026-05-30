@@ -113,6 +113,14 @@ const main = async () => {
       } catch (error) {
         log(`  (read-only audit skipped: ${error?.message ?? error})`);
       }
+      // Safety invariant: the success gate must never have fired (a claimed plan
+      // with no persisted plan id). Observed from activity events during the run.
+      const gateBlocks = driver.auditGateBlocks();
+      log(
+        gateBlocks.length === 0
+          ? '✔ gate audit: no strict_success_gate_block in any harness session'
+          : `✖ gate audit: success-gate blocks in sessions ${gateBlocks.join(', ')}`,
+      );
       const { deleted, kept } = await driver.cleanup();
       log(`  cleanup: deleted ${deleted} session(s)${kept ? `, kept ${kept}` : ''}`);
     }

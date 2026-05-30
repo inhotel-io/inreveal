@@ -91,6 +91,17 @@ pnpm eval -- --layer L3 --filter l3.recall
 pnpm eval -- --layer L3 --diff     # vs eval/baseline.l3.json (instance-specific)
 ```
 
+Auth/config can live in a gitignored `agent-runner/.env` (copy `.env.example`);
+`pnpm eval` / `pnpm eval:l3` auto-load it (`--env-file-if-exists=.env`), so no
+shell exports are needed. Every run also prints two read-only safety audits — no
+plan was applied, and no `strict_success_gate_block` fired — across all sessions.
+
+Scenario shapes (beyond the L1 keys): `expect.planProposed` asserts a reviewable
+plan was proposed (never applied); a `turns: ['…','…']` scenario drives one
+session across multiple user messages (e.g. needs_input → follow-up → plan); and
+a `{album}` token in a prompt is substituted read-only with the user's
+most-populated album so plan scenarios resolve a real target.
+
 Config (all env-overridable, see `config.mjs`):
 
 | var | meaning |

@@ -42,8 +42,13 @@ const parseKv = (summary) => {
 export const createL3Driver = ({ gallery, l3 }) => {
   const baseUrl = gallery.baseUrl.replace(/\/$/, '');
   const createdSessionIds = new Set();
+  // Sessions in which the runner emitted a success-gate block (it claimed a
+  // planned outcome with no persisted plan id — the original bug class). This
+  // must stay empty; surfaced by auditGateBlocks().
+  const gateBlockSessions = new Set();
   let authHeader = null;
   let resolved = null; // { credentialId, model }
+  let albumNameCache; // undefined=unresolved, string=name, null=no album found
 
   const api = async (method, path, body) => {
     const res = await fetch(`${baseUrl}${path}`, {
@@ -158,56 +163,102 @@ export const createL3Driver = ({ gallery, l3 }) => {
   const pollIntervalMs = l3.pollIntervalMs;
   const settleGraceMs = l3.settleGraceMs ?? 4000;
 
-  // Run one prompt through a fresh, isolated session and return the routing +
-  // plan signal. Fresh-session-per-prompt avoids cross-prompt continuation
-  // state leaking between independent scenarios.
-  const classify = async (prompt) => {
-    const session = await api('POST', '/agent/sessions', sessionCreateBody());
-    createdSessionIds.add(session.id);
+  // Read-only album discovery for `{album}` prompt tokens. Picks the most
+  // populated album the user has (most likely to yield a clean add/rename plan).
+  // Cached; falls back to leaving the token if there are no albums.
+  const resolveAlbumName = async () => {
+    if (albumNameCache !== undefined) return albumNameCache;
+    try {
+      const albums = await api('GET', '/albums');
+      const ranked = [...(albums ?? [])].sort((a, b) => (b.assetCount ?? 0) - (a.assetCount ?? 0));
+      albumNameCache = ranked[0]?.albumName ?? null;
+    } catch {
+      albumNameCache = null;
+    }
+    return albumNameCache;
+  };
+  const substituteAlbum = async (prompt) => {
+    if (!prompt.includes('{album}')) return prompt;
+    const name = await resolveAlbumName();
+    return name ? prompt.replaceAll('{album}', name) : prompt;
+  };
 
-    await api('POST', `/agent/sessions/${session.id}/messages`, {
-      content: { blocks: [{ type: 'text', text: prompt }] },
-    });
+  // Scan the (accumulating) activity-event list for a session, returning the
+  // latest router decision + workflow outcome and the running outcome count.
+  // Also records any success-gate block for the read-only safety audit.
+  const scanEvents = (events, sessionId) => {
+    let routerKv = null;
+    let outcomeKv = null;
+    let outcomeCount = 0;
+    for (const e of events) {
+      if (e.kind === 'strict_router_decision') routerKv = parseKv(e.summary);
+      if (e.kind === 'strict_workflow_outcome') {
+        outcomeKv = parseKv(e.summary);
+        outcomeCount++;
+      }
+      if (e.kind === 'strict_success_gate_block') gateBlockSessions.add(sessionId);
+    }
+    return { routerKv, outcomeKv, outcomeCount };
+  };
+
+  // Send one user turn and poll until it settles. `baseOutcomeCount` is the
+  // number of workflow-outcome events seen before this turn — a turn is done
+  // when a NEW outcome lands (matched workflow ran), or the decision is a
+  // negative (no outcome will come), or the session settles (+ grace, so a fast
+  // regex route's runner events have time to flush, and a non-emitting instance
+  // doesn't hang for the full timeout).
+  // Post a user message, retrying through the brief window where the prior
+  // turn's dispatch is still finalizing (server rejects with "message in
+  // progress"). A genuinely non-appendable session exhausts the retries and
+  // surfaces the error.
+  const postMessage = async (sessionId, text) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await api('POST', `/agent/sessions/${sessionId}/messages`, {
+          content: { blocks: [{ type: 'text', text }] },
+        });
+      } catch (error) {
+        const transient = /message in progress|does not accept new messages/i.test(String(error?.message ?? ''));
+        if (!transient || attempt >= 20) throw error;
+        await sleep(pollIntervalMs);
+      }
+    }
+  };
+
+  const runTurn = async (sessionId, prompt, baseOutcomeCount) => {
+    await postMessage(sessionId, await substituteAlbum(prompt));
 
     const deadline = Date.now() + settleTimeoutMs;
     let routerKv = null;
     let outcomeKv = null;
-    let status = session.status;
+    let outcomeCount = baseOutcomeCount;
+    let status = 'running';
     let settledSince = null;
 
     while (Date.now() < deadline) {
-      const events = await api('GET', `/agent/sessions/${session.id}/activity-events`);
-      for (const e of events) {
-        if (e.kind === 'strict_router_decision') routerKv = parseKv(e.summary);
-        if (e.kind === 'strict_workflow_outcome') outcomeKv = parseKv(e.summary);
-      }
-      status = (await api('GET', `/agent/sessions/${session.id}`)).status;
+      const events = await api('GET', `/agent/sessions/${sessionId}/activity-events`);
+      const scan = scanEvents(events, sessionId);
+      routerKv = scan.routerKv ?? routerKv;
+      outcomeKv = scan.outcomeKv ?? outcomeKv;
+      outcomeCount = scan.outcomeCount;
+      status = (await api('GET', `/agent/sessions/${sessionId}`)).status;
 
-      // A matched router decision short-circuits once we also have an outcome or
-      // a settled session; an unmatched (negative) decision needs nothing more —
-      // the open-orchestration tail is irrelevant to the routing assertion.
       const matched = routerKv?.matched === 'true';
-      if (routerKv && (!matched || outcomeKv || SETTLED.has(status))) break;
-      // The runner's strict events (source=runner) are flushed just AFTER the
-      // plan persists, so a fast regex route can flip the session to a settled
-      // status before its router-decision event lands. Don't break on settled
-      // status alone — grant a short grace window for the event to arrive, then
-      // give up (an instance that never emits strict events, e.g. a pre-Slice-6
-      // build, must not hang here for the full timeout).
+      if (routerKv && !matched) break; // negative: no workflow outcome is coming
+      if (outcomeCount > baseOutcomeCount) break; // this turn's workflow finished
       if (SETTLED.has(status)) {
         settledSince ??= Date.now();
         if (Date.now() - settledSince > settleGraceMs) break;
       }
       await sleep(pollIntervalMs);
     }
+    return { routerKv, outcomeKv, outcomeCount, status };
+  };
 
-    const plan = await api('GET', `/agent/sessions/${session.id}/operation-plan`).catch(() => null);
+  const buildDecision = ({ routerKv, outcomeKv, plan, sessionId, status }) => {
     const matched = routerKv?.matched === 'true';
-    const kind = matched ? (routerKv.workflow ?? 'none') : 'none';
-    const planProposed = Boolean(plan && plan.status === 'proposed' && (plan.operations?.length ?? 0) > 0);
-
     return {
-      kind,
+      kind: matched ? (routerKv.workflow ?? 'none') : 'none',
       via: routerKv?.via ?? null,
       confidence: routerKv?.confidence ?? null,
       // L3 summaries are scrubbed of slot values, so slot survival is not
@@ -215,12 +266,48 @@ export const createL3Driver = ({ gallery, l3 }) => {
       // which would read as "slots were rejected").
       parsedSlots: undefined,
       slots: undefined,
-      planProposed,
+      planProposed: Boolean(plan && plan.status === 'proposed' && (plan.operations?.length ?? 0) > 0),
       outcomeStatus: outcomeKv?.status ?? null,
       planStatus: plan?.status ?? null,
-      sessionId: session.id,
+      sessionId,
       timedOut: !routerKv && !SETTLED.has(status),
     };
+  };
+
+  const createSession = async () => {
+    const session = await api('POST', '/agent/sessions', sessionCreateBody());
+    createdSessionIds.add(session.id);
+    return session;
+  };
+
+  // Run one prompt through a fresh, isolated session and return the routing +
+  // plan signal. Fresh-session-per-prompt avoids cross-prompt continuation
+  // state leaking between independent scenarios.
+  const classify = async (prompt) => {
+    const session = await createSession();
+    const turn = await runTurn(session.id, prompt, 0);
+    const plan = await api('GET', `/agent/sessions/${session.id}/operation-plan`).catch(() => null);
+    return buildDecision({ ...turn, plan, sessionId: session.id });
+  };
+
+  // Multi-turn: send each prompt in ONE session in sequence (e.g. ask_user ->
+  // follow-up selection -> plan). Routing comes from the first turn's decision;
+  // the final plan reflects where the conversation landed.
+  const converse = async (prompts) => {
+    const session = await createSession();
+    let routerKv = null;
+    let outcomeKv = null;
+    let outcomeCount = 0;
+    let status;
+    for (const prompt of prompts) {
+      const turn = await runTurn(session.id, prompt, outcomeCount);
+      routerKv = turn.routerKv ?? routerKv; // continuations emit no router decision; keep turn 1's
+      outcomeKv = turn.outcomeKv ?? outcomeKv;
+      outcomeCount = turn.outcomeCount;
+      status = turn.status;
+    }
+    const plan = await api('GET', `/agent/sessions/${session.id}/operation-plan`).catch(() => null);
+    return buildDecision({ routerKv, outcomeKv, plan, sessionId: session.id, status });
   };
 
   // Best-effort read-only safety audit: confirm the agent never applied a plan
@@ -233,6 +320,10 @@ export const createL3Driver = ({ gallery, l3 }) => {
     }
     return offenders;
   };
+
+  // Read-only safety audit: the success gate must never have fired (a planned
+  // outcome with no persisted plan id). Returns offending session ids (empty=ok).
+  const auditGateBlocks = () => [...gateBlockSessions];
 
   const cleanup = async () => {
     if (l3.keepSessions) return { deleted: 0, kept: createdSessionIds.size };
@@ -256,7 +347,9 @@ export const createL3Driver = ({ gallery, l3 }) => {
     baseUrl,
     preflight,
     classify,
+    converse,
     auditNoApply,
+    auditGateBlocks,
     cleanup,
     // Copy fidelity is an L1/judge concern; L3 read-only does not score copy.
     polishCopy: undefined,
