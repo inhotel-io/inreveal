@@ -92,4 +92,10 @@ export default [
     prompt: 'set the description on my newest 20 photos to Berlin weekend',
     expect: { kind: 'update_asset_metadata', slots: { sourceDescription: 'my newest 20 photos' } },
   },
+  {
+    id: 'slots.remove.canonical',
+    category: 'slots',
+    prompt: 'remove my newest 5 photos from Family',
+    expect: { kind: 'remove_photos_from_album', slots: { albumRef: 'Family', sourceDescription: 'my newest 5 photos' } },
+  },
 ];
