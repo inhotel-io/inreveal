@@ -1,5 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
-import { handoffOpen } from '../protocol.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'create_space_from_source';
 const DEFAULT_NAME = 'New Space';
@@ -71,8 +72,51 @@ export const createSpaceFromSourceWorkflow = () => ({
     return { sourceDescription, spaceName: name || DEFAULT_NAME };
   },
 
-  // Execution lands in Slice 16.
-  async run() {
-    return handoffOpen({ reason: 'create_space_from_source execution is implemented in Slice 16.' });
+  async run({ client, slots, signal }) {
+    const sourceDescription = cleanSource(slots?.sourceDescription);
+    const spaceName = clean(slots?.spaceName) || DEFAULT_NAME;
+
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'needs_input') {
+      return needsInput({ text: resolution.text });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}" for the new space. Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // The handle is WRAPPED as a selectionHandle assetSource — there is no
+    // proposeSpaceFromSelection tool. No raw asset ids reach the model.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeSpaceFromSearch',
+        {
+          summary: `Create the "${spaceName}" space.`,
+          spaceName,
+          assetSource: { kind: 'selectionHandle', selectionHandleId },
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeSpaceFromSearch',
+      successText: `I prepared a plan to create the "${spaceName}" space from ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'}. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, spaceName, assetCount },
+    });
   },
 });
