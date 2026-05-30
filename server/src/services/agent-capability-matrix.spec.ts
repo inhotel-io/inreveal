@@ -1,8 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  AGENT_WORKFLOW_MANIFEST_RELATIVE_PATH,
+  GENERATED_WORKFLOWS_END_MARKER,
+  GENERATED_WORKFLOWS_START_MARKER,
+  renderImplementedWorkflowsBlock,
+  type WorkflowManifestEntry,
+} from 'src/bin/sync-agent-capabilities';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 
 const readMatrix = () =>
   readFileSync(resolve(process.cwd(), '../docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md'), 'utf8');
+
+const readManifest = (): WorkflowManifestEntry[] =>
+  JSON.parse(readFileSync(resolve(process.cwd(), AGENT_WORKFLOW_MANIFEST_RELATIVE_PATH), 'utf8'));
 
 const sectionBetween = (markdown: string, startHeading: string, endHeading: string) => {
   const start = markdown.indexOf(startHeading);
@@ -118,16 +130,11 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).toMatch(/quality scoring/i);
   });
 
-  it('documents strict, hybrid, and open flow ownership for Pi capabilities', () => {
+  it('documents the open and hybrid flow-ownership invariants for Pi capabilities', () => {
     const markdown = readMatrix();
 
     expect(markdown).toContain('## Flow Ownership Matrix');
     const flowSection = markdown.slice(markdown.indexOf('## Flow Ownership Matrix'));
-
-    const recentTripRow = flowSection.split('\n').find((line) => line.includes('Create recent trip album'));
-    expect(recentTripRow).toBeDefined();
-    expect(recentTripRow).toContain('Strict');
-    expect(recentTripRow).toContain('create_recent_trip_album');
 
     const searchRow = flowSection.split('\n').find((line) => line.includes('Natural-language filtered search'));
     expect(searchRow).toBeDefined();
@@ -139,5 +146,45 @@ describe('Pi agent capability matrix', () => {
 
     expect(flowSection).toMatch(/no claimed plan unless a persisted plan id\s+exists/);
     expect(flowSection).toContain('selection handles for asset sets');
+  });
+
+  it('keeps the generated implemented-workflows block in sync with the manifest', () => {
+    const markdown = readMatrix();
+    const manifest = readManifest();
+
+    const start = markdown.indexOf(GENERATED_WORKFLOWS_START_MARKER);
+    const end = markdown.indexOf(GENERATED_WORKFLOWS_END_MARKER);
+    expect(start).not.toBe(-1);
+    expect(end).not.toBe(-1);
+    expect(end).toBeGreaterThan(start);
+
+    const managed = markdown.slice(start, end);
+    expect(managed).toContain(renderImplementedWorkflowsBlock(manifest).trim());
+  });
+
+  it('agrees with the hand-authored Flow Ownership Matrix for every workflow', () => {
+    const markdown = readMatrix();
+    const manifest = readManifest();
+    const flowSection = markdown.slice(markdown.indexOf('## Flow Ownership Matrix'));
+    const flowLabel: Record<WorkflowManifestEntry['flow'], string> = { strict: 'Strict', hybrid: 'Hybrid' };
+
+    for (const entry of manifest) {
+      const row = flowSection.split('\n').find((line) => line.includes(entry.matrixRow.capability));
+      expect(row, entry.kind).toBeDefined();
+      expect(row).toContain(flowLabel[entry.flow]);
+    }
+  });
+
+  it('only references read and plan tools that are registered MCP tools', () => {
+    const manifest = readManifest();
+    const registry = new AgentMcpToolRegistryService(new AgentMcpToolContractService());
+    const registeredToolNames = new Set(registry.listTools().map((tool) => tool.name));
+
+    for (const entry of manifest) {
+      for (const readTool of entry.requiredReadTools) {
+        expect(registeredToolNames, `${entry.kind} read tool ${readTool}`).toContain(readTool);
+      }
+      expect(registeredToolNames, `${entry.kind} plan tool ${entry.planTool}`).toContain(entry.planTool);
+    }
   });
 });
