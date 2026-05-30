@@ -151,4 +151,62 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
     assert.ok(KNOWN_OPERATION_TYPES.has('album.create'));
     assert.ok(KNOWN_BATCH_ACTION_TYPES.has('asset.addTag'));
   });
+
+  it('resolveAssetSearchFilters — caps and shape validation', async () => {
+    const client = makeContractClient();
+    // unknown key
+    await assert.rejects(() => client.call('resolveAssetSearchFilters', { foo: ['x'] }), /unrecognized|foo/i);
+    // exceeds 20 names
+    await assert.rejects(() => client.call('resolveAssetSearchFilters', { people: Array(21).fill('x') }), /exceed|20/i);
+    // name too long
+    await assert.rejects(() => client.call('resolveAssetSearchFilters', { people: ['x'.repeat(121)] }), /120|exceed/i);
+    // valid: default client returns resolvedFilters: {}
+    assert.deepEqual(await client.call('resolveAssetSearchFilters', { people: ['Alex'] }), { resolvedFilters: {} });
+  });
+
+  it('resolveAssetSearchFilters — configurable matched/ambiguous returns', async () => {
+    const matched = makeContractClient({
+      resolvedFilters: { personIds: ['per-1'] },
+      resolveResults: [{ kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' }],
+    });
+    const result = await matched.call('resolveAssetSearchFilters', { people: ['Alex'] });
+    assert.deepEqual(result.resolvedFilters, { personIds: ['per-1'] });
+    assert.equal(result.results[0].status, 'matched');
+
+    const ambiguous = makeContractClient({
+      resolvedFilters: {},
+      resolveResults: [{ kind: 'person', query: 'Alex', status: 'ambiguous', choices: ['Alex Smith', 'Alex Jones'], message: '' }],
+    });
+    const amb = await ambiguous.call('resolveAssetSearchFilters', { people: ['Alex'] });
+    assert.equal(amb.results[0].status, 'ambiguous');
+    assert.ok(amb.results[0].choices.length > 0);
+  });
+
+  it('searchAssets — rating-range and visibility-enum validation', async () => {
+    const client = makeContractClient();
+    // rating 0 is out of range (1–5)
+    await assert.rejects(
+      () => client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { rating: 0 } }),
+      /rating/i,
+    );
+    // rating 6 is out of range
+    await assert.rejects(
+      () => client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { rating: 6 } }),
+      /rating/i,
+    );
+    // rating null is accepted (clears the filter)
+    const nullRating = await client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { rating: null } });
+    assert.equal(nullRating.selectionHandle.id, 'handle-1');
+    // unknown visibility rejected
+    await assert.rejects(
+      () => client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { visibility: 'bogus' } }),
+      /visibility/i,
+    );
+    // known visibility accepted
+    const archiveVis = await client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { visibility: 'archive' } });
+    assert.equal(archiveVis.selectionHandle.id, 'handle-1');
+    // rating 5 accepted
+    const rating5 = await client.call('searchAssets', { mode: 'metadata', detail: 'handle', filters: { rating: 5 } });
+    assert.equal(rating5.selectionHandle.id, 'handle-1');
+  });
 });
