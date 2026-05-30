@@ -24,6 +24,7 @@
     "l3.neg.delete": 1,
     "l3.plan.trip.usa": 1,
     "l3.plan.describe.discovered": 1,
+    "l3.plan.add.recency": 1,
     "l3.multiturn.trip.recover": 1
   }
 }
