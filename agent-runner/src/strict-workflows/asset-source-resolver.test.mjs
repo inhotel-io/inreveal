@@ -475,3 +475,116 @@ describe('resolveAssetSource — entity ambiguity / not-found', () => {
     assert.equal(result.text.includes('p2'), false);
   });
 });
+
+describe('resolveAssetSource — entity × recency/date/type/direct matrix', () => {
+  it('newest 20 photos of Alex: resolved; order=desc, limit=20, filters={personIds}', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { personIds: ['per-1'] },
+      resolveResults: [{ kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' }],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'newest 20 photos of Alex', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(search.args.order, 'desc');
+    assert.equal(search.args.limit, 20);
+    assert.deepEqual(search.args.filters, { personIds: ['per-1'] });
+  });
+
+  it('5-star videos from 2024: resolved; no resolver call; filters={takenAfter, takenBefore, type, rating}', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: '5-star videos from 2024', now: NOW });
+    assert.equal(result.status, 'resolved');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+      type: 'VIDEO',
+      rating: 5,
+    });
+  });
+
+  it('my Sony photos of Alex: resolved; resolveAssetSearchFilters args={people, cameraMakes}; filters={personIds, make}', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { personIds: ['per-1'], make: 'Sony' },
+      resolveResults: [
+        { kind: 'person', query: 'Alex', status: 'matched', choices: [], message: '' },
+        { kind: 'cameraMake', query: 'Sony', status: 'matched', choices: [], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my Sony photos of Alex', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { people: ['Alex'], cameraMakes: ['Sony'] });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, { personIds: ['per-1'], make: 'Sony' });
+  });
+
+  it('tagged Travel and favorited: resolved; resolveAssetSearchFilters args={tags}; filters={isFavorite, tagIds}', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { tagIds: ['tag-1'] },
+      resolveResults: [{ kind: 'tag', query: 'Travel', status: 'matched', choices: [], message: '' }],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'tagged Travel and favorited', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Travel'] });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, { isFavorite: true, tagIds: ['tag-1'] });
+  });
+
+  it('over-resolution guard: photos of Alex underwater → handoff before any tool call', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Alex underwater', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(client.calls.some((c) => c.name === 'resolveAssetSearchFilters'), false);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('subjective-beats-entity: the best Berlin photos → handoff; no searchAssets call', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'the best Berlin photos', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('place-vs-person matched: photos of Paris → resolved; filters={personIds} (person wins)', async () => {
+    const client = makeContractClient({
+      resolvedFilters: { personIds: ['per-9'] },
+      resolveResults: [{ kind: 'person', query: 'Paris', status: 'matched', choices: [], message: '' }],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Paris', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, { personIds: ['per-9'] });
+  });
+
+  it('place-vs-person not_found (safe branch): photos of Paris → needs_input; no searchAssets call', async () => {
+    const client = makeContractClient({
+      resolveResults: [{ kind: 'person', query: 'Paris', status: 'not_found', choices: [], message: '' }],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos of Paris', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('regression: my newest 20 photos → resolved; search args has NO filters key', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my newest 20 photos', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, { mode: 'metadata', order: 'desc', limit: 20, detail: 'handle' });
+    assert.equal('filters' in search.args, false);
+  });
+
+  it('parseEntitySource("photos I favorited") → {directFilters:{isFavorite:true}}', () => {
+    assert.deepEqual(parseEntitySource('photos I favorited'), { directFilters: { isFavorite: true } });
+  });
+
+  it('parseEntitySource("tagged Travel and favorited") → {tags:[Travel], directFilters:{isFavorite:true}}', () => {
+    assert.deepEqual(parseEntitySource('tagged Travel and favorited'), {
+      tags: ['Travel'],
+      directFilters: { isFavorite: true },
+    });
+  });
+});

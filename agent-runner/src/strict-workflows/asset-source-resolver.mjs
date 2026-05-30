@@ -181,9 +181,9 @@ export const parseEntitySource = (source) => {
   text = text.replace(/\brated\s+([1-9]\d?)\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
   text = text.replace(/\b([1-9]\d?)[\s-]?stars?\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
   // (6) favorites.
-  if (/\bfavou?rites?\b/i.test(text)) {
+  if (/\bfavou?rite[ds]?\b/i.test(text)) {
     setDirect('isFavorite', true);
-    text = text.replace(/\bfavou?rites?\b/gi, ' ');
+    text = text.replace(/\bfavou?rite[ds]?\b/gi, ' ');
   }
   // (7) visibility.
   if (/\barchived\b/i.test(text)) {
@@ -293,7 +293,7 @@ const DATE_STRIP = new RegExp(
 
 // Entity connector/keyword tokens consumed alongside recognized entity names so an
 // entity source reads as "clean".
-const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rites?|archived|albums?)\b/gi;
+const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rite[ds]?|archived|albums?)\b/gi;
 
 // A source is "clean" when, after removing recency / date / generic-noun / filler AND
 // recognized entity tokens, nothing substantive remains. Subjective qualifiers
