@@ -289,4 +289,30 @@ export default [
     prompt: 'add my newest 20 photos to Family',
     expect: { kind: 'add_photos_to_album', slotsSurvive: true },
   },
+
+  // entity-source variants (resolveAssetSearchFilters path) -------------------
+  {
+    id: 'recall.archive.entity',
+    category: 'recall',
+    prompt: 'archive my Berlin photos',
+    expect: { kind: 'archive_assets', slotsSurvive: true, slots: { archived: true, sourceDescription: /berlin photos/i } },
+  },
+  {
+    id: 'recall.tag.entity',
+    category: 'recall',
+    prompt: 'tag photos of Alex as Family',
+    expect: { kind: 'tag_assets', slotsSurvive: true, slots: { tagName: 'Family', sourceDescription: /of Alex/i } },
+  },
+  {
+    id: 'recall.favorite.entity',
+    category: 'recall',
+    prompt: 'favorite my 5-star photos',
+    expect: { kind: 'favorite_assets', slotsSurvive: true, slots: { favorite: true, sourceDescription: /5-star/i } },
+  },
+  {
+    id: 'recall.createalbum.entity',
+    category: 'recall',
+    prompt: 'make an album of my Sony photos from May',
+    expect: { kind: 'create_album_from_source', slotsSurvive: true, slots: { sourceDescription: /sony photos/i } },
+  },
 ];

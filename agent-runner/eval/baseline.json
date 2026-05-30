@@ -1,6 +1,6 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.995,
+  "overall": 0.996,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
@@ -47,6 +47,10 @@
     "recall.createalbum.llm": 1,
     "recall.createalbum.trip-disambig": 1,
     "recall.createalbum.add-disambig": 1,
+    "recall.archive.entity": 1,
+    "recall.tag.entity": 1,
+    "recall.favorite.entity": 1,
+    "recall.createalbum.entity": 1,
     "neg.q.count": 1,
     "neg.q.biggest": 1,
     "neg.q.where": 1,
@@ -77,6 +81,7 @@
     "slots.members.role-default": 1,
     "slots.role.synonym": 1,
     "slots.createalbum.default-name": 1,
+    "slots.archive.entity": 1,
     "copy.trip.usa.with-exclusions": 1,
     "copy.trip.italy.no-exclusions": 0.667,
     "copy.trip.long-name": 1

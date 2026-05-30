@@ -296,4 +296,22 @@ export default [
     expect: { kind: 'create_recent_trip_album', planProposed: true },
     threshold: 0.5,
   },
+
+  // --- entity-source routing + plan-proposed --------------------------------
+  {
+    id: 'l3.recall.archive.entity',
+    category: 'l3.recall',
+    prompt: 'archive my Berlin photos',
+    expect: { kind: 'archive_assets' },
+  },
+  {
+    // tag_assets entity-source: resolveAssetSearchFilters → searchAssets handle
+    // → addTag plan, proposed never applied. `{album}` discovery token resolves
+    // the album entity live.
+    id: 'l3.plan.tag.entity',
+    category: 'l3.plan',
+    prompt: 'tag photos in the {album} album as eval-l3',
+    expect: { kind: 'tag_assets', planProposed: true },
+    threshold: 0.5,
+  },
 ];

@@ -46,6 +46,7 @@ const SEARCH_TEXT_MODES = new Set(['smart', 'description', 'ocr', 'filename']);
 // metadata searchAssets.filters is a strictObject (server rejects unknown keys);
 // `type` is the AssetType enum. Mirror both so a wrong-shape filter throws here too.
 const KNOWN_ASSET_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'OTHER']);
+const KNOWN_VISIBILITY = new Set(['archive', 'timeline', 'hidden', 'locked']);
 const KNOWN_SEARCH_FILTER_KEYS = new Set([
   'takenAfter', 'takenBefore', 'createdAfter', 'createdBefore', 'updatedAfter', 'updatedBefore',
   'city', 'state', 'country', 'make', 'model', 'lensModel', 'isFavorite', 'isNotInAlbum', 'type',
@@ -167,6 +168,15 @@ const validateSearchAssets = (args) => {
     }
     if (args.filters.type !== undefined && !KNOWN_ASSET_TYPES.has(args.filters.type)) {
       fail(`invalid searchAssets filter type "${args.filters.type}"`);
+    }
+    if (args.filters.rating !== undefined && args.filters.rating !== null) {
+      const r = args.filters.rating;
+      if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 5) {
+        fail(`invalid searchAssets filter rating "${r}"`);
+      }
+    }
+    if (args.filters.visibility !== undefined && !KNOWN_VISIBILITY.has(args.filters.visibility)) {
+      fail(`invalid searchAssets filter visibility "${args.filters.visibility}"`);
     }
   }
 };
