@@ -1,4 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 // tag_assets (hybrid, ADD-ONLY): "tag <source> as <tag>" / "add [the] tag <tag>
 // to <source>" → a batch asset.addTag over a resolved selection handle. The batch
@@ -55,5 +57,56 @@ export const tagAssetsWorkflow = () => ({
       return null;
     }
     return { sourceDescription, tagName };
+  },
+
+  async run({ client, slots, signal }) {
+    const tagName = cleanTag(slots?.tagName);
+    const sourceDescription = clean(slots?.sourceDescription);
+    // Defensive: parseSlots requires a tag, but never plan a tagless add.
+    if (!tagName) {
+      return needsInput({ text: 'What tag would you like to add?' });
+    }
+
+    // 1. Resolve the source into a selection handle (shared resolver).
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 2. Propose a batch tag-add over the selection handle. Exactly one tag field
+    //    (tagName); no raw asset ids reach the model.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAssetBatchFromSelection',
+        {
+          summary: `Tag matching photos with "${tagName}".`,
+          action: { type: 'asset.addTag', tagName },
+          selectionHandleId,
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    // 3. Gate on a persisted plan id before any success copy.
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeAssetBatchFromSelection',
+      successText: `I prepared a plan to tag ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'} with "${tagName}". Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, assetCount, label: tagName },
+    });
   },
 });
