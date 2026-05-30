@@ -28,13 +28,6 @@ export default [
   // Space workflows: questions and the photo-vs-member disambiguation ---------
   { id: 'neg.space.question', category: 'negatives', prompt: 'who has access to the Family space?', expect: { kind: 'none' } },
   {
-    // Adding photos to a space is unsupported; it must NOT become a member op.
-    id: 'neg.space.add-photos',
-    category: 'negatives',
-    prompt: 'add my newest 20 photos to the Family space',
-    expect: { anyKind: ['none', 'add_photos_to_album'] },
-  },
-  {
     // A subjective album source declines (resolver would hand off anyway).
     id: 'neg.createalbum.subjective',
     category: 'negatives',
@@ -63,6 +56,15 @@ export default [
     category: 'negatives',
     prompt: 'change the filename on these photos to beach.jpg',
     expect: { kind: 'none' },
+  },
+
+  // manage_space_assets boundaries -------------------------------------------
+  {
+    // Adding a member (Alex) to a space must NOT route to manage_space_assets (photo op).
+    id: 'neg.spaceassets.member',
+    category: 'negatives',
+    prompt: 'add Alex to the Family space',
+    expect: { kind: 'manage_space_members' },
   },
 
   // remove_photos_from_album boundaries --------------------------------------
