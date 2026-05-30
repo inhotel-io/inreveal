@@ -16,6 +16,8 @@ export type AgentModelSnapshot = {
 
 export type AgentRunnerCapabilitiesSnapshot = Record<string, unknown> | null;
 
+export type AgentWorkflowStateSnapshot = object | null;
+
 export type AgentPermissionPlanSnapshot = {
   read: {
     metadata: boolean;
