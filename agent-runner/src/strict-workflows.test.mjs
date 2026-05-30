@@ -8,6 +8,9 @@ import {
   runCreateRecentTripAlbumWorkflow,
   strictWorkflowPendingTtlMs,
 } from './strict-workflows.mjs';
+import { createIntentClassifier } from './strict-workflows/classifier.mjs';
+import { WORKFLOW_MANIFEST } from './strict-workflows/manifest.mjs';
+import { createWorkflowRegistry } from './strict-workflows/registry.mjs';
 import {
   createWorkflowClient,
   makeTripCandidate,
@@ -116,6 +119,41 @@ describe('strict workflow router', () => {
     ]) {
       assert.deepEqual(matchStrictWorkflow(prompt), { kind: 'unsupported' }, prompt);
     }
+  });
+
+  it('still matches an explicit album name whose words trip the non-generic guard', () => {
+    // "called Travel Tag" contains "tag" (a non-generic verb). The guard runs on
+    // the album-name-stripped text, so this still matches at the fast-path.
+    assert.deepEqual(matchStrictWorkflow('Create an album for my recent trip to USA called Travel Tag'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Travel Tag',
+      placeHint: 'USA',
+    });
+  });
+});
+
+describe('strict router classifier path for declined fast-path matches', () => {
+  const workflows = createWorkflowRegistry().listWorkflows();
+
+  const buildClassifier = (classifyIntent, mode = 'hybrid') =>
+    createIntentClassifier({ classifyIntent, manifest: WORKFLOW_MANIFEST, workflows, mode });
+
+  it('does not run the trip workflow when the classifier returns a competing intent', async () => {
+    // A declined fast-path match (competing prompt) now flows to the LLM. A
+    // competing/unknown intent must NOT be coerced into the trip workflow.
+    const classifier = buildClassifier(async () => ({
+      workflow: 'add_photos_to_album',
+      slots: {},
+      confidence: 'high',
+    }));
+    const decision = await classifier.classify('Add my recent trip photos to Family');
+    assert.equal(decision.kind, 'none');
+  });
+
+  it('does not run the trip workflow when the classifier returns none', async () => {
+    const classifier = buildClassifier(async () => ({ workflow: 'none', slots: {}, confidence: 'low' }));
+    const decision = await classifier.classify('Set the description on my recent trip photos to Vacation');
+    assert.equal(decision.kind, 'none');
   });
 });
 
