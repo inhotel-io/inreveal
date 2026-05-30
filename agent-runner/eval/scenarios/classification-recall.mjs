@@ -200,4 +200,59 @@ export default [
     prompt: 'label my newest 20 photos Travel',
     expect: { kind: 'tag_assets', slotsSurvive: true },
   },
+
+  // rename_or_describe_space ------------------------------------------------
+  {
+    id: 'recall.space.rename',
+    category: 'recall',
+    prompt: 'rename the Family space to Family 2026',
+    expect: {
+      kind: 'rename_or_describe_space',
+      slotsSurvive: true,
+      slots: { spaceRef: 'Family', newName: 'Family 2026' },
+    },
+  },
+  {
+    id: 'recall.space.describe',
+    category: 'recall',
+    prompt: 'set the description on the Trips space to Our adventures',
+    expect: { kind: 'rename_or_describe_space', slotsSurvive: true, slots: { spaceRef: 'Trips', description: /adventures/i } },
+  },
+
+  // manage_space_members ----------------------------------------------------
+  {
+    id: 'recall.members.add',
+    category: 'recall',
+    prompt: 'add Alex to the Family space as editor',
+    expect: { kind: 'manage_space_members', slotsSurvive: true, slots: { action: 'add', spaceRef: 'Family', role: 'editor' } },
+  },
+  {
+    id: 'recall.members.remove',
+    category: 'recall',
+    prompt: 'remove Bob from the Trips space',
+    expect: { kind: 'manage_space_members', slotsSurvive: true, slots: { action: 'remove', spaceRef: 'Trips' } },
+  },
+  {
+    // Routing-only: an uncommon verb the regex misses. The local model reliably
+    // routes "invite" → manage_space_members but does not always extract the member
+    // name into memberQueries (slot fidelity is covered by the regex-path tests).
+    id: 'recall.members.add.llm',
+    category: 'recall',
+    prompt: 'invite Alex to the Family space',
+    expect: { kind: 'manage_space_members' },
+  },
+
+  // change_member_role ------------------------------------------------------
+  {
+    id: 'recall.role.make',
+    category: 'recall',
+    prompt: 'make Alex an editor in the Family space',
+    expect: { kind: 'change_member_role', slotsSurvive: true, slots: { memberQuery: /alex/i, role: 'editor', spaceRef: 'Family' } },
+  },
+  {
+    id: 'recall.role.possessive',
+    category: 'recall',
+    prompt: "change Bob's role to viewer in Trips",
+    expect: { kind: 'change_member_role', slotsSurvive: true, slots: { role: 'viewer', spaceRef: 'Trips' } },
+  },
 ];
