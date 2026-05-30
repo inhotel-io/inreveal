@@ -1,4 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 // favorite_assets (hybrid): "favorite/unfavorite <source>" → a batch
 // asset.setFavorite over a resolved selection handle. This module is the router
@@ -78,5 +80,52 @@ export const favoriteAssetsWorkflow = () => ({
     // Default to favorite when polarity is omitted (the workflow's primary action).
     const favorite = coerceFavorite(rawSlots?.favorite) ?? true;
     return { favorite, sourceDescription };
+  },
+
+  async run({ client, slots, signal }) {
+    const favorite = Boolean(slots?.favorite);
+    const sourceDescription = clean(slots?.sourceDescription);
+
+    // 1. Resolve the source into a selection handle (shared resolver).
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 2. Propose a batch favorite over the selection handle (no raw asset ids).
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAssetBatchFromSelection',
+        {
+          summary: favorite ? 'Favorite matching photos.' : 'Unfavorite matching photos.',
+          action: { type: 'asset.setFavorite', favorite },
+          selectionHandleId,
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    // 3. Gate on a persisted plan id before any success copy.
+    const verb = favorite ? 'favorite' : 'unfavorite';
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeAssetBatchFromSelection',
+      successText: `I prepared a plan to ${verb} ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'}. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, assetCount, target: verb },
+    });
   },
 });
