@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { makeContractClient } from './contract-fixtures.mjs';
 import { manageSpaceAssetsWorkflow } from './manage-space-assets.mjs';
 
 const wf = manageSpaceAssetsWorkflow();
@@ -92,5 +93,220 @@ describe('manage_space_assets identity', () => {
     assert.equal(wf.kind, 'manage_space_assets');
     assert.equal(wf.flow, 'hybrid');
     assert.equal(typeof wf.run, 'function');
+  });
+});
+
+describe('manage_space_assets execution', () => {
+  it('ADD planned: proposeAddAssetsToSpaceFromSearch with spaceId only, selectionHandle, no assetIds', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'planned');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch');
+    assert.ok(proposeCall, 'proposeAddAssetsToSpaceFromSearch was called');
+    assert.equal(proposeCall.args.spaceId, 'spc-1');
+    assert.equal(proposeCall.args.spaceName, undefined);
+    assert.deepEqual(proposeCall.args.assetSource, { kind: 'selectionHandle', selectionHandleId: 'handle-1' });
+    assert.ok(!JSON.stringify(client.calls).includes('assetIds'), 'no raw assetIds in calls');
+  });
+
+  it('ADD planned: searchAssets is metadata, order desc, limit 20, no query', async () => {
+    const client = makeContractClient();
+    await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(searchCall, 'searchAssets was called');
+    assert.equal(searchCall.args.mode, 'metadata');
+    assert.equal(searchCall.args.order, 'desc');
+    assert.equal(searchCall.args.limit, 20);
+    assert.equal(searchCall.args.query, undefined);
+  });
+
+  it('REMOVE planned: proposeAlbumOperations with space.removeAssets op matching contract', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my photos from 2024' } });
+    assert.equal(outcome.status, 'planned');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAlbumOperations');
+    assert.ok(proposeCall, 'proposeAlbumOperations was called');
+    assert.deepEqual(proposeCall.args.operations[0], {
+      type: 'space.removeAssets',
+      summary: 'Remove matching photos.',
+      targetKind: 'existing_space',
+      targetId: 'spc-1',
+      assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+      payload: {},
+    });
+  });
+
+  it('REMOVE date source: searchAssets filters match the 2024 date range', async () => {
+    const client = makeContractClient();
+    await wf.run({ client, slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my photos from 2024' } });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(searchCall, 'searchAssets was called');
+    assert.deepEqual(searchCall.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+  });
+
+  it('handoff: screenshots source (ADD) → handoff_open, no propose call', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my screenshots' } });
+    assert.equal(outcome.status, 'handoff_open');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch' || c.name === 'proposeAlbumOperations');
+    assert.equal(proposeCall, undefined);
+  });
+
+  it('handoff: subjective source "the best ones" → handoff_open, no propose call', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'the best ones' } });
+    assert.equal(outcome.status, 'handoff_open');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch' || c.name === 'proposeAlbumOperations');
+    assert.equal(proposeCall, undefined);
+  });
+
+  it('empty: zero-count handle (ADD) → needs_input, no propose call', async () => {
+    const client = makeContractClient({ handleAssetCount: 0 });
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'needs_input');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch' || c.name === 'proposeAlbumOperations');
+    assert.equal(proposeCall, undefined);
+  });
+
+  it('space unknown: no space match → needs_input, no searchAssets or propose', async () => {
+    const client = makeContractClient({ spaces: [] });
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Nope', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'needs_input');
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(searchCall, undefined);
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch' || c.name === 'proposeAlbumOperations');
+    assert.equal(proposeCall, undefined);
+  });
+
+  it('space ambiguous: multiple matches → needs_input, no propose', async () => {
+    const client = makeContractClient({ spaces: [{ id: 's1', name: 'Family' }, { id: 's2', name: 'Family' }] });
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'needs_input');
+    const proposeCall = client.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch' || c.name === 'proposeAlbumOperations');
+    assert.equal(proposeCall, undefined);
+  });
+
+  it('gate: plan without persisted id → failed, no success text for ADD', async () => {
+    const client = makeContractClient({ planResult: { status: 'success', plan: {} } });
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'failed');
+    assert.ok(!/prepared/i.test(outcome.text), 'failure text must not say "prepared"');
+  });
+
+  it('gate: plan without persisted id → failed, no success text for REMOVE', async () => {
+    const client = makeContractClient({ planResult: { status: 'success', plan: {} } });
+    const outcome = await wf.run({ client, slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my photos from 2024' } });
+    assert.equal(outcome.status, 'failed');
+    assert.ok(!/prepared/i.test(outcome.text), 'failure text must not say "prepared"');
+  });
+
+  it('listSpaces throws → failed', async () => {
+    const client = {
+      calls: [],
+      async call(name, args) {
+        this.calls.push({ name, args });
+        if (name === 'listSpaces') throw new Error('network error');
+        throw new Error(`unexpected: ${name}`);
+      },
+    };
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'failed');
+  });
+
+  it('searchAssets throws → failed', async () => {
+    const baseClient = makeContractClient();
+    const client = {
+      calls: [],
+      async call(name, args) {
+        this.calls.push({ name, args });
+        if (name === 'searchAssets') throw new Error('search error');
+        return baseClient.call(name, args);
+      },
+    };
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'failed');
+  });
+
+  it('propose tool throws → failed', async () => {
+    const baseClient = makeContractClient();
+    const client = {
+      calls: [],
+      async call(name, args) {
+        this.calls.push({ name, args });
+        if (name === 'proposeAddAssetsToSpaceFromSearch') throw new Error('propose error');
+        return baseClient.call(name, args);
+      },
+    };
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'failed');
+  });
+
+  it('success summary: ADD planned → successSummary with correct fields, text mentions add and Family', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } });
+    assert.equal(outcome.status, 'planned');
+    assert.deepEqual(outcome.successSummary, {
+      workflowKind: 'manage_space_assets',
+      spaceName: 'Family',
+      assetCount: 20,
+      action: 'add',
+    });
+    assert.ok(/add/i.test(outcome.text));
+    assert.ok(/Family/.test(outcome.text));
+  });
+
+  it('contract-fixtures: proposeAddAssetsToSpaceFromSearch rejects both spaceId+spaceName (exactly one rule)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAddAssetsToSpaceFromSearch', { spaceId: 'a', spaceName: 'b', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' } }),
+      /exactly one/i,
+    );
+  });
+
+  it('contract-fixtures: proposeAddAssetsToSpaceFromSearch rejects missing assetSource', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAddAssetsToSpaceFromSearch', { spaceId: 'a' }),
+      /assetSource/i,
+    );
+  });
+
+  it('contract-fixtures: proposeAddAssetsToSpaceFromSearch accepts valid spaceId + assetSource', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAddAssetsToSpaceFromSearch', { spaceId: 'a', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' } });
+    assert.deepEqual(result, { status: 'success', plan: { id: 'plan-1' } });
+  });
+
+  it('contract-fixtures: proposeAlbumOperations space.removeAssets rejects targetKind "new_space"', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAlbumOperations', { operations: [{ type: 'space.removeAssets', targetKind: 'new_space', targetId: 'spc-1', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' }, payload: {} }] }),
+      /existing_space/i,
+    );
+  });
+
+  it('contract-fixtures: proposeAlbumOperations space.removeAssets rejects missing targetId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAlbumOperations', { operations: [{ type: 'space.removeAssets', targetKind: 'existing_space', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' }, payload: {} }] }),
+      /targetId/i,
+    );
+  });
+
+  it('contract-fixtures: proposeAlbumOperations space.removeAssets rejects non-empty payload', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('proposeAlbumOperations', { operations: [{ type: 'space.removeAssets', targetKind: 'existing_space', targetId: 'spc-1', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' }, payload: { x: 1 } }] }),
+      /payload/i,
+    );
+  });
+
+  it('contract-fixtures: proposeAlbumOperations space.removeAssets accepts valid op', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', { summary: 'test', operations: [{ type: 'space.removeAssets', targetKind: 'existing_space', targetId: 'spc-1', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' }, payload: {} }] });
+    assert.deepEqual(result, { status: 'success', plan: { id: 'plan-1' } });
   });
 });

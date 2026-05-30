@@ -15,10 +15,12 @@ const CASES = [
   ['make an album of my newest 50 photos', 'create_album_from_source'],
   ['create an album from my 2024 photos called Best of 2024', 'create_album_from_source'],
   ['build an album of my newest 100 photos', 'create_album_from_source'],
-  // add_photos_to_album (incl. "to the X space" — a photo add, not a member op)
+  // add_photos_to_album (album target, no "space" keyword)
   ['add my newest 20 photos to Family', 'add_photos_to_album'],
-  ['add my newest 20 photos to the Family space', 'add_photos_to_album'],
   ['add my Berlin photos from last weekend to the Trips album', 'add_photos_to_album'],
+  // manage_space_assets (photo add/remove to a "space" target)
+  ['add my newest 20 photos to the Family space', 'manage_space_assets'],
+  ['remove my screenshots from the Family space', 'manage_space_assets'],
   // archive_assets
   ['archive my newest 50 photos', 'archive_assets'],
   ['unarchive my last 10 photos', 'archive_assets'],
