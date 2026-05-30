@@ -8,6 +8,7 @@ import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
+import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
 // runtime edit. Registering here makes a workflow both regex-routable (each
@@ -19,6 +20,8 @@ import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 //   - `manage_space_members` / `change_member_role` BEFORE `add_photos_to_album`.
 //   - `add_photos_to_album` stays LAST so its "add <source> to <album>" pattern
 //     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
+//   - `update_asset_metadata` after `rename_or_describe_*` so album/space describe
+//     wins their refs; it declines album/space refs.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -27,6 +30,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   archiveAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
+  updateAssetMetadataWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   addPhotosToAlbumWorkflow,
