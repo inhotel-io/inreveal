@@ -64,4 +64,20 @@ export default [
     prompt: 'change the filename on these photos to beach.jpg',
     expect: { kind: 'none' },
   },
+
+  // remove_photos_from_album boundaries --------------------------------------
+  {
+    // Tag removal is out of scope (add-only) — must not route to remove_photos_from_album.
+    id: 'neg.remove.tag',
+    category: 'negatives',
+    prompt: 'remove the Travel tag from my newest 20',
+    expect: { kind: 'none' },
+  },
+  {
+    // Subjective source declines — the resolver would hand off anyway.
+    id: 'neg.remove.subjective',
+    category: 'negatives',
+    prompt: 'remove the best ones from Family',
+    expect: { kind: 'none' },
+  },
 ];
