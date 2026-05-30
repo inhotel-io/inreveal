@@ -224,8 +224,17 @@ const validateAlbumRemoveAssets = (op) => {
   }
 };
 
+const validateAlbumSetCover = (op) => {
+  if (op.targetKind !== 'existing_album') fail('album.setCover requires targetKind "existing_album"');
+  if (!op.targetId) fail('album.setCover requires targetId');
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('album.setCover payload must be empty');
+  if (!Array.isArray(op.assetIds) || op.assetIds.length === 0) fail('album.setCover requires a non-empty cover assetIds');
+  if (op.assetIds.length > 500) fail('album.setCover assetIds exceeds 500');
+};
+
 const ALBUM_OP_VALIDATORS = {
   'album.removeAssets': validateAlbumRemoveAssets,
+  'album.setCover': validateAlbumSetCover,
 };
 
 const validateOperations = (operations) => {
@@ -286,6 +295,16 @@ export const makeContractClient = (config = {}) => {
 
   const handlers = {
     listAlbums: () => ({ albums }),
+    readAlbum: (args) => {
+      const album = albums.find((candidate) => candidate.id === args?.albumId);
+      if (!album) fail(`album not found: ${args?.albumId}`);
+      return {
+        id: album.id,
+        albumName: album.albumName,
+        assetIds: album.assetIds ?? [],
+        albumThumbnailAssetId: album.albumThumbnailAssetId ?? null,
+      };
+    },
     listSpaces: () => ({ spaces: spaces.map(({ members, ...summary }) => summary) }),
     readSpace: (args) => {
       const space = spaces.find((candidate) => candidate.id === args?.spaceId);
