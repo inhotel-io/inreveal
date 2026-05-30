@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.996,
+  "overall": 0.995,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.889
+    "copy": 0.867
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -47,6 +47,9 @@
     "recall.createalbum.llm": 1,
     "recall.createalbum.trip-disambig": 1,
     "recall.createalbum.add-disambig": 1,
+    "recall.metadata.describe": 1,
+    "recall.metadata.rating": 1,
+    "recall.metadata.caption": 1,
     "recall.archive.entity": 1,
     "recall.tag.entity": 1,
     "recall.favorite.entity": 1,
@@ -68,6 +71,9 @@
     "neg.space.question": 1,
     "neg.space.add-photos": 1,
     "neg.createalbum.subjective": 1,
+    "neg.metadata.album": 1,
+    "neg.metadata.placename": 1,
+    "neg.metadata.filename": 1,
     "slots.usa.alias.unitedstates": 1,
     "slots.usa.alias.us-dot": 1,
     "slots.usa.alias.the-united-states": 1,
@@ -82,8 +88,9 @@
     "slots.role.synonym": 1,
     "slots.createalbum.default-name": 1,
     "slots.archive.entity": 1,
+    "slots.metadata.describe": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 0.667,
+    "copy.trip.italy.no-exclusions": 0.6,
     "copy.trip.long-name": 1
   }
 }
