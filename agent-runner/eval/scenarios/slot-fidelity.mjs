@@ -44,4 +44,22 @@ export default [
     prompt: 'rename the Family album to Family 2026',
     expect: { kind: 'rename_or_describe_album', slots: { albumRef: 'Family', newName: 'Family 2026' } },
   },
+  {
+    id: 'slots.archive.unarchive-polarity',
+    category: 'slots',
+    prompt: 'unarchive my newest 5 photos',
+    expect: { kind: 'archive_assets', slots: { archived: false, sourceDescription: 'my newest 5 photos' } },
+  },
+  {
+    id: 'slots.favorite.polarity',
+    category: 'slots',
+    prompt: 'unfavorite my newest 5 photos',
+    expect: { kind: 'favorite_assets', slots: { favorite: false, sourceDescription: 'my newest 5 photos' } },
+  },
+  {
+    id: 'slots.tag.quoted-name',
+    category: 'slots',
+    prompt: 'tag my newest 20 as "Spring Break"',
+    expect: { kind: 'tag_assets', slots: { tagName: 'Spring Break', sourceDescription: 'my newest 20' } },
+  },
 ];
