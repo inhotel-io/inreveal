@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseDateRange, resolveAssetSource } from './asset-source-resolver.mjs';
+import { parseDateRange, parseMediaType, resolveAssetSource } from './asset-source-resolver.mjs';
 import { makeContractClient } from './workflows/contract-fixtures.mjs';
 
 // A Friday, for deterministic relative-date math.
@@ -27,6 +27,22 @@ describe('parseDateRange', () => {
     assert.equal(parseDateRange('my newest 20 photos', NOW), undefined);
     assert.equal(parseDateRange('newest 20', NOW), undefined); // "20" is not a year
   });
+});
+
+describe('parseMediaType', () => {
+  for (const [phrase, type] of [
+    ['my videos from 2024', 'VIDEO'],
+    ['newest 10 clips', 'VIDEO'],
+    ['my movies', 'VIDEO'],
+    ['newest 20 images', 'IMAGE'],
+    ['my newest 20 photos', undefined], // generic colloquial word — NOT a type
+    ['my pics from 2024', undefined], // generic
+    ['screenshots', undefined], // not a metadata type
+  ]) {
+    it(`maps "${phrase}" → ${type}`, () => {
+      assert.equal(parseMediaType(phrase), type);
+    });
+  }
 });
 
 describe('resolveAssetSource', () => {
@@ -57,7 +73,6 @@ describe('resolveAssetSource', () => {
       'my photos', // all filler, no recency/date bound
       'Berlin photos from last weekend', // location residual qualifies the source
       'newest 20 Berlin photos', // recency + location residual → must NOT resolve newest-20-globally
-      'my videos from 2024', // type-specific noun is substantive until Slice 4
       'photos of Alex from last week', // person residual
     ]) {
       const result = await resolveAssetSource({ client: makeContractClient(), sourceDescription: source, now: NOW });
@@ -88,6 +103,71 @@ describe('resolveAssetSource', () => {
       takenAfter: '2024-01-01T00:00:00.000Z',
       takenBefore: '2024-12-31T23:59:59.999Z',
     });
+  });
+
+  it('resolves a media-type source combined with a date (type + date filters)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my videos from last weekend', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(search.args.limit, 1000); // no recency count → high cap
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2026-05-09T00:00:00.000Z',
+      takenBefore: '2026-05-10T23:59:59.999Z',
+      type: 'VIDEO',
+    });
+  });
+
+  it('resolves an image-type source combined with recency (type filter only)', async () => {
+    const client = makeContractClient();
+    await resolveAssetSource({ client, sourceDescription: 'newest 20 images', now: NOW });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, {
+      mode: 'metadata',
+      order: 'desc',
+      limit: 20,
+      filters: { type: 'IMAGE' },
+      detail: 'handle',
+    });
+  });
+
+  it('combines recency + date + type', async () => {
+    const client = makeContractClient();
+    await resolveAssetSource({ client, sourceDescription: 'newest 20 videos from 2024', now: NOW });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.equal(search.args.limit, 20);
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+      type: 'VIDEO',
+    });
+  });
+
+  it('keeps generic "photos" recency-only sources type-free (no filters key — regression guard)', async () => {
+    const client = makeContractClient();
+    await resolveAssetSource({ client, sourceDescription: 'my newest 20 photos', now: NOW });
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, { mode: 'metadata', order: 'desc', limit: 20, detail: 'handle' });
+  });
+
+  it('hands off a type-only source (unbounded — type is not a bound)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my videos', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(
+      client.calls.some((c) => c.name === 'searchAssets'),
+      false,
+    );
+  });
+
+  it('hands off a non-type media noun ("screenshots")', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'my screenshots', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(
+      client.calls.some((c) => c.name === 'searchAssets'),
+      false,
+    );
   });
 
   it('resolves a relative-date source ("photos I took yesterday")', async () => {

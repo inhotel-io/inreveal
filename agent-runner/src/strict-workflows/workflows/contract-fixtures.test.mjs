@@ -31,6 +31,27 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
     await assert.rejects(() => client.call('searchAssets', { detail: 'bogus' }), /detail/i);
   });
 
+  it('searchAssets enforces the metadata filters strictObject + AssetType enum', async () => {
+    const client = makeContractClient();
+    // Valid: a known key + an in-enum type does NOT throw.
+    const ok = await client.call('searchAssets', {
+      mode: 'metadata',
+      detail: 'handle',
+      filters: { type: 'VIDEO', takenAfter: '2024-01-01T00:00:00.000Z' },
+    });
+    assert.equal(ok.selectionHandle.id, 'handle-1');
+    // Invalid: a type outside the AssetType enum.
+    await assert.rejects(
+      () => client.call('searchAssets', { mode: 'metadata', filters: { type: 'BOGUS' } }),
+      /type/i,
+    );
+    // Invalid: an unknown filter key (the real DTO is a strictObject).
+    await assert.rejects(
+      () => client.call('searchAssets', { mode: 'metadata', filters: { notARealKey: true } }),
+      /filter key/i,
+    );
+  });
+
   it('proposeAssetBatchFromSelection accepts each valid action', async () => {
     const client = makeContractClient();
     for (const action of [
