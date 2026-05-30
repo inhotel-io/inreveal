@@ -43,6 +43,13 @@ const toolApprovalNeededEvent = ({ gallerySessionId, runnerSessionId, toolCallId
   toolCallId,
 });
 
+const workflowStateUpdateEvent = ({ gallerySessionId, runnerSessionId, workflowState }) => ({
+  type: 'workflow-state-update',
+  sessionId: gallerySessionId,
+  runnerSessionId,
+  workflowState: workflowState ?? null,
+});
+
 const redactGatewayToken = (message, gateway) => {
   const token = gateway?.token;
   if (!token) {
@@ -821,7 +828,7 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () 
         mcpGateway: body.mcpGateway,
         supportsImageInput: sessionSupportsImageInput(body),
         initialContext: body.initialContext ?? {},
-        pendingWorkflow: undefined,
+        pendingWorkflow: body.workflowState ?? undefined,
         dispatcher: body.mcpGateway
           ? createWorkflowDispatcher({
               registry,
@@ -841,10 +848,14 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () 
       };
     },
 
-    async *sendMessage({ runnerSessionId, gallerySessionId, content }) {
+    async *sendMessage({ runnerSessionId, gallerySessionId, content, workflowState }) {
       const entry = sessions.get(runnerSessionId);
       if (!entry || entry.gallerySessionId !== gallerySessionId) {
         throw new Error('Runner session not found');
+      }
+
+      if (workflowState !== undefined) {
+        entry.pendingWorkflow = workflowState ?? undefined;
       }
 
       const gateway = requireMcpGateway(entry);
@@ -866,6 +877,8 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () 
         },
         completedEvent: ({ text }) => completedEvent({ gallerySessionId, runnerSessionId, text }),
         approvalEvent: ({ toolCallId }) => toolApprovalNeededEvent({ gallerySessionId, runnerSessionId, toolCallId }),
+        workflowStateEvent: ({ workflowState: nextWorkflowState }) =>
+          workflowStateUpdateEvent({ gallerySessionId, runnerSessionId, workflowState: nextWorkflowState }),
       });
       if (dispatch.handled) {
         yield* strictEvents;
