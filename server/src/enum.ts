@@ -222,6 +222,13 @@ export enum AgentSessionActivityEventKind {
   PlanComposing = 'plan-composing',
   ApplyProgress = 'apply-progress',
   RunnerRecovery = 'runner-recovery',
+  // Strict/hybrid workflow observability (Slice 6). These are debug/audit-only
+  // activity events emitted by the runner's strict dispatcher. They are NOT user
+  // chat and are never projected into the assistant message transcript.
+  StrictRouterDecision = 'strict_router_decision',
+  StrictWorkflowOutcome = 'strict_workflow_outcome',
+  StrictSuccessGateBlock = 'strict_success_gate_block',
+  StrictContinuation = 'strict_continuation',
   Unknown = 'unknown',
 }
 
