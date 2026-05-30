@@ -1,4 +1,6 @@
-import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
+import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
+import { failed, handoffOpen, needsInput } from '../protocol.mjs';
+import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 // archive_assets (hybrid): "archive/unarchive <source>" → a batch
 // asset.setArchive over a resolved selection handle. This module is the router
@@ -76,5 +78,55 @@ export const archiveAssetsWorkflow = () => ({
     // Default to archive when polarity is omitted (the workflow's primary action).
     const archived = coerceArchived(rawSlots?.archived) ?? true;
     return { archived, sourceDescription };
+  },
+
+  async run({ client, slots, signal }) {
+    const archived = Boolean(slots?.archived);
+    const sourceDescription = clean(slots?.sourceDescription);
+
+    // 1. Resolve the source into a selection handle (shared resolver): subjective
+    //    and non-deterministic sources hand off; recency/date/type become a
+    //    bounded metadata-search handle. A tool error surfaces as `failed`.
+    let resolution;
+    try {
+      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
+    }
+    if (resolution.status === 'handoff') {
+      return handoffOpen({ reason: resolution.reason });
+    }
+    if (resolution.status === 'empty') {
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}". Can you describe them differently?`,
+      });
+    }
+    const { selectionHandleId, assetCount } = resolution;
+
+    // 2. Propose a batch archive over the selection handle. No raw asset ids ever
+    //    reach the model — the handle is the only asset reference.
+    let planResult;
+    try {
+      planResult = await client.call(
+        'proposeAssetBatchFromSelection',
+        {
+          summary: archived ? 'Archive matching photos.' : 'Unarchive matching photos.',
+          action: { type: 'asset.setArchive', archived },
+          selectionHandleId,
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
+    }
+
+    // 3. Gate on a persisted plan id before any success copy.
+    const verb = archived ? 'archive' : 'unarchive';
+    return gatePlanResult({
+      planResult,
+      planTool: 'proposeAssetBatchFromSelection',
+      successText: `I prepared a plan to ${verb} ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'}. Review the plan before applying it.`,
+      successSummary: { workflowKind: KIND, assetCount, target: verb },
+    });
   },
 });

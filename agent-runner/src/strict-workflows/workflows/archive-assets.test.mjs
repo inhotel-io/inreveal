@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { archiveAssetsWorkflow } from './archive-assets.mjs';
+import { makeContractClient } from './contract-fixtures.mjs';
 
 const wf = archiveAssetsWorkflow();
 
@@ -69,9 +70,80 @@ describe('archive_assets router & slots', () => {
     assert.equal(wf.parseSlots({ archived: true }), null);
   });
 
-  it('is a router-only hybrid workflow this slice (no run yet)', () => {
+  it('is a hybrid workflow with an executable run', () => {
     assert.equal(wf.kind, 'archive_assets');
     assert.equal(wf.flow, 'hybrid');
-    assert.equal(typeof wf.run, 'undefined');
+    assert.equal(typeof wf.run, 'function');
+  });
+});
+
+describe('archive_assets execution', () => {
+  it('plans a batch setArchive over a recency selection handle (no raw ids)', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my newest 50 photos' } });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.setArchive', archived: true });
+    assert.equal(propose.args.selectionHandleId, 'handle-1');
+    assert.equal(JSON.stringify(client.calls).includes('assetIds'), false);
+  });
+
+  it('carries unarchive polarity into the op payload', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { archived: false, sourceDescription: 'my newest 5 photos' } });
+    assert.equal(outcome.status, 'planned');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.setArchive', archived: false });
+  });
+
+  it('plans a date source via the shared resolver (date filters)', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my photos from 2024' } });
+    assert.equal(outcome.status, 'planned');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args.filters, {
+      takenAfter: '2024-01-01T00:00:00.000Z',
+      takenBefore: '2024-12-31T23:59:59.999Z',
+    });
+  });
+
+  it('hands off a subjective source without proposing', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'the best ones' } });
+    assert.equal(outcome.status, 'handoff_open');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'),
+      false,
+    );
+  });
+
+  it('asks for input when the source resolves to zero assets instead of planning an empty archive', async () => {
+    const client = makeContractClient({ handleAssetCount: 0 });
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my newest 10 photos' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(
+      client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'),
+      false,
+    );
+  });
+
+  it('fails (gate) without success copy when the plan has no persisted id', async () => {
+    const client = makeContractClient({ planResult: { status: 'success', plan: {} } });
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my newest 10 photos' } });
+    assert.equal(outcome.status, 'failed');
+    assert.equal(/prepared|archive /i.test(outcome.text), false);
+  });
+
+  it('fails when the search tool throws', async () => {
+    const client = {
+      calls: [],
+      async call(name) {
+        this.calls.push({ name });
+        if (name === 'searchAssets') throw new Error('boom');
+        throw new Error(`unexpected ${name}`);
+      },
+    };
+    const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my newest 10 photos' } });
+    assert.equal(outcome.status, 'failed');
   });
 });
