@@ -4,6 +4,7 @@ import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
 import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
+import { manageSpaceAssetsWorkflow } from './workflows/manage-space-assets.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
 import { removePhotosFromAlbumWorkflow } from './workflows/remove-photos-from-album.mjs';
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
@@ -18,13 +19,16 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 // Order matters for the regex fast-path (first match wins):
 //   - `rename_or_describe_space` BEFORE `rename_or_describe_album` so the strict
 //     `space`-keyword gate wins "rename the X space …" (album declines those).
-//   - `manage_space_members` / `change_member_role` BEFORE `add_photos_to_album`.
+//   - `manage_space_members` / `change_member_role` BEFORE `manage_space_assets` so
+//     member ops (people) win over asset ops (photos) for space targets.
+//   - `manage_space_assets` BEFORE `add_photos_to_album` so "add <photos> to the X
+//     space" routes to the space workflow, not the album one.
 //   - `favorite_assets` / `tag_assets` / `manage_space_members` BEFORE
 //     `remove_photos_from_album` so "remove … from my favorites" → favorite_assets,
 //     "remove Bob from the Family space" → manage_space_members, and
 //     "remove the Travel tag …" → none (tag_assets is add-only and declines).
 //   - `remove_photos_from_album` AFTER `favorite_assets`/`tag_assets`/
-//     `manage_space_members`, BEFORE `add_photos_to_album`.
+//     `manage_space_members`, BEFORE `manage_space_assets`/`add_photos_to_album`.
 //   - `add_photos_to_album` stays LAST so its "add <source> to <album>" pattern
 //     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
 //   - `update_asset_metadata` after `rename_or_describe_*` so album/space describe
@@ -41,6 +45,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   removePhotosFromAlbumWorkflow,
+  manageSpaceAssetsWorkflow,
   addPhotosToAlbumWorkflow,
 ]);
 

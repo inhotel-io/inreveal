@@ -172,12 +172,20 @@ export default [
     expect: { kind: 'none' },
   },
   {
-    // Adding photos to a space is unsupported; the photo-source guard keeps it out
-    // of manage_space_members (routes to add_photos or none, never a member op).
-    id: 'l3.neg.space.add-photos',
-    category: 'l3.negatives',
+    // Adding photos to a space now routes to manage_space_assets.
+    id: 'l3.recall.space.add-photos',
+    category: 'l3.recall',
     prompt: 'add my newest 20 photos to the {space} space',
-    expect: { anyKind: ['none', 'add_photos_to_album'] },
+    expect: { kind: 'manage_space_assets' },
+  },
+  {
+    // manage_space_assets end-to-end: recency → proposeAddAssetsToSpaceFromSearch plan.
+    // Data-dependent; threshold 0.5 tolerates variance.
+    id: 'l3.plan.space.add',
+    category: 'l3.plan',
+    prompt: 'add my newest 20 photos to the {space} space',
+    expect: { kind: 'manage_space_assets', planProposed: true },
+    threshold: 0.5,
   },
 
   // --- plan-proposed: end-to-end against a real library ---------------------

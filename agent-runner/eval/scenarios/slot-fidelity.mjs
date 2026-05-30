@@ -98,4 +98,10 @@ export default [
     prompt: 'remove my newest 5 photos from Family',
     expect: { kind: 'remove_photos_from_album', slots: { albumRef: 'Family', sourceDescription: 'my newest 5 photos' } },
   },
+  {
+    id: 'slots.spaceassets.remove',
+    category: 'slots',
+    prompt: 'remove my newest 20 photos from the Family space',
+    expect: { kind: 'manage_space_assets', slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' } },
+  },
 ];
