@@ -74,4 +74,10 @@ export default [
     prompt: 'make Alex a contributor in Family',
     expect: { kind: 'change_member_role', slots: { role: 'editor', spaceRef: 'Family' } },
   },
+  {
+    id: 'slots.createalbum.default-name',
+    category: 'slots',
+    prompt: 'make an album of my newest 50 photos',
+    expect: { kind: 'create_album_from_source', slots: { sourceDescription: 'my newest 50 photos', albumName: 'New Album' } },
+  },
 ];

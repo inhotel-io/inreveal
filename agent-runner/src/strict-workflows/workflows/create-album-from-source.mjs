@@ -17,8 +17,12 @@ const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
 const stripQuotes = (t) => (t.length >= 2 && /^["'“‘]/.test(t) && /["'”’]$/.test(t) ? t.slice(1, -1).trim() : t);
 const cleanName = (value) => stripQuotes(clean(value).replace(/[.?!]+$/u, '').trim());
 
-const tripSourcePattern = /\brecent\s+trip\b/i;
-const declinesSource = (source) => SUBJECTIVE_PATTERN.test(source) || tripSourcePattern.test(source);
+// Trip-like sources overlap create_recent_trip_album. Decline them at the
+// fast-path so "build an album out of my weekend in Lisbon" / "my trip to
+// Portugal" / "our recent road trip" fall through to the LLM → trip workflow.
+const TRIP_LIKE =
+  /\b(?:trips?|vacations?|holidays?|getaways?|honeymoons?|cruises?|safaris?|road\s*trips?|weekend\s+(?:in|at|away|getaway))\b/i;
+const declinesSource = (source) => SUBJECTIVE_PATTERN.test(source) || TRIP_LIKE.test(source);
 
 const CREATE_PATTERN =
   /\b(?:make|create|build|put\s+together|assemble|generate)\s+(?:me\s+)?(?:an?\s+|a\s+new\s+|another\s+)?album\s+(?:of|from|out\s+of|with|containing|for)\s+(?<source>.+?)(?:\s+(?:called|named|titled|with\s+the\s+(?:name|title))\s+(?<name>.+))?$/i;
