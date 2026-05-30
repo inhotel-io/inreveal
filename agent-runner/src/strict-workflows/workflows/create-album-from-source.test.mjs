@@ -144,4 +144,15 @@ describe('create_album_from_source execution', () => {
     const outcome = await wf.run({ client, slots: { sourceDescription: 'my newest 10 photos', albumName: 'X' } });
     assert.equal(outcome.status, 'failed');
   });
+
+  it('returns needs_input for an ambiguous source entity (no proposeAlbumFromSelection)', async () => {
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'album', query: 'Italy', status: 'ambiguous', choices: [{ value: 'x', label: 'Italy 2023' }, { value: 'y', label: 'Italy 2024' }], message: '' },
+      ],
+    });
+    const outcome = await wf.run({ client, slots: { sourceDescription: 'photos in the Italy album', albumName: 'X' } });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(client.calls.some((c) => c.name === 'proposeAlbumFromSelection'), false);
+  });
 });
