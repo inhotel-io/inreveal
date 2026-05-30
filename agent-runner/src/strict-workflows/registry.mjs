@@ -1,6 +1,7 @@
 import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
 import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
 import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
+import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
@@ -20,6 +21,7 @@ import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 //     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
+  createAlbumFromSourceWorkflow,
   renameOrDescribeSpaceWorkflow,
   renameOrDescribeAlbumWorkflow,
   archiveAssetsWorkflow,

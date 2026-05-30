@@ -303,6 +303,43 @@ export const WORKFLOW_MANIFEST = Object.freeze([
       workflowOrBoundary: 'Resolve the member; guard owner/self/no-op; propose the role-change plan.',
     }),
   }),
+  Object.freeze({
+    kind: 'create_album_from_source',
+    flow: 'hybrid',
+    title: 'Create album from a source',
+    classifierDescription:
+      'User wants a NEW album built from a metadata-describable set of photos (recency/date/type), not a recent trip.',
+    positiveExamples: Object.freeze([
+      'Make an album of my newest 50 photos',
+      'Create an album from my 2024 photos called Best of 2024',
+      'Build an album of my newest 100 photos',
+    ]),
+    negativeExamples: Object.freeze([
+      'Create an album for my recent trip to USA',
+      'Add my newest 20 photos to Family',
+      'Make an album of the best photos',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos for the new album.',
+      }),
+      albumName: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Album name (defaults to New Album).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['searchAssets']),
+    planTool: 'proposeAlbumFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Create album from a source',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Pi resolves a recency/date/type source; Gallery owns album creation from the handle.',
+    }),
+  }),
 ]);
 
 const byKind = new Map(WORKFLOW_MANIFEST.map((entry) => [entry.kind, entry]));

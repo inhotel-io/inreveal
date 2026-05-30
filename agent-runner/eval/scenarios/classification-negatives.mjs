@@ -34,4 +34,11 @@ export default [
     prompt: 'add my newest 20 photos to the Family space',
     expect: { anyKind: ['none', 'add_photos_to_album'] },
   },
+  {
+    // A subjective album source declines (resolver would hand off anyway).
+    id: 'neg.createalbum.subjective',
+    category: 'negatives',
+    prompt: 'make an album of the best photos',
+    expect: { kind: 'none' },
+  },
 ];
