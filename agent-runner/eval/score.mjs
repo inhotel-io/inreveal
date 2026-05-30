@@ -58,7 +58,10 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
       ok = copyPass(text, sc.expect);
       lastDetail = { text };
     } else {
-      const decision = await driver.classify(sc.prompt);
+      // Multi-turn scenarios (`turns: [...]`) drive a single session across
+      // several user messages (e.g. ask_user -> follow-up). L1 has no converse().
+      const decision =
+        sc.turns && driver.converse ? await driver.converse(sc.turns) : await driver.classify(sc.prompt);
       ok = classificationPass(decision, sc.expect);
       // `undefined` means the layer can't observe slots (L3's scrubbed events);
       // `null` means slots were rejected; an object means they survived.
@@ -88,7 +91,7 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
   return {
     id: sc.id,
     category: sc.category,
-    prompt: sc.prompt,
+    prompt: sc.prompt ?? (sc.turns ? sc.turns.join(' → ') : undefined),
     score,
     passed: score >= threshold,
     threshold,
