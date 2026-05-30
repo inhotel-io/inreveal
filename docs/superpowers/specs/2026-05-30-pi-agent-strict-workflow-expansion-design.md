@@ -263,6 +263,29 @@ regen) additionally pass `pnpm --dir server check` and `sync:agent-capabilities`
 Write the listed tests **first** (red), then implement (green). Tasks use
 checkbox syntax for impl-loop tracking.
 
+### Coverage by eval layer (L1 / L2 / L3)
+
+Every workflow is verified at all three layers of the
+[smoke/eval harness](./2026-05-29-pi-agent-smoke-eval-harness-design.md):
+
+- **L1 — component** (classifier + copy vs the local model, no Gallery): intent
+  recall, slot fidelity, precision negatives. Slices 11, 19, 23, and the
+  cross-workflow disambiguation in Slice 24.
+- **L2 — workflow** (`run()` driven against a **contract-faithful fixture MCP
+  client**, no DB): exact tool-call sequence, plan-op shape, gating, and the
+  `needs_input` / `handoff_open` / `failed` paths and safety guards. The resolver
+  Slices 2–4 and **every execution slice** (6, 8, 10, 14, 16, 18, 22). These run
+  via `node:test` rather than a separate L2 driver, but the fixtures enforce the
+  real tool DTO shapes (the `add_photos` lesson), so they are L2 in substance.
+- **L3 — live** (real Gallery `/agent/*`, read-only, `plan-only`): routing +
+  plan-proposed + never-applied against a running stack. Slices 12, 20, 23, with
+  the local-seeded inner loop and periodic rc-personal described above.
+
+A workflow slice is not complete until its **L2** unit tests are green; a phase is
+not complete until its **L1** battery is ≥ baseline and its **L3** scenarios pass
+live. (L2 is covered by per-workflow unit tests here, not a dedicated
+`l2-workflow.mjs` eval driver — building that driver is out of scope.)
+
 ### Phase 0 — Shared foundation & resolver
 
 #### Slice 1: Contract regression & capability scaffolding
@@ -316,7 +339,10 @@ checkbox syntax for impl-loop tracking.
   "newest 20 photos" → `{ type:image, order:desc, limit:20 }`; "screenshots" →
   handoff (not a metadata type).
 - **Acceptance:** resolver covers recency × date × type combinations
-  deterministically; everything else handoff.
+  deterministically; everything else handoff. Note: because `add_photos_to_album`
+  now shares this resolver, it **also** gains date/type sources (e.g. "add my 2024
+  photos to X") for free — extend its existing L2 tests + L3 scenario to cover a
+  date source, and confirm no regression to its recency behavior.
 
 ### Phase 1 — Batch asset actions
 
@@ -334,9 +360,9 @@ checkbox syntax for impl-loop tracking.
 
 #### Slice 6: `archive_assets` execution
 
-- [ ] `run`: resolver → `proposeAssetBatchFromSelection({ action:
-  asset.setArchive{archived}, selectionHandleId })` → `gatePlanResult` → copy.
-      `empty` → needs_input; `handoff` → handoffOpen; tool error → failed.
+- [ ] `run`: resolver → `proposeAssetBatchFromSelection({ action: asset.setArchive{archived}, selectionHandleId })`
+      → `gatePlanResult` → copy. `empty` → needs_input; `handoff` → handoffOpen;
+      tool error → failed.
 - **Tests (contract fixtures):** recency source → `planned` with one
   `asset.setArchive` op, correct `archived`, handle id, no raw ids; subjective →
   handoff (no propose); zero-asset → needs_input (no propose); planless propose →
@@ -434,11 +460,13 @@ checkbox syntax for impl-loop tracking.
 
 #### Slice 16: `manage_space_members` execution
 
-- [ ] `run`: `listSpaces` resolve → `searchUsers` resolve each member (ambiguous →
-      needs_input; not found → needs_input) → `proposeAlbumOperations`
-      (`space.addMembers` / `space.removeMembers`) → gate → copy. Guard rails:
-      already-member (skip/needs_input), remove non-member, **remove-self rejected**,
-      **last-owner removal blocked** (surface as failed/needs_input, never plan).
+- [ ] `run`: `listSpaces` resolve → `readSpace` (current members + roles, for the
+      guards) → `searchUsers` resolve each member (ambiguous → needs_input; not
+      found → needs_input) → `proposeAlbumOperations` (`space.addMembers` /
+      `space.removeMembers`) → gate → copy. Guard rails from the readSpace member
+      set: already-member (answer/needs_input, don't re-add), remove non-member,
+      **remove-self rejected**, **last-owner removal blocked** (surface as
+      failed/needs_input, never plan).
 - **Tests:** unique add with role; ambiguous user → needs_input; already-member;
   remove non-member; self-removal rejected; last-owner removal blocked; no raw ids.
 - **Acceptance:** end-to-end membership plan with the safety guards enforced
@@ -453,9 +481,12 @@ checkbox syntax for impl-loop tracking.
 
 #### Slice 18: `change_member_role` execution
 
-- [ ] `run`: resolve space + user → `proposeAlbumOperations([space.updateMemberRole])`
-      → gate → copy. Guards: **no-op role** (→ needs_input/answer, no plan),
-      **self-demotion rejected**, **last-owner demotion blocked**.
+- [ ] `run`: `listSpaces` resolve space → `readSpace` (current members + roles) →
+      `searchUsers` resolve the target member → `proposeAlbumOperations`
+      (`[space.updateMemberRole]`) → gate → copy. Guards from the readSpace member
+      set: **no-op role** (current == requested → answer, no plan),
+      **self-demotion rejected**, **last-owner demotion blocked**, target not a
+      member → needs_input.
 - **Tests:** viewer→editor; editor→viewer; no-op role change; self-demotion
   rejected; last-owner demotion blocked; ambiguous user → needs_input.
 - **Acceptance:** end-to-end role-change plan with guards.
@@ -478,7 +509,12 @@ checkbox syntax for impl-loop tracking.
       `change_member_role` ("make {user} an editor in {space}") assert
       plan-proposed **against the local seeded stack only** (known members) and
       routing-only against personal — gate the plan assertion on a config/env flag.
-      Never applied.
+      Preconditions the discovery must satisfy for a plan (else it correctly
+      returns needs_input/no-op, not a plan): the add probe needs a `{user}` who is
+      **not** already in `{space}`; the role probe needs a `{user}` who **is** a
+      member with a **different** role than requested. `env-prep` must seed a space
+      with at least one such non-member and one changeable-role member. Never
+      applied.
 - **Acceptance:** all three route correctly live; describe-space proposes a plan
   on any instance; membership/role propose a plan on the seeded local stack;
   no-apply + gate-block audits clean.
