@@ -290,6 +290,26 @@ export default [
     expect: { kind: 'add_photos_to_album', slotsSurvive: true },
   },
 
+  // update_asset_metadata ------------------------------------------------------
+  {
+    id: 'recall.metadata.describe',
+    category: 'recall',
+    prompt: 'set the description on my newest 20 photos to Berlin weekend',
+    expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
+  },
+  {
+    id: 'recall.metadata.rating',
+    category: 'recall',
+    prompt: 'rate my newest 12 photos five stars',
+    expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 12 photos/i } },
+  },
+  {
+    id: 'recall.metadata.caption',
+    category: 'recall',
+    prompt: 'set the caption on my newest 20 photos to Beach day',
+    expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
+  },
+
   // entity-source variants (resolveAssetSearchFilters path) -------------------
   {
     id: 'recall.archive.entity',

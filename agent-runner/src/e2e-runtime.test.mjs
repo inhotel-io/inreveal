@@ -752,7 +752,25 @@ describe('e2e runtime', () => {
   });
 
   it('proposes a metadata description plan from a newest-photos prompt', async () => {
-    const { calls, fetchImplementation } = createFetch(successHandlers());
+    const { calls, fetchImplementation } = createFetch([
+      ...successHandlers(),
+      {
+        name: 'proposeAssetBatchFromSelection',
+        handle: (_args, request) => ({
+          body: {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              structuredContent: {
+                status: 'success',
+                summary: 'Stored proposed asset batch from selection.',
+                plan: { id: '00000000-0000-4000-8000-000000000304' },
+              },
+            },
+          },
+        }),
+      },
+    ]);
     const runtime = createE2eRuntime({ fetch: fetchImplementation });
     await runtime.createSession(createSessionBody());
 
@@ -760,24 +778,10 @@ describe('e2e runtime', () => {
 
     assert.equal(calls.length, 2);
     assert.equal(calls[0].body.params.name, 'searchAssets');
-    assert.deepEqual(calls[0].body.params.arguments, {
-      filters: {},
-      order: 'desc',
-      limit: 5,
-      detail: 'ids',
-      createSelectionHandle: true,
-      sampleSize: 2,
-    });
-    assert.equal(calls[1].body.params.name, 'proposeAssetBatchFromSearch');
-    assert.deepEqual(calls[1].body.params.arguments.action, {
-      type: 'asset.updateMetadata',
-      description: 'Test batch',
-    });
-    assert.deepEqual(calls[1].body.params.arguments.assetSource, {
-      kind: 'previousSearch',
-      sourceRef: 'asset-source:search:00000000-0000-4000-8000-000000000333',
-    });
-    assert.match(events.at(-1).content.blocks[0].text, /metadata/i);
+    assert.equal(calls[1].body.params.name, 'proposeAssetBatchFromSelection');
+    assert.equal(calls[1].body.params.arguments.action.type, 'asset.updateMetadata');
+    assert.equal(calls[1].body.params.arguments.action.description, 'Test batch.');
+    assert.match(events.at(-1).content.blocks[0].text, /description/i);
   });
 
   it('proposes a metadata coordinate plan only when latitude and longitude are present', async () => {

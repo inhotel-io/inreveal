@@ -86,4 +86,10 @@ export default [
     prompt: 'archive my Berlin photos',
     expect: { kind: 'archive_assets', slots: { archived: true, sourceDescription: 'my Berlin photos' } },
   },
+  {
+    id: 'slots.metadata.describe',
+    category: 'slots',
+    prompt: 'set the description on my newest 20 photos to Berlin weekend',
+    expect: { kind: 'update_asset_metadata', slots: { sourceDescription: 'my newest 20 photos' } },
+  },
 ];

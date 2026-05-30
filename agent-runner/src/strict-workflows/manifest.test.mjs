@@ -47,4 +47,14 @@ describe('strict/hybrid workflow manifest', () => {
       assert.ok(getWorkflowManifestEntry(kind).requiredReadTools.includes('resolveAssetSearchFilters'), kind);
     }
   });
+
+  it('describes update_asset_metadata as a hybrid workflow with its tools', () => {
+    const entry = getWorkflowManifestEntry('update_asset_metadata');
+    assert.equal(entry.flow, 'hybrid');
+    assert.equal(entry.planTool, 'proposeAssetBatchFromSelection');
+    assert.ok(entry.requiredReadTools.includes('searchAssets'));
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
 });

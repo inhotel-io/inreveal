@@ -44,6 +44,14 @@ const CASES = [
   ['make Alex an editor in Family', 'change_member_role'],
   ["change Bob's role to viewer in Trips", 'change_member_role'],
   ['make Sam a viewer in the Family space', 'change_member_role'],
+  // update_asset_metadata (loose-asset metadata edits — not album or space)
+  ['set the description on my newest 20 photos to Berlin', 'update_asset_metadata'],
+  ['rate my newest 12 photos five stars', 'update_asset_metadata'],
+  ['set the timezone on my newest 20 photos to Europe/Berlin', 'update_asset_metadata'],
+  // rename_or_describe_album wins over update_asset_metadata for album refs
+  ['set the description on the Family album to Summer 2026', 'rename_or_describe_album'],
+  // place-name-only location edit → none (not a supported asset-metadata edit)
+  ['set these photos to Paris', 'none'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
