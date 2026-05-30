@@ -3,6 +3,7 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/utils/background_sync.dart';
 import 'package:immich_mobile/platform/native_sync_api.g.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
+import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockStoreService extends Mock implements StoreService {}
@@ -14,3 +15,5 @@ class MockNativeSyncApi extends Mock implements NativeSyncApi {}
 class MockAppSettingsService extends Mock implements AppSettingsService {}
 
 class MockPartnerService extends Mock implements PartnerService {}
+
+class MockBackgroundBackupStatusService extends Mock implements BackgroundBackupStatusService {}
