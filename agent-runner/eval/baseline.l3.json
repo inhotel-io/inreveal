@@ -18,6 +18,10 @@
     "l3.recall.archive": 1,
     "l3.recall.favorite": 1,
     "l3.recall.tag": 1,
+    "l3.recall.space.describe": 1,
+    "l3.recall.members.add": 1,
+    "l3.recall.role": 1,
+    "l3.recall.createalbum": 1,
     "l3.neg.count": 1,
     "l3.neg.thanks": 1,
     "l3.neg.favorite": 1,
@@ -27,12 +31,17 @@
     "l3.neg.delete": 1,
     "l3.neg.archive.subjective": 1,
     "l3.neg.tag.removal": 1,
+    "l3.neg.space.add-photos": 1,
     "l3.plan.trip.usa": 1,
     "l3.plan.describe.discovered": 1,
     "l3.plan.add.recency": 1,
     "l3.plan.archive.recency": 1,
     "l3.plan.favorite.recency": 1,
     "l3.plan.tag.recency": 1,
+    "l3.plan.describe.space": 1,
+    "l3.plan.members.add": 1,
+    "l3.plan.role.make": 1,
+    "l3.plan.createalbum": 1,
     "l3.multiturn.trip.recover": 1
   }
 }
