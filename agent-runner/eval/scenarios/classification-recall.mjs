@@ -310,6 +310,27 @@ export default [
     expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
   },
 
+  // remove_photos_from_album -------------------------------------------------
+  {
+    id: 'recall.remove.canonical',
+    category: 'recall',
+    prompt: 'remove my newest 20 photos from Family',
+    expect: { kind: 'remove_photos_from_album', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
+  {
+    id: 'recall.remove.takeout',
+    category: 'recall',
+    prompt: 'take my newest 20 photos out of the Family album',
+    expect: { kind: 'remove_photos_from_album', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
+  {
+    // Forces the LLM path — 'pull' is not a regex verb.
+    id: 'recall.remove.llm',
+    category: 'recall',
+    prompt: 'pull my 2024 photos out of the Trips album',
+    expect: { kind: 'remove_photos_from_album' },
+  },
+
   // entity-source variants (resolveAssetSearchFilters path) -------------------
   {
     id: 'recall.archive.entity',

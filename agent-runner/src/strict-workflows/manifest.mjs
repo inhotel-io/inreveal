@@ -99,6 +99,36 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'remove_photos_from_album',
+    flow: 'hybrid',
+    title: 'Remove photos from album',
+    classifierDescription:
+      'User wants to remove a metadata-describable set of photos from an existing album (the inverse of adding) — not a member removal, an out-of-favorites, or a tag removal.',
+    positiveExamples: Object.freeze([
+      'Remove my newest 20 photos from Family',
+      'Take my newest 20 photos out of the Trips album',
+      'Remove my 2024 photos from the Italy album',
+    ]),
+    negativeExamples: Object.freeze([
+      'Remove the Travel tag from my newest 20',
+      'Remove Bob from the Family space',
+      'Add my newest 20 photos to Family',
+    ]),
+    slots: Object.freeze({
+      albumRef: Object.freeze({ type: 'string', required: true, description: 'The album to remove photos from.' }),
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos to remove.' }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums', 'resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Remove photos from album',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the album and source; Gallery owns the album.removeAssets plan from the handle (never an empty removal).',
+    }),
+  }),
+  Object.freeze({
     kind: 'archive_assets',
     flow: 'hybrid',
     title: 'Archive or unarchive photos',
