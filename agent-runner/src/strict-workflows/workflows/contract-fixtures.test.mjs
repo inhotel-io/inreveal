@@ -239,6 +239,128 @@ describe('makeContractClient — asset.rotate action', () => {
   });
 });
 
+describe('makeContractClient — readAlbum handler', () => {
+  it('returns album detail for a known id', async () => {
+    const client = makeContractClient({
+      albums: [
+        {
+          id: 'alb-1',
+          albumName: 'Family',
+          assetIds: ['00000000-0000-4000-8000-000000000001'],
+          albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+        },
+      ],
+    });
+    const result = await client.call('readAlbum', { albumId: 'alb-1' });
+    assert.deepEqual(result, {
+      id: 'alb-1',
+      albumName: 'Family',
+      assetIds: ['00000000-0000-4000-8000-000000000001'],
+      albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+    });
+  });
+
+  it('throws /album not found/i for an unknown id', async () => {
+    const client = makeContractClient({
+      albums: [{ id: 'alb-1', albumName: 'Family', assetIds: [], albumThumbnailAssetId: null }],
+    });
+    await assert.rejects(() => client.call('readAlbum', { albumId: 'nope' }), /album not found/i);
+  });
+});
+
+describe('makeContractClient — album.setCover validator', () => {
+  it('KNOWN_OPERATION_TYPES includes album.setCover', () => {
+    assert.equal(KNOWN_OPERATION_TYPES.has('album.setCover'), true);
+  });
+
+  it('accepts a valid album.setCover op', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      operations: [
+        {
+          type: 'album.setCover',
+          targetKind: 'existing_album',
+          targetId: '00000000-0000-4000-8000-000000000001',
+          assetIds: ['00000000-0000-4000-8000-000000000002'],
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('rejects album.setCover without targetId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'album.setCover',
+              targetKind: 'existing_album',
+              assetIds: ['00000000-0000-4000-8000-000000000001'],
+            },
+          ],
+        }),
+      /targetId/i,
+    );
+  });
+
+  it('rejects album.setCover with empty assetIds', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'album.setCover',
+              targetKind: 'existing_album',
+              targetId: '00000000-0000-4000-8000-000000000001',
+              assetIds: [],
+            },
+          ],
+        }),
+      /assetId|cover/i,
+    );
+  });
+
+  it('rejects album.setCover with wrong targetKind', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'album.setCover',
+              targetKind: 'asset_batch',
+              targetId: '00000000-0000-4000-8000-000000000001',
+              assetIds: ['00000000-0000-4000-8000-000000000002'],
+            },
+          ],
+        }),
+      /existing_album/i,
+    );
+  });
+
+  it('rejects album.setCover with a non-empty payload', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'album.setCover',
+              targetKind: 'existing_album',
+              targetId: '00000000-0000-4000-8000-000000000001',
+              assetIds: ['00000000-0000-4000-8000-000000000002'],
+              payload: { x: 1 },
+            },
+          ],
+        }),
+      /payload/i,
+    );
+  });
+});
+
 describe('makeContractClient — asset.updateMetadata action', () => {
   it('KNOWN_BATCH_ACTION_TYPES includes asset.updateMetadata', () => {
     assert.equal(KNOWN_BATCH_ACTION_TYPES.has('asset.updateMetadata'), true);
