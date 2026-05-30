@@ -156,6 +156,7 @@ export const createL3Driver = ({ gallery, l3 }) => {
 
   const settleTimeoutMs = l3.settleTimeoutMs;
   const pollIntervalMs = l3.pollIntervalMs;
+  const settleGraceMs = l3.settleGraceMs ?? 4000;
 
   // Run one prompt through a fresh, isolated session and return the routing +
   // plan signal. Fresh-session-per-prompt avoids cross-prompt continuation
@@ -172,6 +173,7 @@ export const createL3Driver = ({ gallery, l3 }) => {
     let routerKv = null;
     let outcomeKv = null;
     let status = session.status;
+    let settledSince = null;
 
     while (Date.now() < deadline) {
       const events = await api('GET', `/agent/sessions/${session.id}/activity-events`);
@@ -179,15 +181,23 @@ export const createL3Driver = ({ gallery, l3 }) => {
         if (e.kind === 'strict_router_decision') routerKv = parseKv(e.summary);
         if (e.kind === 'strict_workflow_outcome') outcomeKv = parseKv(e.summary);
       }
-      const current = await api('GET', `/agent/sessions/${session.id}`);
-      status = current.status;
+      status = (await api('GET', `/agent/sessions/${session.id}`)).status;
 
       // A matched router decision short-circuits once we also have an outcome or
       // a settled session; an unmatched (negative) decision needs nothing more —
       // the open-orchestration tail is irrelevant to the routing assertion.
-      const matched = routerKv && routerKv.matched === 'true';
+      const matched = routerKv?.matched === 'true';
       if (routerKv && (!matched || outcomeKv || SETTLED.has(status))) break;
-      if (SETTLED.has(status)) break;
+      // The runner's strict events (source=runner) are flushed just AFTER the
+      // plan persists, so a fast regex route can flip the session to a settled
+      // status before its router-decision event lands. Don't break on settled
+      // status alone — grant a short grace window for the event to arrive, then
+      // give up (an instance that never emits strict events, e.g. a pre-Slice-6
+      // build, must not hang here for the full timeout).
+      if (SETTLED.has(status)) {
+        settledSince ??= Date.now();
+        if (Date.now() - settledSince > settleGraceMs) break;
+      }
       await sleep(pollIntervalMs);
     }
 
