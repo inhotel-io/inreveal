@@ -98,6 +98,10 @@ const activityKinds = new Set<AgentRunnerActivityKind>([
   'plan-composing',
   'apply-progress',
   'runner-recovery',
+  'strict_router_decision',
+  'strict_workflow_outcome',
+  'strict_success_gate_block',
+  'strict_continuation',
   'unknown',
 ]);
 const activityStatuses = new Set<AgentRunnerActivityStatus>(['running', 'completed', 'failed', 'skipped']);

@@ -1088,15 +1088,24 @@ describe('pi runtime adapter', () => {
     assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
     assert.deepEqual(mcpCalls.map((call) => call.body.method), ['tools/call', 'tools/call']);
     assert.equal(mcpCalls[0].headers.Authorization, 'Bearer mcp-token-secret');
-    assert.equal(events.length, 1);
-    assert.equal(events[0].type, 'assistant-message-completed');
-    assert.equal(events[0].sessionId, '00000000-0000-4000-8000-000000000100');
-    assert.equal(events[0].runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
-    assert.equal(events[0].providerMessageId, null);
-    assert.match(events[0].content.blocks[0].text, /May 3-12, 2026/);
-    assert.match(events[0].content.blocks[0].text, /28 assets/);
-    assert.match(events[0].content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
-    assert.match(events[0].content.blocks[0].text, /Review the plan before applying it/);
+    // Strict observability events (Slice 6) ride the same stream as debug/audit
+    // `activity` events; they are not part of the user-facing message protocol.
+    const protocolEvents = events.filter((event) => event.type !== 'activity');
+    assert.equal(protocolEvents.length, 1);
+    assert.equal(protocolEvents[0].type, 'assistant-message-completed');
+    assert.equal(protocolEvents[0].sessionId, '00000000-0000-4000-8000-000000000100');
+    assert.equal(protocolEvents[0].runnerSessionId, 'pi-00000000-0000-4000-8000-000000000100');
+    assert.equal(protocolEvents[0].providerMessageId, null);
+    assert.match(protocolEvents[0].content.blocks[0].text, /May 3-12, 2026/);
+    assert.match(protocolEvents[0].content.blocks[0].text, /28 assets/);
+    assert.match(protocolEvents[0].content.blocks[0].text, /skipped 3 known duplicate variants and 1 stack child/i);
+    assert.match(protocolEvents[0].content.blocks[0].text, /Review the plan before applying it/);
+    // The router decision and planned outcome are observable on the activity channel.
+    const observed = events.filter((event) => event.type === 'activity');
+    assert.deepEqual(
+      observed.map((event) => event.kind),
+      ['strict_router_decision', 'strict_workflow_outcome'],
+    );
     assert.equal(session.messages.some((message) => message.role === 'user' && message.content[0].text.includes('recent trip to USA')), true);
     assert.equal(session.messages.some((message) => message.role === 'assistant' && message.content[0].text.includes('Review the plan')), true);
   });
@@ -1262,19 +1271,26 @@ describe('pi runtime adapter', () => {
 
     assert.equal(calls.prompts.length, 0);
     assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
+    // Strict observability rides the activity channel; the protocol events keep
+    // their order (durable workflow-state-update then tool-approval-needed).
+    const protocolEvents = events.filter((event) => event.type !== 'activity');
     assert.deepEqual(
-      events.map((event) => event.type),
+      protocolEvents.map((event) => event.type),
       ['workflow-state-update', 'tool-approval-needed'],
     );
-    const stateEvent = events.find((event) => event.type === 'workflow-state-update');
+    const stateEvent = protocolEvents.find((event) => event.type === 'workflow-state-update');
     assert.equal(stateEvent.workflowState.kind, 'approval');
     assert.doesNotMatch(JSON.stringify(stateEvent.workflowState), /sourceRef|assetIds/);
-    assert.deepEqual(events.at(-1), {
+    assert.deepEqual(protocolEvents.at(-1), {
       type: 'tool-approval-needed',
       sessionId: '00000000-0000-4000-8000-000000000100',
       runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
       toolCallId: '00000000-0000-4000-8000-000000000999',
     });
+    // The approval_required outcome is observable (with no planId yet).
+    assert.ok(
+      events.some((event) => event.type === 'activity' && event.kind === 'strict_workflow_outcome'),
+    );
   });
 
   it('resumes a production strict recent-trip album after candidate selection without provider prompting', async () => {
@@ -1440,13 +1456,15 @@ describe('pi runtime adapter', () => {
     assert.equal(calls.continues, 0);
     assert.equal(mcpCalls.map((call) => call.body.params.name).join(','), 'findTripCandidates,proposeAlbumFromSelection');
     // The approval resume first clears the rehydrated pending state, then re-persists the new approval blob.
+    // Strict observability `activity` events ride the same stream and are filtered out of the protocol assertion.
+    const protocolEvents = events.filter((event) => event.type !== 'activity');
     assert.deepEqual(
-      events.map((event) => event.type),
+      protocolEvents.map((event) => event.type),
       ['workflow-state-update', 'workflow-state-update', 'tool-approval-needed'],
     );
-    assert.equal(events[0].workflowState, null);
-    assert.equal(events[1].workflowState.kind, 'approval');
-    assert.deepEqual(events.at(-1), {
+    assert.equal(protocolEvents[0].workflowState, null);
+    assert.equal(protocolEvents[1].workflowState.kind, 'approval');
+    assert.deepEqual(protocolEvents.at(-1), {
       type: 'tool-approval-needed',
       sessionId: '00000000-0000-4000-8000-000000000100',
       runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',

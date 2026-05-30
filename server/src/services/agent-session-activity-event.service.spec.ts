@@ -195,6 +195,61 @@ describe(AgentSessionActivityEventService.name, () => {
     ).resolves.toEqual(event);
   });
 
+  it.each([
+    AgentSessionActivityEventKind.StrictRouterDecision,
+    AgentSessionActivityEventKind.StrictWorkflowOutcome,
+    AgentSessionActivityEventKind.StrictSuccessGateBlock,
+    AgentSessionActivityEventKind.StrictContinuation,
+  ])('round-trips strict workflow observability runner event %s', (kind) => {
+    const normalized = sut.normalizeRunnerEvent({
+      type: 'activity',
+      sessionId: factory.uuid(),
+      runnerSessionId: 'runner-session',
+      kind,
+      status: AgentSessionActivityEventStatus.Completed,
+      summary: 'matched=true via=regex',
+    } as never);
+
+    expect(normalized).not.toBeNull();
+    expect(normalized?.kind).toBe(kind);
+    expect(normalized?.source).toBe(AgentSessionActivityEventSource.Runner);
+  });
+
+  it('persists strict observability events as activity (not user chat) and websockets them as activity', async () => {
+    const session = makeSession({ userId: auth.user.id });
+    const event = makeEvent({
+      sessionId: session.id,
+      kind: AgentSessionActivityEventKind.StrictSuccessGateBlock,
+      status: AgentSessionActivityEventStatus.Failed,
+      source: AgentSessionActivityEventSource.Runner,
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    repository.create.mockResolvedValue(event);
+
+    const result = await sut.create(
+      auth,
+      session.id,
+      makeCreateDto({
+        kind: AgentSessionActivityEventKind.StrictSuccessGateBlock,
+        status: AgentSessionActivityEventStatus.Failed,
+        source: AgentSessionActivityEventSource.Runner,
+        summary: 'planned outcome blocked: missing planId',
+      }),
+    );
+
+    expect(result).toEqual(event);
+    // Strict observability rides the activity channel; it is never surfaced as an
+    // assistant message in the user-facing transcript.
+    expect(websocketRepository.clientSend).toHaveBeenCalledWith(
+      'on_agent_session_event',
+      auth.user.id,
+      expect.objectContaining({ type: 'activity', sessionId: session.id }),
+    );
+    const payload = websocketRepository.clientSend.mock.calls[0][2];
+    expect((payload as { type: string }).type).toBe('activity');
+    expect(payload).not.toHaveProperty('message');
+  });
+
   it('suppresses prompt and reasoning summaries before persistence', async () => {
     const session = makeSession({ userId: auth.user.id });
     sessionRepository.getById.mockResolvedValue(session);
