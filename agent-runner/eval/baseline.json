@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.992,
+  "overall": 0.988,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.889
+    "copy": 0.778
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -25,6 +25,16 @@
     "recall.add.berlin.weekend": 1,
     "recall.add.yesterday": 1,
     "recall.add.beach.drop": 1,
+    "recall.archive.canonical": 1,
+    "recall.archive.unarchive": 1,
+    "recall.archive.uncommon-verb": 1,
+    "recall.archive.screenshots": 1,
+    "recall.favorite.canonical": 1,
+    "recall.favorite.unfavorite": 1,
+    "recall.favorite.add-to-favorites": 1,
+    "recall.tag.canonical": 1,
+    "recall.tag.add-the-tag": 1,
+    "recall.tag.uncommon-verb": 1,
     "neg.q.count": 1,
     "neg.q.biggest": 1,
     "neg.q.where": 1,
@@ -36,8 +46,9 @@
     "neg.unsup.favorite": 1,
     "neg.unsup.search": 1,
     "neg.unsup.rotate": 1,
-    "neg.unsup.archive": 1,
     "neg.unsup.delete": 1,
+    "neg.archive.subjective": 1,
+    "neg.tag.removal": 1,
     "slots.usa.alias.unitedstates": 1,
     "slots.usa.alias.us-dot": 1,
     "slots.usa.alias.the-united-states": 1,
@@ -45,7 +56,10 @@
     "slots.trip.quoted-name": 1,
     "slots.trip.default-name": 1,
     "slots.rename.ref-and-name": 1,
-    "copy.trip.usa.with-exclusions": 1,
+    "slots.archive.unarchive-polarity": 1,
+    "slots.favorite.polarity": 1,
+    "slots.tag.quoted-name": 1,
+    "copy.trip.usa.with-exclusions": 0.667,
     "copy.trip.italy.no-exclusions": 0.667,
     "copy.trip.long-name": 1
   }

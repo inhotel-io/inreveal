@@ -19,6 +19,9 @@ export default [
   { id: 'neg.unsup.favorite', category: 'negatives', prompt: 'favorite the best 3 photos from last weekend', expect: { kind: 'none' } },
   { id: 'neg.unsup.search', category: 'negatives', prompt: 'find my Sony photos from May', expect: { kind: 'none' } },
   { id: 'neg.unsup.rotate', category: 'negatives', prompt: 'rotate the sideways photos clockwise', expect: { kind: 'none' } },
-  { id: 'neg.unsup.archive', category: 'negatives', prompt: 'archive old screenshots from 2024', expect: { kind: 'none' } },
   { id: 'neg.unsup.delete', category: 'negatives', prompt: 'delete the Family album', expect: { kind: 'none' } },
+
+  // Subjective / out-of-scope arms of the new batch workflows -> none (decline) -
+  { id: 'neg.archive.subjective', category: 'negatives', prompt: 'archive the best ones', expect: { kind: 'none' } },
+  { id: 'neg.tag.removal', category: 'negatives', prompt: 'remove the Travel tag from my newest 20', expect: { kind: 'none' } },
 ];
