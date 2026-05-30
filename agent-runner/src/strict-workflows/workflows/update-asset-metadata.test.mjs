@@ -151,6 +151,14 @@ describe('update_asset_metadata parseSlots', () => {
       { sourceDescription: 'my newest 20 photos', payload: { description: 'Berlin weekend' } },
     );
   });
+
+  it('normalizes match-output form with a NUMERIC rating slot (regex-path integration)', () => {
+    assert.deepEqual(
+      wf.parseSlots({ field: 'rating', rating: 5, sourceDescription: 'my newest 12 photos' }),
+      { sourceDescription: 'my newest 12 photos', payload: { rating: 5 } },
+    );
+    assert.deepEqual(wf.parseSlots({ field: 'rating', rating: null, sourceDescription: 'x' }).payload, { rating: null });
+  });
 });
 
 describe('update_asset_metadata execution', () => {
