@@ -775,10 +775,13 @@ export class AgentToolService {
           }
         }
 
+        // Trip candidates are returned as compact summaries + selection handles, not
+        // as raw asset ids in the model's context, so the per-tool-call asset limit
+        // (which bounds model-facing payloads) must NOT gate discovery — otherwise a
+        // legitimate large trip (the common case) is undiscoverable. The handle bounds
+        // the asset set; the per-session limit below and plan creation enforce the
+        // real cumulative/blast-radius bounds.
         const assetCount = materializedCandidates.reduce((total, candidate) => total + candidate.assetIds.length, 0);
-        if (assetCount > session.permissionPlanSnapshot.limits.maxAssetsPerToolCall) {
-          throw new AgentToolDeniedError('Requested asset count exceeds per-tool limit');
-        }
 
         if (materializedCandidates.length > 0) {
           const reservation = await this.toolCallRepository.transitionWithSessionLimit(

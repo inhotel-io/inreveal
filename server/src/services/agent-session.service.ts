@@ -62,8 +62,8 @@ export class AgentSessionService {
         updateAssetMetadata: false,
       },
       limits: {
-        maxAssetsPerToolCall: 200,
-        maxAssetsPerSession: 2000,
+        maxAssetsPerToolCall: 1000,
+        maxAssetsPerSession: 10000,
         maxPreviewsPerToolCall: 0,
         maxPreviewsPerSession: 0,
         maxOriginalsPerToolCall: 0,
@@ -100,8 +100,8 @@ export class AgentSessionService {
         updateAssetMetadata: true,
       },
       limits: {
-        maxAssetsPerToolCall: 500,
-        maxAssetsPerSession: 5000,
+        maxAssetsPerToolCall: 2000,
+        maxAssetsPerSession: 20000,
         maxPreviewsPerToolCall: 100,
         maxPreviewsPerSession: 500,
         maxOriginalsPerToolCall: 0,
@@ -138,8 +138,8 @@ export class AgentSessionService {
         updateAssetMetadata: true,
       },
       limits: {
-        maxAssetsPerToolCall: 500,
-        maxAssetsPerSession: 5000,
+        maxAssetsPerToolCall: 5000,
+        maxAssetsPerSession: 50000,
         maxPreviewsPerToolCall: 100,
         maxPreviewsPerSession: 500,
         maxOriginalsPerToolCall: 25,
