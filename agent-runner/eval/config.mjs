@@ -6,6 +6,17 @@
 //   EVAL_LLAMA_KEY    api key (any string for llama.cpp)
 //   EVAL_ROUTER_MODE  regex | llm | hybrid (default hybrid)
 //   EVAL_RUNS         repeats per LLM scenario for pass-rate (default 3)
+//
+// L3 (live Gallery /agent/* API, read-only) — only used with `--layer L3`:
+//   GALLERY_URL          Gallery API base (default local dev stack)
+//   GALLERY_API_KEY      x-api-key auth (preferred for headless runs)
+//   GALLERY_TOKEN        bearer access token (alternative to api key)
+//   GALLERY_EMAIL/PASSWORD  login to mint a bearer token (alternative)
+//   GALLERY_CREDENTIAL_ID   reuse an existing agent provider credential
+//   GALLERY_MODEL_URL    else: server-reachable model URL to create a credential for
+//   GALLERY_MODEL        override the model id used for the session
+//   GALLERY_PRESET       permission preset (default visual-organizer)
+//   EVAL_L3_RUNS         repeats per L3 scenario (default 1 — round-trips are slow)
 export default {
   llama: {
     baseUrl: process.env.EVAL_LLAMA_URL ?? 'http://127.0.0.1:8080/v1',
@@ -14,4 +25,23 @@ export default {
   },
   routerMode: process.env.EVAL_ROUTER_MODE ?? 'hybrid',
   runs: Number(process.env.EVAL_RUNS ?? 3),
+
+  gallery: {
+    baseUrl: process.env.GALLERY_URL ?? 'http://localhost:2283/api',
+    apiKey: process.env.GALLERY_API_KEY,
+    token: process.env.GALLERY_TOKEN,
+    email: process.env.GALLERY_EMAIL,
+    password: process.env.GALLERY_PASSWORD,
+    credentialId: process.env.GALLERY_CREDENTIAL_ID,
+    modelUrl: process.env.GALLERY_MODEL_URL,
+    modelSecret: process.env.GALLERY_MODEL_SECRET ?? 'local',
+    model: process.env.GALLERY_MODEL,
+    permissionPreset: process.env.GALLERY_PRESET ?? 'visual-organizer',
+  },
+  l3: {
+    runs: Number(process.env.EVAL_L3_RUNS ?? 1),
+    settleTimeoutMs: Number(process.env.EVAL_L3_TIMEOUT_MS ?? 90_000),
+    pollIntervalMs: Number(process.env.EVAL_L3_POLL_MS ?? 600),
+    keepSessions: process.env.EVAL_L3_KEEP_SESSIONS === '1',
+  },
 };
