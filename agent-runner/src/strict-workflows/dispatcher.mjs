@@ -102,7 +102,7 @@ export const createWorkflowDispatcher = ({ registry, buildClient, now = Date.now
       return { handled: true };
     }
 
-    const decision = registry.classify(prompt);
+    const decision = await registry.classify(prompt, { signal });
     if (decision.kind === 'none') {
       return { handled: false };
     }

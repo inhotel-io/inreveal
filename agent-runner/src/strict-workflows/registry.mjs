@@ -4,12 +4,32 @@ import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-al
 // runtime edit. Slice 7 adds more factories here.
 const WORKFLOW_FACTORIES = Object.freeze([createRecentTripAlbumWorkflow]);
 
-export const createWorkflowRegistry = () => {
+// Regex-only fallback classifier, used when no LLM classifier is injected
+// (e2e-runtime, dispatcher unit tests). Keeps `classify` deterministic and
+// model-free so those callers never reach a provider.
+const createRegexClassifier = (workflows) => ({
+  async classify(prompt) {
+    for (const workflow of workflows.values()) {
+      const matched = workflow.match(prompt);
+      if (matched) {
+        return { kind: workflow.kind, ...matched, via: 'regex', confidence: 'high' };
+      }
+    }
+    return { kind: 'none', via: 'regex' };
+  },
+});
+
+// `classifier` is the Slice 4 LLM intent classifier (regex fast-path → LLM
+// structured classify → parseSlots). When omitted, the registry stays regex-only
+// so Slice 3 dispatcher tests and the e2e runtime keep working without a model.
+export const createWorkflowRegistry = ({ classifier } = {}) => {
   const workflows = new Map();
   for (const factory of WORKFLOW_FACTORIES) {
     const workflow = factory();
     workflows.set(workflow.kind, workflow);
   }
+
+  const activeClassifier = classifier ?? createRegexClassifier(workflows);
 
   return {
     getWorkflow(kind) {
@@ -20,17 +40,11 @@ export const createWorkflowRegistry = () => {
       return [...workflows.values()];
     },
 
-    // Slice 3: regex fast-path only. Slice 4 swaps in the LLM classifier behind
-    // this same `classify(prompt)` signature, returning `{ kind, slots }` or
-    // `{ kind: 'none' }`.
-    classify(prompt) {
-      for (const workflow of workflows.values()) {
-        const matched = workflow.match(prompt);
-        if (matched) {
-          return { kind: workflow.kind, ...matched };
-        }
-      }
-      return { kind: 'none' };
+    // Delegates to the injected classifier (or the regex-only fallback). Returns
+    // `{ kind, slots? }` or `{ kind: 'none' }`. The dispatcher then runs
+    // `parseSlots` before any execution.
+    classify(prompt, options) {
+      return activeClassifier.classify(prompt, options);
     },
   };
 };
