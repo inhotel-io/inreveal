@@ -1,10 +1,5 @@
-import {
-  createRecentTripCandidateSelectionState,
-  matchStrictWorkflow,
-  resolveRecentTripCandidateSelection,
-  runCreateRecentTripAlbumCandidateWorkflow,
-  runCreateRecentTripAlbumWorkflow,
-} from './strict-workflows.mjs';
+import { createWorkflowDispatcher } from './strict-workflows/dispatcher.mjs';
+import { createWorkflowRegistry } from './strict-workflows/registry.mjs';
 
 const protocolVersion = '2026-05-14';
 const inaccessibleAssetId = '00000000-0000-4000-8000-000000000014';
@@ -811,6 +806,7 @@ const proposeAlbumCover = async (client, album, assetId, criteriaMode) => {
 
 export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () => Date.now() } = {}) => {
   const sessions = new Map();
+  const registry = createWorkflowRegistry();
 
   return {
     getCapabilities() {
@@ -825,7 +821,14 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () 
         mcpGateway: body.mcpGateway,
         supportsImageInput: sessionSupportsImageInput(body),
         initialContext: body.initialContext ?? {},
-        pendingStrictWorkflow: undefined,
+        pendingWorkflow: undefined,
+        dispatcher: body.mcpGateway
+          ? createWorkflowDispatcher({
+              registry,
+              buildClient: () => createE2eMcpClient({ gateway: body.mcpGateway, fetch: fetchImplementation }),
+              now,
+            })
+          : undefined,
       });
 
       return {
@@ -852,70 +855,20 @@ export const createE2eRuntime = ({ fetch: fetchImplementation = fetch, now = () 
       const prompt = getPromptText(content);
       const metadataPrompt = parseMetadataPrompt(prompt);
 
-      const strictWorkflow = matchStrictWorkflow(prompt);
-      if (
-        strictWorkflow.kind !== 'create_recent_trip_album' &&
-        entry.pendingStrictWorkflow?.kind === 'create_recent_trip_album_candidate_selection'
-      ) {
-        const resolved = resolveRecentTripCandidateSelection({
-          pending: entry.pendingStrictWorkflow,
-          prompt,
-          nowMs: now(),
-        });
-        if (resolved.status === 'expired') {
-          entry.pendingStrictWorkflow = undefined;
-          yield completedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
-          return;
-        }
-        if (resolved.status === 'needs_input') {
-          yield completedEvent({ gallerySessionId, runnerSessionId, text: resolved.text });
-          return;
-        }
-        if (resolved.status === 'matched') {
-          entry.pendingStrictWorkflow = undefined;
-          const workflowResult = await runCreateRecentTripAlbumCandidateWorkflow({
-            client,
-            workflow: resolved.workflow,
-            candidate: resolved.candidate,
-          });
-          if (workflowResult.status === 'approval_required') {
-            yield toolApprovalNeededEvent({
-              gallerySessionId,
-              runnerSessionId,
-              toolCallId: workflowResult.toolCallId,
-            });
-            return;
-          }
-          yield completedEvent({ gallerySessionId, runnerSessionId, text: workflowResult.text });
-          return;
-        }
-      }
-
-      if (strictWorkflow.kind === 'create_recent_trip_album') {
-        const workflowResult = await runCreateRecentTripAlbumWorkflow({ client, workflow: strictWorkflow });
-        if (workflowResult.status === 'needs_input' && Array.isArray(workflowResult.candidates)) {
-          entry.pendingStrictWorkflow = createRecentTripCandidateSelectionState({
-            workflow: strictWorkflow,
-            candidates: workflowResult.candidates,
-            nowMs: now(),
-          });
-        } else if (workflowResult.status !== 'approval_required') {
-          entry.pendingStrictWorkflow = undefined;
-        }
-        if (workflowResult.status === 'approval_required') {
-          yield toolApprovalNeededEvent({
-            gallerySessionId,
-            runnerSessionId,
-            toolCallId: workflowResult.toolCallId,
-          });
-          return;
-        }
-
-        yield completedEvent({
-          gallerySessionId,
-          runnerSessionId,
-          text: workflowResult.text,
-        });
+      const strictEvents = [];
+      const dispatch = await entry.dispatcher.routeTurn({
+        prompt,
+        emit: (event) => strictEvents.push(event),
+        appendTranscript: () => {},
+        getPending: () => entry.pendingWorkflow,
+        setPending: (next) => {
+          entry.pendingWorkflow = next;
+        },
+        completedEvent: ({ text }) => completedEvent({ gallerySessionId, runnerSessionId, text }),
+        approvalEvent: ({ toolCallId }) => toolApprovalNeededEvent({ gallerySessionId, runnerSessionId, toolCallId }),
+      });
+      if (dispatch.handled) {
+        yield* strictEvents;
         return;
       }
 
