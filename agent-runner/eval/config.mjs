@@ -42,6 +42,9 @@ export default {
     runs: Number(process.env.EVAL_L3_RUNS ?? 1),
     settleTimeoutMs: Number(process.env.EVAL_L3_TIMEOUT_MS ?? 90_000),
     pollIntervalMs: Number(process.env.EVAL_L3_POLL_MS ?? 600),
+    // Grace window to let the runner's strict activity events land after the
+    // session settles (a fast regex route can settle before its event flushes).
+    settleGraceMs: Number(process.env.EVAL_L3_GRACE_MS ?? 4000),
     keepSessions: process.env.EVAL_L3_KEEP_SESSIONS === '1',
   },
 };
