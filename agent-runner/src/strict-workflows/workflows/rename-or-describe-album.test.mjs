@@ -74,6 +74,20 @@ describe('rename_or_describe_album StrictWorkflow', () => {
     assert.equal(wf.parseSlots({ albumRef: 'Family' }, 'do something to Family'), null);
   });
 
+  it('extracts the description value from a "set the description on X to Y" prompt', () => {
+    // Regression: the eval harness caught this phrasing matching the kind but
+    // dropping the value, so parseSlots rejected it and the turn fell through.
+    const matched = wf.match('set the description on my Italy album to Summer 2026 memories');
+    assert.deepEqual(matched.slots, { albumRef: 'Italy', description: 'Summer 2026 memories' });
+    assert.deepEqual(wf.parseSlots(matched.slots, 'irrelevant'), { albumRef: 'Italy', description: 'Summer 2026 memories' });
+  });
+
+  it('still declines a value-less describe request so it can ask for the text', () => {
+    const matched = wf.match('change the description on my Italy album');
+    assert.deepEqual(matched.slots, { albumRef: 'Italy' });
+    assert.equal(wf.parseSlots(matched.slots, 'irrelevant'), null);
+  });
+
   it('fails without claiming success when planning returns no plan id', async () => {
     const client = fakeClient({ planResult: { status: 'success' } });
     const outcome = await wf.run({
