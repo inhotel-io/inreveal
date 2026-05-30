@@ -41,6 +41,15 @@ const extractPlaceHint = (prompt) => {
   return match ? normalizePlaceHint(match[1]) : undefined;
 };
 
+// Slot-normalization helpers shared by the protocol adapter's parseSlots so it
+// reuses the same place/album normalization rather than duplicating the regexes.
+export const normalizePlaceHintSlot = (value) => normalizePlaceHint(value);
+
+export const normalizeAlbumNameSlot = (value) => {
+  const cleaned = cleanAlbumName(value);
+  return cleaned.length > 0 ? cleaned : undefined;
+};
+
 const extractAlbumName = (prompt, placeHint) => {
   const explicit = prompt.match(explicitAlbumNamePattern);
   if (explicit) {
@@ -317,6 +326,14 @@ const plannedResult = ({ planResult, candidate, workflow, label, assetCount, sel
       candidate,
       selectionHandleId,
       assetCount,
+      successSummary: {
+        workflowKind: 'create_recent_trip_album',
+        albumName: workflow.albumName,
+        label,
+        dateRange: tripCandidateDateRange(candidate),
+        assetCount,
+        exclusions: tripDuplicateParts(candidate).join(' and ') || undefined,
+      },
     },
   );
 };
