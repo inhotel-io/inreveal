@@ -38,6 +38,10 @@ const REMOVE_FAV_FROM_PATTERN =
   /\bremove\s+(?:the\s+)?(?:favou?rite|fave)\s+(?:status\s+)?(?:from|on|of)\s+(?<source>.+)$/i;
 const OUT_OF_FAVS_PATTERN = /\bremove\s+(?<source>.+?)\s+from\s+(?:my\s+)?favou?rites\b/i;
 const UNLIKE_PATTERN = /^\s*(?:please\s+)?unlike\s+(?<source>.+)$/i;
+// "add <source> to [my] favorites" is a favorite intent, not an album add — but
+// only when "favorites" is the end of the phrase (so "… to my Favorites album"
+// stays an album add owned by add_photos_to_album).
+const ADD_TO_FAVS_PATTERN = /\badd\s+(?<source>.+?)\s+to\s+(?:my\s+)?favou?rites\b\s*[.?!]*$/i;
 const FAVORITE_PATTERN = /\bfavou?rite\s+(?<source>.+)$/i;
 const LIKE_PATTERN = /^\s*(?:please\s+)?like\s+(?<source>.+)$/i;
 
@@ -46,6 +50,7 @@ const POLARITY_PATTERNS = [
   [REMOVE_FAV_FROM_PATTERN, false],
   [OUT_OF_FAVS_PATTERN, false],
   [UNLIKE_PATTERN, false],
+  [ADD_TO_FAVS_PATTERN, true],
   [FAVORITE_PATTERN, true],
   [LIKE_PATTERN, true],
 ];
