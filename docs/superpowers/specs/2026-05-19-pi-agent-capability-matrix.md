@@ -123,9 +123,11 @@ retried only when the correction is mechanical.
 
 Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do not edit by hand; run `pnpm --dir server sync:agent-capabilities`.
 
-| Kind                       | Flow   | Required read tools  | Plan tool                   |
-| -------------------------- | ------ | -------------------- | --------------------------- |
-| `create_recent_trip_album` | Strict | `findTripCandidates` | `proposeAlbumFromSelection` |
+| Kind                       | Flow   | Required read tools                                       | Plan tool                   |
+| -------------------------- | ------ | --------------------------------------------------------- | --------------------------- |
+| `create_recent_trip_album` | Strict | `findTripCandidates`                                      | `proposeAlbumFromSelection` |
+| `rename_or_describe_album` | Strict | `listAlbums`                                              | `proposeAlbumOperations`    |
+| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`    |
 
 <!-- generated:workflows:end -->
 
