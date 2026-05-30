@@ -98,7 +98,7 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
       summary: 's',
       operations: [
         { type: 'album.addAssets', targetKind: 'existing_album', targetId: 'a', assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' } },
-        { type: 'space.updateDetails', targetId: 'spc-1', payload: { name: 'X' } },
+        { type: 'space.updateDetails', targetKind: 'existing_space', targetId: 'spc-1', payload: { spaceName: 'X' } },
       ],
     });
     assert.equal(ok.plan.id, 'plan-1');
