@@ -101,6 +101,28 @@ export const parseDateRange = (source, now = new Date()) => {
   return undefined;
 };
 
+// --- named-entity / direct-metadata source detection (Phase 0) ---------------
+
+// Camera makes recognized in the bare "my <Make> photos" form. An allow-list so a
+// place ("my Berlin photos") is NOT mistaken for a camera. Explicit "shot on/with
+// <X>" captures any make regardless of this list.
+const CAMERA_MAKES = new Set([
+  'sony', 'canon', 'nikon', 'fuji', 'fujifilm', 'leica', 'panasonic', 'olympus',
+  'pentax', 'gopro', 'dji', 'hasselblad', 'ricoh', 'sigma', 'kodak',
+]);
+
+// Capitalized words that are filler, never a place/camera even before a photo noun.
+const NON_ENTITY_WORDS = new Set([
+  'my', 'the', 'a', 'an', 'these', 'those', 'all', 'some', 'our',
+  'recent', 'newest', 'latest', 'last', 'most', 'best', 'good',
+]);
+
+// Caps to keep the later resolveAssetSearchFilters strictObject within bounds.
+const MAX_ENTITY_NAMES_PER_KIND = 20;
+const MAX_ENTITY_NAME_LENGTH = 120;
+
+const PHOTO_NOUN = '(?:photos?|pics?|pictures?|snaps?|shots?)';
+
 // --- media type parsing (pure) ----------------------------------------------
 
 // Explicit type words only. The generic colloquial library words
@@ -120,6 +142,74 @@ export const parseMediaType = (source) => {
     return 'IMAGE';
   }
   return undefined;
+};
+
+// Classify which named-entity / direct-metadata classes a source mentions. Pure;
+// proposes candidate name strings (the server/tool layer decides matched/ambiguous/
+// not_found in Slice 2). Returns undefined when the source has no entity (recency /
+// date / type / filler only). Operates on a mutable working copy, consuming each
+// matched span so later rules don't re-match it (and so multiple kinds accumulate).
+export const parseEntitySource = (source) => {
+  let text = ` ${String(source ?? '')} `;
+  const result = {};
+  const pushName = (key, raw) => {
+    const name = clean(raw);
+    if (!name || name.length > MAX_ENTITY_NAME_LENGTH) {
+      return;
+    }
+    const list = (result[key] ??= []);
+    if (list.length < MAX_ENTITY_NAMES_PER_KIND && !list.includes(name)) {
+      list.push(name);
+    }
+  };
+  const setDirect = (key, value) => {
+    (result.directFilters ??= {})[key] = value;
+  };
+
+  // (1) album: "in the <Album> album" — before place "in <X>".
+  text = text.replace(/\bin\s+the\s+([A-Za-z][\w' -]*?)\s+albums?\b/gi, (_m, n) => (pushName('albums', n), ' '));
+  // (2) tag: "<Tag>-tagged" first (so the hyphenated form is consumed before "tagged <Tag>" sees it),
+  // then "tagged <Tag>".
+  text = text.replace(/\b([A-Za-z][\w']*)-tagged\b/gi, (_m, n) => (pushName('tags', n), ' '));
+  text = text.replace(/\btagged\s+([A-Za-z][\w'-]*)/gi, (_m, n) => (pushName('tags', n), ' '));
+  // (3) camera (explicit): "shot on/with <Make>" — any token, consumed before people "with".
+  text = text.replace(/\bshot\s+(?:on|with)\s+([A-Za-z][\w'-]*)/gi, (_m, n) => (pushName('cameras', n), ' '));
+  // (4) people: "of/with <Capitalized Name>".
+  text = text.replace(/\b(?:of|with)\s+([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*)/g, (_m, n) => (pushName('people', n), ' '));
+  // (5) rating: "rated N" / "N-star(s)" / "N stars" (clamp 1..5; out-of-range left in place).
+  text = text.replace(/\brated\s+([1-9]\d?)\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
+  text = text.replace(/\b([1-9]\d?)[\s-]?stars?\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
+  // (6) favorites.
+  if (/\bfavou?rites?\b/i.test(text)) {
+    setDirect('isFavorite', true);
+    text = text.replace(/\bfavou?rites?\b/gi, ' ');
+  }
+  // (7) visibility.
+  if (/\barchived\b/i.test(text)) {
+    setDirect('visibility', 'archive');
+    text = text.replace(/\barchived\b/gi, ' ');
+  }
+  // (8) camera (bare): "my <Make> photos" where Make is a known make.
+  const bareNoun = new RegExp(`\\b([A-Z][A-Za-z]+)\\b(?=\\s+${PHOTO_NOUN}\\b)`, 'g');
+  text = text.replace(bareNoun, (m, n) =>
+    CAMERA_MAKES.has(n.toLowerCase()) ? (pushName('cameras', n), ' ') : m,
+  );
+  // (9a) place: "my <Place> photos" (capitalized, not filler, not a known make).
+  text = text.replace(new RegExp(`\\b([A-Z][A-Za-z]+)\\b(?=\\s+${PHOTO_NOUN}\\b)`, 'g'), (m, n) =>
+    NON_ENTITY_WORDS.has(n.toLowerCase()) ? m : (setDirect('city', n), ' '),
+  );
+  // (9b) place: "from/in <Place>" (capitalized, not followed by "album", first wins).
+  text = text.replace(/\b(?:from|in)\s+([A-Z][A-Za-z'-]*)\b(?!\s+albums?\b)/g, (m, n) => {
+    if (NON_ENTITY_WORDS.has(n.toLowerCase())) {
+      return m;
+    }
+    if (result.directFilters?.city === undefined) {
+      setDirect('city', n);
+    }
+    return ' ';
+  });
+
+  return Object.keys(result).length > 0 ? result : undefined;
 };
 
 // --- clean-source gate ------------------------------------------------------
@@ -144,12 +234,30 @@ const DATE_STRIP = new RegExp(
   'gi',
 );
 
-// A source is "clean" when, after removing recency / date / generic-noun / filler
-// tokens, nothing substantive remains. Date phrases are stripped first (so the
-// "last" in "last weekend" is consumed before the recency strip touches it).
-const isCleanSource = (source) => {
-  const residual = String(source ?? '')
-    .toLowerCase()
+// Entity connector/keyword tokens consumed alongside recognized entity names so an
+// entity source reads as "clean".
+const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rites?|archived|albums?)\b/gi;
+
+// A source is "clean" when, after removing recency / date / generic-noun / filler AND
+// recognized entity tokens, nothing substantive remains. Subjective qualifiers
+// ("best") are NOT entity tokens, so they survive and keep the source un-clean.
+export const isCleanSource = (source) => {
+  let text = String(source ?? '').toLowerCase();
+  const entity = parseEntitySource(source);
+  if (entity) {
+    const names = [
+      ...(entity.people ?? []),
+      ...(entity.tags ?? []),
+      ...(entity.albums ?? []),
+      ...(entity.cameras ?? []),
+      ...(entity.directFilters?.city ? [entity.directFilters.city] : []),
+    ];
+    for (const name of names) {
+      text = text.split(name.toLowerCase()).join(' ');
+    }
+    text = text.replace(ENTITY_KEYWORD_STRIP, ' ');
+  }
+  const residual = text
     .replace(DATE_STRIP, ' ')
     .replace(RECENCY_PATTERN_G, ' ')
     .replace(/\b\d{1,4}\b/g, ' ')
@@ -167,6 +275,14 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
   // Subjective sources hand off — never plan a guess.
   if (SUBJECTIVE_PATTERN.test(source)) {
     return { status: 'handoff', reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.` };
+  }
+
+  // Phase 0 (Slice 1): named-entity / direct-metadata sources are DETECTED here, but
+  // the resolution path (resolveAssetSearchFilters → searchAssets with entity filters)
+  // lands in Slice 2. Until then an entity source hands off rather than over-resolve by
+  // the recency/date part alone.
+  if (parseEntitySource(source)) {
+    return { status: 'handoff', reason: `Source "${source}" names an entity this workflow resolves in a later step.` };
   }
 
   const recencyLimit = parseRecencyLimit(source);
