@@ -214,6 +214,19 @@ const SPACE_OP_VALIDATORS = {
   'space.removeAssets': validateSpaceRemoveAssets,
 };
 
+const validateAssetRemoveTag = (op) => {
+  if (op.targetKind !== 'asset_batch') fail('asset.removeTag requires targetKind "asset_batch"');
+  if (op.targetId !== undefined) fail('asset.removeTag must not set targetId');
+  if (op.temporaryTargetId !== undefined) fail('asset.removeTag must not set temporaryTargetId');
+  if (!op.payload || typeof op.payload.tagId !== 'string' || !op.payload.tagId) {
+    fail('asset.removeTag requires payload.tagId (uuid)');
+  }
+  const source = op.assetSource;
+  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
+    fail('asset.removeTag requires an assetSource selectionHandle');
+  }
+};
+
 const validateAlbumRemoveAssets = (op) => {
   if (op.targetKind !== 'existing_album') fail('album.removeAssets requires targetKind "existing_album"');
   if (!op.targetId) fail('album.removeAssets requires targetId');
@@ -235,6 +248,7 @@ const validateAlbumSetCover = (op) => {
 const ALBUM_OP_VALIDATORS = {
   'album.removeAssets': validateAlbumRemoveAssets,
   'album.setCover': validateAlbumSetCover,
+  'asset.removeTag': validateAssetRemoveTag,
 };
 
 const validateOperations = (operations) => {
