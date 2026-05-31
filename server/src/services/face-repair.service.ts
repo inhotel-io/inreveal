@@ -19,8 +19,77 @@ export interface FlaggedFace {
   suspectedOwnerId: string;
 }
 
+export type ReviewOnlyReason = 'over-cap' | 'bad-target';
+
+export interface RepairPlan {
+  toRepair: FlaggedFace[];
+  reviewOnlyFaces: (FlaggedFace & { reason: ReviewOnlyReason })[];
+  reviewOnlyPersonIds: string[];
+  perPerson: { personId: string; eligible: number; flagged: number; flaggedFraction: number }[];
+}
+
 @Injectable()
 export class FaceRepairService extends BaseService {
+  async buildRepairPlan(
+    options: {
+      ownerId?: string;
+      personId?: string;
+      maxDistance: number;
+      voteWindow: number;
+      maxFlaggedFraction: number;
+    } & FlagParams,
+  ): Promise<RepairPlan> {
+    const eligibleByPerson = new Map<string, number>();
+    const flaggedByPerson = new Map<string, FlaggedFace[]>();
+
+    for await (const candidate of this.findReattributionCandidates(options)) {
+      eligibleByPerson.set(candidate.currentPersonId, (eligibleByPerson.get(candidate.currentPersonId) ?? 0) + 1);
+      const decision = decideReattribution(candidate, options);
+      if (decision.flagged && decision.suspectedOwnerId) {
+        const list = flaggedByPerson.get(candidate.currentPersonId) ?? [];
+        list.push({
+          assetFaceId: candidate.assetFaceId,
+          currentPersonId: candidate.currentPersonId,
+          suspectedOwnerId: decision.suspectedOwnerId,
+        });
+        flaggedByPerson.set(candidate.currentPersonId, list);
+      }
+    }
+
+    const reviewOnlyPersonIds = new Set<string>();
+    for (const [personId, eligible] of eligibleByPerson) {
+      const flagged = flaggedByPerson.get(personId)?.length ?? 0;
+      if (eligible > 0 && flagged / eligible > options.maxFlaggedFraction) {
+        reviewOnlyPersonIds.add(personId);
+      }
+    }
+
+    const toRepair: FlaggedFace[] = [];
+    const reviewOnlyFaces: (FlaggedFace & { reason: ReviewOnlyReason })[] = [];
+    for (const [personId, faces] of flaggedByPerson) {
+      if (reviewOnlyPersonIds.has(personId)) {
+        for (const face of faces) {
+          reviewOnlyFaces.push({ ...face, reason: 'over-cap' });
+        }
+        continue;
+      }
+      for (const face of faces) {
+        if (reviewOnlyPersonIds.has(face.suspectedOwnerId)) {
+          reviewOnlyFaces.push({ ...face, reason: 'bad-target' });
+        } else {
+          toRepair.push(face);
+        }
+      }
+    }
+
+    const perPerson = [...eligibleByPerson].map(([personId, eligible]) => {
+      const flagged = flaggedByPerson.get(personId)?.length ?? 0;
+      return { personId, eligible, flagged, flaggedFraction: eligible > 0 ? flagged / eligible : 0 };
+    });
+
+    return { toRepair, reviewOnlyFaces, reviewOnlyPersonIds: [...reviewOnlyPersonIds], perPerson };
+  }
+
   async *findFlaggedFaces(
     options: { ownerId?: string; personId?: string; maxDistance: number; voteWindow: number } & FlagParams,
   ): AsyncIterableIterator<FlaggedFace> {
