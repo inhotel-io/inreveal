@@ -229,6 +229,33 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'cleanup_duplicates',
+    flow: 'hybrid',
+    title: 'Clean up duplicate photos',
+    classifierDescription:
+      'User wants to find and remove near-duplicate photos, keeping the best of each group (reversible Trash).',
+    positiveExamples: Object.freeze([
+      'Clean up my duplicate photos',
+      'Find and remove duplicates',
+      'Trash duplicate photos',
+      'Dedupe my library',
+    ]),
+    negativeExamples: Object.freeze([
+      'Trash my newest 20 photos',
+      'Delete the Family album',
+      'Find my best photos',
+    ]),
+    slots: Object.freeze({}),
+    requiredReadTools: Object.freeze(['listDuplicateGroups']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Duplicate cleanup',
+      tier: 'Solid now',
+      flow: 'Hybrid',
+    }),
+  }),
+  Object.freeze({
     kind: 'trash_assets',
     flow: 'hybrid',
     title: 'Trash photos (recoverable)',
