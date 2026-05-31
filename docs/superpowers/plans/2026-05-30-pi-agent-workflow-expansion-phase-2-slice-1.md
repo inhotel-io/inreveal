@@ -29,7 +29,7 @@ server/runtime/network side effects.
   (`tagged <Tag>` / `<Tag>-tagged`), albums (`in the <Album> album`), cameras
   (`shot on/with <Make>`, or bare `my <Make> photos` where Make ∈ a camera allow-list).
 - **(b) DIRECT metadata** (straight into `searchAssets.filters`): place (`my <Place>
-  photos`, `from/in <Place>`) → `city`; rating (`5-star`/`rated 5`) → `rating` (1..5);
+photos`, `from/in <Place>`) → `city`; rating (`5-star`/`rated 5`) → `rating` (1..5);
   favorites (`favorites`/`favorite`) → `isFavorite:true`; visibility (`archived`) →
   `visibility:'archive'` (lowercase enum).
 - **(c) SUBJECTIVE** (`best`/`blurry`/…) → NOT an entity (stays handled by the existing
@@ -60,14 +60,41 @@ unit testing. Slice 2/4 flip these to resolved.
 // place ("my Berlin photos") is NOT mistaken for a camera. Explicit "shot on/with
 // <X>" captures any make regardless of this list.
 const CAMERA_MAKES = new Set([
-  'sony', 'canon', 'nikon', 'fuji', 'fujifilm', 'leica', 'panasonic', 'olympus',
-  'pentax', 'gopro', 'dji', 'hasselblad', 'ricoh', 'sigma', 'kodak',
+  'sony',
+  'canon',
+  'nikon',
+  'fuji',
+  'fujifilm',
+  'leica',
+  'panasonic',
+  'olympus',
+  'pentax',
+  'gopro',
+  'dji',
+  'hasselblad',
+  'ricoh',
+  'sigma',
+  'kodak',
 ]);
 
 // Capitalized words that are filler, never a place/camera even before a photo noun.
 const NON_ENTITY_WORDS = new Set([
-  'my', 'the', 'a', 'an', 'these', 'those', 'all', 'some', 'our',
-  'recent', 'newest', 'latest', 'last', 'most', 'best', 'good',
+  'my',
+  'the',
+  'a',
+  'an',
+  'these',
+  'those',
+  'all',
+  'some',
+  'our',
+  'recent',
+  'newest',
+  'latest',
+  'last',
+  'most',
+  'best',
+  'good',
 ]);
 
 // Caps to keep the later resolveAssetSearchFilters strictObject within bounds.
@@ -112,10 +139,17 @@ export const parseEntitySource = (source) => {
   // (3) camera (explicit): "shot on/with <Make>" — any token, consumed before people "with".
   text = text.replace(/\bshot\s+(?:on|with)\s+([A-Za-z][\w'-]*)/gi, (_m, n) => (pushName('cameras', n), ' '));
   // (4) people: "of/with <Capitalized Name>".
-  text = text.replace(/\b(?:of|with)\s+([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*)/g, (_m, n) => (pushName('people', n), ' '));
+  text = text.replace(
+    /\b(?:of|with)\s+([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*)*)/g,
+    (_m, n) => (pushName('people', n), ' '),
+  );
   // (5) rating: "rated N" / "N-star(s)" / "N stars" (clamp 1..5; out-of-range left in place).
-  text = text.replace(/\brated\s+([1-9]\d?)\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
-  text = text.replace(/\b([1-9]\d?)[\s-]?stars?\b/gi, (m, n) => (Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m));
+  text = text.replace(/\brated\s+([1-9]\d?)\b/gi, (m, n) =>
+    Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m,
+  );
+  text = text.replace(/\b([1-9]\d?)[\s-]?stars?\b/gi, (m, n) =>
+    Number(n) <= 5 ? (setDirect('rating', Number(n)), ' ') : m,
+  );
   // (6) favorites.
   if (/\bfavou?rites?\b/i.test(text)) {
     setDirect('isFavorite', true);
@@ -128,9 +162,7 @@ export const parseEntitySource = (source) => {
   }
   // (8) camera (bare): "my <Make> photos" where Make is a known make.
   const bareNoun = new RegExp(`\\b([A-Z][A-Za-z]+)\\b(?=\\s+${PHOTO_NOUN}\\b)`, 'g');
-  text = text.replace(bareNoun, (m, n) =>
-    CAMERA_MAKES.has(n.toLowerCase()) ? (pushName('cameras', n), ' ') : m,
-  );
+  text = text.replace(bareNoun, (m, n) => (CAMERA_MAKES.has(n.toLowerCase()) ? (pushName('cameras', n), ' ') : m));
   // (9a) place: "my <Place> photos" (capitalized, not filler, not a known make).
   text = text.replace(new RegExp(`\\b([A-Z][A-Za-z]+)\\b(?=\\s+${PHOTO_NOUN}\\b)`, 'g'), (m, n) =>
     NON_ENTITY_WORDS.has(n.toLowerCase()) ? m : (setDirect('city', n), ' '),
@@ -200,18 +232,18 @@ regresses.)
 Right after the existing `SUBJECTIVE_PATTERN` handoff, BEFORE `parseRecencyLimit`:
 
 ```js
-  // Subjective sources hand off — never plan a guess.
-  if (SUBJECTIVE_PATTERN.test(source)) {
-    return { status: 'handoff', reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.` };
-  }
+// Subjective sources hand off — never plan a guess.
+if (SUBJECTIVE_PATTERN.test(source)) {
+  return { status: 'handoff', reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.` };
+}
 
-  // Phase 0 (Slice 1): named-entity / direct-metadata sources are DETECTED here, but
-  // the resolution path (resolveAssetSearchFilters → searchAssets with entity filters)
-  // lands in Slice 2. Until then an entity source hands off rather than over-resolve by
-  // the recency/date part alone.
-  if (parseEntitySource(source)) {
-    return { status: 'handoff', reason: `Source "${source}" names an entity this workflow resolves in a later step.` };
-  }
+// Phase 0 (Slice 1): named-entity / direct-metadata sources are DETECTED here, but
+// the resolution path (resolveAssetSearchFilters → searchAssets with entity filters)
+// lands in Slice 2. Until then an entity source hands off rather than over-resolve by
+// the recency/date part alone.
+if (parseEntitySource(source)) {
+  return { status: 'handoff', reason: `Source "${source}" names an entity this workflow resolves in a later step.` };
+}
 ```
 
 No other change to `resolveAssetSource` (recency/date/type path unchanged).
@@ -253,7 +285,7 @@ No other change to `resolveAssetSource` (recency/date/type path unchanged).
   - `isCleanSource('my screenshots')` → `false` (non-type residual still un-clean)
 - [ ] In the existing `describe('resolveAssetSource')`, add ONE case to lock
       "subjective beats entity": `resolveAssetSource({ client: makeContractClient(),
-      sourceDescription: 'the best Berlin photos', now: NOW })` → `status === 'handoff'`
+sourceDescription: 'the best Berlin photos', now: NOW })` → `status === 'handoff'`
       AND no `searchAssets` call (the `SUBJECTIVE_PATTERN` check precedes the entity
       short-circuit, so a subjective qualifier never resolves even with a place).
 - [ ] Run `mise exec -- pnpm --dir agent-runner test` → expect RED on the two new
