@@ -23,7 +23,6 @@ export default [
 
   // Subjective / out-of-scope arms of the new batch workflows -> none (decline) -
   { id: 'neg.archive.subjective', category: 'negatives', prompt: 'archive the best ones', expect: { kind: 'none' } },
-  { id: 'neg.tag.removal', category: 'negatives', prompt: 'remove the Travel tag from my newest 20', expect: { kind: 'none' } },
 
   // Space workflows: questions and the photo-vs-member disambiguation ---------
   { id: 'neg.space.question', category: 'negatives', prompt: 'who has access to the Family space?', expect: { kind: 'none' } },
@@ -69,11 +68,11 @@ export default [
 
   // remove_photos_from_album boundaries --------------------------------------
   {
-    // Tag removal is out of scope (add-only) — must not route to remove_photos_from_album.
-    id: 'neg.remove.tag',
+    // Tag removal now owned by untag_assets — must NOT route to remove_photos_from_album.
+    id: 'neg.remove.tag-not-album',
     category: 'negatives',
-    prompt: 'remove the Travel tag from my newest 20',
-    expect: { kind: 'none' },
+    prompt: 'remove my newest 20 from the Italy 2024 album',
+    expect: { kind: 'remove_photos_from_album' },
   },
   {
     // Subjective source declines — the resolver would hand off anyway.
