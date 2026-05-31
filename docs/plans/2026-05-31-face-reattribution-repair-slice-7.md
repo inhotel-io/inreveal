@@ -26,7 +26,7 @@ controller/guard/`@Endpoint`/registration pattern and how its spec mocks the ser
 **Files:** Create `server/src/dtos/face-repair.dto.ts`.
 
 - [ ] **Step 1: Implement the Zod request + response DTOs** (no separate test — exercised by the controller spec
-  in Task 2; this is generated-shape code). Request schema fields all optional with validation:
+      in Task 2; this is generated-shape code). Request schema fields all optional with validation:
 
 ```typescript
 import { createZodDto } from 'nestjs-zod';
@@ -92,7 +92,7 @@ list (wherever `ClassificationController` is listed); Create
 `server/src/controllers/face-repair-admin.controller.spec.ts`.
 
 - [ ] **Step 1: Write the failing controller spec** mirroring `classification.controller.spec.ts` (it uses the
-  shared controller-test harness that builds the Nest app with a mocked service). Assertions:
+      shared controller-test harness that builds the Nest app with a mocked service). Assertions:
   - `POST /admin/face-repair` with no body → calls `service.runRepair` with `dryRun: true` (the schema default) and
     returns the service result;
   - it is admin-guarded (the harness's unauthenticated/non-admin request is rejected — follow exactly how the
@@ -140,5 +140,5 @@ array as `ClassificationController`.)
 ## Self-review
 
 - Slice-7 matrix rows: non-admin rejected ✓ (T2); dryRun defaults true ✓ (T2, via schema default); params parsed
-  + invalid rejected ✓ (T2); OpenAPI/SDK regenerated → deferred to the human step (NOT this subagent). No Slice 8.
-  Types consistent (`RunRepairResult` ⊇ `FaceRepairResponseDto` shape). No placeholders.
+  - invalid rejected ✓ (T2); OpenAPI/SDK regenerated → deferred to the human step (NOT this subagent). No Slice 8.
+    Types consistent (`RunRepairResult` ⊇ `FaceRepairResponseDto` shape). No placeholders.

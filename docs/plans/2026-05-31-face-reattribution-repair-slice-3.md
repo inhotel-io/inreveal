@@ -26,8 +26,7 @@ rest become `toRepair`. Memory is bounded by #persons + #flagged (not all candid
 `server/test/medium/specs/services/face-repair.service.spec.ts`.
 
 - [ ] **Step 1: Write the failing medium tests.** Reuse the existing `axisEmbedding` + cluster helpers. Params:
-  `{ maxDistance: 0.6, voteWindow: 50, minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35, maxFlaggedFraction: 0.5 }`.
-
+      `{ maxDistance: 0.6, voteWindow: 50, minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35, maxFlaggedFraction: 0.5 }`.
   - **Normal leak under cap → toRepair:** Karina-main 10 `first`-axis faces; Alexia has 8 genuine `second`-axis
     faces + 3 leaked `first`-axis faces (flaggedFraction 3/11 ≈ 0.27 < 0.5). Assert the 3 leaked faces are in
     `plan.toRepair` (suspectedOwnerId = karina), and Alexia is NOT in `reviewOnlyPersonIds`.

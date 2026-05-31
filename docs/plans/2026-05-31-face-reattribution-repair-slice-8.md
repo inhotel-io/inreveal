@@ -53,8 +53,8 @@ mocked, so the queued recognition jobs do NOT auto-run — the test drives `hand
     AND was also false at baseline before `runRepair`.
 
 - [ ] **Step 2: Run** — `cd server && pnpm test:medium run test/medium/specs/services/face-repair-e2e.spec.ts`.
-  Expect red first (assertions not yet satisfied while you iterate the setup), then green. If a leaked face does
-  NOT re-home to Karina, investigate (it is a real signal) — do not relax the assertion.
+      Expect red first (assertions not yet satisfied while you iterate the setup), then green. If a leaked face does
+      NOT re-home to Karina, investigate (it is a real signal) — do not relax the assertion.
 
 - [ ] **Step 3: Commit** — `git add -A && git commit -m "test(server): end-to-end face re-attribution repair re-homes leaked faces"`
 
@@ -65,11 +65,11 @@ mocked, so the queued recognition jobs do NOT auto-run — the test drives `hand
 **Files:** same spec file.
 
 - [ ] **Step 1: Write the test.** Setup: **Karina** (10 `axisEmbedding('first')`), **Bob** (10 faces on a third
-  disjoint axis — reuse the `mixedAxisEmbedding(slot)` helper from `face-repair.service.spec.ts` or define a third
-  axis), and **Alexia** with genuine `second`-axis faces + 2 leaked `first`-axis (Karina) + 2 leaked third-axis
-  (Bob). Run `runRepair({ ownerId, dryRun: false, ...same params })`, drive `handleRecognizeFaces` for each queued
-  id, then assert: the 2 Karina-leaks now `personId === karina.id`, the 2 Bob-leaks now `personId === bob.id`
-  (the contamination splits to the correct owners), and `getBackfillWork().hasPersonalIdentityWork === false`.
+      disjoint axis — reuse the `mixedAxisEmbedding(slot)` helper from `face-repair.service.spec.ts` or define a third
+      axis), and **Alexia** with genuine `second`-axis faces + 2 leaked `first`-axis (Karina) + 2 leaked third-axis
+      (Bob). Run `runRepair({ ownerId, dryRun: false, ...same params })`, drive `handleRecognizeFaces` for each queued
+      id, then assert: the 2 Karina-leaks now `personId === karina.id`, the 2 Bob-leaks now `personId === bob.id`
+      (the contamination splits to the correct owners), and `getBackfillWork().hasPersonalIdentityWork === false`.
 
 - [ ] **Step 2: Run** — same command → green.
 - [ ] **Step 3: Validate + commit** — `cd server && pnpm exec prettier --write <file> && pnpm exec eslint <file> --max-warnings 0 && pnpm exec tsc --noEmit`; `git add -A && git commit -m "test(server): multi-owner face re-attribution splits to correct owners"`.

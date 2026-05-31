@@ -159,7 +159,7 @@ already. Avoid a circular import by keeping `summarizeRepairPlan` in its own fil
 `server/test/medium/specs/services/face-repair.service.spec.ts`.
 
 - [ ] **Step 1: Write the failing medium tests.** Reuse the executeRepair suite's isolated-DB + identity-linked
-  setup. Mock `JobRepository` (control `isActive`). Scenarios:
+      setup. Mock `JobRepository` (control `isActive`). Scenarios:
   - **dry-run (default):** `runRepair({ ownerId })` (no `dryRun`) → returns `{ dryRun: true, mutated: false }`,
     `report.totals.flaggedFaces > 0`, and **nothing is mutated** (leaked faces still have their original
     `personId`; `jobRepository.queueAll` NOT called).
@@ -175,7 +175,7 @@ already. Avoid a circular import by keeping `summarizeRepairPlan` in its own fil
 - [ ] **Step 2: Run, confirm red** — `cd server && pnpm test:medium run test/medium/specs/services/face-repair.service.spec.ts` → FAIL (`runRepair` not a function).
 
 - [ ] **Step 3: Implement** (add to `FaceRepairService`; import `QueueName, JobName` from `src/enum`,
-  `summarizeRepairPlan`/`RepairReport` from `./face-repair.summary`):
+      `summarizeRepairPlan`/`RepairReport` from `./face-repair.summary`):
 
 ```typescript
 const DEFAULT_VOTE_WINDOW = 50;

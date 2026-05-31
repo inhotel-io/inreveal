@@ -99,10 +99,7 @@ export interface ReattributionTally {
 }
 
 // Tally a face's already-self-excluded, within-maxDistance assigned neighbors by person.
-export const tallyReattribution = (
-  currentPersonId: string,
-  neighbors: ReattributionNeighbor[],
-): ReattributionTally => {
+export const tallyReattribution = (currentPersonId: string, neighbors: ReattributionNeighbor[]): ReattributionTally => {
   const byPerson = new Map<string, { count: number; nearest: number }>();
   for (const neighbor of neighbors) {
     if (!neighbor.personId) {
@@ -158,12 +155,12 @@ export const tallyReattribution = (
 - Test: `server/test/medium/specs/repositories/face-repair.repository.spec.ts`
 
 - [ ] **Step 1: Write the failing medium test.** Build, for one owner: (a) a person with 2 ML faces + embeddings
-  (eligible); (b) a `manual`-sourced face and an `exif`-sourced face (skipped); (c) a soft-deleted face and a
-  not-visible face (skipped); (d) a face with no `face_search` row (skipped). Assert `streamEligibleFaces({ownerId})`
-  yields exactly the 2 eligible faces with `{assetFaceId, personId, ownerId, embedding}` populated. Use
-  `ctx.newPerson/newAsset/newAssetFace`, raw `face_search` inserts, and set `sourceType` via `newAssetFace` dto.
-  (Confirm `newAssetFace` accepts `sourceType`, `deletedAt`, `isVisible`; if not, set them via a follow-up
-  `ctx.database.updateTable('asset_face')`.)
+      (eligible); (b) a `manual`-sourced face and an `exif`-sourced face (skipped); (c) a soft-deleted face and a
+      not-visible face (skipped); (d) a face with no `face_search` row (skipped). Assert `streamEligibleFaces({ownerId})`
+      yields exactly the 2 eligible faces with `{assetFaceId, personId, ownerId, embedding}` populated. Use
+      `ctx.newPerson/newAsset/newAssetFace`, raw `face_search` inserts, and set `sourceType` via `newAssetFace` dto.
+      (Confirm `newAssetFace` accepts `sourceType`, `deletedAt`, `isVisible`; if not, set them via a follow-up
+      `ctx.database.updateTable('asset_face')`.)
 
 - [ ] **Step 2: Run, confirm red** — `cd server && pnpm test:medium run test/medium/specs/repositories/face-repair.repository.spec.ts` → FAIL (repository/method missing; or factory "Unable to create repository instance" until registered).
 
@@ -224,9 +221,9 @@ Register in `newRealRepository` (medium.factory.ts) in the simple `new key(db)` 
 - Test: `server/test/medium/specs/services/face-repair.service.spec.ts`
 
 - [ ] **Step 1: Write the failing medium test.** Using disjoint-axis embeddings (`axisEmbedding('first')` = person
-  Karina-main with many faces; a small set of `axisEmbedding('first')` faces wrongly assigned to person Alexia =
-  the leak; `axisEmbedding('second')` = a clean unrelated person). For one owner, collect
-  `findReattributionCandidates({ ownerId, maxDistance: 0.6, voteWindow: 50 })` into an array. Assert:
+      Karina-main with many faces; a small set of `axisEmbedding('first')` faces wrongly assigned to person Alexia =
+      the leak; `axisEmbedding('second')` = a clean unrelated person). For one owner, collect
+      `findReattributionCandidates({ ownerId, maxDistance: 0.6, voteWindow: 50 })` into an array. Assert:
   - the leaked faces (on Alexia) each have `topOtherPersonId === Karina.id` with `topOtherCount > 0`;
   - a clean Karina-main face has `topOtherPersonId === null` (or its own person dominates and no other is present);
   - a face is **never** its own neighbor (self excluded): a person with a single face has `ownCount === 0`;
@@ -268,7 +265,11 @@ export class FaceRepairService extends BaseService {
       const neighbors = matches
         .filter((match) => match.id !== face.assetFaceId)
         .map((match) => ({ assetFaceId: match.id, personId: match.personId, distance: match.distance }));
-      yield { assetFaceId: face.assetFaceId, currentPersonId: face.personId, ...tallyReattribution(face.personId, neighbors) };
+      yield {
+        assetFaceId: face.assetFaceId,
+        currentPersonId: face.personId,
+        ...tallyReattribution(face.personId, neighbors),
+      };
     }
   }
 }
@@ -281,7 +282,7 @@ SearchRepository], mock: [LoggingRepository] })`.
 
 - [ ] **Step 4: Run, confirm green** — same command → PASS.
 - [ ] **Step 5: Run the full guard suites to confirm no regression** —
-  `cd server && pnpm test:medium run test/medium/specs/repositories/face-repair.repository.spec.ts test/medium/specs/services/face-repair.service.spec.ts` → PASS; `pnpm exec tsc --noEmit` clean; `pnpm exec eslint <new files> --max-warnings 0` clean; `pnpm exec prettier --write <new files>`.
+      `cd server && pnpm test:medium run test/medium/specs/repositories/face-repair.repository.spec.ts test/medium/specs/services/face-repair.service.spec.ts` → PASS; `pnpm exec tsc --noEmit` clean; `pnpm exec eslint <new files> --max-warnings 0` clean; `pnpm exec prettier --write <new files>`.
 - [ ] **Step 6: Commit** — `git add -A && git commit -m "feat(server): re-attribution detector candidate stream"`
 
 ---

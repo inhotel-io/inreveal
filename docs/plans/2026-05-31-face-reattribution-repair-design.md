@@ -63,15 +63,15 @@ contamination cap (both reported, not guessed).
 
 `POST /admin/face-repair` (admin-guarded; **not** registered on any cron/auto path):
 
-| param                  | default            | meaning                                                                      |
-| ---------------------- | ------------------ | ---------------------------------------------------------------------------- |
-| `dryRun`               | **`true`**         | must explicitly set `false` to mutate                                        |
-| `maxDistance`          | recognition config | cosine radius for the k-NN vote window (recognition's `maxDistance`)          |
-| `minFaces`             | recognition config | min same-person neighbors to count as a claim                                |
-| `voteMargin`           | calibrated         | how many more neighbors a rival owner `Q` needs than `P`                     |
+| param                    | default            | meaning                                                                                                                         |
+| ------------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `dryRun`                 | **`true`**         | must explicitly set `false` to mutate                                                                                           |
+| `maxDistance`            | recognition config | cosine radius for the k-NN vote window (recognition's `maxDistance`)                                                            |
+| `minFaces`               | recognition config | min same-person neighbors to count as a claim                                                                                   |
+| `voteMargin`             | calibrated         | how many more neighbors a rival owner `Q` needs than `P`                                                                        |
 | `maxAttributionDistance` | calibrated (≈0.35) | only re-home `F` onto `Q` if `Q`'s nearest face to `F` is within this **absolute** cosine distance (resemblance / family guard) |
-| `maxFlaggedFraction`   | `0.5`              | if >this share of a person's eligible faces flag, route the person to review-only |
-| `ownerId` / `personId` | none               | optional scope — trial-run one user/person to calibrate + estimate runtime   |
+| `maxFlaggedFraction`     | `0.5`              | if >this share of a person's eligible faces flag, route the person to review-only                                               |
+| `ownerId` / `personId`   | none               | optional scope — trial-run one user/person to calibrate + estimate runtime                                                      |
 
 Returns the report (below) in all modes; mutates only when `dryRun=false`. Params are validated (margins ≥ 0,
 `maxDistance` in (0,2], `maxFlaggedFraction` in [0,1]); invalid input is rejected.
@@ -89,8 +89,7 @@ For each eligible `F`:
 
 1. Indexed k-NN over `face_search` (`embedding <=> F.embedding`) among the **same owner's** assigned faces within
    `maxDistance`, **excluding `F` itself**. Reuse `SearchRepository.searchFaces` (`search.repository.ts:901`) with
-   `userIds=[O]`, `hasPerson: true`, and a **vote-window `numResults`** (larger than recognition's `minFaces`, e.g.
-   50) so the tally sees the whole local neighborhood, not just the nearest few. pgvecto.rs-safe (indexed `<=>`, no
+   `userIds=[O]`, `hasPerson: true`, and a **vote-window `numResults`** (larger than recognition's `minFaces`, e.g. 50) so the tally sees the whole local neighborhood, not just the nearest few. pgvecto.rs-safe (indexed `<=>`, no
    `avg(vector)`); owner-scoped, so another owner's faces never vote. `searchFaces` includes the query face itself,
    so drop the row whose `assetFaceId = F`.
 2. Tally neighbors by `personId`; the **dominant nearby owner** `Q` = the person with the **most** assigned
@@ -195,7 +194,7 @@ All behavior tests are **medium** (real DB) on the vchord harness unless noted; 
 distinct people; **near-axis** embeddings (small inter-cluster distance) model similar relatives.
 
 1. **Detector core (repository).** k-NN re-attribution query returning `{assetFaceId, currentPersonId,
-   suspectedOwnerId, votes, distances}` for an owner scope. Tests: Karina-on-Alexia leak (disjoint axes) flags
+suspectedOwnerId, votes, distances}` for an owner scope. Tests: Karina-on-Alexia leak (disjoint axes) flags
    with `Q=Karina`; a clean cluster flags nothing; `manual`/`exif` faces skipped; **a face with no `face_search`
    row is not flagged**; **an isolated face (no neighbors in `maxDistance`) is not flagged**; **deleted /
    not-visible faces and faces on deleted assets are neither considered nor returned**; **a near neighbor owned
@@ -235,48 +234,48 @@ distinct people; **near-axis** embeddings (small inter-cluster distance) model s
 
 ## Test & edge-case coverage matrix
 
-| Behavior / edge case                                            | Slice |
-| --------------------------------------------------------------- | ----- |
-| Leak (wrong-person face) flagged with true owner `Q`            | 1, 8  |
-| Clean cluster flags nothing (the ~1% FP floor)                  | 1     |
-| `manual` / `exif` faces skipped                                 | 1     |
-| Face with no embedding → not flagged                            | 1     |
-| Isolated face (no neighbors in range) → not flagged             | 1     |
-| Deleted / not-visible / deleted-asset faces excluded            | 1     |
-| Cross-owner neighbor ignored (owner-scoped)                     | 1     |
-| pgvecto.rs engine-compat for new vector SQL                     | 1     |
-| `voteMargin` branch + `P`-doesn't-claim branch                  | 2     |
-| Vote tie / within-margin rival → not flagged                    | 2     |
-| `Q`-not-confident (`< minFaces`) → not flagged                  | 2     |
-| `maxAttributionDistance` floor boundary (in vs out)             | 2     |
-| Co-located mass leak → all flagged (rejected-guard regression)  | 2     |
-| Similar cluster beyond the floor → no cross-flag                | 2, 8  |
-| Very-similar cluster within floor → cap protects                | 3     |
-| Un-attributable (no `Q`) → review-only                          | 3, 8  |
-| Per-person cap → whole person review-only (+ boundary)          | 3, 8  |
-| Suspected `Q` itself review-only → face review-only             | 3     |
-| Batch unassign + `face_identity_face` link cleared              | 4     |
-| `faceAssetId` + counts reconciled (incl. rep face unassigned)   | 4     |
-| No-loop / no `personId`↔identity mismatch (getBackfillWork)     | 4     |
-| Sub-`minFaces` face stays unassigned                            | 4     |
-| Leaked face re-homes to true owner; name preserved              | 4, 8  |
-| No re-corruption (re-home not placed on wrong person)           | 4, 8  |
+| Behavior / edge case                                           | Slice |
+| -------------------------------------------------------------- | ----- |
+| Leak (wrong-person face) flagged with true owner `Q`           | 1, 8  |
+| Clean cluster flags nothing (the ~1% FP floor)                 | 1     |
+| `manual` / `exif` faces skipped                                | 1     |
+| Face with no embedding → not flagged                           | 1     |
+| Isolated face (no neighbors in range) → not flagged            | 1     |
+| Deleted / not-visible / deleted-asset faces excluded           | 1     |
+| Cross-owner neighbor ignored (owner-scoped)                    | 1     |
+| pgvecto.rs engine-compat for new vector SQL                    | 1     |
+| `voteMargin` branch + `P`-doesn't-claim branch                 | 2     |
+| Vote tie / within-margin rival → not flagged                   | 2     |
+| `Q`-not-confident (`< minFaces`) → not flagged                 | 2     |
+| `maxAttributionDistance` floor boundary (in vs out)            | 2     |
+| Co-located mass leak → all flagged (rejected-guard regression) | 2     |
+| Similar cluster beyond the floor → no cross-flag               | 2, 8  |
+| Very-similar cluster within floor → cap protects               | 3     |
+| Un-attributable (no `Q`) → review-only                         | 3, 8  |
+| Per-person cap → whole person review-only (+ boundary)         | 3, 8  |
+| Suspected `Q` itself review-only → face review-only            | 3     |
+| Batch unassign + `face_identity_face` link cleared             | 4     |
+| `faceAssetId` + counts reconciled (incl. rep face unassigned)  | 4     |
+| No-loop / no `personId`↔identity mismatch (getBackfillWork)    | 4     |
+| Sub-`minFaces` face stays unassigned                           | 4     |
+| Leaked face re-homes to true owner; name preserved             | 4, 8  |
+| No re-corruption (re-home not placed on wrong person)          | 4, 8  |
 | Review-only persons/faces untouched in a real run              | 4, 8  |
-| Multi-owner contamination → faces split to correct owners       | 4, 8  |
-| Shared-space face → no dangling projection / stale count        | 4     |
-| Eligibility re-checked at write (concurrent change skipped)     | 4     |
-| `dryRun=true` mutates nothing                                   | 5, 8  |
-| Report shape + matches flagged set + review-only reasons        | 5     |
-| Empty owner / empty instance → empty report, no error           | 5     |
-| Scope (`ownerId`/`personId`) restricts the sweep                | 6     |
-| Idempotency (second real run flags ~nothing)                    | 6, 8  |
-| Refuse/warn when face queues non-idle                           | 6     |
-| Chunk boundary: no drops / no double-count                      | 6     |
-| Endpoint admin-guard (non-admin rejected)                       | 7     |
-| `dryRun` default true at the endpoint                           | 7     |
-| Param parsing + invalid-param rejection                         | 7     |
-| OpenAPI/SDK regenerated                                         | 7     |
-| Full dry-run→real→idempotent flow end-to-end                    | 8     |
+| Multi-owner contamination → faces split to correct owners      | 4, 8  |
+| Shared-space face → no dangling projection / stale count       | 4     |
+| Eligibility re-checked at write (concurrent change skipped)    | 4     |
+| `dryRun=true` mutates nothing                                  | 5, 8  |
+| Report shape + matches flagged set + review-only reasons       | 5     |
+| Empty owner / empty instance → empty report, no error          | 5     |
+| Scope (`ownerId`/`personId`) restricts the sweep               | 6     |
+| Idempotency (second real run flags ~nothing)                   | 6, 8  |
+| Refuse/warn when face queues non-idle                          | 6     |
+| Chunk boundary: no drops / no double-count                     | 6     |
+| Endpoint admin-guard (non-admin rejected)                      | 7     |
+| `dryRun` default true at the endpoint                          | 7     |
+| Param parsing + invalid-param rejection                        | 7     |
+| OpenAPI/SDK regenerated                                        | 7     |
+| Full dry-run→real→idempotent flow end-to-end                   | 8     |
 
 ## Open / to calibrate
 

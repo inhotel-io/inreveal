@@ -109,18 +109,18 @@ async reconcileRepresentativeFaces(personIds: string[]): Promise<void> {
 `server/test/medium/specs/services/face-repair.service.spec.ts`.
 
 - [ ] **Step 1: Write the failing medium tests.** Setup must establish a **consistent identity baseline** so
-  `getBackfillWork` is meaningful: for every person give it an identity (`faceIdentityRepository.ensurePersonIdentity`)
-  and link every face (`faceIdentityRepository.linkFace({ assetFaceId, identityId, source: 'owner-person' })`).
-  Build Karina-main (10 `first`-axis faces) + Alexia (8 `second`-axis genuine + 3 leaked `first`-axis faces). Use
-  `buildRepairPlan(params)` then `executeRepair(plan)`. Get the `JobRepository` mock via
-  `ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository)`.
-  Assertions:
+      `getBackfillWork` is meaningful: for every person give it an identity (`faceIdentityRepository.ensurePersonIdentity`)
+      and link every face (`faceIdentityRepository.linkFace({ assetFaceId, identityId, source: 'owner-person' })`).
+      Build Karina-main (10 `first`-axis faces) + Alexia (8 `second`-axis genuine + 3 leaked `first`-axis faces). Use
+      `buildRepairPlan(params)` then `executeRepair(plan)`. Get the `JobRepository` mock via
+      `ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository)`.
+      Assertions:
   - the 3 leaked faces now have `personId = NULL`, and `face_identity_face` rows for them are deleted;
   - the genuine Alexia + Karina faces are untouched (still assigned + linked);
   - `jobRepository.queueAll` was called with `JobName.FacialRecognition` items for exactly the 3 unassigned ids;
   - **no-loop invariant:** `faceIdentityRepository.getBackfillWork()` returns `hasPersonalIdentityWork === false`
     after `executeRepair` (the unassigned+unlinked faces are not work; everything else stays consistent). Confirm
-    the baseline (before repair) is also `false`, so the test pins that the repair doesn't *introduce* work;
+    the baseline (before repair) is also `false`, so the test pins that the repair doesn't _introduce_ work;
   - **review-only untouched:** put Alexia over the cap in a second scenario (so she's review-only); assert her
     faces keep their `personId` and links after `executeRepair` (nothing in `toRepair`);
   - **rep-face reconcile:** set `Alexia.faceAssetId` to one of the leaked faces before repair; after

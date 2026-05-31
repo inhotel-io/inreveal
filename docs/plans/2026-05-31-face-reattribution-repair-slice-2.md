@@ -52,7 +52,7 @@ describe('decideReattribution', () => {
     expect(d).toEqual({ flagged: true, suspectedOwnerId: 'Q' });
   });
 
-  it("flags when P does not claim F (ownCount < minFaces) and Q is confident and close", () => {
+  it('flags when P does not claim F (ownCount < minFaces) and Q is confident and close', () => {
     const d = decideReattribution(
       tally({ ownCount: 1, topOtherPersonId: 'Q', topOtherCount: 5, topOtherNearest: 0.2 }),
       params,
@@ -152,11 +152,10 @@ export const decideReattribution = (tally: ReattributionTally, params: FlagParam
 `server/test/medium/specs/services/face-repair.service.spec.ts`.
 
 - [ ] **Step 1: Write the failing medium tests.** Reuse `axisEmbedding` (disjoint, distance ~1.0). Add a
-  `relativeAxisEmbedding` ≈0.45 from `axisEmbedding('first')`: `'[' + Array.from({length:512},(_, i)=> (i<140 ||
-  (i>=256 && i<372))?1:0).join(',') + ']'` (140 first-half + 116 second-half ones → cos = 140/256 ≈ 0.547 →
-  distance ≈ 0.453, beyond the 0.35 floor but within maxDistance 0.6). Params for all:
-  `{ maxDistance: 0.6, voteWindow: 50, minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35 }`.
-
+      `relativeAxisEmbedding` ≈0.45 from `axisEmbedding('first')`: `'[' + Array.from({length:512},(_, i)=> (i<140 ||
+(i>=256 && i<372))?1:0).join(',') + ']'` (140 first-half + 116 second-half ones → cos = 140/256 ≈ 0.547 →
+      distance ≈ 0.453, beyond the 0.35 floor but within maxDistance 0.6). Params for all:
+      `{ maxDistance: 0.6, voteWindow: 50, minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35 }`.
   - **Co-located mass leak (the regression):** Karina-main = 10 `axisEmbedding('first')` faces; **5** leaked
     `axisEmbedding('first')` faces wrongly on Alexia (co-located, identical embedding). Assert `findFlaggedFaces`
     flags **all 5** leaked faces, each `suspectedOwnerId === karina.id`. (With the rejected relative guard these
@@ -197,8 +196,8 @@ async *findFlaggedFaces(
 ```
 
 - [ ] **Step 4: Run, confirm green** — same command → PASS. Confirm the measured cosine distance of
-  `relativeAxisEmbedding` is between the floor (0.35) and `maxDistance` (0.6); if not, adjust the second-half ones
-  count and re-confirm in the test.
+      `relativeAxisEmbedding` is between the floor (0.35) and `maxDistance` (0.6); if not, adjust the second-half ones
+      count and re-confirm in the test.
 - [ ] **Step 5: Validate + commit** — `cd server && pnpm exec prettier --write <changed> && pnpm exec eslint <changed> --max-warnings 0 && pnpm exec tsc --noEmit`; `git add -A && git commit -m "feat(server): stream flagged re-attribution faces"`.
 
 ---
