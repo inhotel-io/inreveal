@@ -3492,7 +3492,18 @@ export class AgentToolService {
         return ['type', 'dates', 'filename', 'camera', 'rating', 'visibility', 'quality'];
       }
       case 'allSafe': {
-        return ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility', 'quality'];
+        return [
+          'type',
+          'dates',
+          'location',
+          'camera',
+          'tags',
+          'rating',
+          'filename',
+          'favorite',
+          'visibility',
+          'quality',
+        ];
       }
     }
   }
