@@ -30,7 +30,7 @@ describe('summarizeRepairPlan', () => {
 
   it('reports per-person suspected owners and review-only flag, only for persons with flagged faces', () => {
     const r = summarizeRepairPlan(plan);
-    const ids = r.persons.map((p) => p.personId).sort();
+    const ids = r.persons.map((p) => p.personId).toSorted();
     expect(ids).toEqual(['A', 'D']); // K has 0 flagged -> omitted
     const a = r.persons.find((p) => p.personId === 'A')!;
     expect(a.reviewOnly).toBe(false);

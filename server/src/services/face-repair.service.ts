@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { JobName } from 'src/enum';
+import { JobName, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
+import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import {
   FlagDecision,
   FlagParams,
@@ -28,6 +29,32 @@ export interface RepairPlan {
   reviewOnlyPersonIds: string[];
   perPerson: { personId: string; eligible: number; flagged: number; flaggedFraction: number }[];
 }
+
+const DEFAULT_VOTE_WINDOW = 50;
+const DEFAULT_VOTE_MARGIN = 2;
+const DEFAULT_MAX_ATTRIBUTION_DISTANCE = 0.35;
+const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;
+
+export interface RunRepairOptions {
+  dryRun?: boolean;
+  ownerId?: string;
+  personId?: string;
+  maxDistance?: number;
+  minFaces?: number;
+  voteWindow?: number;
+  voteMargin?: number;
+  maxAttributionDistance?: number;
+  maxFlaggedFraction?: number;
+}
+
+export interface RunRepairResult {
+  dryRun: boolean;
+  mutated: boolean;
+  report: RepairReport;
+  executed?: { unassigned: number; requeued: number };
+}
+
+export { RepairReport } from 'src/services/face-repair.summary';
 
 @Injectable()
 export class FaceRepairService extends BaseService {
@@ -131,6 +158,35 @@ export class FaceRepairService extends BaseService {
     );
 
     return { unassigned: unassignedIds.length, requeued: unassignedIds.length };
+  }
+
+  async runRepair(options: RunRepairOptions = {}): Promise<RunRepairResult> {
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    const dryRun = options.dryRun ?? true;
+
+    const planOptions = {
+      ownerId: options.ownerId,
+      personId: options.personId,
+      maxDistance: options.maxDistance ?? recognition.maxDistance,
+      minFaces: options.minFaces ?? recognition.minFaces,
+      voteWindow: options.voteWindow ?? DEFAULT_VOTE_WINDOW,
+      voteMargin: options.voteMargin ?? DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: options.maxAttributionDistance ?? DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: options.maxFlaggedFraction ?? DEFAULT_MAX_FLAGGED_FRACTION,
+    };
+
+    const plan = await this.buildRepairPlan(planOptions);
+
+    let executed: { unassigned: number; requeued: number } | undefined;
+    if (!dryRun) {
+      if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
+        throw new Error('Refusing to run face re-attribution repair while facial recognition is active');
+      }
+      executed = await this.executeRepair(plan);
+    }
+
+    return { dryRun, mutated: !dryRun, report: summarizeRepairPlan(plan), executed };
   }
 
   async *findReattributionCandidates(options: {

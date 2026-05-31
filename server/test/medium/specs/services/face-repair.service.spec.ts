@@ -1,11 +1,13 @@
 import { Kysely } from 'kysely';
 import { JobName } from 'src/enum';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
 import { FaceRepairService, FlaggedFace, ReattributionCandidate, RepairPlan } from 'src/services/face-repair.service';
 import { newMediumService } from 'test/medium.factory';
@@ -790,5 +792,368 @@ describe('FaceRepairService.executeRepair', () => {
       | undefined;
     const queuedIds = queueAllArg?.map((j) => j.data.id) ?? [];
     expect(queuedIds).not.toContain(movedFaceId);
+  });
+});
+
+// ── runRepair tests ────────────────────────────────────────────────────────────
+// Uses a dedicated isolated DB and adds ConfigRepository + SystemMetadataRepository
+// as real deps so getConfig() resolves the default config correctly.
+
+let runRepairDatabase: Kysely<DB>;
+
+const setupRunRepair = (db?: Kysely<DB>) => {
+  return newMediumService(FaceRepairService, {
+    database: db ?? runRepairDatabase,
+    real: [
+      FaceRepairRepository,
+      SearchRepository,
+      PersonRepository,
+      FaceIdentityRepository,
+      ConfigRepository,
+      SystemMetadataRepository,
+    ],
+    mock: [LoggingRepository, JobRepository],
+  });
+};
+
+// The params used by runRepair scenarios — override via options.maxDistance etc.
+const runRepairPlanDefaults = {
+  maxDistance: 0.6,
+  voteWindow: 50,
+  minFaces: 3,
+  voteMargin: 2,
+  maxAttributionDistance: 0.35,
+  maxFlaggedFraction: 0.5,
+};
+
+describe('FaceRepairService.runRepair', () => {
+  beforeAll(async () => {
+    runRepairDatabase = await getKyselyDB();
+  });
+
+  it('dry-run (default): returns dryRun=true, mutated=false, flaggedFaces>0, mutates nothing, queueAll not called', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces
+    await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
+
+    // Alexia: 8 genuine + 3 leaked first-axis
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    const result = await sut.runRepair({ ownerId: user.id, ...runRepairPlanDefaults });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.mutated).toBe(false);
+    expect(result.report.totals.flaggedFaces).toBeGreaterThan(0);
+
+    // Leaked faces must still have their original personId (nothing mutated)
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds)
+      .execute();
+    for (const row of rows) {
+      expect(row.personId).toBe(alexia.id);
+    }
+
+    // queueAll must not have been called
+    expect(jobMock.queueAll).not.toHaveBeenCalled();
+  });
+
+  it('execute: dryRun=false with isActive=false → mutated=true, leaked faces nulled, queueAll called', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    jobMock.queueAll.mockResolvedValue();
+    const { user } = await ctx.newUser();
+
+    await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
+
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    const result = await sut.runRepair({ ownerId: user.id, dryRun: false, ...runRepairPlanDefaults });
+
+    expect(result.dryRun).toBe(false);
+    expect(result.mutated).toBe(true);
+
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds)
+      .execute();
+    for (const row of rows) {
+      expect(row.personId).toBeNull();
+    }
+
+    expect(jobMock.queueAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('concurrency guard: isActive=true + dryRun=false → throws, nothing mutated; dryRun=true with isActive=true → succeeds', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(true);
+    const { user } = await ctx.newUser();
+
+    await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
+
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    // dryRun=false + isActive=true → throws
+    await expect(sut.runRepair({ ownerId: user.id, dryRun: false, ...runRepairPlanDefaults })).rejects.toThrow();
+
+    // Leaked faces still have their personId (nothing mutated)
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds)
+      .execute();
+    for (const row of rows) {
+      expect(row.personId).toBe(alexia.id);
+    }
+
+    // dryRun=true (default) with isActive=true → succeeds (read-only)
+    await expect(sut.runRepair({ ownerId: user.id, ...runRepairPlanDefaults })).resolves.toMatchObject({
+      dryRun: true,
+      mutated: false,
+    });
+  });
+
+  it('scope: runRepair scoped to ownerA mutates only ownerA faces; ownerB faces remain assigned', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const faceIdentityRepoA = ctx.get(FaceIdentityRepository);
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    jobMock.queueAll.mockResolvedValue();
+
+    const { user: ownerA } = await ctx.newUser();
+    const { user: ownerB } = await ctx.newUser();
+
+    // Owner A: karina-main + alexia with leaked faces
+    await buildLinkedCluster(ctx as any, ownerA.id, axisEmbedding('first'), 10);
+    const { person: alexiaA } = await ctx.newPerson({ ownerId: ownerA.id });
+    const alexiaAIdentity = await faceIdentityRepoA.ensurePersonIdentity(alexiaA.id);
+    const leakedA: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: ownerA.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaA.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepoA.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaAIdentity.id,
+        source: 'owner-person',
+      });
+      leakedA.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: ownerA.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaA.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepoA.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaAIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    // Owner B: mirrored setup
+    await buildLinkedCluster(ctx as any, ownerB.id, axisEmbedding('first'), 10);
+    const { person: alexiaB } = await ctx.newPerson({ ownerId: ownerB.id });
+    const alexiaBIdentity = await faceIdentityRepoA.ensurePersonIdentity(alexiaB.id);
+    const leakedB: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: ownerB.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaB.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepoA.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaBIdentity.id,
+        source: 'owner-person',
+      });
+      leakedB.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: ownerB.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaB.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepoA.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaBIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    await sut.runRepair({ ownerId: ownerA.id, dryRun: false, ...runRepairPlanDefaults });
+
+    // OwnerA leaked faces are unassigned
+    const rowsA = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedA)
+      .execute();
+    for (const row of rowsA) {
+      expect(row.personId).toBeNull();
+    }
+
+    // OwnerB leaked faces remain assigned
+    const rowsB = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedB)
+      .execute();
+    for (const row of rowsB) {
+      expect(row.personId).toBe(alexiaB.id);
+    }
+  });
+
+  it('idempotency: after real runRepair, second dry-run reports flaggedFaces=0', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    jobMock.queueAll.mockResolvedValue();
+    const { user } = await ctx.newUser();
+
+    await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
+
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    // First run: real execution
+    await sut.runRepair({ ownerId: user.id, dryRun: false, ...runRepairPlanDefaults });
+
+    // Second run: dry-run should report 0 flagged (unassigned faces are no longer eligible)
+    const result = await sut.runRepair({ ownerId: user.id, ...runRepairPlanDefaults });
+    expect(result.report.totals.flaggedFaces).toBe(0);
   });
 });
