@@ -28035,6 +28035,21 @@
             "nullable": true,
             "type": "string"
           },
+          "maxBrightness": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxQuality": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxSharpness": {
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
           "model": {
             "nullable": true,
             "type": "string"
