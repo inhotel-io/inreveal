@@ -8,6 +8,8 @@ import {
   AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListDuplicateGroupsToolRequestDto,
+  AgentListDuplicateGroupsToolResponseDto,
   AgentListSpacesToolRequestDto,
   AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
@@ -51,6 +53,7 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
@@ -81,6 +84,8 @@ import {
   AgentCurateSelectionConstraints,
   AgentCurateSelectionDiversifyBy,
   AgentCurateSelectionStrategy,
+  AgentDuplicateAsset,
+  AgentDuplicateGroup,
   AgentReadSelectionMetadataCounts,
   AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetResult,
@@ -99,6 +104,7 @@ import {
   AgentToolCurateSelectionRequestMetadata,
   AgentToolFindTripCandidatesRequestMetadata,
   AgentToolListAlbumsRequestMetadata,
+  AgentToolListDuplicateGroupsRequestMetadata,
   AgentToolListSpacesRequestMetadata,
   AgentToolReadAssetIdsRequestMetadata,
   AgentToolReadAssetMetadataRequestMetadata,
@@ -243,6 +249,7 @@ export class AgentToolService {
     private readonly systemMetadataRepository: SystemMetadataRepository,
     private readonly albumRepository: AlbumRepository,
     private readonly sharedSpaceRepository: SharedSpaceRepository,
+    private readonly duplicateRepository: DuplicateRepository,
     private readonly sessionRepository: AgentSessionRepository,
     private readonly selectionHandleRepository: AgentSelectionHandleRepository,
     private readonly toolCallRepository: AgentToolCallRepository,
@@ -339,6 +346,14 @@ export class AgentToolService {
     dto: AgentListSpacesToolRequestDto,
   ): Promise<AgentListSpacesToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.listSpacesDescriptor());
+  }
+
+  async listDuplicateGroups(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentListDuplicateGroupsToolRequestDto,
+  ): Promise<AgentListDuplicateGroupsToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.listDuplicateGroupsDescriptor());
   }
 
   async readSpace(
@@ -2014,6 +2029,52 @@ export class AgentToolService {
         nextPage: null,
       }),
       failedReason: 'Space list failed',
+    };
+  }
+
+  private listDuplicateGroupsDescriptor(): AgentReadToolDescriptor<
+    AgentListDuplicateGroupsToolRequestDto,
+    { groups: AgentDuplicateGroup[] }
+  > {
+    return {
+      toolName: AgentToolName.ListDuplicateGroups,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `List duplicate groups (max ${request.maxGroups ?? 50})`,
+      requestMetadata: () => ({}) as AgentToolListDuplicateGroupsRequestMetadata,
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: (plan) => plan.limits.maxAssetsPerSession,
+      validateAccess: () => Promise.resolve(null),
+      execute: async (auth, _session, request) => {
+        const maxGroups = request.maxGroups ?? 50;
+        const rows = await this.duplicateRepository.getAll(auth.user.id);
+        const groups: AgentDuplicateGroup[] = rows.slice(0, maxGroups).map(({ duplicateId, assets }) => ({
+          duplicateId,
+          assets: assets.map(
+            (asset): AgentDuplicateAsset => ({
+              id: asset.id,
+              originalFileName: asset.originalFileName,
+              fileCreatedAt: asset.fileCreatedAt,
+              isFavorite: asset.isFavorite,
+              rating: asset.exifInfo?.rating ?? null,
+              width: asset.exifInfo?.exifImageWidth ?? null,
+              height: asset.exifInfo?.exifImageHeight ?? null,
+            }),
+          ),
+        }));
+        return { groups };
+      },
+      responseSummary: (result) => `Returned ${result.groups.length} duplicate group(s)`,
+      responseMetadata: () => ({}),
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      resultSize: (result) => ({
+        returnedItems: result.groups.length,
+        hasMore: false,
+        nextPage: null,
+      }),
+      failedReason: 'Duplicate group list failed',
     };
   }
 

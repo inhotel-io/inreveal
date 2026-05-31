@@ -35,6 +35,7 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -828,6 +829,7 @@ const setup = () => {
     systemMetadataRepository as unknown as SystemMetadataRepository,
     albumRepository as unknown as AlbumRepository,
     sharedSpaceRepository as unknown as SharedSpaceRepository,
+    { getAll: vi.fn(() => Promise.resolve([])) } as unknown as DuplicateRepository,
     sessions as unknown as AgentSessionRepository,
     selectionHandles as unknown as AgentSelectionHandleRepository,
     toolCalls as unknown as AgentToolCallRepository,
