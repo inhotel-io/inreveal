@@ -53,6 +53,7 @@ export type AgentPermissionPlanSnapshot = {
     archiveAssets?: boolean;
     tagAssets?: boolean;
     updateAssetMetadata?: boolean;
+    trashAssets?: boolean;
   };
   limits: {
     maxAssetsPerToolCall: number;
@@ -84,6 +85,7 @@ export type AgentNormalizedPermissionPlanSnapshot = Omit<AgentPermissionPlanSnap
     archiveAssets: boolean;
     tagAssets: boolean;
     updateAssetMetadata: boolean;
+    trashAssets: boolean;
   };
 };
 

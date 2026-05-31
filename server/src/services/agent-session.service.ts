@@ -30,6 +30,7 @@ export class AgentSessionService {
     archiveAssets: false,
     tagAssets: false,
     updateAssetMetadata: false,
+    trashAssets: false,
   };
 
   static readonly permissionPresets: AgentPermissionPresetMap = {
@@ -60,6 +61,7 @@ export class AgentSessionService {
         archiveAssets: false,
         tagAssets: true,
         updateAssetMetadata: false,
+        trashAssets: false,
       },
       limits: {
         maxAssetsPerToolCall: 1000,
@@ -98,6 +100,7 @@ export class AgentSessionService {
         archiveAssets: true,
         tagAssets: true,
         updateAssetMetadata: true,
+        trashAssets: true,
       },
       limits: {
         maxAssetsPerToolCall: 2000,
@@ -136,6 +139,7 @@ export class AgentSessionService {
         archiveAssets: true,
         tagAssets: true,
         updateAssetMetadata: true,
+        trashAssets: true,
       },
       limits: {
         maxAssetsPerToolCall: 5000,

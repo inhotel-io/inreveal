@@ -26,7 +26,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetSelectionHandleId,
   });
 
-  AgentAssetRemoveTagOperationType type;
+  AgentAssetTrashOperationType type;
 
   String summary;
 
@@ -155,7 +155,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentAssetRemoveTagOperationType.fromJson(json[r'type'])!,
+        type: AgentAssetTrashOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
