@@ -34,6 +34,14 @@ describe('strict workflow router', () => {
     });
   });
 
+  it('matches travel-word album paraphrases with uncommon verbs', () => {
+    assert.deepEqual(matchStrictWorkflow('throw the pics from our Italy getaway into a new album'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Italy Trip',
+      placeHint: 'Italy',
+    });
+  });
+
   it('preserves explicit album names', () => {
     assert.deepEqual(matchStrictWorkflow('Create an album for my recent trip called Spring Break'), {
       kind: 'create_recent_trip_album',
