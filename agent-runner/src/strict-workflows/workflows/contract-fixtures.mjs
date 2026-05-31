@@ -56,8 +56,9 @@ const KNOWN_SEARCH_FILTER_KEYS = new Set([
   'takenAfter', 'takenBefore', 'createdAfter', 'createdBefore', 'updatedAfter', 'updatedBefore',
   'city', 'state', 'country', 'make', 'model', 'lensModel', 'isFavorite', 'isNotInAlbum', 'type',
   'rating', 'tagIds', 'tagMatchAny', 'albumIds', 'albumMatchAny', 'personIds', 'personMatchAny',
-  'spaceId', 'spacePersonIds', 'withSharedSpaces', 'visibility',
+  'spaceId', 'spacePersonIds', 'withSharedSpaces', 'visibility', 'maxSharpness', 'maxBrightness', 'maxQuality',
 ]);
+const QUALITY_FILTER_KEYS = ['maxSharpness', 'maxBrightness', 'maxQuality'];
 
 const fail = (message) => {
   throw new Error(message);
@@ -320,6 +321,13 @@ const validateSearchAssets = (args) => {
     }
     if (args.filters.visibility !== undefined && !KNOWN_VISIBILITY.has(args.filters.visibility)) {
       fail(`invalid searchAssets filter visibility "${args.filters.visibility}"`);
+    }
+    for (const key of QUALITY_FILTER_KEYS) {
+      const value = args.filters[key];
+      if (value === undefined) continue;
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 100) {
+        fail(`invalid searchAssets filter ${key} "${value}"`);
+      }
     }
   }
 };

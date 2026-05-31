@@ -356,7 +356,7 @@ export const isCleanSource = (source) => {
   return residual.length === 0;
 };
 
-export const resolveAssetSource = async ({ client, sourceDescription, signal, now = new Date() }) => {
+export const resolveAssetSource = async ({ client, sourceDescription, signal, now = new Date(), extraFilters = {} }) => {
   const source = clean(sourceDescription);
 
   // Subjective sources hand off — never plan a guess. (Subjective beats entity.)
@@ -430,6 +430,8 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     }
     filters = { ...dateFilters, ...(mediaType ? { type: mediaType } : {}) };
   }
+
+  filters = { ...filters, ...extraFilters };
 
   const hasFilters = Object.keys(filters).length > 0;
   const handleResult = await client.call(
