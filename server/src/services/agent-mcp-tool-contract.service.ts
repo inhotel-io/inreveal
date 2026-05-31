@@ -204,7 +204,8 @@ const defineAssetReadContract = (
 const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMetadata> = {
   name: AgentToolName.ReadAssetMetadata,
   title: 'Read asset metadata',
-  description: 'Legacy exact non-search metadata read for selected assets. The technical and allSafe presets include qualityInfo (sharpness, exposure, brightness, quality scores).',
+  description:
+    'Legacy exact non-search metadata read for selected assets. The technical and allSafe presets include qualityInfo (sharpness, exposure, brightness, quality scores).',
   usage:
     'Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility, quality. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
