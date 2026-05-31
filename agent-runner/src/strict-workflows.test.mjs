@@ -42,6 +42,17 @@ describe('strict workflow router', () => {
     });
   });
 
+  it('does not extract temporal travel phrases as place hints', () => {
+    assert.deepEqual(matchStrictWorkflow('throw my vacation photos from last month into a new album'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Recent Trip',
+    });
+    assert.deepEqual(matchStrictWorkflow('throw my Summer vacation into a new album'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Recent Trip',
+    });
+  });
+
   it('preserves explicit album names', () => {
     assert.deepEqual(matchStrictWorkflow('Create an album for my recent trip called Spring Break'), {
       kind: 'create_recent_trip_album',

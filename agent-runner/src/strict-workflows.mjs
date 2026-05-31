@@ -18,6 +18,8 @@ const placeAfterTravelPattern =
   /\b(?:trips?|vacations?|holidays?|getaways?|honeymoons?|cruises?|safaris?)\s+(?:photos?|pics?|pictures?|shots?)?\s*(?:from|to|in)\s+(.+?)\s*(?:\b(?:called|named|as|in|into|to)\b|[?!]|$)/i;
 const weekendPlacePattern = /\bweekend\s+(?:in|at)\s+(.+?)\s*(?:\b(?:called|named|as|in|into|to)\b|[?!]|$)/i;
 const uncertainPlacePattern = /^(?:somewhere|somewhere nice|there|that place|the trip|my trip)$/i;
+const temporalPlacePattern =
+  /^(?:(?:last|this|next)\s+(?:day|week|weekend|month|year|spring|summer|fall|autumn|winter)|today|yesterday|tomorrow|recent|recently|spring|summer|fall|autumn|winter|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|20\d{2})$/i;
 
 const cleanSlot = (value) =>
   String(value ?? '')
@@ -33,7 +35,7 @@ const cleanAlbumName = (value) =>
 
 const normalizePlaceHint = (value) => {
   const cleaned = cleanSlot(value);
-  if (!cleaned || uncertainPlacePattern.test(cleaned)) {
+  if (!cleaned || uncertainPlacePattern.test(cleaned) || temporalPlacePattern.test(cleaned)) {
     return undefined;
   }
 
