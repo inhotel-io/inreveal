@@ -2348,6 +2348,29 @@ Remove a tag from selected assets.
 }
 ```
 
+#### trash-assets
+
+Move selected assets to Trash (recoverable).
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="trash-assets" -->
+
+```json
+{
+  "summary": "Move selected photos to Trash (recoverable).",
+  "operations": [
+    {
+      "type": "asset.trash",
+      "summary": "Move selected photos to Trash (recoverable).",
+      "targetKind": "asset_batch",
+      "assetSource": {
+        "kind": "selectionHandle",
+        "selectionHandleId": "<selectionHandle.id from searchAssets>"
+      }
+    }
+  ]
+}
+```
+
 ### Revise proposed operations
 
 MCP tool name: `reviseProposedOperations`
@@ -3033,6 +3056,31 @@ Revise a plan to remove a tag from selected assets.
       },
       "payload": {
         "tagId": "<tagIds value from resolveAssetSearchFilters>"
+      }
+    }
+  ]
+}
+```
+
+#### revise-trash-assets
+
+Revise a plan to move selected assets to Trash (recoverable).
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-trash-assets" -->
+
+```json
+{
+  "planId": "<plan.id from proposed plan>",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Move selected photos to Trash (recoverable).",
+  "operations": [
+    {
+      "type": "asset.trash",
+      "summary": "Move selected photos to Trash (recoverable).",
+      "targetKind": "asset_batch",
+      "assetSource": {
+        "kind": "selectionHandle",
+        "selectionHandleId": "<selectionHandle.id from searchAssets>"
       }
     }
   ]
