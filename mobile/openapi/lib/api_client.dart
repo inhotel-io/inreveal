@@ -232,6 +232,8 @@ class ApiClient {
           return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSourceInput':
           return AgentAssetSourceInput.fromJson(value);
+        case 'AgentAssetTrashOperationType':
+          return AgentAssetTrashOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetUpdateMetadataOperationType':
           return AgentAssetUpdateMetadataOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetUpdateMetadataTargetKind':
@@ -428,6 +430,8 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':

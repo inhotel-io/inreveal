@@ -547,6 +547,7 @@ export type AgentPermissionPlan = {
         removeMembersFromSpaces: boolean;
         setCover: boolean;
         tagAssets: boolean;
+        trashAssets: boolean;
         updateAssetMetadata: boolean;
         updateDetails: boolean;
         updateSpaceDetails: boolean;
@@ -1003,6 +1004,17 @@ export type AgentProposeAlbumOperationsDto = {
         payload: {
             tagId: string;
         };
+    } | {
+        "type": AgentAssetTrashOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
     })[];
     summary: string;
 };
@@ -1317,6 +1329,17 @@ export type AgentReviseAlbumOperationsDto = {
         payload: {
             tagId: string;
         };
+    } | {
+        "type": AgentAssetTrashOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
     })[];
     summary: string;
 };
@@ -10417,7 +10440,8 @@ export enum AgentOperationType {
     AssetSetArchive = "asset.setArchive",
     AssetUpdateMetadata = "asset.updateMetadata",
     AssetAddTag = "asset.addTag",
-    AssetRemoveTag = "asset.removeTag"
+    AssetRemoveTag = "asset.removeTag",
+    AssetTrash = "asset.trash"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10535,6 +10559,9 @@ export enum AgentAssetAddTagOperationType {
 }
 export enum AgentAssetRemoveTagOperationType {
     AssetRemoveTag = "asset.removeTag"
+}
+export enum AgentAssetTrashOperationType {
+    AssetTrash = "asset.trash"
 }
 export enum Status {
     Success = "success"

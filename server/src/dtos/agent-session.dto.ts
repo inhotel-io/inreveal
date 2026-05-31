@@ -44,6 +44,7 @@ const legacyWriteScopeDefaults = {
   archiveAssets: false,
   tagAssets: false,
   updateAssetMetadata: false,
+  trashAssets: false,
 };
 const expandedWriteScopeShape = {
   createAlbum: z.boolean(),
@@ -63,6 +64,7 @@ const expandedWriteScopeShape = {
   archiveAssets: z.boolean(),
   tagAssets: z.boolean(),
   updateAssetMetadata: z.boolean(),
+  trashAssets: z.boolean(),
 };
 
 const AgentWriteScopeSchema = z.object(expandedWriteScopeShape);
