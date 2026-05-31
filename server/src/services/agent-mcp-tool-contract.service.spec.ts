@@ -1028,9 +1028,7 @@ describe(AgentMcpToolContractService.name, () => {
     const example = contract?.examples.find((candidate) => candidate.name === 'trash-assets');
 
     expect(example, 'trash-assets example should exist').toBeDefined();
-    const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
-      example?.arguments,
-    );
+    const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(example?.arguments);
     expect(parsed.operations).toHaveLength(1);
     expect(parsed.operations[0]).toMatchObject({
       type: AgentOperationType.AssetTrash,
