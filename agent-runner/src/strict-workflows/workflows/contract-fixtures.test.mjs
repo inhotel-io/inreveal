@@ -253,10 +253,12 @@ describe('makeContractClient — readAlbum handler', () => {
     });
     const result = await client.call('readAlbum', { albumId: 'alb-1' });
     assert.deepEqual(result, {
-      id: 'alb-1',
-      albumName: 'Family',
-      assetIds: ['00000000-0000-4000-8000-000000000001'],
-      albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+      album: {
+        id: 'alb-1',
+        albumName: 'Family',
+        assetIds: ['00000000-0000-4000-8000-000000000001'],
+        albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+      },
     });
   });
 
