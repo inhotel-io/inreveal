@@ -146,4 +146,23 @@ describe('archive_assets execution', () => {
     const outcome = await wf.run({ client, slots: { archived: true, sourceDescription: 'my newest 10 photos' } });
     assert.equal(outcome.status, 'failed');
   });
+
+  // Slice 3: upload source — "archive everything I uploaded today" must resolve
+  // (not handoff) and the searchAssets call must carry createdAfter, not takenAfter.
+  it('plans a batch archive for an upload-date source (createdAfter, not takenAfter)', async () => {
+    const NOW = new Date('2026-05-15T12:00:00.000Z');
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { archived: true, sourceDescription: 'everything I uploaded today' },
+      now: NOW,
+    });
+    assert.equal(outcome.status, 'planned');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    assert.ok('createdAfter' in (search.args.filters ?? {}), 'filters must contain createdAfter');
+    assert.equal('takenAfter' in (search.args.filters ?? {}), false);
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.setArchive', archived: true });
+  });
 });
