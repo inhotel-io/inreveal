@@ -135,6 +135,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
 | `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`            |

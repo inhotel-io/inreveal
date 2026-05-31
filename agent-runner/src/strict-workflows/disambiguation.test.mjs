@@ -86,7 +86,7 @@ const CASES = [
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
-  ['remove the Travel tag from my newest 20', 'none'],
+  ['remove the Travel tag from my newest 20', 'untag_assets'],
   ['make an album of the best photos', 'none'],
   ['how many photos do I have?', 'none'],
   ['thanks, that looks great', 'none'],

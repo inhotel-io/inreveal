@@ -490,3 +490,136 @@ describe('makeContractClient — asset.updateMetadata action', () => {
     );
   });
 });
+
+describe('makeContractClient — asset.removeTag validator', () => {
+  const newUuid = () => '00000000-0000-4000-8000-000000000099';
+
+  it('KNOWN_OPERATION_TYPES includes asset.removeTag', () => {
+    assert.equal(KNOWN_OPERATION_TYPES.has('asset.removeTag'), true);
+  });
+
+  it('accepts a valid asset.removeTag op', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      summary: 'remove tag',
+      operations: [
+        {
+          type: 'asset.removeTag',
+          targetKind: 'asset_batch',
+          assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+          payload: { tagId: newUuid() },
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('rejects asset.removeTag with missing payload.tagId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' },
+              payload: {},
+            },
+          ],
+        }),
+      /tagId/i,
+    );
+  });
+
+  it('rejects asset.removeTag with non-string tagId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' },
+              payload: { tagId: 42 },
+            },
+          ],
+        }),
+      /tagId/i,
+    );
+  });
+
+  it('rejects asset.removeTag with targetId present', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'asset_batch',
+              targetId: 'some-id',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' },
+              payload: { tagId: newUuid() },
+            },
+          ],
+        }),
+      /targetId/i,
+    );
+  });
+
+  it('rejects asset.removeTag with wrong targetKind', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'existing_album',
+              targetId: 'alb-1',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' },
+              payload: { tagId: newUuid() },
+            },
+          ],
+        }),
+      /asset_batch/i,
+    );
+  });
+
+  it('rejects asset.removeTag with missing assetSource', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'asset_batch',
+              payload: { tagId: newUuid() },
+            },
+          ],
+        }),
+      /assetSource|selectionHandle/i,
+    );
+  });
+
+  it('rejects asset.removeTag with search-kind assetSource (must be selectionHandle)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.removeTag',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'search', selectionHandleId: 'h' },
+              payload: { tagId: newUuid() },
+            },
+          ],
+        }),
+      /assetSource|selectionHandle/i,
+    );
+  });
+});

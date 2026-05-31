@@ -301,6 +301,44 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'untag_assets',
+    flow: 'hybrid',
+    title: 'Untag photos (remove)',
+    classifierDescription:
+      'User wants to remove an existing tag from a metadata-describable set of photos or a named entity (remove-only; the add arm is tag_assets).',
+    positiveExamples: Object.freeze([
+      'Remove the Travel tag from my newest 20',
+      'Remove tag Spring Break from my last 50 photos',
+      'Untag my newest 20 as Travel',
+      'Untag the Berlin photos from Work',
+    ]),
+    negativeExamples: Object.freeze([
+      'Add the Travel tag to my newest 20',
+      'Remove my newest 20 from the Italy album',
+      'Remove Bob from the Family space',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to untag.',
+      }),
+      tagName: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Tag name to remove (optional for untag phrasing; run asks if missing).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Add or remove tags',
+      tier: 'Solid now',
+      flow: 'Hybrid',
+    }),
+  }),
+  Object.freeze({
     kind: 'update_asset_metadata',
     flow: 'hybrid',
     title: 'Edit photo metadata',
