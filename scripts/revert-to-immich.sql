@@ -643,6 +643,7 @@ BEGIN
       OR "name" LIKE '%LibraryUser%'
       OR "name" LIKE '%AddAssetDuplicateChecksum%'
       OR "name" LIKE '%AddFaceIdentities%'
+      OR "name" LIKE '%AddAssetQualityScoring%'
       OR "name" LIKE '%AddSpacePersonRepresentativeFaceSource%'
       OR "name" LIKE '%SortSpacePeopleByNameIndex%'
       OR "name" LIKE '%ReconcileFaceIdentityIndexOverrides%'
