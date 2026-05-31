@@ -537,6 +537,17 @@ describe(SearchRepository.name, () => {
     });
   });
 
+  describe('searchAssetBuilder quality threshold semantics', () => {
+    it('joins asset_quality and applies maximum quality predicates', () => {
+      const sql = buildAssetSearchSql({ maxSharpness: 30, maxBrightness: 25, maxQuality: 40 });
+
+      expect(sql).toContain('"asset_quality"');
+      expect(sql).toMatch(/"asset_quality"\."sharpness"\s*<=\s*\$\d+/i);
+      expect(sql).toMatch(/"asset_quality"\."brightness"\s*<=\s*\$\d+/i);
+      expect(sql).toMatch(/"asset_quality"\."quality"\s*<=\s*\$\d+/i);
+    });
+  });
+
   describe('searchAssetBuilder album match semantics', () => {
     it('keeps albumIds as all-match by default', () => {
       const sql = buildAssetSearchSql({

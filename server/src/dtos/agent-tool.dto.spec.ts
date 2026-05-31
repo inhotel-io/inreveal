@@ -651,6 +651,40 @@ describe('Agent tool DTOs', () => {
       }
     });
 
+    it('accepts quality threshold filters from 0 to 100', () => {
+      const result = parseSearchAssetsRequest({
+        filters: {
+          maxSharpness: 0,
+          maxBrightness: 100,
+          maxQuality: 50,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.filters).toEqual(
+          expect.objectContaining({
+            maxSharpness: 0,
+            maxBrightness: 100,
+            maxQuality: 50,
+          }),
+        );
+      }
+    });
+
+    it.each([
+      ['maxSharpness', -1],
+      ['maxSharpness', 101],
+      ['maxBrightness', -1],
+      ['maxBrightness', 101],
+      ['maxQuality', -1],
+      ['maxQuality', 101],
+    ] as const)('rejects %s outside 0 to 100', (field, value) => {
+      const result = parseSearchAssetsRequest({ filters: { [field]: value } });
+
+      expectIssue(result, ['filters', field], 'Too');
+    });
+
     it('rejects unknown search metadata fields', () => {
       const result = parseSearchAssetsRequest({ detail: 'summary', fields: ['fullExif'] });
 
