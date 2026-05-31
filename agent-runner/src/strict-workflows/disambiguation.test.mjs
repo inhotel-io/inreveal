@@ -70,6 +70,19 @@ const CASES = [
   // set_album_cover
   ['set the cover of the Family album to the 3rd photo', 'set_album_cover'],
   ['make the Family album cover the first photo', 'set_album_cover'],
+  // --- cross-cutting seam sweep (slice 21) -------------------------------------
+  // Verb/phrasing variants must each land on exactly one kind. The load-bearing
+  // seams: the four "remove … from …" owners (remove_photos_from_album,
+  // manage_space_assets[remove], manage_space_members, favorite_assets), the two
+  // "set the <field> …" owners (update_asset_metadata vs rename_or_describe_*), and
+  // the three create-verb owners (album / space / recent-trip).
+  ['put my newest 20 photos into the Family space', 'manage_space_assets'],
+  ['pull my screenshots out of the Trips space', 'manage_space_assets'],
+  ['turn my newest 20 photos 180', 'rotate_assets'],
+  ['make a space from my newest 50 photos called Trips', 'create_space_from_source'],
+  ['remove my newest 20 from Family', 'remove_photos_from_album'],
+  ['set the rating on my last 10 photos to 4', 'update_asset_metadata'],
+  ['use the cover of the Family album to the last photo', 'set_album_cover'],
   // none (subjective / out-of-scope / chatter decline at the regex fast-path)
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
