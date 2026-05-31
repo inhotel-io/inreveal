@@ -521,11 +521,12 @@
 <main
   class="relative z-0 flex flex-col h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6 md:pt-(--navbar-height-md)"
 >
-  <!-- Sticky grouping switcher: lives outside the scrolling timeline so it stays visible (see Tags). -->
+  <!-- Sticky grouping switcher: lives outside the scrolling timeline so it stays visible (see Tags).
+       mt-12 clears the taller ControlAppBar, which exceeds the --navbar-height padding reserve. -->
   <TimelineRouteGroupingBar
     grouping={timelineGrouping}
     hidden={assetMultiSelectManager.selectionActive || action === 'merge'}
-    class="shrink-0"
+    class="shrink-0 mt-12"
     onGroupingChange={handleTimelineGroupingChange}
   />
   <div class="relative flex-1 min-h-0">
