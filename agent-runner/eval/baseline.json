@@ -73,6 +73,7 @@
     "recall.rotate.canonical": 1,
     "recall.rotate.ccw": 1,
     "recall.rotate.flip": 1,
+    "recall.cleanup_duplicates.canonical": 1,
     "recall.cover.index": 1,
     "recall.cover.first": 1,
     "neg.q.count": 1,
