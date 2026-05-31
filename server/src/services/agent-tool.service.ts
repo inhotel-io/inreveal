@@ -2049,7 +2049,11 @@ export class AgentToolService {
       execute: async (auth, _session, request) => {
         const maxGroups = request.maxGroups ?? 50;
         const rows = await this.duplicateRepository.getAll(auth.user.id);
-        const groups: AgentDuplicateGroup[] = rows.slice(0, maxGroups).map(({ duplicateId, assets }) => ({
+        const slicedRows = rows.slice(0, maxGroups);
+        const allAssetIds = slicedRows.flatMap(({ assets }) => assets.map((a) => a.id));
+        const qualityRows = await this.assetRepository.getAssetQualityByIds(allAssetIds);
+        const sharpnessById = new Map(qualityRows.map((r) => [r.assetId, r.sharpness]));
+        const groups: AgentDuplicateGroup[] = slicedRows.map(({ duplicateId, assets }) => ({
           duplicateId,
           assets: assets.map(
             (asset): AgentDuplicateAsset => ({
@@ -2060,6 +2064,7 @@ export class AgentToolService {
               rating: asset.exifInfo?.rating ?? null,
               width: asset.exifInfo?.exifImageWidth ?? null,
               height: asset.exifInfo?.exifImageHeight ?? null,
+              sharpness: sharpnessById.get(asset.id) ?? null,
             }),
           ),
         }));
