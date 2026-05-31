@@ -54,7 +54,6 @@ class JobName {
   static const librarySyncFilesQueueAll = JobName._(r'LibrarySyncFilesQueueAll');
   static const librarySyncFiles = JobName._(r'LibrarySyncFiles');
   static const libraryScanQueueAll = JobName._(r'LibraryScanQueueAll');
-  static const hlsSessionCleanup = JobName._(r'HlsSessionCleanup');
   static const memoryCleanup = JobName._(r'MemoryCleanup');
   static const memoryGenerate = JobName._(r'MemoryGenerate');
   static const notificationsCleanup = JobName._(r'NotificationsCleanup');
@@ -82,17 +81,9 @@ class JobName {
   static const ocr = JobName._(r'Ocr');
   static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
   static const petDetection = JobName._(r'PetDetection');
-  static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
-  static const integrityUntrackedFilesQueueAll = JobName._(r'IntegrityUntrackedFilesQueueAll');
-  static const integrityUntrackedFiles = JobName._(r'IntegrityUntrackedFiles');
-  static const integrityUntrackedRefresh = JobName._(r'IntegrityUntrackedRefresh');
-  static const integrityMissingFilesQueueAll = JobName._(r'IntegrityMissingFilesQueueAll');
-  static const integrityMissingFiles = JobName._(r'IntegrityMissingFiles');
-  static const integrityMissingFilesRefresh = JobName._(r'IntegrityMissingFilesRefresh');
-  static const integrityChecksumFiles = JobName._(r'IntegrityChecksumFiles');
-  static const integrityChecksumFilesRefresh = JobName._(r'IntegrityChecksumFilesRefresh');
-  static const integrityDeleteReportType = JobName._(r'IntegrityDeleteReportType');
-  static const integrityDeleteReports = JobName._(r'IntegrityDeleteReports');
+  static const imageQualityQueueAll = JobName._(r'ImageQualityQueueAll');
+  static const imageQuality = JobName._(r'ImageQuality');
+  static const workflowRun = JobName._(r'WorkflowRun');
   static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
   static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
   static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
@@ -140,7 +131,6 @@ class JobName {
     librarySyncFilesQueueAll,
     librarySyncFiles,
     libraryScanQueueAll,
-    hlsSessionCleanup,
     memoryCleanup,
     memoryGenerate,
     notificationsCleanup,
@@ -168,17 +158,9 @@ class JobName {
     ocr,
     petDetectionQueueAll,
     petDetection,
-    workflowAssetTrigger,
-    integrityUntrackedFilesQueueAll,
-    integrityUntrackedFiles,
-    integrityUntrackedRefresh,
-    integrityMissingFilesQueueAll,
-    integrityMissingFiles,
-    integrityMissingFilesRefresh,
-    integrityChecksumFiles,
-    integrityChecksumFilesRefresh,
-    integrityDeleteReportType,
-    integrityDeleteReports,
+    imageQualityQueueAll,
+    imageQuality,
+    workflowRun,
     storageBackendMigrationQueueAll,
     storageBackendMigrationSingle,
     sharedSpaceFaceMatch,
@@ -261,7 +243,6 @@ class JobNameTypeTransformer {
         case r'LibrarySyncFilesQueueAll': return JobName.librarySyncFilesQueueAll;
         case r'LibrarySyncFiles': return JobName.librarySyncFiles;
         case r'LibraryScanQueueAll': return JobName.libraryScanQueueAll;
-        case r'HlsSessionCleanup': return JobName.hlsSessionCleanup;
         case r'MemoryCleanup': return JobName.memoryCleanup;
         case r'MemoryGenerate': return JobName.memoryGenerate;
         case r'NotificationsCleanup': return JobName.notificationsCleanup;
@@ -289,17 +270,9 @@ class JobNameTypeTransformer {
         case r'Ocr': return JobName.ocr;
         case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
         case r'PetDetection': return JobName.petDetection;
-        case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
-        case r'IntegrityUntrackedFilesQueueAll': return JobName.integrityUntrackedFilesQueueAll;
-        case r'IntegrityUntrackedFiles': return JobName.integrityUntrackedFiles;
-        case r'IntegrityUntrackedRefresh': return JobName.integrityUntrackedRefresh;
-        case r'IntegrityMissingFilesQueueAll': return JobName.integrityMissingFilesQueueAll;
-        case r'IntegrityMissingFiles': return JobName.integrityMissingFiles;
-        case r'IntegrityMissingFilesRefresh': return JobName.integrityMissingFilesRefresh;
-        case r'IntegrityChecksumFiles': return JobName.integrityChecksumFiles;
-        case r'IntegrityChecksumFilesRefresh': return JobName.integrityChecksumFilesRefresh;
-        case r'IntegrityDeleteReportType': return JobName.integrityDeleteReportType;
-        case r'IntegrityDeleteReports': return JobName.integrityDeleteReports;
+        case r'ImageQualityQueueAll': return JobName.imageQualityQueueAll;
+        case r'ImageQuality': return JobName.imageQuality;
+        case r'WorkflowRun': return JobName.workflowRun;
         case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
         case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
         case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
