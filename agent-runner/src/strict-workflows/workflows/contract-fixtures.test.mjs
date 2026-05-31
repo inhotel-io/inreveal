@@ -52,6 +52,16 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
     );
   });
 
+  it('searchAssets accepts quality threshold filters', async () => {
+    const client = makeContractClient();
+    const ok = await client.call('searchAssets', {
+      mode: 'metadata',
+      detail: 'handle',
+      filters: { maxSharpness: 35, maxBrightness: 30, maxQuality: 40 },
+    });
+    assert.equal(ok.selectionHandle.id, 'handle-1');
+  });
+
   it('proposeAssetBatchFromSelection accepts each valid action', async () => {
     const client = makeContractClient();
     for (const action of [
