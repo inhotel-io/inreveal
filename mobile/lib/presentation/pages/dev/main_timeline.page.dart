@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/sort_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/memory/memory_lane.widget.dart';
 import 'package:immich_mobile/presentation/widgets/photos_filter/filter_subheader.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
@@ -53,7 +54,7 @@ class _MainTimelinePageState extends ConsumerState<MainTimelinePage> {
                 floating: true,
                 pinned: false,
                 snap: false,
-                actions: [FilterIconButton()],
+                actions: [SortIconButton(), FilterIconButton()],
               ),
               bottomSliverWidget: const _SearchLoadMoreFooter(),
             ),
