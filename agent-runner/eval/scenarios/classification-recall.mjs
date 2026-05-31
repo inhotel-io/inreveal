@@ -468,6 +468,14 @@ export default [
     expect: { kind: 'rotate_assets', slotsSurvive: true },
   },
 
+  // cleanup_duplicates ---------------------------------------------------------
+  {
+    id: 'recall.cleanup_duplicates.canonical',
+    category: 'recall',
+    prompt: 'clean up my duplicate photos',
+    expect: { kind: 'cleanup_duplicates', slotsSurvive: true },
+  },
+
   // set_album_cover -----------------------------------------------------------
   {
     id: 'recall.cover.index',

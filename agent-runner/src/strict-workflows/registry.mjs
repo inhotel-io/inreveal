@@ -1,6 +1,7 @@
 import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
 import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
 import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
+import { cleanupDuplicatesWorkflow } from './workflows/cleanup-duplicates.mjs';
 import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
 import { createSpaceFromSourceWorkflow } from './workflows/create-space-from-source.mjs';
@@ -44,6 +45,10 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     create-verb workflows. `create_album_from_source` comes first so "album"
 //     prompts are not stolen; `create_space_from_source` immediately follows and
 //     its inline-name form discriminates via the "space" noun.
+//   - `cleanup_duplicates` BEFORE `trash_assets` so "trash duplicates" / "delete
+//     duplicate photos" routes to cleanup (the duplicate keyword wins), not to
+//     the generic trash workflow. Both require a trash/delete verb but
+//     cleanup_duplicates requires the additional "duplicate(s)/dupe(s)" keyword.
 //   - `trash_assets` is adjacent to `archive_assets` (both source-state workflows).
 //     Its distinct verbs (trash/delete/bin/move-to-trash) do not collide with
 //     `remove_photos_from_album` ("remove … from") or `untag_assets` ("remove … tag").
@@ -55,6 +60,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   renameOrDescribeAlbumWorkflow,
   setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
+  cleanupDuplicatesWorkflow,
   trashAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,

@@ -94,6 +94,11 @@ const CASES = [
   // upload-dated sources do not change verb-routing (resolver bounds at run time)
   ['archive everything I uploaded today', 'archive_assets'],
   ['tag my recent uploads as Imported', 'tag_assets'],
+  // cleanup_duplicates (duplicate keyword required; wins over trash_assets for dup prompts)
+  ['clean up my duplicate photos', 'cleanup_duplicates'],
+  ['trash duplicate photos', 'cleanup_duplicates'],
+  ['find and remove duplicates', 'cleanup_duplicates'],
+  ['dedupe my library', 'cleanup_duplicates'],
   // trash_assets (explicit trash/bin/delete/move-to-trash verb; container and subjective decline)
   ['trash my newest 20 photos', 'trash_assets'],
   ['delete my 2024 screenshots', 'trash_assets'],

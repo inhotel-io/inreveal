@@ -215,14 +215,39 @@ const SPACE_OP_VALIDATORS = {
   'space.removeAssets': validateSpaceRemoveAssets,
 };
 
+// Relaxed validateAssetTrash: accepts EXACTLY ONE of:
+//   - assetSource { kind: 'selectionHandle', selectionHandleId }
+//   - assetIds (non-empty array)
+//   - assetSelectionHandleId (string)
+// Zero mechanisms → error; multiple mechanisms → error.
 const validateAssetTrash = (op) => {
   if (op.targetKind !== 'asset_batch') fail('asset.trash requires targetKind "asset_batch"');
   if (op.targetId !== undefined) fail('asset.trash must not set targetId');
   if (op.temporaryTargetId !== undefined) fail('asset.trash must not set temporaryTargetId');
   if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('asset.trash must not set a payload');
-  const source = op.assetSource;
-  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
-    fail('asset.trash requires an assetSource selectionHandle');
+
+  // Count how many selection mechanisms are present.
+  const hasSource = op.assetSource !== undefined;
+  const hasIds = op.assetIds !== undefined;
+  const hasHandleId = op.assetSelectionHandleId !== undefined;
+  const mechanismCount = Number(hasSource) + Number(hasIds) + Number(hasHandleId);
+
+  if (mechanismCount === 0) {
+    fail('asset.trash requires exactly one selection mechanism: assetSource (selectionHandle), assetIds, or assetSelectionHandleId');
+  }
+  if (mechanismCount > 1) {
+    fail('asset.trash requires exactly one selection mechanism; multiple mechanisms are not allowed');
+  }
+
+  if (hasSource) {
+    if (!op.assetSource || op.assetSource.kind !== 'selectionHandle' || !op.assetSource.selectionHandleId) {
+      fail('asset.trash assetSource must be a selectionHandle with a selectionHandleId');
+    }
+  }
+  if (hasIds) {
+    if (!Array.isArray(op.assetIds) || op.assetIds.length === 0) {
+      fail('asset.trash assetIds must be a non-empty array');
+    }
   }
 };
 
