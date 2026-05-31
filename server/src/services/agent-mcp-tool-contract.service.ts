@@ -1073,6 +1073,54 @@ const listSpacesContract: AgentMcpToolContract<AgentToolName.ListSpaces> = {
   safety,
 };
 
+const listDuplicateGroupsContract: AgentMcpToolContract<AgentToolName.ListDuplicateGroups> = {
+  name: AgentToolName.ListDuplicateGroups,
+  title: 'List duplicate groups',
+  description:
+    'List near-duplicate photo groups detected by CLIP-embedding similarity, returning only the fields needed to choose a keeper (id, originalFileName, fileCreatedAt, isFavorite, rating, width, height).',
+  usage:
+    'Use an empty object for a new request or pass maxGroups to limit results. Use only toolCallId when retrying a Gallery-approved request.',
+  argumentModes: [
+    {
+      name: 'list-duplicate-groups',
+      description: 'Start a new duplicate group list request.',
+      requiredFields: [],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use before ranking duplicate groups and choosing which assets to keep.',
+    },
+    approvedRetryMode,
+  ],
+  examples: [
+    {
+      name: 'list-duplicate-groups',
+      description: 'List duplicate groups (up to the default 50).',
+      arguments: {},
+    },
+    {
+      name: 'list-duplicate-groups-capped',
+      description: 'List at most 10 duplicate groups.',
+      arguments: { maxGroups: 10 },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'tool-call-arguments-missing',
+      match: { missingField: 'arguments', requestShape: 'json-rpc' },
+      hint: 'Use params.arguments: {} for a normal listDuplicateGroups tool call.',
+      exampleName: 'list-duplicate-groups',
+    },
+    {
+      id: 'tool-call-arguments-not-object',
+      match: { issuePath: 'arguments', requestShape: 'json-rpc' },
+      hint: 'The params.arguments value must be a JSON object. Use {} for a normal listDuplicateGroups call.',
+      exampleName: 'list-duplicate-groups',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const readSpaceContract: AgentMcpToolContract<AgentToolName.ReadSpace> = {
   name: AgentToolName.ReadSpace,
   title: 'Read space',
@@ -1213,6 +1261,7 @@ const readToolContracts: AgentMcpReadToolContract[] = [
   listSpacesContract,
   readSpaceContract,
   searchUsersContract,
+  listDuplicateGroupsContract,
 ];
 
 const planningUsage =
