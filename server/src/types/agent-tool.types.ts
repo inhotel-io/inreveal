@@ -77,7 +77,7 @@ export type AgentSearchAssetsField =
 
 export type AgentAssetMetadataDetail = 'basic' | 'descriptive' | 'technical' | 'allSafe';
 
-export type AgentAssetMetadataField = AgentSearchAssetsField;
+export type AgentAssetMetadataField = AgentSearchAssetsField | 'quality';
 
 export type AgentToolSearchAssetsRequestMetadata = {
   mode: AgentSearchAssetsMode;
@@ -428,6 +428,13 @@ export type AgentToolRequestMetadata =
 
 export type AgentToolResponseMetadata = AgentToolResponseIdsMetadata | AgentToolOperationPlanResponseMetadata;
 
+export type AgentAssetMetadataQuality = {
+  sharpness: number | null;
+  exposure: number | null;
+  brightness: number | null;
+  quality: number | null;
+};
+
 export type AgentAssetMetadata = {
   id: string;
   ownerId: string;
@@ -455,6 +462,7 @@ export type AgentAssetMetadata = {
     value: string;
     color: string | null;
   }>;
+  qualityInfo: AgentAssetMetadataQuality | null;
 };
 
 export type AgentSearchAssetExif = Partial<NonNullable<AgentAssetMetadata['exifInfo']>>;
@@ -466,4 +474,6 @@ export type AgentSearchAssetResult = Omit<Partial<AgentAssetMetadata>, 'exifInfo
 
 export type AgentAssetMetadataExifResult = AgentSearchAssetExif;
 
-export type AgentAssetMetadataResult = Omit<AgentSearchAssetResult, 'ownerId'>;
+export type AgentAssetMetadataResult = Omit<AgentSearchAssetResult, 'ownerId'> & {
+  qualityInfo?: AgentAssetMetadataQuality | null;
+};
