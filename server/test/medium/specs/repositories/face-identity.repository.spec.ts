@@ -212,7 +212,7 @@ const newPersonalIdentityCluster = async (
 // identity with no competing named person, so the same-owner conflict check sees nothing to block.
 const newOrphanIdentityCluster = async (
   ctx: ReturnType<typeof setup>['ctx'],
-  input: { ownerId: string; embedding: string; faceCount: number },
+  input: { ownerId: string; embedding?: string; faceCount: number },
 ) => {
   const identity = await ctx.database
     .insertInto('face_identity')
@@ -223,7 +223,13 @@ const newOrphanIdentityCluster = async (
   for (let index = 0; index < input.faceCount; index++) {
     const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
-    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+    // embedding omitted => faces with no face_search row, exercising the "cannot assess" path.
+    if (input.embedding) {
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: input.embedding })
+        .execute();
+    }
     await ctx.database
       .insertInto('face_identity_face')
       .values({ identityId: identity.id, assetFaceId: assetFace.id, source: 'backfill' })
@@ -3503,6 +3509,89 @@ describe(FaceIdentityRepository.name, () => {
           targetIdentityId: target.identity.id,
           sourceIdentityIds: [source.identity.id],
           source: 'manual',
+        });
+
+        expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([target.identity.id]));
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('merges only the embedding-consistent source when one call mixes consistent and distinct sources', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const consistentSource = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const distinctSource = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('second'),
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [consistentSource.identity.id, distinctSource.identity.id],
+          source: 'shared-space-evidence',
+        });
+
+        // Per-source filtering, not all-or-nothing: the consistent source merges, the distinct one is left alone.
+        expect(await getLinkedIdentityIds(ctx, consistentSource.assetFaceIds)).toEqual(new Set([target.identity.id]));
+        expect(await getLinkedIdentityIds(ctx, distinctSource.assetFaceIds)).toEqual(
+          new Set([distinctSource.identity.id]),
+        );
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('allows an automatic merge when the source has no embedded faces (cannot assess)', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const source = await newOrphanIdentityCluster(ctx, { ownerId: user.id, faceCount: 3 });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [source.identity.id],
+          source: 'shared-space-evidence',
+        });
+
+        expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([target.identity.id]));
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('allows an automatic merge when the target has no embedded faces (cannot assess)', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        // Target identity exists with faces but no face_search rows, so its centroid is unknowable.
+        const target = await newOrphanIdentityCluster(ctx, { ownerId: user.id, faceCount: 3 });
+        const source = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('second'),
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [source.identity.id],
+          source: 'shared-space-evidence',
         });
 
         expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([target.identity.id]));

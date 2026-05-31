@@ -32,8 +32,8 @@ drags `asset_face.personId` along. So the real corruption is upstream, at the id
 
 ### The bad merge — two trigger sites, one defect class
 
-**Trigger A — `handleSharedSpacePersonDedup` (`shared-space.service.ts:1704-1875`)**, the dominant
-process during the 2026-05-25 flood:
+**Trigger A — `handleSharedSpacePersonDedup` (`shared-space.service.ts:1704-1875`)**, dominant by job
+volume during the 2026-05-25 flood:
 
 1. Per space person it calls `findClosestSpacePerson(spaceId, person.embedding, {maxDistance, numResults:2})`
    (line 1758). `person.embedding` is the embedding of a **single representative face** — see
@@ -58,6 +58,18 @@ overlapping clusters.
 (`shared-space.service.ts:1407-1504`)**: same shape — keys off the space person's single
 representative `embedding`, searches local faces within `maxDistance`, same weak `candidates.length
 !== 1` guard, same cascade into `mergeIdentities`. Recurs every 6h library scan.
+
+**Which trigger actually corrupted the data — reconciliation (Trigger B), confirmed end-to-end.**
+Trigger A is largely _self-limited_: `handleSharedSpacePersonDedup` deletes the source space person only
+**after** `mergeIdentitiesForSpacePersonEvidence` (delete at :1844, merge at :1806), so at the
+`mergeIdentities` call both space persons still exist and `countMergeConflicts`' same-space check blocks
+any cross-identity fusion. Dedup therefore mostly merges _same-identity_ duplicate space persons.
+Trigger B merges a member's **local** identity into the space person's identity; that source local
+identity usually has no space person in the space, so the conflict check passes and the merge proceeds —
+exactly how a contaminated representative face fuses two different people. The medium test
+`reconciliation does not fuse a member identity into an embedding-distinct space identity`
+(`people-identity-rbac.spec.ts`) reproduces this end-to-end and fails without the guard. The guard sits
+at the shared `mergeIdentities` chokepoint and covers both triggers regardless of which fired.
 
 ### Why Karina's main cluster survived but the duplicate did not
 
@@ -100,10 +112,19 @@ Refusing the identity merge keeps `face_identity_face` pointed at the real sourc
 personal backfill repair never drags `asset_face.personId` onto the wrong person — the reported
 corruption. Identities with no embedded faces are treated as consistent (cannot assess → do not block).
 
-Tests (medium, real DB): refuses an embedding-distinct automatic merge; still performs an
-embedding-consistent automatic merge; manual merges bypass the guard. Full server unit suite (4480),
-the face-identity medium spec (86), and the shared-space face-matching medium spec (33) stay green;
-tsc + eslint clean.
+Tests (medium, real DB):
+
+- `face-identity.repository.spec.ts` (repository chokepoint): refuses an embedding-distinct automatic
+  merge; still performs an embedding-consistent one; manual merges bypass the guard; **mixed-source call
+  merges only the consistent source and leaves the distinct one** (per-source filtering, not
+  all-or-nothing); a source with no embedded faces is allowed (cannot assess); a target with no embedded
+  faces is allowed (cannot assess).
+- `people-identity-rbac.spec.ts` (end-to-end): drives the real `handleSharedSpaceIdentityReconciliation`
+  with a contaminated representative face and asserts the member's distinct identity is **not** fused
+  into the space identity. Verified to fail when the guard is disabled (true reproduction).
+
+Full server unit suite (4480), the face-identity medium spec (89), the people-identity-rbac medium spec
+(67), and the shared-space face-matching medium spec (33) stay green; tsc + eslint clean.
 
 Threshold rationale: the wrongly-fused clusters were ~0.71 centroid distance apart (Hagen 3b: 0.289
 avg similarity), so 0.5 blocks them with margin while leaving same-person duplicate dedup (centroid
