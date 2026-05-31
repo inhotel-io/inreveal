@@ -58,13 +58,13 @@ does not change `toRepair` or any mutation.
       NOT flagged AND `candidate.ownCount < options.minFaces` AND `candidate.topOtherPersonId !== null` AND
       `candidate.topOtherNearest !== null && candidate.topOtherNearest <= options.maxAttributionDistance`, collect
       `{ assetFaceId, currentPersonId }` into a new `unAttributableFaces` array. Add `unAttributableFaces:
-    { assetFaceId: string; currentPersonId: string }[]` to the `RepairPlan` interface and the return.
+  { assetFaceId: string; currentPersonId: string }[]` to the `RepairPlan` interface and the return.
 - [ ] **summarizeRepairPlan** (`face-repair.summary.ts`): add to `RepairReport.totals` a
       `reviewOnlyByReason: { overCap: number; badTarget: number; unAttributable: number }` (count
       `reviewOnlyFaces` by `reason`, and `unAttributable = plan.unAttributableFaces.length`), and add
       `unAttributableFaces: plan.unAttributableFaces.length` is folded into that object. Keep existing fields.
 - [ ] **DTO** (`face-repair.dto.ts`): add `reviewOnlyByReason: z.object({ overCap: z.number(), badTarget:
-    z.number(), unAttributable: z.number() })` to the response `totals`.
+  z.number(), unAttributable: z.number() })` to the response `totals`.
 - [ ] **Tests:**
   - `face-repair.summary.spec.ts`: extend the existing plan fixture with a `reviewOnlyFaces` entry of reason
     `'bad-target'` and a non-empty `unAttributableFaces`; assert `totals.reviewOnlyByReason` = `{ overCap: N,
@@ -122,7 +122,7 @@ In `face-repair-e2e.spec.ts` add a scenario at **`minFaces: 3`** (a second `setu
 ### Item 8 (L3 + H2): empty-owner + non-Timeline eligibility tests
 
 - [ ] **L3 (empty owner):** `face-repair.service.spec.ts` medium — `runRepair({ ownerId: <fresh user with no
-    faces> })` → resolves, `report.totals.flaggedFaces === 0`, `mutated === false`, no throw.
+  faces> })` → resolves, `report.totals.flaggedFaces === 0`, `mutated === false`, no throw.
 - [ ] **H2 (non-Timeline accepted):** `face-repair.repository.spec.ts` medium — a machine-learning face on an asset
       with `visibility != Timeline` (e.g. Archive) IS returned by `streamEligibleFaces` (documents the accepted
       "eligible, may be left blank" decision). Add a one-line comment in `streamEligibleFaces` noting non-Timeline
