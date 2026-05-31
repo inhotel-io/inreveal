@@ -25,7 +25,7 @@ export interface RepairPlan {
   perPerson: { personId: string; eligible: number; flagged: number; flaggedFraction: number }[];
 }
 
-const DEFAULT_VOTE_WINDOW = 50;
+const DEFAULT_VOTE_WINDOW = 200;
 const DEFAULT_VOTE_MARGIN = 2;
 const DEFAULT_MAX_ATTRIBUTION_DISTANCE = 0.35;
 const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;

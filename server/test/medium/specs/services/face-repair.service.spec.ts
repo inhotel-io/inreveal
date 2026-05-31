@@ -398,6 +398,40 @@ describe('FaceRepairService.buildRepairPlan', () => {
     // Their topOtherPersonId will be suspect (1 face), topOtherCount=1 < minFaces=3 → also unAttributable
     // (just confirm suspect face is captured, which is the main assertion)
   });
+
+  it('large co-located leak: 60 leaked faces (> old window=50) all flag toward Karina with voteWindow:200', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces
+    const { person: karina } = await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+
+    // Alexia: 60 leaked first-axis faces (exceeds old DEFAULT_VOTE_WINDOW of 50)
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      leakedFaceIds.push(assetFace.id);
+    }
+
+    const plan: RepairPlan = await sut.buildRepairPlan({
+      ownerId: user.id,
+      ...planParams,
+      voteWindow: 200, // widened window — must see all 10 Karina neighbors even with 60 co-located leaks
+    });
+
+    // All 60 leaked faces must flag toward Karina
+    for (const faceId of leakedFaceIds) {
+      const repaired = plan.toRepair.find((f) => f.assetFaceId === faceId);
+      expect(repaired).toBeDefined();
+      expect(repaired!.suspectedOwnerId).toBe(karina.id);
+    }
+  });
 });
 
 // Setup for executeRepair tests — includes real FaceIdentityRepository and mock JobRepository.
