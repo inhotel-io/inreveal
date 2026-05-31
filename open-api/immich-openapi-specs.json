@@ -22394,9 +22394,45 @@
           "rating",
           "filename",
           "favorite",
-          "visibility"
+          "visibility",
+          "quality"
         ],
         "type": "string"
+      },
+      "AgentAssetMetadataQuality": {
+        "properties": {
+          "brightness": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "exposure": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "quality": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "sharpness": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "brightness",
+          "exposure",
+          "quality",
+          "sharpness"
+        ],
+        "type": "object"
       },
       "AgentAssetMetadataResult": {
         "properties": {
@@ -22479,6 +22515,14 @@
           },
           "originalFileName": {
             "type": "string"
+          },
+          "qualityInfo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AgentAssetMetadataQuality"
+              }
+            ],
+            "nullable": true
           },
           "tags": {
             "items": {
@@ -22803,6 +22847,12 @@
             "nullable": true,
             "type": "integer"
           },
+          "sharpness": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
           "width": {
             "maximum": 9007199254740991,
             "minimum": -9007199254740991,
@@ -22817,6 +22867,7 @@
           "isFavorite",
           "originalFileName",
           "rating",
+          "sharpness",
           "width"
         ],
         "type": "object"
