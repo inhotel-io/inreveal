@@ -124,6 +124,7 @@ describe('strict/hybrid workflow manifest', () => {
     assert.equal(entry.slots.qualityMetric.required, true);
     assert.equal(entry.slots.sourceDescription.required, true);
     assert.equal(entry.matrixRow.capability, 'Visual cleanup');
-    assert.equal(entry.matrixRow.tier, 'Constrained now');
+    assert.equal(entry.matrixRow.tier, 'Solid now');
+    assert.match(entry.matrixRow.workflowOrBoundary, /quality-filtered/i);
   });
 });
