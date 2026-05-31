@@ -58,19 +58,19 @@ Add `describe('resolveAssetSource — entity × recency/date/type/direct matrix'
 Find the `searchAssets` call via `client.calls.find((c) => c.name === 'searchAssets')`.
 
 - [ ] `'newest 20 photos of Alex'` + `makeContractClient({ resolvedFilters:{ personIds:['per-1'] },
-      resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`
+resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`
       → resolved; `search.args.order === 'desc'`, `search.args.limit === 20`,
       `search.args.filters` deepEqual `{ personIds:['per-1'] }`.
 - [ ] `'5-star videos from 2024'` + `makeContractClient()` → resolved; resolver NOT called;
       `search.args.filters` deepEqual `{ takenAfter:'2024-01-01T00:00:00.000Z',
-      takenBefore:'2024-12-31T23:59:59.999Z', type:'VIDEO', rating:5 }`.
+takenBefore:'2024-12-31T23:59:59.999Z', type:'VIDEO', rating:5 }`.
 - [ ] `'my Sony photos of Alex'` + `makeContractClient({ resolvedFilters:{ personIds:['per-1'], make:'Sony' },
-      resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' },
-      { kind:'cameraMake', query:'Sony', status:'matched', choices:[], message:'' }] })`
+resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' },
+{ kind:'cameraMake', query:'Sony', status:'matched', choices:[], message:'' }] })`
       → resolved; the `resolveAssetSearchFilters` call args deepEqual `{ people:['Alex'], cameraMakes:['Sony'] }`;
       `search.args.filters` deepEqual `{ personIds:['per-1'], make:'Sony' }`.
 - [ ] `'tagged Travel and favorited'` + `makeContractClient({ resolvedFilters:{ tagIds:['tag-1'] },
-      resolveResults:[{ kind:'tag', query:'Travel', status:'matched', choices:[], message:'' }] })`
+resolveResults:[{ kind:'tag', query:'Travel', status:'matched', choices:[], message:'' }] })`
       → resolved; `resolveAssetSearchFilters` args deepEqual `{ tags:['Travel'] }`;
       `search.args.filters` deepEqual `{ isFavorite:true, tagIds:['tag-1'] }`.
 - [ ] over-resolution guard: `'photos of Alex underwater'` + `makeContractClient()`
@@ -79,10 +79,10 @@ Find the `searchAssets` call via `client.calls.find((c) => c.name === 'searchAss
 - [ ] subjective-beats-entity: `'the best Berlin photos'` + `makeContractClient()`
       → `status === 'handoff'`; no `searchAssets` call.
 - [ ] place-vs-person matched: `'photos of Paris'` + `makeContractClient({ resolvedFilters:{ personIds:['per-9'] },
-      resolveResults:[{ kind:'person', query:'Paris', status:'matched', choices:[], message:'' }] })`
+resolveResults:[{ kind:'person', query:'Paris', status:'matched', choices:[], message:'' }] })`
       → resolved; `search.args.filters` deepEqual `{ personIds:['per-9'] }`.
 - [ ] place-vs-person not_found (safe branch): `'photos of Paris'` + `makeContractClient({
-      resolveResults:[{ kind:'person', query:'Paris', status:'not_found', choices:[], message:'' }] })`
+resolveResults:[{ kind:'person', query:'Paris', status:'not_found', choices:[], message:'' }] })`
       → `status === 'needs_input'`; no `searchAssets` call (never silently searches city).
 - [ ] regression: `'my newest 20 photos'` → resolved; `search.args` deepEqual
       `{ mode:'metadata', order:'desc', limit:20, detail:'handle' }` (NO `filters` key).
