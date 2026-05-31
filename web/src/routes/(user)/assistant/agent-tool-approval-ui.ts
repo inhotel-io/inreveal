@@ -22,6 +22,7 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.ListSpaces]: 'assistant_agent_tool_name_listSpaces',
   [AgentToolName.ReadSpace]: 'assistant_agent_tool_name_readSpace',
   [AgentToolName.SearchUsers]: 'assistant_agent_tool_name_searchUsers',
+  [AgentToolName.ListDuplicateGroups]: 'assistant_agent_tool_name_listDuplicateGroups',
   [AgentToolName.ProposeAlbumOperations]: 'assistant_agent_tool_name_proposeAlbumOperations',
   [AgentToolName.ProposeAlbumFromSearch]: 'assistant_agent_tool_name_proposeAlbumFromSearch',
   [AgentToolName.ProposeAlbumFromSelection]: 'assistant_agent_tool_name_proposeAlbumFromSelection',

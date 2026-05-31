@@ -34,6 +34,7 @@ class AgentToolName {
   static const listAlbums = AgentToolName._(r'listAlbums');
   static const readAlbum = AgentToolName._(r'readAlbum');
   static const listSpaces = AgentToolName._(r'listSpaces');
+  static const listDuplicateGroups = AgentToolName._(r'listDuplicateGroups');
   static const readSpace = AgentToolName._(r'readSpace');
   static const searchUsers = AgentToolName._(r'searchUsers');
   static const proposeAlbumOperations = AgentToolName._(r'proposeAlbumOperations');
@@ -60,6 +61,7 @@ class AgentToolName {
     listAlbums,
     readAlbum,
     listSpaces,
+    listDuplicateGroups,
     readSpace,
     searchUsers,
     proposeAlbumOperations,
@@ -121,6 +123,7 @@ class AgentToolNameTypeTransformer {
         case r'listAlbums': return AgentToolName.listAlbums;
         case r'readAlbum': return AgentToolName.readAlbum;
         case r'listSpaces': return AgentToolName.listSpaces;
+        case r'listDuplicateGroups': return AgentToolName.listDuplicateGroups;
         case r'readSpace': return AgentToolName.readSpace;
         case r'searchUsers': return AgentToolName.searchUsers;
         case r'proposeAlbumOperations': return AgentToolName.proposeAlbumOperations;
