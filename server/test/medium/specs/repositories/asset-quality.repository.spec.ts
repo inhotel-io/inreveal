@@ -65,11 +65,7 @@ describe('asset_quality schema (slice A2)', () => {
 
     await ctx.database.deleteFrom('asset').where('id', '=', asset.id).execute();
 
-    const rows = await ctx.database
-      .selectFrom('asset_quality')
-      .selectAll()
-      .where('assetId', '=', asset.id)
-      .execute();
+    const rows = await ctx.database.selectFrom('asset_quality').selectAll().where('assetId', '=', asset.id).execute();
     expect(rows).toEqual([]);
   });
 
