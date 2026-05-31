@@ -65,11 +65,22 @@ const AgentAssetMetadataFieldValues = [
   'favorite',
   'visibility',
 ] as const;
+const AgentReadAssetMetadataFieldValues = [...AgentAssetMetadataFieldValues, 'quality'] as const;
 const AgentSearchAssetsFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentSearchAssetsField' });
 const AgentAssetMetadataDetailSchema = z
   .enum(['basic', 'descriptive', 'technical', 'allSafe'])
   .meta({ id: 'AgentAssetMetadataDetail' });
-const AgentAssetMetadataFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta({ id: 'AgentAssetMetadataField' });
+const AgentAssetMetadataFieldSchema = z
+  .enum(AgentReadAssetMetadataFieldValues)
+  .meta({ id: 'AgentAssetMetadataField' });
+const AgentAssetMetadataQualitySchema = z
+  .object({
+    sharpness: z.number().int().nullable(),
+    exposure: z.number().int().nullable(),
+    brightness: z.number().int().nullable(),
+    quality: z.number().int().nullable(),
+  })
+  .meta({ id: 'AgentAssetMetadataQuality' });
 const AgentCurateSelectionStrategySchema = z
   .enum(['metadata-highlights', 'date-spread', 'favorites-first', 'cover-candidate'])
   .meta({ id: 'AgentCurateSelectionStrategy' });
@@ -777,6 +788,7 @@ const AgentAssetMetadataResultFields = {
   visibility: AssetVisibilitySchema.optional(),
   exifInfo: AgentAssetMetadataExifSchema.partial().nullable().optional(),
   tags: z.array(AgentAssetMetadataTagSchema).optional(),
+  qualityInfo: AgentAssetMetadataQualitySchema.nullable().optional(),
 };
 
 const AgentAssetMetadataResultSchema = z
