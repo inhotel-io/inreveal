@@ -974,9 +974,7 @@ describe(AgentSessionService.name, () => {
     expect(repository.getByUserId).toHaveBeenCalledWith(auth.user.id);
     expect(credentialService.getById).not.toHaveBeenCalled();
     expect(result).toEqual(
-      sessions.map(
-        ({ userId: _userId, updateId: _updateId, workflowState: _workflowState, ...session }) => session,
-      ),
+      sessions.map(({ userId: _userId, updateId: _updateId, workflowState: _workflowState, ...session }) => session),
     );
   });
 
