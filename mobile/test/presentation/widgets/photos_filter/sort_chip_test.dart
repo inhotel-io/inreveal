@@ -17,7 +17,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpConsumerWidget(CustomScrollView(slivers: const [PhotosFilterSubheader()]));
+    await tester.pumpConsumerWidget(const CustomScrollView(slivers: [PhotosFilterSubheader()]));
     final c = ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)));
     c.read(photosFilterProvider.notifier).setText('beach');
     await tester.pumpAndSettle();

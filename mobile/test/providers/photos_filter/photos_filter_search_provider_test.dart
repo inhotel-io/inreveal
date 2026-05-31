@@ -30,12 +30,12 @@ void main() {
     final n = make(s);
     addTearDown(n.dispose);
     await n.firstLoad;
-    expect(n.debugState.assets.length, 100);
+    expect(n.getAssets().length, 100);
     await n.loadMore();
-    expect(n.debugState.assets.length, 200);
+    expect(n.getAssets().length, 200);
     await n.loadMore();
-    expect(n.debugState.assets.length, 226);
-    expect(n.debugState.nextPage, isNull);
+    expect(n.getAssets().length, 226);
+    expect(n.nextPage, isNull);
     await n.loadMore();
     verify(() => s.search(any(), 1)).called(1);
     verify(() => s.search(any(), 2)).called(1);
@@ -48,9 +48,9 @@ void main() {
     final n = make(s);
     addTearDown(n.dispose);
     await n.firstLoad;
-    expect(n.debugState.assets, isEmpty);
-    expect(n.debugState.nextPage, isNull);
-    expect(n.debugState.isLoading, isFalse);
+    expect(n.getAssets(), isEmpty);
+    expect(n.nextPage, isNull);
+    expect(n.isLoading, isFalse);
     await n.loadMore();
     verify(() => s.search(any(), 1)).called(1);
   });
@@ -71,7 +71,7 @@ void main() {
     addTearDown(n.dispose);
     await n.firstLoad;
     await n.loadMore();
-    expect(n.debugState.assets.length, 199);
+    expect(n.getAssets().length, 199);
   });
 
   test('dispose mid-flight => no append, no throw', () async {
@@ -133,7 +133,7 @@ void main() {
       addTearDown(n.dispose);
       await n.firstLoad;
       await n.loadMore();
-      expect(n.debugState.nextPage, isNull);
+      expect(n.nextPage, isNull);
       verifyNever(() => s.search(any(), any()));
     });
   });
