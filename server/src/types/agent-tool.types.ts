@@ -177,6 +177,7 @@ export type AgentDuplicateAsset = {
   rating: number | null;
   width: number | null;
   height: number | null;
+  sharpness: number | null;
 };
 
 export type AgentDuplicateGroup = {

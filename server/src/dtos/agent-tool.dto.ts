@@ -1217,6 +1217,7 @@ const AgentDuplicateAssetSchema = z
     rating: z.number().int().nullable(),
     width: z.number().int().nullable(),
     height: z.number().int().nullable(),
+    sharpness: z.number().int().nullable(),
   })
   .meta({ id: 'AgentDuplicateAsset' });
 
