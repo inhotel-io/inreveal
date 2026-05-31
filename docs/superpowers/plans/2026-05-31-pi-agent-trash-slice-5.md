@@ -20,9 +20,9 @@ keep rule needs.
   `exifInfo.rating`, `exifInfo.exifImageWidth/Height`).
 - Read tools follow the `listSpaces` descriptor pattern
   (`agent-tool.service.ts` `listSpaces` + `listSpacesDescriptor`): `runReadTool`
-  + a descriptor `{ toolName, dataClass, requestSummary, requestMetadata,
-  requestedAssetCount, requestedAlbumCount, perToolLimit, perSessionLimit,
-  validateAccess, execute }`.
+  - a descriptor `{ toolName, dataClass, requestSummary, requestMetadata,
+requestedAssetCount, requestedAlbumCount, perToolLimit, perSessionLimit,
+validateAccess, execute }`.
 
 ## CI discipline (carried from Slice 1's CI failure)
 
@@ -46,7 +46,7 @@ Add `Permission.DuplicateRead` is NOT needed — reuse the asset read scope.
   `AgentReadToolRequestSchemas[AgentToolName.ListDuplicateGroups]`.
 - **Scrubbed per-asset summary** `AgentDuplicateAssetSchema`:
   `{ id, originalFileName, fileCreatedAt, isFavorite, rating (nullable int),
-  width (nullable int), height (nullable int) }` — ONLY the keep-rule fields, no
+width (nullable int), height (nullable int) }` — ONLY the keep-rule fields, no
   raw EXIF dump, no preview/original URLs.
 - **Group** `AgentDuplicateGroupSchema`: `{ duplicateId, assets: AgentDuplicateAssetSchema[] }`.
 - **Response** `AgentListDuplicateGroupsToolResponseSchema`: the discriminated
