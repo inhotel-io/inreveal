@@ -298,11 +298,16 @@ export const makeContractClient = (config = {}) => {
     readAlbum: (args) => {
       const album = albums.find((candidate) => candidate.id === args?.albumId);
       if (!album) fail(`album not found: ${args?.albumId}`);
+      // The real readAlbum success response NESTS the detail under `album`
+      // (AgentReadAlbumToolResponse { …, album: AgentAlbumDetail }). Mirror that so a
+      // workflow reading the wrong field (e.g. top-level `assetIds`) fails in L2 too.
       return {
-        id: album.id,
-        albumName: album.albumName,
-        assetIds: album.assetIds ?? [],
-        albumThumbnailAssetId: album.albumThumbnailAssetId ?? null,
+        album: {
+          id: album.id,
+          albumName: album.albumName,
+          assetIds: album.assetIds ?? [],
+          albumThumbnailAssetId: album.albumThumbnailAssetId ?? null,
+        },
       };
     },
     listSpaces: () => ({ spaces: spaces.map(({ members, ...summary }) => summary) }),
