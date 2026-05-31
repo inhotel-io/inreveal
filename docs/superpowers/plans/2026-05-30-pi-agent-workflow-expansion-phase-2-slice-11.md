@@ -25,8 +25,8 @@ a wrong-shape op throws in L2.
 - `album.removeAssets` is already in `KNOWN_OPERATION_TYPES`, but no field validator
   exists — add one (mirrors the `SPACE_OP_VALIDATORS` pattern).
 - The op shape (from add-photos `album.addAssets`, inverted): `{ type:'album.removeAssets',
-  targetKind:'existing_album', targetId, assetSource:{ kind:'selectionHandle',
-  selectionHandleId } }` — NO per-op `summary`, NO `payload`, NO `temporaryTargetId`.
+targetKind:'existing_album', targetId, assetSource:{ kind:'selectionHandle',
+selectionHandleId } }` — NO per-op `summary`, NO `payload`, NO `temporaryTargetId`.
 - `makeContractClient({ planResult })` overrides the propose result; default
   `{ status:'success', plan:{ id:'plan-1' } }`.
 
@@ -55,7 +55,7 @@ const ALBUM_OP_VALIDATORS = {
 In `validateOperations`, after the `SPACE_OP_VALIDATORS[op.type]?.(op);` line, add:
 
 ```js
-    ALBUM_OP_VALIDATORS[op.type]?.(op);
+ALBUM_OP_VALIDATORS[op.type]?.(op);
 ```
 
 ### B. `remove-photos-from-album.mjs` — replace imports + the stub run()

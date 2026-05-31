@@ -10,8 +10,9 @@ tests catch a wrong-shape `album.setCover` op in L2. Fixture-only slice.
 `docs/superpowers/specs/2026-05-30-pi-agent-workflow-expansion-phase-2-design.md`.
 
 **Verified contracts:**
+
 - `album.setCover` op = `{ type:'album.setCover', summary?, targetKind:'existing_album',
-  targetId, assetIds: uniqueCoverAssetIds (1-500 unique uuids), payload:{} }`. The cover is
+targetId, assetIds: uniqueCoverAssetIds (1-500 unique uuids), payload:{} }`. The cover is
   the ASSET SELECTION (`assetIds:[coverId]`), NOT a payload field.
 - `readAlbum` success returns the album detail (incl. `assetIds` + `albumThumbnailAssetId`).
 
@@ -32,7 +33,8 @@ const validateAlbumSetCover = (op) => {
   if (op.targetKind !== 'existing_album') fail('album.setCover requires targetKind "existing_album"');
   if (!op.targetId) fail('album.setCover requires targetId');
   if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('album.setCover payload must be empty');
-  if (!Array.isArray(op.assetIds) || op.assetIds.length === 0) fail('album.setCover requires a non-empty cover assetIds');
+  if (!Array.isArray(op.assetIds) || op.assetIds.length === 0)
+    fail('album.setCover requires a non-empty cover assetIds');
   if (op.assetIds.length > 500) fail('album.setCover assetIds exceeds 500');
 };
 ```
@@ -60,9 +62,9 @@ Add a `readAlbum` handler in the `handlers` object (near `listAlbums`):
 ### B. `contract-fixtures.test.mjs` tests (red → green)
 
 - [ ] `readAlbum`: `makeContractClient({ albums:[{ id:'alb-1', albumName:'Family',
-      assetIds:['00000000-0000-4000-8000-000000000001'], albumThumbnailAssetId:'00000000-0000-4000-8000-000000000001' }] })`
+assetIds:['00000000-0000-4000-8000-000000000001'], albumThumbnailAssetId:'00000000-0000-4000-8000-000000000001' }] })`
       → `client.call('readAlbum', { albumId:'alb-1' })` returns `{ id:'alb-1', albumName:'Family',
-      assetIds:['…001'], albumThumbnailAssetId:'…001' }`; unknown id throws `/album not found/i`.
+assetIds:['…001'], albumThumbnailAssetId:'…001' }`; unknown id throws `/album not found/i`.
 - [ ] `proposeAlbumOperations` with an `album.setCover` op:
   - `{ type:'album.setCover', targetKind:'existing_album', assetIds:['…001'] }` (no targetId) rejects `/targetId/i`
   - `{ type:'album.setCover', targetKind:'existing_album', targetId:'…001', assetIds:['…002'] }` ACCEPTED → `.plan.id==='plan-1'`

@@ -30,8 +30,8 @@ ids); only when ALL are `'matched'` does it proceed to `searchAssets`. Wire the 
 ## Verified facts
 
 - `results[]` element: `{ kind:'person'|'tag'|'album'|'space'|'cameraMake'|'cameraModel'|
-  'lensModel', query, status:'matched'|'ambiguous'|'not_found', value?, id?, searchFilter?,
-  choices:[{ id?, value, label, … }], message }`.
+'lensModel', query, status:'matched'|'ambiguous'|'not_found', value?, id?, searchFilter?,
+choices:[{ id?, value, label, … }], message }`.
 - The fixture already returns `results` when `config.resolveResults` is set (Slice 2). A
   matched result set is the default (`resolveResults` absent → `results:[]` ⇒ all-matched
   by absence), so Slice 2 happy-path tests stay green.
@@ -51,8 +51,13 @@ ids); only when ALL are `'matched'` does it proceed to `searchAssets`. Wire the 
 // Human nouns for needs_input copy. Copy uses choice LABELS / queries only — never
 // ids or raw choice payloads (model-facing-arg safety invariant).
 const RESOLVE_KIND_NOUN = {
-  person: 'person', tag: 'tag', album: 'album', space: 'space',
-  cameraMake: 'camera', cameraModel: 'camera', lensModel: 'lens',
+  person: 'person',
+  tag: 'tag',
+  album: 'album',
+  space: 'space',
+  cameraMake: 'camera',
+  cameraModel: 'camera',
+  lensModel: 'lens',
 };
 
 const joinList = (items) => {
@@ -85,26 +90,26 @@ const notFoundNeedsInputText = (results) => {
 reading `resolvedFilters`:
 
 ```js
-    const nameRequest = buildResolverNameRequest(entity);
-    let resolvedFilters = {};
-    if (Object.keys(nameRequest).length > 0) {
-      const resolution = await client.call('resolveAssetSearchFilters', nameRequest, { signal });
-      const results = resolution?.results ?? [];
-      // Never guess: any ambiguous or not-found entity asks for input instead of
-      // trusting a partial/empty resolvedFilters.
-      const ambiguous = results.filter((result) => result?.status === 'ambiguous');
-      if (ambiguous.length > 0) {
-        return { status: 'needs_input', text: ambiguousNeedsInputText(ambiguous) };
-      }
-      const notFound = results.filter((result) => result?.status === 'not_found');
-      if (notFound.length > 0) {
-        return { status: 'needs_input', text: notFoundNeedsInputText(notFound) };
-      }
-      resolvedFilters = resolution?.resolvedFilters ?? {};
-      if (Object.keys(resolvedFilters).length === 0) {
-        resolvedFilters = mergeResultSearchFilters(results);
-      }
-    }
+const nameRequest = buildResolverNameRequest(entity);
+let resolvedFilters = {};
+if (Object.keys(nameRequest).length > 0) {
+  const resolution = await client.call('resolveAssetSearchFilters', nameRequest, { signal });
+  const results = resolution?.results ?? [];
+  // Never guess: any ambiguous or not-found entity asks for input instead of
+  // trusting a partial/empty resolvedFilters.
+  const ambiguous = results.filter((result) => result?.status === 'ambiguous');
+  if (ambiguous.length > 0) {
+    return { status: 'needs_input', text: ambiguousNeedsInputText(ambiguous) };
+  }
+  const notFound = results.filter((result) => result?.status === 'not_found');
+  if (notFound.length > 0) {
+    return { status: 'needs_input', text: notFoundNeedsInputText(notFound) };
+  }
+  resolvedFilters = resolution?.resolvedFilters ?? {};
+  if (Object.keys(resolvedFilters).length === 0) {
+    resolvedFilters = mergeResultSearchFilters(results);
+  }
+}
 ```
 
 **A3.** Update the module doc comment block (top of file) to list the 4th return shape:
@@ -145,24 +150,24 @@ No other change to the workflows (they already import `needsInput`).
 In `asset-source-resolver.test.mjs`, add `describe('resolveAssetSource — entity ambiguity / not-found')`:
 
 - [ ] ambiguous person: `makeContractClient({ resolveResults: [{ kind:'person', query:'Alex',
-      status:'ambiguous', choices:[{ value:'p1', label:'Alex Smith' }, { value:'p2', label:'Alex Jones' }], message:'' }] })`,
+status:'ambiguous', choices:[{ value:'p1', label:'Alex Smith' }, { value:'p2', label:'Alex Jones' }], message:'' }] })`,
       source `'photos of Alex'` → `result.status === 'needs_input'`, `/which.*Alex/i.test(result.text)`,
       and NO `searchAssets` call.
 - [ ] not-found tag: `resolveResults: [{ kind:'tag', query:'Trvel', status:'not_found', choices:[], message:'' }]`,
       source `'photos tagged Trvel'` → `needs_input`, `/could not find.*tag.*Trvel/i`, NO `searchAssets`.
 - [ ] mixed (matched person + not-found tag): `resolveResults: [{ kind:'person', query:'Alex',
-      status:'matched', choices:[], message:'' }, { kind:'tag', query:'Trvel', status:'not_found', choices:[], message:'' }]`,
+status:'matched', choices:[], message:'' }, { kind:'tag', query:'Trvel', status:'not_found', choices:[], message:'' }]`,
       source `'photos of Alex tagged Trvel'` → `needs_input`, text mentions `Trvel`, NO `searchAssets`.
 - [ ] two ambiguous → single needs_input: `resolveResults: [{ kind:'person', query:'Alex',
-      status:'ambiguous', choices:[{ value:'a', label:'Alex Smith' }], message:'' }, { kind:'tag', query:'Travel',
-      status:'ambiguous', choices:[{ value:'t', label:'Travel 2024' }], message:'' }]`, source
+status:'ambiguous', choices:[{ value:'a', label:'Alex Smith' }], message:'' }, { kind:'tag', query:'Travel',
+status:'ambiguous', choices:[{ value:'t', label:'Travel 2024' }], message:'' }]`, source
       `'photos of Alex tagged Travel'` → `needs_input`, text matches BOTH `/Alex/` and `/Travel/`.
 - [ ] all-matched proceeds (regression): `makeContractClient({ resolvedFilters:{ personIds:['per-1'] },
-      resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`,
+resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`,
       source `'photos of Alex'` → `status === 'resolved'`; `searchAssets.filters` deepEqual `{ personIds:['per-1'] }`.
 - [ ] ambiguous-vs-empty distinction: matched person with ZERO photos →
       `makeContractClient({ resolvedFilters:{ personIds:['per-1'] }, resolveResults:[{ kind:'person',
-      query:'Alex', status:'matched', choices:[], message:'' }], handleAssetCount:0 })`, source
+query:'Alex', status:'matched', choices:[], message:'' }], handleAssetCount:0 })`, source
       `'photos of Alex'` → `status === 'empty'` (NOT `needs_input` — different branch).
 - [ ] needs_input copy carries NO ids: in the ambiguous test, assert
       `result.text.includes('p1') === false` and `result.text.includes('p2') === false`
@@ -173,17 +178,17 @@ In `asset-source-resolver.test.mjs`, add `describe('resolveAssetSource — entit
 ### Task 2: caller tests (red→green wiring)
 
 - [ ] `tag-assets.test.mjs`: add a test — `makeContractClient({ resolveResults:[{ kind:'person',
-      query:'Alex', status:'ambiguous', choices:[{ value:'a', label:'Alex Smith' }, { value:'b', label:'Alex Jones' }],
-      message:'' }] })`, `wf.run({ client, slots:{ tagName:'Family', sourceDescription:'photos of Alex' } })`
+query:'Alex', status:'ambiguous', choices:[{ value:'a', label:'Alex Smith' }, { value:'b', label:'Alex Jones' }],
+message:'' }] })`, `wf.run({ client, slots:{ tagName:'Family', sourceDescription:'photos of Alex' } })`
       → `outcome.status === 'needs_input'` AND `client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection') === false`.
 - [ ] `add-photos-to-album.test.mjs`: add a test — `makeContractClient({ resolveResults:[{ kind:'person',
-      query:'Alex', status:'not_found', choices:[], message:'' }] })`,
+query:'Alex', status:'not_found', choices:[], message:'' }] })`,
       `wf.run({ client, slots:{ albumRef:'Family', sourceDescription:'photos of Alex' } })`
       → `outcome.status === 'needs_input'` AND `proposeAlbumOperations` NOT called. (Album `Family`
       resolves from the default `albums` config; only the SOURCE is not-found.)
 - [ ] `create-album-from-source.test.mjs`: add a test — `makeContractClient({ resolveResults:[{ kind:'album',
-      query:'Italy', status:'ambiguous', choices:[{ value:'x', label:'Italy 2023' }, { value:'y', label:'Italy 2024' }],
-      message:'' }] })`, `wf.run({ client, slots:{ sourceDescription:'photos in the Italy album', albumName:'X' } })`
+query:'Italy', status:'ambiguous', choices:[{ value:'x', label:'Italy 2023' }, { value:'y', label:'Italy 2024' }],
+message:'' }] })`, `wf.run({ client, slots:{ sourceDescription:'photos in the Italy album', albumName:'X' } })`
       → `outcome.status === 'needs_input'` AND `proposeAlbumFromSelection` NOT called.
 - [ ] Apply edit B to all 5 workflows.
 - [ ] Run `mise exec -- pnpm --dir agent-runner test` → all green.

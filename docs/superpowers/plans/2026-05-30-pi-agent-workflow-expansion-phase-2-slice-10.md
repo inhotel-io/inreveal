@@ -34,7 +34,10 @@ import { handoffOpen } from '../protocol.mjs';
 const KIND = 'remove_photos_from_album';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
-const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (value) =>
+  clean(value)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 // Strip a leading article and a trailing "album" noun so "the Family album" → "Family".
 const normalizeAlbumRef = (value) =>

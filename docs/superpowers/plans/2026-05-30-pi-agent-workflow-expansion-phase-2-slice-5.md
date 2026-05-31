@@ -45,13 +45,13 @@ entity sources. Advertise it + broaden the classifier copy.
       `/opt/homebrew/bin/mise exec -- node agent-runner/src/bin/sync-strict-workflow-manifest.mjs`
       (writes `manifest.generated.json`). Do NOT hand-edit the JSON.
 - [ ] `manifest.test.mjs`: add a test —
-      ```js
-      it('lists resolveAssetSearchFilters for every entity-source workflow', () => {
-        for (const kind of ['add_photos_to_album', 'archive_assets', 'favorite_assets', 'tag_assets', 'create_album_from_source']) {
-          assert.ok(getWorkflowManifestEntry(kind).requiredReadTools.includes('resolveAssetSearchFilters'), kind);
-        }
-      });
-      ```
+      `js
+it('lists resolveAssetSearchFilters for every entity-source workflow', () => {
+  for (const kind of ['add_photos_to_album', 'archive_assets', 'favorite_assets', 'tag_assets', 'create_album_from_source']) {
+    assert.ok(getWorkflowManifestEntry(kind).requiredReadTools.includes('resolveAssetSearchFilters'), kind);
+  }
+});
+`
 
 (The capability-matrix doc derives only from `matrixRow`/`kind`/`flow`/`planTool`, so the
 server matrix is unaffected by these field changes — no `sync:agent-capabilities` doc
@@ -63,25 +63,25 @@ change. The unit gate is the manifest mirror + the new test.)
 config already exist (Slice 2). Add the missing filter-value validation.
 
 - [ ] `contract-fixtures.mjs`: add `const KNOWN_VISIBILITY = new Set(['archive', 'timeline',
-      'hidden', 'locked']);` near `KNOWN_ASSET_TYPES`. In `validateSearchAssets`, after the
+'hidden', 'locked']);` near `KNOWN_ASSET_TYPES`. In `validateSearchAssets`, after the
       `type` enum check, add:
-      ```js
-      if (args.filters.rating !== undefined && args.filters.rating !== null) {
-        const r = args.filters.rating;
-        if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 5) {
-          fail(`invalid searchAssets filter rating "${r}"`);
-        }
-      }
-      if (args.filters.visibility !== undefined && !KNOWN_VISIBILITY.has(args.filters.visibility)) {
-        fail(`invalid searchAssets filter visibility "${args.filters.visibility}"`);
-      }
-      ```
+      ``js
+if (args.filters.rating !== undefined && args.filters.rating !== null) {
+  const r = args.filters.rating;
+  if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 5) {
+    fail(`invalid searchAssets filter rating "${r}"`);
+  }
+}
+if (args.filters.visibility !== undefined && !KNOWN_VISIBILITY.has(args.filters.visibility)) {
+  fail(`invalid searchAssets filter visibility "${args.filters.visibility}"`);
+}
+``
 - [ ] `contract-fixtures.test.mjs`: add tests:
   - resolver caps/shape: `resolveAssetSearchFilters({ foo: ['x'] })` rejects `/unrecognized|foo/i`;
     `({ people: Array(21).fill('x') })` rejects `/exceed|20/i`; `({ people: ['x'.repeat(121)] })`
     rejects `/120|exceed/i`; `({ people: ['Alex'] })` (default client) still deepEquals `{ resolvedFilters: {} }`.
   - configurable returns: `makeContractClient({ resolvedFilters:{ personIds:['per-1'] },
-    resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`
+resolveResults:[{ kind:'person', query:'Alex', status:'matched', choices:[], message:'' }] })`
     → `resolveAssetSearchFilters({ people:['Alex'] })` returns `resolvedFilters` deepEqual
     `{ personIds:['per-1'] }` and `results[0].status === 'matched'`. An `ambiguous`-configured
     client returns `results[0].status === 'ambiguous'` with non-empty `choices`.
@@ -96,7 +96,7 @@ config already exist (Slice 2). Add the missing filter-value validation.
 ## Part C — eval scenario data (additive; validated in Part D)
 
 - [ ] `classification-recall.mjs`: append (mirror existing `{ id, category:'recall', prompt,
-      expect:{ kind, slotsSurvive, slots } }` shape):
+expect:{ kind, slotsSurvive, slots } }` shape):
   - `recall.archive.entity` → `'archive my Berlin photos'` → `archive_assets`, `slotsSurvive:true`,
     `slots:{ archived:true, sourceDescription:/berlin photos/i }`
   - `recall.tag.entity` → `'tag photos of Alex as Family'` → `tag_assets`, `slotsSurvive:true`,

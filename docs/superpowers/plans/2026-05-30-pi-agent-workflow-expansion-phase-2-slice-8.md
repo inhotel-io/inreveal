@@ -54,7 +54,10 @@ const describeChange = (payload, assetCount) => {
   if (payload.rating !== undefined) {
     return payload.rating === null
       ? { text: `clear the rating on ${scope}`, target: 'rating' }
-      : { text: `set the rating on ${scope} to ${payload.rating} star${payload.rating === 1 ? '' : 's'}`, target: 'rating' };
+      : {
+          text: `set the rating on ${scope} to ${payload.rating} star${payload.rating === 1 ? '' : 's'}`,
+          target: 'rating',
+        };
   }
   if (payload.timeZone !== undefined) {
     return { text: `set the timezone on ${scope} to ${payload.timeZone}`, target: 'timezone' };

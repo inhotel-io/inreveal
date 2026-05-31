@@ -32,6 +32,7 @@ longitude`:
 - `latitude`: -90..90; `longitude`: -180..180.
 
 Cross-field superRefine rules:
+
 1. ≥1 field supplied (else "Provide at least one metadata field").
 2. NOT both `dateTimeOriginal` and `dateTimeRelative`.
 3. `dateTimeRelative === 0` as the SOLE field → no-op error.
@@ -46,7 +47,13 @@ Cross-field superRefine rules:
 
 ```js
 const UPDATE_METADATA_FIELDS = new Set([
-  'description', 'rating', 'dateTimeOriginal', 'dateTimeRelative', 'timeZone', 'latitude', 'longitude',
+  'description',
+  'rating',
+  'dateTimeOriginal',
+  'dateTimeRelative',
+  'timeZone',
+  'latitude',
+  'longitude',
 ]);
 
 // Mirror AgentAssetBatch asset.updateMetadata: flat strictObject + the 4 cross-field
@@ -59,7 +66,10 @@ const validateUpdateMetadataAction = (action) => {
   }
   const supplied = [...UPDATE_METADATA_FIELDS].filter((field) => action[field] !== undefined);
   if (supplied.length === 0) fail('asset.updateMetadata requires at least one metadata field');
-  if (action.description !== undefined && (typeof action.description !== 'string' || action.description.length > 1000)) {
+  if (
+    action.description !== undefined &&
+    (typeof action.description !== 'string' || action.description.length > 1000)
+  ) {
     fail('asset.updateMetadata description must be a string of at most 1000 chars');
   }
   if (action.rating !== undefined && action.rating !== null) {
@@ -68,16 +78,25 @@ const validateUpdateMetadataAction = (action) => {
       fail('asset.updateMetadata rating must be an integer 1..5 or null');
     }
   }
-  if (action.dateTimeRelative !== undefined && (typeof action.dateTimeRelative !== 'number' || !Number.isInteger(action.dateTimeRelative))) {
+  if (
+    action.dateTimeRelative !== undefined &&
+    (typeof action.dateTimeRelative !== 'number' || !Number.isInteger(action.dateTimeRelative))
+  ) {
     fail('asset.updateMetadata dateTimeRelative must be an integer');
   }
   if (action.timeZone !== undefined && (typeof action.timeZone !== 'string' || action.timeZone.trim().length === 0)) {
     fail('asset.updateMetadata timeZone must be a non-empty IANA time zone');
   }
-  if (action.latitude !== undefined && (typeof action.latitude !== 'number' || action.latitude < -90 || action.latitude > 90)) {
+  if (
+    action.latitude !== undefined &&
+    (typeof action.latitude !== 'number' || action.latitude < -90 || action.latitude > 90)
+  ) {
     fail('asset.updateMetadata latitude must be between -90 and 90');
   }
-  if (action.longitude !== undefined && (typeof action.longitude !== 'number' || action.longitude < -180 || action.longitude > 180)) {
+  if (
+    action.longitude !== undefined &&
+    (typeof action.longitude !== 'number' || action.longitude < -180 || action.longitude > 180)
+  ) {
     fail('asset.updateMetadata longitude must be between -180 and 180');
   }
   if (action.dateTimeOriginal !== undefined && action.dateTimeRelative !== undefined) {
@@ -95,9 +114,9 @@ const validateUpdateMetadataAction = (action) => {
 **Add** the branch in `validateBatchAction` (after the existing `asset.addTag` branch):
 
 ```js
-  if (type === 'asset.updateMetadata') {
-    validateUpdateMetadataAction(action);
-  }
+if (type === 'asset.updateMetadata') {
+  validateUpdateMetadataAction(action);
+}
 ```
 
 (No change to `KNOWN_BATCH_ACTION_TYPES` — `asset.updateMetadata` is already listed. The

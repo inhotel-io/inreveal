@@ -41,7 +41,10 @@ import { handoffOpen } from '../protocol.mjs';
 const KIND = 'update_asset_metadata';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
-const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (value) =>
+  clean(value)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 const stripQuotes = (value) =>
   clean(value)
     .replace(/^["'“”‘’]+/, '')
@@ -89,31 +92,48 @@ const LOCATION_RE = new RegExp(
 // Each extractor returns { field, ...typed, source } | undefined.
 const EXTRACTORS = [
   (p) => {
-    const m = /\b(?:clear|remove|delete)\s+(?:the\s+)?(?:description|caption)\s+(?:on|of|for|from)\s+(?<source>.+)$/i.exec(p);
+    const m =
+      /\b(?:clear|remove|delete)\s+(?:the\s+)?(?:description|caption)\s+(?:on|of|for|from)\s+(?<source>.+)$/i.exec(p);
     return m?.groups ? { field: 'description', description: '', source: m.groups.source } : undefined;
   },
   (p) => {
-    const m = /\b(?:set|change|update|add|edit|give)\s+(?:the\s+|a\s+|its\s+|it\s+a\s+)?(?:new\s+)?(?:description|caption)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<value>.+)$/i.exec(p);
-    return m?.groups ? { field: 'description', description: stripQuotes(m.groups.value), source: m.groups.source } : undefined;
+    const m =
+      /\b(?:set|change|update|add|edit|give)\s+(?:the\s+|a\s+|its\s+|it\s+a\s+)?(?:new\s+)?(?:description|caption)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<value>.+)$/i.exec(
+        p,
+      );
+    return m?.groups
+      ? { field: 'description', description: stripQuotes(m.groups.value), source: m.groups.source }
+      : undefined;
   },
   (p) => {
-    const m = /\b(?:clear|remove|delete)\s+(?:the\s+)?(?:star\s+)?rating\s+(?:on|of|for|from)\s+(?<source>.+)$/i.exec(p);
+    const m = /\b(?:clear|remove|delete)\s+(?:the\s+)?(?:star\s+)?rating\s+(?:on|of|for|from)\s+(?<source>.+)$/i.exec(
+      p,
+    );
     return m?.groups ? { field: 'rating', rating: null, source: m.groups.source } : undefined;
   },
   (p) => {
-    const m = /\brate\s+(?<source>.+?)\s+(?<rating>\d+|one|two|three|four|five)(?:\s*(?:out\s+of\s+5|\/\s*5))?\s+stars?\b/i.exec(p);
+    const m =
+      /\brate\s+(?<source>.+?)\s+(?<rating>\d+|one|two|three|four|five)(?:\s*(?:out\s+of\s+5|\/\s*5))?\s+stars?\b/i.exec(
+        p,
+      );
     if (!m?.groups) return undefined;
     const rating = parseRatingValue(m.groups.rating);
     return rating === undefined ? undefined : { field: 'rating', rating, source: m.groups.source };
   },
   (p) => {
-    const m = /\bset\s+(?:the\s+)?(?:star\s+)?rating\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<rating>\d+|one|two|three|four|five)\b/i.exec(p);
+    const m =
+      /\bset\s+(?:the\s+)?(?:star\s+)?rating\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<rating>\d+|one|two|three|four|five)\b/i.exec(
+        p,
+      );
     if (!m?.groups) return undefined;
     const rating = parseRatingValue(m.groups.rating);
     return rating === undefined ? undefined : { field: 'rating', rating, source: m.groups.source };
   },
   (p) => {
-    const m = /\bset\s+(?:the\s+)?(?:time\s?zone|tz)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<tz>[A-Za-z]+(?:\/[A-Za-z_]+)+)\b/i.exec(p);
+    const m =
+      /\bset\s+(?:the\s+)?(?:time\s?zone|tz)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<tz>[A-Za-z]+(?:\/[A-Za-z_]+)+)\b/i.exec(
+        p,
+      );
     return m?.groups ? { field: 'timeZone', timeZone: clean(m.groups.tz), source: m.groups.source } : undefined;
   },
   (p) => {
@@ -123,13 +143,21 @@ const EXTRACTORS = [
       : undefined;
   },
   (p) => {
-    const m = /\bset\s+(?:the\s+)?(?:date|datetime|date\s*time|timestamp)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<date>.+)$/i.exec(p);
+    const m =
+      /\bset\s+(?:the\s+)?(?:date|datetime|date\s*time|timestamp)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<date>.+)$/i.exec(
+        p,
+      );
     if (!m?.groups) return undefined;
     const range = parseDateRange(m.groups.date);
-    return range ? { field: 'date', dateTimeOriginal: range.takenAfter.toISOString(), source: m.groups.source } : undefined;
+    return range
+      ? { field: 'date', dateTimeOriginal: range.takenAfter.toISOString(), source: m.groups.source }
+      : undefined;
   },
   (p) => {
-    const m = /\b(?:shift|move|adjust)\s+(?<source>.+?)\s+(?<dir>forward|back|backward|ahead|earlier|later)\s+by\s+(?<amt>\d+)\s+(?<unit>hours?|hrs?|minutes?|mins?)\b/i.exec(p);
+    const m =
+      /\b(?:shift|move|adjust)\s+(?<source>.+?)\s+(?<dir>forward|back|backward|ahead|earlier|later)\s+by\s+(?<amt>\d+)\s+(?<unit>hours?|hrs?|minutes?|mins?)\b/i.exec(
+        p,
+      );
     if (!m?.groups) return undefined;
     const amount = Number(m.groups.amt);
     const minutes = /^h/i.test(m.groups.unit) ? amount * 60 : amount;

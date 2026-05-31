@@ -72,15 +72,15 @@ Use a fixed `const NOW = new Date('2026-05-15T12:00:00.000Z');` (a **Friday**).
 Add a `describe('parseDateRange', ...)` importing `parseDateRange` (export it).
 Assert `.toISOString()` of each bound.
 
-| Phrase | takenAfter (ISO) | takenBefore (ISO) |
-| --- | --- | --- |
+| Phrase             | takenAfter (ISO)           | takenBefore (ISO)          |
+| ------------------ | -------------------------- | -------------------------- |
 | `photos from 2024` | `2024-01-01T00:00:00.000Z` | `2024-12-31T23:59:59.999Z` |
-| `in May 2024` | `2024-05-01T00:00:00.000Z` | `2024-05-31T23:59:59.999Z` |
-| `yesterday` | `2026-05-14T00:00:00.000Z` | `2026-05-14T23:59:59.999Z` |
-| `this month` | `2026-05-01T00:00:00.000Z` | `2026-05-31T23:59:59.999Z` |
-| `last month` | `2026-04-01T00:00:00.000Z` | `2026-04-30T23:59:59.999Z` |
-| `last week` | `2026-05-04T00:00:00.000Z` | `2026-05-10T23:59:59.999Z` |
-| `last weekend` | `2026-05-09T00:00:00.000Z` | `2026-05-10T23:59:59.999Z` |
+| `in May 2024`      | `2024-05-01T00:00:00.000Z` | `2024-05-31T23:59:59.999Z` |
+| `yesterday`        | `2026-05-14T00:00:00.000Z` | `2026-05-14T23:59:59.999Z` |
+| `this month`       | `2026-05-01T00:00:00.000Z` | `2026-05-31T23:59:59.999Z` |
+| `last month`       | `2026-04-01T00:00:00.000Z` | `2026-04-30T23:59:59.999Z` |
+| `last week`        | `2026-05-04T00:00:00.000Z` | `2026-05-10T23:59:59.999Z` |
+| `last weekend`     | `2026-05-09T00:00:00.000Z` | `2026-05-10T23:59:59.999Z` |
 
 - [ ] `parseDateRange('sometime recently', NOW)` → `undefined` (unparseable).
 - [ ] `parseDateRange('my newest 20 photos', NOW)` → `undefined` (no date phrase;
@@ -93,8 +93,7 @@ Assert `.toISOString()` of each bound.
       → `status: 'resolved'`; the recorded `searchAssets` call equals
       `{ mode:'metadata', order:'desc', limit:1000, filters:{ takenAfter:'2024-01-01T00:00:00.000Z', takenBefore:'2024-12-31T23:59:59.999Z' }, detail:'handle' }`.
 - [ ] `resolveAssetSource({ client, sourceDescription: 'newest 20 photos from 2024', now: NOW })`
-      → recorded `searchAssets` call has `limit:20` AND the 2024 `filters` (recency
-      + date combine).
+      → recorded `searchAssets` call has `limit:20` AND the 2024 `filters` (recency + date combine).
 - [ ] `resolveAssetSource({ client, sourceDescription: 'my newest 20 photos' })` (no
       date) → recorded call is `{ mode:'metadata', order:'desc', limit:20, detail:'handle' }`
       with **no `filters` key** (recency-only unchanged).
