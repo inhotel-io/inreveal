@@ -1,4 +1,9 @@
-import { decideReattribution, ReattributionNeighbor, ReattributionTally, tallyReattribution } from 'src/utils/face-repair';
+import {
+  decideReattribution,
+  ReattributionNeighbor,
+  ReattributionTally,
+  tallyReattribution,
+} from 'src/utils/face-repair';
 
 const n = (personId: string | null, distance: number): ReattributionNeighbor => ({
   assetFaceId: `${personId}-${distance}`,
@@ -25,7 +30,7 @@ describe('decideReattribution', () => {
     expect(d).toEqual({ flagged: true, suspectedOwnerId: 'Q' });
   });
 
-  it("flags when P does not claim F (ownCount < minFaces) and Q is confident and close", () => {
+  it('flags when P does not claim F (ownCount < minFaces) and Q is confident and close', () => {
     const d = decideReattribution(
       tally({ ownCount: 1, topOtherPersonId: 'Q', topOtherCount: 5, topOtherNearest: 0.2 }),
       params,
