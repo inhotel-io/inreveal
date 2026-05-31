@@ -69,7 +69,7 @@ contamination cap (both reported, not guessed).
 | `maxDistance`          | recognition config | cosine radius for the k-NN vote window (recognition's `maxDistance`)          |
 | `minFaces`             | recognition config | min same-person neighbors to count as a claim                                |
 | `voteMargin`           | calibrated         | how many more neighbors a rival owner `Q` needs than `P`                     |
-| `distanceMargin`       | calibrated (≈0.1)  | `Q` must also be closer to `F` than `P` by this cosine margin (family guard) |
+| `maxAttributionDistance` | calibrated (≈0.35) | only re-home `F` onto `Q` if `Q`'s nearest face to `F` is within this **absolute** cosine distance (resemblance / family guard) |
 | `maxFlaggedFraction`   | `0.5`              | if >this share of a person's eligible faces flag, route the person to review-only |
 | `ownerId` / `personId` | none               | optional scope — trial-run one user/person to calibrate + estimate runtime   |
 
@@ -96,12 +96,18 @@ For each eligible `F`:
 2. Tally neighbors by `personId`; the **dominant nearby owner** `Q` = the person with the **most** assigned
    neighbors of `F` within `maxDistance` and `≥ minFaces`; record each candidate's neighbor count and
    nearest-neighbor distance (for `P` and for `Q`).
-3. **Flag `F` (suspected true owner `Q`) iff a confident external `Q` exists AND**
-   - `Q ≠ P`, and
-   - `Q` outvotes `P` by `voteMargin` **or** `P` has `< minFaces` neighbors (P doesn't even claim `F`), **and**
-   - `Q` is closer to `F` than `P` by `distanceMargin` (the **family-lookalike guard** — vote-share alone is not
-     enough to move a face between similar relatives; a hard distance edge is required).
-   - A tie / sub-`voteMargin` / sub-`distanceMargin` rival does **not** flag.
+3. **Flag `F` (suspected true owner `Q`) iff:**
+   - a confident external `Q` exists: `Q ≠ P`, `Q` has `≥ minFaces` neighbors of `F`, **and** `Q`'s nearest face to
+     `F` is within `maxAttributionDistance` (the **absolute resemblance / family guard** — only re-home `F` onto
+     someone it genuinely looks like), **and**
+   - `Q` outvotes `P` by `voteMargin` **or** `P` has `< minFaces` neighbors (P doesn't even claim `F`).
+   - **Why an absolute floor, not a relative "Q closer than P" margin (decision-2 reversal):** a relative guard
+     measured against `P`'s own nearest face backfires on the exact corruption we target — when many wrong faces are
+     co-located on `P`, `P`'s nearest face to a leaked face is _another co-located leaked sibling_ at the same
+     distance as the true owner, so the relative guard suppresses the flag. The floor is measured **to `Q`, never
+     to the contaminated `P`**, so co-located mass contamination stays detectable. The **vote margin** is the family
+     guard for genuine faces (a real face's own cluster out-votes locally); very-similar relatives _closer_ than the
+     floor are protected by the per-person contamination cap (step 5) + dry-run review, not by this rule.
 4. **Un-attributable** (`F` would leave `P` but no confident external `Q`, e.g. the fully-fused Ina case): record
    as **review-only** — never unassigned/guessed.
 5. **Per-person contamination cap:** after scoring a person, if `flagged / eligible > maxFlaggedFraction`, route
@@ -178,7 +184,8 @@ review-only, and is ~empty for clean clusters / cross-family before mutating.
 - `dryRun` defaults true; mutation is explicit; params validated.
 - `manual` + `exif` faces untouched.
 - Per-person contamination cap + bad-target rule → review-only protects whole clusters / fused persons.
-- Family-lookalike guard (`distanceMargin`) prevents shuffling faces between similar relatives.
+- Resemblance / family guard: the absolute `maxAttributionDistance` floor (distance to `Q`) plus the per-person
+  contamination cap prevent shuffling faces between similar relatives.
 - Owner-scoped — a face can only be re-attributed among the same owner's people.
 
 ## Implementation slices (TDD — write the failing test first, watch it fail, then implement)
@@ -193,10 +200,12 @@ distinct people; **near-axis** embeddings (small inter-cluster distance) model s
    row is not flagged**; **an isolated face (no neighbors in `maxDistance`) is not flagged**; **deleted /
    not-visible faces and faces on deleted assets are neither considered nor returned**; **a near neighbor owned
    by a different owner is ignored**; **pgvecto.rs engine-compat** for the new SQL.
-2. **Flag rule.** Apply `voteMargin` + `distanceMargin` + `< minFaces` branch. Tests: both flag branches
-   (`Q` outvotes `P`; `P` doesn't claim `F`); **a vote tie / within-`voteMargin` rival does not flag**;
-   **`distanceMargin` boundary** (a face just inside vs just outside, `blendedEmbedding`-style); **family guard**
-   — two near-axis (similar) clusters do **not** cross-flag even when votes are close.
+2. **Flag rule.** Apply `voteMargin` + absolute `maxAttributionDistance` floor + `< minFaces` branch. Tests: both
+   flag branches (`Q` outvotes `P`; `P` doesn't claim `F`); a vote tie / within-`voteMargin` rival does not flag;
+   `Q`-not-confident (`< minFaces`) does not flag; **`maxAttributionDistance` floor boundary** (`Q` just inside vs
+   just outside the floor); **co-located mass leak** — many co-located leaked faces ARE all flagged (the case the
+   rejected relative guard hid); **floor family guard** — a similar cluster _beyond_ the floor does **not**
+   cross-flag even when it out-votes.
 3. **Review-only routing.** Tests: a fused blob with no external owner → review-only, not flagged; a person with
    `>maxFlaggedFraction` flagged → whole person review-only (not mutated), **plus the cap boundary** (exactly at
    vs just over); **a flagged face whose suspected `Q` is itself review-only → routed to review-only** (don't
@@ -238,8 +247,11 @@ distinct people; **near-axis** embeddings (small inter-cluster distance) model s
 | pgvecto.rs engine-compat for new vector SQL                     | 1     |
 | `voteMargin` branch + `P`-doesn't-claim branch                  | 2     |
 | Vote tie / within-margin rival → not flagged                    | 2     |
-| `distanceMargin` boundary (in vs out)                           | 2     |
-| Family-similar (near-axis) clusters → no cross-flag             | 2, 8  |
+| `Q`-not-confident (`< minFaces`) → not flagged                  | 2     |
+| `maxAttributionDistance` floor boundary (in vs out)             | 2     |
+| Co-located mass leak → all flagged (rejected-guard regression)  | 2     |
+| Similar cluster beyond the floor → no cross-flag                | 2, 8  |
+| Very-similar cluster within floor → cap protects                | 3     |
 | Un-attributable (no `Q`) → review-only                          | 3, 8  |
 | Per-person cap → whole person review-only (+ boundary)          | 3, 8  |
 | Suspected `Q` itself review-only → face review-only             | 3     |
@@ -268,8 +280,8 @@ distinct people; **near-axis** embeddings (small inter-cluster distance) model s
 
 ## Open / to calibrate
 
-- Concrete `voteMargin` / `distanceMargin` / `minFaces` / `maxFlaggedFraction` values — set defaults, then tune
-  via dry-run on Hagen's clusters (flag A/B, route Ina to review-only, ~0 on clean + cross-family).
+- Concrete `voteMargin` / `maxAttributionDistance` / `minFaces` / `maxFlaggedFraction` values — set defaults, then
+  tune via dry-run on Hagen's clusters (flag A/B, route Ina to review-only, ~0 on clean + cross-family).
 - Whether to add the centroid pre-filter (compute vs recall trade-off) — default off; revisit if the full k-NN
   pass is too slow on Hagen's box.
 - The Slice 4 load-bearing verification decides re-queue-recognition vs direct guarded reassignment.
