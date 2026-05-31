@@ -274,21 +274,20 @@ describe('Spaces person detail page', () => {
     );
   });
 
-  it('places the space person grouping control inline with the person identity header', async () => {
-    renderPage();
+  it('keeps the grouping control outside the scrolling timeline so it stays visible while scrolling', async () => {
+    const { container } = renderPage();
 
+    const main = container.querySelector<HTMLElement>('main');
+    const timeline = screen.getByTestId('space-person-timeline');
     const header = await screen.findByTestId('person-timeline-header');
-    const identity = screen.getByTestId('person-timeline-identity');
     const control = await screen.findByTestId('timeline-desktop-grouping-control');
-    const bar = control.parentElement;
-    expect(header).toContainElement(identity);
-    expect(header).toContainElement(control);
-    expect(header).toHaveClass('gap-4');
-    expect(identity).toHaveClass('w-fit');
-    expect(identity).not.toHaveClass('sm:w-96');
-    expect(Array.from(header.children)).toEqual(expect.arrayContaining([identity, bar]));
-    expect(bar).toHaveClass('bg-transparent', 'dark:bg-transparent', 'px-0', 'py-0');
-    expect(bar).not.toHaveClass('bg-gray-50', 'dark:bg-gray-900', 'border-b');
+
+    // Regression guard for Hagen's report: the switcher must not scroll away with the photo
+    // grid, so it must live outside the timeline scroll container and the person header
+    // (both of which scroll) — pinned in the sticky page chrome instead, exactly like Tags.
+    expect(timeline).not.toContainElement(control);
+    expect(header).not.toContainElement(control);
+    expect(main).toContainElement(control);
   });
 
   it('changes space person timeline grouping while preserving scope without temporal chips', async () => {
