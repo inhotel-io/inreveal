@@ -1,9 +1,78 @@
-import { ReattributionNeighbor, tallyReattribution } from 'src/utils/face-repair';
+import { decideReattribution, ReattributionNeighbor, ReattributionTally, tallyReattribution } from 'src/utils/face-repair';
 
 const n = (personId: string | null, distance: number): ReattributionNeighbor => ({
   assetFaceId: `${personId}-${distance}`,
   personId,
   distance,
+});
+
+const tally = (over: Partial<ReattributionTally>): ReattributionTally => ({
+  ownCount: 0,
+  ownNearest: null,
+  topOtherPersonId: null,
+  topOtherCount: 0,
+  topOtherNearest: null,
+  ...over,
+});
+const params = { minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35 };
+
+describe('decideReattribution', () => {
+  it('flags when a confident, close Q out-votes P by the vote margin', () => {
+    const d = decideReattribution(
+      tally({ ownCount: 1, topOtherPersonId: 'Q', topOtherCount: 8, topOtherNearest: 0.2 }),
+      params,
+    );
+    expect(d).toEqual({ flagged: true, suspectedOwnerId: 'Q' });
+  });
+
+  it("flags when P does not claim F (ownCount < minFaces) and Q is confident and close", () => {
+    const d = decideReattribution(
+      tally({ ownCount: 1, topOtherPersonId: 'Q', topOtherCount: 5, topOtherNearest: 0.2 }),
+      params,
+    );
+    expect(d.flagged).toBe(true);
+    expect(d.suspectedOwnerId).toBe('Q');
+  });
+
+  it('does NOT flag a within-vote-margin rival when P also claims F', () => {
+    const d = decideReattribution(
+      tally({ ownCount: 6, topOtherPersonId: 'Q', topOtherCount: 7, topOtherNearest: 0.2 }),
+      params,
+    );
+    expect(d).toEqual({ flagged: false, suspectedOwnerId: null });
+  });
+
+  it('does NOT flag when Q is not confident (topOtherCount < minFaces)', () => {
+    const d = decideReattribution(
+      tally({ ownCount: 0, topOtherPersonId: 'Q', topOtherCount: 2, topOtherNearest: 0.1 }),
+      params,
+    );
+    expect(d.flagged).toBe(false);
+  });
+
+  it('enforces the absolute distance floor at the boundary', () => {
+    // Q out-votes P, but Q's nearest is 0.40 > floor 0.35 -> NOT flagged
+    const tooFar = decideReattribution(
+      tally({ ownCount: 0, topOtherPersonId: 'Q', topOtherCount: 9, topOtherNearest: 0.4 }),
+      params,
+    );
+    expect(tooFar.flagged).toBe(false);
+    // Q's nearest is 0.30 <= 0.35 -> flagged
+    const closeEnough = decideReattribution(
+      tally({ ownCount: 0, topOtherPersonId: 'Q', topOtherCount: 9, topOtherNearest: 0.3 }),
+      params,
+    );
+    expect(closeEnough.flagged).toBe(true);
+  });
+
+  it('does not use the current person distance (co-located contamination still flags)', () => {
+    // ownNearest tiny (a co-located wrong sibling), Q equally close, Q out-votes -> MUST still flag.
+    const d = decideReattribution(
+      tally({ ownCount: 1, ownNearest: 0.05, topOtherPersonId: 'Q', topOtherCount: 9, topOtherNearest: 0.05 }),
+      params,
+    );
+    expect(d.flagged).toBe(true);
+  });
 });
 
 describe('tallyReattribution', () => {

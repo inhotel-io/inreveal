@@ -52,3 +52,35 @@ export const tallyReattribution = (currentPersonId: string, neighbors: Reattribu
     topOtherNearest,
   };
 };
+
+export interface FlagParams {
+  minFaces: number;
+  voteMargin: number;
+  maxAttributionDistance: number;
+}
+
+export interface FlagDecision {
+  flagged: boolean;
+  suspectedOwnerId: string | null;
+}
+
+// Decide whether a face should be re-attributed away from its current person. Flag only when a confident
+// external owner Q exists — Q has >= minFaces neighbors of F AND Q's nearest neighbor is within
+// maxAttributionDistance (absolute resemblance guard, measured to Q so co-located contamination on P cannot
+// suppress it) — AND Q either out-votes P by voteMargin or P does not claim F (ownCount < minFaces). The vote
+// margin is the family guard for genuine faces; the current-person distance is intentionally NOT used.
+export const decideReattribution = (tally: ReattributionTally, params: FlagParams): FlagDecision => {
+  const { topOtherPersonId, topOtherCount, topOtherNearest, ownCount } = tally;
+
+  const confidentOther =
+    topOtherPersonId !== null &&
+    topOtherNearest !== null &&
+    topOtherCount >= params.minFaces &&
+    topOtherNearest <= params.maxAttributionDistance;
+  if (!confidentOther) {
+    return { flagged: false, suspectedOwnerId: null };
+  }
+
+  const flagged = topOtherCount - ownCount >= params.voteMargin || ownCount < params.minFaces;
+  return { flagged, suspectedOwnerId: flagged ? topOtherPersonId : null };
+};
