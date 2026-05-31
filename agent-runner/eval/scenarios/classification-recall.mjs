@@ -476,6 +476,28 @@ export default [
     expect: { kind: 'cleanup_duplicates', slotsSurvive: true },
   },
 
+  // visual_cleanup ------------------------------------------------------------
+  {
+    id: 'recall.visualcleanup.blurry',
+    category: 'recall',
+    prompt: 'trash my blurry photos from last week',
+    expect: {
+      kind: 'visual_cleanup',
+      slotsSurvive: true,
+      slots: { qualityMetric: 'sharpness', sourceDescription: /photos from last week/i },
+    },
+  },
+  {
+    id: 'recall.visualcleanup.dark-uploads',
+    category: 'recall',
+    prompt: 'delete dark photos from my recent uploads',
+    expect: {
+      kind: 'visual_cleanup',
+      slotsSurvive: true,
+      slots: { qualityMetric: 'brightness', sourceDescription: /photos from my recent uploads/i },
+    },
+  },
+
   // set_album_cover -----------------------------------------------------------
   {
     id: 'recall.cover.index',

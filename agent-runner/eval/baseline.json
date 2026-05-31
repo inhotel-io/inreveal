@@ -5,7 +5,7 @@
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.867
+    "copy": 0.889
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -74,6 +74,8 @@
     "recall.rotate.ccw": 1,
     "recall.rotate.flip": 1,
     "recall.cleanup_duplicates.canonical": 1,
+    "recall.visualcleanup.blurry": 1,
+    "recall.visualcleanup.dark-uploads": 1,
     "recall.cover.index": 1,
     "recall.cover.first": 1,
     "neg.q.count": 1,
@@ -100,6 +102,8 @@
     "neg.createspace.subjective": 1,
     "neg.rotate.subjective": 1,
     "neg.rotate.badangle": 1,
+    "neg.visualcleanup.plain-trash": 1,
+    "neg.visualcleanup.duplicates": 1,
     "neg.cover.subjective": 1,
     "neg.cover.unspecified": 1,
     "slots.usa.alias.unitedstates": 1,
@@ -125,7 +129,7 @@
     "slots.rotate.ccw-polarity": 1,
     "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 0.6,
+    "copy.trip.italy.no-exclusions": 0.667,
     "copy.trip.long-name": 1
   }
 }

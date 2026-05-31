@@ -114,4 +114,16 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.negativeExamples.length > 0);
     assert.ok(entry.matrixRow.capability);
   });
+
+  it('describes visual_cleanup as a hybrid quality-filtered trash workflow', () => {
+    const entry = getWorkflowManifestEntry('visual_cleanup');
+    assert.equal(entry.flow, 'hybrid');
+    assert.deepEqual(entry.requiredReadTools, ['resolveAssetSearchFilters', 'searchAssets']);
+    assert.equal(entry.planTool, 'proposeAlbumOperations');
+    assert.equal(entry.supportsContinuation, false);
+    assert.equal(entry.slots.qualityMetric.required, true);
+    assert.equal(entry.slots.sourceDescription.required, true);
+    assert.equal(entry.matrixRow.capability, 'Visual cleanup');
+    assert.equal(entry.matrixRow.tier, 'Constrained now');
+  });
 });
