@@ -1034,6 +1034,7 @@ export enum QueueName {
   BackupDatabase = 'backupDatabase',
   Ocr = 'ocr',
   PetDetection = 'petDetection',
+  ImageQuality = 'imageQuality',
   Workflow = 'workflow',
   IntegrityCheck = 'integrityCheck',
   Editor = 'editor',
@@ -1136,6 +1137,10 @@ export enum JobName {
   // Pet Detection
   PetDetectionQueueAll = 'PetDetectionQueueAll',
   PetDetection = 'PetDetection',
+
+  // Image Quality
+  ImageQualityQueueAll = 'ImageQualityQueueAll',
+  ImageQuality = 'ImageQuality',
 
   // Workflow
   WorkflowAssetTrigger = 'WorkflowAssetTrigger',
