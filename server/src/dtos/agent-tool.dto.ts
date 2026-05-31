@@ -70,9 +70,7 @@ const AgentSearchAssetsFieldSchema = z.enum(AgentAssetMetadataFieldValues).meta(
 const AgentAssetMetadataDetailSchema = z
   .enum(['basic', 'descriptive', 'technical', 'allSafe'])
   .meta({ id: 'AgentAssetMetadataDetail' });
-const AgentAssetMetadataFieldSchema = z
-  .enum(AgentReadAssetMetadataFieldValues)
-  .meta({ id: 'AgentAssetMetadataField' });
+const AgentAssetMetadataFieldSchema = z.enum(AgentReadAssetMetadataFieldValues).meta({ id: 'AgentAssetMetadataField' });
 const AgentAssetMetadataQualitySchema = z
   .object({
     sharpness: z.number().int().nullable(),
