@@ -863,6 +863,7 @@ export enum QueueName {
   BackupDatabase = 'backupDatabase',
   Ocr = 'ocr',
   PetDetection = 'petDetection',
+  ImageQuality = 'imageQuality',
   Workflow = 'workflow',
   Editor = 'editor',
   StorageBackendMigration = 'storageBackendMigration',
@@ -962,6 +963,10 @@ export enum JobName {
   // Pet Detection
   PetDetectionQueueAll = 'PetDetectionQueueAll',
   PetDetection = 'PetDetection',
+
+  // Image Quality
+  ImageQualityQueueAll = 'ImageQualityQueueAll',
+  ImageQuality = 'ImageQuality',
 
   // Workflow
   WorkflowRun = 'WorkflowRun',
