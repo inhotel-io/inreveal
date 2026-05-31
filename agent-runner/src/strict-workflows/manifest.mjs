@@ -289,7 +289,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     supportsContinuation: false,
     matrixRow: Object.freeze({
       capability: 'Visual cleanup',
-      tier: 'Constrained now',
+      tier: 'Solid now',
       workflowOrBoundary:
         'Pi resolves a quality-filtered source; Gallery owns the reviewable asset.trash plan from the handle.',
     }),
