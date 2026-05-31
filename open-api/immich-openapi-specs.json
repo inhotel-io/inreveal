@@ -32304,6 +32304,8 @@
           "Ocr",
           "PetDetectionQueueAll",
           "PetDetection",
+          "ImageQualityQueueAll",
+          "ImageQuality",
           "WorkflowRun",
           "StorageBackendMigrationQueueAll",
           "StorageBackendMigrationSingle",
@@ -35088,6 +35090,7 @@
           "backupDatabase",
           "ocr",
           "petDetection",
+          "imageQuality",
           "workflow",
           "editor",
           "storageBackendMigration",
@@ -35235,6 +35238,9 @@
           "facialRecognition": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
+          "imageQuality": {
+            "$ref": "#/components/schemas/QueueResponseLegacyDto"
+          },
           "library": {
             "$ref": "#/components/schemas/QueueResponseLegacyDto"
           },
@@ -35289,6 +35295,7 @@
           "editor",
           "faceDetection",
           "facialRecognition",
+          "imageQuality",
           "library",
           "metadataExtraction",
           "migration",
@@ -40332,6 +40339,9 @@
           "faceDetection": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
+          "imageQuality": {
+            "$ref": "#/components/schemas/JobSettingsDto"
+          },
           "library": {
             "$ref": "#/components/schemas/JobSettingsDto"
           },
@@ -40377,6 +40387,7 @@
           "classification",
           "editor",
           "faceDetection",
+          "imageQuality",
           "library",
           "metadataExtraction",
           "migration",
