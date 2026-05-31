@@ -67,7 +67,7 @@ const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   writeScope: carefulWriteScope,
   limits: {
     maxAssetsPerToolCall: 1000,
-    maxAssetsPerSession: 10000,
+    maxAssetsPerSession: 10_000,
     maxPreviewsPerToolCall: 0,
     maxPreviewsPerSession: 0,
     maxOriginalsPerToolCall: 0,
@@ -88,7 +88,7 @@ const visualOrganizerPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   writeScope: expandedWriteScope,
   limits: {
     maxAssetsPerToolCall: 2000,
-    maxAssetsPerSession: 20000,
+    maxAssetsPerSession: 20_000,
     maxPreviewsPerToolCall: 100,
     maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 0,
@@ -109,7 +109,7 @@ const localPowerUserPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
   writeScope: expandedWriteScope,
   limits: {
     maxAssetsPerToolCall: 5000,
-    maxAssetsPerSession: 50000,
+    maxAssetsPerSession: 50_000,
     maxPreviewsPerToolCall: 100,
     maxPreviewsPerSession: 500,
     maxOriginalsPerToolCall: 25,
