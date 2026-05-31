@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { KNOWN_BATCH_ACTION_TYPES, KNOWN_OPERATION_TYPES, makeContractClient } from './contract-fixtures.mjs';
+import { KNOWN_BATCH_ACTION_TYPES, KNOWN_CURATE_STRATEGIES, KNOWN_OPERATION_TYPES, makeContractClient } from './contract-fixtures.mjs';
 
 const newUuid = () => '00000000-0000-4000-8000-000000000001';
 
@@ -621,5 +621,101 @@ describe('makeContractClient — asset.removeTag validator', () => {
         }),
       /assetSource|selectionHandle/i,
     );
+  });
+});
+
+describe('makeContractClient — curateSelection handler', () => {
+  it('exports KNOWN_CURATE_STRATEGIES set with the four strategy values', () => {
+    assert.ok(KNOWN_CURATE_STRATEGIES instanceof Set);
+    assert.ok(KNOWN_CURATE_STRATEGIES.has('metadata-highlights'));
+    assert.ok(KNOWN_CURATE_STRATEGIES.has('date-spread'));
+    assert.ok(KNOWN_CURATE_STRATEGIES.has('favorites-first'));
+    assert.ok(KNOWN_CURATE_STRATEGIES.has('cover-candidate'));
+    assert.equal(KNOWN_CURATE_STRATEGIES.size, 4);
+  });
+
+  it('returns a curated handle with selectedAssetCount and criteriaSummary', async () => {
+    const client = makeContractClient();
+    const result = await client.call('curateSelection', {
+      selectionHandleId: 'handle-1',
+      targetCount: 10,
+    });
+    assert.equal(result.status, 'success');
+    assert.ok(result.selectionHandle?.id);
+    assert.ok(typeof result.selectedAssetCount === 'number');
+    assert.ok(Array.isArray(result.criteriaSummary) && result.criteriaSummary.length > 0);
+    assert.equal(result.strategy, 'metadata-highlights');
+    assert.equal(typeof result.sourceAssetCount, 'number');
+  });
+
+  it('respects an explicit strategy', async () => {
+    const client = makeContractClient();
+    const result = await client.call('curateSelection', {
+      selectionHandleId: 'handle-1',
+      targetCount: 5,
+      strategy: 'favorites-first',
+    });
+    assert.equal(result.status, 'success');
+    assert.equal(result.strategy, 'favorites-first');
+  });
+
+  it('rejects missing selectionHandleId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('curateSelection', { targetCount: 10 }),
+      /selectionHandleId/i,
+    );
+  });
+
+  it('rejects missing targetCount', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('curateSelection', { selectionHandleId: 'handle-1' }),
+      /targetCount/i,
+    );
+  });
+
+  it('rejects targetCount 0', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 0 }),
+      /targetCount/i,
+    );
+  });
+
+  it('rejects targetCount 1001', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 1001 }),
+      /targetCount/i,
+    );
+  });
+
+  it('rejects an unknown strategy', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () => client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 5, strategy: 'best-looking' }),
+      /strategy/i,
+    );
+  });
+
+  it('curateStatus denied returns a denied response', async () => {
+    const client = makeContractClient({ curateStatus: 'denied' });
+    const result = await client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 5 });
+    assert.equal(result.status, 'denied');
+    assert.ok(typeof result.reason === 'string' && result.reason.length > 0);
+  });
+
+  it('curateStatus approval-required returns an approval-required response', async () => {
+    const client = makeContractClient({ curateStatus: 'approval-required' });
+    const result = await client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 5 });
+    assert.equal(result.status, 'approval-required');
+  });
+
+  it('passes through curateWarnings when configured', async () => {
+    const client = makeContractClient({ curateWarnings: ['Low photo count for this strategy.'] });
+    const result = await client.call('curateSelection', { selectionHandleId: 'handle-1', targetCount: 5 });
+    assert.equal(result.status, 'success');
+    assert.deepEqual(result.warnings, ['Low photo count for this strategy.']);
   });
 });

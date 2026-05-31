@@ -124,25 +124,26 @@ retried only when the correction is mechanical.
 
 Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do not edit by hand; run `pnpm --dir server sync:agent-capabilities`.
 
-| Kind                       | Flow   | Required read tools                                       | Plan tool                           |
-| -------------------------- | ------ | --------------------------------------------------------- | ----------------------------------- |
-| `create_recent_trip_album` | Strict | `findTripCandidates`                                      | `proposeAlbumFromSelection`         |
-| `rename_or_describe_album` | Strict | `listAlbums`                                              | `proposeAlbumOperations`            |
-| `set_album_cover`          | Strict | `listAlbums`, `readAlbum`                                 | `proposeAlbumOperations`            |
-| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
-| `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
-| `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAddAssetsToSpaceFromSearch` |
-| `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
-| `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`            |
-| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
-| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
-| `create_album_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumFromSelection`         |
-| `create_space_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeSpaceFromSearch`            |
+| Kind                       | Flow   | Required read tools                                            | Plan tool                           |
+| -------------------------- | ------ | -------------------------------------------------------------- | ----------------------------------- |
+| `create_recent_trip_album` | Strict | `findTripCandidates`                                           | `proposeAlbumFromSelection`         |
+| `rename_or_describe_album` | Strict | `listAlbums`                                                   | `proposeAlbumOperations`            |
+| `set_album_cover`          | Strict | `listAlbums`, `readAlbum`                                      | `proposeAlbumOperations`            |
+| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAlbumOperations`            |
+| `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAlbumOperations`            |
+| `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAddAssetsToSpaceFromSearch` |
+| `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
+| `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `rename_or_describe_space` | Strict | `listSpaces`                                                   | `proposeAlbumOperations`            |
+| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
+| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
+| `create_album_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumFromSelection`         |
+| `create_space_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeSpaceFromSearch`            |
+| `curate_highlights`        | Hybrid | `resolveAssetSearchFilters`, `searchAssets`, `curateSelection` | `proposeAlbumFromSelection`         |
 
 <!-- generated:workflows:end -->
 
