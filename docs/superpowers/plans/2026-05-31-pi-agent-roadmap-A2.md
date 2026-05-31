@@ -33,6 +33,7 @@
 ## Task 1: Failing medium test for the `asset_quality` schema + `qualityScoredAt`
 
 **Files:**
+
 - Create: `server/test/medium/specs/repositories/asset-quality.repository.spec.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -107,11 +108,7 @@ describe('asset_quality schema (slice A2)', () => {
 
     await ctx.database.deleteFrom('asset').where('id', '=', asset.id).execute();
 
-    const rows = await ctx.database
-      .selectFrom('asset_quality')
-      .selectAll()
-      .where('assetId', '=', asset.id)
-      .execute();
+    const rows = await ctx.database.selectFrom('asset_quality').selectAll().where('assetId', '=', asset.id).execute();
     expect(rows).toEqual([]);
   });
 
@@ -153,6 +150,7 @@ Expected: RED. The first three tests fail with a Postgres error like `relation "
 ## Task 2: Add the migration, `@Table` classes, index registration, and the upsert wiring (green)
 
 **Files:**
+
 - Create: `server/src/schema/migrations-gallery/1779100000000-AddAssetQualityScoring.ts`
 - Create: `server/src/schema/tables/asset-quality.table.ts`
 - Modify: `server/src/schema/index.ts`
@@ -248,8 +246,8 @@ import { AssetQualityTable } from 'src/schema/tables/asset-quality.table';
 3. Add to the `DB` interface (near line 264, after `asset_job_status`):
 
 ```ts
-  asset_job_status: AssetJobStatusTable;
-  asset_quality: AssetQualityTable;
+asset_job_status: AssetJobStatusTable;
+asset_quality: AssetQualityTable;
 ```
 
 - [ ] **Step 5: Wire `qualityScoredAt` into `upsertJobStatus`**
@@ -288,6 +286,7 @@ git commit -m "feat(server): add asset_quality table + asset_job_status.qualityS
 ## Task 3: Revert-to-immich.sql maintenance
 
 **Files:**
+
 - Modify: `scripts/revert-to-immich.sql`
 
 The fork's `revert-to-immich.sql` must undo every fork schema change (it is load-bearing for "Immich starts up cleanly" — see `feedback_rebase_revert_script_update`). Four edits, mirroring how `asset_duplicate_checksum` / `petsDetectedAt` are handled.

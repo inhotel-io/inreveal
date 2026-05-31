@@ -7,11 +7,13 @@
 **Architecture:** Mirror the existing `rating`/`exifInfo` path. `readAssetMetadata` already joins `asset_exif` via `withAgentExif` → `exifInfo` and maps it through `mapSelectedAssetMetadata` per selected field; add a parallel `withAgentQuality` → `qualityInfo` and a `'quality'` field/case. `listDuplicateGroups` maps `duplicateRepository.getAll()` rows to a scrubbed `AgentDuplicateAsset`; add `sharpness` via a contained `assetRepository.getAssetQualityByIds()` lookup merged in the descriptor (leaves the shared `MapAsset`/`getAll` query untouched). Scrubbing is a field whitelist — quality fields are added explicitly, no blanket dump.
 
 **Decisions (resolved):**
+
 - `readAssetMetadata` exposes all four scores as a nested `qualityInfo` object (parallels `exifInfo`). It is a NEW selectable field `'quality'`, included in the `technical` and `allSafe` detail presets. `searchAssets` is NOT changed — `readAssetMetadata` gets its own extended field-values list.
 - `listDuplicateGroups` exposes only `sharpness` (what the keep-rule needs), `null` when unscored.
 - These DTOs are in the OpenAPI spec → regen required.
 
 **Grounded integration points:**
+
 - `server/src/dtos/agent-tool.dto.ts`: field values `:57`, schemas `:72`, presets feed `:151-152`; `AgentAssetMetadataResult` `:769-784`; `AgentDuplicateAssetSchema` `:1199-1216`.
 - `server/src/services/agent-tool.service.ts`: `readAssetMetadataDescriptor` `:1738`; `getReadAssetMetadataPresetFields` `:3478`; `mapSelectedAssetMetadata` `:3495` (the `rating` case `:3543`); `listDuplicateGroupsDescriptor` `:2035` (per-asset map `:2054-2063`).
 - `server/src/repositories/asset.repository.ts`: `withAgentExif` `:270`; `getAgentMetadataByIds` `:921`.
@@ -30,8 +32,8 @@
   - With `detail: 'technical'` (or `fields: ['quality']`), the result includes `qualityInfo: { sharpness, exposure, brightness, quality }` when the asset has a quality row.
   - When the asset has NO quality row, `qualityInfo` is `null` (or omitted) — not an error.
   - Scrubbing preserved: requesting `fields: ['quality']` does NOT leak `exifInfo` or other unrequested fields.
-  Mock `assetRepository.getAgentMetadataByIds` to return an asset with a `qualityInfo` object (and one with `qualityInfo: null`). Mirror the existing `rating`/exif tests' mocking style.
-  Run: `/opt/homebrew/bin/mise exec -- pnpm -C server test -- --run agent-tool.service.spec` → RED (field `'quality'` not accepted / `qualityInfo` not mapped).
+    Mock `assetRepository.getAgentMetadataByIds` to return an asset with a `qualityInfo` object (and one with `qualityInfo: null`). Mirror the existing `rating`/exif tests' mocking style.
+    Run: `/opt/homebrew/bin/mise exec -- pnpm -C server test -- --run agent-tool.service.spec` → RED (field `'quality'` not accepted / `qualityInfo` not mapped).
 
 - [ ] **Step 2: Field values + presets** — In `agent-tool.dto.ts`:
   - Add a readAssetMetadata-only field list:
@@ -44,6 +46,7 @@
 - [ ] **Step 3: Preset inclusion** — In `agent-tool.service.ts` `getReadAssetMetadataPresetFields` (:3478): add `'quality'` to the `technical` (:3487) and `allSafe` (:3490) return arrays.
 
 - [ ] **Step 4: Repo join** — In `asset.repository.ts`, add (mirror `withAgentExif` :270):
+
   ```ts
   function withAgentQuality<O>(qb: SelectQueryBuilder<DB, 'asset', O>) {
     return qb.select((eb) =>
@@ -61,15 +64,18 @@
     );
   }
   ```
+
   In `getAgentMetadataByIds` (:921) add `.$call(withAgentQuality)` after `.$call(withAgentExif)`.
 
 - [ ] **Step 5: Type + mapping** — Add `qualityInfo` to the `AgentAssetMetadata` TS type (the type returned by `getAgentMetadataByIds` / consumed by `mapSelectedAssetMetadata`) and the `AgentAssetMetadataResult` type, both as `{ sharpness: number|null; exposure: number|null; brightness: number|null; quality: number|null } | null`. In `mapSelectedAssetMetadata` (:3495) add a case (mirror `rating` :3543):
+
   ```ts
   case 'quality': {
     result.qualityInfo = asset.qualityInfo ?? null;
     break;
   }
   ```
+
   (If the `switch` is exhaustively typed with no `default`, this case is required for tsc.)
 
 - [ ] **Step 6: Green** — Run the readAssetMetadata spec → PASS. Then `/opt/homebrew/bin/mise exec -- make check-server` → clean.
@@ -83,9 +89,10 @@
 **Files:** `asset.repository.ts`, `agent-tool.service.ts`, `agent-tool.dto.ts`, types file, `agent-tool.service.spec.ts`.
 
 - [ ] **Step 1: Failing test** — In `agent-tool.service.spec.ts` listDuplicateGroups block (~:7946): extend the scrub test so each `AgentDuplicateAsset` includes `sharpness` (a number when scored, `null` when not), and assert no other quality field (exposure/brightness/quality) and no exif leak. Mock `duplicateRepository.getAll` as today AND mock the new `assetRepository.getAssetQualityByIds` to return sharpness for some assets, none for others.
-  Run the spec → RED.
+      Run the spec → RED.
 
 - [ ] **Step 2: Repo lookup** — In `asset.repository.ts` add:
+
   ```ts
   @GenerateSql({ params: [[DummyValue.UUID]] })
   getAssetQualityByIds(ids: string[]) {
@@ -96,6 +103,7 @@
       .execute();
   }
   ```
+
   (Mirror an existing `*ByIds` method's `anyUuid`/`@GenerateSql` usage in this repo.)
 
 - [ ] **Step 3: Descriptor merge** — In `listDuplicateGroupsDescriptor` (:2035), after fetching groups, collect all asset ids, call `getAssetQualityByIds`, build a `Map<assetId, sharpness>`, and add `sharpness: sharpnessById.get(asset.id) ?? null` to the per-asset map (:2054-2063).
@@ -112,7 +120,7 @@
 
 - [ ] **Step 1: Contract descriptions** — In `agent-mcp-tool-contract.service.ts`, update the `readAssetMetadata` (:204) and `listDuplicateGroups` (:1076) tool descriptions to mention the new quality fields (so the agent knows they exist). Keep the contract spec `agent-mcp-tool-contract.service.spec.ts` green (update any snapshot/expected description if it asserts text).
 - [ ] **Step 2: Contract test** — Run `/opt/homebrew/bin/mise exec -- pnpm -C server test -- --run agent-mcp-tool-contract.service.spec` → green (update expected shapes if the contract test asserts the response schema fields).
-- [ ] **Step 3: Regen** — 
+- [ ] **Step 3: Regen** —
   ```bash
   cd /Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm/server
   /opt/homebrew/bin/mise exec -- pnpm build && /opt/homebrew/bin/mise exec -- pnpm sync:sql
