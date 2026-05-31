@@ -210,6 +210,25 @@ describe('resolveAssetSource', () => {
     });
   });
 
+  it('rejects extraFilters that would overwrite parsed source filters', async () => {
+    const client = makeContractClient();
+
+    await assert.rejects(
+      () =>
+        resolveAssetSource({
+          client,
+          sourceDescription: 'my videos from 2024',
+          now: NOW,
+          extraFilters: { type: 'IMAGE' },
+        }),
+      /extraFilters.*type/i,
+    );
+    assert.equal(
+      client.calls.some((c) => c.name === 'searchAssets'),
+      false,
+    );
+  });
+
   it('hands off an absurd recency count (> 4 digits is not a count → unbounded)', async () => {
     const client = makeContractClient();
     const result = await resolveAssetSource({ client, sourceDescription: 'newest 99999 photos', now: NOW });
