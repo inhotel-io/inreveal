@@ -1216,6 +1216,18 @@ export class AssetRepository {
       .execute() as Promise<AgentAssetMetadataReviewRow[]>;
   }
 
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  getAssetQualityByIds(ids: string[]) {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+    return this.db
+      .selectFrom('asset_quality')
+      .select(['asset_quality.assetId', 'asset_quality.sharpness'])
+      .where('asset_quality.assetId', '=', anyUuid(ids))
+      .execute();
+  }
+
   @GenerateSql({
     params: [
       {
