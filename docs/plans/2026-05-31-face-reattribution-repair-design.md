@@ -127,6 +127,14 @@ For each eligible `F`:
    (over-cap or fused), route that face to review-only too — never unassign a face toward a cluster we won't
    vouch for.
 
+> **Known limitation (near-total fusion):** the vote is a _local-majority_ test — a face only flags when its true
+> owner out-votes its current person within the `voteWindow` neighborhood. So (a) contamination exceeding
+> `voteWindow` can crowd the true owner out of the window (mitigated by the 200 default; raise it for pathological
+> instances), and (b) if a person's cluster is _predominantly_ another person's faces (a near-total duplicate),
+> the wrong faces out-number the true owner locally and never flag — and because they don't flag, the per-person
+> cap (which keys on flagged fraction) doesn't catch them either. Such near-total-duplicate persons are a manual
+> merge, not an auto-repair case; the repair targets _partial_ contamination of an otherwise-coherent person.
+
 **Detection is a vote tally; recognition re-homes — and they are deliberately not identical.** Recognition's own
 selection (`person.service.ts:966`) is **nearest-assigned-neighbor** (`matches.find(m => m.personId)`), which a
 single co-located wrong-sibling can hijack — so a literal "what recognition would do" detector would under-detect
