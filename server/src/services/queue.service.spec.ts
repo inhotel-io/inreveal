@@ -548,6 +548,7 @@ describe(QueueService.name, () => {
         [QueueName.Notification]: expected,
         [QueueName.BackupDatabase]: expected,
         [QueueName.Ocr]: expected,
+        [QueueName.ImageQuality]: expected,
         [QueueName.PetDetection]: expected,
         [QueueName.Workflow]: expected,
         [QueueName.IntegrityCheck]: expected,
