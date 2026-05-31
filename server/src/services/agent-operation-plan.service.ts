@@ -1090,6 +1090,7 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetUpdateMetadata,
       AgentOperationType.AssetAddTag,
       AgentOperationType.AssetRemoveTag,
+      AgentOperationType.AssetTrash,
     ].includes(type);
   }
 
@@ -1417,7 +1418,8 @@ export class AgentOperationPlanService {
       type === AgentOperationType.AssetSetArchive ||
       type === AgentOperationType.AssetUpdateMetadata ||
       type === AgentOperationType.AssetAddTag ||
-      type === AgentOperationType.AssetRemoveTag
+      type === AgentOperationType.AssetRemoveTag ||
+      type === AgentOperationType.AssetTrash
     );
   }
 
@@ -1941,6 +1943,10 @@ export class AgentOperationPlanService {
       !writeScope.tagAssets
     ) {
       throw new BadRequestException('Agent permission policy does not allow tagging assets');
+    }
+
+    if (type === AgentOperationType.AssetTrash && !writeScope.trashAssets) {
+      throw new BadRequestException('Agent permission policy does not allow moving assets to trash');
     }
   }
 
@@ -2761,6 +2767,11 @@ export class AgentOperationPlanService {
 
       case AgentOperationType.AssetRotate: {
         return this.applyRotateOperation(auth, operation);
+      }
+
+      case AgentOperationType.AssetTrash: {
+        await this.assetService.deleteAll(auth, { ids: operation.assetIds, force: false });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 
       default: {
