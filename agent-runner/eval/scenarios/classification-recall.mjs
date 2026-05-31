@@ -225,6 +225,26 @@ export default [
     expect: { kind: 'untag_assets', slotsSurvive: true, slots: { tagName: 'Travel' } },
   },
 
+  // trash_assets ------------------------------------------------------------
+  {
+    id: 'recall.trash.canonical',
+    category: 'recall',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets', slotsSurvive: true, slots: { sourceDescription: /newest 20/i } },
+  },
+  {
+    id: 'recall.trash.delete-verb',
+    category: 'recall',
+    prompt: 'delete my newest 50 photos',
+    expect: { kind: 'trash_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.trash.move-to-trash',
+    category: 'recall',
+    prompt: 'move my newest 20 photos to the trash',
+    expect: { kind: 'trash_assets', slotsSurvive: true },
+  },
+
   // rename_or_describe_space ------------------------------------------------
   {
     id: 'recall.space.rename',
