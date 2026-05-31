@@ -310,6 +310,9 @@ export type AgentSearchAssetsFilters = {
   isNotInAlbum?: boolean;
   type?: AssetType;
   rating?: number | null;
+  maxSharpness?: number;
+  maxBrightness?: number;
+  maxQuality?: number;
   tagIds?: string[];
   tagMatchAny?: boolean;
   albumIds?: string[];
