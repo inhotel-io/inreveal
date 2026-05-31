@@ -105,6 +105,12 @@ export type MergePropagationProfileInput =
 const MERGE_IDENTITY_MAX_CENTROID_DISTANCE = 0.5;
 const MERGE_IDENTITY_CENTROID_SAMPLE_SIZE = 200;
 
+// Defense-in-depth at the point where personal identity backfill rewrites asset_face.personId: never move
+// a face onto a person whose existing cluster it does not resemble (face-to-centroid cosine distance
+// beyond this bound). This contains corruption regardless of how the identity link became wrong — even a
+// link already corrupt in the database. See docs/plans/2026-05-30-hagen-face-cluster-corruption-diagnosis.md.
+const REPAIR_FACE_MAX_PERSON_DISTANCE = 0.5;
+
 export type AccessibleIdentityFaceMatch = {
   identityId: string;
   type: string;
@@ -2304,7 +2310,14 @@ export class FaceIdentityRepository {
         continue;
       }
 
-      const assetFaceIds = await this.getPersonalBackfillAssetFaceIdsForIdentity(person.id, group.identityId);
+      const candidateAssetFaceIds = await this.getPersonalBackfillAssetFaceIdsForIdentity(person.id, group.identityId);
+      if (candidateAssetFaceIds.length === 0) {
+        continue;
+      }
+
+      // Only move faces that actually resemble the target person — a corrupt identity link must not be
+      // allowed to reassign a face onto someone it looks nothing like.
+      const assetFaceIds = await this.filterFacesResemblingPerson(targetPerson.id, candidateAssetFaceIds);
       if (assetFaceIds.length === 0) {
         continue;
       }
@@ -2354,6 +2367,42 @@ export class FaceIdentityRepository {
       .execute();
 
     return rows.map((row) => row.id);
+  }
+
+  // Returns the subset of candidate faces whose embedding is within REPAIR_FACE_MAX_PERSON_DISTANCE of the
+  // target person's existing cluster centroid. Faces with no embedding, or a target with no embedded faces,
+  // are kept (cannot assess => do not block legitimate consolidation).
+  private async filterFacesResemblingPerson(targetPersonId: string, assetFaceIds: string[]): Promise<string[]> {
+    if (assetFaceIds.length === 0) {
+      return [];
+    }
+
+    const result = await sql<{ id: string }>`
+      WITH target_centroid AS (
+        SELECT avg(target_search.embedding) AS centroid
+        FROM (
+          SELECT asset_face.id
+          FROM asset_face
+          WHERE asset_face."personId" = ${targetPersonId}
+            AND asset_face."deletedAt" IS NULL
+            AND asset_face."isVisible" = true
+          LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+        ) AS target_face
+        INNER JOIN face_search AS target_search ON target_search."faceId" = target_face.id
+      )
+      SELECT candidate.id AS id
+      FROM asset_face AS candidate
+      LEFT JOIN face_search AS candidate_search ON candidate_search."faceId" = candidate.id
+      CROSS JOIN target_centroid
+      WHERE candidate.id IN (${sql.join(assetFaceIds)})
+        AND (
+          candidate_search.embedding IS NULL
+          OR target_centroid.centroid IS NULL
+          OR (target_centroid.centroid <=> candidate_search.embedding) <= ${sql.lit(REPAIR_FACE_MAX_PERSON_DISTANCE)}
+        )
+    `.execute(this.db);
+
+    return result.rows.map((row) => row.id);
   }
 
   private getPersonByIdentity(ownerId: string, identityId: string, excludePersonId?: string) {

@@ -7,8 +7,10 @@ personal person `f0ef121e`. `face_search.embedding` is intact and still proves t
 (0.80 sim to Karina, −0.085 to Alejandra). ~211 of Alejandra's 774 faces exceed minScore against
 Karina; the contamination is broad, not a one-off.
 
-Status: **FIXED (prevent-recurrence) — embedding-consistency guard added at the merge chokepoint.**
-Data repair of the already-corrupted rows is a separate follow-up (see below).
+Status: **FIXED (prevent-recurrence) — two layers: an embedding-consistency guard at the merge
+chokepoint, and a per-face embedding guard at the backfill write point (`asset_face.personId`).**
+A second report (Case 2) confirmed the same systematic bug; see the Case 2 section. Data repair of the
+already-corrupted rows is a separate follow-up (see below).
 
 ## Root cause (confirmed)
 
@@ -129,6 +131,38 @@ Full server unit suite (4480), the face-identity medium spec (89), the people-id
 Threshold rationale: the wrongly-fused clusters were ~0.71 centroid distance apart (Hagen 3b: 0.289
 avg similarity), so 0.5 blocks them with margin while leaving same-person duplicate dedup (centroid
 distance typically < 0.4) untouched. Tunable.
+
+## Case 2 — second report (same systematic bug) + write-point guard
+
+Hagen reported a second instance (Person A's page shows Person B; A↔B avg cross-similarity 0.419; 93%
+of A's 5,835-face cluster re-`updatedAt`'d on 2026-05-25; whole assets re-written in one-second
+windows; faces at 0.9999 similarity to B sitting on A). Investigation confirmed **the same root**:
+
+- The only automatic writer that can overwrite an **already-assigned** face's `asset_face.personId` is
+  `repairPersonalIdentityAssignments` (personal backfill). Facial recognition cannot: `handleRecognizeFaces`
+  short-circuits when `face.personId` is already set (`person.service.ts:941`) and never rewrites it.
+- `repairPersonalIdentityAssignments` moves faces **purely by their `face_identity_face.identityId`** with
+  no embedding check, and that link only becomes wrong via a bad automatic `mergeIdentities` — i.e. the
+  Case-1 chokepoint. So Case 2 is the same bug, amplified by Person B's huge (26k-face) cluster.
+
+The chokepoint guard already refuses the dominant seeding path (reconciliation merges a member's **whole**
+identity; B's whole-cluster centroid is `1 − 0.419 = 0.58 > 0.5`). But Case 2 exposed two residual gaps:
+(a) the **write point itself is unguarded** — any wrong link, including one already corrupt in the live
+DB, is faithfully written into `asset_face.personId`; (b) a tight "bridge" sub-cluster (B faces near A)
+could pass the centroid guard, then backfill scatters it and the cascade amplifies.
+
+**Second fix — per-face guard at the write point** (`repairPersonalIdentityAssignments` via new private
+`filterFacesResemblingPerson`). Before moving candidate faces to `targetPerson`, drop any whose embedding
+is farther than `REPAIR_FACE_MAX_PERSON_DISTANCE = 0.5` from the target person's existing-cluster
+centroid; dropped faces stay put. Faces with no embedding, or a target with no embedded faces, are kept
+(cannot assess → do not block legitimate consolidation). This enforces the invariant both cases violate
+— `asset_face.personId` must be embedding-consistent — at the exact line the corruption is written,
+independent of how the identity link became wrong, and contains links already corrupt in Hagen's DB.
+
+Tests (medium, real DB) in `face-identity.repository.spec.ts`: a face that does **not** resemble the
+target is left on its current person during backfill (fails without the guard); a face that **does**
+resemble the target still moves (legitimate consolidation preserved). Full unit suite (4480) + all
+face-identity / people-identity-rbac / shared-space-face-identity-repair medium specs green.
 
 ## Remaining: data repair (separate follow-up)
 
