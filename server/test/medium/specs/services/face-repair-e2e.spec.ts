@@ -357,3 +357,127 @@ describe('face re-attribution repair: multi-owner contamination split', () => {
     expect(afterWork.hasPersonalIdentityWork).toBe(false);
   });
 });
+
+// ── Task 3: re-home at production minFaces:3 + sub-minFaces stays blank ─────────────────────────
+
+describe('face re-attribution repair: minFaces:3 + sub-minFaces stays unassigned', () => {
+  it('leaked face with ≥3 Karina neighbors re-homes; lone face with <3 neighbors stays NULL; no backfill loop', async () => {
+    const { sut: faceRepair, ctx, jobMock, faceIdentityRepository } = setupRepair(e2eDatabase);
+    const { sut: personService } = setupPerson(e2eDatabase);
+    const { user } = await ctx.newUser();
+
+    // Karina: 10 first-axis faces — the reference cluster.
+    const { person: karina } = await buildLinkedCluster(ctx, user.id, axisEmbedding('first'), 10, 'Karina');
+
+    // Alexia: 3 genuine second-axis faces + 3 leaked first-axis faces (≥ minFaces=3 → should re-home).
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id, name: 'Alexia' });
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
+
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: alexia.id,
+        sourceType: SourceType.MachineLearning,
+      });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: alexia.id,
+        sourceType: SourceType.MachineLearning,
+      });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepo.linkFace({
+        assetFaceId: assetFace.id,
+        identityId: alexiaIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    // Bob: one lone face on mixedAxisEmbedding(1) — completely isolated, <3 same-axis neighbors.
+    // After repair + recognition this face should remain personId=NULL (sub-minFaces → blank).
+    const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+    const bobIdentity = await faceIdentityRepo.ensurePersonIdentity(bob.id);
+    const { asset: loneAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    const { assetFace: loneFace } = await ctx.newAssetFace({
+      assetId: loneAsset.id,
+      personId: bob.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: loneFace.id, embedding: mixedAxisEmbedding(1) })
+      .execute();
+    await faceIdentityRepo.linkFace({
+      assetFaceId: loneFace.id,
+      identityId: bobIdentity.id,
+      source: 'owner-person',
+    });
+
+    // Baseline: no backfill work.
+    const baselineWork = await faceIdentityRepository.getBackfillWork();
+    expect(baselineWork.hasPersonalIdentityWork).toBe(false);
+
+    // Run repair at production minFaces=3.
+    const result = await faceRepair.runRepair({
+      ownerId: user.id,
+      dryRun: false,
+      maxDistance: 0.6,
+      voteWindow: 200,
+      minFaces: 3,
+      voteMargin: 2,
+      maxAttributionDistance: 0.35,
+      maxFlaggedFraction: 0.5,
+    });
+    expect(result.mutated).toBe(true);
+    // The 3 leaked faces should be in toRepair; the lone Bob face is sub-minFaces and not in toRepair
+    expect(result.executed!.unassigned).toBe(3);
+
+    // Drive handleRecognizeFaces for queued ids.
+    const queuedIds = collectQueuedFaceIds(jobMock);
+    expect(queuedIds.toSorted()).toEqual(leakedFaceIds.toSorted());
+    for (const id of queuedIds) {
+      await personService.handleRecognizeFaces({ id, deferred: false });
+    }
+
+    // Assert: leaked faces re-homed to Karina.
+    const reassignedRows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds)
+      .execute();
+    for (const row of reassignedRows) {
+      expect(row.personId).toBe(karina.id);
+    }
+
+    // Assert: lone Bob face was NOT in toRepair (no confident Q with ≥3 neighbors) and stays unmodified.
+    const loneRow = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', loneFace.id)
+      .executeTakeFirstOrThrow();
+    // The lone face was never flagged → its personId is unchanged (still bob.id)
+    expect(loneRow.personId).toBe(bob.id);
+
+    // Assert: no backfill work after repair + recognition.
+    const afterWork = await faceIdentityRepository.getBackfillWork();
+    expect(afterWork.hasPersonalIdentityWork).toBe(false);
+  });
+});
