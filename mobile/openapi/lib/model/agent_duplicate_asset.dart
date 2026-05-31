@@ -19,6 +19,7 @@ class AgentDuplicateAsset {
     required this.isFavorite,
     required this.originalFileName,
     required this.rating,
+    required this.sharpness,
     required this.width,
   });
 
@@ -40,6 +41,10 @@ class AgentDuplicateAsset {
 
   /// Minimum value: -9007199254740991
   /// Maximum value: 9007199254740991
+  int? sharpness;
+
+  /// Minimum value: -9007199254740991
+  /// Maximum value: 9007199254740991
   int? width;
 
   @override
@@ -50,6 +55,7 @@ class AgentDuplicateAsset {
     other.isFavorite == isFavorite &&
     other.originalFileName == originalFileName &&
     other.rating == rating &&
+    other.sharpness == sharpness &&
     other.width == width;
 
   @override
@@ -61,10 +67,11 @@ class AgentDuplicateAsset {
     (isFavorite.hashCode) +
     (originalFileName.hashCode) +
     (rating == null ? 0 : rating!.hashCode) +
+    (sharpness == null ? 0 : sharpness!.hashCode) +
     (width == null ? 0 : width!.hashCode);
 
   @override
-  String toString() => 'AgentDuplicateAsset[fileCreatedAt=$fileCreatedAt, height=$height, id=$id, isFavorite=$isFavorite, originalFileName=$originalFileName, rating=$rating, width=$width]';
+  String toString() => 'AgentDuplicateAsset[fileCreatedAt=$fileCreatedAt, height=$height, id=$id, isFavorite=$isFavorite, originalFileName=$originalFileName, rating=$rating, sharpness=$sharpness, width=$width]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -83,6 +90,11 @@ class AgentDuplicateAsset {
       json[r'rating'] = this.rating;
     } else {
     //  json[r'rating'] = null;
+    }
+    if (this.sharpness != null) {
+      json[r'sharpness'] = this.sharpness;
+    } else {
+    //  json[r'sharpness'] = null;
     }
     if (this.width != null) {
       json[r'width'] = this.width;
@@ -107,6 +119,7 @@ class AgentDuplicateAsset {
         isFavorite: mapValueOfType<bool>(json, r'isFavorite')!,
         originalFileName: mapValueOfType<String>(json, r'originalFileName')!,
         rating: mapValueOfType<int>(json, r'rating'),
+        sharpness: mapValueOfType<int>(json, r'sharpness'),
         width: mapValueOfType<int>(json, r'width'),
       );
     }
@@ -161,6 +174,7 @@ class AgentDuplicateAsset {
     'isFavorite',
     'originalFileName',
     'rating',
+    'sharpness',
     'width',
   };
 }

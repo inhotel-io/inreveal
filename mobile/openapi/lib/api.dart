@@ -93,6 +93,7 @@ part 'model/agent_asset_add_tag_operation_type.dart';
 part 'model/agent_asset_media_reference.dart';
 part 'model/agent_asset_metadata_detail.dart';
 part 'model/agent_asset_metadata_field.dart';
+part 'model/agent_asset_metadata_quality.dart';
 part 'model/agent_asset_metadata_result.dart';
 part 'model/agent_asset_metadata_result_exif_info.dart';
 part 'model/agent_asset_metadata_tag.dart';

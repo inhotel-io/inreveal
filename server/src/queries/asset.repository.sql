@@ -590,7 +590,23 @@ select
         where
           "asset_exif"."assetId" = "asset"."id"
       ) as obj
-  ) as "exifInfo"
+  ) as "exifInfo",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_quality"."sharpness",
+          "asset_quality"."exposure",
+          "asset_quality"."brightness",
+          "asset_quality"."quality"
+        from
+          "asset_quality"
+        where
+          "asset_quality"."assetId" = "asset"."id"
+      ) as obj
+  ) as "qualityInfo"
 from
   "asset"
 where
@@ -627,6 +643,15 @@ where
   and "asset"."deletedAt" is null
   and "asset"."isOffline" = $2
   and "asset"."visibility" in ($3, $4, $5)
+
+-- AssetRepository.getAssetQualityByIds
+select
+  "asset_quality"."assetId",
+  "asset_quality"."sharpness"
+from
+  "asset_quality"
+where
+  "asset_quality"."assetId" = any ($1::uuid[])
 
 -- AssetRepository.searchAgentMetadata
 select
@@ -679,7 +704,23 @@ select
         where
           "asset_exif"."assetId" = "asset"."id"
       ) as obj
-  ) as "exifInfo"
+  ) as "exifInfo",
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "asset_quality"."sharpness",
+          "asset_quality"."exposure",
+          "asset_quality"."brightness",
+          "asset_quality"."quality"
+        from
+          "asset_quality"
+        where
+          "asset_quality"."assetId" = "asset"."id"
+      ) as obj
+  ) as "qualityInfo"
 from
   "asset"
 where
