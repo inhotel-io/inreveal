@@ -1,7 +1,10 @@
 const unsupported = Object.freeze({ kind: 'unsupported' });
 
 const creationPhrasePattern = /\b(?:create|make|put together)\b/i;
+const throwIntoNewAlbumPattern = /\b(?:throw|toss|chuck)\b.+\b(?:in|into|to)\s+(?:a\s+new\s+|an?\s+)?album\b/i;
 const recentTripPattern = /\brecent\s+trip\b/i;
+const travelWordPattern =
+  /\b(?:trips?|vacations?|holidays?|getaways?|honeymoons?|cruises?|safaris?|road\s*trips?|weekends?)\b/i;
 const albumPattern = /\balbum\b/i;
 const highlightPattern = /\b(?:top|best|highlights?|favorite|pick|choose)\b/i;
 const nonGenericPattern =
@@ -9,6 +12,11 @@ const nonGenericPattern =
 const questionOnlyPattern = /^\s*(?:how many|what|which|when|where|who|why|can you tell me)\b/i;
 const explicitAlbumNamePattern = /\b(?:called|named|as)\s+(?:"([^"]+)"|'([^']+)'|(.+?))\s*[.?!]?$/i;
 const placePhrasePattern = /\brecent\s+trip\s+(?:to|in)\s+(.+?)\s*(?:\b(?:called|named|as)\b|[?!]|$)/i;
+const placeBeforeTravelPattern =
+  /\b(?:my|our|the)?\s*([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,5})\s+(?:trips?|vacations?|holidays?|getaways?|honeymoons?|cruises?|safaris?)\b/;
+const placeAfterTravelPattern =
+  /\b(?:trips?|vacations?|holidays?|getaways?|honeymoons?|cruises?|safaris?)\s+(?:photos?|pics?|pictures?|shots?)?\s*(?:from|to|in)\s+(.+?)\s*(?:\b(?:called|named|as|in|into|to)\b|[?!]|$)/i;
+const weekendPlacePattern = /\bweekend\s+(?:in|at)\s+(.+?)\s*(?:\b(?:called|named|as|in|into|to)\b|[?!]|$)/i;
 const uncertainPlacePattern = /^(?:somewhere|somewhere nice|there|that place|the trip|my trip)$/i;
 
 const cleanSlot = (value) =>
@@ -37,7 +45,11 @@ const normalizePlaceHint = (value) => {
 };
 
 const extractPlaceHint = (prompt) => {
-  const match = prompt.match(placePhrasePattern);
+  const match =
+    prompt.match(placePhrasePattern) ??
+    prompt.match(placeBeforeTravelPattern) ??
+    prompt.match(placeAfterTravelPattern) ??
+    prompt.match(weekendPlacePattern);
   return match ? normalizePlaceHint(match[1]) : undefined;
 };
 
@@ -75,10 +87,11 @@ export const matchStrictWorkflow = (prompt) => {
   // album-name-stripped text so an explicit name like "called Travel Tag" — whose
   // words ("tag") would otherwise trip `nonGenericPattern` — still matches here.
   const requestText = stripExplicitAlbumNameClause(text);
+  const hasCanonicalRecentTrip = creationPhrasePattern.test(text) && recentTripPattern.test(text);
+  const hasTravelAlbumParaphrase = travelWordPattern.test(text) && throwIntoNewAlbumPattern.test(text);
   if (
-    !creationPhrasePattern.test(text) ||
+    !(hasCanonicalRecentTrip || hasTravelAlbumParaphrase) ||
     !albumPattern.test(text) ||
-    !recentTripPattern.test(text) ||
     highlightPattern.test(requestText) ||
     nonGenericPattern.test(requestText) ||
     questionOnlyPattern.test(text)
