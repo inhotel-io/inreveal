@@ -229,6 +229,40 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'trash_assets',
+    flow: 'hybrid',
+    title: 'Trash photos (recoverable)',
+    classifierDescription:
+      'User wants to move a metadata-describable set of photos to the recoverable Trash (trash/delete/bin a recency/date/type or named-entity source). Reversible; album/space deletion and subjective sources are out of scope.',
+    positiveExamples: Object.freeze([
+      'Trash my newest 20 photos',
+      'Delete my 2024 screenshots',
+      'Move my newest 50 photos to the trash',
+      'Bin my blurry shots from last weekend',
+    ]),
+    negativeExamples: Object.freeze([
+      'Delete the Family album',
+      'Remove my newest 20 from the Italy album',
+      'Remove the Travel tag from my newest 20',
+      'Trash the best ones',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to trash.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Trash photos',
+      tier: 'Solid now',
+      flow: 'Hybrid',
+    }),
+  }),
+  Object.freeze({
     kind: 'favorite_assets',
     flow: 'hybrid',
     title: 'Favorite or unfavorite photos',
