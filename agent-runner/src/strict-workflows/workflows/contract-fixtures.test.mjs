@@ -747,6 +747,88 @@ describe('makeContractClient — asset.trash validator', () => {
   });
 });
 
+describe('makeContractClient — asset.trash with assetIds (relaxed validator)', () => {
+  it('accepts a valid asset.trash op with explicit assetIds (no assetSource)', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      summary: 'trash duplicates',
+      operations: [
+        {
+          type: 'asset.trash',
+          targetKind: 'asset_batch',
+          assetIds: ['id-1', 'id-2', 'id-3'],
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('accepts a valid asset.trash op with assetSelectionHandleId', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      operations: [
+        {
+          type: 'asset.trash',
+          targetKind: 'asset_batch',
+          assetSelectionHandleId: 'handle-99',
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('rejects asset.trash with zero selection mechanisms (no assetSource, no assetIds, no assetSelectionHandleId)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+            },
+          ],
+        }),
+      /assetSource|selectionHandle|assetIds|selection/i,
+    );
+  });
+
+  it('rejects asset.trash with both assetSource and assetIds (multiple mechanisms)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'h' },
+              assetIds: ['id-1'],
+            },
+          ],
+        }),
+      /one|single|mechanism|multiple/i,
+    );
+  });
+
+  it('rejects asset.trash with empty assetIds array', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+              assetIds: [],
+            },
+          ],
+        }),
+      /assetIds|empty/i,
+    );
+  });
+});
+
 describe('makeContractClient — listDuplicateGroups handler', () => {
   const makeGroup = (duplicateId, assetCount = 2) => ({
     duplicateId,
