@@ -287,7 +287,12 @@ export class AgentRunnerService {
           url: runnerUrl,
           runnerSessionId,
           timeoutMs: runnerMessageStreamTimeoutMs,
-          body: { gallerySessionId: sessionId, messageId, content, ...(workflowState === undefined ? {} : { workflowState }) },
+          body: {
+            gallerySessionId: sessionId,
+            messageId,
+            content,
+            ...(workflowState === undefined ? {} : { workflowState }),
+          },
         }),
         emptyStreamMessage: 'Agent runner message stream ended before completion',
         cleanupContext: { activityContext, baselineToolCallIds, approvedToolResultFailed: false },

@@ -442,7 +442,9 @@ describe(AgentRunnerService.name, () => {
     const runnerSessionId = 'runner-session-1';
     const messageId = '00000000-0000-4000-8000-000000000200';
     const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Create an album for my recent trip.' }] };
-    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Which recent trip should I use?' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'Which recent trip should I use?' }],
+    };
     const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'selection', continuation: { foo: 'bar' } };
 
     configRepository.getEnv.mockReturnValue({
@@ -488,7 +490,9 @@ describe(AgentRunnerService.name, () => {
     const runnerSessionId = 'runner-session-1';
     const messageId = '00000000-0000-4000-8000-000000000200';
     const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Use the first one.' }] };
-    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'Review the plan before applying it.' }],
+    };
 
     configRepository.getEnv.mockReturnValue({
       agent: {
@@ -528,7 +532,9 @@ describe(AgentRunnerService.name, () => {
     const runnerSessionId = 'runner-session-1';
     const messageId = '00000000-0000-4000-8000-000000000200';
     const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Use the first one.' }] };
-    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'Review the plan before applying it.' }],
+    };
     const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'selection', continuation: { foo: 'bar' } };
 
     configRepository.getEnv.mockReturnValue({
@@ -566,7 +572,9 @@ describe(AgentRunnerService.name, () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';
     const runnerSessionId = 'runner-session-1';
-    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Review the plan before applying it.' }] };
+    const assistantContent: AgentMessageContent = {
+      blocks: [{ type: 'text', text: 'Review the plan before applying it.' }],
+    };
     const workflowState = { workflowKind: 'create_recent_trip_album', kind: 'approval', toolCallId: 'tc-1' };
 
     configRepository.getEnv.mockReturnValue({
