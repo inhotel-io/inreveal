@@ -347,12 +347,15 @@ export default [
   },
   {
     // remove_photos_from_album end-to-end: recency → album.removeAssets plan —
-    // proposed, never applied. Data-dependent (needs a real album with removable
-    // matching assets); threshold 0.5 tolerates variance on an empty stack.
+    // proposed, never applied. Strongly data-dependent: the newest-N photos must
+    // already BE IN the target album to propose a non-empty removal (the empty-
+    // removal safety asks for input otherwise). On an unseeded instance the
+    // {album}-discovered album rarely contains the newest-N, so assert routing-only
+    // (SEEDED gates the plan-proposed assertion, like the membership scenarios).
     id: 'l3.plan.remove.recency',
     category: 'l3.plan',
     prompt: 'remove my newest 20 photos from {album}',
-    expect: { kind: 'remove_photos_from_album', planProposed: true },
+    expect: { kind: 'remove_photos_from_album', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
 
