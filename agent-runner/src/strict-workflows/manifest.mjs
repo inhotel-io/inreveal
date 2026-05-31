@@ -256,21 +256,61 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'visual_cleanup',
+    flow: 'hybrid',
+    title: 'Visual cleanup',
+    classifierDescription:
+      'User wants to trash a bounded set of objectively low-quality photos using precomputed quality scores: blurry/out-of-focus, dark/underexposed, or low-quality photos. This is not plain trash, duplicate cleanup, or subjective taste such as ugly/best/good photos.',
+    positiveExamples: Object.freeze([
+      'Trash my blurry photos from last week',
+      'Delete dark photos from my recent uploads',
+      'Clean up low-quality photos from last month',
+    ]),
+    negativeExamples: Object.freeze([
+      'Trash my newest 20 photos',
+      'Trash duplicate photos',
+      'Delete the ugly ones',
+      'Find my best photos',
+    ]),
+    slots: Object.freeze({
+      qualityMetric: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Quality metric to filter by: sharpness, brightness, or quality.',
+      }),
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata-bounded source after removing the quality adjective.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Visual cleanup',
+      tier: 'Constrained now',
+      workflowOrBoundary:
+        'Pi resolves a quality-filtered source; Gallery owns the reviewable asset.trash plan from the handle.',
+    }),
+  }),
+  Object.freeze({
     kind: 'trash_assets',
     flow: 'hybrid',
     title: 'Trash photos (recoverable)',
     classifierDescription:
-      'User wants to move a metadata-describable set of photos to the recoverable Trash (trash/delete/bin a recency/date/type or named-entity source). Reversible; album/space deletion and subjective sources are out of scope.',
+      'User wants to move a metadata-describable set of photos to the recoverable Trash (trash/delete/bin a recency/date/type or named-entity source). Reversible; album/space deletion, duplicate cleanup, objective quality cleanup, and subjective sources are out of scope.',
     positiveExamples: Object.freeze([
       'Trash my newest 20 photos',
       'Delete my 2024 screenshots',
       'Move my newest 50 photos to the trash',
-      'Bin my blurry shots from last weekend',
+      'Bin my videos from last weekend',
     ]),
     negativeExamples: Object.freeze([
       'Delete the Family album',
       'Remove my newest 20 from the Italy album',
       'Remove the Travel tag from my newest 20',
+      'Trash my blurry photos',
       'Trash the best ones',
     ]),
     slots: Object.freeze({
