@@ -1267,6 +1267,57 @@ Retry an approved read request by id.
 }
 ```
 
+### List duplicate groups
+
+MCP tool name: `listDuplicateGroups`
+
+List near-duplicate photo groups detected by CLIP-embedding similarity, returning only the fields needed to choose a keeper (id, originalFileName, fileCreatedAt, isFavorite, rating, width, height).
+
+Use an empty object for a new request or pass maxGroups to limit results. Use only toolCallId when retrying a Gallery-approved request.
+
+Argument modes:
+
+- `list-duplicate-groups`: Use before ranking duplicate groups and choosing which assets to keep.
+  Required fields: none.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved tool request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `assetIds`, `albumId`, `spaceId`, `filters`, `limit`, `detail`, `fields`.
+
+#### list-duplicate-groups
+
+List duplicate groups (up to the default 50).
+
+<!-- mcp-docs:tool-arguments tool="listDuplicateGroups" example="list-duplicate-groups" -->
+
+```json
+{}
+```
+
+#### list-duplicate-groups-capped
+
+List at most 10 duplicate groups.
+
+<!-- mcp-docs:tool-arguments tool="listDuplicateGroups" example="list-duplicate-groups-capped" -->
+
+```json
+{
+  "maxGroups": 10
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="listDuplicateGroups" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
 ### Propose album from search
 
 MCP tool name: `proposeAlbumFromSearch`
@@ -3244,6 +3295,11 @@ Summarize plan risks and selected changes.
 - `search-users-limit-out-of-range`: Use a positive integer limit no greater than 20.
 - `tool-call-arguments-missing`: Put the user search arguments object at params.arguments in the MCP tools/call request.
 - `tool-call-arguments-not-object`: The params.arguments value must be a JSON object, not an array, primitive, or null.
+
+### List duplicate groups
+
+- `tool-call-arguments-missing`: Use params.arguments: {} for a normal listDuplicateGroups tool call.
+- `tool-call-arguments-not-object`: The params.arguments value must be a JSON object. Use {} for a normal listDuplicateGroups call.
 
 ### Propose album from search
 

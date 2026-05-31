@@ -17,6 +17,7 @@ const expectedReadToolNames = [
   AgentToolName.ListSpaces,
   AgentToolName.ReadSpace,
   AgentToolName.SearchUsers,
+  AgentToolName.ListDuplicateGroups,
 ] as const;
 
 const expectedPlanningToolNames = [

@@ -114,6 +114,7 @@ export enum AgentToolName {
   ListAlbums = 'listAlbums',
   ReadAlbum = 'readAlbum',
   ListSpaces = 'listSpaces',
+  ListDuplicateGroups = 'listDuplicateGroups',
   ReadSpace = 'readSpace',
   SearchUsers = 'searchUsers',
   ProposeAlbumOperations = 'proposeAlbumOperations',

@@ -618,6 +618,22 @@ const AgentListSpacesToolRequestSchema = z
   })
   .meta({ id: 'AgentListSpacesToolRequestDto' });
 
+const DEFAULT_DUPLICATE_GROUPS_LIMIT = 50;
+const MAX_DUPLICATE_GROUPS_LIMIT = 500;
+
+const AgentListDuplicateGroupsToolRequestSchema = z
+  .strictObject({
+    maxGroups: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_DUPLICATE_GROUPS_LIMIT)
+      .optional()
+      .describe(`Maximum number of duplicate groups to return (default ${DEFAULT_DUPLICATE_GROUPS_LIMIT})`),
+    toolCallId: uuid.optional().describe('Approved tool call id when retrying after user approval'),
+  })
+  .meta({ id: 'AgentListDuplicateGroupsToolRequestDto' });
+
 const AgentReadSpaceToolRequestSchema = z
   .strictObject({
     spaceId: uuid.optional().describe('Shared space id to inspect'),
@@ -671,6 +687,7 @@ export const AgentReadToolRequestSchemas = {
   [AgentToolName.ListSpaces]: AgentListSpacesToolRequestSchema,
   [AgentToolName.ReadSpace]: AgentReadSpaceToolRequestSchema,
   [AgentToolName.SearchUsers]: AgentSearchUsersToolRequestSchema,
+  [AgentToolName.ListDuplicateGroups]: AgentListDuplicateGroupsToolRequestSchema,
 } as const;
 
 const AgentToolApprovalSchema = z
@@ -1179,6 +1196,40 @@ const AgentListSpacesToolResponseSchema = z
   ])
   .meta({ id: 'AgentListSpacesToolResponseDto' });
 
+const AgentDuplicateAssetSchema = z
+  .object({
+    id: uuid,
+    originalFileName: z.string(),
+    fileCreatedAt: isoDatetimeToDate,
+    isFavorite: z.boolean(),
+    rating: z.number().int().nullable(),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+  })
+  .meta({ id: 'AgentDuplicateAsset' });
+
+const AgentDuplicateGroupSchema = z
+  .object({
+    duplicateId: uuid,
+    assets: z.array(AgentDuplicateAssetSchema),
+  })
+  .meta({ id: 'AgentDuplicateGroup' });
+
+const AgentListDuplicateGroupsToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentListDuplicateGroupsToolApprovalRequiredResponse'),
+    deniedResponse('AgentListDuplicateGroupsToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
+        groups: z.array(AgentDuplicateGroupSchema),
+      })
+      .meta({ id: 'AgentListDuplicateGroupsToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentListDuplicateGroupsToolResponseDto' });
+
 const AgentReadSpaceToolResponseSchema = z
   .discriminatedUnion('status', [
     approvalRequiredResponse('AgentReadSpaceToolApprovalRequiredResponse'),
@@ -1239,6 +1290,7 @@ export class AgentReadAlbumToolRequestDto extends createZodDto(AgentReadAlbumToo
 export class AgentListSpacesToolRequestDto extends createZodDto(AgentListSpacesToolRequestSchema) {}
 export class AgentReadSpaceToolRequestDto extends createZodDto(AgentReadSpaceToolRequestSchema) {}
 export class AgentSearchUsersToolRequestDto extends createZodDto(AgentSearchUsersToolRequestSchema) {}
+export class AgentListDuplicateGroupsToolRequestDto extends createZodDto(AgentListDuplicateGroupsToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
@@ -1309,3 +1361,8 @@ export const AgentSearchUsersToolResponseDto = namedZodDto(
   AgentSearchUsersToolResponseSchema,
 );
 export type AgentSearchUsersToolResponseDto = z.output<typeof AgentSearchUsersToolResponseSchema>;
+export const AgentListDuplicateGroupsToolResponseDto = namedZodDto(
+  'AgentListDuplicateGroupsToolResponseDto',
+  AgentListDuplicateGroupsToolResponseSchema,
+);
+export type AgentListDuplicateGroupsToolResponseDto = z.output<typeof AgentListDuplicateGroupsToolResponseSchema>;
