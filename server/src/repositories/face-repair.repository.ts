@@ -13,6 +13,8 @@ export interface EligibleFaceRow {
 export class FaceRepairRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
+  // Non-Timeline faces (e.g. Archive) are intentionally eligible: they may be left unassigned
+  // after repair if recognition cannot re-home them, which is the accepted outcome (blank > wrong).
   streamEligibleFaces(options: { ownerId?: string; personId?: string }) {
     return this.db
       .selectFrom('asset_face')

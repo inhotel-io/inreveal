@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SourceType } from 'src/enum';
+import { AssetVisibility, SourceType } from 'src/enum';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -167,6 +167,32 @@ describe('FaceRepairRepository.streamEligibleFaces', () => {
 
     expect(results).toContain(faceA.id);
     expect(results).not.toContain(faceB.id);
+  });
+
+  // Non-Timeline (e.g. Archive) faces are intentionally eligible: they may be left unassigned
+  // after repair if recognition cannot re-home them, which is the accepted outcome (blank > wrong).
+  it('includes ML-sourced faces on non-Timeline assets (Archive visibility) — intentionally eligible', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+    const embedding = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
+
+    // Archive-visibility asset: face should still be returned by streamEligibleFaces
+    const { asset: archiveAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+    const { assetFace: archiveFace } = await ctx.newAssetFace({
+      assetId: archiveAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: archiveFace.id, embedding }).execute();
+
+    const results: string[] = [];
+    for await (const row of sut.streamEligibleFaces({ ownerId: user.id })) {
+      results.push(row.assetFaceId);
+    }
+
+    // Archive-visibility face IS returned (non-Timeline assets are eligible)
+    expect(results).toContain(archiveFace.id);
   });
 });
 

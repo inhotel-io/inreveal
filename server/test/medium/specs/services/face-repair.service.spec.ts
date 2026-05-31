@@ -1144,4 +1144,16 @@ describe('FaceRepairService.runRepair', () => {
     const result = await sut.runRepair({ ownerId: user.id, ...runRepairPlanDefaults });
     expect(result.report.totals.flaggedFaces).toBe(0);
   });
+
+  it('empty owner: runRepair on a fresh user with no faces resolves with flaggedFaces=0, mutated=false, no throw', async () => {
+    const { sut, ctx } = setupRunRepair();
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    const { user: emptyUser } = await ctx.newUser();
+
+    const result = await sut.runRepair({ ownerId: emptyUser.id, ...runRepairPlanDefaults });
+
+    expect(result.report.totals.flaggedFaces).toBe(0);
+    expect(result.mutated).toBe(false);
+  });
 });
