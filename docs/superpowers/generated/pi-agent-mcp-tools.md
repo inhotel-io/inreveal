@@ -904,9 +904,9 @@ Retry an approved read request by id.
 
 MCP tool name: `readAssetMetadata`
 
-Legacy exact non-search metadata read for selected assets.
+Legacy exact non-search metadata read for selected assets. The technical and allSafe presets include qualityInfo (sharpness, exposure, brightness, quality scores).
 
-Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility. Use only toolCallId when retrying a Gallery-approved request.
+Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility, quality. Use only toolCallId when retrying a Gallery-approved request.
 
 Argument modes:
 
@@ -1271,7 +1271,7 @@ Retry an approved read request by id.
 
 MCP tool name: `listDuplicateGroups`
 
-List near-duplicate photo groups detected by CLIP-embedding similarity, returning only the fields needed to choose a keeper (id, originalFileName, fileCreatedAt, isFavorite, rating, width, height).
+List near-duplicate photo groups detected by CLIP-embedding similarity, returning only the fields needed to choose a keeper (id, originalFileName, fileCreatedAt, isFavorite, rating, width, height, sharpness). sharpness is null when the asset has not been scored.
 
 Use an empty object for a new request or pass maxGroups to limit results. Use only toolCallId when retrying a Gallery-approved request.
 
