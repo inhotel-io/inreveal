@@ -1008,6 +1008,67 @@ class AgentSessionsApi {
     return null;
   }
 
+  /// Execute the internal listDuplicateGroups agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved duplicate group list tool call for an AI agent session.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentListDuplicateGroupsToolRequestDto] agentListDuplicateGroupsToolRequestDto (required):
+  Future<Response> listDuplicateGroupsWithHttpInfo(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/agent/sessions/{id}/tools/list-duplicate-groups'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = agentListDuplicateGroupsToolRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Execute the internal listDuplicateGroups agent tool
+  ///
+  /// Internal route for requesting or resuming a strict-approved duplicate group list tool call for an AI agent session.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [AgentListDuplicateGroupsToolRequestDto] agentListDuplicateGroupsToolRequestDto (required):
+  Future<AgentListDuplicateGroupsToolResponseDto?> listDuplicateGroups(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto,) async {
+    final response = await listDuplicateGroupsWithHttpInfo(id, agentListDuplicateGroupsToolRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'AgentListDuplicateGroupsToolResponseDto',) as AgentListDuplicateGroupsToolResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Execute the internal listSpaces agent tool
   ///
   /// Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.

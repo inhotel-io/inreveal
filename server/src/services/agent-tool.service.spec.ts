@@ -25,6 +25,7 @@ import { AgentToolCallRepository } from 'src/repositories/agent-tool-call.reposi
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
@@ -352,6 +353,7 @@ describe(AgentToolService.name, () => {
   let systemMetadataRepository: ReturnType<typeof automock<SystemMetadataRepository>>;
   let albumRepository: ReturnType<typeof automock<AlbumRepository>>;
   let sharedSpaceRepository: ReturnType<typeof automock<SharedSpaceRepository>>;
+  let duplicateRepository: ReturnType<typeof automock<DuplicateRepository>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
@@ -374,6 +376,7 @@ describe(AgentToolService.name, () => {
     systemMetadataRepository = automock(SystemMetadataRepository, { args: [{} as never] });
     albumRepository = automock(AlbumRepository, { args: [{} as never] });
     sharedSpaceRepository = automock(SharedSpaceRepository, { args: [{} as never] });
+    duplicateRepository = automock(DuplicateRepository, { args: [{} as never] });
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
@@ -398,6 +401,7 @@ describe(AgentToolService.name, () => {
       systemMetadataRepository,
       albumRepository,
       sharedSpaceRepository,
+      duplicateRepository as unknown as DuplicateRepository,
       sessionRepository,
       selectionHandleRepository,
       toolCallRepository,
@@ -7935,5 +7939,162 @@ describe(AgentToolService.name, () => {
     await expect(sut.readAssetMetadata(auth, newUuid(), { assetIds: [newUuid()] })).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  // --- listDuplicateGroups ---
+
+  it('listDuplicateGroups returns scrubbed groups — only keep-rule fields, no EXIF dump, no URLs', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+    const duplicateId = newUuid();
+    const assetId1 = newUuid();
+    const assetId2 = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    duplicateRepository.getAll.mockResolvedValue([
+      {
+        duplicateId,
+        assets: [
+          {
+            id: assetId1,
+            originalFileName: 'photo1.jpg',
+            fileCreatedAt: now,
+            isFavorite: true,
+            width: 1920,
+            height: 1080,
+            exifInfo: {
+              rating: 4,
+              exifImageWidth: 1920,
+              exifImageHeight: 1080,
+              // extra fields that MUST NOT leak into agent output
+              latitude: 52.52,
+              longitude: 13.405,
+              city: 'Berlin',
+              state: 'Berlin',
+              country: 'Germany',
+              make: 'Nikon',
+              model: 'Zf',
+              lensModel: '40mm',
+              dateTimeOriginal: now,
+            },
+          } as never,
+          {
+            id: assetId2,
+            originalFileName: 'photo2.jpg',
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          } as never,
+        ],
+      },
+    ] as never);
+
+    const result = await sut.listDuplicateGroups(auth, session.id, {});
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    expect(result.groups).toHaveLength(1);
+    const group = result.groups[0];
+    expect(group.duplicateId).toBe(duplicateId);
+    expect(group.assets).toHaveLength(2);
+
+    const first = group.assets[0];
+    // Required keep-rule fields present
+    expect(first.id).toBe(assetId1);
+    expect(first.originalFileName).toBe('photo1.jpg');
+    expect(first.isFavorite).toBe(true);
+    expect(first.rating).toBe(4);
+    expect(first.width).toBe(1920);
+    expect(first.height).toBe(1080);
+    // EXIF dump must NOT leak
+    expect(first).not.toHaveProperty('latitude');
+    expect(first).not.toHaveProperty('longitude');
+    expect(first).not.toHaveProperty('city');
+    expect(first).not.toHaveProperty('country');
+    expect(first).not.toHaveProperty('make');
+    expect(first).not.toHaveProperty('model');
+    expect(first).not.toHaveProperty('exifInfo');
+    // Media URLs must NOT be present
+    expect(first).not.toHaveProperty('thumbhash');
+    expect(first).not.toHaveProperty('originalPath');
+    expect(first).not.toHaveProperty('previewUrl');
+
+    const second = group.assets[1];
+    expect(second.rating).toBeNull();
+    expect(second.width).toBeNull();
+    expect(second.height).toBeNull();
+  });
+
+  it('listDuplicateGroups caps to maxGroups', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    duplicateRepository.getAll.mockResolvedValue(
+      Array.from({ length: 10 }, (_, i) => ({
+        duplicateId: newUuid(),
+        assets: [
+          {
+            id: newUuid(),
+            originalFileName: `a${i}.jpg`,
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          },
+          {
+            id: newUuid(),
+            originalFileName: `b${i}.jpg`,
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          },
+        ],
+      })) as never,
+    );
+
+    const result = await sut.listDuplicateGroups(auth, session.id, { maxGroups: 3 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.groups).toHaveLength(3);
+  });
+
+  it('listDuplicateGroups returns empty groups when no duplicates exist', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    duplicateRepository.getAll.mockResolvedValue([] as never);
+
+    const result = await sut.listDuplicateGroups(auth, session.id, {});
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.groups).toHaveLength(0);
   });
 });

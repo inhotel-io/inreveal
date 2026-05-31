@@ -746,3 +746,69 @@ describe('makeContractClient — asset.trash validator', () => {
     );
   });
 });
+
+describe('makeContractClient — listDuplicateGroups handler', () => {
+  const makeGroup = (duplicateId, assetCount = 2) => ({
+    duplicateId,
+    assets: Array.from({ length: assetCount }, (_, i) => ({
+      id: `asset-${duplicateId}-${i}`,
+      originalFileName: `photo${i}.jpg`,
+      fileCreatedAt: new Date('2025-01-01T00:00:00.000Z').toISOString(),
+      isFavorite: false,
+      rating: null,
+      width: null,
+      height: null,
+    })),
+  });
+
+  it('returns configured duplicate groups', async () => {
+    const groups = [makeGroup('dup-1'), makeGroup('dup-2')];
+    const client = makeContractClient({ duplicateGroups: groups });
+    const result = await client.call('listDuplicateGroups', {});
+    assert.equal(result.groups.length, 2);
+    assert.equal(result.groups[0].duplicateId, 'dup-1');
+    assert.equal(result.groups[0].assets.length, 2);
+  });
+
+  it('returns empty groups when none configured', async () => {
+    const client = makeContractClient();
+    const result = await client.call('listDuplicateGroups', {});
+    assert.deepEqual(result.groups, []);
+  });
+
+  it('caps groups to maxGroups', async () => {
+    const groups = Array.from({ length: 10 }, (_, i) => makeGroup(`dup-${i}`));
+    const client = makeContractClient({ duplicateGroups: groups });
+    const result = await client.call('listDuplicateGroups', { maxGroups: 3 });
+    assert.equal(result.groups.length, 3);
+  });
+
+  it('accepts valid maxGroups values', async () => {
+    const client = makeContractClient();
+    const r1 = await client.call('listDuplicateGroups', { maxGroups: 1 });
+    assert.deepEqual(r1.groups, []);
+    const r2 = await client.call('listDuplicateGroups', { maxGroups: 500 });
+    assert.deepEqual(r2.groups, []);
+  });
+
+  it('rejects maxGroups: 0', async () => {
+    const client = makeContractClient();
+    await assert.rejects(() => client.call('listDuplicateGroups', { maxGroups: 0 }), /maxGroups/i);
+  });
+
+  it('rejects maxGroups > 500', async () => {
+    const client = makeContractClient();
+    await assert.rejects(() => client.call('listDuplicateGroups', { maxGroups: 501 }), /maxGroups/i);
+  });
+
+  it('rejects unknown request keys', async () => {
+    const client = makeContractClient();
+    await assert.rejects(() => client.call('listDuplicateGroups', { bogusKey: 'x' }), /unrecognized|bogusKey/i);
+  });
+
+  it('is recorded in the calls log', async () => {
+    const client = makeContractClient();
+    await client.call('listDuplicateGroups', {});
+    assert.equal(client.calls[0].name, 'listDuplicateGroups');
+  });
+});

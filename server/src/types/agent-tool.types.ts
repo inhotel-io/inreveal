@@ -167,6 +167,23 @@ export type AgentToolReadSpaceRequestMetadata = {
 
 export type AgentToolListSpacesRequestMetadata = Record<string, never>;
 
+export type AgentToolListDuplicateGroupsRequestMetadata = Record<string, never>;
+
+export type AgentDuplicateAsset = {
+  id: string;
+  originalFileName: string;
+  fileCreatedAt: Date;
+  isFavorite: boolean;
+  rating: number | null;
+  width: number | null;
+  height: number | null;
+};
+
+export type AgentDuplicateGroup = {
+  duplicateId: string;
+  assets: AgentDuplicateAsset[];
+};
+
 export type AgentToolSearchUsersRequestMetadata = {
   query: string;
   limit: number;
@@ -405,6 +422,7 @@ export type AgentToolRequestMetadata =
   | AgentToolListAlbumsRequestMetadata
   | AgentToolReadSpaceRequestMetadata
   | AgentToolListSpacesRequestMetadata
+  | AgentToolListDuplicateGroupsRequestMetadata
   | AgentToolSearchUsersRequestMetadata
   | AgentToolOperationPlanRequestMetadata;
 

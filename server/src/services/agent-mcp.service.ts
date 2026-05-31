@@ -5,6 +5,7 @@ import type {
   AgentCurateSelectionToolRequestDto,
   AgentFindTripCandidatesToolRequestDto,
   AgentListAlbumsToolRequestDto,
+  AgentListDuplicateGroupsToolRequestDto,
   AgentListSpacesToolRequestDto,
   AgentReadAlbumToolRequestDto,
   AgentReadAssetMetadataToolRequestDto,
@@ -74,6 +75,7 @@ export class AgentMcpService {
     AgentToolName.ListSpaces,
     AgentToolName.ReadSpace,
     AgentToolName.SearchUsers,
+    AgentToolName.ListDuplicateGroups,
   ]);
 
   private readonly planningToolNames = new Set<AgentToolName>([
@@ -587,6 +589,9 @@ export class AgentMcpService {
       }
       case AgentToolName.SearchUsers: {
         return this.toolService.searchUsers(auth, sessionId, dto as AgentSearchUsersToolRequestDto);
+      }
+      case AgentToolName.ListDuplicateGroups: {
+        return this.toolService.listDuplicateGroups(auth, sessionId, dto as AgentListDuplicateGroupsToolRequestDto);
       }
     }
   }

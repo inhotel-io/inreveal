@@ -301,6 +301,23 @@ const validateSearchAssets = (args) => {
 
 const ok = (config) => config.planResult ?? { status: 'success', plan: { id: 'plan-1' } };
 
+// Validate listDuplicateGroups request shape: optional maxGroups must be int 1..500.
+const validateListDuplicateGroupsRequest = (args) => {
+  if (!args || typeof args !== 'object') return; // empty {} is valid
+  const keys = Object.keys(args).filter((k) => k !== 'toolCallId');
+  for (const key of keys) {
+    if (key !== 'maxGroups') fail(`listDuplicateGroups: unrecognized key "${key}"`);
+  }
+  if (args.maxGroups !== undefined) {
+    if (typeof args.maxGroups !== 'number' || !Number.isInteger(args.maxGroups) || args.maxGroups < 1) {
+      fail('listDuplicateGroups: maxGroups must be an integer >= 1');
+    }
+    if (args.maxGroups > 500) {
+      fail('listDuplicateGroups: maxGroups must be <= 500');
+    }
+  }
+};
+
 /**
  * Build a contract-faithful fake MCP client.
  * @param config.albums            albums returned by listAlbums
@@ -308,6 +325,7 @@ const ok = (config) => config.planResult ?? { status: 'success', plan: { id: 'pl
  * @param config.users            users returned by searchUsers
  * @param config.handleAssetCount  assetCount on the searchAssets selection handle
  * @param config.planResult        override for the propose* tool results
+ * @param config.duplicateGroups   groups returned by listDuplicateGroups
  */
 export const makeContractClient = (config = {}) => {
   const {
@@ -317,6 +335,7 @@ export const makeContractClient = (config = {}) => {
     handleAssetCount = 20,
     resolvedFilters,
     resolveResults,
+    duplicateGroups = [],
   } = config;
   const calls = [];
 
@@ -378,6 +397,11 @@ export const makeContractClient = (config = {}) => {
         fail('selectionHandle assetSource requires selectionHandleId');
       }
       return ok(config);
+    },
+    listDuplicateGroups: (args) => {
+      validateListDuplicateGroupsRequest(args);
+      const maxGroups = args?.maxGroups ?? 50;
+      return { groups: duplicateGroups.slice(0, maxGroups) };
     },
     proposeAlbumOperations: (args) => {
       validateOperations(args?.operations);
