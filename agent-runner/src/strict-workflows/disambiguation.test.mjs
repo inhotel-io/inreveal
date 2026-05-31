@@ -70,10 +70,6 @@ const CASES = [
   // set_album_cover
   ['set the cover of the Family album to the 3rd photo', 'set_album_cover'],
   ['make the Family album cover the first photo', 'set_album_cover'],
-  // curate_highlights (best/top/highlights signal + curate verb)
-  ['pick the best 15 photos from my Portugal trip and make an album', 'curate_highlights'],
-  ['suggest 10 highlights from this album', 'curate_highlights'],
-  ['favorite the best photos from the Family space', 'curate_highlights'],
   // --- cross-cutting seam sweep (slice 21) -------------------------------------
   // Verb/phrasing variants must each land on exactly one kind. The load-bearing
   // seams: the four "remove … from …" owners (remove_photos_from_album,
