@@ -304,6 +304,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       annotations: readToolAnnotations,
     }),
     defineTool({
+      name: AgentToolName.ListDuplicateGroups,
+      title: 'List duplicate groups',
+      description: `List near-duplicate photo groups (CLIP-embedding detection) with the fields needed to choose a keeper; read-only.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.ListDuplicateGroups],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
       name: AgentToolName.ProposeAlbumFromSearch,
       title: 'Propose album from search',
       description: 'Preferred album-from-search workflow that creates a reviewable plan.',
