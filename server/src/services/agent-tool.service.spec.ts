@@ -194,6 +194,7 @@ const makeMetadata = (
     rating: 5,
   },
   tags: [{ id: newUuid(), value: 'travel', color: null }],
+  qualityInfo: null,
   ...overrides,
 });
 
@@ -1402,8 +1403,8 @@ describe(AgentToolService.name, () => {
   it.each([
     ['basic', ['type', 'dates']],
     ['descriptive', ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']],
-    ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility']],
-    ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility']],
+    ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility', 'quality']],
+    ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility', 'quality']],
   ] as const)('applies the %s metadata detail preset', async (detail, expectedFields) => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
@@ -1452,8 +1453,83 @@ describe(AgentToolService.name, () => {
       visibility: metadata.visibility,
       exifInfo: metadata.exifInfo,
       tags: metadata.tags,
+      qualityInfo: null,
     });
     expect(result.assets[0]).not.toHaveProperty('ownerId');
+  });
+
+  it('readAssetMetadata returns qualityInfo when fields includes quality and asset has a quality row', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetId, {
+        qualityInfo: { sharpness: 82, exposure: 65, brightness: 70, quality: 75 },
+      } as never),
+    ] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['quality'] });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success, got ${result.status}`);
+    }
+
+    expect(result.fields).toEqual(['quality']);
+    expect(result.assets[0]).toEqual({
+      id: assetId,
+      qualityInfo: { sharpness: 82, exposure: 65, brightness: 70, quality: 75 },
+    });
+    expect(result.assets[0]).not.toHaveProperty('exifInfo');
+    expect(result.assets[0]).not.toHaveProperty('tags');
+    expect(result.assets[0]).not.toHaveProperty('originalFileName');
+  });
+
+  it('readAssetMetadata returns qualityInfo null when asset has no quality row', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetId, { qualityInfo: null } as never),
+    ] as never);
+
+    const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], fields: ['quality'] });
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success, got ${result.status}`);
+    }
+
+    expect(result.assets[0]).toEqual({ id: assetId, qualityInfo: null });
+  });
+
+  it('readAssetMetadata includes qualityInfo in technical and allSafe presets', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetId, {
+        qualityInfo: { sharpness: 90, exposure: 55, brightness: 60, quality: 80 },
+      } as never),
+    ] as never);
+
+    for (const detail of ['technical', 'allSafe'] as const) {
+      const result = await sut.readAssetMetadata(auth, session.id, { assetIds: [assetId], detail });
+
+      if (result.status !== 'success') {
+        throw new Error(`Expected success for detail=${detail}, got ${result.status}`);
+      }
+
+      expect(result.assets[0]).toHaveProperty('qualityInfo');
+      expect(result.assets[0].qualityInfo).toEqual({ sharpness: 90, exposure: 55, brightness: 60, quality: 80 });
+    }
   });
 
   it('rejects large metadata reads before repository hydration when they exceed the per-tool limit', async () => {
