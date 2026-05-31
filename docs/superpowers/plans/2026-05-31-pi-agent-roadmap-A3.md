@@ -11,6 +11,7 @@
 **ML string match (verified):** Python `ModelTask.IMAGE_QUALITY = "image-quality"`, `ModelType.VISUAL = "visual"` (`machine-learning/immich_ml/schemas.py`). The server `ModelTask` enum must add `IMAGE_QUALITY = 'image-quality'`; server `ModelType.VISUAL = 'visual'` already exists.
 
 **CI gates this slice hits (all must stay green):**
+
 - `make check-server` (tsc): exhaustive `Record<ConcurrentQueueName>` (config.ts), the `satisfies` records, the ML request union.
 - `make check-web` (svelte-check/tsc): exhaustive `Record<QueueName, QueueItem>` in `web/src/lib/services/queue.service.ts:204` — a new `QueueName` breaks it until the entry is added; new `$t(...)` keys must exist in `i18n/en.json`.
 - `pnpm sync:sql` git-clean gate: the new `@GenerateSql` repo methods regenerate `server/src/queries/asset-job.repository.sql` — must regen + commit.
@@ -22,11 +23,13 @@
 ## File Structure
 
 **New files:**
+
 - `server/src/services/image-quality.service.ts` — the service (2 `@OnJob` handlers).
 - `server/src/services/image-quality.service.spec.ts` — unit spec (TDD gate, `newTestService`).
 - `server/test/medium/specs/services/image-quality.service.spec.ts` — medium spec (real DB write).
 
 **Modified — server:**
+
 - `server/src/enum.ts` — `QueueName.ImageQuality`; `JobName.ImageQualityQueueAll` + `JobName.ImageQuality`.
 - `server/src/repositories/machine-learning.repository.ts` — `ModelTask.IMAGE_QUALITY`; `ImageQuality`/`ImageQualityResponse`/`ImageQualityRequest` types; add to `MachineLearningRequest` union; `analyzeAssetQuality()`.
 - `server/src/repositories/asset-job.repository.ts` — `streamForImageQualityJob(force?)` + `getForImageQuality(id)`.
@@ -39,6 +42,7 @@
 - `server/src/services/system-config.service.spec.ts` — add `[QueueName.ImageQuality]: { concurrency: 1 }` to the expected default concurrency map.
 
 **Modified — web:**
+
 - `web/src/lib/constants.ts` — `QueueName.ImageQuality` in `ADMIN_VISIBLE_QUEUES`.
 - `web/src/lib/services/queue.service.ts` — `[QueueName.ImageQuality]` entry in the `Record<QueueName, QueueItem>` map (+ an `@mdi/js` icon import).
 - `i18n/en.json` — `admin.machine_learning_image_quality` + `admin.image_quality_job_description`.
@@ -52,6 +56,7 @@
 This is the cohesive unit the unit spec drives. Write the failing unit spec first, then implement the enums, ML method, repo methods, and service to green it.
 
 **Files:**
+
 - Create: `server/src/services/image-quality.service.spec.ts`
 - Modify: `server/src/enum.ts`, `server/src/repositories/machine-learning.repository.ts`, `server/src/repositories/asset-job.repository.ts`, `server/src/repositories/asset.repository.ts`, `server/src/utils/misc.ts`
 - Create: `server/src/services/image-quality.service.ts`
@@ -195,8 +200,10 @@ Expected: RED — the import `ImageQualityService` fails to resolve (module not 
 - [ ] **Step 3: Add the enum members**
 
 In `server/src/enum.ts`:
+
 - In `QueueName`, after `Ocr = 'ocr',` add: `ImageQuality = 'imageQuality',`
 - In `JobName`, after the OCR block (`Ocr = 'Ocr',`) add:
+
 ```ts
   // Image Quality
   ImageQualityQueueAll = 'ImageQualityQueueAll',
@@ -206,15 +213,19 @@ In `server/src/enum.ts`:
 - [ ] **Step 4: Add the ML task, types, and `analyzeAssetQuality`**
 
 In `server/src/repositories/machine-learning.repository.ts`:
+
 - Add to the `ModelTask` enum: `IMAGE_QUALITY = 'image-quality',` (server `ModelType.VISUAL = 'visual'` already exists).
 - Add types near the other response types (after `OcrResponse`):
+
 ```ts
 export type ImageQuality = { sharpness: number; exposure: number; brightness: number; quality: number };
 export type ImageQualityResponse = { [ModelTask.IMAGE_QUALITY]: ImageQuality } & VisualResponse;
 export type ImageQualityRequest = { [ModelTask.IMAGE_QUALITY]: { [ModelType.VISUAL]: ModelOptions } };
 ```
+
 - Add `| ImageQualityRequest` to the `MachineLearningRequest` union.
 - Add the method (mirror `ocr()`); the heuristic predictor dispatches by task and ignores `modelName`, so pass a fixed identifier:
+
 ```ts
   async analyzeAssetQuality(imagePath: string): Promise<ImageQuality> {
     const request: ImageQualityRequest = {
@@ -228,6 +239,7 @@ export type ImageQualityRequest = { [ModelTask.IMAGE_QUALITY]: { [ModelType.VISU
 - [ ] **Step 5: Add the eligible-asset repo methods**
 
 In `server/src/repositories/asset-job.repository.ts`, mirror `streamForOcrJob` / `getForOcr` (use `withFilePath`, `AssetFileType.Preview`, `DummyValue.UUID`, `AssetVisibility` — already imported there):
+
 ```ts
   @GenerateSql({ params: [], stream: true })
   streamForImageQualityJob(force?: boolean) {
@@ -257,6 +269,7 @@ In `server/src/repositories/asset-job.repository.ts`, mirror `streamForOcrJob` /
 - [ ] **Step 6: Add `upsertAssetQuality`**
 
 In `server/src/repositories/asset.repository.ts`, add (mirror `upsertFile`'s try/`isStaleAssetForeignKeyConstraint` pattern; `AssetQualityTable` is imported via the schema):
+
 ```ts
   async upsertAssetQuality(
     quality: Pick<Insertable<AssetQualityTable>, 'assetId' | 'sharpness' | 'exposure' | 'brightness' | 'quality'>,
@@ -282,11 +295,13 @@ In `server/src/repositories/asset.repository.ts`, add (mirror `upsertFile`'s try
     }
   }
 ```
+
 Add the import `import { AssetQualityTable } from 'src/schema/tables/asset-quality.table';` (alongside the other table-type imports in that file; `Insertable` and `isStaleAssetForeignKeyConstraint` are already imported/used).
 
 - [ ] **Step 7: Add the enable helper**
 
 In `server/src/utils/misc.ts`, after `isOcrEnabled`:
+
 ```ts
 export const isImageQualityEnabled = (machineLearning: SystemConfig['machineLearning']) =>
   isMachineLearningEnabled(machineLearning);
@@ -295,6 +310,7 @@ export const isImageQualityEnabled = (machineLearning: SystemConfig['machineLear
 - [ ] **Step 8: Write the service**
 
 Create `server/src/services/image-quality.service.ts` (mirror `ocr.service.ts`'s structure: `@OnJob`, `getConfig`, `JOBS_ASSET_PAGINATION_SIZE`, `JobItem[]` batching):
+
 ```ts
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
@@ -350,6 +366,7 @@ export class ImageQualityService extends BaseService {
   }
 }
 ```
+
 (Confirm the exact imports/identifiers against `ocr.service.ts` — `OnJob` source, `getConfig`, repo accessor names `assetJobRepository`/`jobRepository`/`assetRepository`/`machineLearningRepository` on `BaseService`. Fix imports to match; `make check-server` is the gate.)
 
 - [ ] **Step 9: Register the service**
@@ -383,16 +400,19 @@ Adding `QueueName.ImageQuality` breaks several exhaustive maps. `ImageQuality` i
 
 - [ ] **Step 1: Concurrency default** — In `server/src/config.ts`'s job concurrency map (the `Record<ConcurrentQueueName, { concurrency: number }>` literal), add next to the `[QueueName.Ocr]` entry: `[QueueName.ImageQuality]: { concurrency: 1 },`
 - [ ] **Step 2: Queue start switch** — In `server/src/services/queue.service.ts`, after the `case QueueName.Ocr` block, add:
+
 ```ts
       case QueueName.ImageQuality: {
         return this.jobRepository.queue({ name: JobName.ImageQualityQueueAll, data: { force } });
       }
 ```
+
 - [ ] **Step 3: Legacy queue DTO** — In `server/src/dtos/queue-legacy.dto.ts`, in `QueuesResponseLegacySchema`, add next to `[QueueName.Ocr]`: `[QueueName.ImageQuality]: QueueResponseLegacySchema,`
 - [ ] **Step 4: System-config spec** — In `server/src/services/system-config.service.spec.ts`, in the expected default concurrency map, add `[QueueName.ImageQuality]: { concurrency: 1 },` next to the `[QueueName.Ocr]` entry (search the file for `QueueName.Ocr`; if OCR isn't asserted there, place it to keep the map matching `config.ts`).
 - [ ] **Step 5: Type-check** — Run `/opt/homebrew/bin/mise exec -- make check-server`. Expected: clean. Fix any remaining exhaustive `Record<QueueName|ConcurrentQueueName>` / switch the compiler flags.
 - [ ] **Step 6: Run the relevant unit specs** — `/opt/homebrew/bin/mise exec -- pnpm -C server test -- --run system-config queue.service` → green.
 - [ ] **Step 7: Commit**
+
 ```bash
 git add server/src/config.ts server/src/services/queue.service.ts server/src/dtos/queue-legacy.dto.ts server/src/services/system-config.service.spec.ts
 git commit -m "feat(server): register ImageQuality queue (concurrency, start switch, legacy dto) (roadmap A3)"
@@ -407,6 +427,7 @@ The web `items: Record<QueueName, QueueItem>` (`web/src/lib/services/queue.servi
 **Files:** `web/src/lib/services/queue.service.ts`, `web/src/lib/constants.ts`, `i18n/en.json`
 
 - [ ] **Step 1: Queue item** — In `web/src/lib/services/queue.service.ts`, add after the `[QueueName.Ocr]` entry (and add an icon import from `@mdi/js`, e.g. `mdiImageCheckOutline`, alongside the existing `mdi*` imports):
+
 ```ts
     [QueueName.ImageQuality]: {
       icon: mdiImageCheckOutline,
@@ -414,13 +435,17 @@ The web `items: Record<QueueName, QueueItem>` (`web/src/lib/services/queue.servi
       subtitle: $t('admin.image_quality_job_description'),
     },
 ```
+
 - [ ] **Step 2: Admin visibility** — In `web/src/lib/constants.ts`, add `QueueName.ImageQuality,` to `ADMIN_VISIBLE_QUEUES` (next to `QueueName.Ocr`).
 - [ ] **Step 3: i18n** — In `i18n/en.json`, in the `admin` section near `machine_learning_ocr`, add (keep keys alphabetical if the file is sorted; the i18n lint may require sorting):
+
 ```json
     "image_quality_job_description": "Score images for sharpness, exposure, and brightness",
     "machine_learning_image_quality": "Image Quality",
 ```
+
 - [ ] **Step 4: Commit** (web check runs in Task 5 after SDK regen, since `QueueName.ImageQuality` must exist in the SDK first):
+
 ```bash
 git add web/src/lib/services/queue.service.ts web/src/lib/constants.ts i18n/en.json
 git commit -m "feat(web): Image Quality admin queue card + i18n (roadmap A3)"
@@ -433,6 +458,7 @@ git commit -m "feat(web): Image Quality admin queue card + i18n (roadmap A3)"
 **Files:** Create `server/test/medium/specs/services/image-quality.service.spec.ts`
 
 - [ ] **Step 1: Write the medium test** (mirror `ocr.service` medium spec):
+
 ```ts
 import { Kysely } from 'kysely';
 import { AssetFileType, JobStatus } from 'src/enum';
@@ -505,8 +531,10 @@ describe(ImageQualityService.name, () => {
   });
 });
 ```
+
 - [ ] **Step 2: Run** — `/opt/homebrew/bin/mise exec -- pnpm -C server test:medium -- --run image-quality.service.spec` → PASS. (`getForImageQuality` needs the preview asset_file row, which `ctx.newAssetFile` provides.)
 - [ ] **Step 3: Commit**
+
 ```bash
 git add server/test/medium/specs/services/image-quality.service.spec.ts
 git commit -m "test(server): ImageQualityService medium spec (roadmap A3)"
@@ -517,13 +545,16 @@ git commit -m "test(server): ImageQualityService medium spec (roadmap A3)"
 ## Task 5: Regen (SQL + OpenAPI/SDK) + full verification + push
 
 - [ ] **Step 1: Regenerate query SQL docs** (new `@GenerateSql` methods):
+
 ```bash
 cd /Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm/server
 /opt/homebrew/bin/mise exec -- pnpm build
 /opt/homebrew/bin/mise exec -- pnpm sync:sql
 git status --porcelain server/src/queries   # expect asset-job.repository.sql changed
 ```
+
 - [ ] **Step 2: Regenerate OpenAPI + SDK** (QueueName/JobName enums are exposed):
+
 ```bash
 cd /Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm
 /opt/homebrew/bin/mise exec -- pnpm -C server build
@@ -531,12 +562,17 @@ cd /Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm
 /opt/homebrew/bin/mise exec -- make open-api
 git status --porcelain open-api mobile/openapi   # expect spec + TS SDK + dart client changed
 ```
+
 (Dart generation needs Java — see `feedback_openapi_dart_generation`. If Java/codegen is unavailable locally, regenerate the TypeScript SDK only with `make open-api-typescript` and note that the Dart client must be regenerated in CI/by a follow-up; the web build only needs the TS SDK.)
+
 - [ ] **Step 3: Build the SDK so web type-checks see `QueueName.ImageQuality`**:
+
 ```bash
 /opt/homebrew/bin/mise exec -- make build-sdk
 ```
+
 - [ ] **Step 4: Full gates**
+
 ```bash
 /opt/homebrew/bin/mise exec -- make check-server          # tsc
 /opt/homebrew/bin/mise exec -- make lint-server           # eslint --max-warnings 0
@@ -544,13 +580,18 @@ git status --porcelain open-api mobile/openapi   # expect spec + TS SDK + dart c
 /opt/homebrew/bin/mise exec -- pnpm -C server test -- --run             # full unit suite
 /opt/homebrew/bin/mise exec -- pnpm -C server test:medium -- --run      # full medium suite (exiftool exif specs fail locally — pre-existing/env, ignore)
 ```
+
 Expected: all green except the known local exiftool `exif/*` medium failures (no exiftool binary locally — they pass in CI).
+
 - [ ] **Step 5: Commit the generated artifacts**
+
 ```bash
 git add server/src/queries open-api mobile/openapi
 git commit -m "chore(api): regen SQL + OpenAPI/SDK for ImageQuality queue (roadmap A3)"
 ```
+
 - [ ] **Step 6: Push**
+
 ```bash
 git push
 ```
