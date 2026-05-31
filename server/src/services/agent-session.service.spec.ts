@@ -34,6 +34,7 @@ const carefulWriteScope = {
   archiveAssets: false,
   tagAssets: true,
   updateAssetMetadata: false,
+  trashAssets: false,
 };
 const expandedWriteScope = {
   createAlbum: true,
@@ -53,6 +54,7 @@ const expandedWriteScope = {
   archiveAssets: true,
   tagAssets: true,
   updateAssetMetadata: true,
+  trashAssets: true,
 };
 
 const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
@@ -465,6 +467,7 @@ describe(AgentSessionService.name, () => {
         archiveAssets: false,
         tagAssets: false,
         updateAssetMetadata: false,
+        trashAssets: false,
       },
     };
     const dto = makeCreateDto({
@@ -1040,6 +1043,7 @@ describe(AgentSessionService.name, () => {
       archiveAssets: false,
       tagAssets: false,
       updateAssetMetadata: false,
+      trashAssets: false,
     });
   });
 
