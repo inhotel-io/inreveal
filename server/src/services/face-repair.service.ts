@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { JobName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import {
   FlagDecision,
@@ -103,6 +104,33 @@ export class FaceRepairService extends BaseService {
         };
       }
     }
+  }
+
+  async executeRepair(plan: RepairPlan): Promise<{ unassigned: number; requeued: number }> {
+    const byPerson = new Map<string, string[]>();
+    for (const face of plan.toRepair) {
+      const list = byPerson.get(face.currentPersonId) ?? [];
+      list.push(face.assetFaceId);
+      byPerson.set(face.currentPersonId, list);
+    }
+
+    const unassignedIds: string[] = [];
+    for (const [personId, assetFaceIds] of byPerson) {
+      const ids = await this.faceRepairRepository.unassignFacesFromPerson(personId, assetFaceIds);
+      unassignedIds.push(...ids);
+    }
+
+    if (unassignedIds.length === 0) {
+      return { unassigned: 0, requeued: 0 };
+    }
+
+    await this.faceIdentityRepository.unlinkFaces(unassignedIds);
+    await this.faceRepairRepository.reconcileRepresentativeFaces([...byPerson.keys()]);
+    await this.jobRepository.queueAll(
+      unassignedIds.map((id) => ({ name: JobName.FacialRecognition, data: { id, deferred: false } })),
+    );
+
+    return { unassigned: unassignedIds.length, requeued: unassignedIds.length };
   }
 
   async *findReattributionCandidates(options: {
