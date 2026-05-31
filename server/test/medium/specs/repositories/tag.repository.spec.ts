@@ -20,7 +20,9 @@ const setup = (db?: Kysely<DB>) => {
 
 type Ctx = ReturnType<typeof setup>['ctx'];
 
-const createTag = (ctx: Ctx, userId: string, value: string) => ctx.get(TagRepository).create({ userId, value });
+// Create a tag the way production does (upsertValue), which also populates tag_closure
+// — required for any tag-id timeline/search filter (withAnyTagId) to match the asset.
+const createTag = (ctx: Ctx, userId: string, value: string) => ctx.get(TagRepository).upsertValue({ userId, value });
 
 // Seed a tag owned by the space creator, attached to an asset added directly to a
 // space, with `member` joined at the given role. The tag and asset are owned by a
@@ -178,6 +180,32 @@ describe(TagRepository.name, () => {
         .execute();
 
       await expect(sut.getAll(member.id).then((r) => r.map((t) => t.id))).resolves.not.toContain(tag.id);
+    });
+
+    it('GRANT — member sees same-value tags from every owner who shared a tagged asset', async () => {
+      const { ctx, sut } = setup();
+      // Tags are per-user, so two owners tagging "family" produce two distinct tag rows
+      // with the same value. A member who can reach both owners' assets through the space
+      // should get BOTH rows (the web tree then collapses them onto one "family" node).
+      const { user: ownerA } = await ctx.newUser();
+      const { user: ownerB } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: ownerA.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+      const { asset: assetA } = await ctx.newAsset({ ownerId: ownerA.id });
+      const tagA = await createTag(ctx, ownerA.id, 'family');
+      await ctx.newTagAsset({ tagIds: [tagA.id], assetIds: [assetA.id] });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetA.id, addedById: ownerA.id });
+
+      const { asset: assetB } = await ctx.newAsset({ ownerId: ownerB.id });
+      const tagB = await createTag(ctx, ownerB.id, 'family');
+      await ctx.newTagAsset({ tagIds: [tagB.id], assetIds: [assetB.id] });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetB.id, addedById: ownerB.id });
+
+      const ids = await sut.getAll(member.id).then((r) => r.map((t) => t.id));
+
+      expect(ids).toEqual(expect.arrayContaining([tagA.id, tagB.id]));
     });
   });
 });
