@@ -86,6 +86,7 @@ const sessions: AgentSessionResponseDto[] = [
         updateAssetMetadata: true,
         updateSpaceDetails: true,
         updateSpaceMemberRoles: true,
+        trashAssets: true,
       },
     },
     initialContextSnapshot: {},
