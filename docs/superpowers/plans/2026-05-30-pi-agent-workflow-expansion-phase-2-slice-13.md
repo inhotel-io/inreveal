@@ -32,7 +32,10 @@ import { handoffOpen } from '../protocol.mjs';
 const KIND = 'manage_space_assets';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
-const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (value) =>
+  clean(value)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 const normalizeSpaceRef = (value) =>
   clean(value)

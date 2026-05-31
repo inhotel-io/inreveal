@@ -31,7 +31,18 @@ Add constants near the other validators:
 
 ```js
 const KNOWN_SPACE_FROM_SEARCH_KEYS = new Set(['summary', 'spaceName', 'description', 'color', 'assetSource']);
-const KNOWN_AVATAR_COLORS = new Set(['primary', 'pink', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'gray', 'amber']);
+const KNOWN_AVATAR_COLORS = new Set([
+  'primary',
+  'pink',
+  'red',
+  'yellow',
+  'blue',
+  'green',
+  'purple',
+  'orange',
+  'gray',
+  'amber',
+]);
 const KNOWN_ASSET_SOURCE_KINDS = new Set(['search', 'previousSearch', 'selectionHandle']);
 ```
 

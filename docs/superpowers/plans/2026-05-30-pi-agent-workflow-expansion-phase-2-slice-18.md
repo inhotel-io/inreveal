@@ -48,7 +48,10 @@ import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 const KIND = 'rotate_assets';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
-const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (value) =>
+  clean(value)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 const tripSourcePattern = /\brecent\s+trip\b/i;
 const declinesSource = (source) => SUBJECTIVE_PATTERN.test(source) || tripSourcePattern.test(source);
@@ -195,9 +198,9 @@ export const rotateAssetsWorkflow = () => ({
 In `validateBatchAction`, after the `asset.updateMetadata` branch, add:
 
 ```js
-  if (type === 'asset.rotate') {
-    if (![90, 180, 270].includes(action.angle)) fail('asset.rotate angle must be 90, 180, or 270');
-  }
+if (type === 'asset.rotate') {
+  if (![90, 180, 270].includes(action.angle)) fail('asset.rotate angle must be 90, 180, or 270');
+}
 ```
 
 ### C. module + fixture tests (red → green)

@@ -81,7 +81,7 @@ with the other source workflows now that Phase 0 landed).
   - `['remove Bob from the Family space', 'manage_space_members']` (collision guard)
   - `['remove my newest 20 from my favorites', 'favorite_assets']` (collision guard)
   - `['remove the Travel tag from my newest 20', 'none']` (collision guard)
-  (The "exercises every registered workflow kind" test then auto-covers the new kind.)
+    (The "exercises every registered workflow kind" test then auto-covers the new kind.)
 
 ## Part B — L1 / L3 scenarios (additive; L1 validated in Part C)
 

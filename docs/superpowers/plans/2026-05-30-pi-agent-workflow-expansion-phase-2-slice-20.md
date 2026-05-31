@@ -8,7 +8,8 @@
 `<assetRef>`", resolve the album (`listAlbums`, 0/>1 → needs_input), resolve the cover to
 ONE uuid by EXPLICIT index (first/last/Nth against `readAlbum.assetIds`; else handoff),
 propose one `proposeAlbumOperations([album.setCover])` with `assetIds:[coverId]`. Register
-+ manifest + L1/L3. **Closes Phase 5.**
+
+- manifest + L1/L3. **Closes Phase 5.**
 
 **Spec scope:** Slice 20 of
 `docs/superpowers/specs/2026-05-30-pi-agent-workflow-expansion-phase-2-design.md`.
@@ -54,8 +55,16 @@ const resolveAlbum = async ({ client, albumRef, signal }) => {
 };
 
 const WORD_ORDINALS = {
-  first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
-  sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  sixth: 6,
+  seventh: 7,
+  eighth: 8,
+  ninth: 9,
+  tenth: 10,
 };
 
 // Resolve an explicit position to a 1-based index, or undefined if the reference is not a
@@ -88,7 +97,9 @@ const tryMatch = (prompt) => {
     return undefined;
   }
   const albumRef = normalizeAlbumRef(match.groups.album);
-  const coverRef = clean(match.groups.cover).replace(/[.?!]+$/u, '').trim();
+  const coverRef = clean(match.groups.cover)
+    .replace(/[.?!]+$/u, '')
+    .trim();
   return albumRef && coverRef ? { albumRef, coverRef } : undefined;
 };
 
