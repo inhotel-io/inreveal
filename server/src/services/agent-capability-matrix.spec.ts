@@ -53,7 +53,7 @@ describe('Pi agent capability matrix', () => {
     const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
     expect(needsNewToolSection).not.toContain('Natural-language semantic search');
     expect(needsNewToolSection).not.toContain('Large-library pagination');
-    expect(markdown).toContain('Next expansion candidates: image quality scoring');
+    expect(markdown).toContain('Next expansion candidates: a forward geocoder');
     // Reversible trash + duplicate cleanup shipped — no longer new-tool gaps.
     expect(needsNewToolSection).not.toContain('| Trash/delete ');
     expect(needsNewToolSection).not.toContain('| Duplicate/similar-photo cleanup ');
@@ -92,7 +92,7 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolSection).toMatch(/forward geocoder|geocod/i);
   });
 
-  it('documents bounded highlight curation as solid while quality scoring remains a new-tool gap', () => {
+  it('documents bounded highlight curation and visual cleanup with objective quality signals', () => {
     const markdown = readMatrix();
     const constrainedMatrix = sectionBetween(
       markdown,
@@ -104,14 +104,16 @@ describe('Pi agent capability matrix', () => {
 
     expect(bestPhotosRow).toBeDefined();
     expect(bestPhotosRow).toContain('Solid now for bounded sources');
-    expect(bestPhotosRow).toMatch(/bounded candidates/i);
+    expect(bestPhotosRow).toMatch(/bounded candidates|bounded and reviewable/i);
     expect(bestPhotosRow).toMatch(/ratings|favorites|metadata|previews/i);
-    expect(bestPhotosRow).toMatch(/not quality scoring|not objective/i);
+    expect(bestPhotosRow).toMatch(/objective quality scores/i);
+    expect(bestPhotosRow).toMatch(/suggested highlights|curation/i);
     expect(bestPhotosRow).not.toContain('planned implementation');
 
     const visualCleanupRow = constrainedMatrix.split('\n').find((line) => line.includes('Visual cleanup'));
     expect(visualCleanupRow).toBeDefined();
-    expect(visualCleanupRow).toContain('Constrained now');
+    expect(visualCleanupRow).toContain('Solid now');
+    expect(visualCleanupRow).toMatch(/objective quality scoring|sharpness|brightness/i);
 
     for (const prompt of [
       'Suggest 5 highlights from this album and make an album called Highlights.',
@@ -128,9 +130,8 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolHeadingIndex).not.toBe(-1);
 
     const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
-    expect(needsNewToolSection).toContain('Image quality scoring');
-    expect(needsNewToolSection).toContain('analyzeAssetQuality');
-    expect(needsNewToolSection).toMatch(/quality scoring/i);
+    expect(needsNewToolSection).not.toContain('Image quality scoring');
+    expect(needsNewToolSection).not.toContain('analyzeAssetQuality');
   });
 
   it('documents the open and hybrid flow-ownership invariants for Pi capabilities', () => {
