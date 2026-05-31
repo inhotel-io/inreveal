@@ -2318,6 +2318,14 @@ export class FaceIdentityRepository {
       // Only move faces that actually resemble the target person — a corrupt identity link must not be
       // allowed to reassign a face onto someone it looks nothing like.
       const assetFaceIds = await this.filterFacesResemblingPerson(targetPerson.id, candidateAssetFaceIds);
+
+      // Faces we refuse to move keep their current person; realign their identity link to that person so
+      // the mismatch is genuinely resolved. Otherwise person.identityId stays DISTINCT FROM the face's
+      // identity, getBackfillWork() reports work forever, and handleFaceIdentityBackfill re-queues in a loop.
+      const resembling = new Set(assetFaceIds);
+      const blockedAssetFaceIds = candidateAssetFaceIds.filter((id) => !resembling.has(id));
+      await this.realignFacesToPersonIdentity(person.id, blockedAssetFaceIds);
+
       if (assetFaceIds.length === 0) {
         continue;
       }
@@ -2403,6 +2411,21 @@ export class FaceIdentityRepository {
     `.execute(this.db);
 
     return result.rows.map((row) => row.id);
+  }
+
+  // Repoints the given faces' identity link to their current person's identity. Used when the repair
+  // guard refuses to move embedding-inconsistent faces: trust the (embedding-consistent) person they are
+  // already on over the corrupt identity link, resolving the mismatch instead of leaving perpetual work.
+  private async realignFacesToPersonIdentity(personId: string, assetFaceIds: string[]): Promise<void> {
+    if (assetFaceIds.length === 0) {
+      return;
+    }
+    const identity = await this.ensurePersonIdentity(personId);
+    await this.db
+      .updateTable('face_identity_face')
+      .set({ identityId: identity.id, source: 'backfill' })
+      .where('assetFaceId', 'in', assetFaceIds)
+      .execute();
   }
 
   private getPersonByIdentity(ownerId: string, identityId: string, excludePersonId?: string) {

@@ -3615,7 +3615,7 @@ describe(FaceIdentityRepository.name, () => {
         // Person B owns a single axis-B face that is (corruptly) linked to A's identity — the state a bad
         // automatic merge leaves behind. Repair would otherwise follow the identity link and move it to A.
         const { person: personB } = await ctx.newPerson({ ownerId: user.id });
-        await sut.ensurePersonIdentity(personB.id);
+        const identityB = await sut.ensurePersonIdentity(personB.id);
         const { asset } = await ctx.newAsset({ ownerId: user.id });
         const { assetFace: corruptFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
         await ctx.database
@@ -3632,6 +3632,18 @@ describe(FaceIdentityRepository.name, () => {
           .where('id', '=', corruptFace.id)
           .executeTakeFirstOrThrow();
         expect(row.personId).toBe(personB.id);
+
+        // The mismatch must be resolved by realigning the kept face's identity to its current person —
+        // otherwise person.identityId stays DISTINCT FROM face_identity_face.identityId, getBackfillWork()
+        // reports work forever, and handleFaceIdentityBackfill re-queues itself in an infinite loop.
+        const link = await ctx.database
+          .selectFrom('face_identity_face')
+          .select('identityId')
+          .where('assetFaceId', '=', corruptFace.id)
+          .executeTakeFirstOrThrow();
+        expect(link.identityId).toBe(identityB.id);
+        const backfillWork = await sut.getBackfillWork();
+        expect(backfillWork.hasPersonalIdentityWork).toBe(false);
       } finally {
         await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
       }
@@ -3665,6 +3677,51 @@ describe(FaceIdentityRepository.name, () => {
           .where('id', '=', resemblingFace.id)
           .executeTakeFirstOrThrow();
         expect(row.personId).toBe(personA.person.id);
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('moves only the resembling faces and realigns the rest when one group mixes both', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const personA = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const { person: personB } = await ctx.newPerson({ ownerId: user.id });
+        const identityB = await sut.ensurePersonIdentity(personB.id);
+        // Two faces on B, both linked to A's identity: one resembles A (axis-A), one does not (axis-B).
+        const makeBFaceLinkedToA = async (embedding: string) => {
+          const { asset } = await ctx.newAsset({ ownerId: user.id });
+          const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
+          await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
+          await sut.linkFace({ assetFaceId: assetFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+          return assetFace.id;
+        };
+        const resemblingFaceId = await makeBFaceLinkedToA(axisEmbedding('first'));
+        const distinctFaceId = await makeBFaceLinkedToA(axisEmbedding('second'));
+
+        await sut.backfillPersonalIdentities({ limit: 100 });
+
+        const faces = await ctx.database
+          .selectFrom('asset_face')
+          .select(['id', 'personId'])
+          .where('id', 'in', [resemblingFaceId, distinctFaceId])
+          .execute();
+        const distinctLink = await ctx.database
+          .selectFrom('face_identity_face')
+          .select('identityId')
+          .where('assetFaceId', '=', distinctFaceId)
+          .executeTakeFirstOrThrow();
+
+        expect(faces.find((face) => face.id === resemblingFaceId)?.personId).toBe(personA.person.id);
+        expect(faces.find((face) => face.id === distinctFaceId)?.personId).toBe(personB.id);
+        expect(distinctLink.identityId).toBe(identityB.id);
+        const backfillWork = await sut.getBackfillWork();
+        expect(backfillWork.hasPersonalIdentityWork).toBe(false);
       } finally {
         await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
       }

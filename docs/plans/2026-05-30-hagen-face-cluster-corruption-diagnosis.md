@@ -159,10 +159,21 @@ centroid; dropped faces stay put. Faces with no embedding, or a target with no e
 — `asset_face.personId` must be embedding-consistent — at the exact line the corruption is written,
 independent of how the identity link became wrong, and contains links already corrupt in Hagen's DB.
 
+**Loop-safety (critical):** a refused face keeps its current person but its `face_identity_face` link
+still pointed elsewhere — a permanent `person.identityId IS DISTINCT FROM face_identity_face.identityId`
+mismatch. `getBackfillWork()` (`face-identity.repository.ts:428-439`) reports that as outstanding work,
+and `handleFaceIdentityBackfill` (`person.service.ts:552-559`) re-queues itself (toggling an `a`/`b`
+continuation id to dodge job dedup) until there is no work — so an un-resolved refusal is an **infinite
+backfill loop**. The guard therefore **realigns** each refused face's identity link to the person it
+stays on (`realignFacesToPersonIdentity`): trust the embedding-consistent `personId` over the corrupt
+identity link, which fully resolves the mismatch.
+
 Tests (medium, real DB) in `face-identity.repository.spec.ts`: a face that does **not** resemble the
-target is left on its current person during backfill (fails without the guard); a face that **does**
-resemble the target still moves (legitimate consolidation preserved). Full unit suite (4480) + all
-face-identity / people-identity-rbac / shared-space-face-identity-repair medium specs green.
+target is left on its current person, its identity link realigned, and **`getBackfillWork()` reports no
+residual personal work** (this assertion fails without the realign — it pins the no-loop invariant); a
+face that **does** resemble the target still moves (legitimate consolidation preserved); a single group
+mixing both moves only the resembling face and realigns the rest. Full unit suite (4480) + all
+face-identity / people-identity-rbac / shared-space-face-identity-repair / metadata medium specs green.
 
 ## Remaining: data repair (separate follow-up)
 
