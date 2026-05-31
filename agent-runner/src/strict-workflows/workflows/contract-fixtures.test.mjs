@@ -623,3 +623,126 @@ describe('makeContractClient — asset.removeTag validator', () => {
     );
   });
 });
+
+describe('makeContractClient — asset.trash validator', () => {
+  it('KNOWN_OPERATION_TYPES includes asset.trash', () => {
+    assert.equal(KNOWN_OPERATION_TYPES.has('asset.trash'), true);
+  });
+
+  it('accepts a valid asset.trash op (no payload)', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      summary: 'move to trash',
+      operations: [
+        {
+          type: 'asset.trash',
+          targetKind: 'asset_batch',
+          assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('accepts asset.trash with an empty payload object (payload is present but empty)', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      operations: [
+        {
+          type: 'asset.trash',
+          targetKind: 'asset_batch',
+          assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+          payload: {},
+        },
+      ],
+    });
+    assert.equal(result.plan.id, 'plan-1');
+  });
+
+  it('rejects asset.trash with a non-empty payload', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+              payload: { reason: 'cleanup' },
+            },
+          ],
+        }),
+      /payload/i,
+    );
+  });
+
+  it('rejects asset.trash with targetId present', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+              targetId: 'some-id',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+            },
+          ],
+        }),
+      /targetId/i,
+    );
+  });
+
+  it('rejects asset.trash with wrong targetKind', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'existing_album',
+              targetId: 'alb-1',
+              assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+            },
+          ],
+        }),
+      /asset_batch/i,
+    );
+  });
+
+  it('rejects asset.trash with missing assetSource', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+            },
+          ],
+        }),
+      /assetSource|selectionHandle/i,
+    );
+  });
+
+  it('rejects asset.trash with search-kind assetSource (must be selectionHandle)', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          operations: [
+            {
+              type: 'asset.trash',
+              targetKind: 'asset_batch',
+              assetSource: { kind: 'search', selectionHandleId: 'handle-1' },
+            },
+          ],
+        }),
+      /assetSource|selectionHandle/i,
+    );
+  });
+});

@@ -54,6 +54,7 @@ const expectedProposalExampleNames = [
   'archive-assets',
   'add-tag-to-assets',
   'remove-tag-from-assets',
+  'trash-assets',
 ] as const;
 
 const expectedPlanningOperationTypes = [
@@ -72,6 +73,7 @@ const expectedPlanningOperationTypes = [
   AgentOperationType.AssetUpdateMetadata,
   AgentOperationType.AssetAddTag,
   AgentOperationType.AssetRemoveTag,
+  AgentOperationType.AssetTrash,
 ] as const;
 
 const forbiddenContractPattern =
@@ -1019,6 +1021,24 @@ describe(AgentMcpToolContractService.name, () => {
       });
       expect(parsed.operations[0]).not.toHaveProperty('assetIds');
     }
+  });
+
+  it('defines a parseable asset.trash planning example with riskLevel high and no payload', () => {
+    const contract = sut.getPlanningToolContract(AgentToolName.ProposeAlbumOperations);
+    const example = contract?.examples.find((candidate) => candidate.name === 'trash-assets');
+
+    expect(example, 'trash-assets example should exist').toBeDefined();
+    const parsed = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAlbumOperations].parse(
+      example?.arguments,
+    );
+    expect(parsed.operations).toHaveLength(1);
+    expect(parsed.operations[0]).toMatchObject({
+      type: AgentOperationType.AssetTrash,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetSource: { kind: 'selectionHandle', selectionHandleId: '00000000-0000-4000-8000-000000000333' },
+      riskLevel: 'high',
+    });
+    expect(parsed.operations[0]).not.toHaveProperty('payload');
   });
 
   it('covers every supported planning operation type with proposal examples', () => {
