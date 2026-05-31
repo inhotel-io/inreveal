@@ -13,11 +13,12 @@ L1/L3 scenarios (flipping the stale `add_photos`/space assertions). **Closes Pha
 `docs/superpowers/specs/2026-05-30-pi-agent-workflow-expansion-phase-2-design.md`.
 
 **Verified contracts:**
+
 - `proposeAddAssetsToSpaceFromSearch` = `strictObject({ summary?, spaceId?, spaceName?,
-  assetSource })`, superRefine `Boolean(spaceId) === Boolean(spaceName)` → error (pass
+assetSource })`, superRefine `Boolean(spaceId) === Boolean(spaceName)` → error (pass
   `spaceId` ONLY). `assetSource` accepts `{ kind:'selectionHandle', selectionHandleId }`.
 - `space.removeAssets` op = `{ type:'space.removeAssets', summary, targetKind:'existing_space',
-  targetId, assetSource:{ kind:'selectionHandle', selectionHandleId }, payload:{} }`.
+targetId, assetSource:{ kind:'selectionHandle', selectionHandleId }, payload:{} }`.
 
 **Files:**
 

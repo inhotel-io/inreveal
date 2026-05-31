@@ -26,17 +26,17 @@ client that mirrors the real DTOs (`server/src/dtos/agent-tool.dto.ts`,
 ## Real contracts to mirror (verified against the server DTOs)
 
 - `resolveAssetSearchFilters` — `z.strictObject` with `people/tags/albums/spaces/
-  cameraMakes/cameraModels/lensModels/scope/toolCallId`; **no `query`**.
+cameraMakes/cameraModels/lensModels/scope/toolCallId`; **no `query`**.
 - `searchAssets` — `mode` default `metadata`; metadata mode **rejects `query`**
   (`query` only for smart/description/ocr/filename); `detail ∈ {ids,handle,summary,
-  metadata}`; returns a `selectionHandle` for `detail:'handle'`.
+metadata}`; returns a `selectionHandle` for `detail:'handle'`.
 - `proposeAssetBatchFromSelection` — `{ summary?, action, selectionHandleId }`;
   `action` is a discriminated union on `type`: `asset.setFavorite{favorite:boolean}`,
   `asset.setArchive{archived:boolean}`, `asset.addTag{tagId? , tagName?}` (exactly
   one), `asset.rotate{…}`, `asset.updateMetadata{…}`.
 - `proposeAlbumOperations` — `{ summary, operations:[…] }`; `operations` is the full
-  `AgentGalleryOperationInput` union (album.*, space.* incl.
-  `space.updateDetails/addMembers/removeMembers/updateMemberRole`, asset.*).
+  `AgentGalleryOperationInput` union (album._, space._ incl.
+  `space.updateDetails/addMembers/removeMembers/updateMemberRole`, asset.\*).
 - `proposeAlbumFromSelection` — `{ summary?, albumName, description?, selectionHandleId }`.
 - Read tools used by workflows: `listAlbums`, `listSpaces`, `readSpace`,
   `searchUsers`.
@@ -63,11 +63,11 @@ client that mirrors the real DTOs (`server/src/dtos/agent-tool.dto.ts`,
 - `resolveAssetSearchFilters` → **throws** if `'query' in args` (Unrecognized key);
   else `{ resolvedFilters: {} }`.
 - `searchAssets` → **throws** if `(args.mode ?? 'metadata') === 'metadata' &&
-  args.query !== undefined`; **throws** if `args.detail` set and not in the enum;
+args.query !== undefined`; **throws** if `args.detail` set and not in the enum;
   else `{ selectionHandle: { id:'handle-1', assetCount: config.handleAssetCount ?? 20 } }`.
 - `proposeAssetBatchFromSelection` → validate `args.action` (below) and require a
   non-empty `args.selectionHandleId`; return `config.planResult ?? { status:'success',
-  plan:{ id:'plan-1' } }`.
+plan:{ id:'plan-1' } }`.
 - `proposeAlbumOperations` → require `Array.isArray(args.operations)` and every
   `op.type ∈ KNOWN_OPERATION_TYPES` (else throw "unknown operation type"); return
   the plan result.
@@ -80,7 +80,7 @@ Action validation (`proposeAssetBatchFromSelection.action`):
 - `asset.setFavorite` → `typeof favorite === 'boolean'`.
 - `asset.setArchive` → `typeof archived === 'boolean'`.
 - `asset.addTag` → exactly one of `tagName`/`tagId` (`Number(tagName!==undefined) +
-  Number(tagId!==undefined) === 1`), else throw.
+Number(tagId!==undefined) === 1`), else throw.
 - unknown `type` → throw "unknown batch action".
 
 Config knobs (all optional): `albums`, `spaces`, `users`, `handleAssetCount`,
