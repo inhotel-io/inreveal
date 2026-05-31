@@ -361,7 +361,7 @@ describe('FaceRepairService.buildRepairPlan', () => {
     const { user } = await ctx.newUser();
 
     // clusterSmall: 2 first-axis faces (< minFaces=3, so not a confident owner)
-    const { person: clusterSmall } = await buildCluster(ctx, user.id, axisEmbedding('first'), 2);
+    await buildCluster(ctx, user.id, axisEmbedding('first'), 2);
 
     // suspect: 1 first-axis face belonging to a different person — ownCount < minFaces=3,
     // topOtherPersonId=clusterSmall, topOtherNearest ~0 (identical axis) <= maxAttributionDistance=0.35,
