@@ -1462,6 +1462,7 @@ export type AgentDuplicateAsset = {
     isFavorite: boolean;
     originalFileName: string;
     rating: number | null;
+    sharpness: number | null;
     width: number | null;
 };
 export type AgentDuplicateGroup = {
@@ -1552,6 +1553,12 @@ export type AgentReadAssetMetadataToolDeniedResponse = {
     status: Status18;
     toolCall: AgentToolCallResponseDto;
 };
+export type AgentAssetMetadataQuality = {
+    brightness: number | null;
+    exposure: number | null;
+    quality: number | null;
+    sharpness: number | null;
+};
 export type AgentAssetMetadataTag = {
     color: string | null;
     id: string;
@@ -1576,6 +1583,7 @@ export type AgentAssetMetadataResult = {
     isFavorite?: boolean;
     localDateTime?: string;
     originalFileName?: string;
+    qualityInfo?: (AgentAssetMetadataQuality) | null;
     tags?: AgentAssetMetadataTag[];
     "type"?: AssetTypeEnum;
     visibility?: AssetVisibility;
@@ -10765,7 +10773,8 @@ export enum AgentAssetMetadataField {
     Rating = "rating",
     Filename = "filename",
     Favorite = "favorite",
-    Visibility = "visibility"
+    Visibility = "visibility",
+    Quality = "quality"
 }
 export enum Status17 {
     ApprovalRequired = "approval-required"
