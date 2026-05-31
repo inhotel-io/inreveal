@@ -15,6 +15,12 @@ class SearchApiRepository extends ApiRepository {
 
   List<String> _tagIdsForSearch(SearchFilter filter) => filter.tagIds ?? const <String>[];
 
+  AssetOrder? _order(SearchFilter filter) => switch (filter.sort) {
+    SearchSortOrder.relevance => null,
+    SearchSortOrder.newest => AssetOrder.desc,
+    SearchSortOrder.oldest => AssetOrder.asc,
+  };
+
   Future<SearchResponseDto?> search(SearchFilter filter, int page) {
     AssetTypeEnum? type;
     if (filter.mediaType.index == AssetType.image.index) {
@@ -43,6 +49,7 @@ class SearchApiRepository extends ApiRepository {
         personIds: filter.people.map((e) => e.id).toList(),
         tagIds: _tagIdsForSearch(filter),
         type: type,
+        order: _order(filter),
         page: page,
         size: 100,
       );
@@ -67,6 +74,7 @@ class SearchApiRepository extends ApiRepository {
       personIds: filter.people.map((e) => e.id).toList(),
       tagIds: _tagIdsForSearch(filter),
       type: type,
+      order: _order(filter),
       page: page,
       size: 1000,
     );
