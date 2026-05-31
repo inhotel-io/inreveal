@@ -191,6 +191,8 @@ abstract class SearchDisplayFilters with _$SearchDisplayFilters {
   }) = _SearchDisplayFilters;
 }
 
+enum SearchSortOrder { relevance, newest, oldest }
+
 class SearchFilter {
   String? context;
   String? filename;
@@ -208,6 +210,7 @@ class SearchFilter {
 
   // Enum
   AssetType mediaType;
+  SearchSortOrder sort;
 
   SearchFilter({
     this.context,
@@ -224,6 +227,7 @@ class SearchFilter {
     required this.display,
     required this.rating,
     required this.mediaType,
+    this.sort = SearchSortOrder.relevance,
   });
 
   static SearchFilter empty() => SearchFilter(
@@ -277,6 +281,7 @@ class SearchFilter {
     SearchDisplayFilters? display,
     SearchRatingFilter? rating,
     AssetType? mediaType,
+    SearchSortOrder? sort,
   }) {
     return SearchFilter(
       context: context ?? this.context,
@@ -293,12 +298,13 @@ class SearchFilter {
       rating: rating ?? this.rating,
       mediaType: mediaType ?? this.mediaType,
       tagIds: tagIds ?? this.tagIds,
+      sort: sort ?? this.sort,
     );
   }
 
   @override
   String toString() {
-    return 'SearchFilter(context: $context, filename: $filename, description: $description, language: $language, ocr: $ocr, people: $people, location: $location, tagIds: $tagIds, camera: $camera, date: $date, display: $display, rating: $rating, mediaType: $mediaType, assetId: $assetId)';
+    return 'SearchFilter(context: $context, filename: $filename, description: $description, language: $language, ocr: $ocr, people: $people, location: $location, tagIds: $tagIds, camera: $camera, date: $date, display: $display, rating: $rating, mediaType: $mediaType, assetId: $assetId, sort: $sort)';
   }
 
   @override
@@ -320,7 +326,8 @@ class SearchFilter {
         other.date == date &&
         other.display == display &&
         other.rating == rating &&
-        other.mediaType == mediaType;
+        other.mediaType == mediaType &&
+        other.sort == sort;
   }
 
   @override
@@ -338,6 +345,7 @@ class SearchFilter {
         date.hashCode ^
         display.hashCode ^
         rating.hashCode ^
-        mediaType.hashCode;
+        mediaType.hashCode ^
+        sort.hashCode;
   }
 }
