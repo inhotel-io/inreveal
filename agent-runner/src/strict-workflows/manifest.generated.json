@@ -284,6 +284,34 @@
     }
   },
   {
+    "kind": "cleanup_duplicates",
+    "flow": "hybrid",
+    "title": "Clean up duplicate photos",
+    "classifierDescription": "User wants to find and remove near-duplicate photos, keeping the best of each group (reversible Trash).",
+    "positiveExamples": [
+      "Clean up my duplicate photos",
+      "Find and remove duplicates",
+      "Trash duplicate photos",
+      "Dedupe my library"
+    ],
+    "negativeExamples": [
+      "Trash my newest 20 photos",
+      "Delete the Family album",
+      "Find my best photos"
+    ],
+    "slots": {},
+    "requiredReadTools": [
+      "listDuplicateGroups"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Duplicate cleanup",
+      "tier": "Solid now",
+      "flow": "Hybrid"
+    }
+  },
+  {
     "kind": "trash_assets",
     "flow": "hybrid",
     "title": "Trash photos (recoverable)",
