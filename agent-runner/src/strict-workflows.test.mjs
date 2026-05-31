@@ -51,6 +51,14 @@ describe('strict workflow router', () => {
       kind: 'create_recent_trip_album',
       albumName: 'Recent Trip',
     });
+    assert.deepEqual(matchStrictWorkflow('throw my vacation photos from May 2024 into a new album'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Recent Trip',
+    });
+    assert.deepEqual(matchStrictWorkflow('throw my vacation photos from summer 2025 into a new album'), {
+      kind: 'create_recent_trip_album',
+      albumName: 'Recent Trip',
+    });
   });
 
   it('preserves explicit album names', () => {
