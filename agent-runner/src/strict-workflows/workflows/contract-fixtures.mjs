@@ -29,6 +29,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.updateMetadata',
   'asset.addTag',
   'asset.removeTag',
+  'asset.trash',
 ]);
 
 // Action types accepted by proposeAssetBatchFromSelection's discriminated union.
@@ -214,6 +215,17 @@ const SPACE_OP_VALIDATORS = {
   'space.removeAssets': validateSpaceRemoveAssets,
 };
 
+const validateAssetTrash = (op) => {
+  if (op.targetKind !== 'asset_batch') fail('asset.trash requires targetKind "asset_batch"');
+  if (op.targetId !== undefined) fail('asset.trash must not set targetId');
+  if (op.temporaryTargetId !== undefined) fail('asset.trash must not set temporaryTargetId');
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('asset.trash must not set a payload');
+  const source = op.assetSource;
+  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
+    fail('asset.trash requires an assetSource selectionHandle');
+  }
+};
+
 const validateAssetRemoveTag = (op) => {
   if (op.targetKind !== 'asset_batch') fail('asset.removeTag requires targetKind "asset_batch"');
   if (op.targetId !== undefined) fail('asset.removeTag must not set targetId');
@@ -249,6 +261,7 @@ const ALBUM_OP_VALIDATORS = {
   'album.removeAssets': validateAlbumRemoveAssets,
   'album.setCover': validateAlbumSetCover,
   'asset.removeTag': validateAssetRemoveTag,
+  'asset.trash': validateAssetTrash,
 };
 
 const validateOperations = (operations) => {
