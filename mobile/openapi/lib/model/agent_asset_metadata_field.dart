@@ -32,6 +32,7 @@ class AgentAssetMetadataField {
   static const filename = AgentAssetMetadataField._(r'filename');
   static const favorite = AgentAssetMetadataField._(r'favorite');
   static const visibility = AgentAssetMetadataField._(r'visibility');
+  static const quality = AgentAssetMetadataField._(r'quality');
 
   /// List of all possible values in this [enum][AgentAssetMetadataField].
   static const values = <AgentAssetMetadataField>[
@@ -44,6 +45,7 @@ class AgentAssetMetadataField {
     filename,
     favorite,
     visibility,
+    quality,
   ];
 
   static AgentAssetMetadataField? fromJson(dynamic value) => AgentAssetMetadataFieldTypeTransformer().decode(value);
@@ -91,6 +93,7 @@ class AgentAssetMetadataFieldTypeTransformer {
         case r'filename': return AgentAssetMetadataField.filename;
         case r'favorite': return AgentAssetMetadataField.favorite;
         case r'visibility': return AgentAssetMetadataField.visibility;
+        case r'quality': return AgentAssetMetadataField.quality;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
