@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isCleanSource, parseDateRange, parseEntitySource, parseMediaType, resolveAssetSource } from './asset-source-resolver.mjs';
+import { isCleanSource, parseDateRange, parseEntitySource, parseMediaType, parseUploadRange, resolveAssetSource } from './asset-source-resolver.mjs';
 import { makeContractClient } from './workflows/contract-fixtures.mjs';
 
 // A Friday, for deterministic relative-date math.
@@ -11,7 +11,9 @@ describe('parseDateRange', () => {
   for (const [phrase, after, before] of [
     ['photos from 2024', '2024-01-01T00:00:00.000Z', '2024-12-31T23:59:59.999Z'],
     ['in May 2024', '2024-05-01T00:00:00.000Z', '2024-05-31T23:59:59.999Z'],
+    ['today', '2026-05-15T00:00:00.000Z', '2026-05-15T23:59:59.999Z'],
     ['yesterday', '2026-05-14T00:00:00.000Z', '2026-05-14T23:59:59.999Z'],
+    ['this week', '2026-05-11T00:00:00.000Z', '2026-05-15T23:59:59.999Z'],
     ['this month', '2026-05-01T00:00:00.000Z', '2026-05-31T23:59:59.999Z'],
     ['last month', '2026-04-01T00:00:00.000Z', '2026-04-30T23:59:59.999Z'],
     ['last week', '2026-05-04T00:00:00.000Z', '2026-05-10T23:59:59.999Z'],
@@ -586,5 +588,156 @@ describe('resolveAssetSource — entity × recency/date/type/direct matrix', () 
       tags: ['Travel'],
       directFilters: { isFavorite: true },
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseUploadRange (Slice 3)
+// ---------------------------------------------------------------------------
+
+describe('parseUploadRange', () => {
+  // "uploaded today" → createdAfter/createdBefore bounding 2026-05-15.
+  it('"uploaded today" → createdAfter/createdBefore bounding today', () => {
+    const result = parseUploadRange('uploaded today', NOW);
+    assert.ok(result, 'should return a range');
+    assert.equal(result.createdAfter.toISOString(), '2026-05-15T00:00:00.000Z');
+    assert.equal(result.createdBefore.toISOString(), '2026-05-15T23:59:59.999Z');
+    assert.equal('takenAfter' in result, false);
+    assert.equal('takenBefore' in result, false);
+  });
+
+  // "added this week" → this-week created range (Monday 2026-05-11 through Friday 2026-05-15).
+  it('"added this week" → this-week created range', () => {
+    const result = parseUploadRange('added this week', NOW);
+    assert.ok(result, 'should return a range for "added this week"');
+    assert.equal(result.createdAfter.toISOString(), '2026-05-11T00:00:00.000Z');
+    assert.equal(result.createdBefore.toISOString(), '2026-05-15T23:59:59.999Z');
+    assert.equal('takenAfter' in result, false);
+  });
+
+  // "imported yesterday" → 2026-05-14 created range.
+  it('"imported yesterday" → 2026-05-14 created range', () => {
+    const result = parseUploadRange('imported yesterday', NOW);
+    assert.ok(result, 'should return a range');
+    assert.equal(result.createdAfter.toISOString(), '2026-05-14T00:00:00.000Z');
+    assert.equal(result.createdBefore.toISOString(), '2026-05-14T23:59:59.999Z');
+    assert.equal('takenAfter' in result, false);
+  });
+
+  // "uploaded in January 2024" → Jan 2024 created range.
+  it('"uploaded in January 2024" → January 2024 created range', () => {
+    const result = parseUploadRange('uploaded in January 2024', NOW);
+    assert.ok(result, 'should return a range');
+    assert.equal(result.createdAfter.toISOString(), '2024-01-01T00:00:00.000Z');
+    assert.equal(result.createdBefore.toISOString(), '2024-01-31T23:59:59.999Z');
+    assert.equal('takenAfter' in result, false);
+  });
+
+  // "recent uploads" → createdAfter = now − 30 days, createdBefore = now.
+  it('"recent uploads" → 30-day default window', () => {
+    const result = parseUploadRange('recent uploads', NOW);
+    assert.ok(result, 'should return a range');
+    const expectedAfter = new Date(NOW.getTime() - 30 * 86_400_000);
+    assert.equal(result.createdAfter.toISOString(), expectedAfter.toISOString());
+    assert.equal(result.createdBefore.toISOString(), NOW.toISOString());
+    assert.equal('takenAfter' in result, false);
+  });
+
+  // "recently uploaded" → 30-day default window.
+  it('"recently uploaded" → 30-day default window', () => {
+    const result = parseUploadRange('recently uploaded', NOW);
+    assert.ok(result, 'should return a range');
+    const expectedAfter = new Date(NOW.getTime() - 30 * 86_400_000);
+    assert.equal(result.createdAfter.toISOString(), expectedAfter.toISOString());
+    assert.equal(result.createdBefore.toISOString(), NOW.toISOString());
+  });
+
+  // "photos I uploaded" (no time, not "recent") → undefined.
+  it('"photos I uploaded" (no time, not recent) → undefined', () => {
+    assert.equal(parseUploadRange('photos I uploaded', NOW), undefined);
+  });
+
+  // Capture phrasing returns undefined.
+  it('"photos from today" (capture phrasing) → undefined', () => {
+    assert.equal(parseUploadRange('photos from today', NOW), undefined);
+  });
+
+  it('"taken last weekend" (capture phrasing) → undefined', () => {
+    assert.equal(parseUploadRange('taken last weekend', NOW), undefined);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveAssetSource — upload source integration (Slice 3)
+// ---------------------------------------------------------------------------
+
+describe('resolveAssetSource — upload sources', () => {
+  it('"everything I uploaded today" → resolved; searchAssets carries createdAfter/createdBefore, NOT takenAfter', async () => {
+    const client = makeContractClient({ handleAssetCount: 7 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'everything I uploaded today', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    assert.ok('createdAfter' in (search.args.filters ?? {}), 'filters must contain createdAfter');
+    assert.ok('createdBefore' in (search.args.filters ?? {}), 'filters must contain createdBefore');
+    assert.equal('takenAfter' in (search.args.filters ?? {}), false);
+    assert.equal('takenBefore' in (search.args.filters ?? {}), false);
+  });
+
+  it('"photos from today" (capture) → searchAssets carries takenAfter/takenBefore, NOT createdAfter', async () => {
+    const client = makeContractClient({ handleAssetCount: 3 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos from today', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    assert.ok('takenAfter' in (search.args.filters ?? {}), 'filters must contain takenAfter');
+    assert.ok('takenBefore' in (search.args.filters ?? {}), 'filters must contain takenBefore');
+    assert.equal('createdAfter' in (search.args.filters ?? {}), false);
+    assert.equal('createdBefore' in (search.args.filters ?? {}), false);
+  });
+
+  it('"photos I uploaded today" (mixed) → upload wins; searchAssets carries createdAfter, NOT takenAfter', async () => {
+    const client = makeContractClient({ handleAssetCount: 4 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos I uploaded today', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    assert.ok('createdAfter' in (search.args.filters ?? {}), 'filters must have createdAfter (upload wins)');
+    assert.equal('takenAfter' in (search.args.filters ?? {}), false);
+  });
+
+  it('"recent uploads" → resolved (NOT handoff); createdAfter is 30-day default window', async () => {
+    const client = makeContractClient({ handleAssetCount: 10 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'recent uploads', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    const expectedAfter = new Date(NOW.getTime() - 30 * 86_400_000).toISOString();
+    assert.equal(search.args.filters?.createdAfter, expectedAfter);
+  });
+
+  it('"photos I uploaded" (no time) → handoff (no bounded upload range)', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({ client, sourceDescription: 'photos I uploaded', now: NOW });
+    assert.equal(result.status, 'handoff');
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isCleanSource — upload words (Slice 3)
+// ---------------------------------------------------------------------------
+
+describe('isCleanSource — upload word consumption', () => {
+  it('"everything I uploaded today" is clean (upload words stripped)', () => {
+    assert.equal(isCleanSource('everything I uploaded today'), true);
+  });
+
+  it('"recent uploads" is clean', () => {
+    assert.equal(isCleanSource('recent uploads'), true);
+  });
+
+  it('"photos I uploaded" is clean (no residual after strip)', () => {
+    assert.equal(isCleanSource('photos I uploaded'), true);
   });
 });
