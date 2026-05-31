@@ -94,6 +94,13 @@ const CASES = [
   // upload-dated sources do not change verb-routing (resolver bounds at run time)
   ['archive everything I uploaded today', 'archive_assets'],
   ['tag my recent uploads as Imported', 'tag_assets'],
+  // trash_assets (explicit trash/bin/delete/move-to-trash verb; container and subjective decline)
+  ['trash my newest 20 photos', 'trash_assets'],
+  ['delete my 2024 screenshots', 'trash_assets'],
+  ['move my newest 50 photos to the trash', 'trash_assets'],
+  // trash_assets must NOT steal these
+  ['delete the Family album', 'none'],
+  ['trash the best ones', 'none'],
   ['make an album of the best photos', 'none'],
   ['how many photos do I have?', 'none'],
   ['thanks, that looks great', 'none'],
