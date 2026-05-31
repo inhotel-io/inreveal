@@ -565,6 +565,60 @@ export const WORKFLOW_MANIFEST = Object.freeze([
         'Pi resolves the source; Gallery owns space creation from the wrapped selection handle (proposeSpaceFromSearch).',
     }),
   }),
+  Object.freeze({
+    kind: 'curate_highlights',
+    flow: 'hybrid',
+    title: 'Curate highlights (suggested)',
+    classifierDescription:
+      'User wants the assistant to SUGGEST a small set of highlights (the best/top N photos) from a BOUNDED source (album, shared space, date range, person, place) and make an album, favorite them, or add them to an album. Metadata-signal suggestions, NOT objective image-quality scoring. Unbounded (\'best photos in my library\') or visual-quality phrasing (\'sharpest\', \'best composition\') is out of scope.',
+    positiveExamples: Object.freeze([
+      'Pick the best 15 photos from my Portugal trip and make an album',
+      'Suggest 10 highlights from this album',
+      'Favorite the best photos from the Family space',
+      'Choose 20 highlights from photos of Alex',
+    ]),
+    negativeExamples: Object.freeze([
+      'Make an album from my Italy trip',
+      'Find the best photos in my library',
+      'Pick the sharpest photo',
+      'Show me my best photos',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the bounded source (album, space, date range, person, place).',
+      }),
+      count: Object.freeze({
+        type: 'integer',
+        required: false,
+        description: 'Number of highlights to select (defaults applied by Slice 4).',
+      }),
+      action: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'What to do with the highlights: album (default), favorite, or addToAlbum.',
+      }),
+      albumName: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Name for the new album when action is album.',
+      }),
+      targetAlbum: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Existing album name when action is addToAlbum.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets', 'curateSelection']),
+    planTool: 'proposeAlbumFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: '“Best photos” curation',
+      tier: 'Solid now',
+      flow: 'Hybrid',
+    }),
+  }),
 ]);
 
 const byKind = new Map(WORKFLOW_MANIFEST.map((entry) => [entry.kind, entry]));

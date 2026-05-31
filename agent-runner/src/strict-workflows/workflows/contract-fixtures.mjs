@@ -40,6 +40,9 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.updateMetadata',
 ]);
 
+// Strategy enum accepted by curateSelection.
+export const KNOWN_CURATE_STRATEGIES = new Set(['metadata-highlights', 'date-spread', 'favorites-first', 'cover-candidate']);
+
 const KNOWN_SPACE_FROM_SEARCH_KEYS = new Set(['summary', 'spaceName', 'description', 'color', 'assetSource']);
 const KNOWN_AVATAR_COLORS = new Set(['primary', 'pink', 'red', 'yellow', 'blue', 'green', 'purple', 'orange', 'gray', 'amber']);
 const KNOWN_ASSET_SOURCE_KINDS = new Set(['search', 'previousSearch', 'selectionHandle']);
@@ -290,11 +293,17 @@ const ok = (config) => config.planResult ?? { status: 'success', plan: { id: 'pl
 
 /**
  * Build a contract-faithful fake MCP client.
- * @param config.albums            albums returned by listAlbums
- * @param config.spaces            spaces (each may carry `members`) for listSpaces/readSpace
- * @param config.users            users returned by searchUsers
- * @param config.handleAssetCount  assetCount on the searchAssets selection handle
- * @param config.planResult        override for the propose* tool results
+ * @param config.albums                  albums returned by listAlbums
+ * @param config.spaces                  spaces (each may carry `members`) for listSpaces/readSpace
+ * @param config.users                   users returned by searchUsers
+ * @param config.handleAssetCount        assetCount on the searchAssets selection handle
+ * @param config.planResult              override for the propose* tool results
+ * @param config.curatedHandleId         id of the curated selection handle (default 'curated-1')
+ * @param config.selectedAssetCount      override selected count from curateSelection
+ * @param config.criteriaSummary         criteria strings returned from curateSelection
+ * @param config.curateWarnings          optional warnings array from curateSelection
+ * @param config.curateStatus            'success' | 'denied' | 'approval-required'
+ * @param config.curateDeniedReason      reason string when curateStatus is 'denied'
  */
 export const makeContractClient = (config = {}) => {
   const {
@@ -304,6 +313,12 @@ export const makeContractClient = (config = {}) => {
     handleAssetCount = 20,
     resolvedFilters,
     resolveResults,
+    curatedHandleId = 'curated-1',
+    selectedAssetCount,
+    criteriaSummary = ['Prioritized existing favorites and ratings.'],
+    curateWarnings,
+    curateStatus = 'success',
+    curateDeniedReason = 'Curation was denied.',
   } = config;
   const calls = [];
 
@@ -374,6 +389,29 @@ export const makeContractClient = (config = {}) => {
       if (!args?.albumName) fail('proposeAlbumFromSelection requires albumName');
       if (!args?.selectionHandleId) fail('proposeAlbumFromSelection requires selectionHandleId');
       return ok(config);
+    },
+    curateSelection: (args) => {
+      if (!args || typeof args !== 'object') fail('curateSelection requires an object');
+      if (!args.selectionHandleId) fail('curateSelection requires selectionHandleId');
+      if (typeof args.targetCount !== 'number' || args.targetCount < 1 || args.targetCount > 1000) {
+        fail('curateSelection requires targetCount in 1..1000');
+      }
+      if (args.strategy !== undefined && !KNOWN_CURATE_STRATEGIES.has(args.strategy)) {
+        fail(`curateSelection strategy "${args.strategy}" is invalid`);
+      }
+      if (curateStatus === 'denied') return { status: 'denied', reason: curateDeniedReason, toolCall: {} };
+      if (curateStatus === 'approval-required') return { status: 'approval-required', toolCall: {} };
+      const selected = selectedAssetCount ?? Math.min(args.targetCount, handleAssetCount);
+      return {
+        status: 'success',
+        toolCall: {},
+        strategy: args.strategy ?? 'metadata-highlights',
+        selectionHandle: { id: curatedHandleId, assetCount: selected },
+        sourceAssetCount: handleAssetCount,
+        selectedAssetCount: selected,
+        criteriaSummary,
+        ...(curateWarnings ? { warnings: curateWarnings } : {}),
+      };
     },
     proposeSpaceFromSearch: (args) => {
       if (!args || typeof args !== 'object') fail('proposeSpaceFromSearch requires an object');
