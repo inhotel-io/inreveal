@@ -12,6 +12,7 @@ import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-al
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
 import { setAlbumCoverWorkflow } from './workflows/set-album-cover.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
+import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
@@ -26,12 +27,14 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     member ops (people) win over asset ops (photos) for space targets.
 //   - `manage_space_assets` BEFORE `add_photos_to_album` so "add <photos> to the X
 //     space" routes to the space workflow, not the album one.
-//   - `favorite_assets` / `tag_assets` / `manage_space_members` BEFORE
-//     `remove_photos_from_album` so "remove … from my favorites" → favorite_assets,
-//     "remove Bob from the Family space" → manage_space_members, and
-//     "remove the Travel tag …" → none (tag_assets is add-only and declines).
+//   - `favorite_assets` / `tag_assets` / `untag_assets` / `manage_space_members`
+//     BEFORE `remove_photos_from_album` so "remove … from my favorites" →
+//     favorite_assets, "remove Bob from the Family space" → manage_space_members,
+//     "remove the Travel tag …" → untag_assets (requires the literal `tag` token;
+//     never steals favorite/space/member removals which have no `tag` token).
 //   - `remove_photos_from_album` AFTER `favorite_assets`/`tag_assets`/
-//     `manage_space_members`, BEFORE `manage_space_assets`/`add_photos_to_album`.
+//     `untag_assets`/`manage_space_members`, BEFORE `manage_space_assets`/
+//     `add_photos_to_album`.
 //   - `add_photos_to_album` stays LAST so its "add <source> to <album>" pattern
 //     never steals "add the tag <tag> to <source>" (tag_assets) or member adds.
 //   - `update_asset_metadata` after `rename_or_describe_*` so album/space describe
@@ -50,6 +53,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   archiveAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
+  untagAssetsWorkflow,
   updateAssetMetadataWorkflow,
   rotateAssetsWorkflow,
   manageSpaceMembersWorkflow,
