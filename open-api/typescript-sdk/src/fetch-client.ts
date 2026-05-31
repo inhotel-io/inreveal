@@ -108,6 +108,11 @@ export type FaceRepairResponseDto = {
             affectedPersons: number;
             eligibleFaces: number;
             flaggedFaces: number;
+            reviewOnlyByReason: {
+                badTarget: number;
+                overCap: number;
+                unAttributable: number;
+            };
             reviewOnlyFaces: number;
             reviewOnlyPersons: number;
             toRepair: number;

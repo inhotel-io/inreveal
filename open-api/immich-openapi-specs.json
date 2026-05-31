@@ -22691,6 +22691,25 @@
                   "flaggedFaces": {
                     "type": "number"
                   },
+                  "reviewOnlyByReason": {
+                    "properties": {
+                      "badTarget": {
+                        "type": "number"
+                      },
+                      "overCap": {
+                        "type": "number"
+                      },
+                      "unAttributable": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "overCap",
+                      "badTarget",
+                      "unAttributable"
+                    ],
+                    "type": "object"
+                  },
                   "reviewOnlyFaces": {
                     "type": "number"
                   },
@@ -22707,7 +22726,8 @@
                   "toRepair",
                   "reviewOnlyFaces",
                   "reviewOnlyPersons",
-                  "affectedPersons"
+                  "affectedPersons",
+                  "reviewOnlyByReason"
                 ],
                 "type": "object"
               }

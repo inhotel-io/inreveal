@@ -398,6 +398,8 @@ class ApiClient {
           return FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner.fromJson(value);
         case 'FaceRepairResponseDtoReportTotals':
           return FaceRepairResponseDtoReportTotals.fromJson(value);
+        case 'FaceRepairResponseDtoReportTotalsReviewOnlyByReason':
+          return FaceRepairResponseDtoReportTotalsReviewOnlyByReason.fromJson(value);
         case 'FacialRecognitionConfig':
           return FacialRecognitionConfig.fromJson(value);
         case 'FilterSuggestionsPersonDto':

@@ -489,6 +489,7 @@ Class | Method | HTTP request | Description
  - [FaceRepairResponseDtoReportPersonsInner](doc//FaceRepairResponseDtoReportPersonsInner.md)
  - [FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner](doc//FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner.md)
  - [FaceRepairResponseDtoReportTotals](doc//FaceRepairResponseDtoReportTotals.md)
+ - [FaceRepairResponseDtoReportTotalsReviewOnlyByReason](doc//FaceRepairResponseDtoReportTotalsReviewOnlyByReason.md)
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FilterSuggestionsPersonDto](doc//FilterSuggestionsPersonDto.md)
  - [FilterSuggestionsResponseDto](doc//FilterSuggestionsResponseDto.md)
