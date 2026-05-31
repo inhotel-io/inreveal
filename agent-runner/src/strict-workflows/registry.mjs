@@ -4,7 +4,6 @@ import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
 import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
 import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-album.mjs';
 import { createSpaceFromSourceWorkflow } from './workflows/create-space-from-source.mjs';
-import { curateHighlightsWorkflow } from './workflows/curate-highlights.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { manageSpaceAssetsWorkflow } from './workflows/manage-space-assets.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
@@ -44,10 +43,6 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     create-verb workflows. `create_album_from_source` comes first so "album"
 //     prompts are not stolen; `create_space_from_source` immediately follows and
 //     its inline-name form discriminates via the "space" noun.
-//   - `curate_highlights` AFTER `create_album_from_source`, `create_recent_trip_album`,
-//     and `set_album_cover` (those own plain "make an album" / "trip album" / "set cover").
-//     The curate patterns require a `best|top|highlights` signal that none of the
-//     create/cover patterns consume, so there is no steal risk in either direction.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -55,7 +50,6 @@ const WORKFLOW_FACTORIES = Object.freeze([
   renameOrDescribeSpaceWorkflow,
   renameOrDescribeAlbumWorkflow,
   setAlbumCoverWorkflow,
-  curateHighlightsWorkflow,
   archiveAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
