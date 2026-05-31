@@ -403,12 +403,16 @@ export default [
   },
   {
     // set_album_cover end-to-end: first photo → album.setCover plan — proposed,
-    // never applied. Data-dependent (needs a real album with at least 1 asset);
-    // threshold 0.5 tolerates variance on an empty stack.
+    // never applied. Strongly data-dependent: setting a cover requires the agent to
+    // OWN the album, but the {album} discovered by assetCount on an unseeded instance
+    // is often a shared/imported album the agent can read (readAlbum returns its
+    // assetIds) but not modify (the server rejects the setCover op). The op shape +
+    // index resolution are unit/L1-verified and the routing passes live; assert
+    // routing-only here (SEEDED gates the plan-proposed assertion, like remove.recency).
     id: 'l3.plan.cover.index',
     category: 'l3.plan',
     prompt: 'set the cover of the {album} album to the first photo',
-    expect: { kind: 'set_album_cover', planProposed: true },
+    expect: { kind: 'set_album_cover', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
