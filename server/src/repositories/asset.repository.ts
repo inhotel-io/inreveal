@@ -34,6 +34,7 @@ import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetFileTable } from 'src/schema/tables/asset-file.table';
 import { AssetJobStatusTable } from 'src/schema/tables/asset-job-status.table';
 import { AssetMetadataTable } from 'src/schema/tables/asset-metadata.table';
+import { AssetQualityTable } from 'src/schema/tables/asset-quality.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { AgentAssetMediaReference, AgentAssetMetadata, AgentSearchAssetsFilters } from 'src/types/agent-tool.types';
 import {
@@ -673,6 +674,30 @@ export class AssetRepository {
         return;
       }
 
+      throw error;
+    }
+  }
+
+  async upsertAssetQuality(
+    quality: Pick<Insertable<AssetQualityTable>, 'assetId' | 'sharpness' | 'exposure' | 'brightness' | 'quality'>,
+  ): Promise<void> {
+    try {
+      await this.db
+        .insertInto('asset_quality')
+        .values(quality)
+        .onConflict((oc) =>
+          oc.column('assetId').doUpdateSet((eb) => ({
+            sharpness: eb.ref('excluded.sharpness'),
+            exposure: eb.ref('excluded.exposure'),
+            brightness: eb.ref('excluded.brightness'),
+            quality: eb.ref('excluded.quality'),
+          })),
+        )
+        .execute();
+    } catch (error) {
+      if (isStaleAssetForeignKeyConstraint(error)) {
+        return;
+      }
       throw error;
     }
   }
