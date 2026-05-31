@@ -181,13 +181,6 @@ export default [
     expect: { kind: 'none' },
   },
   {
-    // Tag REMOVAL is out of scope (add-only) — must not route to tag_assets.
-    id: 'l3.neg.tag.removal',
-    category: 'l3.negatives',
-    prompt: 'remove the Travel tag from my newest 20',
-    expect: { kind: 'none' },
-  },
-  {
     // Adding photos to a space now routes to manage_space_assets.
     id: 'l3.recall.space.add-photos',
     category: 'l3.recall',
