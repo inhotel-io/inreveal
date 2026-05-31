@@ -88,6 +88,22 @@ export default [
     expect: { kind: 'tag_assets' },
   },
   {
+    // untag_assets routing: tag removal reaches the new workflow live (regex
+    // fast-path; the literal "tag" token keeps it off remove_photos_from_album).
+    id: 'l3.recall.untag',
+    category: 'l3.recall',
+    prompt: 'remove the "eval-l3" tag from my newest 20',
+    expect: { kind: 'untag_assets' },
+  },
+  {
+    // recent-upload source: an upload-dated source still verb-routes to archive
+    // (the resolver bounds it by createdAfter at run time, not at routing).
+    id: 'l3.recall.upload',
+    category: 'l3.recall',
+    prompt: 'archive everything I uploaded today',
+    expect: { kind: 'archive_assets' },
+  },
+  {
     id: 'l3.recall.space.describe',
     category: 'l3.recall',
     prompt: 'set the description on the {space} space to Shared memories',
@@ -232,6 +248,26 @@ export default [
     category: 'l3.plan',
     prompt: 'archive my newest 20 photos',
     expect: { kind: 'archive_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // untag_assets end-to-end: needs a tag that EXISTS on real owned assets to
+    // resolve the name->id and propose an asset.removeTag plan. On unseeded
+    // personal (no guaranteed "eval-l3" tag) this asserts routing only.
+    id: 'l3.plan.untag.tag',
+    category: 'l3.plan',
+    prompt: 'remove the "eval-l3" tag from my newest 20',
+    expect: { kind: 'untag_assets', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
+    // recent-upload end-to-end: "recent uploads" resolves to a createdAfter
+    // window (last 30 days) -> a bounded selection -> a reviewable archive plan.
+    // Data-dependent (needs assets uploaded recently); routing-only when unseeded.
+    id: 'l3.plan.upload.recency',
+    category: 'l3.plan',
+    prompt: 'archive my recent uploads',
+    expect: { kind: 'archive_assets', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {

@@ -87,6 +87,13 @@ const CASES = [
   ['archive the best ones', 'none'],
   ['favorite the best 3 photos from last weekend', 'none'],
   ['remove the Travel tag from my newest 20', 'untag_assets'],
+  ['remove tag Spring Break from my last 50 photos', 'untag_assets'],
+  ['untag my newest 20 as Travel', 'untag_assets'],
+  // untag requires the literal "tag" token; album/space/favorite removals keep theirs
+  ['remove my newest 20 from the Italy album', 'remove_photos_from_album'],
+  // upload-dated sources do not change verb-routing (resolver bounds at run time)
+  ['archive everything I uploaded today', 'archive_assets'],
+  ['tag my recent uploads as Imported', 'tag_assets'],
   ['make an album of the best photos', 'none'],
   ['how many photos do I have?', 'none'],
   ['thanks, that looks great', 'none'],
