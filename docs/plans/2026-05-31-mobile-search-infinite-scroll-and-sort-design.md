@@ -1,7 +1,7 @@
 # Mobile search: infinite scroll, bigger debounce, and sort — design
 
 Date: 2026-05-31
-Status: Approved design (pending implementation plan)
+Status: Implemented (2026-05-31) — see the plan doc; all 9 tasks landed on `worktree-mobile-search-infinite-scroll-sort`.
 Branch / worktree: `worktree-mobile-search-infinite-scroll-sort`
 
 ## 1. Problem
