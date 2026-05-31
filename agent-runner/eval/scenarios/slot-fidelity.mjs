@@ -63,6 +63,12 @@ export default [
     expect: { kind: 'tag_assets', slots: { tagName: 'Spring Break', sourceDescription: 'my newest 20' } },
   },
   {
+    id: 'slots.untag.canonical',
+    category: 'slots',
+    prompt: 'remove the Travel tag from my newest 20',
+    expect: { kind: 'untag_assets', slots: { tagName: 'Travel', sourceDescription: 'my newest 20' } },
+  },
+  {
     id: 'slots.members.role-default',
     category: 'slots',
     prompt: 'add Alex to the Family space',
