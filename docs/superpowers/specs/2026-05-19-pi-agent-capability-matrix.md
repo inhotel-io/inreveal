@@ -121,7 +121,7 @@ retried only when the correction is mechanical.
 | Summarize a proposed plan        | Strict                      | Summary must be generated from a persisted plan.                                                                                                                                                                      |
 | Revise a plan                    | Strict                      | Revision must replace a persisted plan and never apply it.                                                                                                                                                            |
 | “Best photos” curation           | Hybrid                      | Open bounded curation; strict resulting album, favorite, archive, tag, or metadata plan.                                                                                                                              |
-| Visual cleanup                   | Hybrid                      | `visual_cleanup`: Pi resolves a bounded source plus objective quality threshold (`maxSharpness`/`maxBrightness`/`maxQuality`); Gallery owns the reviewable, recoverable `asset.trash` plan from the handle.             |
+| Visual cleanup                   | Hybrid                      | `visual_cleanup`: Pi resolves a bounded source and feeds quality-filtered `searchAssets` (`maxSharpness`/`maxBrightness`/`maxQuality`) into a reviewable, recoverable `asset.trash` proposal owned by Gallery.           |
 | Recent upload organization       | Strict when bounded         | The source resolver maps “uploaded/added/recent uploads” to upload-date filters (`createdAfter`/`createdBefore`); the bounded handle then drives a deterministic source workflow (archive/tag/album/etc.).            |
 | Screenshot/document cleanup      | Hybrid                      | Metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation.                                                                                                     |
 | Story/memory albums              | Hybrid                      | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                                                                                                                 |
@@ -187,26 +187,26 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 ## High-Value Constrained Capabilities
 
 These are attractive user workflows, but they need clear guardrails because the
-current tool surface does not provide a specialized classifier or unbounded
+current tool surface does not provide every specialized classifier or unbounded
 semantic search.
 
 | Capability                  | Why users want it                                             | Current feasibility                                                                                                                                               | Guardrail                                                                                            |
 | --------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, and previews across bounded candidates; suggested highlights are not objective quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
-| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Constrained now with previews, but not robust for hundreds/thousands without scoring tools.                                                                       | Treat as suggestions; show thumbnails; avoid auto-apply.                                             |
+| “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, previews, and available objective quality scores; suggested highlight curation remains bounded and reviewable. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
+| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Solid now for bounded sources using objective quality scoring (`sharpness`, `brightness`, and `quality`) through quality-filtered `searchAssets`; resulting trash proposals are reviewable and recoverable. | Treat as suggestions; show thumbnails; avoid auto-apply.                                             |
 | Recent upload organization  | “Organize everything I uploaded today.”                       | Solid now: the source resolver bounds “uploaded/added/recent uploads” by upload date (`createdAfter`/`createdBefore`) and feeds the strict source workflows.      | Chunk large result sets and explain any limit.                                                       |
 | Screenshot/document cleanup | Archive screenshots or documents.                             | Works if media metadata or tags identify them; weak if detection requires image understanding.                                                                    | Prefer metadata filters; ask for confirmation on visual-only matches.                                |
 | Story/memory albums         | “Make a birthday highlights album.”                           | Works when date/location/album context is known; weak for people/event recognition.                                                                               | Ask for date/person/album context if semantic cues are not searchable.                               |
 
 ## Needs New MCP Tool
 
-Next expansion candidates: image quality scoring, then a forward geocoder for
-place-name location edits. (Reversible trash and metadata-only duplicate cleanup
-shipped — see the Flow Ownership Matrix.)
+Next expansion candidates: a forward geocoder for place-name location edits,
+then richer image-edit operation families. (Reversible trash, metadata-only
+duplicate cleanup, and objective image quality filters shipped — see the Flow
+Ownership Matrix.)
 
 | Capability                              | Missing capability                                                      | Candidate tool direction                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Image quality scoring                   | No blur/exposure/aesthetic score tool.                                  | `analyzeAssetQuality` or precomputed quality metadata in search/read metadata.    |
 | Place-name-to-coordinate metadata edits | No forward geocoder for turning names such as “Paris” into coordinates. | Forward-geocoding resolver with ambiguity handling before `asset.updateMetadata`. |
 | Edits beyond rotation                   | No crop, enhance, or batch adjustments.                                 | Separate image-edit operation family with preview artifacts.                      |
 | Sharing/export/download workflows       | No direct operation plan for sharing links, exports, or downloads.      | Sharing/export tools with explicit privacy review.                                |
