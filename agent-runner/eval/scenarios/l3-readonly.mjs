@@ -118,6 +118,18 @@ export default [
     expect: { kind: 'cleanup_duplicates' },
   },
   {
+    id: 'l3.recall.visualcleanup.blurry',
+    category: 'l3.recall',
+    prompt: 'trash my blurry photos',
+    expect: { kind: 'visual_cleanup' },
+  },
+  {
+    id: 'l3.recall.visualcleanup.dark',
+    category: 'l3.recall',
+    prompt: 'delete dark photos from my recent uploads',
+    expect: { kind: 'visual_cleanup' },
+  },
+  {
     id: 'l3.recall.space.describe',
     category: 'l3.recall',
     prompt: 'set the description on the {space} space to Shared memories',
@@ -296,6 +308,13 @@ export default [
     category: 'l3.plan',
     prompt: 'clean up my duplicate photos',
     expect: { kind: 'cleanup_duplicates', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
+    id: 'l3.plan.visualcleanup.blurry',
+    category: 'l3.plan',
+    prompt: 'trash my blurry photos from last month',
+    expect: { kind: 'visual_cleanup', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
