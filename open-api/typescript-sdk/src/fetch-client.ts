@@ -2642,6 +2642,7 @@ export type QueuesResponseLegacyDto = {
     editor: QueueResponseLegacyDto;
     faceDetection: QueueResponseLegacyDto;
     facialRecognition: QueueResponseLegacyDto;
+    imageQuality: QueueResponseLegacyDto;
     library: QueueResponseLegacyDto;
     metadataExtraction: QueueResponseLegacyDto;
     migration: QueueResponseLegacyDto;
@@ -4293,6 +4294,7 @@ export type SystemConfigJobDto = {
     classification: JobSettingsDto;
     editor: JobSettingsDto;
     faceDetection: JobSettingsDto;
+    imageQuality: JobSettingsDto;
     library: JobSettingsDto;
     metadataExtraction: JobSettingsDto;
     migration: JobSettingsDto;
@@ -11121,6 +11123,7 @@ export enum QueueName {
     BackupDatabase = "backupDatabase",
     Ocr = "ocr",
     PetDetection = "petDetection",
+    ImageQuality = "imageQuality",
     Workflow = "workflow",
     Editor = "editor",
     StorageBackendMigration = "storageBackendMigration",
@@ -11227,6 +11230,8 @@ export enum JobName {
     Ocr = "Ocr",
     PetDetectionQueueAll = "PetDetectionQueueAll",
     PetDetection = "PetDetection",
+    ImageQualityQueueAll = "ImageQualityQueueAll",
+    ImageQuality = "ImageQuality",
     WorkflowRun = "WorkflowRun",
     StorageBackendMigrationQueueAll = "StorageBackendMigrationQueueAll",
     StorageBackendMigrationSingle = "StorageBackendMigrationSingle",
