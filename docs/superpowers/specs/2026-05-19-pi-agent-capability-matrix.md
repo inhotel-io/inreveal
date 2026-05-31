@@ -55,7 +55,8 @@ Current reviewable operation types:
   `space.updateDetails`, `space.addMembers`, `space.removeMembers`,
   `space.updateMemberRole`.
 - Assets: `asset.rotate`, `asset.setFavorite`, `asset.setArchive`,
-  `asset.addTag`, `asset.removeTag`, `asset.updateMetadata`.
+  `asset.addTag`, `asset.removeTag`, `asset.updateMetadata`, `asset.trash`
+  (reversible move to Trash; High risk; `trashAssets` write-scope).
 
 Safety invariant: MCP tools do not directly mutate the gallery. Writes must be
 represented as operation plans and applied by Gallery after user review.
@@ -191,13 +192,13 @@ semantic search.
 
 ## Needs New MCP Tool
 
-Next expansion candidates: semantic duplicate cleanup or quality scoring.
+Next expansion candidates: image quality scoring, then a forward geocoder for
+place-name location edits. (Reversible trash and metadata-only duplicate cleanup
+shipped — see the Flow Ownership Matrix.)
 
 | Capability                              | Missing capability                                                      | Candidate tool direction                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Duplicate/similar-photo cleanup         | No duplicate cluster or perceptual similarity surface.                  | `findSimilarAssets` or `listDuplicateGroups`.                                     |
 | Image quality scoring                   | No blur/exposure/aesthetic score tool.                                  | `analyzeAssetQuality` or precomputed quality metadata in search/read metadata.    |
-| Trash/delete                            | Operation plans support archive, not delete/trash.                      | Product decision first; then `asset.trash` operation with stricter risk UI.       |
 | Place-name-to-coordinate metadata edits | No forward geocoder for turning names such as “Paris” into coordinates. | Forward-geocoding resolver with ambiguity handling before `asset.updateMetadata`. |
 | Edits beyond rotation                   | No crop, enhance, or batch adjustments.                                 | Separate image-edit operation family with preview artifacts.                      |
 | Sharing/export/download workflows       | No direct operation plan for sharing links, exports, or downloads.      | Sharing/export tools with explicit privacy review.                                |
