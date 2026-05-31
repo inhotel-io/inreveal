@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, Selectable, sql, Transaction } from 'kysely';
+import { Insertable, Kysely, RawBuilder, Selectable, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import {
@@ -2377,6 +2377,26 @@ export class FaceIdentityRepository {
     return rows.map((row) => row.id);
   }
 
+  // Engine-agnostic cluster centroid. Averages each embedding dimension via array decomposition
+  // (unnest -> per-dimension avg -> recompose into a vector) instead of avg(vector), which the
+  // pgvecto.rs `vector` type does not implement (Hagen's production engine; VectorChord does, which
+  // is why the vchord-based test harness never surfaced it). `faces` is a sub-select exposing
+  // "group_key" and "embedding" columns; this returns one ("group_key", centroid) row per non-empty
+  // group. A group with no embedded faces yields no row — callers treat "cannot assess" as consistent.
+  private faceSetCentroidsByGroup(faces: RawBuilder<unknown>): RawBuilder<unknown> {
+    return sql`
+      SELECT grouped."group_key" AS "group_key",
+             array_agg(grouped.v ORDER BY grouped.idx)::real[]::vector AS centroid
+      FROM (
+        SELECT sampled."group_key" AS "group_key", dims.idx AS idx, avg(dims.val) AS v
+        FROM (${faces}) AS sampled,
+             LATERAL unnest(sampled.embedding::real[]) WITH ORDINALITY AS dims(val, idx)
+        GROUP BY sampled."group_key", dims.idx
+      ) AS grouped
+      GROUP BY grouped."group_key"
+    `;
+  }
+
   // Returns the subset of candidate faces whose embedding is within REPAIR_FACE_MAX_PERSON_DISTANCE of the
   // target person's existing cluster centroid. Faces with no embedding, or a target with no embedded faces,
   // are kept (cannot assess => do not block legitimate consolidation).
@@ -2385,23 +2405,25 @@ export class FaceIdentityRepository {
       return [];
     }
 
+    const targetFaces = sql`
+      SELECT 'target' AS "group_key", target_search.embedding AS embedding
+      FROM (
+        SELECT asset_face.id
+        FROM asset_face
+        WHERE asset_face."personId" = ${targetPersonId}
+          AND asset_face."deletedAt" IS NULL
+          AND asset_face."isVisible" = true
+        LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+      ) AS target_face
+      INNER JOIN face_search AS target_search ON target_search."faceId" = target_face.id
+    `;
+
     const result = await sql<{ id: string }>`
-      WITH target_centroid AS (
-        SELECT avg(target_search.embedding) AS centroid
-        FROM (
-          SELECT asset_face.id
-          FROM asset_face
-          WHERE asset_face."personId" = ${targetPersonId}
-            AND asset_face."deletedAt" IS NULL
-            AND asset_face."isVisible" = true
-          LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
-        ) AS target_face
-        INNER JOIN face_search AS target_search ON target_search."faceId" = target_face.id
-      )
+      WITH target_centroid AS (${this.faceSetCentroidsByGroup(targetFaces)})
       SELECT candidate.id AS id
       FROM asset_face AS candidate
       LEFT JOIN face_search AS candidate_search ON candidate_search."faceId" = candidate.id
-      CROSS JOIN target_centroid
+      LEFT JOIN target_centroid ON true
       WHERE candidate.id IN (${sql.join(assetFaceIds)})
         AND (
           candidate_search.embedding IS NULL
@@ -2873,35 +2895,38 @@ export class FaceIdentityRepository {
       return [];
     }
 
+    const targetFaces = sql`
+      SELECT 'target' AS "group_key", target_search.embedding AS embedding
+      FROM (
+        SELECT face_identity_face."assetFaceId"
+        FROM face_identity_face
+        WHERE face_identity_face."identityId" = ${targetIdentityId}
+        LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+      ) AS target_face
+      INNER JOIN face_search AS target_search ON target_search."faceId" = target_face."assetFaceId"
+    `;
+
+    const sourceFaces = sql`
+      SELECT sampled."identityId" AS "group_key", source_search.embedding AS embedding
+      FROM (
+        SELECT
+          face_identity_face."identityId",
+          face_identity_face."assetFaceId",
+          row_number() OVER (
+            PARTITION BY face_identity_face."identityId"
+            ORDER BY face_identity_face."assetFaceId"
+          ) AS rn
+        FROM face_identity_face
+        WHERE face_identity_face."identityId" IN (${sql.join(sourceIdentityIds)})
+      ) AS sampled
+      INNER JOIN face_search AS source_search ON source_search."faceId" = sampled."assetFaceId"
+      WHERE sampled.rn <= ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+    `;
+
     const result = await sql<{ identityId: string }>`
-      WITH target_centroid AS (
-        SELECT avg(target_search.embedding) AS centroid
-        FROM (
-          SELECT face_identity_face."assetFaceId"
-          FROM face_identity_face
-          WHERE face_identity_face."identityId" = ${targetIdentityId}
-          LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
-        ) AS target_face
-        INNER JOIN face_search AS target_search ON target_search."faceId" = target_face."assetFaceId"
-      ),
-      source_centroid AS (
-        SELECT sampled."identityId" AS "identityId", avg(source_search.embedding) AS centroid
-        FROM (
-          SELECT
-            face_identity_face."identityId",
-            face_identity_face."assetFaceId",
-            row_number() OVER (
-              PARTITION BY face_identity_face."identityId"
-              ORDER BY face_identity_face."assetFaceId"
-            ) AS rn
-          FROM face_identity_face
-          WHERE face_identity_face."identityId" IN (${sql.join(sourceIdentityIds)})
-        ) AS sampled
-        INNER JOIN face_search AS source_search ON source_search."faceId" = sampled."assetFaceId"
-        WHERE sampled.rn <= ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
-        GROUP BY sampled."identityId"
-      )
-      SELECT source_centroid."identityId" AS "identityId"
+      WITH target_centroid AS (${this.faceSetCentroidsByGroup(targetFaces)}),
+      source_centroid AS (${this.faceSetCentroidsByGroup(sourceFaces)})
+      SELECT source_centroid."group_key" AS "identityId"
       FROM source_centroid
       CROSS JOIN target_centroid
       WHERE target_centroid.centroid IS NOT NULL
