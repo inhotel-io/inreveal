@@ -2343,4 +2343,76 @@ describe('Agent operation DTOs', () => {
       );
     });
   });
+
+  describe('asset.trash operation schema', () => {
+    const makeValidTrashOp = (overrides: Record<string, unknown> = {}) => ({
+      type: AgentOperationType.AssetTrash,
+      summary: 'Move matching photos to Trash.',
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds: [factory.uuid()],
+      ...overrides,
+    });
+
+    it('accepts a valid asset.trash operation with default High riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidTrashOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetTrash);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.High);
+      }
+    });
+
+    it('accepts a valid asset.trash operation with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidTrashOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects asset.trash with a payload field', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidTrashOp({ payload: { foo: 'bar' } })),
+        ['operations', 0],
+        'Unrecognized key',
+      );
+    });
+
+    it('rejects asset.trash with a targetId', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidTrashOp({ targetId: factory.uuid() })),
+        ['operations', 0, 'targetId'],
+        'targetId is not valid for asset batch targets',
+      );
+    });
+
+    it('rejects asset.trash with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidTrashOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.trash requires an asset_batch target',
+      );
+    });
+
+    it('rejects asset.trash with no asset selection mechanism', () => {
+      expectIssue(
+        parseSingleOperationProposal({ ...makeValidTrashOp(), assetIds: undefined }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects asset.trash with multiple asset selection mechanisms', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidTrashOp({ assetSelectionHandleId: factory.uuid() })),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidTrashOp());
+      expect(result.success).toBe(true);
+    });
+  });
 });
