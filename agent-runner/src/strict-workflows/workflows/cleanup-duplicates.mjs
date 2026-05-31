@@ -24,8 +24,10 @@ const PATTERNS = [
 ];
 
 /**
- * Deterministic keeper selection: favorite > higher rating > larger resolution
- * > older fileCreatedAt (keep the original) > lexicographic id.
+ * Deterministic keeper selection: favorite > higher rating > higher sharpness
+ * > larger resolution > older fileCreatedAt (keep the original) > lexicographic id.
+ * Sharpness (from the quality scorer) is nullable; a null/absent score sorts
+ * lowest, so duplicate groups without quality scores keep their prior behavior.
  * @param {Array} assets
  * @returns {{ keeper: object, nonKeepers: object[] }}
  */
@@ -33,13 +35,15 @@ export const pickKeeper = (assets) => {
   const score = (a) => [
     a.isFavorite ? 1 : 0,
     typeof a.rating === 'number' ? a.rating : -1,
+    typeof a.sharpness === 'number' ? a.sharpness : -1,
     (a.width ?? 0) * (a.height ?? 0),
   ];
   const sorted = [...assets].sort((a, b) => {
-    const [fa, ra, sa] = score(a);
-    const [fb, rb, sb] = score(b);
+    const [fa, ra, sha, sa] = score(a);
+    const [fb, rb, shb, sb] = score(b);
     if (fa !== fb) return fb - fa; // favorite first
     if (ra !== rb) return rb - ra; // higher rating
+    if (sha !== shb) return shb - sha; // sharper first
     if (sa !== sb) return sb - sa; // larger resolution
     const ta = Date.parse(a.fileCreatedAt) || 0;
     const tb = Date.parse(b.fileCreatedAt) || 0;

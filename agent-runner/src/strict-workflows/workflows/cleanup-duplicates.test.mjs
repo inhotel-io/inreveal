@@ -11,6 +11,7 @@ const makeAsset = (overrides = {}) => ({
   id: overrides.id ?? 'asset-1',
   isFavorite: overrides.isFavorite ?? false,
   rating: overrides.rating ?? null,
+  sharpness: overrides.sharpness ?? null,
   width: overrides.width ?? null,
   height: overrides.height ?? null,
   fileCreatedAt: overrides.fileCreatedAt ?? '2025-01-01T00:00:00.000Z',
@@ -73,6 +74,51 @@ describe('pickKeeper — larger resolution wins (no favorite, same rating)', () 
   });
 });
 
+describe('pickKeeper — sharpness (ranked above resolution, below rating)', () => {
+  it('prefers the sharper of two equal-resolution duplicates', () => {
+    const sharp = makeAsset({ id: 'sharp', width: 1000, height: 1000, sharpness: 80 });
+    const blurry = makeAsset({ id: 'blurry', width: 1000, height: 1000, sharpness: 20 });
+    const { keeper, nonKeepers } = pickKeeper([blurry, sharp]);
+    assert.equal(keeper.id, 'sharp');
+    assert.deepEqual(nonKeepers.map((x) => x.id), ['blurry']);
+  });
+
+  it('ranks present sharpness above resolution (sharper-but-smaller wins)', () => {
+    const sharpSmall = makeAsset({ id: 'sharpSmall', width: 800, height: 600, sharpness: 90 });
+    const blurryBig = makeAsset({ id: 'blurryBig', width: 4000, height: 3000, sharpness: 10 });
+    const { keeper } = pickKeeper([blurryBig, sharpSmall]);
+    assert.equal(keeper.id, 'sharpSmall');
+  });
+
+  it('falls back to resolution when sharpness is null on both', () => {
+    const big = makeAsset({ id: 'big', width: 4000, height: 3000, sharpness: null });
+    const small = makeAsset({ id: 'small', width: 800, height: 600, sharpness: null });
+    const { keeper } = pickKeeper([small, big]);
+    assert.equal(keeper.id, 'big');
+  });
+
+  it('treats null sharpness as lowest (scored asset wins over unscored at equal resolution)', () => {
+    const scored = makeAsset({ id: 'scored', width: 1000, height: 1000, sharpness: 5 });
+    const unscored = makeAsset({ id: 'unscored', width: 1000, height: 1000, sharpness: null });
+    const { keeper } = pickKeeper([unscored, scored]);
+    assert.equal(keeper.id, 'scored');
+  });
+
+  it('all-null sharpness is identical to the pre-sharpness behavior (resolution, then age, then id)', () => {
+    const a = makeAsset({ id: 'a', width: 1000, height: 1000, fileCreatedAt: '2025-01-02T00:00:00.000Z' });
+    const b = makeAsset({ id: 'b', width: 1000, height: 1000, fileCreatedAt: '2025-01-01T00:00:00.000Z' });
+    const { keeper } = pickKeeper([a, b]);
+    assert.equal(keeper.id, 'b'); // older wins at equal resolution + null sharpness
+  });
+
+  it('rating still outranks sharpness (higher rating but blurrier wins)', () => {
+    const highRatingBlurry = makeAsset({ id: 'rated', rating: 5, sharpness: 10 });
+    const lowRatingSharp = makeAsset({ id: 'sharp', rating: 1, sharpness: 99 });
+    const { keeper } = pickKeeper([lowRatingSharp, highRatingBlurry]);
+    assert.equal(keeper.id, 'rated');
+  });
+});
+
 describe('pickKeeper — older fileCreatedAt wins (keep original)', () => {
   it('picks the asset with the earlier creation date', () => {
     const a = makeAsset({ id: 'a', fileCreatedAt: '2025-06-01T00:00:00.000Z' });
@@ -104,14 +150,22 @@ describe('pickKeeper — lexicographic id tiebreak', () => {
   });
 });
 
-describe('pickKeeper — priority chain with three assets', () => {
-  it('favorite > rating > resolution > date > id chain resolves correctly', () => {
+describe('pickKeeper — priority chain', () => {
+  it('favorite > rating > sharpness > resolution > date > id chain resolves correctly', () => {
     const fav = makeAsset({ id: 'fav', isFavorite: true, rating: 1 });
     const highRating = makeAsset({ id: 'rating', isFavorite: false, rating: 5 });
-    const bigRes = makeAsset({ id: 'res', isFavorite: false, rating: 3, width: 4000, height: 3000 });
-    const { keeper, nonKeepers } = pickKeeper([highRating, bigRes, fav]);
-    assert.equal(keeper.id, 'fav');
-    assert.equal(nonKeepers.length, 2);
+    const sharpAsset = makeAsset({ id: 'sharp', isFavorite: false, rating: 3, sharpness: 99 });
+    const bigRes = makeAsset({ id: 'res', isFavorite: false, rating: 3, sharpness: 1, width: 4000, height: 3000 });
+    const { keeper, nonKeepers } = pickKeeper([highRating, sharpAsset, bigRes, fav]);
+    assert.equal(keeper.id, 'fav'); // favorite outranks everything
+    assert.equal(nonKeepers.length, 3);
+  });
+
+  it('with no favorite and equal rating, sharpness outranks the larger-resolution asset', () => {
+    const sharpAsset = makeAsset({ id: 'sharp', rating: 3, sharpness: 99, width: 800, height: 600 });
+    const bigRes = makeAsset({ id: 'res', rating: 3, sharpness: 1, width: 4000, height: 3000 });
+    const { keeper } = pickKeeper([bigRes, sharpAsset]);
+    assert.equal(keeper.id, 'sharp');
   });
 });
 
