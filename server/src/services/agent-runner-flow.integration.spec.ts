@@ -141,6 +141,7 @@ const metadata = (id: string): AgentAssetMetadata => ({
   visibility: AssetVisibility.Timeline,
   exifInfo: null,
   tags: [],
+  qualityInfo: null,
 });
 
 type AcceptanceSearchCase = {

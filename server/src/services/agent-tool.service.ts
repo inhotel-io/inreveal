@@ -3484,10 +3484,10 @@ export class AgentToolService {
         return ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location'];
       }
       case 'technical': {
-        return ['type', 'dates', 'filename', 'camera', 'rating', 'visibility'];
+        return ['type', 'dates', 'filename', 'camera', 'rating', 'visibility', 'quality'];
       }
       case 'allSafe': {
-        return ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility'];
+        return ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility', 'quality'];
       }
     }
   }
@@ -3559,6 +3559,10 @@ export class AgentToolService {
           result.visibility = asset.visibility;
           break;
         }
+        case 'quality': {
+          result.qualityInfo = asset.qualityInfo ?? null;
+          break;
+        }
       }
     }
 
@@ -3595,6 +3599,7 @@ export class AgentToolService {
           }
         : null,
       tags: asset.tags.map((tag) => ({ id: tag.id, value: tag.value, color: tag.color })),
+      qualityInfo: asset.qualityInfo ?? null,
     };
   }
 
