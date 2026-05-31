@@ -1,4 +1,4 @@
-import { handoffOpen } from '../protocol.mjs';
+import { handoffOpen, needsInput } from '../protocol.mjs';
 
 // curate_highlights (hybrid): "pick/choose/select/suggest/curate/find the best/top N
 // highlights from <source> [and make an album [called X]]" OR
@@ -14,6 +14,13 @@ import { handoffOpen } from '../protocol.mjs';
 //   - read-only browse: "show me my best photos" (no source clause)
 
 const KIND = 'curate_highlights';
+
+const DEFAULT_HIGHLIGHT_COUNT = 10; // conservative default for a bounded source
+const MAX_HIGHLIGHT_COUNT = 1000;   // mirrors MAX_CURATE_SELECTION_TARGET_COUNT
+
+// Whole-library / unbounded sources cannot be curated without a narrowing scope.
+const UNBOUNDED_SOURCE_PATTERN =
+  /\b(?:my\s+)?(?:whole\s+|entire\s+)?(?:library|collection|everything|all\s+(?:my\s+|of\s+my\s+)?photos|all\s+photos)\b/i;
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
@@ -36,6 +43,16 @@ const WORD_COUNTS = {
 const WORD_COUNT_ALTERNATIVES = Object.keys(WORD_COUNTS).join('|');
 // Matches either a digit string or a spelled-out count word.
 const COUNT_ALTS = `(?:\\d+|${WORD_COUNT_ALTERNATIVES})`;
+
+// Robust count coercion for run() guardrails.
+// The LLM may emit count as a number, a digit string, or a spelled-out word.
+const coerceCount = (raw) => {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  if (typeof raw === 'number') return raw;               // may be 0/negative → validated below
+  const n = Number(raw);
+  if (Number.isFinite(n)) return n;                      // "15" → 15
+  return WORD_COUNTS[String(raw).toLowerCase()] ?? Number.NaN; // "fifteen" → 15, junk → NaN
+};
 
 const parseCount = (raw) => {
   if (!raw) return undefined;
@@ -186,8 +203,27 @@ export const curateHighlightsWorkflow = () => ({
     };
   },
 
-  // Placeholder: Slices 4-6 replace this with the full bounded curation plan.
-  async run(_ctx) {
+  async run({ slots }) {
+    const sourceDescription = clean(slots?.sourceDescription);
+    if (!sourceDescription || UNBOUNDED_SOURCE_PATTERN.test(sourceDescription)) {
+      return needsInput({
+        text: 'To suggest highlights, I need a bounded source such as an album, shared space, date range, or selected photos. Which source or set should I use?',
+      });
+    }
+
+    const count = coerceCount(slots?.count);
+    if (count !== undefined && (Number.isNaN(count) || !Number.isInteger(count) || count < 1)) {
+      return needsInput({ text: 'How many highlights would you like? Please give a positive whole number.' });
+    }
+    if (count !== undefined && count > MAX_HIGHLIGHT_COUNT) {
+      return needsInput({
+        text: `I can suggest ${MAX_HIGHLIGHT_COUNT} or fewer highlights at once. Pick a smaller number or narrow the source.`,
+      });
+    }
+    const targetCount = count ?? DEFAULT_HIGHLIGHT_COUNT;
+
+    // Slice 5 replaces this with: resolve source → curateSelection(targetCount) → propose.
+    void targetCount;
     return handoffOpen({ reason: 'Highlight curation planning is not implemented yet.' });
   },
 });
