@@ -15,6 +15,7 @@ import { setAlbumCoverWorkflow } from './workflows/set-album-cover.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 import { trashAssetsWorkflow } from './workflows/trash-assets.mjs';
 import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
+import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
@@ -49,6 +50,9 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     duplicate photos" routes to cleanup (the duplicate keyword wins), not to
 //     the generic trash workflow. Both require a trash/delete verb but
 //     cleanup_duplicates requires the additional "duplicate(s)/dupe(s)" keyword.
+//   - `visual_cleanup` BEFORE `trash_assets` so objective-quality cleanup
+//     ("trash blurry photos", "delete dark uploads") uses quality filters instead
+//     of the generic trash source resolver.
 //   - `trash_assets` is adjacent to `archive_assets` (both source-state workflows).
 //     Its distinct verbs (trash/delete/bin/move-to-trash) do not collide with
 //     `remove_photos_from_album` ("remove … from") or `untag_assets` ("remove … tag").
@@ -61,6 +65,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
   cleanupDuplicatesWorkflow,
+  visualCleanupWorkflow,
   trashAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
