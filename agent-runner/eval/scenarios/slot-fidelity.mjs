@@ -63,6 +63,12 @@ export default [
     expect: { kind: 'tag_assets', slots: { tagName: 'Spring Break', sourceDescription: 'my newest 20' } },
   },
   {
+    id: 'slots.trash.canonical',
+    category: 'slots',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets', slots: { sourceDescription: 'my newest 20 photos' } },
+  },
+  {
     id: 'slots.untag.canonical',
     category: 'slots',
     prompt: 'remove the Travel tag from my newest 20',
