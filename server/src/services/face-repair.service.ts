@@ -2,13 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { JobName, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
-import {
-  FlagDecision,
-  FlagParams,
-  ReattributionTally,
-  decideReattribution,
-  tallyReattribution,
-} from 'src/utils/face-repair';
+import { FlagParams, ReattributionTally, decideReattribution, tallyReattribution } from 'src/utils/face-repair';
 
 export interface ReattributionCandidate extends ReattributionTally {
   assetFaceId: string;
@@ -116,21 +110,6 @@ export class FaceRepairService extends BaseService {
     });
 
     return { toRepair, reviewOnlyFaces, reviewOnlyPersonIds: [...reviewOnlyPersonIds], perPerson };
-  }
-
-  async *findFlaggedFaces(
-    options: { ownerId?: string; personId?: string; maxDistance: number; voteWindow: number } & FlagParams,
-  ): AsyncIterableIterator<FlaggedFace> {
-    for await (const candidate of this.findReattributionCandidates(options)) {
-      const decision: FlagDecision = decideReattribution(candidate, options);
-      if (decision.flagged && decision.suspectedOwnerId) {
-        yield {
-          assetFaceId: candidate.assetFaceId,
-          currentPersonId: candidate.currentPersonId,
-          suspectedOwnerId: decision.suspectedOwnerId,
-        };
-      }
-    }
   }
 
   async executeRepair(plan: RepairPlan): Promise<{ unassigned: number; requeued: number }> {
