@@ -681,4 +681,111 @@ void main() {
       expect(task.requiresWiFi, isFalse);
     });
   });
+
+  group('backup batch continuation', () {
+    void stubUploadPath(LocalAsset asset) {
+      final entity = MockAssetEntity();
+      when(() => entity.isLivePhoto).thenReturn(false);
+      when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => entity);
+      when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => File('/tmp/${asset.id}.jpg'));
+      when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+    }
+
+    UploadTask backupTask(String id) => UploadTask(
+      taskId: id,
+      url: 'http://test-server.com/assets',
+      filename: '$id.jpg',
+      baseDirectory: BaseDirectory.temporary,
+      group: kBackupGroup,
+    );
+
+    setUp(() {
+      // Android keeps enqueueTasks to a single enqueueBackgroundAll call.
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((invocation) async {
+        final tasks = invocation.positionalArguments.first as List;
+        return List<bool>.filled(tasks.length, true);
+      });
+    });
+
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('does not re-enqueue assets already enqueued in the same session', () async {
+      final a1 = LocalAssetStub.image1;
+      final a2 = LocalAssetStub.image2;
+      stubUploadPath(a1);
+      stubUploadPath(a2);
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2]);
+
+      await sut.uploadBackupCandidates('user-1'); // enqueues a1 + a2
+      await sut.uploadBackupCandidates('user-1'); // same candidates, already enqueued -> no-op
+
+      verify(() => mockUploadRepository.enqueueBackgroundAll(any())).called(1);
+    });
+
+    test('enqueues the next batch once the upload queue drains', () async {
+      final a1 = LocalAssetStub.image1;
+      final a2 = LocalAssetStub.image2;
+      stubUploadPath(a1);
+      stubUploadPath(a2);
+      sut.backupBatchSize = 1;
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2]);
+      when(() => mockUploadRepository.getActiveTasks(kBackupGroup)).thenAnswer((_) async => <Task>[]);
+
+      await sut.uploadBackupCandidates('user-1'); // enqueues a1 only (batch size 1)
+
+      // a1 finishes and the queue is now empty -> the next batch (a2) is enqueued.
+      capturedStatusCallback()(TaskStatusUpdate(backupTask(a1.id), TaskStatus.complete));
+      await pumpEventQueue();
+
+      verify(() => mockBackupRepository.getCandidates('user-1')).called(2);
+      verify(() => mockUploadRepository.enqueueBackgroundAll(any())).called(2);
+    });
+
+    test('resume arms continuation and skips assets already in flight', () async {
+      final a1 = LocalAssetStub.image1; // already uploading (resumed)
+      final a2 = LocalAssetStub.image2; // the next asset to enqueue
+      stubUploadPath(a2);
+      sut.backupBatchSize = 1;
+      when(() => mockUploadRepository.start()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2]);
+
+      var activeCalls = 0;
+      when(() => mockUploadRepository.getActiveTasks(kBackupGroup)).thenAnswer((_) async {
+        activeCalls++;
+        // First call (resume seeding) sees a1 in flight; later (drain check) empty.
+        return activeCalls == 1 ? [backupTask(a1.id)] : <Task>[];
+      });
+
+      await sut.resume('user-1'); // seeds {a1}, arms continuation
+
+      // a1 finishes and the queue drains -> next batch enqueues a2 only.
+      capturedStatusCallback()(TaskStatusUpdate(backupTask(a1.id), TaskStatus.complete));
+      await pumpEventQueue();
+
+      final captured = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured;
+      expect(captured, hasLength(1));
+      expect((captured.single as List).cast<UploadTask>().map((t) => t.taskId), [a2.id]);
+    });
+
+    test('does not enqueue the next batch while tasks are still active', () async {
+      final a1 = LocalAssetStub.image1;
+      final a2 = LocalAssetStub.image2;
+      stubUploadPath(a1);
+      stubUploadPath(a2);
+      sut.backupBatchSize = 1;
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2]);
+      when(
+        () => mockUploadRepository.getActiveTasks(kBackupGroup),
+      ).thenAnswer((_) async => [backupTask('still-running')]);
+
+      await sut.uploadBackupCandidates('user-1'); // enqueues a1
+
+      capturedStatusCallback()(TaskStatusUpdate(backupTask(a1.id), TaskStatus.complete));
+      await pumpEventQueue();
+
+      verify(() => mockUploadRepository.enqueueBackgroundAll(any())).called(1);
+    });
+  });
 }
