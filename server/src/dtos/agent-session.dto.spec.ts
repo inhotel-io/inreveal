@@ -32,6 +32,7 @@ const fullWriteScope = {
   addMembersToSpaces: true,
   removeMembersFromSpaces: true,
   updateSpaceMemberRoles: true,
+  trashAssets: true,
 };
 const expandedWriteScopeKeys = [
   'removeAssets',
@@ -47,6 +48,7 @@ const expandedWriteScopeKeys = [
   'addMembersToSpaces',
   'removeMembersFromSpaces',
   'updateSpaceMemberRoles',
+  'trashAssets',
 ];
 
 const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({

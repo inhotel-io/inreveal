@@ -594,6 +594,18 @@ const removeTagOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRemoveTag);
   });
 
+const trashOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetTrash).meta({ id: 'AgentAssetTrashOperationType' }),
+    ...assetBatchBase,
+    // Override assetBatchBase's Low default — trash is always High risk
+    riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.High),
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetTrash);
+  });
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -626,6 +638,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   updateMetadataOperationSchema,
   addTagOperationSchema,
   removeTagOperationSchema,
+  trashOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>
