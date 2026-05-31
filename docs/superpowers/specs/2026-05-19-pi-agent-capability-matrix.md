@@ -94,11 +94,11 @@ retried only when the correction is mechanical.
 | Create recent trip album         | Strict                      | `create_recent_trip_album` handles recent-trip detection, candidate choice, and album plan creation from the handle. See [strict recent trip album design](./2026-05-28-pi-agent-strict-recent-trip-album-design.md). |
 | Create album from a source       | Hybrid                      | `create_album_from_source`: generic album from a recency/date/type source via `proposeAlbumFromSelection`; trip and subjective sources hand off.                                                                      |
 | Add photos to existing album     | Hybrid                      | `add_photos_to_album`: Pi may resolve the source; Gallery owns album lookup, duplicate-safe add semantics, and plan creation.                                                                                         |
-| Remove wrong photos from album   | Hybrid                      | Strict when metadata-identifiable; open discovery when visual or subjective matching is required.                                                                                                                     |
+| Remove photos from album         | Hybrid                      | `remove_photos_from_album`: Pi resolves the album + source; Gallery owns the `album.removeAssets` plan from the handle (empty removals ask for input).                                                                |
 | Rename or describe album         | Strict                      | `rename_or_describe_album`: Direct album-detail update plan; preserve unspecified fields.                                                                                                                             |
-| Set album cover                  | Hybrid                      | Pi or Gallery may inspect bounded candidates; Gallery owns cover plan creation and validation.                                                                                                                        |
-| Create shared space              | Strict                      | Space create and optional add-assets plan with temporary target validation.                                                                                                                                           |
-| Add/remove photos in space       | Hybrid                      | Pi may resolve source assets; Gallery owns space membership plan creation.                                                                                                                                            |
+| Set album cover                  | Strict                      | `set_album_cover`: Pi resolves the album + an explicit photo position; Gallery owns the `album.setCover` plan (cover rides in the asset selection).                                                                   |
+| Create space from a source       | Hybrid                      | `create_space_from_source`: Pi resolves the source; Gallery owns space creation from the wrapped selection handle (`proposeSpaceFromSearch`).                                                                         |
+| Add/remove photos in a space     | Hybrid                      | `manage_space_assets`: Pi resolves the space + source; Gallery owns the space add (from-search) / remove (`space.removeAssets`) plan.                                                                                 |
 | Update space details             | Strict                      | `rename_or_describe_space`: Direct space-detail update plan; preserve assets and members.                                                                                                                             |
 | Add or remove space members      | Strict                      | `manage_space_members`: Gallery owns user lookup, role defaults, membership validation, and plan creation.                                                                                                            |
 | Change space member roles        | Strict                      | `change_member_role`: Gallery owns role transition validation and plan creation.                                                                                                                                      |
@@ -107,8 +107,8 @@ retried only when the correction is mechanical.
 | Mark favorites                   | Hybrid                      | `favorite_assets`: Open curation for subjective "best"; strict favorite plan once a bounded source exists.                                                                                                            |
 | Archive assets                   | Hybrid                      | `archive_assets`: recency/date/type source -> batch `asset.setArchive` plan; subjective or qualified sources hand off.                                                                                                |
 | Add or remove tags               | Hybrid (add arm)            | `tag_assets`: add-only `asset.addTag` from a resolved source; removal and subjective sources hand off.                                                                                                                |
-| Batch asset metadata edits       | Strict                      | Explicit supported fields use deterministic field validation, before/after review metadata, and plan creation.                                                                                                        |
-| Rotate images                    | Hybrid                      | Strict for explicit targets and angle; open discovery for "sideways" detection.                                                                                                                                       |
+| Batch asset metadata edits       | Hybrid                      | `update_asset_metadata`: Pi resolves a loose-asset source; Gallery owns the `asset.updateMetadata` plan (description/rating/date/timezone/lat+lng; place names ask for coordinates).                                  |
+| Rotate assets                    | Hybrid                      | `rotate_assets`: Pi resolves the source + explicit angle (90/180/270); Gallery owns the batch `asset.rotate` plan. No-angle / subjective declines.                                                                    |
 | Answer album/library questions   | Open read flow              | Pi may use read/search tools and answer without write planning.                                                                                                                                                       |
 | Summarize a proposed plan        | Strict                      | Summary must be generated from a persisted plan.                                                                                                                                                                      |
 | Revise a plan                    | Strict                      | Revision must replace a persisted plan and never apply it.                                                                                                                                                            |
@@ -124,18 +124,24 @@ retried only when the correction is mechanical.
 
 Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do not edit by hand; run `pnpm --dir server sync:agent-capabilities`.
 
-| Kind                       | Flow   | Required read tools                                       | Plan tool                        |
-| -------------------------- | ------ | --------------------------------------------------------- | -------------------------------- |
-| `create_recent_trip_album` | Strict | `findTripCandidates`                                      | `proposeAlbumFromSelection`      |
-| `rename_or_describe_album` | Strict | `listAlbums`                                              | `proposeAlbumOperations`         |
-| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`         |
-| `archive_assets`           | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
-| `favorite_assets`          | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
-| `tag_assets`               | Hybrid | `searchAssets`                                            | `proposeAssetBatchFromSelection` |
-| `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`         |
-| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
-| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`         |
-| `create_album_from_source` | Hybrid | `searchAssets`                                            | `proposeAlbumFromSelection`      |
+| Kind                       | Flow   | Required read tools                                       | Plan tool                           |
+| -------------------------- | ------ | --------------------------------------------------------- | ----------------------------------- |
+| `create_recent_trip_album` | Strict | `findTripCandidates`                                      | `proposeAlbumFromSelection`         |
+| `rename_or_describe_album` | Strict | `listAlbums`                                              | `proposeAlbumOperations`            |
+| `set_album_cover`          | Strict | `listAlbums`, `readAlbum`                                 | `proposeAlbumOperations`            |
+| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
+| `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
+| `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAddAssetsToSpaceFromSearch` |
+| `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`            |
+| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
+| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
+| `create_album_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumFromSelection`         |
+| `create_space_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeSpaceFromSearch`            |
 
 <!-- generated:workflows:end -->
 
@@ -255,14 +261,17 @@ Use these prompts as manual and automated acceptance scenarios:
 1. Turn the “solid now” rows into an automated assistant regression suite.
 2. Add prompt/docs examples for each smoke prompt so smaller models learn the
    intended tool sequence.
-3. The batch-action (`archive_assets`, `favorite_assets`, `tag_assets`),
-   space-detail/membership (`rename_or_describe_space`, `manage_space_members`,
-   `change_member_role`), and general `create_album_from_source` workflows now ship
-   on top of `create_recent_trip_album`, `rename_or_describe_album`, and
-   `add_photos_to_album`, each with L1 (component) + L3 (live, read-only) eval
-   coverage and a shared metadata source-resolver (recency + relative dates + media
-   type, behind a clean-source precision gate).
-4. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
+3. **Phase 2 shipped (16 strict/hybrid workflows total).** On top of the Phase-1
+   set, six new workflows ship — `update_asset_metadata`, `remove_photos_from_album`,
+   `manage_space_assets`, `create_space_from_source`, `rotate_assets`, and
+   `set_album_cover` — each with L1 (component) + L3 (live, read-only) eval coverage.
+4. **The shared source-resolver now resolves named entities + direct metadata.** It
+   maps people/tags/albums/cameras through the real `resolveAssetSearchFilters` tool
+   (structured args, never a free-text `query`) and places/ratings/favorites/
+   visibility straight into `searchAssets` filters; ambiguous or not-found entities
+   ask for input rather than guess. So every source-based workflow accepts entity
+   sources (e.g. “archive my Berlin photos”, “tag photos of Alex as Family”).
+5. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
    `needs_input` rather than a durable continuation — a follow-up could add
-   candidate-resume like the trip workflow. Named-entity / location / semantic
-   sources still hand off (a later spec may integrate `resolveAssetSearchFilters`).
+   candidate-resume like the trip workflow. Place-name → coordinate geocoding and
+   subjective/visual sources remain out of scope (they hand off).
