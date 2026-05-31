@@ -75,6 +75,9 @@ export const parseDateRange = (source, now = new Date()) => {
   if (year) {
     return { takenAfter: dayStart(Number(year[1]), 0, 1), takenBefore: dayEnd(Number(year[1]), 11, 31) };
   }
+  if (/\btoday\b/.test(text)) {
+    return dayRange(now);
+  }
   if (/\byesterday\b/.test(text)) {
     return dayRange(new Date(now.getTime() - DAY_MS));
   }
@@ -92,6 +95,9 @@ export const parseDateRange = (source, now = new Date()) => {
     const sunday = new Date(thisMonday.getTime() - DAY_MS);
     return { takenAfter: dayRange(monday).takenAfter, takenBefore: dayRange(sunday).takenBefore };
   }
+  if (/\bthis\s+week\b/.test(text)) {
+    return { takenAfter: dayRange(thisMonday).takenAfter, takenBefore: dayRange(now).takenBefore };
+  }
   if (/\bthis\s+month\b/.test(text)) {
     return monthRange(now.getUTCFullYear(), now.getUTCMonth());
   }
@@ -100,6 +106,27 @@ export const parseDateRange = (source, now = new Date()) => {
     return monthRange(prev.getUTCFullYear(), prev.getUTCMonth());
   }
   return undefined;
+};
+
+// --- upload-date parsing (Slice 3: createdAfter / createdBefore) ---------------
+
+const UPLOAD_PHRASE = /\b(?:uploaded|imported|added|recent\s+uploads?|recently\s+(?:uploaded|added|imported))\b/i;
+const UPLOAD_STRIP = /\b(?:uploaded|imported|added|uploads?|recently)\b/gi;
+const DEFAULT_UPLOAD_WINDOW_DAYS = 30;
+
+// Resolve upload phrasing to an upload-date (created) range, or undefined.
+// "uploaded <timeword>" delegates to parseDateRange for the time; "recent
+// uploads"/"recently uploaded" with no explicit time uses a default window.
+// "photos I uploaded" (no time, not "recent") → undefined (caller handoffs).
+export const parseUploadRange = (source, now = new Date()) => {
+  const text = String(source ?? '');
+  if (!UPLOAD_PHRASE.test(text)) return undefined;
+  const range = parseDateRange(text, now);
+  if (range) return { createdAfter: range.takenAfter, createdBefore: range.takenBefore };
+  if (/\brecent(?:ly)?\b/i.test(text)) {
+    return { createdAfter: new Date(now.getTime() - DEFAULT_UPLOAD_WINDOW_DAYS * DAY_MS), createdBefore: now };
+  }
+  return undefined; // "photos I uploaded" (no time, not "recent") → unbounded → caller handoffs
 };
 
 // --- named-entity / direct-metadata source detection (Phase 0) ---------------
@@ -277,14 +304,16 @@ const GENERIC_NOUNS = /\b(?:photos?|pics?|pictures?|snaps?|shots?)\b/gi;
 // via parseMediaType), so a type-qualified source is "clean".
 const TYPE_NOUNS = /\b(?:videos?|clips?|movies?|images?)\b/gi;
 const STOPWORDS =
-  /\b(?:my|the|a|an|all|of|from|in|on|during|some|please|that|this|these|those|i|me|we|our|us|took|taken|and|to|with)\b/gi;
+  /\b(?:my|the|a|an|all|everything|of|from|in|on|during|some|please|that|this|these|those|i|me|we|our|us|took|taken|and|to|with)\b/gi;
 const DATE_STRIP = new RegExp(
   [
     MONTH_YEAR_RE.source,
     YEAR_RE.source,
+    'today',
     'yesterday',
     'last\\s+weekend',
     'last\\s+week',
+    'this\\s+week',
     'this\\s+month',
     'last\\s+month',
   ].join('|'),
@@ -317,6 +346,7 @@ export const isCleanSource = (source) => {
   const residual = text
     .replace(DATE_STRIP, ' ')
     .replace(RECENCY_PATTERN_G, ' ')
+    .replace(UPLOAD_STRIP, ' ')
     .replace(/\b\d{1,4}\b/g, ' ')
     .replace(GENERIC_NOUNS, ' ')
     .replace(TYPE_NOUNS, ' ')
@@ -336,7 +366,8 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
 
   const entity = parseEntitySource(source);
   const recencyLimit = parseRecencyLimit(source);
-  const dateRange = parseDateRange(source, now);
+  const uploadRange = parseUploadRange(source, now);
+  const dateRange = uploadRange ? undefined : parseDateRange(source, now);
   const mediaType = parseMediaType(source);
 
   // Clean-source gate: an unconsumed residual (an unresolvable qualifier) hands off
@@ -349,9 +380,11 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     };
   }
 
-  const dateFilters = dateRange
-    ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
-    : {};
+  const dateFilters = uploadRange
+    ? { createdAfter: uploadRange.createdAfter.toISOString(), createdBefore: uploadRange.createdBefore.toISOString() }
+    : dateRange
+      ? { takenAfter: dateRange.takenAfter.toISOString(), takenBefore: dateRange.takenBefore.toISOString() }
+      : {};
 
   let filters;
   if (entity) {
@@ -392,7 +425,7 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
   } else {
     // Recency / date / type-only source (unchanged). Type is a modifier, not a bound,
     // so a clean source with no count and no date hands off.
-    if (recencyLimit === undefined && dateRange === undefined) {
+    if (recencyLimit === undefined && dateRange === undefined && uploadRange === undefined) {
       return { status: 'handoff', reason: `Source "${source}" needs a count or date range this workflow can bound.` };
     }
     filters = { ...dateFilters, ...(mediaType ? { type: mediaType } : {}) };
