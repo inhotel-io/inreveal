@@ -138,6 +138,7 @@ DROP TABLE IF EXISTS "classification_category" CASCADE;
 -- Storage migration log and asset duplicate checksum
 DROP TABLE IF EXISTS "storage_migration_log" CASCADE;
 DROP TABLE IF EXISTS "asset_duplicate_checksum" CASCADE;
+DROP TABLE IF EXISTS "asset_quality" CASCADE;
 
 -- Agent provider credentials, sessions, activity events, messages, tool calls, selection handles, and operation plans
 DROP TABLE IF EXISTS "agent_operation" CASCADE;
@@ -179,6 +180,7 @@ ALTER TABLE "person"            DROP COLUMN IF EXISTS "type";
 ALTER TABLE "person"            DROP COLUMN IF EXISTS "species";
 ALTER TABLE "asset_job_status"  DROP COLUMN IF EXISTS "petsDetectedAt";
 ALTER TABLE "asset_job_status"  DROP COLUMN IF EXISTS "classifiedAt";
+ALTER TABLE "asset_job_status"  DROP COLUMN IF EXISTS "qualityScoredAt";
 ALTER TABLE "library"           DROP COLUMN IF EXISTS "createId";
 DROP INDEX IF EXISTS "asset_face_personId_idx";
 DROP INDEX IF EXISTS "person_ownerId_identityId_key";
@@ -596,6 +598,7 @@ DELETE FROM "kysely_migrations"
    '1778940000000-AgentSessionActivityEvent',
    '1778950000000-AgentSelectionHandle',
    '1779000000000-AddAgentSessionWorkflowState',
+   '1779100000000-AddAssetQualityScoring',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
@@ -667,7 +670,7 @@ BEGIN
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
-       'storage_migration_log', 'asset_duplicate_checksum',
+       'storage_migration_log', 'asset_duplicate_checksum', 'asset_quality',
        'agent_provider_credential', 'agent_session', 'agent_session_activity_event',
        'agent_message', 'agent_tool_call', 'agent_selection_handle',
        'agent_operation_plan', 'agent_operation'
