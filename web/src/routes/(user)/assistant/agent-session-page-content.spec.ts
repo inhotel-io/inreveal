@@ -211,6 +211,7 @@ const createdSession: AgentSessionResponseDto = {
       updateAssetMetadata: true,
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
+      trashAssets: true,
     },
   },
   permissionPreset: AgentPermissionPreset.VisualOrganizer,
