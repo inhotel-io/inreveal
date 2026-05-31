@@ -106,4 +106,14 @@ describe('tallyReattribution', () => {
     expect(tally.topOtherPersonId).toBe('Q');
     expect(tally.topOtherCount).toBe(1);
   });
+
+  it('breaks ties on personId (lexical) when count and nearest distance are equal — order independent', () => {
+    // B inserted before A — without tiebreak, B wins due to insertion order
+    const t1 = tallyReattribution('P', [n('B', 0.2), n('A', 0.2)]);
+    // A inserted before B
+    const t2 = tallyReattribution('P', [n('A', 0.2), n('B', 0.2)]);
+    // 'A' < 'B' lexically — A must win regardless of input order
+    expect(t1.topOtherPersonId).toBe('A');
+    expect(t2.topOtherPersonId).toBe('A');
+  });
 });

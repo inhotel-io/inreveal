@@ -35,7 +35,10 @@ export const tallyReattribution = (currentPersonId: string, neighbors: Reattribu
     if (personId === currentPersonId) {
       continue;
     }
-    const wins = count > topOtherCount || (count === topOtherCount && nearest < (topOtherNearest ?? Infinity));
+    const wins =
+      count > topOtherCount ||
+      (count === topOtherCount && nearest < (topOtherNearest ?? Infinity)) ||
+      (count === topOtherCount && nearest === topOtherNearest && personId < topOtherPersonId!);
     if (wins) {
       topOtherPersonId = personId;
       topOtherCount = count;
