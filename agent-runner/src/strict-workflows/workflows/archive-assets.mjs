@@ -80,7 +80,7 @@ export const archiveAssetsWorkflow = () => ({
     return { archived, sourceDescription };
   },
 
-  async run({ client, slots, signal }) {
+  async run({ client, slots, signal, now }) {
     const archived = Boolean(slots?.archived);
     const sourceDescription = clean(slots?.sourceDescription);
 
@@ -89,7 +89,7 @@ export const archiveAssetsWorkflow = () => ({
     //    bounded metadata-search handle. A tool error surfaces as `failed`.
     let resolution;
     try {
-      resolution = await resolveAssetSource({ client, sourceDescription, signal });
+      resolution = await resolveAssetSource({ client, sourceDescription, signal, ...(now ? { now } : {}) });
     } catch (error) {
       return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
     }
