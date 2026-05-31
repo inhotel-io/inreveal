@@ -595,6 +595,7 @@ DELETE FROM "kysely_migrations"
    '1778930000000-AgentSessionTitle',
    '1778940000000-AgentSessionActivityEvent',
    '1778950000000-AgentSelectionHandle',
+   '1779000000000-AddAgentSessionWorkflowState',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
