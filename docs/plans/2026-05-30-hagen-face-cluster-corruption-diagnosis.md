@@ -175,6 +175,20 @@ face that **does** resemble the target still moves (legitimate consolidation pre
 mixing both moves only the resembling face and realigns the rest. Full unit suite (4480) + all
 face-identity / people-identity-rbac / shared-space-face-identity-repair / metadata medium specs green.
 
+### Residual-coverage tests (added after a "is coverage full?" pass)
+
+- **Job-level no-loop** (`people-identity-rbac.spec.ts`): drives the real `handleFaceIdentityBackfill`
+  with a refused face and asserts it queues **no** `FaceIdentityBackfill` continuation. Verified to fail
+  (a continuation _is_ queued) when the realign is disabled — i.e. it directly catches the loop, not just
+  the `getBackfillWork()` invariant.
+- **Threshold boundary** (both guards): using `blendedEmbedding`, a source/face at centroid distance
+  ~0.453 is merged/moved while one at ~0.547 is refused — pinning the cutoff to ≈0.5 (a change to 0.3 or
+  0.7 would fail these).
+- **Contaminated-centroid limitation (documented, not silent):** once a person's cluster is 50/50
+  contaminated, a pure other-person face sits only ~0.29 from the mixed centroid and is **not** blocked.
+  The guard is strongest at first contamination (clean target) and weaker mid-cascade — the merge-chokepoint
+  guard is the primary defense against seeding; this write-point guard is the safety net.
+
 ## Remaining: data repair (separate follow-up)
 
 ## Recommended remediation (not yet implemented)

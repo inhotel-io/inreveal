@@ -189,6 +189,23 @@ const axisEmbedding = (axis: 'first' | 'second') => {
   return '[' + values.join(',') + ']';
 };
 
+// A 0/1 vector with `firstHalfOnes` ones in [0,256) and `secondHalfOnes` ones in [256,512). Against an
+// all-ones-first-half centroid (axisEmbedding('first')), cosine distance = 1 - firstHalfOnes/256 when the
+// total ones = 256. So blendedEmbedding(140,116) sits at distance ~0.453 and (116,140) at ~0.547 —
+// straddling the 0.5 guard threshold for boundary tests.
+const blendedEmbedding = (firstHalfOnes: number, secondHalfOnes: number) => {
+  const values = Array.from({ length: 512 }, (_, index) => {
+    if (index < firstHalfOnes) {
+      return 1;
+    }
+    if (index >= 256 && index < 256 + secondHalfOnes) {
+      return 1;
+    }
+    return 0;
+  });
+  return '[' + values.join(',') + ']';
+};
+
 const newPersonalIdentityCluster = async (
   ctx: ReturnType<typeof setup>['ctx'],
   sut: FaceIdentityRepository,
@@ -3599,6 +3616,41 @@ describe(FaceIdentityRepository.name, () => {
         await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
       }
     });
+
+    it('merges a source just inside the 0.5 centroid threshold but refuses one just outside it', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const insideSource = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: blendedEmbedding(140, 116), // centroid distance ~0.453 (< 0.5)
+          faceCount: 3,
+        });
+        const outsideSource = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: blendedEmbedding(116, 140), // centroid distance ~0.547 (> 0.5)
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [insideSource.identity.id, outsideSource.identity.id],
+          source: 'shared-space-evidence',
+        });
+
+        expect(await getLinkedIdentityIds(ctx, insideSource.assetFaceIds)).toEqual(new Set([target.identity.id]));
+        expect(await getLinkedIdentityIds(ctx, outsideSource.assetFaceIds)).toEqual(
+          new Set([outsideSource.identity.id]),
+        );
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
   });
 
   describe('personal identity repair embedding guard', () => {
@@ -3722,6 +3774,83 @@ describe(FaceIdentityRepository.name, () => {
         expect(distinctLink.identityId).toBe(identityB.id);
         const backfillWork = await sut.getBackfillWork();
         expect(backfillWork.hasPersonalIdentityWork).toBe(false);
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('moves a face just inside the 0.5 distance threshold but refuses one just outside it', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const personA = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const { person: personB } = await ctx.newPerson({ ownerId: user.id });
+        await sut.ensurePersonIdentity(personB.id);
+        const makeBFaceLinkedToA = async (embedding: string) => {
+          const { asset } = await ctx.newAsset({ ownerId: user.id });
+          const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
+          await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
+          await sut.linkFace({ assetFaceId: assetFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+          return assetFace.id;
+        };
+        const insideFaceId = await makeBFaceLinkedToA(blendedEmbedding(140, 116)); // distance ~0.453 (< 0.5)
+        const outsideFaceId = await makeBFaceLinkedToA(blendedEmbedding(116, 140)); // distance ~0.547 (> 0.5)
+
+        await sut.backfillPersonalIdentities({ limit: 100 });
+
+        const faces = await ctx.database
+          .selectFrom('asset_face')
+          .select(['id', 'personId'])
+          .where('id', 'in', [insideFaceId, outsideFaceId])
+          .execute();
+        expect(faces.find((face) => face.id === insideFaceId)?.personId).toBe(personA.person.id);
+        expect(faces.find((face) => face.id === outsideFaceId)?.personId).toBe(personB.id);
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('does not block a face once the target cluster is already contaminated (documents a known limitation)', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        // Person A is already 50/50 contaminated: three axis-A faces and three axis-B faces, all on A.
+        const { person: personA } = await ctx.newPerson({ ownerId: user.id });
+        const identityA = await sut.ensurePersonIdentity(personA.id);
+        const addAFace = async (embedding: string) => {
+          const { asset } = await ctx.newAsset({ ownerId: user.id });
+          const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personA.id });
+          await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
+          await sut.linkFace({ assetFaceId: assetFace.id, identityId: identityA.id, source: 'owner-person' });
+        };
+        for (let index = 0; index < 3; index++) {
+          await addAFace(axisEmbedding('first'));
+        }
+        for (let index = 0; index < 3; index++) {
+          await addAFace(axisEmbedding('second'));
+        }
+        // A new pure axis-B face. Against A's MIXED centroid it is only ~0.29 away (< 0.5), so the guard
+        // does NOT block it — once a cluster spans two people its centroid no longer represents one person.
+        const { person: personB } = await ctx.newPerson({ ownerId: user.id });
+        await sut.ensurePersonIdentity(personB.id);
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace: bFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
+        await ctx.database.insertInto('face_search').values({ faceId: bFace.id, embedding: axisEmbedding('second') }).execute();
+        await sut.linkFace({ assetFaceId: bFace.id, identityId: identityA.id, source: 'shared-space-evidence' });
+
+        await sut.backfillPersonalIdentities({ limit: 100 });
+
+        const row = await ctx.database
+          .selectFrom('asset_face')
+          .select('personId')
+          .where('id', '=', bFace.id)
+          .executeTakeFirstOrThrow();
+        // Limitation: the guard is strongest at first contamination (clean target) and weaker mid-cascade.
+        expect(row.personId).toBe(personA.id);
       } finally {
         await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
       }

@@ -1825,6 +1825,44 @@ describe('People identity RBAC projection', () => {
     }
   });
 
+  it('does not re-queue the backfill job after the repair guard refuses a face (no infinite loop)', async () => {
+    const { ctx, sut, faceIdentityRepository } = setup();
+    const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    const { user } = await ctx.newUser();
+    try {
+      // Person A: a clean axis-A cluster.
+      const { person: personA } = await ctx.newPerson({ ownerId: user.id });
+      const identityA = await faceIdentityRepository.ensurePersonIdentity(personA.id);
+      for (let index = 0; index < 3; index++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: personA.id });
+        await ctx.database.insertInto('face_search').values({ faceId, embedding: axisEmbedding('first') }).execute();
+        await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identityA.id, source: 'owner-person' });
+      }
+      // Person B owns an axis-B face corruptly linked to A's identity — the repair guard will refuse it.
+      const { person: personB } = await ctx.newPerson({ ownerId: user.id });
+      await faceIdentityRepository.ensurePersonIdentity(personB.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { result: corruptFaceId } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
+      await ctx.database.insertInto('face_search').values({ faceId: corruptFaceId, embedding: axisEmbedding('second') }).execute();
+      await faceIdentityRepository.linkFace({
+        assetFaceId: corruptFaceId,
+        identityId: identityA.id,
+        source: 'shared-space-evidence',
+      });
+
+      jobs.queue.mockClear();
+      await sut.handleFaceIdentityBackfill({});
+
+      // Without the realign, the refused face would leave permanent backfill work and handleFaceIdentityBackfill
+      // would re-queue itself (continuationId toggle) forever.
+      const backfillRequeues = jobs.queue.mock.calls.filter(([job]) => job.name === JobName.FaceIdentityBackfill);
+      expect(backfillRequeues).toEqual([]);
+    } finally {
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+    }
+  });
+
   it('removes a removed shared-space asset from visible identity counts without splitting identities', async () => {
     const fixture = await setupJoinAfterDuplicatesFixture();
 
