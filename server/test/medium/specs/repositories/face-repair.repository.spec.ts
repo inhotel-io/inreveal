@@ -169,3 +169,129 @@ describe('FaceRepairRepository.streamEligibleFaces', () => {
     expect(results).not.toContain(faceB.id);
   });
 });
+
+describe('FaceRepairRepository.unassignFacesFromPerson', () => {
+  it('sets personId to NULL for requested faces still on that person and returns their ids', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
+
+    const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: person.id });
+
+    const { asset: assetC } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceC } = await ctx.newAssetFace({ assetId: assetC.id, personId: person.id });
+
+    const unassigned = await sut.unassignFacesFromPerson(person.id, [faceA.id, faceB.id]);
+
+    expect(unassigned.toSorted()).toEqual([faceA.id, faceB.id].toSorted());
+
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', [faceA.id, faceB.id, faceC.id])
+      .execute();
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r.personId]));
+    expect(byId[faceA.id]).toBeNull();
+    expect(byId[faceB.id]).toBeNull();
+    expect(byId[faceC.id]).toBe(person.id);
+  });
+
+  it('eligibility re-check: skips faces already moved to another person', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: personP } = await ctx.newPerson({ ownerId: user.id });
+    const { person: personQ } = await ctx.newPerson({ ownerId: user.id });
+
+    // face x is on person Q at unassign time (simulates concurrent move)
+    const { asset: assetX } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceX } = await ctx.newAssetFace({ assetId: assetX.id, personId: personQ.id });
+
+    const unassigned = await sut.unassignFacesFromPerson(personP.id, [faceX.id]);
+
+    expect(unassigned).toHaveLength(0);
+    const row = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', faceX.id)
+      .executeTakeFirstOrThrow();
+    expect(row.personId).toBe(personQ.id);
+  });
+
+  it('eligibility re-check: does not unassign manual-sourced faces', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ sourceType: 'manual' as SourceType })
+      .where('id', '=', manualFace.id)
+      .execute();
+
+    const unassigned = await sut.unassignFacesFromPerson(person.id, [manualFace.id]);
+
+    expect(unassigned).toHaveLength(0);
+    const row = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', manualFace.id)
+      .executeTakeFirstOrThrow();
+    expect(row.personId).toBe(person.id);
+  });
+});
+
+describe('FaceRepairRepository.reconcileRepresentativeFaces', () => {
+  it('repoints faceAssetId when the current rep face has been unassigned', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
+
+    const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: person.id });
+
+    // Set faceA as rep
+    await ctx.database.updateTable('person').set({ faceAssetId: faceA.id }).where('id', '=', person.id).execute();
+
+    // Unassign faceA (simulating what unassignFacesFromPerson does)
+    await ctx.database.updateTable('asset_face').set({ personId: null }).where('id', '=', faceA.id).execute();
+
+    await sut.reconcileRepresentativeFaces([person.id]);
+
+    const updated = await ctx.database
+      .selectFrom('person')
+      .select('faceAssetId')
+      .where('id', '=', person.id)
+      .executeTakeFirstOrThrow();
+    // faceA is unassigned so faceB should now be the rep
+    expect(updated.faceAssetId).toBe(faceB.id);
+  });
+
+  it("leaves faceAssetId unchanged when it still points to one of the person's faces", async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
+
+    await ctx.database.updateTable('person').set({ faceAssetId: faceA.id }).where('id', '=', person.id).execute();
+
+    await sut.reconcileRepresentativeFaces([person.id]);
+
+    const updated = await ctx.database
+      .selectFrom('person')
+      .select('faceAssetId')
+      .where('id', '=', person.id)
+      .executeTakeFirstOrThrow();
+    expect(updated.faceAssetId).toBe(faceA.id);
+  });
+});
