@@ -190,6 +190,26 @@ describe('resolveAssetSource', () => {
     assert.deepEqual(search.args, { mode: 'metadata', order: 'desc', limit: 20, detail: 'handle' });
   });
 
+  it('merges extraFilters into the bounded search filters', async () => {
+    const client = makeContractClient();
+    const result = await resolveAssetSource({
+      client,
+      sourceDescription: 'my newest 20 photos',
+      now: NOW,
+      extraFilters: { maxSharpness: 30 },
+    });
+
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(search.args, {
+      mode: 'metadata',
+      order: 'desc',
+      limit: 20,
+      filters: { maxSharpness: 30 },
+      detail: 'handle',
+    });
+  });
+
   it('hands off an absurd recency count (> 4 digits is not a count → unbounded)', async () => {
     const client = makeContractClient();
     const result = await resolveAssetSource({ client, sourceDescription: 'newest 99999 photos', now: NOW });
