@@ -107,6 +107,22 @@ export default [
     expect: { kind: 'none' },
   },
 
+  // visual_cleanup boundaries ------------------------------------------------
+  {
+    // Plain trash has no quality keyword; it remains trash_assets.
+    id: 'neg.visualcleanup.plain-trash',
+    category: 'negatives',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets' },
+  },
+  {
+    // Duplicate keyword owns duplicate cleanup, even with a trash verb.
+    id: 'neg.visualcleanup.duplicates',
+    category: 'negatives',
+    prompt: 'trash duplicate photos',
+    expect: { kind: 'cleanup_duplicates' },
+  },
+
   // set_album_cover boundaries -----------------------------------------------
   {
     // Subjective cover reference — no explicit position.
