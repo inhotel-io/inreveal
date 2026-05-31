@@ -104,6 +104,7 @@ const SystemConfigJobSchema = z
     library: JobSettingsSchema,
     notifications: JobSettingsSchema,
     ocr: JobSettingsSchema,
+    imageQuality: JobSettingsSchema,
     petDetection: JobSettingsSchema,
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
