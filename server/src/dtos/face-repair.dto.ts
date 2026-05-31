@@ -40,6 +40,7 @@ export const FaceRepairResponseSchema = z
         reviewOnlyFaces: z.number(),
         reviewOnlyPersons: z.number(),
         affectedPersons: z.number(),
+        reviewOnlyByReason: z.object({ overCap: z.number(), badTarget: z.number(), unAttributable: z.number() }),
       }),
       persons: z.array(PersonSchema),
     }),

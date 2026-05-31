@@ -355,6 +355,49 @@ describe('FaceRepairService.buildRepairPlan', () => {
       expect(plan.reviewOnlyFaces.find((f) => f.assetFaceId === faceId)).toBeUndefined();
     }
   });
+
+  it('unAttributableFaces: close-but-sub-minFaces neighbor lands in unAttributableFaces, not toRepair; isolated face does not', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+
+    // clusterSmall: 2 first-axis faces (< minFaces=3, so not a confident owner)
+    const { person: clusterSmall } = await buildCluster(ctx, user.id, axisEmbedding('first'), 2);
+
+    // suspect: 1 first-axis face belonging to a different person — ownCount < minFaces=3,
+    // topOtherPersonId=clusterSmall, topOtherNearest ~0 (identical axis) <= maxAttributionDistance=0.35,
+    // but topOtherCount=2 < minFaces=3 → NOT flagged → should land in unAttributableFaces
+    const { person: suspect } = await ctx.newPerson({ ownerId: user.id });
+    const { asset: suspectAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: suspectFace } = await ctx.newAssetFace({ assetId: suspectAsset.id, personId: suspect.id });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: suspectFace.id, embedding: axisEmbedding('first') })
+      .execute();
+
+    // isolated: 1 face on a completely separate axis — no neighbors within maxDistance=0.6 → NOT unAttributable
+    const { person: isolated } = await ctx.newPerson({ ownerId: user.id });
+    const { asset: isolatedAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: isolatedFace } = await ctx.newAssetFace({ assetId: isolatedAsset.id, personId: isolated.id });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: isolatedFace.id, embedding: axisEmbedding('second') })
+      .execute();
+
+    const plan: RepairPlan = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+
+    // suspect face: in unAttributableFaces, NOT in toRepair
+    const unAttr = plan.unAttributableFaces.find((f) => f.assetFaceId === suspectFace.id);
+    expect(unAttr).toBeDefined();
+    expect(unAttr!.currentPersonId).toBe(suspect.id);
+    expect(plan.toRepair.find((f) => f.assetFaceId === suspectFace.id)).toBeUndefined();
+
+    // isolated face: NOT in unAttributableFaces (no close other owner)
+    expect(plan.unAttributableFaces.find((f) => f.assetFaceId === isolatedFace.id)).toBeUndefined();
+
+    // clusterSmall's own faces are also under minFaces — but they have each other as close neighbors
+    // Their topOtherPersonId will be suspect (1 face), topOtherCount=1 < minFaces=3 → also unAttributable
+    // (just confirm suspect face is captured, which is the main assertion)
+  });
 });
 
 // Setup for executeRepair tests — includes real FaceIdentityRepository and mock JobRepository.

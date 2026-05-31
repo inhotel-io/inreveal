@@ -36,6 +36,7 @@ describe(FaceRepairAdminController.name, () => {
             reviewOnlyFaces: 0,
             reviewOnlyPersons: 0,
             affectedPersons: 0,
+            reviewOnlyByReason: { overCap: 0, badTarget: 0, unAttributable: 0 },
           },
           persons: [],
         },

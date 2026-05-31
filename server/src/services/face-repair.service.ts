@@ -21,6 +21,7 @@ export interface RepairPlan {
   toRepair: FlaggedFace[];
   reviewOnlyFaces: (FlaggedFace & { reason: ReviewOnlyReason })[];
   reviewOnlyPersonIds: string[];
+  unAttributableFaces: { assetFaceId: string; currentPersonId: string }[];
   perPerson: { personId: string; eligible: number; flagged: number; flaggedFraction: number }[];
 }
 
@@ -63,6 +64,7 @@ export class FaceRepairService extends BaseService {
   ): Promise<RepairPlan> {
     const eligibleByPerson = new Map<string, number>();
     const flaggedByPerson = new Map<string, FlaggedFace[]>();
+    const unAttributableFaces: { assetFaceId: string; currentPersonId: string }[] = [];
 
     for await (const candidate of this.findReattributionCandidates(options)) {
       eligibleByPerson.set(candidate.currentPersonId, (eligibleByPerson.get(candidate.currentPersonId) ?? 0) + 1);
@@ -75,6 +77,14 @@ export class FaceRepairService extends BaseService {
           suspectedOwnerId: decision.suspectedOwnerId,
         });
         flaggedByPerson.set(candidate.currentPersonId, list);
+      } else if (
+        !decision.flagged &&
+        candidate.ownCount < options.minFaces &&
+        candidate.topOtherPersonId !== null &&
+        candidate.topOtherNearest !== null &&
+        candidate.topOtherNearest <= options.maxAttributionDistance
+      ) {
+        unAttributableFaces.push({ assetFaceId: candidate.assetFaceId, currentPersonId: candidate.currentPersonId });
       }
     }
 
@@ -109,7 +119,7 @@ export class FaceRepairService extends BaseService {
       return { personId, eligible, flagged, flaggedFraction: eligible > 0 ? flagged / eligible : 0 };
     });
 
-    return { toRepair, reviewOnlyFaces, reviewOnlyPersonIds: [...reviewOnlyPersonIds], perPerson };
+    return { toRepair, reviewOnlyFaces, reviewOnlyPersonIds: [...reviewOnlyPersonIds], unAttributableFaces, perPerson };
   }
 
   async executeRepair(plan: RepairPlan): Promise<{ unassigned: number; requeued: number }> {

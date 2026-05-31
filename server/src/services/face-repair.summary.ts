@@ -22,6 +22,7 @@ export interface RepairReport {
     reviewOnlyFaces: number;
     reviewOnlyPersons: number;
     affectedPersons: number;
+    reviewOnlyByReason: { overCap: number; badTarget: number; unAttributable: number };
   };
   persons: RepairReportPerson[];
 }
@@ -50,6 +51,9 @@ export const summarizeRepairPlan = (plan: RepairPlan): RepairReport => {
       ),
     }));
 
+  const overCap = plan.reviewOnlyFaces.filter((f) => f.reason === 'over-cap').length;
+  const badTarget = plan.reviewOnlyFaces.filter((f) => f.reason === 'bad-target').length;
+
   return {
     totals: {
       eligibleFaces: plan.perPerson.reduce((sum, p) => sum + p.eligible, 0),
@@ -58,6 +62,7 @@ export const summarizeRepairPlan = (plan: RepairPlan): RepairReport => {
       reviewOnlyFaces: plan.reviewOnlyFaces.length,
       reviewOnlyPersons: plan.reviewOnlyPersonIds.length,
       affectedPersons: persons.length,
+      reviewOnlyByReason: { overCap, badTarget, unAttributable: plan.unAttributableFaces.length },
     },
     persons,
   };
