@@ -1404,7 +1404,10 @@ describe(AgentToolService.name, () => {
     ['basic', ['type', 'dates']],
     ['descriptive', ['type', 'dates', 'filename', 'favorite', 'rating', 'tags', 'location']],
     ['technical', ['type', 'dates', 'filename', 'camera', 'rating', 'visibility', 'quality']],
-    ['allSafe', ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility', 'quality']],
+    [
+      'allSafe',
+      ['type', 'dates', 'location', 'camera', 'tags', 'rating', 'filename', 'favorite', 'visibility', 'quality'],
+    ],
   ] as const)('applies the %s metadata detail preset', async (detail, expectedFields) => {
     const auth = AuthFactory.create();
     const assetId = newUuid();
@@ -8138,9 +8141,33 @@ describe(AgentToolService.name, () => {
       {
         duplicateId,
         assets: [
-          { id: assetId1, originalFileName: 'a.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
-          { id: assetId2, originalFileName: 'b.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
-          { id: assetId3, originalFileName: 'c.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
+          {
+            id: assetId1,
+            originalFileName: 'a.jpg',
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          },
+          {
+            id: assetId2,
+            originalFileName: 'b.jpg',
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          },
+          {
+            id: assetId3,
+            originalFileName: 'c.jpg',
+            fileCreatedAt: now,
+            isFavorite: false,
+            width: null,
+            height: null,
+            exifInfo: null,
+          },
         ],
       },
     ] as never);
