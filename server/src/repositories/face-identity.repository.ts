@@ -97,6 +97,14 @@ export type MergePropagationProfileInput =
   | { mode: 'profiles'; personIds: string[] }
   | { mode: 'identities'; identityIds: string[] };
 
+// Automatic shared-space identity merges must never irreversibly fuse two clusters whose averaged
+// embeddings are farther apart than this cosine distance. A single representative-face match (the basis
+// of space dedup / reconciliation) is not enough evidence to merge two identities, so we re-check the
+// whole-cluster centroids at the merge chokepoint. Manual merges bypass this — a human overrides.
+// See docs/plans/2026-05-30-hagen-face-cluster-corruption-diagnosis.md.
+const MERGE_IDENTITY_MAX_CENTROID_DISTANCE = 0.5;
+const MERGE_IDENTITY_CENTROID_SAMPLE_SIZE = 200;
+
 export type AccessibleIdentityFaceMatch = {
   identityId: string;
   type: string;
@@ -2630,16 +2638,32 @@ export class FaceIdentityRepository {
         };
       }
 
+      // Embedding-consistency guard: refuse automatic merges that would fuse embedding-distinct
+      // clusters (the face-cluster corruption root cause). Manual merges are trusted and skip this.
+      let mergeableSourceIdentityIds = sourceIdentityIds;
+      if (input.source === 'shared-space-evidence') {
+        const inconsistent = new Set(
+          await this.getEmbeddingInconsistentSourceIdentityIds(trx, input.targetIdentityId, sourceIdentityIds),
+        );
+        mergeableSourceIdentityIds = sourceIdentityIds.filter((identityId) => !inconsistent.has(identityId));
+        if (mergeableSourceIdentityIds.length === 0) {
+          return {
+            personalProfileConflictCount,
+            spaceProfileConflictCount,
+          };
+        }
+      }
+
       await trx
         .updateTable('face_identity_face')
         .set({ identityId: input.targetIdentityId, source: input.source })
-        .where('identityId', 'in', sourceIdentityIds)
+        .where('identityId', 'in', mergeableSourceIdentityIds)
         .execute();
 
       await trx
         .updateTable('person')
         .set({ identityId: input.targetIdentityId })
-        .where('identityId', 'in', sourceIdentityIds)
+        .where('identityId', 'in', mergeableSourceIdentityIds)
         .where(({ not, exists, selectFrom, ref }) =>
           not(
             exists(
@@ -2655,7 +2679,7 @@ export class FaceIdentityRepository {
       await trx
         .updateTable('shared_space_person')
         .set({ identityId: input.targetIdentityId })
-        .where('identityId', 'in', sourceIdentityIds)
+        .where('identityId', 'in', mergeableSourceIdentityIds)
         .where(({ not, exists, selectFrom, ref }) =>
           not(
             exists(
@@ -2674,7 +2698,7 @@ export class FaceIdentityRepository {
         .leftJoin('shared_space_person', 'shared_space_person.identityId', 'face_identity.id')
         .leftJoin('face_identity_face', 'face_identity_face.identityId', 'face_identity.id')
         .select('face_identity.id')
-        .where('face_identity.id', 'in', sourceIdentityIds)
+        .where('face_identity.id', 'in', mergeableSourceIdentityIds)
         .where('person.id', 'is', null)
         .where('shared_space_person.id', 'is', null)
         .where('face_identity_face.assetFaceId', 'is', null)
@@ -2763,6 +2787,56 @@ export class FaceIdentityRepository {
     if (deletableIds.length > 0) {
       await db.deleteFrom('face_identity').where('id', 'in', deletableIds).execute();
     }
+  }
+
+  // Returns the source identities whose bounded-sample embedding centroid is farther from the target
+  // centroid than MERGE_IDENTITY_MAX_CENTROID_DISTANCE. Identities with no embedded faces never surface
+  // here and are treated as consistent (we cannot assess them, so we do not block the merge).
+  private async getEmbeddingInconsistentSourceIdentityIds(
+    trx: Kysely<DB> | Transaction<DB>,
+    targetIdentityId: string,
+    sourceIdentityIds: string[],
+  ): Promise<string[]> {
+    if (sourceIdentityIds.length === 0) {
+      return [];
+    }
+
+    const result = await sql<{ identityId: string }>`
+      WITH target_centroid AS (
+        SELECT avg(target_search.embedding) AS centroid
+        FROM (
+          SELECT face_identity_face."assetFaceId"
+          FROM face_identity_face
+          WHERE face_identity_face."identityId" = ${targetIdentityId}
+          LIMIT ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+        ) AS target_face
+        INNER JOIN face_search AS target_search ON target_search."faceId" = target_face."assetFaceId"
+      ),
+      source_centroid AS (
+        SELECT sampled."identityId" AS "identityId", avg(source_search.embedding) AS centroid
+        FROM (
+          SELECT
+            face_identity_face."identityId",
+            face_identity_face."assetFaceId",
+            row_number() OVER (
+              PARTITION BY face_identity_face."identityId"
+              ORDER BY face_identity_face."assetFaceId"
+            ) AS rn
+          FROM face_identity_face
+          WHERE face_identity_face."identityId" IN (${sql.join(sourceIdentityIds)})
+        ) AS sampled
+        INNER JOIN face_search AS source_search ON source_search."faceId" = sampled."assetFaceId"
+        WHERE sampled.rn <= ${sql.lit(MERGE_IDENTITY_CENTROID_SAMPLE_SIZE)}
+        GROUP BY sampled."identityId"
+      )
+      SELECT source_centroid."identityId" AS "identityId"
+      FROM source_centroid
+      CROSS JOIN target_centroid
+      WHERE target_centroid.centroid IS NOT NULL
+        AND (target_centroid.centroid <=> source_centroid.centroid) > ${sql.lit(MERGE_IDENTITY_MAX_CENTROID_DISTANCE)}
+    `.execute(trx);
+
+    return result.rows.map((row) => row.identityId);
   }
 
   private async countMergeConflicts(

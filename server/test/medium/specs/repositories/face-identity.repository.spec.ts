@@ -178,6 +178,70 @@ const getPersonalIdentityMismatchRows = async (ctx: ReturnType<typeof setup>['ct
   return rows.filter((row) => row.personIdentityId !== row.faceIdentityId);
 };
 
+// Two clusters on disjoint embedding axes are maximally dissimilar (cosine distance ~1.0), standing in
+// for two genuinely different people. newEmbedding() can't be used here: its all-positive random
+// components leave two independent vectors ~0.75 similar.
+const axisEmbedding = (axis: 'first' | 'second') => {
+  const values = Array.from({ length: 512 }, (_, index) => {
+    const inFirstHalf = index < 256;
+    return (axis === 'first' ? inFirstHalf : !inFirstHalf) ? 1 : 0;
+  });
+  return '[' + values.join(',') + ']';
+};
+
+const newPersonalIdentityCluster = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: FaceIdentityRepository,
+  input: { ownerId: string; embedding: string; faceCount: number },
+) => {
+  const { person } = await ctx.newPerson({ ownerId: input.ownerId });
+  const identity = await sut.ensurePersonIdentity(person.id);
+  const assetFaceIds: string[] = [];
+  for (let index = 0; index < input.faceCount; index++) {
+    const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    assetFaceIds.push(assetFace.id);
+  }
+  return { person, identity, assetFaceIds };
+};
+
+// A secondary identity backed by faces but with NO personal person pointing at it. This is the
+// structural precondition that let the real corruption slip past countMergeConflicts: a duplicate
+// identity with no competing named person, so the same-owner conflict check sees nothing to block.
+const newOrphanIdentityCluster = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  input: { ownerId: string; embedding: string; faceCount: number },
+) => {
+  const identity = await ctx.database
+    .insertInto('face_identity')
+    .values({ type: 'person' })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  const assetFaceIds: string[] = [];
+  for (let index = 0; index < input.faceCount; index++) {
+    const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+    await ctx.database
+      .insertInto('face_identity_face')
+      .values({ identityId: identity.id, assetFaceId: assetFace.id, source: 'backfill' })
+      .execute();
+    assetFaceIds.push(assetFace.id);
+  }
+  return { identity, assetFaceIds };
+};
+
+const getLinkedIdentityIds = async (ctx: ReturnType<typeof setup>['ctx'], assetFaceIds: string[]) => {
+  const rows = await ctx.database
+    .selectFrom('face_identity_face')
+    .select(['assetFaceId', 'identityId'])
+    .where('assetFaceId', 'in', assetFaceIds)
+    .execute();
+  return new Set(rows.map((row) => row.identityId));
+};
+
 describe(FaceIdentityRepository.name, () => {
   it('returns no accessible identity match when multiple shared identities are within threshold', async () => {
     const { ctx, sut } = setup();
@@ -3361,6 +3425,90 @@ describe(FaceIdentityRepository.name, () => {
       });
 
       expect(resolved).toEqual(expect.objectContaining({ accessible: true, allBackingFacesRepairable: false }));
+    });
+  });
+
+  describe('embedding-consistency guard on automatic identity merges', () => {
+    it('refuses an automatic shared-space merge of two embedding-distinct identities', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const source = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('second'),
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [source.identity.id],
+          source: 'shared-space-evidence',
+        });
+
+        // Faces stay on their original identity — the catastrophic cross-person reassignment is blocked.
+        expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([source.identity.id]));
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('still performs an automatic shared-space merge when the two identities are embedding-consistent', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const source = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [source.identity.id],
+          source: 'shared-space-evidence',
+        });
+
+        expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([target.identity.id]));
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
+    });
+
+    it('does not apply the embedding guard to manual merges', async () => {
+      const { ctx, sut } = setup(await getKyselyDB());
+      const { user } = await ctx.newUser();
+      try {
+        const target = await newPersonalIdentityCluster(ctx, sut, {
+          ownerId: user.id,
+          embedding: axisEmbedding('first'),
+          faceCount: 3,
+        });
+        const source = await newOrphanIdentityCluster(ctx, {
+          ownerId: user.id,
+          embedding: axisEmbedding('second'),
+          faceCount: 3,
+        });
+
+        await sut.mergeIdentities({
+          targetIdentityId: target.identity.id,
+          sourceIdentityIds: [source.identity.id],
+          source: 'manual',
+        });
+
+        expect(await getLinkedIdentityIds(ctx, source.assetFaceIds)).toEqual(new Set([target.identity.id]));
+      } finally {
+        await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
+      }
     });
   });
 });
