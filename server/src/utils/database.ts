@@ -718,6 +718,19 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
           options.rating!,
         ),
     )
+    .$if(
+      options.maxSharpness !== undefined || options.maxBrightness !== undefined || options.maxQuality !== undefined,
+      (qb) =>
+        qb
+          .innerJoin('asset_quality', 'asset.id', 'asset_quality.assetId')
+          .$if(options.maxSharpness !== undefined, (qb) =>
+            qb.where('asset_quality.sharpness', '<=', options.maxSharpness!),
+          )
+          .$if(options.maxBrightness !== undefined, (qb) =>
+            qb.where('asset_quality.brightness', '<=', options.maxBrightness!),
+          )
+          .$if(options.maxQuality !== undefined, (qb) => qb.where('asset_quality.quality', '<=', options.maxQuality!)),
+    )
     .$if(!!options.checksum, (qb) => qb.where('asset.checksum', '=', options.checksum!))
     .$if(!!options.id, (qb) => qb.where('asset.id', '=', asUuid(options.id!)))
     .$if(!!options.libraryId, (qb) => qb.where('asset.libraryId', '=', asUuid(options.libraryId!)))

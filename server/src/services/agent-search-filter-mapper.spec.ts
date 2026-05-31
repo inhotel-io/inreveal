@@ -79,6 +79,32 @@ describe(buildAgentMetadataSearch.name, () => {
     );
   });
 
+  it('maps quality threshold filters to Gallery metadata search options', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: {
+        mode: 'metadata',
+        filters: {
+          maxSharpness: 30,
+          maxBrightness: 25,
+          maxQuality: 40,
+        },
+        limit: 25,
+        page: 1,
+        order: 'desc',
+      },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).toEqual(
+      expect.objectContaining({
+        maxSharpness: 30,
+        maxBrightness: 25,
+        maxQuality: 40,
+      }),
+    );
+  });
+
   it('does not leak pagination dto fields into repository options', () => {
     const result = buildAgentMetadataSearch({
       userId,
