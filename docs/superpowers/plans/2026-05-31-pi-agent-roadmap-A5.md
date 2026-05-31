@@ -15,13 +15,17 @@
 - [ ] **Step 1: Failing tests** — In `cleanup-duplicates.test.mjs`:
   - Update `makeAsset` to include `sharpness: overrides.sharpness ?? null`.
   - Add a describe/it block `pickKeeper — sharpness`:
+
     ```js
     it('prefers the sharper of two equal-resolution duplicates', () => {
       const sharp = makeAsset({ id: 'sharp', width: 1000, height: 1000, sharpness: 80 });
       const blurry = makeAsset({ id: 'blurry', width: 1000, height: 1000, sharpness: 20 });
       const { keeper, nonKeepers } = pickKeeper([blurry, sharp]);
       assert.equal(keeper.id, 'sharp');
-      assert.deepEqual(nonKeepers.map((a) => a.id), ['blurry']);
+      assert.deepEqual(
+        nonKeepers.map((a) => a.id),
+        ['blurry'],
+      );
     });
 
     it('ranks present sharpness above resolution (sharper-but-smaller wins)', () => {
@@ -52,10 +56,12 @@
       assert.equal(keeper.id, 'b'); // older wins at equal resolution + null sharpness
     });
     ```
+
   - Update the existing priority-chain test (the `favorite > rating > resolution > date > id` one) to insert a sharpness asset and rename/extend its assertion so the chain reads favorite > rating > sharpness > resolution > date > id. Keep its existing assertions valid (favorite still wins).
-  Run: `/opt/homebrew/bin/mise exec -- pnpm --dir agent-runner test` → RED on the new sharpness tests (current `pickKeeper` ignores sharpness, so `ranks present sharpness above resolution` and `prefers the sharper` fail).
+    Run: `/opt/homebrew/bin/mise exec -- pnpm --dir agent-runner test` → RED on the new sharpness tests (current `pickKeeper` ignores sharpness, so `ranks present sharpness above resolution` and `prefers the sharper` fail).
 
 - [ ] **Step 2: Implement** — In `cleanup-duplicates.mjs` `pickKeeper`, add sharpness to `score` and a comparison between rating and resolution:
+
   ```js
   const score = (a) => [
     a.isFavorite ? 1 : 0,
