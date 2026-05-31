@@ -431,7 +431,12 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     filters = { ...dateFilters, ...(mediaType ? { type: mediaType } : {}) };
   }
 
-  filters = { ...filters, ...extraFilters };
+  const extraFilterEntries = Object.entries(extraFilters ?? {}).filter(([, value]) => value !== undefined);
+  const collidingExtraFilters = extraFilterEntries.map(([key]) => key).filter((key) => filters[key] !== undefined);
+  if (collidingExtraFilters.length > 0) {
+    throw new Error(`extraFilters cannot override source filters: ${collidingExtraFilters.join(', ')}`);
+  }
+  filters = { ...filters, ...Object.fromEntries(extraFilterEntries) };
 
   const hasFilters = Object.keys(filters).length > 0;
   const handleResult = await client.call(
