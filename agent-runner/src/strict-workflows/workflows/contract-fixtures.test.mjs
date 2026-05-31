@@ -62,6 +62,30 @@ describe('makeContractClient — contract-faithful fake MCP client', () => {
     assert.equal(ok.selectionHandle.id, 'handle-1');
   });
 
+  it('searchAssets enforces shared-space filter cross-field constraints', async () => {
+    const client = makeContractClient();
+
+    await assert.rejects(
+      () =>
+        client.call('searchAssets', {
+          mode: 'metadata',
+          detail: 'handle',
+          filters: { spacePersonIds: ['space-person-1'] },
+        }),
+      /spacePersonIds requires spaceId/i,
+    );
+
+    await assert.rejects(
+      () =>
+        client.call('searchAssets', {
+          mode: 'metadata',
+          detail: 'handle',
+          filters: { spaceId: 'space-1', withSharedSpaces: true },
+        }),
+      /Cannot use both spaceId and withSharedSpaces/i,
+    );
+  });
+
   it('proposeAssetBatchFromSelection accepts each valid action', async () => {
     const client = makeContractClient();
     for (const action of [

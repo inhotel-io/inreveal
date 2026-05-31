@@ -322,6 +322,12 @@ const validateSearchAssets = (args) => {
     if (args.filters.visibility !== undefined && !KNOWN_VISIBILITY.has(args.filters.visibility)) {
       fail(`invalid searchAssets filter visibility "${args.filters.visibility}"`);
     }
+    if (Array.isArray(args.filters.spacePersonIds) && args.filters.spacePersonIds.length > 0 && !args.filters.spaceId) {
+      fail('spacePersonIds requires spaceId');
+    }
+    if (args.filters.spaceId && args.filters.withSharedSpaces === true) {
+      fail('Cannot use both spaceId and withSharedSpaces');
+    }
     for (const key of QUALITY_FILTER_KEYS) {
       const value = args.filters[key];
       if (value === undefined) continue;
