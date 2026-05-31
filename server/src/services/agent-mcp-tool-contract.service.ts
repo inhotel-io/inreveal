@@ -1659,6 +1659,21 @@ const planningProposalExamples: AgentMcpToolExample[] = [
       ],
     },
   },
+  {
+    name: 'trash-assets',
+    description: 'Move selected assets to Trash (recoverable).',
+    arguments: {
+      summary: 'Move selected photos to Trash (recoverable).',
+      operations: [
+        {
+          type: AgentOperationType.AssetTrash,
+          summary: 'Move selected photos to Trash (recoverable).',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
+        },
+      ],
+    },
+  },
 ];
 
 const planningCommonMistakes: AgentMcpCommonMistake[] = [
