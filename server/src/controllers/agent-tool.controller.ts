@@ -6,6 +6,8 @@ import {
   AgentFindTripCandidatesToolResponseDto,
   AgentListAlbumsToolRequestDto,
   AgentListAlbumsToolResponseDto,
+  AgentListDuplicateGroupsToolRequestDto,
+  AgentListDuplicateGroupsToolResponseDto,
   AgentListSpacesToolRequestDto,
   AgentListSpacesToolResponseDto,
   AgentReadAlbumToolRequestDto,
@@ -171,6 +173,23 @@ export class AgentToolController {
     @Body() dto: AgentListSpacesToolRequestDto,
   ): Promise<AgentListSpacesToolResponseDto> {
     return this.service.listSpaces(auth, id, dto);
+  }
+
+  @Post('tools/list-duplicate-groups')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentListDuplicateGroupsToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal listDuplicateGroups agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved duplicate group list tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  listDuplicateGroups(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentListDuplicateGroupsToolRequestDto,
+  ): Promise<AgentListDuplicateGroupsToolResponseDto> {
+    return this.service.listDuplicateGroups(auth, id, dto);
   }
 
   @Post('tools/read-space')

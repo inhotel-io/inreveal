@@ -106,6 +106,7 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**getToolCalls**](doc//AgentSessionsApi.md#gettoolcalls) | **GET** /agent/sessions/{id}/tool-calls | List agent tool calls
 *AgentSessionsApi* | [**handle**](doc//AgentSessionsApi.md#handle) | **POST** /agent/internal/mcp/sessions/{id} | Handle the internal runner MCP endpoint
 *AgentSessionsApi* | [**listAlbums**](doc//AgentSessionsApi.md#listalbums) | **POST** /agent/sessions/{id}/tools/list-albums | Execute the internal listAlbums agent tool
+*AgentSessionsApi* | [**listDuplicateGroups**](doc//AgentSessionsApi.md#listduplicategroups) | **POST** /agent/sessions/{id}/tools/list-duplicate-groups | Execute the internal listDuplicateGroups agent tool
 *AgentSessionsApi* | [**listSpaces**](doc//AgentSessionsApi.md#listspaces) | **POST** /agent/sessions/{id}/tools/list-spaces | Execute the internal listSpaces agent tool
 *AgentSessionsApi* | [**proposeAlbumOperations**](doc//AgentSessionsApi.md#proposealbumoperations) | **POST** /agent/sessions/{id}/operation-plan/proposals | Propose agent album operations
 *AgentSessionsApi* | [**readAlbum**](doc//AgentSessionsApi.md#readalbum) | **POST** /agent/sessions/{id}/tools/read-album | Execute the internal readAlbum agent tool
@@ -450,6 +451,8 @@ Class | Method | HTTP request | Description
  - [AgentDeclarativeNameMatch](doc//AgentDeclarativeNameMatch.md)
  - [AgentDeclarativeNamedFilter](doc//AgentDeclarativeNamedFilter.md)
  - [AgentDeclarativeSpaceFilter](doc//AgentDeclarativeSpaceFilter.md)
+ - [AgentDuplicateAsset](doc//AgentDuplicateAsset.md)
+ - [AgentDuplicateGroup](doc//AgentDuplicateGroup.md)
  - [AgentExplicitAssetsAssetSourceInput](doc//AgentExplicitAssetsAssetSourceInput.md)
  - [AgentFindTripCandidatesToolApprovalRequiredResponse](doc//AgentFindTripCandidatesToolApprovalRequiredResponse.md)
  - [AgentFindTripCandidatesToolDeniedResponse](doc//AgentFindTripCandidatesToolDeniedResponse.md)
@@ -461,6 +464,11 @@ Class | Method | HTTP request | Description
  - [AgentListAlbumsToolRequestDto](doc//AgentListAlbumsToolRequestDto.md)
  - [AgentListAlbumsToolResponseDto](doc//AgentListAlbumsToolResponseDto.md)
  - [AgentListAlbumsToolSuccessResponse](doc//AgentListAlbumsToolSuccessResponse.md)
+ - [AgentListDuplicateGroupsToolApprovalRequiredResponse](doc//AgentListDuplicateGroupsToolApprovalRequiredResponse.md)
+ - [AgentListDuplicateGroupsToolDeniedResponse](doc//AgentListDuplicateGroupsToolDeniedResponse.md)
+ - [AgentListDuplicateGroupsToolRequestDto](doc//AgentListDuplicateGroupsToolRequestDto.md)
+ - [AgentListDuplicateGroupsToolResponseDto](doc//AgentListDuplicateGroupsToolResponseDto.md)
+ - [AgentListDuplicateGroupsToolSuccessResponse](doc//AgentListDuplicateGroupsToolSuccessResponse.md)
  - [AgentListSpacesToolApprovalRequiredResponse](doc//AgentListSpacesToolApprovalRequiredResponse.md)
  - [AgentListSpacesToolDeniedResponse](doc//AgentListSpacesToolDeniedResponse.md)
  - [AgentListSpacesToolRequestDto](doc//AgentListSpacesToolRequestDto.md)

@@ -19,6 +19,7 @@ const expectedToolNames = [
   AgentToolName.ListSpaces,
   AgentToolName.ReadSpace,
   AgentToolName.SearchUsers,
+  AgentToolName.ListDuplicateGroups,
   AgentToolName.ProposeAlbumFromSearch,
   AgentToolName.ProposeAddAssetsToAlbumFromSearch,
   AgentToolName.ProposeSpaceFromSearch,
@@ -45,6 +46,7 @@ const expectedReadToolNames = [
   AgentToolName.ListSpaces,
   AgentToolName.ReadSpace,
   AgentToolName.SearchUsers,
+  AgentToolName.ListDuplicateGroups,
 ] as const;
 
 const expectedPlanningToolNames = [

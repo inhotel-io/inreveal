@@ -3255,6 +3255,73 @@
         "x-immich-state": "Internal"
       }
     },
+    "/agent/sessions/{id}/tools/list-duplicate-groups": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved duplicate group list tool call for an AI agent session.",
+        "operationId": "listDuplicateGroups",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentListDuplicateGroupsToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentListDuplicateGroupsToolResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal listDuplicateGroups agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
     "/agent/sessions/{id}/tools/list-spaces": {
       "post": {
         "description": "Internal route for requesting or resuming a strict-approved shared-space list tool call for an AI agent session.",
@@ -22705,6 +22772,75 @@
         ],
         "type": "object"
       },
+      "AgentDuplicateAsset": {
+        "properties": {
+          "fileCreatedAt": {
+            "example": "2024-01-01T00:00:00.000Z",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "type": "string"
+          },
+          "height": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "rating": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          },
+          "width": {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fileCreatedAt",
+          "height",
+          "id",
+          "isFavorite",
+          "originalFileName",
+          "rating",
+          "width"
+        ],
+        "type": "object"
+      },
+      "AgentDuplicateGroup": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDuplicateAsset"
+            },
+            "type": "array"
+          },
+          "duplicateId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assets",
+          "duplicateId"
+        ],
+        "type": "object"
+      },
       "AgentExplicitAssetsAssetSourceInput": {
         "additionalProperties": false,
         "properties": {
@@ -22946,6 +23082,106 @@
         },
         "required": [
           "albums",
+          "resultSize",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListDuplicateGroupsToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListDuplicateGroupsToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentListDuplicateGroupsToolRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "maxGroups": {
+            "description": "Maximum number of duplicate groups to return (default 50)",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "toolCallId": {
+            "description": "Approved tool call id when retrying after user approval",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentListDuplicateGroupsToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentListDuplicateGroupsToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListDuplicateGroupsToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentListDuplicateGroupsToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentListDuplicateGroupsToolSuccessResponse": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDuplicateGroup"
+            },
+            "type": "array"
+          },
+          "resultSize": {
+            "$ref": "#/components/schemas/AgentToolResultSize"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "groups",
           "resultSize",
           "status",
           "toolCall"
@@ -28944,6 +29180,7 @@
           "listAlbums",
           "readAlbum",
           "listSpaces",
+          "listDuplicateGroups",
           "readSpace",
           "searchUsers",
           "proposeAlbumOperations",

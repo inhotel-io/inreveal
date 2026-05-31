@@ -252,6 +252,10 @@ class ApiClient {
           return AgentDeclarativeNamedFilter.fromJson(value);
         case 'AgentDeclarativeSpaceFilter':
           return AgentDeclarativeSpaceFilter.fromJson(value);
+        case 'AgentDuplicateAsset':
+          return AgentDuplicateAsset.fromJson(value);
+        case 'AgentDuplicateGroup':
+          return AgentDuplicateGroup.fromJson(value);
         case 'AgentExplicitAssetsAssetSourceInput':
           return AgentExplicitAssetsAssetSourceInput.fromJson(value);
         case 'AgentFindTripCandidatesToolApprovalRequiredResponse':
@@ -274,6 +278,16 @@ class ApiClient {
           return AgentListAlbumsToolResponseDto.fromJson(value);
         case 'AgentListAlbumsToolSuccessResponse':
           return AgentListAlbumsToolSuccessResponse.fromJson(value);
+        case 'AgentListDuplicateGroupsToolApprovalRequiredResponse':
+          return AgentListDuplicateGroupsToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentListDuplicateGroupsToolDeniedResponse':
+          return AgentListDuplicateGroupsToolDeniedResponse.fromJson(value);
+        case 'AgentListDuplicateGroupsToolRequestDto':
+          return AgentListDuplicateGroupsToolRequestDto.fromJson(value);
+        case 'AgentListDuplicateGroupsToolResponseDto':
+          return AgentListDuplicateGroupsToolResponseDto.fromJson(value);
+        case 'AgentListDuplicateGroupsToolSuccessResponse':
+          return AgentListDuplicateGroupsToolSuccessResponse.fromJson(value);
         case 'AgentListSpacesToolApprovalRequiredResponse':
           return AgentListSpacesToolApprovalRequiredResponse.fromJson(value);
         case 'AgentListSpacesToolDeniedResponse':

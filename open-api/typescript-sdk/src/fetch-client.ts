@@ -1440,17 +1440,52 @@ export type AgentListAlbumsToolSuccessResponse = {
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentListAlbumsToolResponseDto = AgentListAlbumsToolApprovalRequiredResponse | AgentListAlbumsToolDeniedResponse | AgentListAlbumsToolSuccessResponse;
+export type AgentListDuplicateGroupsToolRequestDto = {
+    /** Maximum number of duplicate groups to return (default 50) */
+    maxGroups?: number;
+    /** Approved tool call id when retrying after user approval */
+    toolCallId?: string;
+};
+export type AgentListDuplicateGroupsToolApprovalRequiredResponse = {
+    status: Status8;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentListDuplicateGroupsToolDeniedResponse = {
+    reason: string;
+    status: Status9;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentDuplicateAsset = {
+    fileCreatedAt: string;
+    height: number | null;
+    id: string;
+    isFavorite: boolean;
+    originalFileName: string;
+    rating: number | null;
+    width: number | null;
+};
+export type AgentDuplicateGroup = {
+    assets: AgentDuplicateAsset[];
+    duplicateId: string;
+};
+export type AgentListDuplicateGroupsToolSuccessResponse = {
+    groups: AgentDuplicateGroup[];
+    resultSize: AgentToolResultSize;
+    status: Status10;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentListDuplicateGroupsToolResponseDto = AgentListDuplicateGroupsToolApprovalRequiredResponse | AgentListDuplicateGroupsToolDeniedResponse | AgentListDuplicateGroupsToolSuccessResponse;
 export type AgentListSpacesToolRequestDto = {
     /** Approved tool call id when retrying after user approval */
     toolCallId?: string;
 };
 export type AgentListSpacesToolApprovalRequiredResponse = {
-    status: Status8;
+    status: Status11;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentListSpacesToolDeniedResponse = {
     reason: string;
-    status: Status9;
+    status: Status12;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSpaceSummary = {
@@ -1467,7 +1502,7 @@ export type AgentSpaceSummary = {
 export type AgentListSpacesToolSuccessResponse = {
     resultSize: AgentToolResultSize;
     spaces: AgentSpaceSummary[];
-    status: Status10;
+    status: Status13;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentListSpacesToolResponseDto = AgentListSpacesToolApprovalRequiredResponse | AgentListSpacesToolDeniedResponse | AgentListSpacesToolSuccessResponse;
@@ -1476,12 +1511,12 @@ export type AgentReadAlbumToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentReadAlbumToolApprovalRequiredResponse = {
-    status: Status11;
+    status: Status14;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAlbumToolDeniedResponse = {
     reason: string;
-    status: Status12;
+    status: Status15;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentAlbumDetail = {
@@ -1498,7 +1533,7 @@ export type AgentAlbumDetail = {
 export type AgentReadAlbumToolSuccessResponse = {
     album: AgentAlbumDetail;
     resultSize: AgentToolResultSize;
-    status: Status13;
+    status: Status16;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAlbumToolResponseDto = AgentReadAlbumToolApprovalRequiredResponse | AgentReadAlbumToolDeniedResponse | AgentReadAlbumToolSuccessResponse;
@@ -1509,12 +1544,12 @@ export type AgentReadAssetMetadataToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentReadAssetMetadataToolApprovalRequiredResponse = {
-    status: Status14;
+    status: Status17;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetMetadataToolDeniedResponse = {
     reason: string;
-    status: Status15;
+    status: Status18;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentAssetMetadataTag = {
@@ -1550,7 +1585,7 @@ export type AgentReadAssetMetadataToolSuccessResponse = {
     detail?: AgentAssetMetadataDetail;
     fields: AgentAssetMetadataField[];
     resultSize: AgentToolResultSize;
-    status: Status16;
+    status: Status19;
     summary: string;
     toolCall: AgentToolCallResponseDto;
 };
@@ -1560,12 +1595,12 @@ export type AgentReadAssetOriginalsToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentReadAssetOriginalsToolApprovalRequiredResponse = {
-    status: Status17;
+    status: Status20;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetOriginalsToolDeniedResponse = {
     reason: string;
-    status: Status18;
+    status: Status21;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentAssetMediaReference = {
@@ -1579,7 +1614,7 @@ export type AgentAssetMediaReference = {
 export type AgentReadAssetOriginalsToolSuccessResponse = {
     originals: AgentAssetMediaReference[];
     resultSize: AgentToolResultSize;
-    status: Status19;
+    status: Status22;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetOriginalsToolResponseDto = AgentReadAssetOriginalsToolApprovalRequiredResponse | AgentReadAssetOriginalsToolDeniedResponse | AgentReadAssetOriginalsToolSuccessResponse;
@@ -1588,18 +1623,18 @@ export type AgentReadAssetPreviewsToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentReadAssetPreviewsToolApprovalRequiredResponse = {
-    status: Status20;
+    status: Status23;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetPreviewsToolDeniedResponse = {
     reason: string;
-    status: Status21;
+    status: Status24;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetPreviewsToolSuccessResponse = {
     previews: AgentAssetMediaReference[];
     resultSize: AgentToolResultSize;
-    status: Status22;
+    status: Status25;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadAssetPreviewsToolResponseDto = AgentReadAssetPreviewsToolApprovalRequiredResponse | AgentReadAssetPreviewsToolDeniedResponse | AgentReadAssetPreviewsToolSuccessResponse;
@@ -1610,12 +1645,12 @@ export type AgentReadSpaceToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentReadSpaceToolApprovalRequiredResponse = {
-    status: Status23;
+    status: Status26;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadSpaceToolDeniedResponse = {
     reason: string;
-    status: Status24;
+    status: Status27;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSpaceMemberSummary = {
@@ -1643,7 +1678,7 @@ export type AgentSpaceDetail = {
 export type AgentReadSpaceToolSuccessResponse = {
     resultSize: AgentToolResultSize;
     space: AgentSpaceDetail;
-    status: Status25;
+    status: Status28;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentReadSpaceToolResponseDto = AgentReadSpaceToolApprovalRequiredResponse | AgentReadSpaceToolDeniedResponse | AgentReadSpaceToolSuccessResponse;
@@ -1689,12 +1724,12 @@ export type AgentSearchAssetsToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentSearchAssetsToolApprovalRequiredResponse = {
-    status: Status26;
+    status: Status29;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchAssetsToolDeniedResponse = {
     reason: string;
-    status: Status27;
+    status: Status30;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchAssetsSampleItem = {
@@ -1736,7 +1771,7 @@ export type AgentSearchAssetsToolSuccessResponse = {
     returnedCount: number;
     sample?: AgentSearchAssetsSample;
     selectionHandle: AgentSearchAssetsSelectionHandle;
-    status: Status28;
+    status: Status31;
     summary: string;
     toolCall: AgentToolCallResponseDto;
     totalCount?: number;
@@ -1749,12 +1784,12 @@ export type AgentSearchUsersToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentSearchUsersToolApprovalRequiredResponse = {
-    status: Status29;
+    status: Status32;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchUsersToolDeniedResponse = {
     reason: string;
-    status: Status30;
+    status: Status33;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentUserLookupResult = {
@@ -1766,7 +1801,7 @@ export type AgentUserLookupResult = {
 };
 export type AgentSearchUsersToolSuccessResponse = {
     resultSize: AgentToolResultSize;
-    status: Status31;
+    status: Status34;
     toolCall: AgentToolCallResponseDto;
     users: AgentUserLookupResult[];
 };
@@ -6010,6 +6045,22 @@ export function listAlbums({ id, agentListAlbumsToolRequestDto }: {
         ...opts,
         method: "POST",
         body: agentListAlbumsToolRequestDto
+    })));
+}
+/**
+ * Execute the internal listDuplicateGroups agent tool
+ */
+export function listDuplicateGroups({ id, agentListDuplicateGroupsToolRequestDto }: {
+    id: string;
+    agentListDuplicateGroupsToolRequestDto: AgentListDuplicateGroupsToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentListDuplicateGroupsToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/list-duplicate-groups`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentListDuplicateGroupsToolRequestDto
     })));
 }
 /**
@@ -10596,6 +10647,7 @@ export enum AgentToolName {
     ListAlbums = "listAlbums",
     ReadAlbum = "readAlbum",
     ListSpaces = "listSpaces",
+    ListDuplicateGroups = "listDuplicateGroups",
     ReadSpace = "readSpace",
     SearchUsers = "searchUsers",
     ProposeAlbumOperations = "proposeAlbumOperations",
@@ -10687,6 +10739,15 @@ export enum Status12 {
 export enum Status13 {
     Success = "success"
 }
+export enum Status14 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status15 {
+    Denied = "denied"
+}
+export enum Status16 {
+    Success = "success"
+}
 export enum AgentAssetMetadataDetail {
     Basic = "basic",
     Descriptive = "descriptive",
@@ -10703,15 +10764,6 @@ export enum AgentAssetMetadataField {
     Filename = "filename",
     Favorite = "favorite",
     Visibility = "visibility"
-}
-export enum Status14 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status15 {
-    Denied = "denied"
-}
-export enum Status16 {
-    Success = "success"
 }
 export enum Status17 {
     ApprovalRequired = "approval-required"
@@ -10738,6 +10790,15 @@ export enum Status24 {
     Denied = "denied"
 }
 export enum Status25 {
+    Success = "success"
+}
+export enum Status26 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status27 {
+    Denied = "denied"
+}
+export enum Status28 {
     Success = "success"
 }
 export enum AgentSearchAssetsRequestDetail {
@@ -10769,10 +10830,10 @@ export enum AgentSearchAssetsOrder {
     Desc = "desc",
     Relevance = "relevance"
 }
-export enum Status26 {
+export enum Status29 {
     ApprovalRequired = "approval-required"
 }
-export enum Status27 {
+export enum Status30 {
     Denied = "denied"
 }
 export enum AgentSearchAssetsDetail {
@@ -10780,16 +10841,16 @@ export enum AgentSearchAssetsDetail {
     Summary = "summary",
     Metadata = "metadata"
 }
-export enum Status28 {
+export enum Status31 {
     Success = "success"
 }
-export enum Status29 {
+export enum Status32 {
     ApprovalRequired = "approval-required"
 }
-export enum Status30 {
+export enum Status33 {
     Denied = "denied"
 }
-export enum Status31 {
+export enum Status34 {
     Success = "success"
 }
 export enum AlbumUserRole {
