@@ -3674,7 +3674,11 @@ describe(FaceIdentityRepository.name, () => {
           .insertInto('face_search')
           .values({ faceId: corruptFace.id, embedding: axisEmbedding('second') })
           .execute();
-        await sut.linkFace({ assetFaceId: corruptFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+        await sut.linkFace({
+          assetFaceId: corruptFace.id,
+          identityId: personA.identity.id,
+          source: 'shared-space-evidence',
+        });
 
         await sut.backfillPersonalIdentities({ limit: 100 });
 
@@ -3719,7 +3723,11 @@ describe(FaceIdentityRepository.name, () => {
           .insertInto('face_search')
           .values({ faceId: resemblingFace.id, embedding: axisEmbedding('first') })
           .execute();
-        await sut.linkFace({ assetFaceId: resemblingFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+        await sut.linkFace({
+          assetFaceId: resemblingFace.id,
+          identityId: personA.identity.id,
+          source: 'shared-space-evidence',
+        });
 
         await sut.backfillPersonalIdentities({ limit: 100 });
 
@@ -3750,7 +3758,11 @@ describe(FaceIdentityRepository.name, () => {
           const { asset } = await ctx.newAsset({ ownerId: user.id });
           const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
           await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
-          await sut.linkFace({ assetFaceId: assetFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+          await sut.linkFace({
+            assetFaceId: assetFace.id,
+            identityId: personA.identity.id,
+            source: 'shared-space-evidence',
+          });
           return assetFace.id;
         };
         const resemblingFaceId = await makeBFaceLinkedToA(axisEmbedding('first'));
@@ -3794,7 +3806,11 @@ describe(FaceIdentityRepository.name, () => {
           const { asset } = await ctx.newAsset({ ownerId: user.id });
           const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
           await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding }).execute();
-          await sut.linkFace({ assetFaceId: assetFace.id, identityId: personA.identity.id, source: 'shared-space-evidence' });
+          await sut.linkFace({
+            assetFaceId: assetFace.id,
+            identityId: personA.identity.id,
+            source: 'shared-space-evidence',
+          });
           return assetFace.id;
         };
         const insideFaceId = await makeBFaceLinkedToA(blendedEmbedding(140, 116)); // distance ~0.453 (< 0.5)
@@ -3839,7 +3855,10 @@ describe(FaceIdentityRepository.name, () => {
         await sut.ensurePersonIdentity(personB.id);
         const { asset } = await ctx.newAsset({ ownerId: user.id });
         const { assetFace: bFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
-        await ctx.database.insertInto('face_search').values({ faceId: bFace.id, embedding: axisEmbedding('second') }).execute();
+        await ctx.database
+          .insertInto('face_search')
+          .values({ faceId: bFace.id, embedding: axisEmbedding('second') })
+          .execute();
         await sut.linkFace({ assetFaceId: bFace.id, identityId: identityA.id, source: 'shared-space-evidence' });
 
         await sut.backfillPersonalIdentities({ limit: 100 });

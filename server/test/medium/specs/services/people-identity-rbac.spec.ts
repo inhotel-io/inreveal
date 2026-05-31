@@ -1770,16 +1770,30 @@ describe('People identity RBAC projection', () => {
         const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
         await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
         const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerPerson.id });
-        await ctx.database.insertInto('face_search').values({ faceId, embedding: axisEmbedding('first') }).execute();
-        await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: ownerIdentity.id, source: 'owner-person' });
+        await ctx.database
+          .insertInto('face_search')
+          .values({ faceId, embedding: axisEmbedding('first') })
+          .execute();
+        await faceIdentityRepository.linkFace({
+          assetFaceId: faceId,
+          identityId: ownerIdentity.id,
+          source: 'owner-person',
+        });
         ownerFaceIds.push(faceId);
       }
       // The contaminated representative face: axis-B.
       const { asset: repAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
       await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: repAsset.id, addedById: owner.id });
       const { result: repFaceId } = await ctx.newAssetFace({ assetId: repAsset.id, personId: ownerPerson.id });
-      await ctx.database.insertInto('face_search').values({ faceId: repFaceId, embedding: axisEmbedding('second') }).execute();
-      await faceIdentityRepository.linkFace({ assetFaceId: repFaceId, identityId: ownerIdentity.id, source: 'owner-person' });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: repFaceId, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepository.linkFace({
+        assetFaceId: repFaceId,
+        identityId: ownerIdentity.id,
+        source: 'owner-person',
+      });
 
       const spacePerson = await ctx.database
         .insertInto('shared_space_person')
@@ -1793,7 +1807,10 @@ describe('People identity RBAC projection', () => {
         .returningAll()
         .executeTakeFirstOrThrow();
       for (const faceId of [...ownerFaceIds, repFaceId]) {
-        await ctx.database.insertInto('shared_space_person_face').values({ personId: spacePerson.id, assetFaceId: faceId }).execute();
+        await ctx.database
+          .insertInto('shared_space_person_face')
+          .values({ personId: spacePerson.id, assetFaceId: faceId })
+          .execute();
       }
 
       // The member's local identity is a DIFFERENT person whose face sits on axis-B (matching the rep).
@@ -1801,8 +1818,15 @@ describe('People identity RBAC projection', () => {
       const memberIdentity = await faceIdentityRepository.ensurePersonIdentity(memberPerson.id);
       const { asset: memberAsset } = await ctx.newAsset({ ownerId: member.id, visibility: AssetVisibility.Timeline });
       const { result: memberFaceId } = await ctx.newAssetFace({ assetId: memberAsset.id, personId: memberPerson.id });
-      await ctx.database.insertInto('face_search').values({ faceId: memberFaceId, embedding: axisEmbedding('second') }).execute();
-      await faceIdentityRepository.linkFace({ assetFaceId: memberFaceId, identityId: memberIdentity.id, source: 'owner-person' });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: memberFaceId, embedding: axisEmbedding('second') })
+        .execute();
+      await faceIdentityRepository.linkFace({
+        assetFaceId: memberFaceId,
+        identityId: memberIdentity.id,
+        source: 'owner-person',
+      });
 
       await sharedSpaceService.handleSharedSpaceIdentityReconciliation({ spaceId: space.id, userId: member.id });
 
@@ -1836,15 +1860,25 @@ describe('People identity RBAC projection', () => {
       for (let index = 0; index < 3; index++) {
         const { asset } = await ctx.newAsset({ ownerId: user.id });
         const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: personA.id });
-        await ctx.database.insertInto('face_search').values({ faceId, embedding: axisEmbedding('first') }).execute();
-        await faceIdentityRepository.linkFace({ assetFaceId: faceId, identityId: identityA.id, source: 'owner-person' });
+        await ctx.database
+          .insertInto('face_search')
+          .values({ faceId, embedding: axisEmbedding('first') })
+          .execute();
+        await faceIdentityRepository.linkFace({
+          assetFaceId: faceId,
+          identityId: identityA.id,
+          source: 'owner-person',
+        });
       }
       // Person B owns an axis-B face corruptly linked to A's identity — the repair guard will refuse it.
       const { person: personB } = await ctx.newPerson({ ownerId: user.id });
       await faceIdentityRepository.ensurePersonIdentity(personB.id);
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { result: corruptFaceId } = await ctx.newAssetFace({ assetId: asset.id, personId: personB.id });
-      await ctx.database.insertInto('face_search').values({ faceId: corruptFaceId, embedding: axisEmbedding('second') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: corruptFaceId, embedding: axisEmbedding('second') })
+        .execute();
       await faceIdentityRepository.linkFace({
         assetFaceId: corruptFaceId,
         identityId: identityA.id,
