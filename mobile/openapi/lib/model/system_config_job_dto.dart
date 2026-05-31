@@ -17,7 +17,7 @@ class SystemConfigJobDto {
     required this.classification,
     required this.editor,
     required this.faceDetection,
-    required this.integrityCheck,
+    required this.imageQuality,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
@@ -41,7 +41,7 @@ class SystemConfigJobDto {
 
   JobSettingsDto faceDetection;
 
-  JobSettingsDto integrityCheck;
+  JobSettingsDto imageQuality;
 
   JobSettingsDto library_;
 
@@ -75,7 +75,7 @@ class SystemConfigJobDto {
     other.classification == classification &&
     other.editor == editor &&
     other.faceDetection == faceDetection &&
-    other.integrityCheck == integrityCheck &&
+    other.imageQuality == imageQuality &&
     other.library_ == library_ &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
@@ -97,7 +97,7 @@ class SystemConfigJobDto {
     (classification.hashCode) +
     (editor.hashCode) +
     (faceDetection.hashCode) +
-    (integrityCheck.hashCode) +
+    (imageQuality.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
@@ -113,7 +113,7 @@ class SystemConfigJobDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, classification=$classification, editor=$editor, faceDetection=$faceDetection, integrityCheck=$integrityCheck, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'SystemConfigJobDto[backgroundTask=$backgroundTask, classification=$classification, editor=$editor, faceDetection=$faceDetection, imageQuality=$imageQuality, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -121,7 +121,7 @@ class SystemConfigJobDto {
       json[r'classification'] = this.classification;
       json[r'editor'] = this.editor;
       json[r'faceDetection'] = this.faceDetection;
-      json[r'integrityCheck'] = this.integrityCheck;
+      json[r'imageQuality'] = this.imageQuality;
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
@@ -151,7 +151,7 @@ class SystemConfigJobDto {
         classification: JobSettingsDto.fromJson(json[r'classification'])!,
         editor: JobSettingsDto.fromJson(json[r'editor'])!,
         faceDetection: JobSettingsDto.fromJson(json[r'faceDetection'])!,
-        integrityCheck: JobSettingsDto.fromJson(json[r'integrityCheck'])!,
+        imageQuality: JobSettingsDto.fromJson(json[r'imageQuality'])!,
         library_: JobSettingsDto.fromJson(json[r'library'])!,
         metadataExtraction: JobSettingsDto.fromJson(json[r'metadataExtraction'])!,
         migration: JobSettingsDto.fromJson(json[r'migration'])!,
@@ -216,7 +216,7 @@ class SystemConfigJobDto {
     'classification',
     'editor',
     'faceDetection',
-    'integrityCheck',
+    'imageQuality',
     'library',
     'metadataExtraction',
     'migration',

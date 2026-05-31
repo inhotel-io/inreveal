@@ -20,7 +20,7 @@ class QueuesResponseLegacyDto {
     required this.editor,
     required this.faceDetection,
     required this.facialRecognition,
-    required this.integrityCheck,
+    required this.imageQuality,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
@@ -52,7 +52,7 @@ class QueuesResponseLegacyDto {
 
   QueueResponseLegacyDto facialRecognition;
 
-  QueueResponseLegacyDto integrityCheck;
+  QueueResponseLegacyDto imageQuality;
 
   QueueResponseLegacyDto library_;
 
@@ -93,7 +93,7 @@ class QueuesResponseLegacyDto {
     other.editor == editor &&
     other.faceDetection == faceDetection &&
     other.facialRecognition == facialRecognition &&
-    other.integrityCheck == integrityCheck &&
+    other.imageQuality == imageQuality &&
     other.library_ == library_ &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
@@ -120,7 +120,7 @@ class QueuesResponseLegacyDto {
     (editor.hashCode) +
     (faceDetection.hashCode) +
     (facialRecognition.hashCode) +
-    (integrityCheck.hashCode) +
+    (imageQuality.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
@@ -138,7 +138,7 @@ class QueuesResponseLegacyDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, classification=$classification, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, integrityCheck=$integrityCheck, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageBackendMigration=$storageBackendMigration, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, classification=$classification, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageQuality=$imageQuality, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageBackendMigration=$storageBackendMigration, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -149,7 +149,7 @@ class QueuesResponseLegacyDto {
       json[r'editor'] = this.editor;
       json[r'faceDetection'] = this.faceDetection;
       json[r'facialRecognition'] = this.facialRecognition;
-      json[r'integrityCheck'] = this.integrityCheck;
+      json[r'imageQuality'] = this.imageQuality;
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
@@ -184,7 +184,7 @@ class QueuesResponseLegacyDto {
         editor: QueueResponseLegacyDto.fromJson(json[r'editor'])!,
         faceDetection: QueueResponseLegacyDto.fromJson(json[r'faceDetection'])!,
         facialRecognition: QueueResponseLegacyDto.fromJson(json[r'facialRecognition'])!,
-        integrityCheck: QueueResponseLegacyDto.fromJson(json[r'integrityCheck'])!,
+        imageQuality: QueueResponseLegacyDto.fromJson(json[r'imageQuality'])!,
         library_: QueueResponseLegacyDto.fromJson(json[r'library'])!,
         metadataExtraction: QueueResponseLegacyDto.fromJson(json[r'metadataExtraction'])!,
         migration: QueueResponseLegacyDto.fromJson(json[r'migration'])!,
@@ -254,7 +254,7 @@ class QueuesResponseLegacyDto {
     'editor',
     'faceDetection',
     'facialRecognition',
-    'integrityCheck',
+    'imageQuality',
     'library',
     'metadataExtraction',
     'migration',
