@@ -4,6 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/services/search.service.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
+import 'package:immich_mobile/providers/infrastructure/search.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
+import 'package:immich_mobile/providers/user.provider.dart';
 
 class PhotosFilterSearchState {
   final List<BaseAsset> assets;
@@ -37,6 +40,11 @@ class PhotosFilterSearchNotifier extends StateNotifier<PhotosFilterSearchState> 
     : _search = search,
       _filter = filter,
       super(const PhotosFilterSearchState()) {
+    if (filter.isEmpty) {
+      firstLoad = Future.value();
+      state = const PhotosFilterSearchState(nextPage: null);
+      return;
+    }
     firstLoad = loadMore();
   }
 
@@ -73,3 +81,18 @@ class PhotosFilterSearchNotifier extends StateNotifier<PhotosFilterSearchState> 
     super.dispose();
   }
 }
+
+bool isSearchActive(String? userId, SearchFilter filter) => userId != null && !filter.isEmpty;
+
+final photosFilterSearchProvider =
+    StateNotifierProvider.autoDispose<PhotosFilterSearchNotifier, PhotosFilterSearchState>((ref) {
+      final filter = ref.watch(photosTimelineFilterProvider);
+      final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+      final search = ref.watch(searchServiceProvider);
+      final n = PhotosFilterSearchNotifier(
+        search: search,
+        filter: isSearchActive(userId, filter) ? filter : SearchFilter.empty(),
+      );
+      ref.onDispose(n.dispose);
+      return n;
+    });

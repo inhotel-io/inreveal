@@ -119,4 +119,22 @@ void main() {
     await sub.cancel();
     expect(seen, containsAllInOrder([100, 140]));
   });
+
+  group('search activation', () {
+    test('isSearchActive gate', () {
+      expect(isSearchActive(null, SearchFilter.empty()..context = 'x'), isFalse);
+      expect(isSearchActive('u', SearchFilter.empty()), isFalse);
+      expect(isSearchActive('u', SearchFilter.empty()..context = 'x'), isTrue);
+    });
+
+    test('empty-filter notifier is terminal and never calls the API', () async {
+      final s = _MockSearch();
+      final n = PhotosFilterSearchNotifier(search: s, filter: SearchFilter.empty());
+      addTearDown(n.dispose);
+      await n.firstLoad;
+      await n.loadMore();
+      expect(n.debugState.nextPage, isNull);
+      verifyNever(() => s.search(any(), any()));
+    });
+  });
 }
