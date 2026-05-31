@@ -137,3 +137,107 @@ describe('curate_highlights run() — placeholder handoff', () => {
     assert.equal(typeof wf.run, 'function');
   });
 });
+
+describe('curate_highlights run guardrails', () => {
+  // Helper: call run() with a synthetic slots object
+  const run = (slots) => wf.run({ client: null, slots, signal: undefined });
+
+  // --- Unbounded source guard ---
+
+  it('scope-ask: "my library" source → needs_input with scope hint', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'my library' });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(
+      /album|space|date/i.test(outcome.text),
+      `expected scope mention in: "${outcome.text}"`,
+    );
+    assert.equal(outcome.continuation, undefined, 'no plan created');
+  });
+
+  it('scope-ask: "everything" source → needs_input', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'everything' });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/album|space|date/i.test(outcome.text));
+  });
+
+  it('scope-ask: "all my photos" source → needs_input', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'all my photos' });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/album|space|date/i.test(outcome.text));
+  });
+
+  it('scope-ask: "my entire collection" source → needs_input', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'my entire collection' });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/album|space|date/i.test(outcome.text));
+  });
+
+  it('scope-ask: matched "find the best photos in my library" slots → needs_input', async () => {
+    const matched = wf.match('find the best photos in my library');
+    const outcome = await wf.run({ client: null, slots: matched.slots, signal: undefined });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/album|space|date/i.test(outcome.text));
+  });
+
+  // --- Invalid count guard ---
+
+  it('invalid count: 0 → needs_input asking for positive whole number', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: 0 });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/positive|whole/i.test(outcome.text), `expected positive/whole in: "${outcome.text}"`);
+  });
+
+  it('invalid count: -3 → needs_input asking for positive whole number', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: -3 });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/positive|whole/i.test(outcome.text));
+  });
+
+  it('over-limit count: 5000 → needs_input asking to narrow', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: 5000 });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/1000|smaller|narrow/i.test(outcome.text), `expected limit mention in: "${outcome.text}"`);
+  });
+
+  it('count exactly at limit: 1000 → proceeds to placeholder (handoff_open)', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: 1000 });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+
+  // --- String count coercion ---
+
+  it('digit-string count "15" → proceeds to placeholder (valid)', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: '15' });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+
+  it('spelled-out count "fifteen" → proceeds to placeholder (valid)', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: 'fifteen' });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+
+  it('junk count "lots" → needs_input asking for positive whole number', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album', count: 'lots' });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(/positive|whole/i.test(outcome.text));
+  });
+
+  // --- Missing count on bounded source → default and proceed ---
+
+  it('missing count + bounded source → proceeds to placeholder (default applied)', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'this album' });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+
+  // --- Bounded source + valid count → proceed ---
+
+  it('bounded source "my Portugal trip" + count 15 → proceeds to placeholder', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'my Portugal trip', count: 15 });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+
+  it('bounded source "last weekend" + count 20 → proceeds to placeholder', async () => {
+    const outcome = await run({ action: 'album', sourceDescription: 'last weekend', count: 20 });
+    assert.equal(outcome.status, 'handoff_open');
+  });
+});
