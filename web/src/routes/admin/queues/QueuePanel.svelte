@@ -83,6 +83,10 @@
       allText: $t('all'),
       missingText: $t('missing'),
     },
+    [QueueName.ImageQuality]: {
+      allText: $t('all'),
+      missingText: $t('missing'),
+    },
     [QueueName.Classification]: {
       allText: $t('all'),
       missingText: $t('missing'),
