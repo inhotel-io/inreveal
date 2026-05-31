@@ -458,6 +458,22 @@ function withAgentExif<O>(qb: SelectQueryBuilder<DB, 'asset', O>) {
   );
 }
 
+function withAgentQuality<O>(qb: SelectQueryBuilder<DB, 'asset', O>) {
+  return qb.select((eb) =>
+    jsonObjectFrom(
+      eb
+        .selectFrom('asset_quality')
+        .select([
+          'asset_quality.sharpness',
+          'asset_quality.exposure',
+          'asset_quality.brightness',
+          'asset_quality.quality',
+        ])
+        .whereRef('asset_quality.assetId', '=', 'asset.id'),
+    ).as('qualityInfo'),
+  );
+}
+
 @Injectable()
 export class AssetRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -1164,6 +1180,7 @@ export class AssetRepository {
       ])
       .select(withTags)
       .$call(withAgentExif)
+      .$call(withAgentQuality)
       .where('asset.id', '=', anyUuid(ids))
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
@@ -1239,6 +1256,7 @@ export class AssetRepository {
       ])
       .select(withTags)
       .$call(withAgentExif)
+      .$call(withAgentQuality)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
       .where(
