@@ -1701,6 +1701,9 @@ export type AgentSearchAssetsFilters = {
     isNotInAlbum?: boolean;
     lensModel?: string | null;
     make?: string | null;
+    maxBrightness?: number;
+    maxQuality?: number;
+    maxSharpness?: number;
     model?: string | null;
     personIds?: string[];
     personMatchAny?: boolean;

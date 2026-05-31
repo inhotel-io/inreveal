@@ -23,6 +23,9 @@ class AgentSearchAssetsFilters {
     this.isNotInAlbum,
     this.lensModel,
     this.make,
+    this.maxBrightness,
+    this.maxQuality,
+    this.maxSharpness,
     this.model,
     this.personIds = const [],
     this.personMatchAny,
@@ -90,6 +93,36 @@ class AgentSearchAssetsFilters {
   String? lensModel;
 
   String? make;
+
+  /// Minimum value: 0
+  /// Maximum value: 100
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxBrightness;
+
+  /// Minimum value: 0
+  /// Maximum value: 100
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxQuality;
+
+  /// Minimum value: 0
+  /// Maximum value: 100
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  int? maxSharpness;
 
   String? model;
 
@@ -197,6 +230,9 @@ class AgentSearchAssetsFilters {
     other.isNotInAlbum == isNotInAlbum &&
     other.lensModel == lensModel &&
     other.make == make &&
+    other.maxBrightness == maxBrightness &&
+    other.maxQuality == maxQuality &&
+    other.maxSharpness == maxSharpness &&
     other.model == model &&
     _deepEquality.equals(other.personIds, personIds) &&
     other.personMatchAny == personMatchAny &&
@@ -227,6 +263,9 @@ class AgentSearchAssetsFilters {
     (isNotInAlbum == null ? 0 : isNotInAlbum!.hashCode) +
     (lensModel == null ? 0 : lensModel!.hashCode) +
     (make == null ? 0 : make!.hashCode) +
+    (maxBrightness == null ? 0 : maxBrightness!.hashCode) +
+    (maxQuality == null ? 0 : maxQuality!.hashCode) +
+    (maxSharpness == null ? 0 : maxSharpness!.hashCode) +
     (model == null ? 0 : model!.hashCode) +
     (personIds.hashCode) +
     (personMatchAny == null ? 0 : personMatchAny!.hashCode) +
@@ -245,7 +284,7 @@ class AgentSearchAssetsFilters {
     (withSharedSpaces == null ? 0 : withSharedSpaces!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, albumMatchAny=$albumMatchAny, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, model=$model, personIds=$personIds, personMatchAny=$personMatchAny, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, tagMatchAny=$tagMatchAny, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
+  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, albumMatchAny=$albumMatchAny, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, maxBrightness=$maxBrightness, maxQuality=$maxQuality, maxSharpness=$maxSharpness, model=$model, personIds=$personIds, personMatchAny=$personMatchAny, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, tagMatchAny=$tagMatchAny, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -298,6 +337,21 @@ class AgentSearchAssetsFilters {
       json[r'make'] = this.make;
     } else {
     //  json[r'make'] = null;
+    }
+    if (this.maxBrightness != null) {
+      json[r'maxBrightness'] = this.maxBrightness;
+    } else {
+    //  json[r'maxBrightness'] = null;
+    }
+    if (this.maxQuality != null) {
+      json[r'maxQuality'] = this.maxQuality;
+    } else {
+    //  json[r'maxQuality'] = null;
+    }
+    if (this.maxSharpness != null) {
+      json[r'maxSharpness'] = this.maxSharpness;
+    } else {
+    //  json[r'maxSharpness'] = null;
     }
     if (this.model != null) {
       json[r'model'] = this.model;
@@ -399,6 +453,9 @@ class AgentSearchAssetsFilters {
         isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
         lensModel: mapValueOfType<String>(json, r'lensModel'),
         make: mapValueOfType<String>(json, r'make'),
+        maxBrightness: mapValueOfType<int>(json, r'maxBrightness'),
+        maxQuality: mapValueOfType<int>(json, r'maxQuality'),
+        maxSharpness: mapValueOfType<int>(json, r'maxSharpness'),
         model: mapValueOfType<String>(json, r'model'),
         personIds: json[r'personIds'] is Iterable
             ? (json[r'personIds'] as Iterable).cast<String>().toList(growable: false)
