@@ -89,10 +89,10 @@ final photosFilterSearchProvider =
       final filter = ref.watch(photosTimelineFilterProvider);
       final userId = ref.watch(currentUserProvider.select((u) => u?.id));
       final search = ref.watch(searchServiceProvider);
-      final n = PhotosFilterSearchNotifier(
+      // StateNotifierProvider.autoDispose disposes the notifier itself; an explicit
+      // ref.onDispose(n.dispose) would double-dispose (debug-mode StateError).
+      return PhotosFilterSearchNotifier(
         search: search,
         filter: isSearchActive(userId, filter) ? filter : SearchFilter.empty(),
       );
-      ref.onDispose(n.dispose);
-      return n;
     });
