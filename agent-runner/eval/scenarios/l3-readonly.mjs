@@ -104,6 +104,20 @@ export default [
     expect: { kind: 'archive_assets' },
   },
   {
+    // trash_assets routing: reversible trash reaches the new workflow live.
+    id: 'l3.recall.trash',
+    category: 'l3.recall',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets' },
+  },
+  {
+    // cleanup_duplicates routing: the duplicate keyword owns it (not trash_assets).
+    id: 'l3.recall.duplicates',
+    category: 'l3.recall',
+    prompt: 'clean up my duplicate photos',
+    expect: { kind: 'cleanup_duplicates' },
+  },
+  {
     id: 'l3.recall.space.describe',
     category: 'l3.recall',
     prompt: 'set the description on the {space} space to Shared memories',
@@ -261,6 +275,27 @@ export default [
     category: 'l3.plan',
     prompt: 'archive my recent uploads',
     expect: { kind: 'archive_assets', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
+    // trash_assets end-to-end (PROPOSE-ONLY, never applied): recency resolves to a
+    // selection handle and proposes a reversible asset.trash plan. The L3 preset is
+    // visual-organizer, which now grants `trashAssets`, so the plan proposes live;
+    // the read-only audit must confirm NO plan was applied (nothing is trashed).
+    id: 'l3.plan.trash.recency',
+    category: 'l3.plan',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // cleanup_duplicates end-to-end: lists duplicate groups, keeps one per group,
+    // proposes an asset.trash over the non-keepers. Data-dependent (needs detected
+    // duplicates); routing-only when unseeded. Propose-only, never applied.
+    id: 'l3.plan.duplicates',
+    category: 'l3.plan',
+    prompt: 'clean up my duplicate photos',
+    expect: { kind: 'cleanup_duplicates', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
