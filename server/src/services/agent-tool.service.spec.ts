@@ -8091,6 +8091,8 @@ describe(AgentToolService.name, () => {
     expect(first.rating).toBe(4);
     expect(first.width).toBe(1920);
     expect(first.height).toBe(1080);
+    // sharpness present (null — no mock for quality lookup in this test)
+    expect(first).toHaveProperty('sharpness');
     // EXIF dump must NOT leak
     expect(first).not.toHaveProperty('latitude');
     expect(first).not.toHaveProperty('longitude');
@@ -8099,6 +8101,10 @@ describe(AgentToolService.name, () => {
     expect(first).not.toHaveProperty('make');
     expect(first).not.toHaveProperty('model');
     expect(first).not.toHaveProperty('exifInfo');
+    // Other quality fields must NOT leak
+    expect(first).not.toHaveProperty('exposure');
+    expect(first).not.toHaveProperty('brightness');
+    expect(first).not.toHaveProperty('quality');
     // Media URLs must NOT be present
     expect(first).not.toHaveProperty('thumbhash');
     expect(first).not.toHaveProperty('originalPath');
@@ -8108,6 +8114,59 @@ describe(AgentToolService.name, () => {
     expect(second.rating).toBeNull();
     expect(second.width).toBeNull();
     expect(second.height).toBeNull();
+    // sharpness must be present (null for unscored, no other quality fields)
+    expect(second).toHaveProperty('sharpness');
+    expect(second).not.toHaveProperty('exposure');
+    expect(second).not.toHaveProperty('brightness');
+    expect(second).not.toHaveProperty('quality');
+  });
+
+  it('listDuplicateGroups includes per-asset sharpness from quality lookup', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+      permissionPlanSnapshot: makePlan({ assetScope: { owned: true, sharedSpaces: false, locked: false } }),
+    });
+    const duplicateId = newUuid();
+    const assetId1 = newUuid();
+    const assetId2 = newUuid();
+    const assetId3 = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    duplicateRepository.getAll.mockResolvedValue([
+      {
+        duplicateId,
+        assets: [
+          { id: assetId1, originalFileName: 'a.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
+          { id: assetId2, originalFileName: 'b.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
+          { id: assetId3, originalFileName: 'c.jpg', fileCreatedAt: now, isFavorite: false, width: null, height: null, exifInfo: null },
+        ],
+      },
+    ] as never);
+    assetRepository.getAssetQualityByIds.mockResolvedValue([
+      { assetId: assetId1, sharpness: 91 },
+      { assetId: assetId2, sharpness: 55 },
+      // assetId3 has no quality row → sharpness should be null
+    ] as never);
+
+    const result = await sut.listDuplicateGroups(auth, session.id, {});
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+
+    const assets = result.groups[0].assets;
+    expect(assets[0].sharpness).toBe(91);
+    expect(assets[1].sharpness).toBe(55);
+    expect(assets[2].sharpness).toBeNull();
+    // No other quality fields should leak
+    for (const asset of assets) {
+      expect(asset).not.toHaveProperty('exposure');
+      expect(asset).not.toHaveProperty('brightness');
+      expect(asset).not.toHaveProperty('quality');
+    }
   });
 
   it('listDuplicateGroups caps to maxGroups', async () => {
