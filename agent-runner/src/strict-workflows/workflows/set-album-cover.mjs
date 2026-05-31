@@ -105,7 +105,7 @@ export const setAlbumCoverWorkflow = () => ({
     } catch (error) {
       return failed({ text: safeFailureText(error?.message ?? 'The album lookup failed.') });
     }
-    const assetIds = Array.isArray(detail?.assetIds) ? detail.assetIds : [];
+    const assetIds = Array.isArray(detail?.album?.assetIds) ? detail.album.assetIds : [];
 
     const index = parseCoverIndex(coverRef, assetIds.length);
     if (index === undefined) {
