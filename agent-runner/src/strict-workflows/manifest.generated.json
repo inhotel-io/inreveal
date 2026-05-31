@@ -284,6 +284,42 @@
     }
   },
   {
+    "kind": "trash_assets",
+    "flow": "hybrid",
+    "title": "Trash photos (recoverable)",
+    "classifierDescription": "User wants to move a metadata-describable set of photos to the recoverable Trash (trash/delete/bin a recency/date/type or named-entity source). Reversible; album/space deletion and subjective sources are out of scope.",
+    "positiveExamples": [
+      "Trash my newest 20 photos",
+      "Delete my 2024 screenshots",
+      "Move my newest 50 photos to the trash",
+      "Bin my blurry shots from last weekend"
+    ],
+    "negativeExamples": [
+      "Delete the Family album",
+      "Remove my newest 20 from the Italy album",
+      "Remove the Travel tag from my newest 20",
+      "Trash the best ones"
+    ],
+    "slots": {
+      "sourceDescription": {
+        "type": "string",
+        "required": true,
+        "description": "Metadata description of the photos to trash."
+      }
+    },
+    "requiredReadTools": [
+      "resolveAssetSearchFilters",
+      "searchAssets"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Trash photos",
+      "tier": "Solid now",
+      "flow": "Hybrid"
+    }
+  },
+  {
     "kind": "favorite_assets",
     "flow": "hybrid",
     "title": "Favorite or unfavorite photos",

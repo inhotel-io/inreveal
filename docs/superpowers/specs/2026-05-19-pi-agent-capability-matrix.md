@@ -106,6 +106,7 @@ retried only when the correction is mechanical.
 | Natural-language filtered search | Open read flow              | Pi may explore filters and summarize results, while handles remain the asset-set boundary.                                                                                                                            |
 | Mark favorites                   | Hybrid                      | `favorite_assets`: Open curation for subjective "best"; strict favorite plan once a bounded source exists.                                                                                                            |
 | Archive assets                   | Hybrid                      | `archive_assets`: recency/date/type source -> batch `asset.setArchive` plan; subjective or qualified sources hand off.                                                                                                |
+| Trash photos                     | Hybrid                      | `trash_assets`: Pi resolves the source; Gallery owns the High-risk, reversible `asset.trash` plan (recoverable Trash); album/space deletion and subjective sources hand off.                                          |
 | Add or remove tags               | Hybrid                      | `tag_assets` adds (`asset.addTag`) and `untag_assets` removes (`asset.removeTag`, resolving the tag name to an id) from a resolved source; subjective sources hand off.                                               |
 | Batch asset metadata edits       | Hybrid                      | `update_asset_metadata`: Pi resolves a loose-asset source; Gallery owns the `asset.updateMetadata` plan (description/rating/date/timezone/lat+lng; place names ask for coordinates).                                  |
 | Rotate assets                    | Hybrid                      | `rotate_assets`: Pi resolves the source + explicit angle (90/180/270); Gallery owns the batch `asset.rotate` plan. No-angle / subjective declines.                                                                    |
@@ -133,6 +134,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
 | `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAddAssetsToSpaceFromSearch` |
 | `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
+| `trash_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
 | `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
 | `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |

@@ -12,6 +12,7 @@ import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-al
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
 import { setAlbumCoverWorkflow } from './workflows/set-album-cover.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
+import { trashAssetsWorkflow } from './workflows/trash-assets.mjs';
 import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
@@ -43,6 +44,9 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     create-verb workflows. `create_album_from_source` comes first so "album"
 //     prompts are not stolen; `create_space_from_source` immediately follows and
 //     its inline-name form discriminates via the "space" noun.
+//   - `trash_assets` is adjacent to `archive_assets` (both source-state workflows).
+//     Its distinct verbs (trash/delete/bin/move-to-trash) do not collide with
+//     `remove_photos_from_album` ("remove … from") or `untag_assets` ("remove … tag").
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -51,6 +55,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   renameOrDescribeAlbumWorkflow,
   setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
+  trashAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
   untagAssetsWorkflow,
