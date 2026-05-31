@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.996,
+  "overall": 1,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.867
+    "copy": 1
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -60,6 +60,15 @@
     "recall.tag.entity": 1,
     "recall.favorite.entity": 1,
     "recall.createalbum.entity": 1,
+    "recall.createspace.canonical": 1,
+    "recall.createspace.named": 1,
+    "recall.createspace.album-disambig": 1,
+    "recall.createspace.member-disambig": 1,
+    "recall.rotate.canonical": 1,
+    "recall.rotate.ccw": 1,
+    "recall.rotate.flip": 1,
+    "recall.cover.index": 1,
+    "recall.cover.first": 1,
     "neg.q.count": 1,
     "neg.q.biggest": 1,
     "neg.q.where": 1,
@@ -82,6 +91,11 @@
     "neg.spaceassets.member": 1,
     "neg.remove.tag": 1,
     "neg.remove.subjective": 1,
+    "neg.createspace.subjective": 1,
+    "neg.rotate.subjective": 1,
+    "neg.rotate.badangle": 1,
+    "neg.cover.subjective": 1,
+    "neg.cover.unspecified": 1,
     "slots.usa.alias.unitedstates": 1,
     "slots.usa.alias.us-dot": 1,
     "slots.usa.alias.the-united-states": 1,
@@ -99,8 +113,11 @@
     "slots.metadata.describe": 1,
     "slots.remove.canonical": 1,
     "slots.spaceassets.remove": 1,
+    "slots.createspace.default-name": 1,
+    "slots.rotate.ccw-polarity": 1,
+    "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 0.6,
+    "copy.trip.italy.no-exclusions": 1,
     "copy.trip.long-name": 1
   }
 }
