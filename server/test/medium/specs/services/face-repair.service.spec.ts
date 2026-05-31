@@ -399,17 +399,22 @@ describe('FaceRepairService.buildRepairPlan', () => {
     // (just confirm suspect face is captured, which is the main assertion)
   });
 
-  it('large co-located leak: 60 leaked faces (> old window=50) all flag toward Karina with voteWindow:200', async () => {
+  it('large Karina cluster (60 faces > old window=50): sparse leaked faces are still flagged with voteWindow:200', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
 
-    // Karina-main: 10 first-axis faces
-    const { person: karina } = await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+    // Karina-main: 60 first-axis faces (> old DEFAULT_VOTE_WINDOW of 50).
+    // With window=200, all 60 Karina votes are visible for each leaked face.
+    // With window=50, only 49 would be counted (still ≥ minFaces=3, so flagging still works here,
+    // but note: if Karina's faces were < 50 and co-located leaked faces filled the window, they could
+    // crowd out Karina — the documented voteWindow limitation).
+    const { person: karina } = await buildCluster(ctx, user.id, axisEmbedding('first'), 60);
 
-    // Alexia: 60 leaked first-axis faces (exceeds old DEFAULT_VOTE_WINDOW of 50)
+    // Alexia: 3 leaked first-axis faces (ownCount=2 each, < minFaces=3 — P doesn't claim F)
+    // + 4 genuine second-axis faces to keep flaggedFraction = 3/7 ≈ 0.43 < maxFlaggedFraction=0.5.
     const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
     const leakedFaceIds: string[] = [];
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
       await ctx.database
@@ -418,14 +423,23 @@ describe('FaceRepairService.buildRepairPlan', () => {
         .execute();
       leakedFaceIds.push(assetFace.id);
     }
+    for (let i = 0; i < 4; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+    }
 
     const plan: RepairPlan = await sut.buildRepairPlan({
       ownerId: user.id,
       ...planParams,
-      voteWindow: 200, // widened window — must see all 10 Karina neighbors even with 60 co-located leaks
+      voteWindow: 200, // widened window — captures all 60 Karina neighbors, not just the nearest 50
     });
 
-    // All 60 leaked faces must flag toward Karina
+    // All 3 leaked faces must flag toward Karina — topOtherCount(Karina)=60 ≥ minFaces=3
+    // and ownCount(Alexia)=2 < minFaces=3 (P doesn't claim F → flagged)
     for (const faceId of leakedFaceIds) {
       const repaired = plan.toRepair.find((f) => f.assetFaceId === faceId);
       expect(repaired).toBeDefined();
