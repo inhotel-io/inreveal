@@ -77,6 +77,14 @@ const makeAssetUpdateMetadataOperation = (payload: Record<string, unknown>) => (
 
 const parsePlan = (input: unknown) => AgentProposeAlbumOperationsDto.schema.safeParse(input);
 
+const makeValidTrashOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetTrash,
+  summary: 'Move matching photos to Trash.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -502,7 +510,11 @@ describe('Agent operation DTOs', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
-        expect(result.data.operations[0].payload).toMatchObject({ description: 'Berlin weekend' });
+        const op = result.data.operations[0];
+        if (op.type !== AgentOperationType.AssetUpdateMetadata) {
+          throw new Error('unexpected op type');
+        }
+        expect(op.payload).toMatchObject({ description: 'Berlin weekend' });
       }
     });
 
@@ -847,7 +859,7 @@ describe('Agent operation DTOs', () => {
       throw new Error('Expected empty space update payload to fail validation');
     }
     expect(
-      z.treeifyError(emptyPayload.error).properties?.operations?.items?.[0]?.properties?.payload?.errors,
+      (z.treeifyError(emptyPayload.error).properties?.operations?.items?.[0]?.properties as any)?.payload?.errors,
     ).toContain('Provide spaceName, description, or color');
 
     for (const payload of [
@@ -1397,7 +1409,11 @@ describe('Agent operation DTOs', () => {
 
     expect(validCreate.success).toBe(true);
     if (validCreate.success) {
-      expect(validCreate.data.operations[0].payload).toMatchObject({ description: '' });
+      const op = validCreate.data.operations[0];
+      if (op.type !== AgentOperationType.AlbumCreate) {
+        throw new Error('unexpected op type');
+      }
+      expect(op.payload).toMatchObject({ description: '' });
     }
   });
 
@@ -2345,14 +2361,6 @@ describe('Agent operation DTOs', () => {
   });
 
   describe('asset.trash operation schema', () => {
-    const makeValidTrashOp = (overrides: Record<string, unknown> = {}) => ({
-      type: AgentOperationType.AssetTrash,
-      summary: 'Move matching photos to Trash.',
-      targetKind: AgentOperationTargetKind.AssetBatch,
-      assetIds: [factory.uuid()],
-      ...overrides,
-    });
-
     it('accepts a valid asset.trash operation with default High riskLevel', () => {
       const result = parseSingleOperationProposal(makeValidTrashOp());
       expect(result.success).toBe(true);
