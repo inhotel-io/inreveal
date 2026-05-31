@@ -433,6 +433,7 @@ Class | Method | HTTP request | Description
  - [AgentAssetMediaReference](doc//AgentAssetMediaReference.md)
  - [AgentAssetMetadataDetail](doc//AgentAssetMetadataDetail.md)
  - [AgentAssetMetadataField](doc//AgentAssetMetadataField.md)
+ - [AgentAssetMetadataQuality](doc//AgentAssetMetadataQuality.md)
  - [AgentAssetMetadataResult](doc//AgentAssetMetadataResult.md)
  - [AgentAssetMetadataResultExifInfo](doc//AgentAssetMetadataResultExifInfo.md)
  - [AgentAssetMetadataTag](doc//AgentAssetMetadataTag.md)

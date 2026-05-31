@@ -216,6 +216,8 @@ class ApiClient {
           return AgentAssetMetadataDetailTypeTransformer().decode(value);
         case 'AgentAssetMetadataField':
           return AgentAssetMetadataFieldTypeTransformer().decode(value);
+        case 'AgentAssetMetadataQuality':
+          return AgentAssetMetadataQuality.fromJson(value);
         case 'AgentAssetMetadataResult':
           return AgentAssetMetadataResult.fromJson(value);
         case 'AgentAssetMetadataResultExifInfo':
