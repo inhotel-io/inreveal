@@ -78,6 +78,33 @@ describe('decideReattribution', () => {
     );
     expect(d.flagged).toBe(true);
   });
+
+  it('voteMargin exact boundary: topOtherCount - ownCount === voteMargin is flagged (>=); one less is not', () => {
+    // ownCount=6, topOtherCount=8, voteMargin=2 → 8-6 === 2 → flagged
+    const atBoundary = decideReattribution(
+      tally({ ownCount: 6, topOtherPersonId: 'Q', topOtherCount: 8, topOtherNearest: 0.2 }),
+      { minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35 },
+    );
+    expect(atBoundary.flagged).toBe(true);
+    expect(atBoundary.suspectedOwnerId).toBe('Q');
+
+    // ownCount=7, topOtherCount=8, voteMargin=2 → 8-7 === 1 < 2, and ownCount(7)>=minFaces(3) → not flagged
+    const oneShort = decideReattribution(
+      tally({ ownCount: 7, topOtherPersonId: 'Q', topOtherCount: 8, topOtherNearest: 0.2 }),
+      { minFaces: 3, voteMargin: 2, maxAttributionDistance: 0.35 },
+    );
+    expect(oneShort.flagged).toBe(false);
+  });
+
+  it('voteMargin:0 — a tie out-votes when margin is 0 (documents intentional behavior)', () => {
+    // ownCount=5, topOtherCount=5, voteMargin=0 → 5-5 === 0 >= 0 → flagged
+    const d = decideReattribution(
+      tally({ ownCount: 5, topOtherPersonId: 'Q', topOtherCount: 5, topOtherNearest: 0.2 }),
+      { minFaces: 3, voteMargin: 0, maxAttributionDistance: 0.35 },
+    );
+    expect(d.flagged).toBe(true);
+    expect(d.suspectedOwnerId).toBe('Q');
+  });
 });
 
 describe('tallyReattribution', () => {
