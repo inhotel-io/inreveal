@@ -180,6 +180,10 @@ class AgentSessionActivityEventResponseDtoKindEnum {
   static const planComposing = AgentSessionActivityEventResponseDtoKindEnum._(r'plan-composing');
   static const applyProgress = AgentSessionActivityEventResponseDtoKindEnum._(r'apply-progress');
   static const runnerRecovery = AgentSessionActivityEventResponseDtoKindEnum._(r'runner-recovery');
+  static const strictRouterDecision = AgentSessionActivityEventResponseDtoKindEnum._(r'strict_router_decision');
+  static const strictWorkflowOutcome = AgentSessionActivityEventResponseDtoKindEnum._(r'strict_workflow_outcome');
+  static const strictSuccessGateBlock = AgentSessionActivityEventResponseDtoKindEnum._(r'strict_success_gate_block');
+  static const strictContinuation = AgentSessionActivityEventResponseDtoKindEnum._(r'strict_continuation');
   static const unknown = AgentSessionActivityEventResponseDtoKindEnum._(r'unknown');
 
   /// List of all possible values in this [enum][AgentSessionActivityEventResponseDtoKindEnum].
@@ -188,6 +192,10 @@ class AgentSessionActivityEventResponseDtoKindEnum {
     planComposing,
     applyProgress,
     runnerRecovery,
+    strictRouterDecision,
+    strictWorkflowOutcome,
+    strictSuccessGateBlock,
+    strictContinuation,
     unknown,
   ];
 
@@ -231,6 +239,10 @@ class AgentSessionActivityEventResponseDtoKindEnumTypeTransformer {
         case r'plan-composing': return AgentSessionActivityEventResponseDtoKindEnum.planComposing;
         case r'apply-progress': return AgentSessionActivityEventResponseDtoKindEnum.applyProgress;
         case r'runner-recovery': return AgentSessionActivityEventResponseDtoKindEnum.runnerRecovery;
+        case r'strict_router_decision': return AgentSessionActivityEventResponseDtoKindEnum.strictRouterDecision;
+        case r'strict_workflow_outcome': return AgentSessionActivityEventResponseDtoKindEnum.strictWorkflowOutcome;
+        case r'strict_success_gate_block': return AgentSessionActivityEventResponseDtoKindEnum.strictSuccessGateBlock;
+        case r'strict_continuation': return AgentSessionActivityEventResponseDtoKindEnum.strictContinuation;
         case r'unknown': return AgentSessionActivityEventResponseDtoKindEnum.unknown;
         default:
           if (!allowNull) {
