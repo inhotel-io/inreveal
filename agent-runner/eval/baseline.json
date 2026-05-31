@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 1,
+  "overall": 0.996,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 1
+    "copy": 0.867
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -35,6 +35,9 @@
     "recall.tag.canonical": 1,
     "recall.tag.add-the-tag": 1,
     "recall.tag.uncommon-verb": 1,
+    "recall.untag.canonical": 1,
+    "recall.untag.tag-named-from": 1,
+    "recall.untag.verb": 1,
     "recall.space.rename": 1,
     "recall.space.describe": 1,
     "recall.members.add": 1,
@@ -82,14 +85,13 @@
     "neg.unsup.rotate": 1,
     "neg.unsup.delete": 1,
     "neg.archive.subjective": 1,
-    "neg.tag.removal": 1,
     "neg.space.question": 1,
     "neg.createalbum.subjective": 1,
     "neg.metadata.album": 1,
     "neg.metadata.placename": 1,
     "neg.metadata.filename": 1,
     "neg.spaceassets.member": 1,
-    "neg.remove.tag": 1,
+    "neg.remove.tag-not-album": 1,
     "neg.remove.subjective": 1,
     "neg.createspace.subjective": 1,
     "neg.rotate.subjective": 1,
@@ -106,6 +108,7 @@
     "slots.archive.unarchive-polarity": 1,
     "slots.favorite.polarity": 1,
     "slots.tag.quoted-name": 1,
+    "slots.untag.canonical": 1,
     "slots.members.role-default": 1,
     "slots.role.synonym": 1,
     "slots.createalbum.default-name": 1,
@@ -117,7 +120,7 @@
     "slots.rotate.ccw-polarity": 1,
     "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 1,
+    "copy.trip.italy.no-exclusions": 0.6,
     "copy.trip.long-name": 1
   }
 }

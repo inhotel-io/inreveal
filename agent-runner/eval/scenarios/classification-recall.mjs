@@ -201,6 +201,30 @@ export default [
     expect: { kind: 'tag_assets', slotsSurvive: true },
   },
 
+  // untag_assets ------------------------------------------------------------
+  {
+    id: 'recall.untag.canonical',
+    category: 'recall',
+    prompt: 'remove the Travel tag from my newest 20',
+    expect: {
+      kind: 'untag_assets',
+      slotsSurvive: true,
+      slots: { sourceDescription: /newest 20/i, tagName: 'Travel' },
+    },
+  },
+  {
+    id: 'recall.untag.tag-named-from',
+    category: 'recall',
+    prompt: 'remove tag Spring Break from my last 50 photos',
+    expect: { kind: 'untag_assets', slotsSurvive: true, slots: { tagName: 'Spring Break' } },
+  },
+  {
+    id: 'recall.untag.verb',
+    category: 'recall',
+    prompt: 'untag my newest 20 as Travel',
+    expect: { kind: 'untag_assets', slotsSurvive: true, slots: { tagName: 'Travel' } },
+  },
+
   // rename_or_describe_space ------------------------------------------------
   {
     id: 'recall.space.rename',
