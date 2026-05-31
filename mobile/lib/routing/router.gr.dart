@@ -1126,6 +1126,7 @@ class DriftSlideshowRouteArgs {
   int get hashCode => key.hashCode ^ timeline.hashCode;
 }
 
+/// generated route for
 /// [DriftTrashPage]
 class DriftTrashRoute extends PageRouteInfo<void> {
   const DriftTrashRoute({List<PageRouteInfo>? children})
