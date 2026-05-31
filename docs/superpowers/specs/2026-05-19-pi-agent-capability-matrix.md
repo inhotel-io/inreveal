@@ -114,7 +114,7 @@ retried only when the correction is mechanical.
 | Revise a plan                    | Strict                      | Revision must replace a persisted plan and never apply it.                                                                                                                                                            |
 | “Best photos” curation           | Hybrid                      | Open bounded curation; strict resulting album, favorite, archive, tag, or metadata plan.                                                                                                                              |
 | Visual cleanup                   | Open discovery, strict plan | Candidate inspection remains suggestive; any mutation requires a reviewable plan.                                                                                                                                     |
-| Recent upload organization       | Strict when bounded         | Upload/date bounded requests use deterministic handle-to-plan creation.                                                                                                                                               |
+| Recent upload organization       | Strict when bounded         | The source resolver maps “uploaded/added/recent uploads” to upload-date filters (`createdAfter`/`createdBefore`); the bounded handle then drives a deterministic source workflow (archive/tag/album/etc.).            |
 | Screenshot/document cleanup      | Hybrid                      | Metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation.                                                                                                     |
 | Story/memory albums              | Hybrid                      | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                                                                                                                 |
 
@@ -181,7 +181,7 @@ semantic search.
 | --------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, and previews across bounded candidates; suggested highlights are not objective quality scoring. | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
 | Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Constrained now with previews, but not robust for hundreds/thousands without scoring tools.                                                                       | Treat as suggestions; show thumbnails; avoid auto-apply.                                             |
-| Recent upload organization  | “Organize everything I uploaded today.”                       | Works if search can bound by time and result limit.                                                                                                               | Chunk large result sets and explain any limit.                                                       |
+| Recent upload organization  | “Organize everything I uploaded today.”                       | Solid now: the source resolver bounds “uploaded/added/recent uploads” by upload date (`createdAfter`/`createdBefore`) and feeds the strict source workflows.      | Chunk large result sets and explain any limit.                                                       |
 | Screenshot/document cleanup | Archive screenshots or documents.                             | Works if media metadata or tags identify them; weak if detection requires image understanding.                                                                    | Prefer metadata filters; ask for confirmation on visual-only matches.                                |
 | Story/memory albums         | “Make a birthday highlights album.”                           | Works when date/location/album context is known; weak for people/event recognition.                                                                               | Ask for date/person/album context if semantic cues are not searchable.                               |
 
@@ -272,7 +272,16 @@ Use these prompts as manual and automated acceptance scenarios:
    visibility straight into `searchAssets` filters; ambiguous or not-found entities
    ask for input rather than guess. So every source-based workflow accepts entity
    sources (e.g. “archive my Berlin photos”, “tag photos of Alex as Family”).
-5. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
+5. **Phase 3 shipped (17 strict/hybrid workflows total).** `untag_assets` adds tag
+   removal (`asset.removeTag`, resolving the tag name to an id) on a resolved
+   source, completing the “Add or remove tags” capability; the shared source
+   resolver now recognizes upload-date phrasing (“uploaded today”, “recent
+   uploads”) and bounds it by `createdAfter`/`createdBefore` rather than capture
+   date, so every source workflow accepts upload-dated sources. Highlight curation
+   intentionally stays on the existing `curateSelection` tool + LLM path — a
+   deterministic workflow would intercept “best N” prompts and regress
+   preview-assisted curation — so no `curate_highlights` workflow was added.
+6. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
    `needs_input` rather than a durable continuation — a follow-up could add
    candidate-resume like the trip workflow. Place-name → coordinate geocoding and
    subjective/visual sources remain out of scope (they hand off).
