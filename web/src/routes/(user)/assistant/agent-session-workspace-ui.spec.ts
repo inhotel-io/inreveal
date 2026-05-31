@@ -76,6 +76,7 @@ const session = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSession
         updateAssetMetadata: true,
         updateSpaceDetails: true,
         updateSpaceMemberRoles: true,
+        trashAssets: true,
       },
     },
     initialContextSnapshot: {},

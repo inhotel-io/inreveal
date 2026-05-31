@@ -42,8 +42,8 @@ import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
-import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
@@ -8848,7 +8848,7 @@ describe(AgentOperationPlanService.name, () => {
       type: AgentOperationType.AssetTrash,
       targetKind: AgentOperationTargetKind.AssetBatch,
       assetIds,
-      payload: null,
+      payload: undefined,
     });
     const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
 
@@ -8887,7 +8887,7 @@ describe(AgentOperationPlanService.name, () => {
       type: AgentOperationType.AssetTrash,
       targetKind: AgentOperationTargetKind.AssetBatch,
       assetIds,
-      payload: null,
+      payload: undefined,
     });
     const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
 
