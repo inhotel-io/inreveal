@@ -54,7 +54,6 @@ class JobName {
   static const librarySyncFilesQueueAll = JobName._(r'LibrarySyncFilesQueueAll');
   static const librarySyncFiles = JobName._(r'LibrarySyncFiles');
   static const libraryScanQueueAll = JobName._(r'LibraryScanQueueAll');
-  static const hlsSessionCleanup = JobName._(r'HlsSessionCleanup');
   static const memoryCleanup = JobName._(r'MemoryCleanup');
   static const memoryGenerate = JobName._(r'MemoryGenerate');
   static const notificationsCleanup = JobName._(r'NotificationsCleanup');
@@ -82,7 +81,9 @@ class JobName {
   static const ocr = JobName._(r'Ocr');
   static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
   static const petDetection = JobName._(r'PetDetection');
-  static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
+  static const imageQualityQueueAll = JobName._(r'ImageQualityQueueAll');
+  static const imageQuality = JobName._(r'ImageQuality');
+  static const workflowRun = JobName._(r'WorkflowRun');
   static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
   static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
   static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
@@ -130,7 +131,6 @@ class JobName {
     librarySyncFilesQueueAll,
     librarySyncFiles,
     libraryScanQueueAll,
-    hlsSessionCleanup,
     memoryCleanup,
     memoryGenerate,
     notificationsCleanup,
@@ -158,7 +158,9 @@ class JobName {
     ocr,
     petDetectionQueueAll,
     petDetection,
-    workflowAssetTrigger,
+    imageQualityQueueAll,
+    imageQuality,
+    workflowRun,
     storageBackendMigrationQueueAll,
     storageBackendMigrationSingle,
     sharedSpaceFaceMatch,
@@ -241,7 +243,6 @@ class JobNameTypeTransformer {
         case r'LibrarySyncFilesQueueAll': return JobName.librarySyncFilesQueueAll;
         case r'LibrarySyncFiles': return JobName.librarySyncFiles;
         case r'LibraryScanQueueAll': return JobName.libraryScanQueueAll;
-        case r'HlsSessionCleanup': return JobName.hlsSessionCleanup;
         case r'MemoryCleanup': return JobName.memoryCleanup;
         case r'MemoryGenerate': return JobName.memoryGenerate;
         case r'NotificationsCleanup': return JobName.notificationsCleanup;
@@ -269,7 +270,9 @@ class JobNameTypeTransformer {
         case r'Ocr': return JobName.ocr;
         case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
         case r'PetDetection': return JobName.petDetection;
-        case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
+        case r'ImageQualityQueueAll': return JobName.imageQualityQueueAll;
+        case r'ImageQuality': return JobName.imageQuality;
+        case r'WorkflowRun': return JobName.workflowRun;
         case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
         case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
         case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
