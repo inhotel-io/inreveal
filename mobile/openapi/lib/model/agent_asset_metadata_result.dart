@@ -20,6 +20,7 @@ class AgentAssetMetadataResult {
     this.isFavorite,
     this.localDateTime,
     this.originalFileName,
+    this.qualityInfo,
     this.tags = const [],
     this.type,
     this.visibility,
@@ -69,6 +70,8 @@ class AgentAssetMetadataResult {
   ///
   String? originalFileName;
 
+  AgentAssetMetadataQuality? qualityInfo;
+
   List<AgentAssetMetadataTag> tags;
 
   ///
@@ -96,6 +99,7 @@ class AgentAssetMetadataResult {
     other.isFavorite == isFavorite &&
     other.localDateTime == localDateTime &&
     other.originalFileName == originalFileName &&
+    other.qualityInfo == qualityInfo &&
     _deepEquality.equals(other.tags, tags) &&
     other.type == type &&
     other.visibility == visibility;
@@ -110,12 +114,13 @@ class AgentAssetMetadataResult {
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
     (localDateTime == null ? 0 : localDateTime!.hashCode) +
     (originalFileName == null ? 0 : originalFileName!.hashCode) +
+    (qualityInfo == null ? 0 : qualityInfo!.hashCode) +
     (tags.hashCode) +
     (type == null ? 0 : type!.hashCode) +
     (visibility == null ? 0 : visibility!.hashCode);
 
   @override
-  String toString() => 'AgentAssetMetadataResult[exifInfo=$exifInfo, fileCreatedAt=$fileCreatedAt, fileModifiedAt=$fileModifiedAt, id=$id, isFavorite=$isFavorite, localDateTime=$localDateTime, originalFileName=$originalFileName, tags=$tags, type=$type, visibility=$visibility]';
+  String toString() => 'AgentAssetMetadataResult[exifInfo=$exifInfo, fileCreatedAt=$fileCreatedAt, fileModifiedAt=$fileModifiedAt, id=$id, isFavorite=$isFavorite, localDateTime=$localDateTime, originalFileName=$originalFileName, qualityInfo=$qualityInfo, tags=$tags, type=$type, visibility=$visibility]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -156,6 +161,11 @@ class AgentAssetMetadataResult {
     } else {
     //  json[r'originalFileName'] = null;
     }
+    if (this.qualityInfo != null) {
+      json[r'qualityInfo'] = this.qualityInfo;
+    } else {
+    //  json[r'qualityInfo'] = null;
+    }
       json[r'tags'] = this.tags;
     if (this.type != null) {
       json[r'type'] = this.type;
@@ -186,6 +196,7 @@ class AgentAssetMetadataResult {
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
         localDateTime: mapDateTime(json, r'localDateTime', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         originalFileName: mapValueOfType<String>(json, r'originalFileName'),
+        qualityInfo: AgentAssetMetadataQuality.fromJson(json[r'qualityInfo']),
         tags: AgentAssetMetadataTag.listFromJson(json[r'tags']),
         type: AssetTypeEnum.fromJson(json[r'type']),
         visibility: AssetVisibility.fromJson(json[r'visibility']),
