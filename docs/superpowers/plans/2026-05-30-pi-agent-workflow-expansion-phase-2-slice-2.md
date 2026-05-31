@@ -28,14 +28,14 @@ all-matched happy path + direct sources). The full combination matrix is Slice 4
 ## Verified real contracts (from `server/src/dtos/agent-tool.dto.ts`)
 
 - **`resolveAssetSearchFilters` request** = `z.strictObject({ people?, tags?, albums?,
-  spaces?, cameraMakes?, cameraModels?, lensModels?, scope?, toolCallId? })`; each name
+spaces?, cameraMakes?, cameraModels?, lensModels?, scope?, toolCallId? })`; each name
   field is `resolverNameList` = `array(string.trim().min(1).max(120)).min(1).max(20)`.
   **No `query` field.**
 - **`resolveAssetSearchFilters` success response** = `{ status:'success', toolCall,
-  resolvedFilters, resultSize, results }`. `resolvedFilters` is the full
+resolvedFilters, resultSize, results }`. `resolvedFilters` is the full
   `AgentSearchAssetsFilters`. `results[]` element = `{ kind:'person'|'tag'|'album'|
-  'space'|'cameraMake'|'cameraModel'|'lensModel', query, status:'matched'|'ambiguous'|
-  'not_found', value?, id?, searchFilter?, choices:[…] (required), message (required) }`.
+'space'|'cameraMake'|'cameraModel'|'lensModel', query, status:'matched'|'ambiguous'|
+'not_found', value?, id?, searchFilter?, choices:[…] (required), message (required) }`.
   (Slice 2 reads `resolvedFilters`; the `results[].status` inspection is Slice 3.)
 - **searchAssets metadata filters** (`AgentSearchAssetsFilters`, a strictObject) accept
   `personIds`, `tagIds`, `albumIds`, `make`, `city`, `rating` (int 1..5 nullable),
@@ -100,7 +100,10 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
 
   // Subjective sources hand off — never plan a guess. (Subjective beats entity.)
   if (SUBJECTIVE_PATTERN.test(source)) {
-    return { status: 'handoff', reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.` };
+    return {
+      status: 'handoff',
+      reason: `Source "${source}" is subjective and cannot be resolved from metadata alone.`,
+    };
   }
 
   const entity = parseEntitySource(source);
@@ -189,10 +192,24 @@ GONE — replaced by the entity branch above.)
 
 ```js
 const KNOWN_RESOLVE_FILTER_KEYS = new Set([
-  'people', 'tags', 'albums', 'spaces', 'cameraMakes', 'cameraModels', 'lensModels', 'scope', 'toolCallId',
+  'people',
+  'tags',
+  'albums',
+  'spaces',
+  'cameraMakes',
+  'cameraModels',
+  'lensModels',
+  'scope',
+  'toolCallId',
 ]);
 const RESOLVE_NAME_LIST_KEYS = new Set([
-  'people', 'tags', 'albums', 'spaces', 'cameraMakes', 'cameraModels', 'lensModels',
+  'people',
+  'tags',
+  'albums',
+  'spaces',
+  'cameraMakes',
+  'cameraModels',
+  'lensModels',
 ]);
 
 // Mirror the real strictObject request: reject unknown keys (incl. `query`) and the
@@ -204,10 +221,12 @@ const validateResolveRequest = (args) => {
   }
   for (const key of RESOLVE_NAME_LIST_KEYS) {
     if (args[key] === undefined) continue;
-    if (!Array.isArray(args[key]) || args[key].length === 0) fail(`resolveAssetSearchFilters: ${key} must be a non-empty array`);
+    if (!Array.isArray(args[key]) || args[key].length === 0)
+      fail(`resolveAssetSearchFilters: ${key} must be a non-empty array`);
     if (args[key].length > 20) fail(`resolveAssetSearchFilters: ${key} exceeds 20 names`);
     for (const name of args[key]) {
-      if (typeof name !== 'string' || name.trim().length === 0) fail(`resolveAssetSearchFilters: ${key} names must be non-empty strings`);
+      if (typeof name !== 'string' || name.trim().length === 0)
+        fail(`resolveAssetSearchFilters: ${key} names must be non-empty strings`);
       if (name.length > 120) fail(`resolveAssetSearchFilters: ${key} name exceeds 120 chars`);
     }
   }
@@ -218,14 +237,14 @@ const validateResolveRequest = (args) => {
 ~160-165), defaulting `undefined`:
 
 ```js
-  const {
-    albums = [{ id: 'alb-1', albumName: 'Family' }],
-    spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
-    users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
-    handleAssetCount = 20,
-    resolvedFilters,
-    resolveResults,
-  } = config;
+const {
+  albums = [{ id: 'alb-1', albumName: 'Family' }],
+  spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
+  users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
+  handleAssetCount = 20,
+  resolvedFilters,
+  resolveResults,
+} = config;
 ```
 
 **B3.** Replace the `resolveAssetSearchFilters` handler (currently lines 183-186):

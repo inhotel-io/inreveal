@@ -28,9 +28,9 @@ lock disambiguation precedence, and add L1/L3 eval scenarios. **Closes Phase 1.*
 - [ ] `registry.mjs`: add import (after the `tagAssetsWorkflow` import, alphabetical):
       `import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';`
       Insert `updateAssetMetadataWorkflow,` into `WORKFLOW_FACTORIES` **immediately after
-      `tagAssetsWorkflow,`** (grouped with the batch workflows, after the rename_* gate).
+      `tagAssetsWorkflow,`** (grouped with the batch workflows, after the rename*\* gate).
       Extend the order-rationale comment: `update_asset_metadata` after
-      `rename_or_describe_*` so album/space describe wins; it declines album/space refs.
+      `rename_or_describe*\*` so album/space describe wins; it declines album/space refs.
 - [ ] `manifest.mjs`: add this entry immediately after the `tag_assets` entry:
 
 ```js
@@ -81,7 +81,7 @@ lock disambiguation precedence, and add L1/L3 eval scenarios. **Closes Phase 1.*
   - `['set the timezone on my newest 20 photos to Europe/Berlin', 'update_asset_metadata']`
   - `['set the description on the Family album to Summer 2026', 'rename_or_describe_album']`
   - `['set these photos to Paris', 'none']`
-  (The "exercises every registered workflow kind" test then auto-covers the new kind.)
+    (The "exercises every registered workflow kind" test then auto-covers the new kind.)
 
 ## Part B — L1 / L3 eval scenarios (additive; L1 validated in Part C)
 
@@ -120,7 +120,7 @@ NOT the subagent's job:
 
 - [ ] L1 (local model up): run `eval/run.mjs --diff` (full). Confirm the new
       `recall.metadata.*` / `slots.metadata.*` pass and the `neg.metadata.album` boundary
-      holds, with NO regression (watch the rename_or_describe_* boundary). Then `--accept`
+      holds, with NO regression (watch the rename*or_describe*\* boundary). Then `--accept`
       to re-seed `baseline.json`.
 - [ ] L3: deferred to the final RC (entity routing/plan + metadata scenarios), then
       `--accept` `baseline.l3.json`.

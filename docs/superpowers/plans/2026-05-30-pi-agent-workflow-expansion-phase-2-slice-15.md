@@ -40,7 +40,10 @@ const KIND = 'create_space_from_source';
 const DEFAULT_NAME = 'New Space';
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
-const cleanSource = (value) => clean(value).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (value) =>
+  clean(value)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 const stripQuotes = (value) =>
   clean(value)
     .replace(/^["'“”‘’]+/, '')
