@@ -141,6 +141,18 @@ describe('visual_cleanup execution', () => {
     assert.equal(client.calls.some((c) => c.name === 'proposeAlbumOperations'), false);
   });
 
+  it('asks for scope instead of handing all-library cleanup to open orchestration', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { qualityMetric: 'sharpness', sourceDescription: 'all photos from my library' },
+    });
+
+    assert.equal(outcome.status, 'needs_input');
+    assert.match(outcome.text, /scope|count|date|album|tag/i);
+    assert.equal(client.calls.length, 0);
+  });
+
   it('returns needs_input when no low-quality matches are found', async () => {
     const client = makeContractClient({ handleAssetCount: 0 });
     const outcome = await wf.run({
