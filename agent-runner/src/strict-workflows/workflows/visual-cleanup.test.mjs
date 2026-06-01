@@ -129,4 +129,23 @@ describe('visual_cleanup execution', () => {
     assert.equal(outcome.status, 'needs_input');
     assert.equal(client.calls.some((c) => c.name === 'proposeAlbumOperations'), false);
   });
+
+  it('returns actionable needs_input when the session cannot trash assets', async () => {
+    const client = makeContractClient({ handleAssetCount: 4 });
+    client.call = async (name, args) => {
+      client.calls.push({ name, args });
+      if (name === 'proposeAlbumOperations') {
+        throw new Error('Agent permission policy does not allow moving assets to trash');
+      }
+      return { selectionHandle: { id: 'handle-1', assetCount: 4 }, assets: [] };
+    };
+
+    const outcome = await wf.run({
+      client,
+      slots: { qualityMetric: 'sharpness', sourceDescription: 'my newest 20 photos' },
+    });
+
+    assert.equal(outcome.status, 'needs_input');
+    assert.match(outcome.text, /Visual organizer|trash permission/i);
+  });
 });
