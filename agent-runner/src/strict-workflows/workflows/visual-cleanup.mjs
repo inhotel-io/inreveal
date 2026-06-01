@@ -87,7 +87,7 @@ export const visualCleanupWorkflow = () => ({
     if (!QUALITY_METRICS.has(qualityMetric) || !sourceDescription) return null;
     return { qualityMetric, sourceDescription };
   },
-  async run({ client, slots, signal }) {
+  async run({ client, slots, signal, now }) {
     const parsed = this.parseSlots(slots);
     if (!parsed) {
       return needsInput({ text: 'Which photos should I check for visual quality, and what kind of quality issue?' });
@@ -102,6 +102,7 @@ export const visualCleanupWorkflow = () => ({
         client,
         sourceDescription,
         signal,
+        ...(now ? { now } : {}),
         extraFilters: config.filter,
       });
     } catch (error) {

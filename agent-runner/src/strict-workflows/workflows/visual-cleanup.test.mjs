@@ -80,10 +80,12 @@ describe('visual_cleanup execution', () => {
   });
 
   it('uses brightness threshold for dark prompts', async () => {
+    const NOW = new Date('2026-05-15T12:00:00.000Z');
     const client = makeContractClient({ handleAssetCount: 3 });
     const outcome = await wf.run({
       client,
       slots: { qualityMetric: 'brightness', sourceDescription: 'photos from last month' },
+      now: NOW,
     });
 
     assert.equal(outcome.status, 'planned');
