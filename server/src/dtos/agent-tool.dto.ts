@@ -93,6 +93,9 @@ const AgentCurateSelectionConstraintsSchema = z
     minRating: z.number().int().min(1).max(5).optional(),
     excludeVideos: z.boolean().optional(),
     diversifyBy: z.array(AgentCurateSelectionDiversifyBySchema).min(1).max(4).optional(),
+    maxSharpness: z.number().int().min(0).max(100).optional(),
+    maxBrightness: z.number().int().min(0).max(100).optional(),
+    maxQuality: z.number().int().min(0).max(100).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.types && new Set(value.types).size !== value.types.length) {

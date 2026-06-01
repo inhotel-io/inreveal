@@ -489,7 +489,8 @@ describe(AgentMcpToolContractService.name, () => {
 
     expect(contract?.usage).toContain('metadata-only');
     expect(contract?.usage).toContain('new selectionHandle');
-    expect(contract?.usage).toContain('not objective image-quality scoring');
+    expect(contract?.usage).toContain('stored quality-score filtering');
+    expect(contract?.usage).toContain('stored scores only');
     expect(contract?.usage).not.toContain('selected assetIds');
     expect(example?.arguments).toEqual({
       selectionHandleId: '00000000-0000-4000-8000-000000000333',

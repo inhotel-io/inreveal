@@ -121,7 +121,7 @@ retried only when the correction is mechanical.
 | Summarize a proposed plan        | Strict              | Summary must be generated from a persisted plan.                                                                                                                                                                                  |
 | Revise a plan                    | Strict              | Revision must replace a persisted plan and never apply it.                                                                                                                                                                        |
 | “Best photos” curation           | Hybrid              | Open bounded curation; strict resulting album, favorite, archive, tag, or metadata plan.                                                                                                                                          |
-| Visual cleanup                   | Hybrid              | `visual_cleanup`: Pi resolves a bounded source and feeds quality-filtered `searchAssets` (`maxSharpness`/`maxBrightness`/`maxQuality`) into a reviewable, recoverable `asset.trash` proposal owned by Gallery.                    |
+| Visual cleanup                   | Hybrid              | `visual_cleanup`: Pi resolves a bounded source, derives a quality-filtered handle (`maxSharpness`/`maxBrightness`/`maxQuality`), then feeds it into a reviewable, recoverable `asset.trash` proposal owned by Gallery.             |
 | Recent upload organization       | Strict when bounded | The source resolver maps “uploaded/added/recent uploads” to upload-date filters (`createdAfter`/`createdBefore`); the bounded handle then drives a deterministic source workflow (archive/tag/album/etc.).                        |
 | Screenshot/document cleanup      | Hybrid              | Metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation.                                                                                                                 |
 | Story/memory albums              | Hybrid              | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                                                                                                                             |
@@ -132,28 +132,28 @@ retried only when the correction is mechanical.
 
 Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do not edit by hand; run `pnpm --dir server sync:agent-capabilities`.
 
-| Kind                       | Flow   | Required read tools                                       | Plan tool                           |
-| -------------------------- | ------ | --------------------------------------------------------- | ----------------------------------- |
-| `create_recent_trip_album` | Strict | `findTripCandidates`                                      | `proposeAlbumFromSelection`         |
-| `rename_or_describe_album` | Strict | `listAlbums`                                              | `proposeAlbumOperations`            |
-| `set_album_cover`          | Strict | `listAlbums`, `readAlbum`                                 | `proposeAlbumOperations`            |
-| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
-| `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAlbumOperations`            |
-| `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets` | `proposeAddAssetsToSpaceFromSearch` |
-| `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `cleanup_duplicates`       | Hybrid | `listDuplicateGroups`                                     | `proposeAlbumOperations`            |
-| `visual_cleanup`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
-| `trash_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
-| `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumOperations`            |
-| `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAssetBatchFromSelection`    |
-| `rename_or_describe_space` | Strict | `listSpaces`                                              | `proposeAlbumOperations`            |
-| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
-| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                  | `proposeAlbumOperations`            |
-| `create_album_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeAlbumFromSelection`         |
-| `create_space_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`               | `proposeSpaceFromSearch`            |
+| Kind                       | Flow   | Required read tools                                            | Plan tool                           |
+| -------------------------- | ------ | -------------------------------------------------------------- | ----------------------------------- |
+| `create_recent_trip_album` | Strict | `findTripCandidates`                                           | `proposeAlbumFromSelection`         |
+| `rename_or_describe_album` | Strict | `listAlbums`                                                   | `proposeAlbumOperations`            |
+| `set_album_cover`          | Strict | `listAlbums`, `readAlbum`                                      | `proposeAlbumOperations`            |
+| `add_photos_to_album`      | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAlbumOperations`            |
+| `remove_photos_from_album` | Hybrid | `listAlbums`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAlbumOperations`            |
+| `manage_space_assets`      | Hybrid | `listSpaces`, `resolveAssetSearchFilters`, `searchAssets`      | `proposeAddAssetsToSpaceFromSearch` |
+| `archive_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `cleanup_duplicates`       | Hybrid | `listDuplicateGroups`                                          | `proposeAlbumOperations`            |
+| `visual_cleanup`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`, `curateSelection` | `proposeAlbumOperations`            |
+| `trash_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
+| `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
+| `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `rename_or_describe_space` | Strict | `listSpaces`                                                   | `proposeAlbumOperations`            |
+| `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
+| `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
+| `create_album_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumFromSelection`         |
+| `create_space_from_source` | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeSpaceFromSearch`            |
 
 <!-- generated:workflows:end -->
 
@@ -193,7 +193,7 @@ semantic search.
 | Capability                  | Why users want it                                             | Current feasibility                                                                                                                                                                                         | Guardrail                                                                                            |
 | --------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | “Best photos” curation      | Users want the assistant to pick highlights.                  | Solid now for bounded sources using ratings, favorites, metadata, previews, and available objective quality scores; suggested highlight curation remains bounded and reviewable.                            | Ask for a scope when broad: album, shared space, date range, search/filter, selection, or max count. |
-| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Solid now for bounded sources using objective quality scoring (`sharpness`, `brightness`, and `quality`) through quality-filtered `searchAssets`; resulting trash proposals are reviewable and recoverable. | Treat as suggestions; show thumbnails; avoid auto-apply.                                             |
+| Visual cleanup              | Remove blurry, dark, duplicate-looking, or irrelevant photos. | Solid now for bounded sources using objective quality scoring (`sharpness`, `brightness`, and `quality`) through a derived quality-filtered handle; resulting trash proposals are reviewable and recoverable. | Treat as suggestions; show thumbnails; avoid auto-apply.                                             |
 | Recent upload organization  | “Organize everything I uploaded today.”                       | Solid now: the source resolver bounds “uploaded/added/recent uploads” by upload date (`createdAfter`/`createdBefore`) and feeds the strict source workflows.                                                | Chunk large result sets and explain any limit.                                                       |
 | Screenshot/document cleanup | Archive screenshots or documents.                             | Works if media metadata or tags identify them; weak if detection requires image understanding.                                                                                                              | Prefer metadata filters; ask for confirmation on visual-only matches.                                |
 | Story/memory albums         | “Make a birthday highlights album.”                           | Works when date/location/album context is known; weak for people/event recognition.                                                                                                                         | Ask for date/person/album context if semantic cues are not searchable.                               |

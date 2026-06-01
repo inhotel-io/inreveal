@@ -40,6 +40,9 @@ export type AgentCurateSelectionConstraints = {
   minRating?: number;
   excludeVideos?: boolean;
   diversifyBy?: AgentCurateSelectionDiversifyBy[];
+  maxSharpness?: number;
+  maxBrightness?: number;
+  maxQuality?: number;
 };
 
 export type AgentToolCurateSelectionRequestMetadata = {

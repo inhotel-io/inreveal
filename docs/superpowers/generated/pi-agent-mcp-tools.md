@@ -102,8 +102,8 @@ Do not ask the user to approve in chat and do not create a new read request with
 Use the smallest useful payload first. Resolve names before search. Search for a handle/sourceRef first. Use `readSelectionMetadata` for search-handle metadata inspection and `readAssetMetadata` is legacy exact non-search ID usage. Propose a plan only after the selected asset set is clear.
 
 - Broad search: use `searchAssets` with handle detail or omit `detail`. Bounded handle-first searches may use `limit` up to 1000 when policy allows; samples remain 10-25. If `hasMore` or `resultSize.truncated` is true, page with `nextPage` or ask a narrowing question; when hasMore is true, keep the same mode, query, filters, order, and limit.
-- Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs and is not objective image-quality scoring.
-- Selection-backed plans: Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id.
+- Curation: use `curateSelection` with `selectionHandleId`, `targetCount`, and a metadata-only strategy. It returns a derived `selectionHandle` plus `criteriaSummary`; it does not return selected asset IDs. Quality constraints use stored objective scores only.
+- Selection-backed plans: Use proposeAlbumFromSelection and proposeAssetBatchFromSelection after curateSelection returns a final selectionHandle.id. For operations those helpers do not support, such as recoverable trash, use proposeAlbumOperations with assetSource.selectionHandle.
 - Visual curation: search for a handle/sourceRef first and use `readSelectionMetadata` itemRef samples to narrow. Call preview reads only for exact non-search `assetIds` from a small inspected set when visual inspection is needed.
 - Technical metadata: search for a handle first, then call `readSelectionMetadata` with exact `fields` such as `camera`, `dates`, and `filename`; use `readAssetMetadata` only for legacy exact non-search asset IDs.
 - Large album: page bounded handle results and propose operations from `selectionHandle.id` or `sourceRef`. Do not request full metadata for every candidate.
@@ -840,7 +840,7 @@ MCP tool name: `curateSelection`
 
 Create a derived selection handle from metadata-only ranking and diversification.
 
-Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, or date-spread workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only and not objective image-quality scoring; no previews are inspected.
+Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, date-spread, or stored quality-score filtering workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only; objective quality constraints use stored scores only, and no previews are inspected.
 
 Argument modes:
 

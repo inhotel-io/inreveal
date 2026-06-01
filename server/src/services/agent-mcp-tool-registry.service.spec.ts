@@ -353,7 +353,7 @@ describe(AgentMcpToolRegistryService.name, () => {
         description: expect.stringContaining('derived selection handle'),
       }),
       strategy: expect.objectContaining({
-        description: expect.stringContaining('not objective image-quality scoring'),
+        description: expect.stringContaining('stored objective scores'),
       }),
       constraints: expect.objectContaining({
         description: expect.stringContaining('metadata-only curation constraints'),
