@@ -1670,6 +1670,8 @@ export type PluginTemplateResponseDto = {
     title: string;
     /** Workflow trigger */
     trigger: WorkflowTrigger;
+    /** Ui hints, for example "smart-album" */
+    uiHints: string[];
 };
 export type QueueJobTypeCountsDto = {
     /** Number of sampled active jobs with this name */
@@ -9072,7 +9074,7 @@ export enum JobName {
     Ocr = "Ocr",
     PetDetectionQueueAll = "PetDetectionQueueAll",
     PetDetection = "PetDetection",
-    WorkflowAssetCreate = "WorkflowAssetCreate",
+    WorkflowAssetTrigger = "WorkflowAssetTrigger",
     StorageBackendMigrationQueueAll = "StorageBackendMigrationQueueAll",
     StorageBackendMigrationSingle = "StorageBackendMigrationSingle",
     SharedSpaceFaceMatch = "SharedSpaceFaceMatch",
