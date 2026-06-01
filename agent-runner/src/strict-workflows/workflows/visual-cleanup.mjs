@@ -111,7 +111,7 @@ export const visualCleanupWorkflow = () => ({
     }
 
     if (resolution.status === 'handoff') {
-      if (/bound|count|date|scope|could not be resolved/i.test(resolution.reason ?? '')) {
+      if (/bound|count|date|scope|could not be resolved|cannot resolve|metadata alone/i.test(resolution.reason ?? '')) {
         return needsInput({
           text: `Which ${config.label} photos should I check? Add a count, date range, album, tag, person, or recent-upload scope.`,
         });
