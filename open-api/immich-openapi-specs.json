@@ -23617,7 +23617,7 @@
           "Ocr",
           "PetDetectionQueueAll",
           "PetDetection",
-          "WorkflowAssetCreate",
+          "WorkflowAssetTrigger",
           "StorageBackendMigrationQueueAll",
           "StorageBackendMigrationSingle",
           "SharedSpaceFaceMatch",
@@ -25985,6 +25985,13 @@
           "trigger": {
             "$ref": "#/components/schemas/WorkflowTrigger",
             "description": "Workflow trigger"
+          },
+          "uiHints": {
+            "description": "Ui hints, for example \"smart-album\"",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -25992,7 +25999,8 @@
           "key",
           "steps",
           "title",
-          "trigger"
+          "trigger",
+          "uiHints"
         ],
         "type": "object"
       },
