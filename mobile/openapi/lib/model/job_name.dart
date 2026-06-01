@@ -81,7 +81,7 @@ class JobName {
   static const ocr = JobName._(r'Ocr');
   static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
   static const petDetection = JobName._(r'PetDetection');
-  static const workflowAssetCreate = JobName._(r'WorkflowAssetCreate');
+  static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
   static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
   static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
   static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
@@ -156,7 +156,7 @@ class JobName {
     ocr,
     petDetectionQueueAll,
     petDetection,
-    workflowAssetCreate,
+    workflowAssetTrigger,
     storageBackendMigrationQueueAll,
     storageBackendMigrationSingle,
     sharedSpaceFaceMatch,
@@ -266,7 +266,7 @@ class JobNameTypeTransformer {
         case r'Ocr': return JobName.ocr;
         case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
         case r'PetDetection': return JobName.petDetection;
-        case r'WorkflowAssetCreate': return JobName.workflowAssetCreate;
+        case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
         case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
         case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
         case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
