@@ -363,6 +363,7 @@ const validateListDuplicateGroupsRequest = (args) => {
  * @param config.spaces            spaces (each may carry `members`) for listSpaces/readSpace
  * @param config.users            users returned by searchUsers
  * @param config.handleAssetCount  assetCount on the searchAssets selection handle
+ * @param config.handleAssetCounts assetCounts for successive derived handles
  * @param config.planResult        override for the propose* tool results
  * @param config.duplicateGroups   groups returned by listDuplicateGroups
  */
@@ -372,11 +373,16 @@ export const makeContractClient = (config = {}) => {
     spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
     users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
     handleAssetCount = 20,
+    handleAssetCounts,
     resolvedFilters,
     resolveResults,
     duplicateGroups = [],
   } = config;
   const calls = [];
+  const nextHandleAssetCount = () =>
+    Array.isArray(handleAssetCounts) && handleAssetCounts.length > 0
+      ? handleAssetCounts[Math.min(calls.filter((c) => c.name === 'searchAssets' || c.name === 'curateSelection').length - 1, handleAssetCounts.length - 1)]
+      : handleAssetCount;
 
   const handlers = {
     listAlbums: () => ({ albums }),
@@ -419,7 +425,25 @@ export const makeContractClient = (config = {}) => {
     },
     searchAssets: (args) => {
       validateSearchAssets(args ?? {});
-      return { selectionHandle: { id: 'handle-1', assetCount: handleAssetCount } };
+      return { selectionHandle: { id: 'handle-1', assetCount: nextHandleAssetCount() } };
+    },
+    curateSelection: (args) => {
+      if (!args?.selectionHandleId) fail('curateSelection requires selectionHandleId');
+      if (!Number.isInteger(args?.targetCount) || args.targetCount < 1) fail('curateSelection requires targetCount');
+      const constraints = args.constraints ?? {};
+      if (constraints.types !== undefined) {
+        if (!Array.isArray(constraints.types) || constraints.types.some((type) => !KNOWN_ASSET_TYPES.has(type))) {
+          fail('curateSelection constraints.types must be valid asset types');
+        }
+      }
+      for (const key of QUALITY_FILTER_KEYS) {
+        const value = constraints[key];
+        if (value === undefined) continue;
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 100) {
+          fail(`invalid curateSelection constraint ${key} "${value}"`);
+        }
+      }
+      return { selectionHandle: { id: 'handle-2', assetCount: nextHandleAssetCount() } };
     },
     proposeAssetBatchFromSelection: (args) => {
       validateBatchAction(args?.action);

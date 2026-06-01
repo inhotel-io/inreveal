@@ -284,14 +284,14 @@ export const WORKFLOW_MANIFEST = Object.freeze([
         description: 'Metadata-bounded source after removing the quality adjective.',
       }),
     }),
-    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets', 'curateSelection']),
     planTool: 'proposeAlbumOperations',
     supportsContinuation: false,
     matrixRow: Object.freeze({
       capability: 'Visual cleanup',
       tier: 'Solid now',
       workflowOrBoundary:
-        'Pi resolves a quality-filtered source; Gallery owns the reviewable asset.trash plan from the handle.',
+        'Pi resolves a bounded source, derives a quality-filtered handle, and Gallery owns the reviewable asset.trash plan from that handle.',
     }),
   }),
   Object.freeze({

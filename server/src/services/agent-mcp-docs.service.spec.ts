@@ -155,7 +155,7 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('`curateSelection`');
     expect(markdown).toContain('targetCount');
     expect(markdown).toContain('metadata-only');
-    expect(markdown).toContain('not objective image-quality scoring');
+    expect(markdown).toContain('stored objective scores only');
     expect(markdown).toContain('new selectionHandle');
     expect(markdown).not.toContain('choose selected assetIds');
   });

@@ -154,7 +154,7 @@ describe(AgentMcpPromptService.name, () => {
     expect(defaultWrite).toContain('mcp_gallery_proposeAlbumFromSelection');
     expect(defaultWrite).toContain('mcp_gallery_proposeAssetBatchFromSelection');
     expect(prompt).toContain(
-      'After curateSelection: use proposeAlbumFromSelection or proposeAssetBatchFromSelection with selectionHandle.id; do not copy asset IDs.',
+      'After curateSelection: selection tools, or proposeAlbumOperations for asset.trash, with selectionHandle.id; no asset IDs.',
     );
     expect(prompt).toContain('assetSource.search');
     expect(prompt).toContain('assetSource.selectionHandle');
@@ -343,7 +343,7 @@ describe(AgentMcpPromptService.name, () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain(
-      'Best/highlights require bounded album/space/date/search/selection; use curateSelection for metadata-only suggested narrowing; not objective quality scoring; handle->planning.',
+      'Best/highlights require bounded album/space/date/search/selection; use curateSelection for metadata-only suggested narrowing. Quality cleanup can use stored quality constraints; no preview inspection; handle->planning.',
     );
     expect(prompt).toContain(
       'Technical metadata: search handle, then readSelectionMetadata fields camera/dates/filename; readAssetMetadata legacy exact non-search IDs only',
@@ -352,18 +352,18 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).not.toContain('mcp_gallery_apply');
   });
 
-  it('teaches highlight curation as bounded suggestions without quality scoring', () => {
+  it('teaches highlight curation as bounded suggestions and quality cleanup as stored-score filtering', () => {
     const prompt = sut.generatePromptCheatSheet();
 
     expect(prompt).toContain('mcp_gallery_curateSelection');
     expect(prompt).toContain('metadata-only');
-    expect(prompt).toContain('not objective quality scoring');
+    expect(prompt).toContain('stored quality constraints');
     expect(prompt).toContain('curateSelection');
     expect(prompt).not.toContain('choose 15 assetIds');
     expect(prompt).toMatch(/highlights?.*bounded/i);
     expect(prompt).toMatch(/best.*highlights?.*album.*space.*date.*search.*selection/i);
     expect(prompt).toMatch(/suggested|recommend/i);
-    expect(prompt).toMatch(/not objective|no objective|not .*quality scoring/i);
+    expect(prompt).toContain('no preview inspection');
     expect(prompt).not.toMatch(/selected assetIds only|selected ids only/i);
     expect(prompt).not.toContain('analyzeAssetQuality');
     expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);

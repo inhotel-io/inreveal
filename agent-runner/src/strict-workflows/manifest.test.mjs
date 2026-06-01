@@ -118,7 +118,7 @@ describe('strict/hybrid workflow manifest', () => {
   it('describes visual_cleanup as a hybrid quality-filtered trash workflow', () => {
     const entry = getWorkflowManifestEntry('visual_cleanup');
     assert.equal(entry.flow, 'hybrid');
-    assert.deepEqual(entry.requiredReadTools, ['resolveAssetSearchFilters', 'searchAssets']);
+    assert.deepEqual(entry.requiredReadTools, ['resolveAssetSearchFilters', 'searchAssets', 'curateSelection']);
     assert.equal(entry.planTool, 'proposeAlbumOperations');
     assert.equal(entry.supportsContinuation, false);
     assert.equal(entry.slots.qualityMetric.required, true);

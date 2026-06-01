@@ -101,6 +101,7 @@ const CASES = [
   ['dedupe my library', 'cleanup_duplicates'],
   // visual_cleanup (quality keyword required; wins over generic trash for objective quality)
   ['trash my blurry photos', 'visual_cleanup'],
+  ['remove blurry photos from my last 100 uploaded photos', 'visual_cleanup'],
   ['delete dark photos from my recent uploads', 'visual_cleanup'],
   ['cleanup low-quality photos from last month', 'visual_cleanup'],
   // trash_assets (explicit trash/bin/delete/move-to-trash verb; container and subjective decline)
