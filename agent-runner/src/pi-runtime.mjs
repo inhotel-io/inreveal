@@ -389,6 +389,10 @@ const findApprovalRequiredToolCallId = (value) => {
   return undefined;
 };
 
+const galleryToolTurnBudget = 12;
+const galleryToolBudgetExceededText =
+  'I stopped because this request used too many Gallery tool calls without reaching a safe plan. Narrow the scope, for example to the last 100 uploads, a date range, an album, or a tag, then try again.';
+
 const galleryToolResultPromptBudgetBytes = 16_000;
 const compactedGalleryToolTextBudgetBytes = 8_000;
 
@@ -519,6 +523,43 @@ const isGalleryToolResult = (value) =>
   typeof value === 'object' &&
   typeof value.status === 'string' &&
   (value.toolCall || value.resultSize || typeof value.summary === 'string');
+
+const countGalleryToolResults = (value) => {
+  if (!value || typeof value !== 'object') {
+    return 0;
+  }
+
+  if (typeof value.text === 'string') {
+    const parsed = parseJsonObject(value.text);
+    if (parsed) {
+      return countGalleryToolResults(parsed);
+    }
+  }
+
+  let count = isGalleryToolResult(value) ? 1 : 0;
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        count += countGalleryToolResults(item);
+      }
+      continue;
+    }
+
+    count += countGalleryToolResults(child);
+  }
+
+  return count;
+};
+
+const galleryToolBudgetExceeded = (messages) =>
+  messages.reduce((count, message) => count + (message?.role === 'tool' ? countGalleryToolResults(message) : 0), 0) >
+  galleryToolTurnBudget;
+
+const appendOpenGuardrailTranscript = (session, text, { model } = {}) => {
+  if (Array.isArray(session.messages)) {
+    session.messages.push(syntheticAssistantMessage({ text, model }));
+  }
+};
 
 const compactToolSummary = (toolResult, resultSize, counts) => {
   const toolName = typeof toolResult?.toolCall?.toolName === 'string' ? ` ${toolResult.toolCall.toolName}` : '';
@@ -1397,15 +1438,26 @@ export const createPiRuntime = ({
               return;
             }
 
-            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(
-              newMessagesSince(entry.session, messageStartLength),
-            );
+            const newMessages = newMessagesSince(entry.session, messageStartLength);
+            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(newMessages);
             if (approvalRequiredToolCallId) {
               enqueue({
                 type: 'tool-approval-needed',
                 sessionId: gallerySessionId,
                 runnerSessionId,
                 toolCallId: approvalRequiredToolCallId,
+              });
+              return;
+            }
+
+            if (galleryToolBudgetExceeded(newMessages)) {
+              appendOpenGuardrailTranscript(entry.session, galleryToolBudgetExceededText, { model: entry.model });
+              enqueue({
+                type: 'assistant-message-completed',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                providerMessageId: null,
+                content: { blocks: [{ type: 'text', text: galleryToolBudgetExceededText }] },
               });
               return;
             }
@@ -1648,15 +1700,26 @@ export const createPiRuntime = ({
               return;
             }
 
-            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(
-              newMessagesSince(entry.session, messageStartLength),
-            );
+            const newMessages = newMessagesSince(entry.session, messageStartLength);
+            const approvalRequiredToolCallId = findApprovalRequiredToolCallId(newMessages);
             if (approvalRequiredToolCallId) {
               enqueue({
                 type: 'tool-approval-needed',
                 sessionId: gallerySessionId,
                 runnerSessionId,
                 toolCallId: approvalRequiredToolCallId,
+              });
+              return;
+            }
+
+            if (galleryToolBudgetExceeded(newMessages)) {
+              appendOpenGuardrailTranscript(entry.session, galleryToolBudgetExceededText, { model: entry.model });
+              enqueue({
+                type: 'assistant-message-completed',
+                sessionId: gallerySessionId,
+                runnerSessionId,
+                providerMessageId: null,
+                content: { blocks: [{ type: 'text', text: galleryToolBudgetExceededText }] },
               });
               return;
             }

@@ -2274,6 +2274,68 @@ describe('pi runtime adapter', () => {
     assert.equal(events.at(-1)?.type, 'assistant-message-completed');
   });
 
+  it('stops an open provider turn that exceeds the Gallery tool-call budget', async () => {
+    const { sdk, ai, session } = createFakeDependencies();
+    session.prompt = async function (text) {
+      this.messages.push({ role: 'user', content: [{ type: 'text', text }] });
+      for (let index = 0; index < 13; index += 1) {
+        this.messages.push({
+          role: 'tool',
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                status: 'success',
+                summary: `Search page ${index + 1}`,
+                toolCall: {
+                  id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+                  toolName: 'mcp_gallery_searchAssets',
+                  status: 'completed',
+                },
+                selectionHandle: { id: `handle-${index + 1}`, assetCount: 1000 },
+                resultSize: { returnedItems: 1000, hasMore: index < 12, nextPage: String(index + 2) },
+              }),
+            },
+          ],
+        });
+      }
+      this.messages.push({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Let me try a different approach.' }],
+        usage: { totalTokens: 0 },
+        stopReason: 'stop',
+      });
+    };
+    const runtime = createPiRuntime({ sdk, ai, routerMode: 'regex' });
+    await runtime.createSession(createSessionBody({ mcpGateway: createMcpGateway() }));
+
+    const events = await collect(
+      runtime.sendMessage(
+        createMessageRequest({
+          content: { blocks: [{ type: 'text', text: 'inspect my whole library and keep trying formats' }] },
+        }),
+      ),
+    );
+
+    assert.deepEqual(events.filter((event) => event.type !== 'activity'), [
+      {
+        type: 'assistant-message-completed',
+        sessionId: '00000000-0000-4000-8000-000000000100',
+        runnerSessionId: 'pi-00000000-0000-4000-8000-000000000100',
+        providerMessageId: null,
+        content: {
+          blocks: [
+            {
+              type: 'text',
+              text:
+                'I stopped because this request used too many Gallery tool calls without reaching a safe plan. Narrow the scope, for example to the last 100 uploads, a date range, an album, or a tag, then try again.',
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('resumes approval with a compact approved result summary instead of replaying a large raw result', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
