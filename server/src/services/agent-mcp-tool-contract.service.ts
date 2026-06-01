@@ -280,7 +280,7 @@ const curateSelectionContract: AgentMcpToolContract<AgentToolName.CurateSelectio
   title: 'Curate selection',
   description: 'Create a derived selection handle from metadata-only ranking and diversification.',
   usage:
-    'Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, or date-spread workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only and not objective image-quality scoring; no previews are inspected.',
+    'Use after searchAssets returns selectionHandle.id and before planning highlight, cover-candidate, favorite-first, date-spread, or stored quality-score filtering workflows. This tool returns a new selectionHandle plus criteriaSummary and itemRef samples without selected asset IDs. It is metadata-only; objective quality constraints use stored scores only, and no previews are inspected.',
   argumentModes: [
     {
       name: 'selection-curation',

@@ -6,7 +6,7 @@ const KIND = 'visual_cleanup';
 
 const QUALITY_CONFIG = Object.freeze({
   sharpness: Object.freeze({
-    filter: Object.freeze({ maxSharpness: 35 }),
+    filter: Object.freeze({ maxSharpness: 20 }),
     label: 'blurry',
   }),
   brightness: Object.freeze({
@@ -27,9 +27,10 @@ const isTrashPermissionDenied = (message) => /permission policy does not allow m
 const duplicatePattern = /\b(?:duplicates?|dupes?|dedupe)\b/i;
 const cleanupPattern = /\b(?:clean\s*up|cleanup)\s+(?<source>.+)$/i;
 const trashPattern = /\b(?:trash|bin|delete)\s+(?<source>.+)$/i;
+const removePattern = /\bremove\s+(?<source>.+)$/i;
 const moveToTrashPattern =
   /\b(?:move|send|put|throw)\s+(?<source>.+?)\s+(?:in|into|to)\s+(?:the\s+)?(?:trash|bin|recycle\s*bin)\b/i;
-const verbPatterns = [moveToTrashPattern, cleanupPattern, trashPattern];
+const verbPatterns = [moveToTrashPattern, cleanupPattern, trashPattern, removePattern];
 
 const qualityPatterns = [
   { metric: 'sharpness', pattern: /\b(?:blurry|blurred|fuzzy|soft|out[-\s]?of[-\s]?focus)\b/i },
@@ -104,7 +105,6 @@ export const visualCleanupWorkflow = () => ({
         sourceDescription,
         signal,
         ...(now ? { now } : {}),
-        extraFilters: config.filter,
       });
     } catch (error) {
       return failed({ text: safeFailureText(error?.message ?? 'The search tool failed.') });
@@ -125,7 +125,35 @@ export const visualCleanupWorkflow = () => ({
       });
     }
 
-    const { selectionHandleId, assetCount } = resolution;
+    const { selectionHandleId, assetCount: sourceAssetCount } = resolution;
+    let qualitySelection;
+    try {
+      qualitySelection = await client.call(
+        'curateSelection',
+        {
+          selectionHandleId,
+          targetCount: sourceAssetCount,
+          strategy: 'metadata-highlights',
+          constraints: { types: ['IMAGE'], ...config.filter },
+          sampleSize: 0,
+        },
+        { signal },
+      );
+    } catch (error) {
+      return failed({ text: safeFailureText(error?.message ?? 'The quality filtering tool failed.') });
+    }
+
+    const qualitySelectionHandleId = clean(qualitySelection?.selectionHandle?.id);
+    const assetCount =
+      typeof qualitySelection?.selectionHandle?.assetCount === 'number'
+        ? qualitySelection.selectionHandle.assetCount
+        : undefined;
+    if (!qualitySelectionHandleId || typeof assetCount !== 'number' || assetCount === 0) {
+      return needsInput({
+        text: `I could not find any ${config.label} photos matching "${sourceDescription}". The matching photos may not be scored yet, or the scope may need to be broader.`,
+      });
+    }
+
     let planResult;
     try {
       planResult = await client.call(
@@ -137,7 +165,7 @@ export const visualCleanupWorkflow = () => ({
               type: 'asset.trash',
               summary: 'Move low-quality matching photos to Trash (recoverable).',
               targetKind: 'asset_batch',
-              assetSource: { kind: 'selectionHandle', selectionHandleId },
+              assetSource: { kind: 'selectionHandle', selectionHandleId: qualitySelectionHandleId },
               riskLevel: 'high',
             },
           ],
