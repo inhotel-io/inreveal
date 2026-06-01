@@ -63,28 +63,26 @@ ARG TARGETPLATFORM
 COPY --from=ghcr.io/jdx/mise:2026.8.1@sha256:b2297770273f71e685b8056e3b07bfda4ffc35f0fb62e0339b3cdc1e5766e2fe /usr/local/bin/mise /usr/local/bin/mise
 
 WORKDIR /app
-COPY ./mise.toml ./mise.toml
-COPY ./mise.lock ./mise.lock
-COPY ./packages/plugin-core/mise.toml ./packages/plugin-core/
-ENV MISE_TRUSTED_CONFIG_PATHS=/app/mise.toml
-ENV MISE_DATA_DIR=/buildcache/mise
-ENV MISE_DISABLE_TOOLS=flutter
-RUN --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
-  mise install --locked
-
 COPY ./packages/sdk ./packages/sdk/
 COPY ./packages/plugin-core ./packages/plugin-core/
 COPY ./packages/plugin-sdk ./packages/plugin-sdk/
+ENV MISE_DATA_DIR=/buildcache/mise
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends binaryen && \
+  rm -rf /var/lib/apt/lists/*
 
 # Build plugins
 RUN --mount=type=cache,id=pnpm-packages,target=/buildcache/pnpm-store \
+  --mount=type=cache,id=mise-plugin-tools-${TARGETPLATFORM},target=/buildcache/mise \
   --mount=type=bind,source=package.json,target=package.json \
   --mount=type=bind,source=.pnpmfile.cjs,target=.pnpmfile.cjs \
   --mount=type=bind,source=pnpm-lock.yaml,target=pnpm-lock.yaml \
   --mount=type=bind,source=pnpm-workspace.yaml,target=pnpm-workspace.yaml \
   --mount=type=bind,source=patches,target=patches \
-  --mount=type=cache,id=mise-tools-${TARGETPLATFORM},target=/buildcache/mise \
-  mise //:plugins
+  pnpm --filter @immich/plugin-sdk --filter @immich/plugin-core install --frozen-lockfile && \
+  mise exec --no-deps --jobs=1 github:extism/js-pdk@1.6.0 -- \
+    pnpm --filter @immich/plugin-sdk --filter @immich/plugin-core build
 
 FROM ghcr.io/immich-app/base-server-prod:202607211135@sha256:ced131da7523544fe975cfd25abd67386e712e39496340b437cd95a08d0a18f3
 
