@@ -366,14 +366,30 @@ describe('Agent tool DTOs', () => {
           selectionHandleId,
           targetCount: 1,
           strategy: 'cover-candidate',
-          constraints: { types: ['IMAGE'], minRating: 4, excludeVideos: true, diversifyBy: ['location'] },
+          constraints: {
+            types: ['IMAGE'],
+            minRating: 4,
+            excludeVideos: true,
+            diversifyBy: ['location'],
+            maxSharpness: 20,
+            maxBrightness: 30,
+            maxQuality: 40,
+          },
           sampleSize: 0,
         }),
       ).toEqual({
         selectionHandleId,
         targetCount: 1,
         strategy: 'cover-candidate',
-        constraints: { types: ['IMAGE'], minRating: 4, excludeVideos: true, diversifyBy: ['location'] },
+        constraints: {
+          types: ['IMAGE'],
+          minRating: 4,
+          excludeVideos: true,
+          diversifyBy: ['location'],
+          maxSharpness: 20,
+          maxBrightness: 30,
+          maxQuality: 40,
+        },
         sampleSize: 0,
       });
     });

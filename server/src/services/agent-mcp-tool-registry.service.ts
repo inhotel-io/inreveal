@@ -105,10 +105,10 @@ const propertyDescriptions = {
     'The selectionHandle.id returned by searchAssets or curateSelection. Use this for readSelectionMetadata, curateSelection, and handle-backed planning instead of copying search asset IDs.',
   targetCount: 'Number of assets to select into a derived selection handle. Use 1 to 1000.',
   strategy:
-    'Curation strategy: metadata-highlights, date-spread, favorites-first, or cover-candidate. Metadata-only and not objective image-quality scoring.',
+    'Curation strategy: metadata-highlights, date-spread, favorites-first, or cover-candidate. Metadata-only; quality constraints use stored objective scores only.',
   criteria: 'Optional user-facing criteria text to record in criteriaSummary for selection curation.',
   constraints:
-    'Optional metadata-only curation constraints for media types, favorites, minimum rating, video exclusion, and date/location/tag diversification.',
+    'Optional metadata-only curation constraints for media types, favorites, minimum rating, video exclusion, stored quality thresholds (maxSharpness/maxBrightness/maxQuality), and date/location/tag diversification.',
   albumId: 'Existing album id returned by listAlbums/readAlbum.',
   albumName: 'Album name to create or exact visible album name to resolve.',
   spaceId: 'Existing shared space id returned by listSpaces/readSpace.',

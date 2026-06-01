@@ -341,14 +341,15 @@
     },
     "requiredReadTools": [
       "resolveAssetSearchFilters",
-      "searchAssets"
+      "searchAssets",
+      "curateSelection"
     ],
     "planTool": "proposeAlbumOperations",
     "supportsContinuation": false,
     "matrixRow": {
       "capability": "Visual cleanup",
       "tier": "Solid now",
-      "workflowOrBoundary": "Pi resolves a quality-filtered source; Gallery owns the reviewable asset.trash plan from the handle."
+      "workflowOrBoundary": "Pi resolves a bounded source, derives a quality-filtered handle, and Gallery owns the reviewable asset.trash plan from that handle."
     }
   },
   {
