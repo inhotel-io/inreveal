@@ -150,6 +150,9 @@ class BackgroundUploadService {
   /// Guards against overlapping next-batch enqueues from concurrent completions.
   bool _isQueuingNextBatch = false;
 
+  /// Last final status update received while a drain check was already running.
+  TaskStatusUpdate? _pendingBackupDrainUpdate;
+
   void _onTaskProgressCallback(TaskProgressUpdate update) {
     if (!_taskProgressController.isClosed) {
       _taskProgressController.add(update);
@@ -194,6 +197,18 @@ class BackgroundUploadService {
   /// Get a list of tasks that are ENQUEUED or RUNNING
   Future<List<Task>> getActiveTasks(String group) {
     return _uploadRepository.getActiveTasks(group);
+  }
+
+  bool _isBackupUploadGroup(String group) {
+    return group == kBackupGroup || group == kBackupLivePhotoGroup;
+  }
+
+  Future<List<Task>> _getActiveBackupTasks() async {
+    final activeGroups = await Future.wait([
+      _uploadRepository.getActiveTasks(kBackupGroup),
+      _uploadRepository.getActiveTasks(kBackupLivePhotoGroup),
+    ]);
+    return activeGroups.expand((group) => group).toList(growable: false);
   }
 
   /// Start background upload using iOS URLSession
@@ -268,7 +283,7 @@ class BackgroundUploadService {
   /// the next batch does not re-enqueue them.
   Future<void> resume(String userId) async {
     _activeBackupUserId = userId;
-    final active = await _uploadRepository.getActiveTasks(kBackupGroup);
+    final active = await _getActiveBackupTasks();
     for (final task in active) {
       _enqueuedAssetIds.add(task.taskId);
     }
@@ -323,18 +338,22 @@ class BackgroundUploadService {
   /// enqueue the next batch so a single trigger works through the whole backlog
   /// instead of stalling after [backupBatchSize] items.
   Future<void> _maybeQueueNextBackupBatch(TaskStatusUpdate update) async {
-    if (update.task.group != kBackupGroup || !update.status.isFinalState) {
+    if (!_isBackupUploadGroup(update.task.group) || !update.status.isFinalState) {
       return;
     }
     final userId = _activeBackupUserId;
-    if (userId == null || shouldAbortQueuingTasks || _isQueuingNextBatch) {
+    if (userId == null || shouldAbortQueuingTasks) {
+      return;
+    }
+    if (_isQueuingNextBatch) {
+      _pendingBackupDrainUpdate = update;
       return;
     }
 
     _isQueuingNextBatch = true;
     try {
-      final active = await _uploadRepository.getActiveTasks(kBackupGroup);
-      if (active.any((task) => task.taskId != update.task.taskId)) {
+      final active = await _getActiveBackupTasks();
+      if (active.any((task) => task.group != update.task.group || task.taskId != update.task.taskId)) {
         // Other tasks of this batch are still uploading; the next batch is
         // queued when the last one completes. (The just-completed task may still
         // be reported active depending on update ordering, so ignore it.)
@@ -344,7 +363,12 @@ class BackgroundUploadService {
     } catch (error, stackTrace) {
       _logger.severe("Failed to enqueue next backup batch", error, stackTrace);
     } finally {
+      final pendingUpdate = _pendingBackupDrainUpdate;
+      _pendingBackupDrainUpdate = null;
       _isQueuingNextBatch = false;
+      if (pendingUpdate != null) {
+        await _maybeQueueNextBackupBatch(pendingUpdate);
+      }
     }
   }
 

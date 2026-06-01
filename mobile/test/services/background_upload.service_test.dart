@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -691,12 +692,12 @@ void main() {
       when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
     }
 
-    UploadTask backupTask(String id) => UploadTask(
+    UploadTask backupTask(String id, {String group = kBackupGroup}) => UploadTask(
       taskId: id,
       url: 'http://test-server.com/assets',
       filename: '$id.jpg',
       baseDirectory: BaseDirectory.temporary,
-      group: kBackupGroup,
+      group: group,
     );
 
     setUp(() {
@@ -707,6 +708,7 @@ void main() {
         final tasks = invocation.positionalArguments.first as List;
         return List<bool>.filled(tasks.length, true);
       });
+      when(() => mockUploadRepository.getActiveTasks(kBackupLivePhotoGroup)).thenAnswer((_) async => <Task>[]);
     });
 
     tearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -762,6 +764,63 @@ void main() {
 
       // a1 finishes and the queue drains -> next batch enqueues a2 only.
       capturedStatusCallback()(TaskStatusUpdate(backupTask(a1.id), TaskStatus.complete));
+      await pumpEventQueue();
+
+      final captured = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured;
+      expect(captured, hasLength(1));
+      expect((captured.single as List).cast<UploadTask>().map((t) => t.taskId), [a2.id]);
+    });
+
+    test('rechecks the drain when final callbacks overlap while a drain check is in progress', () async {
+      final a1 = LocalAssetStub.image1;
+      final a2 = LocalAssetStub.image2;
+      final a3 = LocalAssetStub.image1.copyWith(id: 'image3', name: 'image3.jpg');
+      stubUploadPath(a1);
+      stubUploadPath(a2);
+      stubUploadPath(a3);
+      sut.backupBatchSize = 2;
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2, a3]);
+
+      final firstDrainCheck = Completer<List<Task>>();
+      var activeCalls = 0;
+      when(() => mockUploadRepository.getActiveTasks(kBackupGroup)).thenAnswer((_) {
+        activeCalls++;
+        if (activeCalls == 1) {
+          return firstDrainCheck.future;
+        }
+        return Future.value(<Task>[]);
+      });
+
+      await sut.uploadBackupCandidates('user-1'); // enqueues a1 + a2
+
+      final onStatus = capturedStatusCallback();
+      onStatus(TaskStatusUpdate(backupTask(a1.id), TaskStatus.complete));
+      onStatus(TaskStatusUpdate(backupTask(a2.id), TaskStatus.complete));
+      firstDrainCheck.complete([backupTask(a2.id)]);
+      await pumpEventQueue();
+
+      expect(activeCalls, 2);
+      verify(() => mockUploadRepository.enqueueBackgroundAll(any())).called(2);
+    });
+
+    test('resume arms continuation from live photo still tasks and skips them after they finish', () async {
+      final a1 = LocalAssetStub.image1; // already uploading in kBackupLivePhotoGroup
+      final a2 = LocalAssetStub.image2; // the next asset to enqueue
+      stubUploadPath(a2);
+      sut.backupBatchSize = 1;
+      when(() => mockUploadRepository.start()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => [a1, a2]);
+
+      when(() => mockUploadRepository.getActiveTasks(kBackupGroup)).thenAnswer((_) async => <Task>[]);
+      var livePhotoActiveCalls = 0;
+      when(() => mockUploadRepository.getActiveTasks(kBackupLivePhotoGroup)).thenAnswer((_) async {
+        livePhotoActiveCalls++;
+        return livePhotoActiveCalls == 1 ? [backupTask(a1.id, group: kBackupLivePhotoGroup)] : <Task>[];
+      });
+
+      await sut.resume('user-1'); // seeds {a1}, arms continuation from the live-photo still group
+
+      capturedStatusCallback()(TaskStatusUpdate(backupTask(a1.id, group: kBackupLivePhotoGroup), TaskStatus.complete));
       await pumpEventQueue();
 
       final captured = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured;
