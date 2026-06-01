@@ -1290,6 +1290,13 @@ export class AgentToolService {
       `Metadata-only ${input.strategy} curation used favorites, ratings, dates, tags, and location; no visual inspection or objective image analysis was used.`,
       `Selected ${selected.length} of ${input.assets.length} hydrated metadata rows from the source selection.`,
     ];
+    if (
+      input.constraints.maxSharpness !== undefined ||
+      input.constraints.maxBrightness !== undefined ||
+      input.constraints.maxQuality !== undefined
+    ) {
+      criteriaSummary[0] = `Metadata-only ${input.strategy} curation used stored objective image quality scores, favorites, ratings, dates, tags, and location; no preview inspection was used.`;
+    }
     if (input.criteria) {
       criteriaSummary.push(`User criteria: ${input.criteria}`);
     }
@@ -1321,6 +1328,24 @@ export class AgentToolService {
     }
     if (constraints.minRating !== undefined) {
       eligible = eligible.filter((asset) => (asset.exifInfo?.rating ?? 0) >= constraints.minRating!);
+    }
+    if (constraints.maxSharpness !== undefined) {
+      eligible = eligible.filter((asset) => {
+        const value = asset.qualityInfo?.sharpness;
+        return typeof value === 'number' && value <= constraints.maxSharpness!;
+      });
+    }
+    if (constraints.maxBrightness !== undefined) {
+      eligible = eligible.filter((asset) => {
+        const value = asset.qualityInfo?.brightness;
+        return typeof value === 'number' && value <= constraints.maxBrightness!;
+      });
+    }
+    if (constraints.maxQuality !== undefined) {
+      eligible = eligible.filter((asset) => {
+        const value = asset.qualityInfo?.quality;
+        return typeof value === 'number' && value <= constraints.maxQuality!;
+      });
     }
 
     return eligible;

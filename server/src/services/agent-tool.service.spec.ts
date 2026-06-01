@@ -5081,6 +5081,40 @@ describe(AgentToolService.name, () => {
     }
   });
 
+  it('curateSelection can derive a low-quality subset from a bounded source handle', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid(), newUuid(), newUuid()];
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+    const sourceHandle = makeCurateHandle(session, auth.user.id, assetIds);
+    const derivedHandle = makeCurateHandle(session, auth.user.id, [assetIds[1], assetIds[3]]);
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue(sourceHandle);
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      makeMetadata(assetIds[0], { qualityInfo: { sharpness: 45, exposure: 70, brightness: 70, quality: 80 } }),
+      makeMetadata(assetIds[1], { qualityInfo: { sharpness: 12, exposure: 70, brightness: 70, quality: 80 } }),
+      makeMetadata(assetIds[2], { qualityInfo: null }),
+      makeMetadata(assetIds[3], { qualityInfo: { sharpness: 20, exposure: 70, brightness: 70, quality: 80 } }),
+    ] as never);
+    selectionHandleRepository.create.mockResolvedValue(derivedHandle);
+
+    const result = await sut.curateSelection(auth, session.id, {
+      selectionHandleId: sourceHandle.id,
+      targetCount: 4,
+      constraints: { types: ['IMAGE'], maxSharpness: 20 },
+      sampleSize: 0,
+    });
+
+    expect(selectionHandleRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ assetIds: [assetIds[1], assetIds[3]] }),
+    );
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.selectionHandle).toMatchObject({ id: derivedHandle.id, assetCount: 2 });
+      expect(result.criteriaSummary.join(' ')).toMatch(/objective image quality/i);
+    }
+  });
+
   it('curateSelection date-spread starts with newest date group before older high-score groups', async () => {
     const auth = AuthFactory.create();
     const assetIds = [newUuid(), newUuid(), newUuid()];
