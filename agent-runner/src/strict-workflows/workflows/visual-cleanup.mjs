@@ -22,6 +22,7 @@ const QUALITY_CONFIG = Object.freeze({
 const QUALITY_METRICS = new Set(Object.keys(QUALITY_CONFIG));
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 const cleanSource = (v) => clean(v).replace(/[.?!]+$/u, '').replace(/\s+/gu, ' ').trim();
+const isTrashPermissionDenied = (message) => /permission policy does not allow moving assets to trash/i.test(message);
 
 const duplicatePattern = /\b(?:duplicates?|dupes?|dedupe)\b/i;
 const cleanupPattern = /\b(?:clean\s*up|cleanup)\s+(?<source>.+)$/i;
@@ -144,6 +145,13 @@ export const visualCleanupWorkflow = () => ({
         { signal },
       );
     } catch (error) {
+      const message = error?.message ?? '';
+      if (isTrashPermissionDenied(message)) {
+        return needsInput({
+          text:
+            'This assistant session does not have trash permission. Start or switch to a Visual organizer session, then ask again to move the matching low-quality photos to Trash.',
+        });
+      }
       return failed({ text: safeFailureText(error?.message ?? 'The planning tool failed.') });
     }
 
