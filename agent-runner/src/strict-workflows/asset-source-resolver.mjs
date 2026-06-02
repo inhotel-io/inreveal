@@ -36,6 +36,9 @@ export const parseRecencyLimit = (source) => {
   if (!RECENCY_PATTERN.test(source)) {
     return undefined;
   }
+  if (/\blast\s+\d{1,3}\s+(?:days?|weeks?|months?)\b/i.test(source)) {
+    return undefined;
+  }
   const match = COUNT_PATTERN.exec(source);
   if (!match) {
     return undefined;
@@ -63,6 +66,13 @@ const dayRange = (date) => ({
   takenBefore: dayEnd(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
 });
 const DAY_MS = 86_400_000;
+const RELATIVE_PERIOD_RE = /\blast\s+(\d{1,3})\s+(days?|weeks?|months?)\b/;
+
+const subtractMonths = (date, months) => {
+  const result = new Date(date);
+  result.setUTCMonth(result.getUTCMonth() - months);
+  return result;
+};
 
 export const parseDateRange = (source, now = new Date()) => {
   const text = String(source ?? '').toLowerCase();
@@ -80,6 +90,20 @@ export const parseDateRange = (source, now = new Date()) => {
   }
   if (/\byesterday\b/.test(text)) {
     return dayRange(new Date(now.getTime() - DAY_MS));
+  }
+  const relativePeriod = RELATIVE_PERIOD_RE.exec(text);
+  if (relativePeriod) {
+    const count = Number(relativePeriod[1]);
+    const unit = relativePeriod[2];
+    if (unit.startsWith('day')) {
+      return { takenAfter: new Date(now.getTime() - count * DAY_MS), takenBefore: now };
+    }
+    if (unit.startsWith('week')) {
+      return { takenAfter: new Date(now.getTime() - count * 7 * DAY_MS), takenBefore: now };
+    }
+    if (unit.startsWith('month')) {
+      return { takenAfter: subtractMonths(now, count), takenBefore: now };
+    }
   }
   // Weeks start Monday.
   const thisMonday = new Date(
@@ -313,6 +337,7 @@ const DATE_STRIP = new RegExp(
     'yesterday',
     'last\\s+weekend',
     'last\\s+week',
+    RELATIVE_PERIOD_RE.source,
     'this\\s+week',
     'this\\s+month',
     'last\\s+month',

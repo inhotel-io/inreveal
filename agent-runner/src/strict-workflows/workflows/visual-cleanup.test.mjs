@@ -138,7 +138,24 @@ describe('visual_cleanup execution', () => {
 
     assert.equal(outcome.status, 'needs_input');
     assert.match(outcome.text, /scope|count|date/i);
+    assert.deepEqual(outcome.continuation, { qualityMetric: 'sharpness' });
     assert.equal(client.calls.some((c) => c.name === 'proposeAlbumOperations'), false);
+  });
+
+  it('resumes a pending blurry cleanup with a user-provided upload scope', async () => {
+    const resolved = wf.resumeContinuation({
+      pending: { qualityMetric: 'sharpness' },
+      prompt: 'uploaded in the last 6 months',
+      nowMs: new Date('2026-05-15T12:00:00.000Z').getTime(),
+    });
+
+    assert.deepEqual(resolved, {
+      status: 'matched',
+      ctx: {
+        slots: { qualityMetric: 'sharpness', sourceDescription: 'uploaded in the last 6 months' },
+        now: new Date('2026-05-15T12:00:00.000Z'),
+      },
+    });
   });
 
   it('asks for scope instead of handing all-library cleanup to open orchestration', async () => {
@@ -150,6 +167,7 @@ describe('visual_cleanup execution', () => {
 
     assert.equal(outcome.status, 'needs_input');
     assert.match(outcome.text, /scope|count|date|album|tag/i);
+    assert.deepEqual(outcome.continuation, { qualityMetric: 'sharpness' });
     assert.equal(client.calls.length, 0);
   });
 
