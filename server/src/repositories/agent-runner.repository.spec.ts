@@ -332,6 +332,50 @@ describe(AgentRunnerRepository.name, () => {
     ).rejects.toThrow('Agent runner session creation failed with status 502');
   });
 
+  it('cancels a runner session through the configured runner URL', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    mockFetch.mockResolvedValue({ ok: true, status: 204 });
+
+    await expect(
+      sut.cancelSession({
+        url: 'https://gateway.local/pi-runner/',
+        runnerSessionId: 'runner/session 1',
+        timeoutMs: 3000,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockFetch).toHaveBeenCalledWith(new URL('https://gateway.local/pi-runner/sessions/runner%2Fsession%201'), {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+      signal: expect.any(AbortSignal),
+    });
+    expect(timeoutSpy).toHaveBeenCalledWith(3000);
+  });
+
+  it('treats missing runner sessions as already cancelled', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 404 });
+
+    await expect(
+      sut.cancelSession({
+        url: 'http://agent-runner:4477',
+        runnerSessionId: 'runner-session-1',
+        timeoutMs: 3000,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws when runner session cancellation fails with a non-success response', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 502 });
+
+    await expect(
+      sut.cancelSession({
+        url: 'http://agent-runner:4477',
+        runnerSessionId: 'runner-session-1',
+        timeoutMs: 3000,
+      }),
+    ).rejects.toThrow('Agent runner session cancellation failed with status 502');
+  });
+
   it('streams and normalizes runner message SSE events', async () => {
     const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const deltaEvent = {

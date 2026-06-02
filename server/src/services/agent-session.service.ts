@@ -286,7 +286,20 @@ export class AgentSessionService {
       throw new BadRequestException('Agent session cannot be cancelled in its current state');
     }
 
+    await this.cancelRunnerSession(session);
+
     return this.map(updated);
+  }
+
+  private async cancelRunnerSession(session: AgentSession): Promise<void> {
+    try {
+      await this.agentRunnerService.cancelSession({
+        runnerEndpoint: session.runnerEndpoint,
+        runnerSessionId: session.runnerSessionId,
+      });
+    } catch {
+      // The database cancellation is authoritative; runner cleanup is best-effort.
+    }
   }
 
   private resolvePermissionPlan(dto: AgentSessionCreateDto): AgentPermissionPlanSnapshot {
