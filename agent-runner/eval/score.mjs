@@ -23,6 +23,14 @@ const classificationPass = (decision, expect) => {
   if (decision.kind === 'none') return true; // negative assertion: "none" is the whole check
   if (expect.slotsSurvive && decision.parsedSlots === null) return false;
   if (expect.slots && !slotMatches(decision.parsedSlots, expect.slots)) return false;
+  if (expect.minOutcomeCount !== undefined && Number(decision.outcomeCount ?? 0) < expect.minOutcomeCount) return false;
+  if (expect.minTurnsWithOutcome !== undefined && Number(decision.turnsWithOutcome ?? 0) < expect.minTurnsWithOutcome) {
+    return false;
+  }
+  if (expect.outcomeStatus !== undefined) {
+    const statuses = Array.isArray(expect.outcomeStatus) ? expect.outcomeStatus : [expect.outcomeStatus];
+    if (!statuses.includes(decision.outcomeStatus)) return false;
+  }
   // L3 plan-proposed assertion: did the strict workflow actually propose a
   // (never-applied) plan? Only checked when the scenario opts in.
   if (expect.planProposed !== undefined && Boolean(decision.planProposed) !== expect.planProposed) return false;
@@ -78,6 +86,8 @@ export const evalScenario = async (driver, sc, defaultRuns) => {
         parsedSlots: decision.parsedSlots,
         planProposed: decision.planProposed,
         outcomeStatus: decision.outcomeStatus,
+        outcomeCount: decision.outcomeCount,
+        turnsWithOutcome: decision.turnsWithOutcome,
       };
     }
     attempts++;
@@ -153,7 +163,10 @@ export const renderScorecard = (agg, results, meta) => {
     lines.push(`## Failures (${failures.length})`);
     for (const f of failures) {
       const d = f.detail ?? {};
-      const planBit = d.planProposed === undefined ? '' : ` planProposed=${d.planProposed} outcome=${d.outcomeStatus ?? '—'}`;
+      const planBit =
+        d.planProposed === undefined
+          ? ''
+          : ` planProposed=${d.planProposed} outcome=${d.outcomeStatus ?? '—'} outcomeCount=${d.outcomeCount ?? '—'} turnsWithOutcome=${d.turnsWithOutcome ?? '—'}`;
       const got =
         f.category === 'copy'
           ? JSON.stringify(d.text)
