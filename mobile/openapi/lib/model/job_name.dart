@@ -54,6 +54,7 @@ class JobName {
   static const librarySyncFilesQueueAll = JobName._(r'LibrarySyncFilesQueueAll');
   static const librarySyncFiles = JobName._(r'LibrarySyncFiles');
   static const libraryScanQueueAll = JobName._(r'LibraryScanQueueAll');
+  static const hlsSessionCleanup = JobName._(r'HlsSessionCleanup');
   static const memoryCleanup = JobName._(r'MemoryCleanup');
   static const memoryGenerate = JobName._(r'MemoryGenerate');
   static const notificationsCleanup = JobName._(r'NotificationsCleanup');
@@ -129,6 +130,7 @@ class JobName {
     librarySyncFilesQueueAll,
     librarySyncFiles,
     libraryScanQueueAll,
+    hlsSessionCleanup,
     memoryCleanup,
     memoryGenerate,
     notificationsCleanup,
@@ -239,6 +241,7 @@ class JobNameTypeTransformer {
         case r'LibrarySyncFilesQueueAll': return JobName.librarySyncFilesQueueAll;
         case r'LibrarySyncFiles': return JobName.librarySyncFiles;
         case r'LibraryScanQueueAll': return JobName.libraryScanQueueAll;
+        case r'HlsSessionCleanup': return JobName.hlsSessionCleanup;
         case r'MemoryCleanup': return JobName.memoryCleanup;
         case r'MemoryGenerate': return JobName.memoryGenerate;
         case r'NotificationsCleanup': return JobName.notificationsCleanup;
