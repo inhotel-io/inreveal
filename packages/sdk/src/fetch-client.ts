@@ -9274,18 +9274,6 @@ export enum ReleaseType {
     Prepatch = "prepatch",
     Prerelease = "prerelease"
 }
-export enum Color {
-    Primary = "primary",
-    Pink = "pink",
-    Red = "red",
-    Yellow = "yellow",
-    Blue = "blue",
-    Green = "green",
-    Purple = "purple",
-    Orange = "orange",
-    Gray = "gray",
-    Amber = "amber"
-}
 export enum UserMetadataKey {
     Preferences = "preferences",
     License = "license",
