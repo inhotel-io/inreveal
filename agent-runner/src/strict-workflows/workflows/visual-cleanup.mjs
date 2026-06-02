@@ -23,6 +23,7 @@ const QUALITY_METRICS = new Set(Object.keys(QUALITY_CONFIG));
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
 const cleanSource = (v) => clean(v).replace(/[.?!]+$/u, '').replace(/\s+/gu, ' ').trim();
 const isTrashPermissionDenied = (message) => /permission policy does not allow moving assets to trash/i.test(message);
+const continuationFor = (qualityMetric) => ({ qualityMetric });
 
 const duplicatePattern = /\b(?:duplicates?|dupes?|dedupe)\b/i;
 const cleanupPattern = /\b(?:clean\s*up|cleanup)\s+(?<source>.+)$/i;
@@ -89,6 +90,26 @@ export const visualCleanupWorkflow = () => ({
     if (!QUALITY_METRICS.has(qualityMetric) || !sourceDescription) return null;
     return { qualityMetric, sourceDescription };
   },
+  resumeContinuation({ pending, prompt, nowMs }) {
+    const qualityMetric = clean(pending?.qualityMetric);
+    const sourceDescription = cleanSource(prompt);
+    if (!QUALITY_METRICS.has(qualityMetric)) {
+      return { status: 'missing', text: 'I no longer have the pending visual-cleanup request. Please ask again.' };
+    }
+    if (!sourceDescription) {
+      return {
+        status: 'needs_input',
+        text: 'Which photos should I check? Add a count, date range, album, tag, person, or recent-upload scope.',
+      };
+    }
+    return {
+      status: 'matched',
+      ctx: {
+        slots: { qualityMetric, sourceDescription },
+        ...(Number.isFinite(nowMs) ? { now: new Date(nowMs) } : {}),
+      },
+    };
+  },
   async run({ client, slots, signal, now }) {
     const parsed = this.parseSlots(slots);
     if (!parsed) {
@@ -114,6 +135,7 @@ export const visualCleanupWorkflow = () => ({
       if (/bound|count|date|scope|could not be resolved|cannot resolve|metadata alone/i.test(resolution.reason ?? '')) {
         return needsInput({
           text: `Which ${config.label} photos should I check? Add a count, date range, album, tag, person, or recent-upload scope.`,
+          continuation: continuationFor(qualityMetric),
         });
       }
       return handoffOpen({ reason: resolution.reason });
