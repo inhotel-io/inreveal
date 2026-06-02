@@ -119,6 +119,25 @@ export class AgentRunnerService {
     });
   }
 
+  async cancelSession({
+    runnerEndpoint,
+    runnerSessionId,
+  }: {
+    runnerEndpoint: string | null;
+    runnerSessionId: string | null;
+  }): Promise<void> {
+    if (!runnerEndpoint || !runnerSessionId) {
+      return;
+    }
+
+    const { runnerHealthTimeoutMs } = this.configRepository.getEnv().agent;
+    await this.agentRunnerRepository.cancelSession({
+      url: runnerEndpoint,
+      runnerSessionId,
+      timeoutMs: runnerHealthTimeoutMs,
+    });
+  }
+
   async getStatus(): Promise<AgentRunnerStatusDto> {
     const { runnerUrl, runnerHealthTimeoutMs, mcpGatewayUrl } = this.configRepository.getEnv().agent;
     if (!runnerUrl || !mcpGatewayUrl) {

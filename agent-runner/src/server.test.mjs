@@ -263,6 +263,137 @@ describe('agent runner server', () => {
     });
   });
 
+  it('deletes a runner session by disposing the runtime session and rejecting future messages', async () => {
+    const runtime = createRuntime();
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      const { runnerSessionId } = await createResponse.json();
+
+      const deleteResponse = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}`, {
+        method: 'DELETE',
+      });
+
+      assert.equal(deleteResponse.status, 204);
+      assert.deepEqual(runtime.calls.disposeSession, [runnerSessionId]);
+
+      const messageResponse = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+      });
+      assert.equal(messageResponse.status, 404);
+    });
+  });
+
+  it('keeps a runner session retryable when disposal fails', async () => {
+    let attempts = 0;
+    const runtime = createRuntime({
+      disposeSession: async () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error('transient cleanup failure');
+        }
+      },
+    });
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      const { runnerSessionId } = await createResponse.json();
+
+      const firstDeleteResponse = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}`, {
+        method: 'DELETE',
+      });
+      assert.equal(firstDeleteResponse.status, 502);
+
+      const secondDeleteResponse = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}`, {
+        method: 'DELETE',
+      });
+      assert.equal(secondDeleteResponse.status, 204);
+      assert.deepEqual(runtime.calls.disposeSession, [runnerSessionId, runnerSessionId]);
+    });
+  });
+
+  it('deletes a runner session by aborting an active runtime message stream', async () => {
+    let messageCancelled = false;
+    const runtime = createRuntime();
+    runtime.sendMessage = (body) => ({
+      [Symbol.asyncIterator]() {
+        let sentDelta = false;
+        const iterator = {
+          async next() {
+            if (sentDelta) {
+              return new Promise(() => {});
+            }
+
+            sentDelta = true;
+            return {
+              done: false,
+              value: {
+                type: 'assistant-message-delta',
+                sessionId: body.gallerySessionId,
+                runnerSessionId: body.runnerSessionId,
+                delta: 'first chunk',
+                sequence: 1,
+              },
+            };
+          },
+          async return() {
+            messageCancelled = true;
+            return { done: true };
+          },
+        };
+        runtime.activeMessageIterator = iterator;
+        return iterator;
+      },
+    });
+    runtime.disposeSession = async (runnerSessionId) => {
+      runtime.calls.disposeSession.push(runnerSessionId);
+      await runtime.activeMessageIterator?.return?.();
+    };
+
+    await withServer(runtime, async (baseUrl) => {
+      const createResponse = await fetch(`${baseUrl}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createSessionBody()),
+      });
+      const { runnerSessionId } = await createResponse.json();
+
+      const response = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}/messages`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageBody),
+      });
+      assert.equal(response.status, 200);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let body = '';
+      while (!body.includes('event: assistant-message-delta')) {
+        const { value, done } = await reader.read();
+        assert.equal(done, false);
+        body += decoder.decode(value);
+      }
+
+      const deleteResponse = await fetch(`${baseUrl}/sessions/${encodeURIComponent(runnerSessionId)}`, {
+        method: 'DELETE',
+      });
+
+      assert.equal(deleteResponse.status, 204);
+      await waitForCondition(() => messageCancelled);
+      await reader.cancel();
+    });
+  });
+
   it('validates model setup with a temporary no-tools runtime session', async () => {
     const runtime = createRuntime();
 

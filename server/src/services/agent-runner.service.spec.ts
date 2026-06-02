@@ -361,6 +361,35 @@ describe(AgentRunnerService.name, () => {
     expect(toolTokenService.create).not.toHaveBeenCalled();
   });
 
+  it('cancels a runner session with the stored runner endpoint and configured timeout', async () => {
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerHealthTimeoutMs: 3000,
+      },
+    } as never);
+    agentRunnerRepository.cancelSession.mockResolvedValue();
+
+    await sut.cancelSession({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'runner-session-1',
+    });
+
+    expect(agentRunnerRepository.cancelSession).toHaveBeenCalledWith({
+      url: 'http://agent-runner:4477',
+      runnerSessionId: 'runner-session-1',
+      timeoutMs: 3000,
+    });
+  });
+
+  it('skips runner cancellation when the runner session was never created', async () => {
+    await sut.cancelSession({
+      runnerEndpoint: null,
+      runnerSessionId: null,
+    });
+
+    expect(agentRunnerRepository.cancelSession).not.toHaveBeenCalled();
+  });
+
   it('streams a user message to the runner, emits deltas, and persists the completed assistant message', async () => {
     const userId = '00000000-0000-4000-8000-000000000001';
     const sessionId = '00000000-0000-4000-8000-000000000100';

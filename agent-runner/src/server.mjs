@@ -319,6 +319,25 @@ export const startServer = ({
       return;
     }
 
+    const sessionMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
+    if (request.method === 'DELETE' && sessionMatch) {
+      const runnerSessionId = decodeRunnerSessionId(sessionMatch[1]);
+      if (!runnerSessionId || !runnerSessions.has(runnerSessionId)) {
+        sendJson(response, 404, { error: 'runner session not found' });
+        return;
+      }
+
+      try {
+        await runtime.disposeSession?.(runnerSessionId);
+        runnerSessions.delete(runnerSessionId);
+        response.writeHead(204);
+        response.end();
+      } catch {
+        sendJson(response, 502, { error: 'runner session disposal failed' });
+      }
+      return;
+    }
+
     const messageMatch = url.pathname.match(/^\/sessions\/([^/]+)\/messages$/);
     if (request.method === 'POST' && messageMatch) {
       const runnerSessionId = decodeRunnerSessionId(messageMatch[1]);

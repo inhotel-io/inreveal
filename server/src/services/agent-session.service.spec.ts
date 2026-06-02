@@ -1129,6 +1129,27 @@ describe(AgentSessionService.name, () => {
     expect(result.endedAt).toEqual(now);
   });
 
+  it('cancels the active runner session after the database session is cancelled', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'runner-session-1',
+    });
+    const cancelled = makeSession({ ...session, status: AgentSessionStatus.Cancelled, endedAt: now });
+
+    repository.getById.mockResolvedValue(session);
+    repository.cancel.mockResolvedValue(cancelled);
+
+    await sut.cancel(auth, session.id);
+
+    expect(agentRunnerService.cancelSession).toHaveBeenCalledWith({
+      runnerEndpoint: 'http://agent-runner:4477',
+      runnerSessionId: 'runner-session-1',
+    });
+  });
+
   it('returns cancelled session when a concurrent duplicate cancel wins the update race', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
