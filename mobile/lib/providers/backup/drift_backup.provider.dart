@@ -212,6 +212,8 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
   final BackgroundUploadService _backgroundUploadService;
   final UploadSpeedManager _uploadSpeedManager;
   Completer<void>? _cancelToken;
+  String? _activeBackgroundBackupUserId;
+  bool _isCheckingForMoreBackgroundTasks = false;
   late final StreamSubscription<TaskProgressUpdate> _backgroundProgressSubscription;
   late final StreamSubscription<TaskStatusUpdate> _backgroundStatusSubscription;
 
@@ -282,6 +284,7 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             _removeUploadItem(taskId);
           });
         }
+        unawaited(_queueMoreBackgroundBackupCandidatesIfNeeded());
         break;
       case TaskStatus.failed:
       case TaskStatus.notFound:
@@ -301,9 +304,36 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             ),
           },
         );
+        unawaited(_queueMoreBackgroundBackupCandidatesIfNeeded());
         break;
       default:
         break;
+    }
+  }
+
+  Future<void> _queueMoreBackgroundBackupCandidatesIfNeeded() async {
+    final userId = _activeBackgroundBackupUserId;
+    if (userId == null || _isCheckingForMoreBackgroundTasks || state.remainderCount <= 0) {
+      return;
+    }
+
+    _isCheckingForMoreBackgroundTasks = true;
+    try {
+      final taskGroups = await Future.wait([
+        _backgroundUploadService.getActiveTasks(kBackupGroup),
+        _backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup),
+      ]);
+      if (!mounted || _activeBackgroundBackupUserId != userId || state.remainderCount <= 0) {
+        return;
+      }
+
+      final activeTaskCount = taskGroups.fold<int>(0, (count, tasks) => count + tasks.length);
+      if (activeTaskCount == 0) {
+        _logger.info("Background upload queue drained with ${state.remainderCount} assets remaining, queueing more");
+        await _backgroundUploadService.uploadBackupCandidates(userId);
+      }
+    } finally {
+      _isCheckingForMoreBackgroundTasks = false;
     }
   }
 
@@ -384,6 +414,7 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
   Future<void> stopBackup() async {
     if (CurrentPlatform.isIOS) {
       await _backgroundUploadService.cancel();
+      _activeBackgroundBackupUserId = null;
       _uploadSpeedManager.clear();
       state = state.copyWith(uploadItems: {}, iCloudDownloadProgress: {});
       return;
@@ -493,6 +524,7 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
       return;
     }
     _logger.info("Start background backup sequence");
+    _activeBackgroundBackupUserId = userId;
     state = state.copyWith(error: BackupError.none);
     final taskGroups = await Future.wait([
       _backgroundUploadService.getActiveTasks(kBackupGroup),

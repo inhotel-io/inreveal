@@ -195,20 +195,34 @@ class BackgroundUploadService {
     _logger.info("Found ${candidates.length} backup candidates for background tasks");
 
     const batchSize = 100;
-    final batch = candidates.take(batchSize).toList();
-    List<UploadTask> tasks = [];
+    var enqueuedCount = 0;
 
-    for (final asset in batch) {
-      final task = await getUploadTask(asset);
-      if (task != null) {
-        tasks.add(task);
+    for (var start = 0; start < candidates.length && !shouldAbortQueuingTasks; start += batchSize) {
+      final batch = candidates.skip(start).take(batchSize);
+      final tasks = <UploadTask>[];
+
+      for (final asset in batch) {
+        if (shouldAbortQueuingTasks) {
+          break;
+        }
+
+        final task = await getUploadTask(asset);
+        if (task != null) {
+          tasks.add(task);
+        }
       }
+
+      if (tasks.isEmpty || shouldAbortQueuingTasks) {
+        continue;
+      }
+
+      _logger.info("Enqueuing ${tasks.length} background upload tasks");
+      final results = await enqueueTasks(tasks);
+      enqueuedCount += results.where((success) => success).length;
     }
 
-    if (tasks.isNotEmpty && !shouldAbortQueuingTasks) {
-      _logger.info("Enqueuing ${tasks.length} background upload tasks");
-      await enqueueTasks(tasks);
-      await _backgroundBackupStatusService.recordUploadEnqueue(candidateCount: tasks.length);
+    if (enqueuedCount > 0) {
+      await _backgroundBackupStatusService.recordUploadEnqueue(candidateCount: enqueuedCount);
     }
   }
 

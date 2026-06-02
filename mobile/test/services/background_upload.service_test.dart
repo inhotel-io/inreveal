@@ -39,6 +39,15 @@ void main() {
   setUpAll(() async {
     registerFallbackValue(AppSettingsEnum.useCellularForUploadPhotos);
     registerFallbackValue(BackgroundBackupFailureReason.none);
+    registerFallbackValue(
+      UploadTask(
+        taskId: 'fallback',
+        url: 'http://test-server.com/assets',
+        filename: 'fallback.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      ),
+    );
 
     TestWidgetsFlutterBinding.ensureInitialized();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -112,6 +121,43 @@ void main() {
 
       verify(() => mockBackgroundBackupStatusService.recordCandidateCount(1)).called(1);
       verify(() => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: 1)).called(1);
+    });
+
+    test('queues every backup candidate in batches larger than the initial 100', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final candidates = List.generate(
+        250,
+        (index) => LocalAssetStub.image1.copyWith(id: 'asset-$index', name: 'asset-$index.jpg'),
+      );
+      final mockEntity = MockAssetEntity();
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => candidates);
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((invocation) async {
+        final tasks = invocation.positionalArguments.single as List<UploadTask>;
+        return List.filled(tasks.length, true);
+      });
+      when(() => mockUploadRepository.updateNotification(any(), TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      for (final asset in candidates) {
+        when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+        when(
+          () => mockStorageRepository.getFileForAsset(asset.id),
+        ).thenAnswer((_) async => File('/path/${asset.id}.jpg'));
+        when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+      }
+
+      await sut.uploadBackupCandidates('user-1');
+
+      final enqueuedBatches = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured;
+      expect(enqueuedBatches.map((batch) => (batch as List<UploadTask>).length), [100, 100, 50]);
+      verify(() => mockBackgroundBackupStatusService.recordCandidateCount(250)).called(1);
+      verify(() => mockBackgroundBackupStatusService.recordUploadEnqueue(candidateCount: 250)).called(1);
     });
 
     test('records zero candidate count when no candidates exist', () async {

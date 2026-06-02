@@ -48,19 +48,25 @@ class _FakeInnerClient extends http.BaseClient {
 /// mimicking `cupertino_http`: aborting the request injects an error into the
 /// response stream and closes it.
 class _StreamingFakeClient extends http.BaseClient {
+  _StreamingFakeClient({this.closeOnAbort = true});
+
+  final bool closeOnAbort;
   late StreamController<List<int>> body;
   bool closed = false;
   bool hadOpenStreamAtClose = false;
+  bool bodyWasListenedTo = false;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    body = StreamController<List<int>>();
+    body = StreamController<List<int>>(onListen: () => bodyWasListenedTo = true);
     if (request case http.Abortable(:final abortTrigger?)) {
       unawaited(
         abortTrigger.whenComplete(() {
           if (!body.isClosed) {
             body.addError(http.RequestAbortedException(request.url));
-            unawaited(body.close());
+            if (closeOnAbort) {
+              unawaited(body.close());
+            }
           }
         }),
       );
@@ -100,6 +106,54 @@ void main() {
     );
 
     await drained;
+  });
+
+  test('shutdown drains an unconsumed response body before closing the inner client', () async {
+    final inner = _StreamingFakeClient();
+    final client = DrainingHttpClient(inner);
+
+    await client.send(http.Request('GET', Uri.parse('https://example.com/api/sync')));
+
+    await client.shutdown(timeout: const Duration(milliseconds: 10));
+
+    expect(inner.bodyWasListenedTo, isTrue, reason: 'shutdown cannot drain an unlistened response body');
+    expect(
+      inner.hadOpenStreamAtClose,
+      isFalse,
+      reason: 'inner client must not close before an unconsumed response body settles',
+    );
+  });
+
+  test('shutdown waits for the response body to close after an error event', () async {
+    final inner = _StreamingFakeClient(closeOnAbort: false);
+    final client = DrainingHttpClient(inner);
+
+    final response = await client.send(http.Request('GET', Uri.parse('https://example.com/api/sync')));
+    final data = <List<int>>[];
+    final errors = <Object>[];
+    final done = Completer<void>();
+    response.stream.listen(data.add, onError: errors.add, onDone: done.complete);
+
+    final shutdown = client.shutdown(timeout: const Duration(milliseconds: 200));
+    await pumpEventQueue();
+    await pumpEventQueue();
+
+    expect(errors.single, isA<http.RequestAbortedException>());
+    expect(
+      inner.closed,
+      isFalse,
+      reason: 'an error event is not enough; teardown must wait for the stream close callback',
+    );
+
+    inner.body.add([1, 2, 3]);
+    await inner.body.close();
+    await shutdown;
+    await done.future;
+
+    expect(data, [
+      [1, 2, 3],
+    ]);
+    expect(inner.hadOpenStreamAtClose, isFalse);
   });
 
   test('rejects new requests after shutdown', () async {

@@ -68,22 +68,49 @@ class DrainingHttpClient extends http.BaseClient {
       // The request is not fully settled until its body has been delivered:
       // `cupertino_http` fires its completion FFI callback when the response
       // stream closes, so the request must stay tracked (and abortable) until
-      // then.
-      final tracked = response.stream.transform(
-        StreamTransformer<List<int>, List<int>>.fromHandlers(
-          handleData: (data, sink) => sink.add(data),
-          handleError: (error, stackTrace, sink) {
-            sink.addError(error, stackTrace);
-            settle();
-          },
-          handleDone: (sink) {
-            settle();
-            sink.close();
-          },
-        ),
+      // then. Subscribe eagerly so shutdown can drain even if the caller has not
+      // listened to the response body yet.
+      late final StreamSubscription<List<int>> subscription;
+      var proxyClosed = false;
+      late final StreamController<List<int>> proxy;
+
+      Future<void> closeProxy() async {
+        if (proxyClosed) {
+          return;
+        }
+        proxyClosed = true;
+        await proxy.close();
+      }
+
+      proxy = StreamController<List<int>>(
+        sync: true,
+        onPause: () => subscription.pause(),
+        onResume: () => subscription.resume(),
+        onCancel: () async {
+          await subscription.cancel();
+          settle();
+        },
       );
+
+      subscription = response.stream.listen(
+        (data) {
+          if (!proxyClosed) {
+            proxy.add(data);
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (!proxyClosed) {
+            proxy.addError(error, stackTrace);
+          }
+        },
+        onDone: () {
+          settle();
+          unawaited(closeProxy());
+        },
+      );
+
       return http.StreamedResponse(
-        tracked,
+        proxy.stream,
         response.statusCode,
         contentLength: response.contentLength,
         request: response.request,

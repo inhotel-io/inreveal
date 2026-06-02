@@ -23,6 +23,15 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(Completer<void>());
+    registerFallbackValue(
+      UploadTask(
+        taskId: 'fallback',
+        url: 'http://test-server.com/assets',
+        filename: 'fallback.jpg',
+        baseDirectory: BaseDirectory.temporary,
+        group: kBackupGroup,
+      ),
+    );
   });
 
   setUp(() {
@@ -185,5 +194,38 @@ void main() {
 
     expect(sut.state.backupCount, 1);
     expect(sut.state.remainderCount, 0);
+  });
+
+  test('queues more URLSession backup candidates when active tasks drain but assets remain', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(
+      () => foregroundUploadService.getBackupCounts('user-1'),
+    ).thenAnswer((_) async => (total: 3517, remainder: 3340, processing: 0));
+    await sut.getBackupStatus('user-1');
+
+    final activeTask = UploadTask(
+      taskId: 'asset-1',
+      url: 'http://test-server.com/assets',
+      filename: 'asset.jpg',
+      displayName: 'asset.jpg',
+      baseDirectory: BaseDirectory.temporary,
+      group: kBackupGroup,
+    );
+
+    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => [activeTask]);
+    when(() => backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup)).thenAnswer((_) async => []);
+    when(() => backgroundUploadService.resume()).thenAnswer((_) async {});
+    when(() => backgroundUploadService.uploadBackupCandidates('user-1')).thenAnswer((_) async {});
+
+    await sut.startBackup('user-1');
+
+    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => []);
+
+    statusController.add(TaskStatusUpdate(activeTask, TaskStatus.complete));
+    await pumpEventQueue();
+
+    verify(() => backgroundUploadService.uploadBackupCandidates('user-1')).called(1);
   });
 }
