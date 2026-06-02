@@ -696,6 +696,13 @@ describe('parseUploadRange', () => {
     assert.equal(parseUploadRange('photos I uploaded', NOW), undefined);
   });
 
+  it('"uploaded in the last 6 months" → rolling created range', () => {
+    const result = parseUploadRange('uploaded in the last 6 months', NOW);
+    assert.ok(result, 'should return a range');
+    assert.equal(result.createdAfter.toISOString(), '2025-11-15T12:00:00.000Z');
+    assert.equal(result.createdBefore.toISOString(), NOW.toISOString());
+  });
+
   // Capture phrasing returns undefined.
   it('"photos from today" (capture phrasing) → undefined', () => {
     assert.equal(parseUploadRange('photos from today', NOW), undefined);
@@ -753,6 +760,18 @@ describe('resolveAssetSource — upload sources', () => {
     assert.ok(search, 'searchAssets must be called');
     const expectedAfter = new Date(NOW.getTime() - 30 * 86_400_000).toISOString();
     assert.equal(search.args.filters?.createdAfter, expectedAfter);
+  });
+
+  it('"uploaded in the last 6 months" → resolved with created range', async () => {
+    const client = makeContractClient({ handleAssetCount: 10 });
+    const result = await resolveAssetSource({ client, sourceDescription: 'uploaded in the last 6 months', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const search = client.calls.find((c) => c.name === 'searchAssets');
+    assert.ok(search, 'searchAssets must be called');
+    assert.equal(search.args.filters?.createdAfter, '2025-11-15T12:00:00.000Z');
+    assert.equal(search.args.filters?.createdBefore, NOW.toISOString());
+    assert.equal('takenAfter' in (search.args.filters ?? {}), false);
+    assert.equal(search.args.limit, 1000);
   });
 
   it('"photos I uploaded" (no time) → handoff (no bounded upload range)', async () => {
