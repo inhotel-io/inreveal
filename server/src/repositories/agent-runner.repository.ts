@@ -441,6 +441,26 @@ export class AgentRunnerRepository {
     return result;
   }
 
+  async cancelSession({
+    url,
+    runnerSessionId,
+    timeoutMs,
+  }: {
+    url: string;
+    runnerSessionId: string;
+    timeoutMs: number;
+  }): Promise<void> {
+    const response = await fetch(getRunnerUrl(url, `sessions/${encodeURIComponent(runnerSessionId)}`), {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Agent runner session cancellation failed with status ${response.status}`);
+    }
+  }
+
   async *streamMessage({
     url,
     runnerSessionId,
