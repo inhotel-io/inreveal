@@ -9,6 +9,10 @@
 //     to propose a plan. These are meant for a real library with "lots of data"
 //     (the personal instance) and may legitimately not propose on an empty
 //     stack — that's a missing-data signal, not a routing regression.
+//   - outcome count (`minOutcomeCount: N`) / turn count (`minTurnsWithOutcome: N`):
+//     multi-turn progress. Follow-up specs use this to prove later user messages
+//     re-entered the strict workflow instead of only preserving the first turn's
+//     routing decision.
 //
 // L3 activity summaries are scrubbed of slot values, so we never assert exact
 // slots here (that's L1's job). `none` is asserted for negatives — the agent
@@ -385,6 +389,27 @@ export default [
     category: 'l3.multiturn',
     turns: ['Make an album for my recent trip', 'Create an album for my recent trip to USA'],
     expect: { kind: 'create_recent_trip_album', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // The first turn is intentionally over-broad and should ask for a scope.
+    // The second turn supplies the missing recent-upload window.
+    // `minTurnsWithOutcome` proves both messages emitted strict workflow outcomes
+    // instead of the follow-up falling through to open chat.
+    id: 'l3.multiturn.visualcleanup.blurry.upload-window',
+    category: 'l3.multiturn',
+    turns: ['remove all blurry photos from my library', 'uploaded in the last 6 months'],
+    expect: { kind: 'visual_cleanup', minTurnsWithOutcome: 2 },
+    threshold: 0.5,
+  },
+  {
+    // Same continuation shape for a different quality metric and a shorter
+    // follow-up phrase. This covers the "recent uploads" shorthand that caused
+    // repeated search/handle confusion in live sessions.
+    id: 'l3.multiturn.visualcleanup.dark.recent-uploads',
+    category: 'l3.multiturn',
+    turns: ['remove all dark photos from my library', 'recent uploads'],
+    expect: { kind: 'visual_cleanup', minTurnsWithOutcome: 2 },
     threshold: 0.5,
   },
 

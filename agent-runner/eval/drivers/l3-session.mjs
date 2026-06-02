@@ -302,8 +302,9 @@ export const createL3Driver = ({ gallery, l3 }) => {
     return { routerKv, outcomeKv, outcomeCount, status };
   };
 
-  const buildDecision = ({ routerKv, outcomeKv, plan, sessionId, status }) => {
+  const buildDecision = ({ routerKv, outcomeKv, outcomeCount, outcomeDeltas, plan, sessionId, status }) => {
     const matched = routerKv?.matched === 'true';
+    const deltas = Array.isArray(outcomeDeltas) ? outcomeDeltas : [];
     return {
       kind: matched ? (routerKv.workflow ?? 'none') : 'none',
       via: routerKv?.via ?? null,
@@ -315,6 +316,8 @@ export const createL3Driver = ({ gallery, l3 }) => {
       slots: undefined,
       planProposed: Boolean(plan && plan.status === 'proposed' && (plan.operations?.length ?? 0) > 0),
       outcomeStatus: outcomeKv?.status ?? null,
+      outcomeCount: Number(outcomeCount ?? 0),
+      turnsWithOutcome: deltas.filter((delta) => Number(delta) > 0).length,
       planStatus: plan?.status ?? null,
       sessionId,
       timedOut: !routerKv && !SETTLED.has(status),
@@ -345,16 +348,18 @@ export const createL3Driver = ({ gallery, l3 }) => {
     let routerKv = null;
     let outcomeKv = null;
     let outcomeCount = 0;
+    const outcomeDeltas = [];
     let status;
     for (const prompt of prompts) {
       const turn = await runTurn(session.id, prompt, outcomeCount);
+      outcomeDeltas.push(turn.outcomeCount - outcomeCount);
       routerKv = turn.routerKv ?? routerKv; // continuations emit no router decision; keep turn 1's
       outcomeKv = turn.outcomeKv ?? outcomeKv;
       outcomeCount = turn.outcomeCount;
       status = turn.status;
     }
     const plan = await api('GET', `/agent/sessions/${session.id}/operation-plan`).catch(() => null);
-    return buildDecision({ routerKv, outcomeKv, plan, sessionId: session.id, status });
+    return buildDecision({ routerKv, outcomeKv, outcomeCount, outcomeDeltas, plan, sessionId: session.id, status });
   };
 
   // Best-effort read-only safety audit: confirm the agent never applied a plan
