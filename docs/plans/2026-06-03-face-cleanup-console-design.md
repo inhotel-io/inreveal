@@ -129,7 +129,16 @@ and `executeRepair` (unassign/unlink). **No `avg(vector)` anywhere** → none of
 landmines apply here.
 
 Fork migration in `server/src/schema/migrations-gallery/` with a round timestamp (e.g. `1780000000000`); see
-CLAUDE.md migration layout.
+CLAUDE.md migration layout. The migration is **reversible** (the `down` drops `face_repair_scan`) and the table
+is added to the revert-to-immich cleanup (see `feedback_rebase_revert_script_update`).
+
+**Lifecycle / retention:** the console only ever reads the latest scan, so `completeScan`/`failScan` **prune
+superseded scan rows** (keep the most recent only) — the `persons` JSONB can be hundreds of KB, so the table
+must not grow one fat row per scan forever.
+
+**Concurrency:** at most one scan at a time. The trigger is idempotent via a fixed/derived job id _and_ a
+DB guard (reject a new scan while a row is in `pending`/`running`), so two simultaneous `POST .../scan` calls
+produce exactly one job, not two.
 
 ### S-B. Confidence classification (pure)
 
@@ -165,7 +174,15 @@ Extend the repair path with `approvedPersonIds: string[]` and optional `excludeF
 - `excludeFaceIds` (the per-face deselects from the review page) are dropped from `toRepair` before
   `executeRepair`.
 - `executeRepair` is reused verbatim (unassign flagged → `unlinkFaces` → `reconcileRepresentativeFaces` →
-  re-queue `FacialRecognition`). The existing "refuse while `FacialRecognition` active" guard stays.
+  re-queue `FacialRecognition`). The existing "refuse while `FacialRecognition` active" guard stays, **plus a
+  new refusal while a scan is `running`** (apply mutates the faces the scan is snapshotting).
+- **Best-effort + idempotent + resumable.** `executeRepair` is not one transaction, so a mid-apply failure can
+  leave some faces unassigned and others not. That is safe: the write-time re-check makes a re-apply skip
+  already-moved faces and converge, and a per-person failure is logged without aborting the rest. The endpoint
+  returns the real `{ unassigned, requeued }` so the UI reports what actually happened.
+- **Suspected owner is never written directly**, so a suspected owner that was deleted/merged between scan and
+  apply cannot break the apply — it only unassigns the approved person's own faces and lets recognition decide
+  where they land.
 
 ### S-D. API endpoints (admin-guarded)
 
@@ -173,7 +190,10 @@ Extend the repair path with `approvedPersonIds: string[]` and optional `excludeF
   already `running` or if `FacialRecognition` is active.
 - `GET /admin/face-repair/scan/latest` → the latest `face_repair_scan` (status + progress + report).
 - `POST /admin/face-repair/apply` → `{ approvedPersonIds, excludeFaceIds? }`; runs the override apply, returns
-  the existing `{ unassigned, requeued }` result. Refuses (409) if `FacialRecognition` is active.
+  the existing `{ unassigned, requeued }` result. Refuses (409) if `FacialRecognition` is active **or a scan is
+  `running`**.
+
+All three are `@Authenticated({ admin: true })`; a non-admin gets 403 on each.
 
 The existing `POST /admin/face-repair` (parameterized dry-run/apply) stays as-is — the per-person
 `maxFlaggedFraction` override it already supports is the **immediate workaround** for Hagen (below).
@@ -185,6 +205,10 @@ Both pages live under `web/src/routes/admin/face-cleanup/`, admin-guarded, in Im
 contract.
 
 ### List / triage page (`/admin/face-cleanup`)
+
+**Visual contract:** [`face-cleanup-console-mockup.html`](../../face-cleanup-console-mockup.html) — the
+implementation must match its layout, grouping, colour semantics, columns, and component styling (rebuilt with
+`@immich/ui` primitives; the mockup is hand-rolled HTML, so reproduce the _look_, not the markup).
 
 - Header with **Re-scan** + last-scan timestamp; a 5-stat strip (Eligible / Flagged / Auto-repaired ✓ /
   Needs decision / Unattributable).
@@ -198,6 +222,9 @@ contract.
 - While a scan is `running`, the page polls `GET .../scan/latest` and shows progress.
 
 ### Review page (`/admin/face-cleanup/{personId}`)
+
+**Visual contract:** [`face-cleanup-review-page-mockup.html`](../../face-cleanup-review-page-mockup.html) —
+match its banner, decision strip, faces-leaving grid, per-face deselect treatment, and sticky action bar.
 
 Opened from a _review-first_ row (confident rows never need it). Answers "what am I deciding and how":
 
@@ -233,8 +260,10 @@ Every slice is implemented **test-first (RED → GREEN → refactor)** using the
 `newTestService` for server unit, the real-DB **medium** harness for repository/job behavior, `vitest` +
 `@testing-library/svelte` for web, and Playwright for E2E. No slice is "done" until its listed cases are green
 plus `make check-server` / `make lint-server` / `make check-web` (the web `check:svelte` script is a local
-no-op — rely on server `tsc` + CI). Below is the required coverage; add cases if implementation reveals more,
-never remove.
+no-op — rely on server `tsc` + CI). Each slice's impl plan **writes its listed tests first, watches them fail
+(red), then implements to green** — the lists below are the minimum bar, not the ceiling; add cases if
+implementation reveals more, never remove. Happy path _and_ failure/boundary path are both required for every
+new method.
 
 ### Slice 1 — Scan persistence (medium, real DB)
 
@@ -243,7 +272,11 @@ never remove.
 - enrichment: a flagged person row carries `personName`, `faceCount`, `thumbnailFaceId`, and each
   `suspectedOwners` entry carries `ownerName` + `thumbnailFaceId`; **unnamed person → `personName: null`**
   (not empty string); **owner with no thumbnail → `thumbnailFaceId: null`** (no crash).
+- **clean instance → an empty, well-formed report** (`persons: []`, zeroed `totals`), not null/throw.
 - JSONB round-trips a 600+ person report without loss.
+- **retention:** `completeScan`/`failScan` prune superseded rows — after N scans only the latest remains; a
+  concurrent-trigger guard rejects a second scan while one is `pending`/`running`.
+- **migration:** `up` creates `face_repair_scan`; `down` drops it (assert the migration is reversible).
 - **Register `FaceRepairScanRepository` in `test/medium.factory.ts`** (`newRealRepository` switch) — omission
   throws "Unable to create repository instance for key".
 
@@ -264,11 +297,15 @@ never remove.
 - job runs `buildRepairPlan`, classifies, persists, sets `status=completed` + final `progress`.
 - progress advances during the stream (assert at least one intermediate `updateScanProgress`).
 - `POST .../scan` returns a `scanId` and enqueues exactly one `FaceRepairScan` job.
+- **concurrent triggers:** two near-simultaneous `POST .../scan` enqueue exactly **one** job (fixed job id +
+  DB guard), not two.
 - **refusal:** `POST .../scan` 409s when a scan is already `running`; 409s when `FacialRecognition` is active
   (mock `jobRepository.isActive`).
 - a thrown error inside the handler → `status=failed` + `error` populated (no half-written report).
-- `GET .../scan/latest` with no scan yet → empty/`null` (defined, not a 500).
-- admin guard: non-admin → 403 on both routes.
+- a clean instance completes with an empty report (0 flagged), not a failure.
+- `GET .../scan/latest` with **no scan yet → `null`/empty** (defined, not a 500), distinct from a completed
+  empty report.
+- admin guard: non-admin → 403 on **all three** routes (`scan`, `scan/latest`, `apply`).
 - OpenAPI: regenerated spec + SDK include the new DTOs (CI `make open-api` diff clean).
 
 ### Slice 4 — Batch apply (medium + unit)
@@ -284,8 +321,13 @@ never remove.
   of the owner's state) — assert P's faces are unassigned/re-queued **and** that approving P writes nothing to
   Q (Q is only touched later by recognition's k-NN, not by the apply).
 - idempotent re-apply: second apply of the same set unassigns 0 (faces already moved).
+- **partial failure is resumable:** simulate a failure partway through a multi-person apply → already-moved
+  persons stay moved, the error surfaces, and a re-apply completes the remainder (write-time re-check skips the
+  done faces). One person failing does not abort the others.
+- **stale suspected owner:** the suspected owner referenced by the report was deleted/merged since the scan →
+  apply still unassigns + re-queues the approved person's faces without error (apply never writes to the owner).
 - empty `approvedPersonIds` → no-op `{ unassigned: 0, requeued: 0 }`.
-- **refusal** when `FacialRecognition` active → 409, nothing mutated.
+- **refusal** when `FacialRecognition` active **or a scan is `running`** → 409, nothing mutated.
 - admin guard: non-admin → 403.
 
 ### Slice 5 — List/triage page (web, vitest + testing-library)
@@ -299,7 +341,11 @@ never remove.
 - filters (All/Review first/Confident/Named) and sort change the visible set.
 - scan `running` state renders progress and polls; `completed` renders the table; `failed` renders an error
   with a retry affordance.
-- empty report (0 flagged) → an explicit "nothing to clean up" empty state.
+- **no scan ever run** → a distinct "Run a scan to begin" empty state (not the same as a completed-but-empty
+  report); **completed empty report (0 flagged)** → an explicit "nothing to clean up" state.
+- **apply error handling:** a 409 from `apply` (recognition/scan became active) surfaces a non-destructive
+  error and keeps the selection; the bulk-approve button is disabled while a request is in flight (no
+  double-submit).
 
 ### Slice 6 — Review page (web)
 
@@ -309,7 +355,11 @@ never remove.
 - the action bar's after-counts update with deselects (move `N − excluded`, person keeps `kept + excluded`).
 - **Approve** posts `approvedPersonIds:[personId]` + the exact `excludeFaceIds`; **Cancel** navigates back
   without a request.
-- Leaving/Staying toggle switches the grid source.
+- **deselect every face → "Move 0" is disabled** (no empty apply); approve is also disabled while the request
+  is in flight.
+- **apply error (409)** surfaces non-destructively and keeps the deselect state.
+- the flagged grid **lazy-loads / pages** (1,956 faces must not all render at once); the Leaving/Staying toggle
+  switches the grid source.
 - a person not in the latest report (stale deep link) → graceful "no longer flagged / re-scan" state.
 
 ### Slice 7 — E2E + docs
