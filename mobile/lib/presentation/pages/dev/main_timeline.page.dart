@@ -2,6 +2,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/sort_icon_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/memory/memory_lane.widget.dart';
@@ -33,32 +34,32 @@ class _MainTimelinePageState extends ConsumerState<MainTimelinePage> {
       timelineServiceBuilder: buildPhotosTimelineRouteService,
       child: Stack(
         children: [
-          NotificationListener<ScrollUpdateNotification>(
-            onNotification: (n) {
-              final m = n.metrics;
-              if (m.axis != Axis.vertical) return false;
-              final isSheet = n.context?.findAncestorWidgetOfExactType<DraggableScrollableSheet>() != null;
-              if (!isSheet && m.maxScrollExtent - m.pixels < m.viewportDimension) {
-                ref.read(photosFilterSearchProvider.notifier).loadMore();
-              }
-              return false;
-            },
-            child: Timeline(
-              topSliverWidget: const SliverMainAxisGroup(
-                slivers: [
-                  PhotosFilterSubheader(),
-                  SliverToBoxAdapter(child: DriftMemoryLane()),
-                ],
+          // Read photosFilterSearchProvider from inside the TimelineRouteScope so the
+          // paginating notifier driving load-more is the same scoped instance the
+          // timeline renders (the page's own ref lives outside the route scope).
+          Consumer(
+            builder: (context, scopedRef, _) => NotificationListener<ScrollUpdateNotification>(
+              onNotification: (n) {
+                final m = n.metrics;
+                if (m.axis != Axis.vertical) return false;
+                final isSheet = n.context?.findAncestorWidgetOfExactType<DraggableScrollableSheet>() != null;
+                if (!isSheet && m.maxScrollExtent - m.pixels < m.viewportDimension) {
+                  scopedRef.read(photosFilterSearchProvider.notifier).loadMore();
+                }
+                return false;
+              },
+              child: Timeline(
+                topSliverWidget: const SliverMainAxisGroup(
+                  slivers: [
+                    PhotosFilterSubheader(),
+                    SliverToBoxAdapter(child: DriftMemoryLane()),
+                  ],
+                ),
+                topSliverWidgetHeight: hasMemories ? 200 : 0,
+                showStorageIndicator: true,
+                appBar: const PhotosTimelineAppBar(),
+                bottomSliverWidget: const _SearchLoadMoreFooter(),
               ),
-              topSliverWidgetHeight: hasMemories ? 200 : 0,
-              showStorageIndicator: true,
-              appBar: const ImmichSliverAppBar(
-                floating: true,
-                pinned: false,
-                snap: false,
-                actions: [SortIconButton(), FilterIconButton()],
-              ),
-              bottomSliverWidget: const _SearchLoadMoreFooter(),
             ),
           ),
           const FilterSheet(),
@@ -98,7 +99,7 @@ class _SearchLoadMoreFooter extends ConsumerWidget {
 class PhotosTimelineAppBar extends StatelessWidget {
   const PhotosTimelineAppBar({super.key});
 
-  static const actions = <Widget>[TimelineGroupingSelector.compact()];
+  static const actions = <Widget>[TimelineGroupingSelector.compact(), SortIconButton(), FilterIconButton()];
 
   @override
   Widget build(BuildContext context) {

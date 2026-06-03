@@ -141,7 +141,9 @@ void main() {
   group('adopted timeline route contracts', () {
     test('Main Photos keeps app bar selector and route-local controls contract', () {
       expect(MainTimelinePage.timelineOverviewControlsEnabled, isTrue);
-      expect(PhotosTimelineAppBar.actions.single, isA<TimelineGroupingSelector>());
+      // The Photos app bar leads with the grouping selector (#625); it also carries
+      // the live-search sort and filter actions (#654), so it is no longer a single action.
+      expect(PhotosTimelineAppBar.actions.first, isA<TimelineGroupingSelector>());
     });
 
     test('routes expose expected top sliver heights', () {

@@ -364,11 +364,11 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
   }
 
   Segment? _findSegmentForDate(List<Segment> segments, DateTime date) {
-    final dates = segments
-        .map((segment) => segment.bucket is TimeBucket ? (segment.bucket as TimeBucket).date : null)
-        .toList(growable: false);
-    final index = findMatchingSegmentIndex(dates, date);
-    return index == null ? null : segments[index];
+    // findTimelineScrollTargetSegment adds a year-level fallback on top of the
+    // day/month match, so a "view in timeline" request still resolves a segment
+    // when the timeline is in Years/Months grouping (#625) — not only the day
+    // grouping the scroll-drain mechanism (#643) was originally written for.
+    return findTimelineScrollTargetSegment(segments, date);
   }
 
   void _scrollToDate(DateTime date, List<Segment> segments) {
