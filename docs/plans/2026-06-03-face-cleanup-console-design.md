@@ -1,0 +1,361 @@
+# Face Cleanup Console — admin review UI for re-attribution over-cap clusters — design
+
+**Status:** approved (brainstorm 2026-06-03); ready for slice-by-slice implementation
+**Branch / PR:** `worktree-hagen-face-cluster-corruption`, follow-up on the shipped
+[face re-attribution repair](2026-05-31-face-reattribution-repair-design.md) (`FaceRepairService`).
+**Prereq:** the re-attribution repair engine (`FaceRepairService.buildRepairPlan` / `executeRepair`) and the
+#652 prevention guards are already on this branch and must be **deployed** — the console is a UI layer on top
+of that engine; it adds no new face-moving logic.
+
+## Motivation
+
+The re-attribution repair auto-fixes a face only when its cluster is **less than 50% contaminated**
+(`flaggedFraction <= maxFlaggedFraction`, default `0.5`). On Hagen's production instance the repair ran and
+re-homed 2,760 faces, but left **10,486 faces across 627 people** in the `reviewOnly` / `over-cap` bucket —
+the clusters where _more than half_ the faces are flagged. These are real, confirmed corruption (e.g. Jula
+Kulz 77.7% → Armin Falkner; "Person A" 67.7% → Angelinde Falkner; Alexia Varga Arrieta 64.7%), all from the
+2026-05-25 batch event. The repair correctly **diagnoses** them and refuses to **act**, and there is currently
+no downstream action available to an admin — so they stay permanently broken regardless of how often the
+repair runs. See [the corruption diagnosis](2026-05-30-hagen-face-cluster-corruption-diagnosis.md).
+
+### Key insight: the over-cap cap is a default for _unreviewed bulk runs_, not a hard limit
+
+The `over-cap` gate exists so an unattended, instance-wide repair never blindly rewrites a cluster that is
+mostly-flagged (where the cluster's own identity is in doubt). But the re-attribution decision itself is
+**robust under heavy contamination**: `decideReattribution` (`src/utils/face-repair.ts`) flags a face by its
+absolute resemblance to a _suspected owner_ Q (`topOtherNearest <= maxAttributionDistance`, measured **to Q**,
+with a vote margin), explicitly _"so co-located contamination on P cannot suppress it."_ So a 78%-contaminated
+cluster does not poison the decision: Armin's faces flag → Armin; Jula's real faces stay on Jula.
+
+Two facts make a human-confirmed override the correct primitive (verified in code, not assumed):
+
+1. **The repair never empties a cluster.** `executeRepair` unassigns only the _flagged_ faces, calls
+   `faceIdentityRepository.unlinkFaces`, `reconcileRepresentativeFaces`, and re-queues `FacialRecognition`;
+   recognition (k-NN over assigned faces, `searchFaces`) routes each flagged face to its true owner's intact
+   cluster. The person keeps its unflagged faces, name, and thumbnail.
+2. **"Dissolve" (un-assign all faces) would be strictly worse.** Recognition is k-NN over assigned faces, so a
+   person with zero faces can never receive faces again, and `handlePersonCleanup` deletes faceless people —
+   the name is _lost_, not merely ghosted. Re-attributing only the impostor faces sidesteps this entirely.
+
+The console therefore productizes a **per-person, admin-confirmed re-attribution override**: the admin reviews
+the evidence for a contaminated person and approves moving its flagged faces to their true owners. The
+existing `maxFlaggedFraction` / `personId` request params already prove this works for a single person; the
+console makes it reviewable and safe at the scale of hundreds of clusters.
+
+## Goals / non-goals
+
+**Goals:** an admin-only console that (a) scans the instance for contaminated clusters and persists a
+reviewable report, (b) classifies each flagged person as _confident_ or _review-first_, (c) lets the admin
+bulk-approve the confident long tail and individually review the rest on a dedicated page (with per-face
+deselect), and (d) applies an exact, audited re-attribution to the approved set. Names, thumbnails, and
+unflagged faces are always preserved.
+
+**Non-goals (explicit, per brainstorm):**
+
+- **Literal "dissolve"** (un-assign all faces of a person + re-cluster) — rejected; technically inferior and
+  loses names (see Motivation).
+- **The `unAttributable` residue** (faces with no confident external owner — 173 on Hagen's instance): they
+  have nowhere to be re-homed, so they stay assigned (`blank > wrong` does not apply — moving them nowhere
+  helps no one). Surfaced in the totals as a documented, deliberate no-op.
+- **A per-user / person-page surface.** The operation is admin-only (matches the existing
+  `@Authenticated({ admin: true })` endpoint). A self-service entry point on `/people` is a possible later
+  follow-up, not this work.
+- **Server-side pagination of the report.** At hundreds–low-thousands of flagged persons the report is small
+  enough to ship as one payload and sort/filter/select client-side. If an instance ever exceeds that, add
+  pagination later (noted in Slice 1).
+
+## Decisions locked in the brainstorm
+
+| Decision                | Choice                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Primitive               | Per-person **re-attribution override** (re-home impostor faces), **not** dissolve                                   |
+| Surface / audience      | **Admin-only** console under Administration                                                                         |
+| Scale model             | List + multi-select bulk-approve with guardrails; **confident rows auto-selected**, **review-first surfaced first** |
+| Scan execution          | **Background job** (BullMQ) with progress + persisted report (not a synchronous request)                            |
+| Report storage          | Single `face_repair_scan` row with enriched persons as **JSONB** (client-side sort/filter/select)                   |
+| Large-cluster threshold | **50 faces** (default; configurable) → forces a cluster into _review-first_                                         |
+
+## Architecture overview
+
+Two screens on top of three server capabilities — all extensions of the existing `FaceRepairService`, adding
+no new face-moving logic:
+
+```
+                          ┌──────────────── server ────────────────┐
+  [Re-scan] ──trigger──▶  FaceRepairScan job                        │
+                          │  buildRepairPlan (existing)             │
+                          │  → classifyFlaggedPerson (new, pure)    │
+                          │  → enrich w/ names+thumbnails           │
+                          │  → persist face_repair_scan (new)       │
+  list page ◀──GET────────  latest scan report (JSONB)              │
+       │                  │                                         │
+  review page             │                                         │
+       │                  │                                         │
+  [Approve] ──POST───────▶  apply { approvedPersonIds, excludeFaceIds } │
+                          │  buildRepairPlan(approved exempt cap)   │
+                          │  → executeRepair (existing)             │
+                          └─────────────────────────────────────────┘
+```
+
+UI reference mockups (this branch, repo root): `face-cleanup-console-mockup.html` (triage list) and
+`face-cleanup-review-page-mockup.html` (per-person review page).
+
+## Server design
+
+### S-A. Scan job + persisted report
+
+New fork table `face_repair_scan` (one row per scan; the console reads the latest):
+
+| column                                   | type                                          | notes                                                                                                                                      |
+| ---------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                                     | uuid pk                                       |                                                                                                                                            |
+| `status`                                 | enum `pending`/`running`/`completed`/`failed` |                                                                                                                                            |
+| `requestedBy`                            | uuid → `user.id`                              | which admin started it                                                                                                                     |
+| `params`                                 | jsonb                                         | thresholds used (maxDistance, voteWindow, voteMargin, maxAttributionDistance, maxFlaggedFraction, largeClusterThreshold, optional ownerId) |
+| `totals`                                 | jsonb                                         | the existing `RepairReport.totals` shape                                                                                                   |
+| `persons`                                | jsonb                                         | enriched per-person rows (below)                                                                                                           |
+| `progress`                               | jsonb `{ scanned, total }`                    | for the poll                                                                                                                               |
+| `error`                                  | text null                                     |                                                                                                                                            |
+| `startedAt` / `finishedAt` / `createdAt` | timestamptz                                   |                                                                                                                                            |
+
+Enriched person row (what the UI needs beyond the raw report):
+`{ personId, ownerId, personName|null, faceCount, thumbnailFaceId, eligible, flagged, flaggedFraction,
+suspectedOwners:[{ ownerPersonId, ownerName|null, thumbnailFaceId, count }], recommendation, reviewReasons[] }`.
+
+New `FaceRepairScanRepository`: `createScan`, `updateScanProgress`, `completeScan(result)`, `failScan(error)`,
+`getLatestScan`, `getScanById`. **Engine note:** the enrichment joins `person` for names + `faceAssetId`
+thumbnails; the heavy work reuses `buildRepairPlan` → `searchFaces` (k-NN, works on Hagen's legacy pgvecto.rs)
+and `executeRepair` (unassign/unlink). **No `avg(vector)` anywhere** → none of the #652 engine-compat
+landmines apply here.
+
+Fork migration in `server/src/schema/migrations-gallery/` with a round timestamp (e.g. `1780000000000`); see
+CLAUDE.md migration layout.
+
+### S-B. Confidence classification (pure)
+
+Pure function `classifyFlaggedPerson(person, ctx) -> { recommendation: 'confident' | 'review-first', reviewReasons: string[] }`
+where `ctx = { reviewOnlyPersonIds: Set, largeClusterThreshold: number }`. Rules (a person is **review-first**
+if _any_ hold; otherwise **confident**):
+
+- `named` — `personName != null` (don't silently touch a human-named person).
+- `large-cluster` — `faceCount > largeClusterThreshold` (default 50; Hagen's "future family members").
+- `multiple-owners` — more than one distinct `suspectedOwners` entry (ambiguous destination).
+- `bad-target` — any suspected owner is itself in `reviewOnlyPersonIds` (re-homing would pour faces into
+  another corrupt cluster).
+
+Lives in `src/utils/face-repair.ts` next to `decideReattribution`; pure → fully unit-testable.
+
+### S-C. Batch apply by approved person IDs
+
+Extend the repair path with `approvedPersonIds: string[]` and optional `excludeFaceIds: string[]`:
+
+- In `buildRepairPlan`, a person in `approvedPersonIds` is **exempted from the over-cap gate** → its flagged
+  faces flow to `toRepair` instead of `reviewOnly`. Everyone else stays `reviewOnly` (unapproved corruption is
+  provably untouched — safer and more legible than a blanket `maxFlaggedFraction=1`).
+- **`bad-target` is also lifted for an approved person.** Today a flagged face is held as `reviewOnly` when its
+  _suspected owner_ is itself over-cap. For an approved person we move its flagged faces anyway, because (a)
+  the detector says those faces genuinely belong to that owner, and (b) we never write into the owner directly
+  — we unassign + re-queue `FacialRecognition`, which k-NN-matches them onto the owner's _real_ faces (the
+  owner's own contamination is a separate, later cleanup). The admin saw the `bad-target` warning on the
+  review page and chose to proceed. (Suggested operating order is still owners-first; see Open questions.)
+- **Apply is scoped to `approvedPersonIds`, never a full re-scan.** `executeRepair` re-votes only the approved
+  persons' faces — extend `streamEligibleFaces` to accept a person-id _set_ (or loop per person). This keeps an
+  apply cheap (thousands of faces, not the ~450k instance), and re-checks each face at write so a face moved by
+  a concurrent job since the scan is skipped.
+- `excludeFaceIds` (the per-face deselects from the review page) are dropped from `toRepair` before
+  `executeRepair`.
+- `executeRepair` is reused verbatim (unassign flagged → `unlinkFaces` → `reconcileRepresentativeFaces` →
+  re-queue `FacialRecognition`). The existing "refuse while `FacialRecognition` active" guard stays.
+
+### S-D. API endpoints (admin-guarded)
+
+- `POST /admin/face-repair/scan` → `{ scanId }`; enqueues `JobName.FaceRepairScan`. Refuses (409) if a scan is
+  already `running` or if `FacialRecognition` is active.
+- `GET /admin/face-repair/scan/latest` → the latest `face_repair_scan` (status + progress + report).
+- `POST /admin/face-repair/apply` → `{ approvedPersonIds, excludeFaceIds? }`; runs the override apply, returns
+  the existing `{ unassigned, requeued }` result. Refuses (409) if `FacialRecognition` is active.
+
+The existing `POST /admin/face-repair` (parameterized dry-run/apply) stays as-is — the per-person
+`maxFlaggedFraction` override it already supports is the **immediate workaround** for Hagen (below).
+
+## Web design (admin console)
+
+Both pages live under `web/src/routes/admin/face-cleanup/`, admin-guarded, in Immich's light theme
+(`#4250af` primary, `GoogleSans`, `rounded-2xl/3xl`, `@immich/ui` primitives). The mockups are the visual
+contract.
+
+### List / triage page (`/admin/face-cleanup`)
+
+- Header with **Re-scan** + last-scan timestamp; a 5-stat strip (Eligible / Flagged / Auto-repaired ✓ /
+  Needs decision / Unattributable).
+- A table inside a rounded card, **grouped**: _Review these first_ (amber) pinned on top, then _Confident —
+  auto-selected_. Columns: checkbox, Person (thumbnail + name/"Unnamed cluster"), Owner, Flagged (% + bar +
+  fraction), → Suspected owner (thumbnail + name + count), Status chip + reasons, **Review** button.
+- **Confident rows are pre-checked; review-first rows are not checkable until opened** (the guardrail).
+  Selection bar shows the count and a one-click **Re-attribute selected** that calls `POST .../apply` with the
+  checked `personId`s.
+- Filters (All / Review first / Confident / Named), search, sort.
+- While a scan is `running`, the page polls `GET .../scan/latest` and shows progress.
+
+### Review page (`/admin/face-cleanup/{personId}`)
+
+Opened from a _review-first_ row (confident rows never need it). Answers "what am I deciding and how":
+
+- A plain-language banner: _"1,956 of Jula's 2,738 faces actually match Armin Falkner… Jula keeps her 782 real
+  faces, name and thumbnail."_
+- A **decision strip**: `✓ Stays — Jula Kulz (782)` ──→ `Moves to Armin Falkner (1,956)`, each with a ringed
+  reference face.
+- The **faces-leaving grid** (the flagged crops, paged/lazy-loaded), each checked with a `→ owner` tag;
+  clicking a tile **deselects** that face (it stays with the person) and updates the live count. A
+  Leaving/Staying toggle.
+- A sticky action bar with the exact outcome (_"1,955 faces will move to Armin · she'll have 783 after"_) and
+  **Move N faces** / **Cancel**. Approving posts `approvedPersonIds:[personId]` + the `excludeFaceIds` of any
+  deselected tiles, then returns to the list.
+
+## Slices (each is its own impl plan; build in dependency order)
+
+| #   | Slice                                                                                                                                                                         | Depends on | Layer      |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------- |
+| 1   | **Scan persistence** — migration + `FaceRepairScanRepository` + enrich-and-store from a `RepairPlan`                                                                          | —          | server     |
+| 2   | **Confidence classification** — pure `classifyFlaggedPerson` + thresholds                                                                                                     | —          | server     |
+| 3   | **Scan job + read API** — `JobName.FaceRepairScan` handler (buildRepairPlan → classify → enrich → persist → progress); `POST .../scan`, `GET .../scan/latest`; refusal guards | 1, 2       | server     |
+| 4   | **Batch apply** — `approvedPersonIds` + `excludeFaceIds` in plan/exec; `POST .../apply`                                                                                       | 1          | server     |
+| 5   | **List/triage page** — scan trigger + poll, grouped table, auto-select + review-first guardrail, bulk-approve                                                                 | 3, 4       | web        |
+| 6   | **Review page** — decision strip + faces-leaving grid + per-face deselect + apply                                                                                             | 4, 5       | web        |
+| 7   | **E2E + docs** — Playwright admin happy-path; user docs for the console + documented `unAttributable` no-op                                                                   | 5, 6       | e2e / docs |
+
+OpenAPI/SDK regeneration (`pnpm build` → `pnpm sync:open-api` → `make open-api`; build the SDK so web value
+imports resolve) is a task **inside** Slices 3 and 4, not a separate slice.
+
+## Testing — TDD is mandatory
+
+Every slice is implemented **test-first (RED → GREEN → refactor)** using the project harnesses: `vitest` +
+`newTestService` for server unit, the real-DB **medium** harness for repository/job behavior, `vitest` +
+`@testing-library/svelte` for web, and Playwright for E2E. No slice is "done" until its listed cases are green
+plus `make check-server` / `make lint-server` / `make check-web` (the web `check:svelte` script is a local
+no-op — rely on server `tsc` + CI). Below is the required coverage; add cases if implementation reveals more,
+never remove.
+
+### Slice 1 — Scan persistence (medium, real DB)
+
+- create → `getLatestScan` returns it; multiple scans → latest by `createdAt`.
+- `updateScanProgress` / `completeScan` / `failScan` transition `status` and set `finishedAt`/`error`.
+- enrichment: a flagged person row carries `personName`, `faceCount`, `thumbnailFaceId`, and each
+  `suspectedOwners` entry carries `ownerName` + `thumbnailFaceId`; **unnamed person → `personName: null`**
+  (not empty string); **owner with no thumbnail → `thumbnailFaceId: null`** (no crash).
+- JSONB round-trips a 600+ person report without loss.
+- **Register `FaceRepairScanRepository` in `test/medium.factory.ts`** (`newRealRepository` switch) — omission
+  throws "Unable to create repository instance for key".
+
+### Slice 2 — Confidence classification (pure unit, exhaustive)
+
+- single clean suspected owner, unnamed, small → **confident**.
+- `named` person → review-first (reason `named`), even with one clean owner.
+- `faceCount` at the boundary: `50` → confident, `51` → review-first (reason `large-cluster`).
+- two distinct suspected owners → review-first (`multiple-owners`).
+- suspected owner ∈ `reviewOnlyPersonIds` → review-first (`bad-target`).
+- multiple reasons accumulate (named **and** large → both reasons present, deterministic order).
+- zero-flagged person is never classified (excluded upstream — assert it is not present).
+- threshold is read from `ctx`, not hard-coded (pass a custom `largeClusterThreshold` and assert it moves the
+  boundary).
+
+### Slice 3 — Scan job + read API (medium + service unit)
+
+- job runs `buildRepairPlan`, classifies, persists, sets `status=completed` + final `progress`.
+- progress advances during the stream (assert at least one intermediate `updateScanProgress`).
+- `POST .../scan` returns a `scanId` and enqueues exactly one `FaceRepairScan` job.
+- **refusal:** `POST .../scan` 409s when a scan is already `running`; 409s when `FacialRecognition` is active
+  (mock `jobRepository.isActive`).
+- a thrown error inside the handler → `status=failed` + `error` populated (no half-written report).
+- `GET .../scan/latest` with no scan yet → empty/`null` (defined, not a 500).
+- admin guard: non-admin → 403 on both routes.
+- OpenAPI: regenerated spec + SDK include the new DTOs (CI `make open-api` diff clean).
+
+### Slice 4 — Batch apply (medium + unit)
+
+- approve one over-cap person → its flagged faces move to `toRepair` and are unassigned/unlinked/re-queued;
+  **a non-approved over-cap person in the same scan stays `reviewOnly` (untouched).**
+- `excludeFaceIds` drops exactly those faces from the move (approve person, exclude 1 face → `unassigned`
+  count is `flagged − 1`; the excluded face keeps its `personId`).
+- **re-check at write:** a flagged face concurrently moved off the person since the scan is skipped
+  (`unassignFacesFromPerson` only touches still-`personId`+ML faces) — count reflects the skip.
+- **bad-target lifted on approval:** approving person P whose suspected owner Q is over-cap and **not** approved
+  still re-homes P's flagged faces (per S-C: the override moves the approved person's flagged faces regardless
+  of the owner's state) — assert P's faces are unassigned/re-queued **and** that approving P writes nothing to
+  Q (Q is only touched later by recognition's k-NN, not by the apply).
+- idempotent re-apply: second apply of the same set unassigns 0 (faces already moved).
+- empty `approvedPersonIds` → no-op `{ unassigned: 0, requeued: 0 }`.
+- **refusal** when `FacialRecognition` active → 409, nothing mutated.
+- admin guard: non-admin → 403.
+
+### Slice 5 — List/triage page (web, vitest + testing-library)
+
+- renders grouped: review-first rows before confident rows regardless of scan order.
+- confident rows render **pre-checked**; review-first checkboxes render **disabled** until that row is opened
+  (simulate open → becomes enabled).
+- selection count + "Re-attribute selected (N)" reflect checkbox state; **Clear** empties it.
+- bulk-approve posts the checked `personId`s to `apply` (assert the request body; override the SDK/provider
+  call rather than a one-shot mock).
+- filters (All/Review first/Confident/Named) and sort change the visible set.
+- scan `running` state renders progress and polls; `completed` renders the table; `failed` renders an error
+  with a retry affordance.
+- empty report (0 flagged) → an explicit "nothing to clean up" empty state.
+
+### Slice 6 — Review page (web)
+
+- banner + decision strip render the person's and suspected owner's names/counts from the report.
+- faces-leaving grid renders the flagged crops; clicking a tile toggles it to **excluded** and the live
+  "will move" count decrements (and re-increments on re-click).
+- the action bar's after-counts update with deselects (move `N − excluded`, person keeps `kept + excluded`).
+- **Approve** posts `approvedPersonIds:[personId]` + the exact `excludeFaceIds`; **Cancel** navigates back
+  without a request.
+- Leaving/Staying toggle switches the grid source.
+- a person not in the latest report (stale deep link) → graceful "no longer flagged / re-scan" state.
+
+### Slice 7 — E2E + docs
+
+- Playwright (admin): trigger scan (seeded fixture) → list shows a review-first + a confident person →
+  bulk-approve confident → open review-first → deselect one face → approve → both reflected; faces re-queued.
+- docs page under `docs/docs/` for the console + an explicit note that `unAttributable` faces are a
+  deliberate no-op; run docs prettier (CI Docs Build is strict).
+
+## Implementation notes / gotchas
+
+- **No engine-compat risk** (unlike the #652 guards): scan = `searchFaces` k-NN, apply = unassign/unlink. Do
+  **not** introduce `avg(vector)`; it throws on Hagen's pgvecto.rs (`feedback_pgvecto_rs_no_avg_vector`).
+- **medium repo registration:** every new repository (`FaceRepairScanRepository`) must be hand-registered in
+  `test/medium.factory.ts`’s `newRealRepository` switch.
+- **OpenAPI workflow:** after Slices 3/4, `pnpm build` → `pnpm sync:open-api` → `make open-api`; the web build
+  needs the SDK built for value imports.
+- **Migrations:** fork migration in `migrations-gallery/` with a round timestamp; the `postbuild` copy merges
+  it into `dist/schema/migrations/`.
+- **Web checks:** `check:svelte` reports 0/0 locally (no-op) — gate on server `tsc` + CI Lint/Test Web.
+- **No modals required** (the review is a page) — avoids the bits-ui body-scroll-lock teardown gotcha; if any
+  small confirm modal is added, add the 50ms `afterEach` drain.
+
+## Immediate workaround (no new code) — give to Hagen now
+
+The three confirmed named clusters can be fixed today on `face-repair-rc3` via the existing endpoint, per
+person, with the queue drained:
+
+```jsonc
+// dry-run first — confirms toRepair jumps from 0 to the flagged count
+POST /admin/face-repair { "dryRun": true,  "personId": "ab714816-…", "maxFlaggedFraction": 1 }
+// then apply — re-homes the impostor faces to their true owner, keeps the real faces + name
+POST /admin/face-repair { "dryRun": false, "personId": "ab714816-…", "maxFlaggedFraction": 1 }
+```
+
+This is exactly what Slice 4 productizes (per-person exemption from the over-cap gate) with review UI around
+it.
+
+## Open questions / risks
+
+- **Scan cost:** a full-instance scan is `eligibleFaces × k-NN` (Hagen: ~450k). The background job removes the
+  HTTP-timeout risk; confirm it co-exists with the "refuse while `FacialRecognition` active" guard so a scan
+  and recognition never thrash the concurrency-1 queue (Slice 3 should likely run the scan on a non-blocking
+  path or yield).
+- **`bad-target` chains:** approving a person whose owner is also corrupt re-homes into corruption. The
+  classifier surfaces this as review-first; the safe operating procedure is to clean the **owners first**
+  (smallest `flaggedFraction` first). Document this ordering in the user docs (Slice 7).
+- **Stale reports:** applying mutates the DB but the persisted scan is a snapshot; the list should mark
+  applied persons and prompt a re-scan rather than imply the report is live.
