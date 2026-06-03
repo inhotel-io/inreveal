@@ -32,4 +32,38 @@ describe(FaceRepairScanRepository.name, () => {
     expect(latest?.params).toEqual(PARAMS);
     expect(latest?.persons).toEqual([]);
   });
+
+  it('advances progress, then completes with totals + persons and finishedAt', async () => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+
+    await sut.updateScanProgress(scan.id, { status: 'running', progress: { scanned: 10, total: 100 } });
+    let row = await sut.getScanById(scan.id);
+    expect(row?.status).toBe('running');
+    expect(row?.progress).toEqual({ scanned: 10, total: 100 });
+
+    const totals = {
+      eligibleFaces: 5,
+      flaggedFaces: 2,
+      toRepair: 0,
+      reviewOnlyFaces: 2,
+      reviewOnlyPersons: 1,
+      affectedPersons: 1,
+      reviewOnlyByReason: { overCap: 2, badTarget: 0, unAttributable: 0 },
+    };
+    await sut.completeScan(scan.id, { totals, persons: [] });
+    row = await sut.getScanById(scan.id);
+    expect(row?.status).toBe('completed');
+    expect(row?.totals).toEqual(totals);
+    expect(row?.finishedAt).not.toBeNull();
+  });
+
+  it('fails a scan with an error message and finishedAt, no half-written report', async () => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.failScan(scan.id, 'boom');
+    const row = await sut.getScanById(scan.id);
+    expect(row?.status).toBe('failed');
+    expect(row?.error).toBe('boom');
+    expect(row?.finishedAt).not.toBeNull();
+    expect(row?.totals).toBeNull();
+  });
 });

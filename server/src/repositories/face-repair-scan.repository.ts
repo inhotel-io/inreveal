@@ -72,4 +72,35 @@ export class FaceRepairScanRepository {
   getScanById(id: string): Promise<RepairScanRow | undefined> {
     return this.db.selectFrom('face_repair_scan').selectAll().where('id', '=', id).executeTakeFirst();
   }
+
+  async updateScanProgress(
+    id: string,
+    input: { status?: RepairScanStatus; progress?: RepairScanProgress; startedAt?: Date },
+  ): Promise<void> {
+    await this.db
+      .updateTable('face_repair_scan')
+      .set({
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.progress ? { progress: input.progress } : {}),
+        ...(input.startedAt ? { startedAt: input.startedAt } : {}),
+      })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  async completeScan(id: string, input: { totals: RepairScanTotals; persons: RepairScanPerson[] }): Promise<void> {
+    await this.db
+      .updateTable('face_repair_scan')
+      .set({ status: 'completed', totals: input.totals, persons: input.persons, finishedAt: new Date() })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  async failScan(id: string, error: string): Promise<void> {
+    await this.db
+      .updateTable('face_repair_scan')
+      .set({ status: 'failed', error, finishedAt: new Date() })
+      .where('id', '=', id)
+      .execute();
+  }
 }
