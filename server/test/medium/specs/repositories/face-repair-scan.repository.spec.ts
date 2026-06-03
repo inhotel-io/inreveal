@@ -2,7 +2,7 @@ import { Kysely } from 'kysely';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
 import { DB } from 'src/schema';
 import { getKyselyDB } from 'test/utils';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 const PARAMS: RepairScanParams = {
   maxDistance: 0.5,
@@ -14,6 +14,16 @@ const PARAMS: RepairScanParams = {
   largeClusterThreshold: 50,
 };
 
+const zeroTotals = () => ({
+  eligibleFaces: 0,
+  flaggedFaces: 0,
+  toRepair: 0,
+  reviewOnlyFaces: 0,
+  reviewOnlyPersons: 0,
+  affectedPersons: 0,
+  reviewOnlyByReason: { overCap: 0, badTarget: 0, unAttributable: 0 },
+});
+
 describe(FaceRepairScanRepository.name, () => {
   let db: Kysely<DB>;
   let sut: FaceRepairScanRepository;
@@ -22,6 +32,8 @@ describe(FaceRepairScanRepository.name, () => {
     db = await getKyselyDB();
     sut = new FaceRepairScanRepository(db);
   });
+
+  afterEach(() => db.deleteFrom('face_repair_scan').execute());
 
   it('creates a pending scan and returns it as the latest', async () => {
     const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
@@ -65,5 +77,21 @@ describe(FaceRepairScanRepository.name, () => {
     expect(row?.error).toBe('boom');
     expect(row?.finishedAt).not.toBeNull();
     expect(row?.totals).toBeNull();
+  });
+
+  it('refuses a second scan while one is pending/running', async () => {
+    await sut.createScan({ requestedBy: null, params: PARAMS });
+    await expect(sut.createScan({ requestedBy: null, params: PARAMS })).rejects.toThrow(/scan .*in progress/i);
+  });
+
+  it('pruneSupersededScans keeps only the latest', async () => {
+    const first = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.completeScan(first.id, { totals: zeroTotals(), persons: [] });
+    const second = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.completeScan(second.id, { totals: zeroTotals(), persons: [] });
+
+    await sut.pruneSupersededScans();
+    expect(await sut.getScanById(first.id)).toBeUndefined();
+    expect((await sut.getLatestScan())?.id).toBe(second.id);
   });
 });

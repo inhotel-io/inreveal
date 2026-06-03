@@ -58,11 +58,21 @@ export class FaceRepairScanRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   async createScan(input: { requestedBy: string | null; params: RepairScanParams }): Promise<RepairScanRow> {
-    return this.db
-      .insertInto('face_repair_scan')
-      .values({ status: 'pending', requestedBy: input.requestedBy, params: input.params as unknown as Insertable<FaceRepairScanTable>['params'] })
-      .returningAll()
-      .executeTakeFirstOrThrow();
+    return this.db.transaction().execute(async (trx) => {
+      const inFlight = await trx
+        .selectFrom('face_repair_scan')
+        .select('id')
+        .where('status', 'in', ['pending', 'running'])
+        .executeTakeFirst();
+      if (inFlight) {
+        throw new Error('A face-repair scan is already in progress');
+      }
+      return trx
+        .insertInto('face_repair_scan')
+        .values({ status: 'pending', requestedBy: input.requestedBy, params: input.params as unknown as Insertable<FaceRepairScanTable>['params'] })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    });
   }
 
   getLatestScan(): Promise<RepairScanRow | undefined> {
@@ -102,5 +112,18 @@ export class FaceRepairScanRepository {
       .set({ status: 'failed', error, finishedAt: new Date() })
       .where('id', '=', id)
       .execute();
+  }
+
+  async pruneSupersededScans(): Promise<void> {
+    const latest = await this.db
+      .selectFrom('face_repair_scan')
+      .select('id')
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    if (!latest) {
+      return;
+    }
+    await this.db.deleteFrom('face_repair_scan').where('id', '!=', latest.id).execute();
   }
 }
