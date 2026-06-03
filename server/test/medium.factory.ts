@@ -33,6 +33,7 @@ import { DatabaseRepository } from 'src/repositories/database.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { IntegrityRepository } from 'src/repositories/integrity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -513,6 +514,7 @@ const newRealRepository = <T extends BaseServiceDeps[number]>(key: T, db: Kysely
     case AssetEditRepository:
     case AssetJobRepository:
     case FaceIdentityRepository:
+    case FaceRepairRepository:
     case IntegrityRepository:
     case MemoryRepository:
     case NotificationRepository:
