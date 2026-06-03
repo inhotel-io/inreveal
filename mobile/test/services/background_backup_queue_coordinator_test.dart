@@ -20,6 +20,8 @@ class FakeBackgroundUploadQueue implements BackgroundBackupQueuePort {
   int cancelCalls = 0;
   int batchSize = 100;
   bool delayNextEnqueue = false;
+  bool throwOnEnqueue = false;
+  final scriptedResults = <BackgroundBackupQueueResult>[];
 
   @override
   Future<List<Task>> getActiveTasks(String group) async {
@@ -44,6 +46,25 @@ class FakeBackgroundUploadQueue implements BackgroundBackupQueuePort {
     Set<String> excludedLocalAssetIds = const {},
   }) async {
     excludedSnapshots.add(Set<String>.from(excludedLocalAssetIds));
+    if (throwOnEnqueue) {
+      throw StateError('enqueue failed');
+    }
+    if (scriptedResults.isNotEmpty) {
+      final result = scriptedResults.removeAt(0);
+      if (result.enqueuedLocalAssetIds.isNotEmpty) {
+        queuedBatches.add(result.enqueuedLocalAssetIds);
+        for (final id in result.enqueuedLocalAssetIds) {
+          activeTasks[id] = UploadTask(
+            taskId: id,
+            url: 'http://test-server.com/assets',
+            filename: '$id.jpg',
+            baseDirectory: BaseDirectory.temporary,
+            group: kBackupGroup,
+          );
+        }
+      }
+      return result;
+    }
     if (delayNextEnqueue) {
       final completer = Completer<BackgroundBackupQueueResult>();
       enqueueCompleter.add(completer);
@@ -124,6 +145,7 @@ void main() {
     expect(queue.queuedBatches.last, hasLength(17));
     expect(queue.queuedBatches.expand((batch) => batch).toSet(), hasLength(3517));
     expect(queue.excludedSnapshots.last, containsAll(List.generate(3517, (index) => 'asset-$index')));
+    expect(sut.isActive, false);
   });
 
   test('concurrent terminal callbacks trigger at most one refill', () async {
@@ -241,5 +263,69 @@ void main() {
     await sut.handleStatus(TaskStatusUpdate(task, TaskStatus.complete));
 
     expect(queue.excludedSnapshots.last, containsAll(['asset-0', 'asset-1', 'asset-2']));
+  });
+
+  test('ends the session instead of stalling when enqueue throws on start', () async {
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0'])..throwOnEnqueue = true;
+    final sut = BackgroundBackupQueueCoordinator(queue);
+
+    await sut.start('user-1');
+
+    expect(sut.isActive, false);
+    expect(queue.queuedBatches, isEmpty);
+  });
+
+  test('a refill error ends the session without poisoning the status chain', () async {
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1'])..batchSize = 1;
+    final sut = BackgroundBackupQueueCoordinator(queue);
+
+    await sut.start('user-1');
+    final task = queue.activeTasks.remove('asset-0')!;
+    queue.throwOnEnqueue = true;
+
+    await sut.handleStatus(TaskStatusUpdate(task, TaskStatus.complete));
+
+    expect(sut.isActive, false);
+  });
+
+  test('advances past a fully skipped batch without waiting for callbacks', () async {
+    final queue = FakeBackgroundUploadQueue();
+    queue.scriptedResults.addAll([
+      const BackgroundBackupQueueResult(
+        totalCandidateCount: 150,
+        eligibleCandidateCount: 150,
+        enqueuedLocalAssetIds: [],
+        skippedLocalAssetIds: ['s0'],
+        enqueueFailedLocalAssetIds: [],
+        remainingEligibleCandidateCount: 50,
+      ),
+      const BackgroundBackupQueueResult(
+        totalCandidateCount: 150,
+        eligibleCandidateCount: 50,
+        enqueuedLocalAssetIds: ['asset-real'],
+        skippedLocalAssetIds: [],
+        enqueueFailedLocalAssetIds: [],
+        remainingEligibleCandidateCount: 49,
+      ),
+    ]);
+    final sut = BackgroundBackupQueueCoordinator(queue);
+
+    await sut.start('user-1');
+
+    expect(queue.queuedBatches, [
+      ['asset-real'],
+    ]);
+    expect(queue.excludedSnapshots.length, 2);
+    expect(sut.isActive, true);
+  });
+
+  test('start with an empty library ends the session immediately', () async {
+    final queue = FakeBackgroundUploadQueue(candidateIds: []);
+    final sut = BackgroundBackupQueueCoordinator(queue);
+
+    await sut.start('user-1');
+
+    expect(queue.queuedBatches, isEmpty);
+    expect(sut.isActive, false);
   });
 }

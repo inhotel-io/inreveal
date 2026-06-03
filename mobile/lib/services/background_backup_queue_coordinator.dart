@@ -35,6 +35,7 @@ class BackgroundBackupQueueCoordinator {
   Future<void> start(String userId) async {
     _activeUserId = userId;
     final generation = ++_sessionGeneration;
+    _logger.info('Starting background backup session');
 
     final activeTasks = await _activeTasks();
     if (!_isCurrentSession(userId, generation)) {
@@ -65,8 +66,12 @@ class BackgroundBackupQueueCoordinator {
     }
     final generation = _sessionGeneration;
     _refillTail = (_refillTail ?? Future.value()).then((_) async {
-      _recordTerminalStatus(update);
-      await _refillIfDrained(userId, generation);
+      try {
+        _recordTerminalStatus(update);
+        await _refillIfDrained(userId, generation);
+      } catch (error, stackTrace) {
+        _logger.severe('Background backup refill failed', error, stackTrace);
+      }
     });
     return _refillTail!;
   }
@@ -104,20 +109,45 @@ class BackgroundBackupQueueCoordinator {
   }
 
   Future<void> _enqueueNextBatch(String userId, int generation) async {
-    final result = await _queue.enqueueNextBackupBatch(
-      userId,
-      excludedLocalAssetIds: _excludedLocalAssetIds(),
-    );
-    if (!_isCurrentSession(userId, generation)) {
-      return;
-    }
+    while (true) {
+      final BackgroundBackupQueueResult result;
+      try {
+        result = await _queue.enqueueNextBackupBatch(
+          userId,
+          excludedLocalAssetIds: _excludedLocalAssetIds(),
+        );
+      } catch (error, stackTrace) {
+        _logger.severe('Background backup enqueue failed; ending session', error, stackTrace);
+        if (_isCurrentSession(userId, generation)) {
+          _activeUserId = null;
+        }
+        return;
+      }
 
-    _queuedLocalAssetIds.addAll(result.enqueuedLocalAssetIds);
-    _skippedLocalAssetIds.addAll(result.skippedLocalAssetIds);
-    _enqueueFailedLocalAssetIds.addAll(result.enqueueFailedLocalAssetIds);
+      if (!_isCurrentSession(userId, generation)) {
+        return;
+      }
 
-    if (!result.queuedAny && !result.hasMoreEligibleCandidates) {
-      _activeUserId = null;
+      _queuedLocalAssetIds.addAll(result.enqueuedLocalAssetIds);
+      _skippedLocalAssetIds.addAll(result.skippedLocalAssetIds);
+      _enqueueFailedLocalAssetIds.addAll(result.enqueueFailedLocalAssetIds);
+
+      if (result.queuedAny) {
+        _logger.info('Enqueued ${result.enqueuedCount} background backup tasks');
+        return;
+      }
+
+      if (!result.hasMoreEligibleCandidates) {
+        _logger.info('Background backup session complete');
+        _activeUserId = null;
+        return;
+      }
+
+      // No tasks were enqueued (all skipped or enqueue-failed) but more eligible
+      // candidates remain. No completion callback will arrive to drive the next
+      // refill, so advance to the next window now. The exclusion sets grow by the
+      // whole window each iteration, so this is guaranteed to converge.
+      _logger.info('Batch produced no tasks; advancing to the next window');
     }
   }
 
