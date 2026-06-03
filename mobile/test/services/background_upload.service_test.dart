@@ -172,7 +172,8 @@ void main() {
       );
     });
 
-    test('records upload success and failure from background downloader callbacks', () async {
+    test('does not record upload success or failure from background downloader callbacks (coordinator owns progress)',
+        () async {
       final successTask = UploadTask(
         taskId: 'asset-1',
         url: 'http://test-server.com/assets',
@@ -193,10 +194,10 @@ void main() {
       onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
       await pumpEventQueue();
 
-      verify(() => mockBackgroundBackupStatusService.recordUploadSuccess()).called(1);
-      verify(
+      verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
+      verifyNever(
         () => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed),
-      ).called(1);
+      );
     });
 
     test('enqueueNextBackupBatch queues one bounded eligible batch and reports exact counts', () async {

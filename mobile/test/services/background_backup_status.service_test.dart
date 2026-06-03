@@ -102,4 +102,45 @@ void main() {
       expect((await sut.read()).lastBackgroundFailureReason, reason);
     }
   });
+
+  test('recordQueueProgress keeps remaining count nonzero during large backup successes', () async {
+    await sut.recordCandidateCount(3340);
+    await sut.recordQueueProgress(
+      queuedCount: 100,
+      completedCount: 1,
+      failedCount: 0,
+      skippedCount: 0,
+      enqueueFailedCount: 0,
+      remainingCount: 3239,
+    );
+
+    final status = await sut.read();
+
+    expect(status.lastQueuedCount, 100);
+    expect(status.lastCompletedCount, 1);
+    expect(status.lastFailedCount, 0);
+    expect(status.lastSkippedCount, 0);
+    expect(status.lastEnqueueFailedCount, 0);
+    expect(status.lastRemainingCount, 3239);
+    expect(status.lastCandidateCount, 3340);
+  });
+
+  test('recordBackupComplete clears pending counts only when no eligible candidates remain', () async {
+    await sut.recordCandidateCount(17);
+    await sut.recordQueueProgress(
+      queuedCount: 17,
+      completedCount: 17,
+      failedCount: 0,
+      skippedCount: 0,
+      enqueueFailedCount: 0,
+      remainingCount: 0,
+    );
+    await sut.recordBackupComplete();
+
+    final status = await sut.read();
+
+    expect(status.lastCandidateCount, 0);
+    expect(status.lastRemainingCount, 0);
+    expect(status.lastFullBackupCompletedAt, isNotNull);
+  });
 }

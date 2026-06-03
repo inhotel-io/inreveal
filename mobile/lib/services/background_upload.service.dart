@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/domain/models/asset/asset_metadata.model.dart';
-import 'package:immich_mobile/domain/models/background_backup_status.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -349,24 +348,9 @@ class BackgroundUploadService implements BackgroundBackupQueuePort {
     return _uploadRepository.start();
   }
 
-  bool _isLivePhotoMotionTask(Task task) {
-    if (task.group != kBackupGroup || task.metaData.isEmpty) {
-      return false;
-    }
-
-    try {
-      return UploadTaskMetadata.fromJson(task.metaData).isLivePhotos;
-    } catch (_) {
-      return false;
-    }
-  }
-
   void _handleTaskStatusUpdate(TaskStatusUpdate update) async {
     switch (update.status) {
       case TaskStatus.complete:
-        if (!_isLivePhotoMotionTask(update.task)) {
-          unawaited(_backgroundBackupStatusService.recordUploadSuccess());
-        }
         unawaited(_handleLivePhoto(update));
 
         if (CurrentPlatform.isIOS) {
@@ -383,7 +367,6 @@ class BackgroundUploadService implements BackgroundBackupQueuePort {
       case TaskStatus.failed:
       case TaskStatus.notFound:
       case TaskStatus.canceled:
-        unawaited(_backgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed));
         break;
 
       default:

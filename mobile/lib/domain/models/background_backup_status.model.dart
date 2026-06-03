@@ -30,6 +30,14 @@ class BackgroundBackupStatus {
     this.lastBackgroundFailureReason = BackgroundBackupFailureReason.none,
     this.lastCandidateCount = 0,
     this.lastSuccessfulSchedulerKind,
+    this.lastQueuedCount = 0,
+    this.lastCompletedCount = 0,
+    this.lastFailedCount = 0,
+    this.lastSkippedCount = 0,
+    this.lastEnqueueFailedCount = 0,
+    this.lastRemainingCount = 0,
+    this.lastQueueDrainedAt,
+    this.lastFullBackupCompletedAt,
   });
 
   final DateTime? lastBackgroundWakeAt;
@@ -40,6 +48,14 @@ class BackgroundBackupStatus {
   final BackgroundBackupFailureReason lastBackgroundFailureReason;
   final int lastCandidateCount;
   final BackgroundBackupSchedulerKind? lastSuccessfulSchedulerKind;
+  final int lastQueuedCount;
+  final int lastCompletedCount;
+  final int lastFailedCount;
+  final int lastSkippedCount;
+  final int lastEnqueueFailedCount;
+  final int lastRemainingCount;
+  final DateTime? lastQueueDrainedAt;
+  final DateTime? lastFullBackupCompletedAt;
 
   BackgroundBackupStatus copyWith({
     DateTime? lastBackgroundWakeAt,
@@ -50,6 +66,14 @@ class BackgroundBackupStatus {
     BackgroundBackupFailureReason? lastBackgroundFailureReason,
     int? lastCandidateCount,
     BackgroundBackupSchedulerKind? lastSuccessfulSchedulerKind,
+    int? lastQueuedCount,
+    int? lastCompletedCount,
+    int? lastFailedCount,
+    int? lastSkippedCount,
+    int? lastEnqueueFailedCount,
+    int? lastRemainingCount,
+    DateTime? lastQueueDrainedAt,
+    DateTime? lastFullBackupCompletedAt,
   }) {
     return BackgroundBackupStatus(
       lastBackgroundWakeAt: lastBackgroundWakeAt ?? this.lastBackgroundWakeAt,
@@ -60,6 +84,14 @@ class BackgroundBackupStatus {
       lastBackgroundFailureReason: lastBackgroundFailureReason ?? this.lastBackgroundFailureReason,
       lastCandidateCount: lastCandidateCount ?? this.lastCandidateCount,
       lastSuccessfulSchedulerKind: lastSuccessfulSchedulerKind ?? this.lastSuccessfulSchedulerKind,
+      lastQueuedCount: lastQueuedCount ?? this.lastQueuedCount,
+      lastCompletedCount: lastCompletedCount ?? this.lastCompletedCount,
+      lastFailedCount: lastFailedCount ?? this.lastFailedCount,
+      lastSkippedCount: lastSkippedCount ?? this.lastSkippedCount,
+      lastEnqueueFailedCount: lastEnqueueFailedCount ?? this.lastEnqueueFailedCount,
+      lastRemainingCount: lastRemainingCount ?? this.lastRemainingCount,
+      lastQueueDrainedAt: lastQueueDrainedAt ?? this.lastQueueDrainedAt,
+      lastFullBackupCompletedAt: lastFullBackupCompletedAt ?? this.lastFullBackupCompletedAt,
     );
   }
 
@@ -105,6 +137,14 @@ class BackgroundBackupStatus {
       'lastBackgroundFailureReason': lastBackgroundFailureReason.name,
       'lastCandidateCount': lastCandidateCount,
       'lastSuccessfulSchedulerKind': lastSuccessfulSchedulerKind?.name,
+      'lastQueuedCount': lastQueuedCount,
+      'lastCompletedCount': lastCompletedCount,
+      'lastFailedCount': lastFailedCount,
+      'lastSkippedCount': lastSkippedCount,
+      'lastEnqueueFailedCount': lastEnqueueFailedCount,
+      'lastRemainingCount': lastRemainingCount,
+      'lastQueueDrainedAt': lastQueueDrainedAt?.toIso8601String(),
+      'lastFullBackupCompletedAt': lastFullBackupCompletedAt?.toIso8601String(),
     };
   }
 
@@ -120,6 +160,14 @@ class BackgroundBackupStatus {
       ),
       lastCandidateCount: json['lastCandidateCount'] as int? ?? 0,
       lastSuccessfulSchedulerKind: _schedulerKind(json['lastSuccessfulSchedulerKind']),
+      lastQueuedCount: json['lastQueuedCount'] as int? ?? 0,
+      lastCompletedCount: json['lastCompletedCount'] as int? ?? 0,
+      lastFailedCount: json['lastFailedCount'] as int? ?? 0,
+      lastSkippedCount: json['lastSkippedCount'] as int? ?? 0,
+      lastEnqueueFailedCount: json['lastEnqueueFailedCount'] as int? ?? 0,
+      lastRemainingCount: json['lastRemainingCount'] as int? ?? 0,
+      lastQueueDrainedAt: _date(json['lastQueueDrainedAt']),
+      lastFullBackupCompletedAt: _date(json['lastFullBackupCompletedAt']),
     );
   }
 
@@ -160,7 +208,15 @@ class BackgroundBackupStatus {
         other.lastReminderAt == lastReminderAt &&
         other.lastBackgroundFailureReason == lastBackgroundFailureReason &&
         other.lastCandidateCount == lastCandidateCount &&
-        other.lastSuccessfulSchedulerKind == lastSuccessfulSchedulerKind;
+        other.lastSuccessfulSchedulerKind == lastSuccessfulSchedulerKind &&
+        other.lastQueuedCount == lastQueuedCount &&
+        other.lastCompletedCount == lastCompletedCount &&
+        other.lastFailedCount == lastFailedCount &&
+        other.lastSkippedCount == lastSkippedCount &&
+        other.lastEnqueueFailedCount == lastEnqueueFailedCount &&
+        other.lastRemainingCount == lastRemainingCount &&
+        other.lastQueueDrainedAt == lastQueueDrainedAt &&
+        other.lastFullBackupCompletedAt == lastFullBackupCompletedAt;
   }
 
   @override
@@ -173,5 +229,13 @@ class BackgroundBackupStatus {
     lastBackgroundFailureReason,
     lastCandidateCount,
     lastSuccessfulSchedulerKind,
+    lastQueuedCount,
+    lastCompletedCount,
+    lastFailedCount,
+    lastSkippedCount,
+    lastEnqueueFailedCount,
+    lastRemainingCount,
+    lastQueueDrainedAt,
+    lastFullBackupCompletedAt,
   );
 }

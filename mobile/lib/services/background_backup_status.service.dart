@@ -82,6 +82,46 @@ class BackgroundBackupStatusService {
     return _mutate((current) => current.copyWith(lastBackgroundFailureReason: reason));
   }
 
+  Future<void> recordQueueProgress({
+    required int queuedCount,
+    required int completedCount,
+    required int failedCount,
+    required int skippedCount,
+    required int enqueueFailedCount,
+    required int remainingCount,
+  }) {
+    return _mutate(
+      (current) => current.copyWith(
+        lastQueuedCount: queuedCount,
+        lastCompletedCount: completedCount,
+        lastFailedCount: failedCount,
+        lastSkippedCount: skippedCount,
+        lastEnqueueFailedCount: enqueueFailedCount,
+        lastRemainingCount: remainingCount,
+        lastUploadEnqueueAt: queuedCount > current.lastQueuedCount ? _now() : current.lastUploadEnqueueAt,
+        lastUploadSuccessAt: completedCount > current.lastCompletedCount ? _now() : current.lastUploadSuccessAt,
+        lastBackgroundFailureReason: failedCount > current.lastFailedCount
+            ? BackgroundBackupFailureReason.uploadFailed
+            : BackgroundBackupFailureReason.none,
+      ),
+    );
+  }
+
+  Future<void> recordQueueDrained({required int remainingCount}) {
+    return _mutate((current) => current.copyWith(lastQueueDrainedAt: _now(), lastRemainingCount: remainingCount));
+  }
+
+  Future<void> recordBackupComplete() {
+    return _mutate(
+      (current) => current.copyWith(
+        lastFullBackupCompletedAt: _now(),
+        lastCandidateCount: 0,
+        lastRemainingCount: 0,
+        lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
+      ),
+    );
+  }
+
   Future<void> markReminderShown() {
     return _mutate((current) => current.copyWith(lastReminderAt: _now()));
   }

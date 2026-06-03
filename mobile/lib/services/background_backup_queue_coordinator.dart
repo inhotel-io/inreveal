@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:immich_mobile/constants/constants.dart';
+import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
 import 'package:logging/logging.dart';
 
@@ -16,14 +17,17 @@ abstract interface class BackgroundBackupQueuePort {
 }
 
 class BackgroundBackupQueueCoordinator {
-  BackgroundBackupQueueCoordinator(this._queue);
+  BackgroundBackupQueueCoordinator(this._queue, {BackgroundBackupStatusService? statusService})
+    : _statusService = statusService;
 
   final BackgroundBackupQueuePort _queue;
+  final BackgroundBackupStatusService? _statusService;
   final Logger _logger = Logger('BackgroundBackupQueueCoordinator');
 
   String? _activeUserId;
   int _sessionGeneration = 0;
   Future<void>? _refillTail;
+  int _remainingEligibleCount = 0;
   final Set<String> _queuedLocalAssetIds = {};
   final Set<String> _completedLocalAssetIds = {};
   final Set<String> _failedLocalAssetIds = {};
@@ -77,21 +81,29 @@ class BackgroundBackupQueueCoordinator {
   }
 
   void _recordTerminalStatus(TaskStatusUpdate update) {
+    var removedLogicalAsset = false;
+
     switch (update.status) {
       case TaskStatus.complete:
-        if (!_isLivePhotoMotionTask(update.task)) {
-          _queuedLocalAssetIds.remove(update.task.taskId);
+        if (!_isLivePhotoMotionTask(update.task) && _queuedLocalAssetIds.remove(update.task.taskId)) {
           _completedLocalAssetIds.add(update.task.taskId);
+          removedLogicalAsset = true;
         }
         break;
       case TaskStatus.failed:
       case TaskStatus.notFound:
       case TaskStatus.canceled:
-        _queuedLocalAssetIds.remove(update.task.taskId);
-        _failedLocalAssetIds.add(update.task.taskId);
+        if (_queuedLocalAssetIds.remove(update.task.taskId)) {
+          _failedLocalAssetIds.add(update.task.taskId);
+          removedLogicalAsset = true;
+        }
         break;
       default:
         break;
+    }
+
+    if (removedLogicalAsset && _remainingEligibleCount > 0) {
+      _remainingEligibleCount--;
     }
   }
 
@@ -132,6 +144,9 @@ class BackgroundBackupQueueCoordinator {
       _skippedLocalAssetIds.addAll(result.skippedLocalAssetIds);
       _enqueueFailedLocalAssetIds.addAll(result.enqueueFailedLocalAssetIds);
 
+      _remainingEligibleCount = result.remainingEligibleCandidateCount;
+      await _recordProgress();
+
       if (result.queuedAny) {
         _logger.info('Enqueued ${result.enqueuedCount} background backup tasks');
         return;
@@ -139,6 +154,7 @@ class BackgroundBackupQueueCoordinator {
 
       if (!result.hasMoreEligibleCandidates) {
         _logger.info('Background backup session complete');
+        await _statusService?.recordBackupComplete();
         _activeUserId = null;
         return;
       }
@@ -186,6 +202,18 @@ class BackgroundBackupQueueCoordinator {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<void> _recordProgress() {
+    return _statusService?.recordQueueProgress(
+          queuedCount: _queuedLocalAssetIds.length,
+          completedCount: _completedLocalAssetIds.length,
+          failedCount: _failedLocalAssetIds.length,
+          skippedCount: _skippedLocalAssetIds.length,
+          enqueueFailedCount: _enqueueFailedLocalAssetIds.length,
+          remainingCount: _remainingEligibleCount,
+        ) ??
+        Future.value();
   }
 
   void _clearSessionSets() {

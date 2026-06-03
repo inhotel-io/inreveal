@@ -98,4 +98,28 @@ void main() {
 
     expect(status.deriveHealth(now: now), BackgroundBackupHealth.stale);
   });
+
+  test('serializes large backup progress fields', () {
+    final status = BackgroundBackupStatus(
+      lastQueuedCount: 100,
+      lastCompletedCount: 50,
+      lastFailedCount: 2,
+      lastSkippedCount: 3,
+      lastEnqueueFailedCount: 4,
+      lastRemainingCount: 3340,
+      lastQueueDrainedAt: DateTime.utc(2026, 6, 2, 10),
+      lastFullBackupCompletedAt: DateTime.utc(2026, 6, 2, 11),
+    );
+
+    final roundTrip = BackgroundBackupStatus.fromJson(status.toJson());
+
+    expect(roundTrip.lastQueuedCount, 100);
+    expect(roundTrip.lastCompletedCount, 50);
+    expect(roundTrip.lastFailedCount, 2);
+    expect(roundTrip.lastSkippedCount, 3);
+    expect(roundTrip.lastEnqueueFailedCount, 4);
+    expect(roundTrip.lastRemainingCount, 3340);
+    expect(roundTrip.lastQueueDrainedAt, DateTime.utc(2026, 6, 2, 10));
+    expect(roundTrip.lastFullBackupCompletedAt, DateTime.utc(2026, 6, 2, 11));
+  });
 }
