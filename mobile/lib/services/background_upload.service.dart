@@ -21,6 +21,7 @@ import 'package:immich_mobile/providers/infrastructure/storage.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
 import 'package:immich_mobile/services/api.service.dart';
+import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:immich_mobile/utils/debug_print.dart';
@@ -123,7 +124,7 @@ class BackgroundBackupQueueResult {
 ///
 /// This service handles asynchronous background uploads that can continue
 /// even when the app is suspended. Primarily used for iOS background backup.
-class BackgroundUploadService {
+class BackgroundUploadService implements BackgroundBackupQueuePort {
   BackgroundUploadService(
     this._uploadRepository,
     this._storageRepository,
@@ -199,6 +200,7 @@ class BackgroundUploadService {
   }
 
   /// Get a list of tasks that are ENQUEUED or RUNNING
+  @override
   Future<List<Task>> getActiveTasks(String group) {
     return _uploadRepository.getActiveTasks(group);
   }
@@ -257,6 +259,7 @@ class BackgroundUploadService {
   /// [excludedLocalAssetIds] are asset IDs already queued or in-flight — they
   /// are filtered out before the batch window is applied. The caller is
   /// responsible for calling this again when the batch drains.
+  @override
   Future<BackgroundBackupQueueResult> enqueueNextBackupBatch(
     String userId, {
     Set<String> excludedLocalAssetIds = const {},
@@ -328,6 +331,7 @@ class BackgroundUploadService {
   /// Cancel all ongoing background uploads and reset the upload queue
   ///
   /// Returns the number of tasks left in the queue
+  @override
   Future<int> cancel() async {
     shouldAbortQueuingTasks = true;
 
@@ -340,6 +344,7 @@ class BackgroundUploadService {
   }
 
   /// Resume background backup processing
+  @override
   Future<void> resume() {
     return _uploadRepository.start();
   }
