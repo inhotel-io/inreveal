@@ -15,7 +15,7 @@ export async function up(db: Kysely<any>): Promise<void> {
       "finishedAt" timestamp with time zone,
       "createdAt" timestamp with time zone NOT NULL DEFAULT now(),
       CONSTRAINT "face_repair_scan_pkey" PRIMARY KEY ("id"),
-      CONSTRAINT "face_repair_scan_requestedBy_fkey" FOREIGN KEY ("requestedBy") REFERENCES "users" ("id") ON DELETE SET NULL
+      CONSTRAINT "face_repair_scan_requestedBy_fkey" FOREIGN KEY ("requestedBy") REFERENCES "user" ("id") ON DELETE SET NULL
     )
   `.execute(db);
 
