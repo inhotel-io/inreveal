@@ -74,6 +74,51 @@ export type DatabaseBackupUploadDto = {
     /** Database backup file */
     file?: Blob;
 };
+export type FaceRepairRequestDto = {
+    dryRun?: boolean;
+    maxAttributionDistance?: number;
+    maxDistance?: number;
+    maxFlaggedFraction?: number;
+    minFaces?: number;
+    ownerId?: string;
+    personId?: string;
+    voteMargin?: number;
+    voteWindow?: number;
+};
+export type FaceRepairResponseDto = {
+    dryRun: boolean;
+    executed?: {
+        requeued: number;
+        unassigned: number;
+    };
+    mutated: boolean;
+    report: {
+        persons: {
+            eligible: number;
+            flagged: number;
+            flaggedFraction: number;
+            personId: string;
+            reviewOnly: boolean;
+            suspectedOwners: {
+                count: number;
+                ownerPersonId: string;
+            }[];
+        }[];
+        totals: {
+            affectedPersons: number;
+            eligibleFaces: number;
+            flaggedFaces: number;
+            reviewOnlyByReason: {
+                badTarget: number;
+                overCap: number;
+                unAttributable: number;
+            };
+            reviewOnlyFaces: number;
+            reviewOnlyPersons: number;
+            toRepair: number;
+        };
+    };
+};
 export type SetMaintenanceModeDto = {
     action: MaintenanceAction;
     /** Restore backup filename */
@@ -4118,6 +4163,21 @@ export function downloadDatabaseBackup({ filename }: {
     }>(`/admin/database-backups/${encodeURIComponent(filename)}`, {
         ...opts
     }));
+}
+/**
+ * Run face re-attribution repair
+ */
+export function runFaceRepair({ faceRepairRequestDto }: {
+    faceRepairRequestDto: FaceRepairRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairResponseDto;
+    }>("/admin/face-repair", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairRequestDto
+    })));
 }
 /**
  * Set maintenance mode
