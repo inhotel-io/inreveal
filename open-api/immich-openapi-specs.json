@@ -585,6 +585,56 @@
         "x-immich-state": "Alpha"
       }
     },
+    "/admin/face-repair": {
+      "post": {
+        "operationId": "runFaceRepair",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Run face re-attribution repair",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/maintenance": {
       "post": {
         "description": "Put Immich into or take it out of maintenance mode",
@@ -32118,6 +32168,195 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "FaceRepairRequestDto": {
+        "properties": {
+          "dryRun": {
+            "default": true,
+            "type": "boolean"
+          },
+          "maxAttributionDistance": {
+            "exclusiveMinimum": 0,
+            "maximum": 2,
+            "type": "number"
+          },
+          "maxDistance": {
+            "exclusiveMinimum": 0,
+            "maximum": 2,
+            "type": "number"
+          },
+          "maxFlaggedFraction": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "minFaces": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "ownerId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "personId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "voteMargin": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "voteWindow": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "FaceRepairResponseDto": {
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "executed": {
+            "properties": {
+              "requeued": {
+                "type": "number"
+              },
+              "unassigned": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "unassigned",
+              "requeued"
+            ],
+            "type": "object"
+          },
+          "mutated": {
+            "type": "boolean"
+          },
+          "report": {
+            "properties": {
+              "persons": {
+                "items": {
+                  "properties": {
+                    "eligible": {
+                      "type": "number"
+                    },
+                    "flagged": {
+                      "type": "number"
+                    },
+                    "flaggedFraction": {
+                      "type": "number"
+                    },
+                    "personId": {
+                      "type": "string"
+                    },
+                    "reviewOnly": {
+                      "type": "boolean"
+                    },
+                    "suspectedOwners": {
+                      "items": {
+                        "properties": {
+                          "count": {
+                            "type": "number"
+                          },
+                          "ownerPersonId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "ownerPersonId",
+                          "count"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "personId",
+                    "eligible",
+                    "flagged",
+                    "flaggedFraction",
+                    "reviewOnly",
+                    "suspectedOwners"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "totals": {
+                "properties": {
+                  "affectedPersons": {
+                    "type": "number"
+                  },
+                  "eligibleFaces": {
+                    "type": "number"
+                  },
+                  "flaggedFaces": {
+                    "type": "number"
+                  },
+                  "reviewOnlyByReason": {
+                    "properties": {
+                      "badTarget": {
+                        "type": "number"
+                      },
+                      "overCap": {
+                        "type": "number"
+                      },
+                      "unAttributable": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "overCap",
+                      "badTarget",
+                      "unAttributable"
+                    ],
+                    "type": "object"
+                  },
+                  "reviewOnlyFaces": {
+                    "type": "number"
+                  },
+                  "reviewOnlyPersons": {
+                    "type": "number"
+                  },
+                  "toRepair": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "eligibleFaces",
+                  "flaggedFaces",
+                  "toRepair",
+                  "reviewOnlyFaces",
+                  "reviewOnlyPersons",
+                  "affectedPersons",
+                  "reviewOnlyByReason"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "totals",
+              "persons"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "dryRun",
+          "mutated",
+          "report"
         ],
         "type": "object"
       },
