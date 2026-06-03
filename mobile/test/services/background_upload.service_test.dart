@@ -199,6 +199,111 @@ void main() {
       ).called(1);
     });
 
+    test('enqueueNextBackupBatch queues one bounded eligible batch and reports exact counts', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      sut.backupBatchSize = 100;
+      final candidates = List.generate(
+        250,
+        (index) => LocalAssetStub.image1.copyWith(id: 'asset-$index', name: 'asset-$index.jpg'),
+      );
+      final mockEntity = MockAssetEntity();
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => candidates);
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((invocation) async {
+        final tasks = invocation.positionalArguments.single as List<UploadTask>;
+        return List.filled(tasks.length, true);
+      });
+      when(() => mockUploadRepository.updateNotification(any(), TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      for (final asset in candidates) {
+        when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+        when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => File('/path/${asset.id}.jpg'));
+        when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+      }
+
+      final result = await sut.enqueueNextBackupBatch(
+        'user-1',
+        excludedLocalAssetIds: {'asset-0', 'asset-1'},
+      );
+
+      final batch = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured.single as List<UploadTask>;
+      expect(batch.map((task) => task.taskId), List.generate(100, (index) => 'asset-${index + 2}'));
+      expect(result.totalCandidateCount, 250);
+      expect(result.eligibleCandidateCount, 248);
+      expect(result.enqueuedLocalAssetIds, List.generate(100, (index) => 'asset-${index + 2}'));
+      expect(result.skippedLocalAssetIds, isEmpty);
+      expect(result.enqueueFailedLocalAssetIds, isEmpty);
+      expect(result.remainingEligibleCandidateCount, 148);
+      expect(result.queuedAny, true);
+      expect(result.hasMoreEligibleCandidates, true);
+    });
+
+    test('enqueueNextBackupBatch does not loop when every candidate is excluded', () async {
+      sut.backupBatchSize = 100;
+      final candidates = List.generate(
+        3,
+        (index) => LocalAssetStub.image1.copyWith(id: 'asset-$index', name: 'asset-$index.jpg'),
+      );
+
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => candidates);
+
+      final result = await sut.enqueueNextBackupBatch(
+        'user-1',
+        excludedLocalAssetIds: {'asset-0', 'asset-1', 'asset-2'},
+      );
+
+      expect(result.totalCandidateCount, 3);
+      expect(result.eligibleCandidateCount, 0);
+      expect(result.enqueuedLocalAssetIds, isEmpty);
+      expect(result.remainingEligibleCandidateCount, 0);
+      expect(result.queuedAny, false);
+      expect(result.hasMoreEligibleCandidates, false);
+      verifyNever(() => mockUploadRepository.enqueueBackgroundAll(any()));
+    });
+
+    test('enqueueNextBackupBatch reports skipped files and mixed native enqueue failures', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      sut.backupBatchSize = 4;
+      final candidates = List.generate(
+        4,
+        (index) => LocalAssetStub.image1.copyWith(id: 'asset-$index', name: 'asset-$index.jpg'),
+      );
+      final mockEntity = MockAssetEntity();
+      when(() => mockEntity.isLivePhoto).thenReturn(false);
+
+      when(() => mockStorageRepository.clearCache()).thenAnswer((_) async {});
+      when(() => mockBackupRepository.getCandidates('user-1')).thenAnswer((_) async => candidates);
+      when(() => mockUploadRepository.disableHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.restoreDefaultHoldingQueue()).thenAnswer((_) async {});
+      when(() => mockUploadRepository.enqueueBackgroundAll(any())).thenAnswer((_) async => [true, false, true]);
+      when(() => mockUploadRepository.updateNotification(any(), TaskStatus.enqueued)).thenAnswer((_) async {});
+
+      for (final asset in candidates) {
+        when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
+        when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
+      }
+      when(() => mockStorageRepository.getFileForAsset('asset-0')).thenAnswer((_) async => File('/path/asset-0.jpg'));
+      when(() => mockStorageRepository.getFileForAsset('asset-1')).thenAnswer((_) async => null);
+      when(() => mockStorageRepository.getFileForAsset('asset-2')).thenAnswer((_) async => File('/path/asset-2.jpg'));
+      when(() => mockStorageRepository.getFileForAsset('asset-3')).thenAnswer((_) async => File('/path/asset-3.jpg'));
+
+      final result = await sut.enqueueNextBackupBatch('user-1');
+
+      expect(result.enqueuedLocalAssetIds, ['asset-0', 'asset-3']);
+      expect(result.skippedLocalAssetIds, ['asset-1']);
+      expect(result.enqueueFailedLocalAssetIds, ['asset-2']);
+      expect(result.remainingEligibleCandidateCount, 0);
+    });
+
     test('does not record logical upload success for Live Photo motion completion', () async {
       final motionTask = UploadTask(
         taskId: 'asset-live',

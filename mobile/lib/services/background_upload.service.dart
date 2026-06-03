@@ -96,6 +96,29 @@ class UploadTaskMetadata {
   int get hashCode => localAssetId.hashCode ^ isLivePhotos.hashCode ^ livePhotoVideoId.hashCode;
 }
 
+/// Result of a single bounded background backup enqueue pass.
+class BackgroundBackupQueueResult {
+  const BackgroundBackupQueueResult({
+    required this.totalCandidateCount,
+    required this.eligibleCandidateCount,
+    required this.enqueuedLocalAssetIds,
+    required this.skippedLocalAssetIds,
+    required this.enqueueFailedLocalAssetIds,
+    required this.remainingEligibleCandidateCount,
+  });
+
+  final int totalCandidateCount;
+  final int eligibleCandidateCount;
+  final List<String> enqueuedLocalAssetIds;
+  final List<String> skippedLocalAssetIds;
+  final List<String> enqueueFailedLocalAssetIds;
+  final int remainingEligibleCandidateCount;
+
+  int get enqueuedCount => enqueuedLocalAssetIds.length;
+  bool get queuedAny => enqueuedLocalAssetIds.isNotEmpty;
+  bool get hasMoreEligibleCandidates => remainingEligibleCandidateCount > 0;
+}
+
 /// Service for handling background uploads using iOS URLSession (background_downloader)
 ///
 /// This service handles asynchronous background uploads that can continue
@@ -130,6 +153,9 @@ class BackgroundUploadService {
   Stream<TaskProgressUpdate> get taskProgressStream => _taskProgressController.stream;
 
   bool shouldAbortQueuingTasks = false;
+
+  @visibleForTesting
+  int backupBatchSize = 100;
 
   void _onTaskProgressCallback(TaskProgressUpdate update) {
     if (!_taskProgressController.isClosed) {
@@ -224,6 +250,79 @@ class BackgroundUploadService {
     if (enqueuedCount > 0) {
       await _backgroundBackupStatusService.recordUploadEnqueue(candidateCount: enqueuedCount);
     }
+  }
+
+  /// Enqueue exactly one bounded batch of eligible backup candidates.
+  ///
+  /// [excludedLocalAssetIds] are asset IDs already queued or in-flight — they
+  /// are filtered out before the batch window is applied. The caller is
+  /// responsible for calling this again when the batch drains.
+  Future<BackgroundBackupQueueResult> enqueueNextBackupBatch(
+    String userId, {
+    Set<String> excludedLocalAssetIds = const {},
+  }) async {
+    await _storageRepository.clearCache();
+    shouldAbortQueuingTasks = false;
+
+    final candidates = await _backupRepository.getCandidates(userId);
+    await _backgroundBackupStatusService.recordCandidateCount(candidates.length);
+
+    final eligibleCandidates = candidates
+        .where((candidate) => !excludedLocalAssetIds.contains(candidate.id))
+        .toList(growable: false);
+    final batchCandidates = eligibleCandidates.take(backupBatchSize).toList(growable: false);
+
+    final tasks = <UploadTask>[];
+    final skippedLocalAssetIds = <String>[];
+    for (final asset in batchCandidates) {
+      if (shouldAbortQueuingTasks) {
+        break;
+      }
+
+      final task = await getUploadTask(asset);
+      if (task == null) {
+        skippedLocalAssetIds.add(asset.id);
+        continue;
+      }
+      tasks.add(task);
+    }
+
+    if (tasks.isEmpty || shouldAbortQueuingTasks) {
+      return BackgroundBackupQueueResult(
+        totalCandidateCount: candidates.length,
+        eligibleCandidateCount: eligibleCandidates.length,
+        enqueuedLocalAssetIds: const [],
+        skippedLocalAssetIds: skippedLocalAssetIds,
+        enqueueFailedLocalAssetIds: const [],
+        remainingEligibleCandidateCount: eligibleCandidates.length - skippedLocalAssetIds.length,
+      );
+    }
+
+    final results = await enqueueTasks(tasks);
+    final enqueuedLocalAssetIds = <String>[];
+    final enqueueFailedLocalAssetIds = <String>[];
+
+    for (var i = 0; i < tasks.length; i++) {
+      final success = i < results.length && results[i];
+      if (success) {
+        enqueuedLocalAssetIds.add(tasks[i].taskId);
+      } else {
+        enqueueFailedLocalAssetIds.add(tasks[i].taskId);
+      }
+    }
+
+    return BackgroundBackupQueueResult(
+      totalCandidateCount: candidates.length,
+      eligibleCandidateCount: eligibleCandidates.length,
+      enqueuedLocalAssetIds: enqueuedLocalAssetIds,
+      skippedLocalAssetIds: skippedLocalAssetIds,
+      enqueueFailedLocalAssetIds: enqueueFailedLocalAssetIds,
+      remainingEligibleCandidateCount:
+          eligibleCandidates.length -
+          enqueuedLocalAssetIds.length -
+          skippedLocalAssetIds.length -
+          enqueueFailedLocalAssetIds.length,
+    );
   }
 
   /// Cancel all ongoing background uploads and reset the upload queue
