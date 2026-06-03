@@ -27,7 +27,7 @@ class NetworkRepository {
   @visibleForTesting
   static http.Client Function(Pointer<Void> pointer)? debugBaseClientFactory;
 
-  /// Test seam: overrides the native session recreation.
+  /// Test seam: overrides the native session recreation performed by [refresh].
   @visibleForTesting
   static Future<void> Function()? debugRecreateSession;
 
@@ -76,6 +76,25 @@ class NetworkRepository {
     } else {
       _client = base;
     }
+  }
+
+  /// Re-establishes this isolate's native HTTP client.
+  ///
+  /// On iOS the foreground and background-worker isolates share one native
+  /// URLSession. When the background-worker isolate is torn down
+  /// (`engine.destroyContext()`) it leaves the shared session's
+  /// `cupertino_http` callback target pointing at a destroyed isolate, so the
+  /// foreground can no longer complete any request until a cold restart.
+  ///
+  /// On resume we recreate the native session (iOS) and rebuild this isolate's
+  /// client — defeating [init]'s same-pointer short-circuit — so the foreground
+  /// owns a fresh, live session again.
+  static Future<void> refresh() async {
+    if (CurrentPlatform.isIOS) {
+      await (debugRecreateSession ?? networkApi.recreateSession)();
+    }
+    _clientPointer = null;
+    await init();
   }
 
   static http.Client _buildBaseClient(Pointer<Void> clientPointer) {
