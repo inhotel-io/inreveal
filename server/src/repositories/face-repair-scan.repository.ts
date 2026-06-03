@@ -126,4 +126,52 @@ export class FaceRepairScanRepository {
     }
     await this.db.deleteFrom('face_repair_scan').where('id', '!=', latest.id).execute();
   }
+
+  async enrichReportPersons(
+    rows: Array<{
+      personId: string;
+      eligible: number;
+      flagged: number;
+      flaggedFraction: number;
+      suspectedOwnerIds: string[];
+    }>,
+  ): Promise<RepairScanPerson[]> {
+    const personIds = [...new Set(rows.flatMap((r) => [r.personId, ...r.suspectedOwnerIds]))];
+    if (personIds.length === 0) {
+      return [];
+    }
+    const people = await this.db
+      .selectFrom('person')
+      .select(['id', 'ownerId', 'name', 'faceAssetId'])
+      .where('id', 'in', personIds)
+      .execute();
+    const byId = new Map(people.map((person) => [person.id, person]));
+    const nameOf = (id: string) => (byId.get(id)?.name ? byId.get(id)!.name : null);
+    const thumbOf = (id: string) => byId.get(id)?.faceAssetId ?? null;
+
+    return rows.map((row) => {
+      const counts = new Map<string, number>();
+      for (const ownerId of row.suspectedOwnerIds) {
+        counts.set(ownerId, (counts.get(ownerId) ?? 0) + 1);
+      }
+      return {
+        personId: row.personId,
+        ownerId: byId.get(row.personId)?.ownerId ?? '',
+        personName: nameOf(row.personId),
+        faceCount: row.eligible,
+        thumbnailFaceId: thumbOf(row.personId),
+        eligible: row.eligible,
+        flagged: row.flagged,
+        flaggedFraction: row.flaggedFraction,
+        suspectedOwners: [...counts].map(([ownerPersonId, count]) => ({
+          ownerPersonId,
+          ownerName: nameOf(ownerPersonId),
+          thumbnailFaceId: thumbOf(ownerPersonId),
+          count,
+        })),
+        recommendation: 'confident',
+        reviewReasons: [],
+      };
+    });
+  }
 }

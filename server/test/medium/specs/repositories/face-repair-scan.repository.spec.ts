@@ -1,6 +1,8 @@
 import { Kysely } from 'kysely';
-import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
+import { FaceRepairScanRepository, RepairScanParams, RepairScanPerson } from 'src/repositories/face-repair-scan.repository';
 import { DB } from 'src/schema';
+import { mediumFactory } from 'test/medium.factory';
+import { newUuid } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
@@ -93,5 +95,85 @@ describe(FaceRepairScanRepository.name, () => {
     await sut.pruneSupersededScans();
     expect(await sut.getScanById(first.id)).toBeUndefined();
     expect((await sut.getLatestScan())?.id).toBe(second.id);
+  });
+
+  describe('enrichReportPersons', () => {
+    let ownerId: string;
+    let p: { id: string; faceAssetId: string | null; name: string };
+    let unnamed: { id: string; faceAssetId: string | null; name: string };
+    let q: { id: string; faceAssetId: string | null; name: string };
+
+    beforeAll(async () => {
+      // Create owner user
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      ownerId = user.id;
+
+      // Person p: named 'Jula', will get a faceAssetId via asset_face
+      const pData = mediumFactory.personInsert({ ownerId, name: 'Jula' });
+      await db.insertInto('person').values(pData).execute();
+
+      // Create an asset + asset_face for p, then link faceAssetId
+      const pAsset = mediumFactory.assetInsert({ ownerId });
+      await db.insertInto('asset').values(pAsset).execute();
+      const pFace = mediumFactory.assetFaceInsert({ assetId: pAsset.id, personId: pData.id });
+      await db.insertInto('asset_face').values(pFace).execute();
+      await db.updateTable('person').set({ faceAssetId: pFace.id }).where('id', '=', pData.id).execute();
+      p = { id: pData.id, faceAssetId: pFace.id, name: 'Jula' };
+
+      // Person unnamed: name = '' (empty string → null after enrich)
+      const unnamedData = mediumFactory.personInsert({ ownerId, name: '' });
+      // personInsert spreads `name: ''` last so it overrides the default 'Test Name'
+      await db.insertInto('person').values({ ...unnamedData, name: '' }).execute();
+      unnamed = { id: unnamedData.id, faceAssetId: null, name: '' };
+
+      // Person q: suspected owner, no faceAssetId
+      const qData = mediumFactory.personInsert({ ownerId });
+      await db.insertInto('person').values(qData).execute();
+      q = { id: qData.id, faceAssetId: null, name: qData.name };
+    });
+
+    afterEach(async () => {
+      await db.deleteFrom('face_repair_scan').execute();
+    });
+
+    it('enriches persons with names + thumbnails; null name and null thumbnail survive', async () => {
+      const enriched = await sut.enrichReportPersons([
+        { personId: p.id, eligible: 10, flagged: 8, flaggedFraction: 0.8, suspectedOwnerIds: [q.id] },
+        { personId: unnamed.id, eligible: 4, flagged: 3, flaggedFraction: 0.75, suspectedOwnerIds: [] },
+      ]);
+
+      const enrichedP = enriched.find((row) => row.personId === p.id)!;
+      expect(enrichedP.personName).toBe('Jula');
+      expect(enrichedP.ownerId).toBe(ownerId);
+      expect(enrichedP.thumbnailFaceId).toBe(p.faceAssetId);
+      expect(enrichedP.suspectedOwners).toEqual([
+        { ownerPersonId: q.id, ownerName: q.name ?? null, thumbnailFaceId: null, count: 1 },
+      ]);
+
+      const enrichedUnnamed = enriched.find((row) => row.personId === unnamed.id)!;
+      expect(enrichedUnnamed.personName).toBeNull();
+    });
+
+    it('round-trips a 600+ person report through jsonb without loss', async () => {
+      const persons: RepairScanPerson[] = Array.from({ length: 600 }, (_, i) => ({
+        personId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+        ownerId,
+        personName: i % 2 === 0 ? `P${i}` : null,
+        faceCount: i,
+        thumbnailFaceId: null,
+        eligible: i + 1,
+        flagged: i,
+        flaggedFraction: i / (i + 1),
+        suspectedOwners: [],
+        recommendation: 'confident',
+        reviewReasons: [],
+      }));
+      const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+      await sut.completeScan(scan.id, { totals: zeroTotals(), persons });
+      const row = await sut.getScanById(scan.id);
+      expect(row?.persons).toHaveLength(600);
+      expect(row?.persons[599].personName).toBeNull();
+    });
   });
 });
