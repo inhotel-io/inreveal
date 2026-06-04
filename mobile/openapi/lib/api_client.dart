@@ -384,6 +384,10 @@ class ApiClient {
           return ExifResponseDto.fromJson(value);
         case 'FaceDto':
           return FaceDto.fromJson(value);
+        case 'FaceRepairApplyRequestDto':
+          return FaceRepairApplyRequestDto.fromJson(value);
+        case 'FaceRepairApplyResponseDto':
+          return FaceRepairApplyResponseDto.fromJson(value);
         case 'FaceRepairRequestDto':
           return FaceRepairRequestDto.fromJson(value);
         case 'FaceRepairResponseDto':

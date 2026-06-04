@@ -635,6 +635,56 @@
         ]
       }
     },
+    "/admin/face-repair/apply": {
+      "post": {
+        "operationId": "applyFaceRepair",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairApplyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairApplyResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Apply face re-attribution for approved persons",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/face-repair/scan": {
       "post": {
         "operationId": "triggerScan",
@@ -23147,6 +23197,46 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "FaceRepairApplyRequestDto": {
+        "properties": {
+          "approvedPersonIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "excludeFaceIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "approvedPersonIds"
+        ],
+        "type": "object"
+      },
+      "FaceRepairApplyResponseDto": {
+        "properties": {
+          "requeued": {
+            "type": "number"
+          },
+          "unassigned": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "requeued",
+          "unassigned"
         ],
         "type": "object"
       },

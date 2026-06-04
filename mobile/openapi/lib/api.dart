@@ -174,6 +174,8 @@ part 'model/email_notifications_response.dart';
 part 'model/email_notifications_update.dart';
 part 'model/exif_response_dto.dart';
 part 'model/face_dto.dart';
+part 'model/face_repair_apply_request_dto.dart';
+part 'model/face_repair_apply_response_dto.dart';
 part 'model/face_repair_request_dto.dart';
 part 'model/face_repair_response_dto.dart';
 part 'model/face_repair_response_dto_executed.dart';

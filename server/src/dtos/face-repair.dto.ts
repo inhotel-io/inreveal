@@ -97,3 +97,13 @@ export const FaceRepairScanStatusSchema = z
   })
   .meta({ id: 'FaceRepairScanStatusDto' });
 export class FaceRepairScanStatusDto extends createZodDto(FaceRepairScanStatusSchema) {}
+
+export const FaceRepairApplyRequestSchema = z
+  .object({ approvedPersonIds: z.array(z.uuidv4()).min(1), excludeFaceIds: z.array(z.uuidv4()).optional() })
+  .meta({ id: 'FaceRepairApplyRequestDto' });
+export class FaceRepairApplyRequestDto extends createZodDto(FaceRepairApplyRequestSchema) {}
+
+export const FaceRepairApplyResponseSchema = z
+  .object({ unassigned: z.number(), requeued: z.number() })
+  .meta({ id: 'FaceRepairApplyResponseDto' });
+export class FaceRepairApplyResponseDto extends createZodDto(FaceRepairApplyResponseSchema) {}

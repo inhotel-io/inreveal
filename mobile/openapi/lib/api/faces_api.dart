@@ -16,6 +16,58 @@ class FacesApi {
 
   final ApiClient apiClient;
 
+  /// Apply face re-attribution for approved persons
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairApplyRequestDto] faceRepairApplyRequestDto (required):
+  Future<Response> applyFaceRepairWithHttpInfo(FaceRepairApplyRequestDto faceRepairApplyRequestDto,) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/apply';
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairApplyRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Apply face re-attribution for approved persons
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairApplyRequestDto] faceRepairApplyRequestDto (required):
+  Future<FaceRepairApplyResponseDto?> applyFaceRepair(FaceRepairApplyRequestDto faceRepairApplyRequestDto,) async {
+    final response = await applyFaceRepairWithHttpInfo(faceRepairApplyRequestDto,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairApplyResponseDto',) as FaceRepairApplyResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Create a face
   ///
   /// Create a new face that has not been discovered by facial recognition. The content of the bounding box is considered a face.
