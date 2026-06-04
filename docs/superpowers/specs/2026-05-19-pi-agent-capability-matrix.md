@@ -306,8 +306,11 @@ Use these prompts as manual and automated acceptance scenarios:
    Both were verified with a propose-only live L3 (the read-only audit confirms no
    plan is applied). This closes the “Trash/delete” and “Duplicate/similar-photo
    cleanup” new-tool gaps.
-7. Space disambiguation (“which space/user did you mean?”) currently re-prompts via
-   `needs_input` rather than a durable continuation — a follow-up could add
-   candidate-resume like the trip workflow. Subjective/visual sources remain out
-   of scope (they hand off); place-name → coordinate geocoding now resolves via
+7. Space disambiguation (“which space/user did you mean?”) now offers a **durable
+   candidate continuation** — `manage_space_members`, `change_member_role`,
+   `rename_or_describe_space`, and `manage_space_assets` present a numbered
+   candidate list and resolve the next-turn pick (“the first one” / a name / a
+   number) via the shared `candidate-disambiguation` helper, reusing the trip
+   workflow's continuation protocol (10-min TTL). Subjective/visual sources remain
+   out of scope (they hand off); place-name → coordinate geocoding now resolves via
    `resolveLocation`.
