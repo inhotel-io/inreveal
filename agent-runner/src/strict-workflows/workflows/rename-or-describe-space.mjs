@@ -1,3 +1,4 @@
+import { buildCandidateContinuation, resumeFromCandidates } from '../candidate-disambiguation.mjs';
 import { failed, needsInput } from '../protocol.mjs';
 import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
@@ -83,7 +84,7 @@ export const renameOrDescribeSpaceWorkflow = () => ({
     return slots;
   },
 
-  async run({ client, slots, signal }) {
+  async run({ client, slots, resolvedSpaceId, signal, nowMs }) {
     const newName = clean(slots?.newName);
     const description = clean(slots?.description);
     if (!newName && !description) {
@@ -91,17 +92,45 @@ export const renameOrDescribeSpaceWorkflow = () => ({
       return needsInput({ text: 'Tell me the new space name or the description you would like to set.' });
     }
 
-    const ref = normalizeSpaceRef(slots?.spaceRef);
-    const result = await client.call('listSpaces', {}, { signal });
-    const spaces = Array.isArray(result?.spaces) ? result.spaces : [];
-    const matches = spaces.filter((space) => clean(space?.name).toLowerCase() === ref.toLowerCase());
-    if (matches.length === 0) {
-      return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
+    // 1. Resolve the space (skip when already resolved via continuation).
+    let space;
+    let ref;
+
+    if (resolvedSpaceId) {
+      // Continuation path: we know the id — synthesize a minimal space record
+      // using the spaceRef for the display name (a readSpace round-trip is
+      // unnecessary since we only need the id for the plan payload).
+      ref = normalizeSpaceRef(slots?.spaceRef);
+      space = { id: resolvedSpaceId, name: ref };
+    } else {
+      ref = normalizeSpaceRef(slots?.spaceRef);
+      let listed;
+      try {
+        listed = await client.call('listSpaces', {}, { signal });
+      } catch (error) {
+        return failed({ text: safeFailureText(error?.message ?? 'The space lookup tool failed.') });
+      }
+      const spaces = Array.isArray(listed?.spaces) ? listed.spaces : [];
+      const matches = spaces.filter((s) => clean(s?.name).toLowerCase() === ref.toLowerCase());
+      if (matches.length === 0) {
+        return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
+      }
+      if (matches.length > 1) {
+        // Ambiguous space — offer durable candidate list.
+        const candidates = matches.map((s) => ({ id: s.id, name: s.name }));
+        const continuation = buildCandidateContinuation({
+          kind: 'rename_or_describe_space_space',
+          candidates,
+          nowMs: nowMs ?? Date.now(),
+          slots,
+        });
+        return needsInput({
+          text: `Multiple spaces are called "${ref}". Which one do you mean?\n${candidates.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}`,
+          continuation,
+        });
+      }
+      space = matches[0];
     }
-    if (matches.length > 1) {
-      return needsInput({ text: `Multiple spaces are called "${ref}". Which one do you mean?` });
-    }
-    const space = matches[0];
 
     // Include ONLY the fields the user set so unspecified ones are preserved.
     const payload = {};
@@ -147,5 +176,27 @@ export const renameOrDescribeSpaceWorkflow = () => ({
       successText: `I prepared a plan to ${changeParts.join(' and ')} for the "${clean(space.name) || ref}" space. Review the plan before applying it.`,
       successSummary: { workflowKind: KIND, target: clean(space.name) || ref },
     });
+  },
+
+  // Resolve a candidate pick from a continuation follow-up.
+  // Returns { status:'matched', ctx } | { status:'needs_input'|'expired', text }.
+  resumeContinuation({ pending, prompt, nowMs }) {
+    const kind = pending?.kind;
+    if (kind !== 'rename_or_describe_space_space') {
+      return { status: 'needs_input', text: 'I no longer have pending candidates for this request. Please start over.' };
+    }
+
+    const result = resumeFromCandidates({ pending, prompt, nowMs: nowMs ?? Date.now(), kind });
+    if (result.status !== 'matched') {
+      return result; // needs_input | expired | missing — pass through
+    }
+
+    return {
+      status: 'matched',
+      ctx: {
+        slots: pending.slots,
+        resolvedSpaceId: result.choice.id,
+      },
+    };
   },
 });
