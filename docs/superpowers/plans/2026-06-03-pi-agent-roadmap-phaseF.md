@@ -9,9 +9,9 @@ Spec: `docs/superpowers/specs/2026-05-31-pi-agent-capability-roadmap.md` (Phase 
   and asks for it otherwise. Crop is reversible (clears via `removeAssetEdits`), Low/Medium risk.
 - **OQ-F2 (sharing).** Implement the op + workflow **propose-only**: a new `createSharedLinks` write-scope that
   **defaults false in EVERY preset (granted nowhere by default)**, **High** risk, and **L3 NEVER applies** (routing
-  + propose only; the eval preset must not carry the scope). No outward-facing link is created during
-  implementation, tests (mocked), or eval. Enabling live link creation remains gated on the user's product/privacy
-  sign-off (granting `createSharedLinks` in a preset) — explicitly OUT of scope here.
+  - propose only; the eval preset must not carry the scope). No outward-facing link is created during
+    implementation, tests (mocked), or eval. Enabling live link creation remains gated on the user's product/privacy
+    sign-off (granting `createSharedLinks` in a preset) — explicitly OUT of scope here.
 
 ## Integration map (verified)
 
