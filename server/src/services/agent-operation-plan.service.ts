@@ -520,6 +520,9 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetRotate: {
         return `Rotate matching photos ${dto.angle} degrees`;
       }
+      case AgentOperationType.AssetCrop: {
+        return `Crop matching photos to ${dto.width}×${dto.height} at (${dto.x}, ${dto.y})`;
+      }
       case AgentOperationType.AssetUpdateMetadata: {
         return 'Update matching photo metadata';
       }
@@ -529,7 +532,7 @@ export class AgentOperationPlanService {
   private getAssetBatchWorkflowTargetKind(
     dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
   ): AgentOperationTargetKind {
-    return dto.type === AgentOperationType.AssetRotate
+    return dto.type === AgentOperationType.AssetRotate || dto.type === AgentOperationType.AssetCrop
       ? AgentOperationTargetKind.ImageEditBatch
       : AgentOperationTargetKind.AssetBatch;
   }
@@ -549,6 +552,9 @@ export class AgentOperationPlanService {
       }
       case AgentOperationType.AssetRotate: {
         return { angle: dto.angle };
+      }
+      case AgentOperationType.AssetCrop: {
+        return { x: dto.x, y: dto.y, width: dto.width, height: dto.height };
       }
       case AgentOperationType.AssetUpdateMetadata: {
         return this.getAssetUpdateMetadataWorkflowPayload(dto);
@@ -575,7 +581,8 @@ export class AgentOperationPlanService {
     dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
   ): AgentOperationRiskLevel {
     switch (dto.type) {
-      case AgentOperationType.AssetSetFavorite: {
+      case AgentOperationType.AssetSetFavorite:
+      case AgentOperationType.AssetCrop: {
         return AgentOperationRiskLevel.Low;
       }
       case AgentOperationType.AssetSetArchive: {
