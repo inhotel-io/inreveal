@@ -799,6 +799,9 @@ const AgentAssetBatchWorkflowActionSchema = z
     assetRotatePayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetRotate),
     }),
+    assetCropPayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetCrop),
+    }),
     z
       .strictObject({
         type: z.literal(AgentOperationType.AssetUpdateMetadata),

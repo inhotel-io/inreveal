@@ -2131,6 +2131,13 @@ describe('Agent operation DTOs', () => {
         },
       ],
       [
+        'crop',
+        {
+          action: { type: AgentOperationType.AssetCrop, x: 100, y: 100, width: 800, height: 600 },
+          assetSource: { kind: 'search', filters: { type: AssetType.Image } },
+        },
+      ],
+      [
         'metadata update',
         {
           action: {
@@ -2189,6 +2196,29 @@ describe('Agent operation DTOs', () => {
     it.each([0, 45, 91, 360])('rejects proposeAssetBatchFromSearch rotate angle %s', (angle) => {
       const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
         action: { type: AgentOperationType.AssetRotate, angle },
+        assetSource: { kind: 'search', filters: {} },
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('accepts proposeAssetBatchFromSelection crop action', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection].safeParse({
+        summary: 'Crop matching photos.',
+        action: { type: AgentOperationType.AssetCrop, x: 0, y: 0, width: 1000, height: 1000 },
+        selectionHandleId: factory.uuid(),
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      ['negative x', { type: AgentOperationType.AssetCrop, x: -1, y: 0, width: 800, height: 600 }],
+      ['zero width', { type: AgentOperationType.AssetCrop, x: 0, y: 0, width: 0, height: 600 }],
+      ['missing height', { type: AgentOperationType.AssetCrop, x: 0, y: 0, width: 800 }],
+    ])('rejects proposeAssetBatchFromSearch crop geometry %s', (_label, action) => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        action,
         assetSource: { kind: 'search', filters: {} },
       });
 
