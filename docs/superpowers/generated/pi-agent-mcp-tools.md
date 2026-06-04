@@ -225,6 +225,59 @@ Example: `favorite-search-results`
 
 ## Tools
 
+### Resolve location
+
+MCP tool name: `resolveLocation`
+
+Forward-geocode a place name to coordinates. Returns matched (single clear result), ambiguous (up to 5 candidate places), or not_found.
+
+Use when a user specifies a place name to set as a photo location. If the result is ambiguous, present the choices to the user and ask them to pick one. If not_found, tell the user the place was not recognised and ask for a more specific name.
+
+Argument modes:
+
+- `forward-geocode`: Use when you have a place name from the user that needs to be resolved to coordinates.
+  Required fields: `query`.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved resolve-location request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `query`.
+
+#### resolve-paris-matched
+
+Forward-geocode "Paris" — likely returns matched with Île-de-France coordinates.
+
+<!-- mcp-docs:tool-arguments tool="resolveLocation" example="resolve-paris-matched" -->
+
+```json
+{
+  "query": "Paris, France"
+}
+```
+
+#### resolve-paris-ambiguous
+
+Forward-geocode "Paris" without a country — may return ambiguous with FR and US choices.
+
+<!-- mcp-docs:tool-arguments tool="resolveLocation" example="resolve-paris-ambiguous" -->
+
+```json
+{
+  "query": "Paris"
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="resolveLocation" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
 ### Resolve asset search filters
 
 MCP tool name: `resolveAssetSearchFilters`
@@ -3178,6 +3231,10 @@ Summarize plan risks and selected changes.
 ```
 
 ## Common Mistakes
+
+### Resolve location
+
+- `resolve-location-missing-query`: Provide the query field with the place name string to forward-geocode.
 
 ### Resolve asset search filters
 

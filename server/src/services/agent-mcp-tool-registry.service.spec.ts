@@ -6,6 +6,7 @@ import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registr
 import z from 'zod';
 
 const expectedToolNames = [
+  AgentToolName.ResolveLocation,
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.FindTripCandidates,
@@ -33,6 +34,7 @@ const expectedToolNames = [
 ] as const;
 
 const expectedReadToolNames = [
+  AgentToolName.ResolveLocation,
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.FindTripCandidates,
