@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.997,
+  "overall": 0.998,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.867
+    "copy": 0.889
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -29,6 +29,7 @@
     "recall.archive.unarchive": 1,
     "recall.archive.uncommon-verb": 1,
     "recall.archive.screenshots": 1,
+    "recall.trash.screenshots": 1,
     "recall.favorite.canonical": 1,
     "recall.favorite.unfavorite": 1,
     "recall.favorite.add-to-favorites": 1,
@@ -84,6 +85,10 @@
     "recall.crop.comma-form": 1,
     "recall.crop.labeled-form": 1,
     "recall.crop.zero-origin": 1,
+    "recall.share.as-link": 1,
+    "recall.share.create-link": 1,
+    "recall.share.neg.trash": 1,
+    "recall.share.neg.album": 1,
     "recall.cover.index": 1,
     "recall.cover.first": 1,
     "neg.q.count": 1,
@@ -142,7 +147,7 @@
     "slots.rotate.ccw-polarity": 1,
     "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 0.6,
+    "copy.trip.italy.no-exclusions": 0.667,
     "copy.trip.long-name": 1
   }
 }
