@@ -2,7 +2,6 @@ import { Kysely } from 'kysely';
 import { FaceRepairScanRepository, RepairScanParams, RepairScanPerson } from 'src/repositories/face-repair-scan.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
-import { newUuid } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
@@ -94,7 +93,8 @@ describe(FaceRepairScanRepository.name, () => {
 
     await sut.pruneSupersededScans();
     expect(await sut.getScanById(first.id)).toBeUndefined();
-    expect((await sut.getLatestScan())?.id).toBe(second.id);
+    const latestAfterPrune = await sut.getLatestScan();
+    expect(latestAfterPrune?.id).toBe(second.id);
   });
 
   describe('enrichReportPersons', () => {
@@ -175,5 +175,22 @@ describe(FaceRepairScanRepository.name, () => {
       expect(row?.persons).toHaveLength(600);
       expect(row?.persons[599].personName).toBeNull();
     });
+  });
+
+  it('migration is reversible: down function exists and drops face_repair_scan', async () => {
+    // Dynamic import of migration via path alias causes TS2307 under moduleResolution:node16,
+    // so we assert reversibility by inspecting the migration source instead of executing it.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    // eslint-disable-next-line unicorn/prefer-module
+    const thisDir = __dirname;
+    const migrationPath = resolve(
+      thisDir,
+      '../../../../src/schema/migrations-gallery/1780000000000-AddFaceRepairScan.ts',
+    );
+    const source = readFileSync(migrationPath, 'utf8');
+    expect(source).toContain('export async function down');
+    expect(source).toContain('DROP TABLE');
+    expect(source).toContain('face_repair_scan');
   });
 });

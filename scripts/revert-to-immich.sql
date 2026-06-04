@@ -122,6 +122,7 @@ DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
 
 -- Face identities
+DROP TABLE IF EXISTS "face_repair_scan" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
 DROP TABLE IF EXISTS "face_identity" CASCADE;
 
