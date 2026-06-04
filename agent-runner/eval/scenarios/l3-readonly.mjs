@@ -583,6 +583,26 @@ export default [
     threshold: 0.5,
   },
 
+  // --- crop_assets routing + plan-proposed ----------------------------------
+  {
+    // crop_assets routing: explicit geometry in the prompt → crop_assets (regex
+    // fast-path; no model needed). Holds against any instance.
+    id: 'l3.recall.crop',
+    category: 'l3.recall',
+    prompt: 'crop this photo to 100,100,800,600',
+    expect: { kind: 'crop_assets' },
+  },
+  {
+    // crop_assets end-to-end (PROPOSE-ONLY, never applied): explicit geometry +
+    // recency source → batch asset.crop plan. Data-dependent (needs at least one
+    // owned asset); routing-only when unseeded (SEEDED gates the plan assertion).
+    id: 'l3.plan.crop',
+    category: 'l3.plan',
+    prompt: 'crop this photo to 100,100,800,600',
+    expect: { kind: 'crop_assets', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+
   // --- set_album_cover routing + plan-proposed ------------------------------
   {
     id: 'l3.recall.cover',

@@ -539,6 +539,38 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'crop_assets',
+    flow: 'hybrid',
+    title: 'Crop photos (explicit geometry)',
+    classifierDescription:
+      'User wants to crop a photo to EXPLICIT pixel geometry (x, y, width, height supplied in the prompt). Comma form "crop this photo to 100,100,800,600" or labeled form "crop to x=N y=N w=N h=N". No geometry → asks for x/y/width/height; never guesses coordinates.',
+    positiveExamples: Object.freeze([
+      'crop this photo to 100,100,800,600',
+      'crop to x=10 y=20 w=300 h=400',
+      'crop my newest photo to x=0 y=0 width=1920 height=1080',
+    ]),
+    negativeExamples: Object.freeze([
+      'crop this photo',
+      'crop my newest 20 photos',
+      'rotate my newest 20 photos 90 clockwise',
+    ]),
+    slots: Object.freeze({
+      x: Object.freeze({ type: 'number', required: true, description: 'Left edge of the crop rectangle (pixels, >= 0).' }),
+      y: Object.freeze({ type: 'number', required: true, description: 'Top edge of the crop rectangle (pixels, >= 0).' }),
+      width: Object.freeze({ type: 'number', required: true, description: 'Width of the crop rectangle (pixels, >= 1).' }),
+      height: Object.freeze({ type: 'number', required: true, description: 'Height of the crop rectangle (pixels, >= 1).' }),
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photo to crop.' }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Crop assets',
+      tier: 'Solid now',
+      workflowOrBoundary: 'Pi resolves the source + explicit geometry (x/y/width/height); Gallery owns the batch asset.crop plan from the handle. No-geometry → asks for coordinates; never guesses.',
+    }),
+  }),
+  Object.freeze({
     kind: 'rename_or_describe_space',
     flow: 'strict',
     title: 'Rename or describe space',
