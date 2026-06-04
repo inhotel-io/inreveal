@@ -22,11 +22,15 @@ Current read tools:
 - `searchAssets`: Smart, OCR, description, filename, and metadata search by
   date, created/updated ranges, location labels, camera fields, favorite state,
   album membership, tags, people, shared-space people, shared-space scope,
-  visibility, rating including unrated, media type, bounded limit, order, and
-  page continuation.
+  visibility, rating including unrated, media type, trashed state (`isTrashed`,
+  for restore sources), bounded limit, order, and page continuation.
 - `resolveAssetSearchFilters`: resolves user-facing people, tag, album, shared
   space, location, camera make/model, and lens names into `searchAssets` filters
   or structured ambiguity/denied/no-match results.
+- `resolveLocation`: forward-geocodes a place name to coordinates via the
+  `geodata_places` trigram index, returning `matched` / `ambiguous` (with candidate
+  choices) / `not_found` so place-name metadata edits resolve without asking for
+  raw lat/lng.
 - `readAssetMetadata`: timestamps, location labels, camera fields, rating,
   favorite state, visibility, and tags for selected assets.
 - `readAssetPreviews`: preview media references for selected assets.
@@ -49,8 +53,9 @@ Current planning tools:
 - `proposeAlbumOperations`: creates a reviewable plan.
 - `reviseProposedOperations`: replaces an existing plan after user feedback.
 - `summarizePlan`: summarizes an existing plan.
-- `proposeAssetBatchFromSearch`: proposes reviewable favorite, archive, tag,
-  metadata, or rotate operations from a declarative or previous search source.
+- `proposeAssetBatchFromSearch` / `proposeAssetBatchFromSelection`: propose
+  reviewable favorite, archive, tag, metadata, rotate, or crop operations from a
+  declarative/previous search source or a resolved selection handle.
 
 Current reviewable operation types:
 
@@ -62,7 +67,12 @@ Current reviewable operation types:
 - Assets: `asset.rotate`, `asset.setFavorite`, `asset.setArchive`,
   `asset.addTag`, `asset.removeTag`, `asset.updateMetadata`, `asset.trash`
   (reversible move to Trash; High risk; `trashAssets` write-scope),
-  `asset.restore` (reversible un-trash; Low risk; `trashAssets` write-scope).
+  `asset.restore` (reversible un-trash; Low risk; `trashAssets` write-scope),
+  `asset.crop` (reversible explicit-geometry crop; Low risk; `editAssets`
+  write-scope; ImageEditBatch target).
+- Sharing: `shareLink.create` (creates an individual-asset public share link with
+  optional expiry/password/hide-metadata; High risk; OUTWARD-FACING;
+  `createSharedLinks` write-scope, granted only in the LocalPowerUser preset).
 
 Safety invariant: MCP tools do not directly mutate the gallery. Writes must be
 represented as operation plans and applied by Gallery after user review.
@@ -119,7 +129,7 @@ retried only when the correction is mechanical.
 | Add or remove tags               | Hybrid              | `tag_assets` adds (`asset.addTag`) and `untag_assets` removes (`asset.removeTag`, resolving the tag name to an id) from a resolved source; subjective sources hand off.                                                                                                                                                                                                                                                                                           |
 | Batch asset metadata edits       | Hybrid              | `update_asset_metadata`: Pi resolves a loose-asset source; Gallery owns the `asset.updateMetadata` plan (description/rating/date/timezone/lat+lng; place names resolve to coordinates via `resolveLocation`).                                                                                                                                                                                                                                                     |
 | Rotate assets                    | Hybrid              | `rotate_assets`: Pi resolves the source + explicit angle (90/180/270); Gallery owns the batch `asset.rotate` plan. No-angle / subjective declines.                                                                                                                                                                                                                                                                                                                |
-| Crop assets                      | Hybrid              | `crop_assets`: Pi resolves the source + explicit geometry (x/y/width/height); Gallery owns the batch `asset.crop` plan. No-geometry → asks for coordinates; never guesses.                                                                                                                                                                                                                                                                                        |
+| Crop assets                      | Hybrid              | `crop_assets`: Pi resolves the source + explicit geometry (x/y/width/height); Gallery owns the batch `asset.crop` plan. No-geometry → asks for coordinates; never guesses. Verified at L1 (slot fidelity) + L2; a regex/explicit-path capability — raw coordinate-crop prompts are not reliably engaged by the live LLM agent (OQ-F1), so there is no live-L3 routing assertion.                                                                                  |
 | Answer album/library questions   | Open read flow      | Pi may use read/search tools and answer without write planning.                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Summarize a proposed plan        | Strict              | Summary must be generated from a persisted plan.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Revise a plan                    | Strict              | Revision must replace a persisted plan and never apply it.                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -185,11 +195,14 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | Add or remove tags               | “Tag these Berlin photos as Travel.”                                        | Solid now                                 | Search/read metadata, propose `asset.addTag` or `asset.removeTag`.                                                                                                                                                                                                       | Shows tag name or existing tag id resolution and selected assets.                                                                                                                                                  | New tag by name; existing tag removal; ambiguous tag names if exposed; invalid payload with both tag id and name rejected.                                                                                                                                        |
 | Batch asset metadata edits       | “Set the description on the 5 newest photos to Test batch.”                 | Solid now for explicit supported fields   | Search or inspect the target set, then propose `asset.updateMetadata` through `proposeAssetBatchFromSearch` or `proposeAlbumOperations`. Supports description, rating, date/time, timezone, explicit latitude/longitude, and place names resolved via `resolveLocation`. | Shows field-level before/after metadata, selected count, representative assets, and coordinate warnings before apply; resolves place names to coordinates via `resolveLocation` (ambiguous names ask which place). | Description update; clear rating; absolute date/time; relative timestamp shift; timezone update; explicit coordinates; place name resolves to coordinates; ambiguous place name asks which; latitude without longitude asks for longitude; apply keeps chat open. |
 | Rotate images                    | “Rotate the sideways photos clockwise.”                                     | Constrained now                           | Read previews/originals if allowed, propose `asset.rotate`.                                                                                                                                                                                                              | Shows thumbnails and rotation direction; only supports valid rotation angles.                                                                                                                                      | Valid 90/180/270 angle; unsupported angle rejected; non-image assets excluded; preview permission denied.                                                                                                                                                         |
+| Crop images                      | “Crop my newest photo to 100, 100, 800, 600.”                               | Constrained now (explicit geometry)       | Resolve a source, parse explicit x/y/width/height, propose a batch `asset.crop` (ImageEditBatch; reversible via `removeAssetEdits`); image-only.                                                                                                                         | Shows the crop geometry + selected count; asks for x/y/width/height when absent and never guesses pixel coordinates.                                                                                               | Comma + labeled geometry forms; no-geometry asks; rotate phrasing stays `rotate_assets`; out-of-bounds geometry rejected by the editor; coordinate crops are not reliably routed by the live LLM agent (OQ-F1) — verified at L1/L2.                               |
 | Trash photos (reversible)        | “Trash my newest 20 photos.” / “Delete my 2024 screenshots.”                | Solid now                                 | Resolve a bounded source, propose a High-risk `asset.trash` (`deleteAll(force:false)` → recoverable Trash); `trashAssets` write-scope required.                                                                                                                          | States the count, that it moves to the recoverable Trash (not permanent), and never hard-deletes; declines album-level deletion and subjective sources.                                                            | Bounded source; empty selection asks; album-level “delete the X album” declines; subjective declines; write-scope ungranted blocks; never `force:true`.                                                                                                           |
+| Restore from trash (reversible)  | “Restore my newest 20 from trash.” / “Recover what I just trashed.”         | Solid now                                 | Resolve a trashed-asset source (`isTrashed:true` injected), propose a Low-risk, reversible `asset.restore` (moves assets back to the library); `trashAssets` write-scope required.                                                                                       | States the count and that assets move back to the library from Trash; declines non-restore verbs.                                                                                                                  | Bounded trashed source; nothing in trash (direct answer); does not steal plain trash/untag verbs; write-scope ungranted blocks.                                                                                                                                   |
 | Duplicate cleanup                | “Clean up my duplicate photos.”                                             | Solid now (metadata keep-rule)            | `listDuplicateGroups`, keep one per group (favorite > rating > sharpness > resolution > age > id), propose `asset.trash` over the non-keepers.                                                                                                                           | Discloses the keep rule + counts; keeper is never trashed; reversible; review before apply.                                                                                                                        | No duplicate groups (direct answer, no plan); keeper preserved; tie-breaks deterministic; large libraries capped by `maxGroups`.                                                                                                                                  |
 | Answer album/library questions   | “How many photos are in this album?”                                        | Solid now                                 | `listAlbums`, `readAlbum`, optionally `readAssetMetadata`.                                                                                                                                                                                                               | Gives a direct answer and cites the album or search scope in plain language.                                                                                                                                       | Album count; album date range; no album found; ambiguous album name.                                                                                                                                                                                              |
 | Summarize a proposed plan        | “What exactly will this plan change?”                                       | Solid now                                 | `summarizePlan`.                                                                                                                                                                                                                                                         | Produces a concise human summary without raw operation ids unless details are requested.                                                                                                                           | Whole-plan summary; risk-focused summary; summary after revision; missing plan id validation.                                                                                                                                                                     |
 | Revise a plan                    | “Actually exclude videos and keep only 30 photos.”                          | Solid now                                 | `reviseProposedOperations` with previous plan id and replacement operations.                                                                                                                                                                                             | Replaces the displayed plan, keeps prior chat context, and does not apply either plan until user approval.                                                                                                         | Remove subset; add dependent operation; invalid temporary target; apply revised plan then continue chat.                                                                                                                                                          |
+| Share photos as a link           | “Share these photos as a link that expires in 7 days.”                      | Solid now (LocalPowerUser only)           | Resolve a bounded source, propose a High-risk, OUTWARD-FACING `shareLink.create` (individual-asset link; optional expiry/password/hide-metadata); `createSharedLinks` granted only in LocalPowerUser.                                                                    | States it creates a public link, shows expiry/password/metadata settings, and requires plan approval before the link is created; blocked (with disclosure) when the scope is ungranted.                            | Link with expiry; with password; hide-metadata; empty selection asks; past expiry rejected; scope ungranted blocks; never auto-applies.                                                                                                                           |
 
 ## High-Value Constrained Capabilities
 
@@ -280,6 +293,10 @@ Use these prompts as manual and automated acceptance scenarios:
 27. “Suggest 20 highlights from this album.”
 28. “Suggest highlights from last weekend.”
 29. “Create an album for my recent trip to USA.”
+30. “Restore my newest 20 photos from trash.”
+31. “Trash my screenshots.”
+32. “Crop my newest photo to 100, 100, 800, 600.”
+33. “Share these photos as a link that expires in 7 days.” (LocalPowerUser preset)
 
 ## Next Steps
 
@@ -323,3 +340,20 @@ Use these prompts as manual and automated acceptance scenarios:
    workflow's continuation protocol (10-min TTL). Subjective/visual sources remain
    out of scope (they hand off); place-name → coordinate geocoding now resolves via
    `resolveLocation`.
+8. **Roadmap phases B–F shipped (23 strict/hybrid workflows total).** On top of the
+   trash/duplicate set: **B** — a `resolveLocation` forward-geocoder read tool +
+   place-name location edits in `update_asset_metadata`. **C** — an `isTrashed`
+   search filter, a reversible `asset.restore` op, and the `restore_assets`
+   workflow. **D** — durable space/user disambiguation (item 7). **E** — the
+   resolver maps "screenshots" tag-first to the `Screenshots` / `Auto/Screenshots`
+   classification tag (discloses + hands off when untagged; no `make:null`
+   heuristic). **F** — a reversible explicit-geometry `asset.crop` op + `crop_assets`
+   workflow, and an outward-facing `shareLink.create` op + `share_assets` workflow
+   gated behind a new `createSharedLinks` write-scope (granted only in LocalPowerUser;
+   off in the eval preset). Each routing/op change carries L1 (component) + propose-
+   only L3 (live, read-only; the audit confirms no plan is applied) coverage, except
+   crop, whose coordinate-geometry intent is not reliably routed by the live LLM
+   agent (OQ-F1) and is asserted at L1/L2 only. A live L3 run against the personal
+   instance also surfaced and fixed a real bug — `asset.crop` was missing from the
+   `proposeAssetBatch` tool's action union and its summary/target/payload/risk
+   mappings, so the workflow could classify but not propose.
