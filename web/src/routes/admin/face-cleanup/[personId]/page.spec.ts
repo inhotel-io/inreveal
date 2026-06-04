@@ -81,13 +81,12 @@ vi.mock('$lib/components/layouts/AdminPageLayout.svelte', async () => {
 
 // Mock people-utils thumbnail helper
 vi.mock('$lib/utils/people-utils', () => ({
-  getPersonFaceThumbnailUrl: (personId: string, faceId: string) =>
-    `/api/people/${personId}/faces/${faceId}/thumbnail`,
+  getPersonFaceThumbnailUrl: (personId: string, faceId: string) => `/api/people/${personId}/faces/${faceId}/thumbnail`,
   getSpacePersonFaceThumbnailUrl: vi.fn(),
 }));
 
-import { applyFaceRepair, getFaceRepairPersonFaces, getLatestScan, type FaceRepairPersonFacesDto } from '@immich/sdk';
 import { goto } from '$app/navigation';
+import { applyFaceRepair, getFaceRepairPersonFaces, getLatestScan, type FaceRepairPersonFacesDto } from '@immich/sdk';
 import Page from './+page.svelte';
 
 // ---- helpers ----

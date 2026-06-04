@@ -4,7 +4,13 @@ import { JobName, JobStatus, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
-import { FlagParams, ReattributionTally, classifyFlaggedPerson, decideReattribution, tallyReattribution } from 'src/utils/face-repair';
+import {
+  FlagParams,
+  ReattributionTally,
+  classifyFlaggedPerson,
+  decideReattribution,
+  tallyReattribution,
+} from 'src/utils/face-repair';
 
 export interface ReattributionCandidate extends ReattributionTally {
   assetFaceId: string;
@@ -231,16 +237,18 @@ export class FaceRepairService extends BaseService {
       const { machineLearning } = await this.getConfig({ withCache: true });
       const recognition = machineLearning.facialRecognition;
 
-      const storedParams = storedScan?.params as {
-        ownerId?: string;
-        maxDistance?: number;
-        minFaces?: number;
-        voteWindow?: number;
-        voteMargin?: number;
-        maxAttributionDistance?: number;
-        maxFlaggedFraction?: number;
-        largeClusterThreshold?: number;
-      } | undefined;
+      const storedParams = storedScan?.params as
+        | {
+            ownerId?: string;
+            maxDistance?: number;
+            minFaces?: number;
+            voteWindow?: number;
+            voteMargin?: number;
+            maxAttributionDistance?: number;
+            maxFlaggedFraction?: number;
+            largeClusterThreshold?: number;
+          }
+        | undefined;
 
       const ownerId = storedParams?.ownerId;
       const maxDistance = storedParams?.maxDistance ?? recognition.maxDistance;
@@ -391,7 +399,10 @@ export class FaceRepairService extends BaseService {
     return { personId, flaggedFaces };
   }
 
-  async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<{ unassigned: number; requeued: number }> {
+  async applyRepair(input: {
+    approvedPersonIds: string[];
+    excludeFaceIds?: string[];
+  }): Promise<{ unassigned: number; requeued: number }> {
     if (input.approvedPersonIds.length === 0) {
       return { unassigned: 0, requeued: 0 };
     }

@@ -1,7 +1,7 @@
 import {
   ClassifyContext,
-  ClassifyPersonInput,
   classifyFlaggedPerson,
+  ClassifyPersonInput,
   decideReattribution,
   ReattributionNeighbor,
   ReattributionTally,

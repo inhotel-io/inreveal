@@ -84,10 +84,7 @@
 
   onMount(async () => {
     try {
-      const [facesResult, scanResult] = await Promise.all([
-        getFaceRepairPersonFaces({ personId }),
-        getLatestScan(),
-      ]);
+      const [facesResult, scanResult] = await Promise.all([getFaceRepairPersonFaces({ personId }), getLatestScan()]);
 
       const faces = facesResult as unknown as { flaggedFaces: FlaggedFace[] };
       flaggedFaces = faces?.flaggedFaces ?? [];
@@ -135,12 +132,7 @@
   };
 </script>
 
-<AdminPageLayout
-  breadcrumbs={[
-    { title: $t('admin.face_cleanup'), href: Route.faceCleanup() },
-    { title: personName },
-  ]}
->
+<AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
   <div class="mx-auto max-w-screen-xl p-6 pb-36">
     <!-- Back link -->
     <a
@@ -240,9 +232,7 @@
         <div
           class="flex items-center justify-center border-x border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
         >
-          <div
-            class="rounded-full border border-gray-200 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-800"
-          >
+          <div class="rounded-full border border-gray-200 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-800">
             <Icon path={mdiArrowRight} size="16" class="text-gray-400" />
           </div>
         </div>
@@ -276,11 +266,7 @@
           class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
         >
           <span class="flex-1">{applyError}</span>
-          <button
-            type="button"
-            onclick={() => (applyError = null)}
-            class="flex-none text-red-400 hover:text-red-600"
-          >
+          <button type="button" onclick={() => (applyError = null)} class="flex-none text-red-400 hover:text-red-600">
             <Icon path={mdiClose} size="16" />
           </button>
         </div>
@@ -308,21 +294,14 @@
               type="button"
               class={[
                 'relative aspect-square overflow-hidden rounded-xl border-2 transition-all',
-                excluded
-                  ? 'border-transparent opacity-55 grayscale-[0.5]'
-                  : 'border-primary hover:border-primary/80',
+                excluded ? 'border-transparent opacity-55 grayscale-[0.5]' : 'border-primary hover:border-primary/80',
               ].join(' ')}
               onclick={() => vm.toggle(face.assetFaceId)}
               data-testid="face-tile"
               data-faceid={face.assetFaceId}
               data-excluded={excluded}
             >
-              <img
-                src={faceThumbnailUrl(face.assetFaceId)}
-                alt=""
-                class="size-full object-cover"
-                loading="lazy"
-              />
+              <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
               <!-- Checkmark or stays overlay -->
               {#if excluded}
                 <div
@@ -390,12 +369,7 @@
       <Button color="secondary" onclick={handleCancel} data-testid="cancel-btn">
         {$t('admin.face_cleanup_review_cancel')}
       </Button>
-      <Button
-        color="primary"
-        disabled={vm.movingCount === 0 || applying}
-        onclick={handleMove}
-        data-testid="move-btn"
-      >
+      <Button color="primary" disabled={vm.movingCount === 0 || applying} onclick={handleMove} data-testid="move-btn">
         <Icon path={mdiArrowRight} size="16" />
         {$t('admin.face_cleanup_review_move', { values: { count: vm.movingCount.toLocaleString() } })}
       </Button>

@@ -69,7 +69,11 @@ export class FaceRepairScanRepository {
       }
       return trx
         .insertInto('face_repair_scan')
-        .values({ status: 'pending', requestedBy: input.requestedBy, params: input.params as unknown as Insertable<FaceRepairScanTable>['params'] })
+        .values({
+          status: 'pending',
+          requestedBy: input.requestedBy,
+          params: input.params as unknown as Insertable<FaceRepairScanTable>['params'],
+        })
         .returningAll()
         .executeTakeFirstOrThrow();
     });

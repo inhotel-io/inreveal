@@ -1,7 +1,7 @@
 import { Kysely } from 'kysely';
 import { ConfigRepository } from 'src/repositories/config.repository';
-import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
+import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -92,7 +92,10 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     for (let i = 0; i < 10; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karinaData.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
     }
 
     // Alexia: 3 leaked first-axis faces + 8 genuine second-axis → under cap → toRepair

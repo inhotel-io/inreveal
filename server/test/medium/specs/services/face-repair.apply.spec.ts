@@ -2,8 +2,8 @@ import { Kysely } from 'kysely';
 import { SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
-import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
+import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -100,7 +100,10 @@ const seedOverCapPerson = async (
       personId: person.id,
       sourceType: SourceType.MachineLearning,
     });
-    await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+      .execute();
   }
 
   return { person, leakedFaceIds, ownerQ };
@@ -138,21 +141,13 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
     expect(result.unassigned).toBe(p1Leaked.length);
 
     // P1's faces are now null.
-    const p1Rows = await db
-      .selectFrom('asset_face')
-      .select(['id', 'personId'])
-      .where('id', 'in', p1Leaked)
-      .execute();
+    const p1Rows = await db.selectFrom('asset_face').select(['id', 'personId']).where('id', 'in', p1Leaked).execute();
     for (const row of p1Rows) {
       expect(row.personId).toBeNull();
     }
 
     // P2's faces are unchanged — still assigned to P2.
-    const p2Rows = await db
-      .selectFrom('asset_face')
-      .select(['id', 'personId'])
-      .where('id', 'in', p2Leaked)
-      .execute();
+    const p2Rows = await db.selectFrom('asset_face').select(['id', 'personId']).where('id', 'in', p2Leaked).execute();
     for (const row of p2Rows) {
       expect(row.personId).toBe(p2.id);
     }

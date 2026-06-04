@@ -1,5 +1,9 @@
 import { Kysely } from 'kysely';
-import { FaceRepairScanRepository, RepairScanParams, RepairScanPerson } from 'src/repositories/face-repair-scan.repository';
+import {
+  FaceRepairScanRepository,
+  RepairScanParams,
+  RepairScanPerson,
+} from 'src/repositories/face-repair-scan.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -124,7 +128,10 @@ describe(FaceRepairScanRepository.name, () => {
       // Person unnamed: name = '' (empty string → null after enrich)
       const unnamedData = mediumFactory.personInsert({ ownerId, name: '' });
       // personInsert spreads `name: ''` last so it overrides the default 'Test Name'
-      await db.insertInto('person').values({ ...unnamedData, name: '' }).execute();
+      await db
+        .insertInto('person')
+        .values({ ...unnamedData, name: '' })
+        .execute();
       unnamed = { id: unnamedData.id, faceAssetId: null, name: '' };
 
       // Person q: suspected owner, no faceAssetId
