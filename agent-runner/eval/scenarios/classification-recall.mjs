@@ -146,6 +146,15 @@ export default [
     prompt: 'archive old screenshots from 2024',
     expect: { kind: 'archive_assets', slotsSurvive: true },
   },
+  {
+    // Verb parity (E1): the same "screenshots" source rides the trash verb →
+    // trash_assets, not archive. Routing is pre-resolution; the tag resolves at run
+    // time. Bounded phrasing (no "all") is not declined.
+    id: 'recall.trash.screenshots',
+    category: 'recall',
+    prompt: 'trash my screenshots',
+    expect: { kind: 'trash_assets' },
+  },
 
   // favorite_assets ---------------------------------------------------------
   {
