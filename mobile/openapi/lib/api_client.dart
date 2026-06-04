@@ -226,6 +226,8 @@ class ApiClient {
           return AgentAssetMetadataTag.fromJson(value);
         case 'AgentAssetRemoveTagOperationType':
           return AgentAssetRemoveTagOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetRestoreOperationType':
+          return AgentAssetRestoreOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetRotateOperationType':
           return AgentAssetRotateOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSetArchiveOperationType':
@@ -448,6 +450,8 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf19':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf19.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':

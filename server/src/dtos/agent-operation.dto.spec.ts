@@ -85,6 +85,14 @@ const makeValidTrashOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeValidRestoreOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetRestore,
+  summary: 'Restore matching photos from Trash.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -2420,6 +2428,70 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidTrashOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('asset.restore operation schema', () => {
+    it('accepts a valid asset.restore operation with default Low riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidRestoreOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetRestore);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.Low);
+      }
+    });
+
+    it('accepts a valid asset.restore operation with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidRestoreOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects asset.restore with a payload field', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidRestoreOp({ payload: { foo: 'bar' } })),
+        ['operations', 0],
+        'Unrecognized key',
+      );
+    });
+
+    it('rejects asset.restore with a targetId', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidRestoreOp({ targetId: factory.uuid() })),
+        ['operations', 0, 'targetId'],
+        'targetId is not valid for asset batch targets',
+      );
+    });
+
+    it('rejects asset.restore with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidRestoreOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.restore requires an asset_batch target',
+      );
+    });
+
+    it('rejects asset.restore with no asset selection mechanism', () => {
+      expectIssue(
+        parseSingleOperationProposal({ ...makeValidRestoreOp(), assetIds: undefined }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects asset.restore with multiple asset selection mechanisms', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidRestoreOp({ assetSelectionHandleId: factory.uuid() })),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidRestoreOp());
       expect(result.success).toBe(true);
     });
   });

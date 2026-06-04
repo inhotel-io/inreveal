@@ -22620,6 +22620,12 @@
         ],
         "type": "string"
       },
+      "AgentAssetRestoreOperationType": {
+        "enum": [
+          "asset.restore"
+        ],
+        "type": "string"
+      },
       "AgentAssetRotateOperationType": {
         "enum": [
           "asset.rotate"
@@ -24334,7 +24340,8 @@
           "asset.updateMetadata",
           "asset.addTag",
           "asset.removeTag",
-          "asset.trash"
+          "asset.trash",
+          "asset.restore"
         ],
         "type": "string"
       },
@@ -25837,6 +25844,65 @@
                     },
                     "riskLevel": {
                       "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetRestoreOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
                     },
                     "enabled": {
@@ -27830,6 +27896,65 @@
                     },
                     "riskLevel": {
                       "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetRestoreOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
                       "$ref": "#/components/schemas/AgentOperationRiskLevel"
                     },
                     "enabled": {

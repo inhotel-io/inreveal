@@ -85,6 +85,9 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetRemoveTagOperationType) {
     return AgentAssetRemoveTagOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetRestoreOperationType) {
+    return AgentAssetRestoreOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssetRotateOperationType) {
     return AgentAssetRotateOperationTypeTypeTransformer().encode(value).toString();
   }
