@@ -181,12 +181,12 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
     requiredReadTools: Object.freeze(['listSpaces', 'resolveAssetSearchFilters', 'searchAssets']),
     planTool: 'proposeAddAssetsToSpaceFromSearch',
-    supportsContinuation: false,
+    supportsContinuation: true,
     matrixRow: Object.freeze({
       capability: 'Add/remove photos in a space',
       tier: 'Solid now',
       workflowOrBoundary:
-        'Pi resolves the space and source; Gallery owns the space add (from-search) / remove (space.removeAssets) plan from the handle.',
+        'Pi resolves the space and source; Gallery owns the space add (from-search) / remove (space.removeAssets) plan from the handle. Durable space disambiguation: ambiguous space gets a storable candidate list.',
     }),
   }),
   Object.freeze({
@@ -561,11 +561,11 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
     requiredReadTools: Object.freeze(['listSpaces']),
     planTool: 'proposeAlbumOperations',
-    supportsContinuation: false,
+    supportsContinuation: true,
     matrixRow: Object.freeze({
       capability: 'Update space details',
       tier: 'Solid now',
-      workflowOrBoundary: 'Direct space-detail update plan; preserve unspecified fields.',
+      workflowOrBoundary: 'Direct space-detail update plan; preserve unspecified fields. Durable space disambiguation: ambiguous space gets a storable candidate list.',
     }),
   }),
   Object.freeze({
