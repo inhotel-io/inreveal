@@ -513,16 +513,17 @@
     "kind": "update_asset_metadata",
     "flow": "hybrid",
     "title": "Edit photo metadata",
-    "classifierDescription": "User wants to edit metadata (description/caption, star rating, capture date, time zone, or explicit lat+lng location) on a metadata-describable set of LOOSE photos — not an album or a space.",
+    "classifierDescription": "User wants to edit metadata (description/caption, star rating, capture date, time zone, or GPS location — by place name or explicit lat+lng) on a metadata-describable set of LOOSE photos — not an album or a space.",
     "positiveExamples": [
       "Set the description on my newest 20 photos to Berlin weekend",
       "Rate my newest 12 photos five stars",
-      "Set the timezone on my newest 20 photos to Europe/Berlin"
+      "Set the timezone on my newest 20 photos to Europe/Berlin",
+      "Set the location on my newest 20 to Paris"
     ],
     "negativeExamples": [
       "Set the description on the Family album to Summer 2026",
       "Set the description on the Trips space to Our adventures",
-      "Set the location on these photos to Paris"
+      "Set Paris as the album cover"
     ],
     "slots": {
       "field": {
@@ -534,6 +535,11 @@
         "type": "string",
         "required": false,
         "description": "New value (text, 1-5 or clear for rating, IANA zone, ISO date)."
+      },
+      "placeName": {
+        "type": "string",
+        "required": false,
+        "description": "Place name for a location edit (resolved to lat/lng via resolveLocation)."
       },
       "latitude": {
         "type": "number",
@@ -553,7 +559,8 @@
     },
     "requiredReadTools": [
       "resolveAssetSearchFilters",
-      "searchAssets"
+      "searchAssets",
+      "resolveLocation"
     ],
     "planTool": "proposeAssetBatchFromSelection",
     "supportsContinuation": false,
