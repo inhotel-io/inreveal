@@ -1,3 +1,4 @@
+import { buildCandidateContinuation, resumeFromCandidates } from '../candidate-disambiguation.mjs';
 import { failed, needsInput } from '../protocol.mjs';
 import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
@@ -155,7 +156,7 @@ export const manageSpaceMembersWorkflow = () => ({
     return slots;
   },
 
-  async run({ client, slots, signal }) {
+  async run({ client, slots, resolvedSpaceId, resolvedUserId, signal, nowMs }) {
     const action = clean(slots?.action).toLowerCase();
     const memberQueries = Array.isArray(slots?.memberQueries) ? slots.memberQueries : [];
     const role = clean(slots?.role).toLowerCase();
@@ -167,7 +168,29 @@ export const manageSpaceMembersWorkflow = () => ({
       });
     }
 
-    // 1. Resolve the space (none/ambiguous → ask).
+    // 1. Resolve the space (none/ambiguous → ask; skip when already resolved).
+    let spaceSummary;
+    let spaceName;
+    if (resolvedSpaceId) {
+      // Continuation path: skip listSpaces, read directly.
+      let detail;
+      try {
+        detail = await client.call('readSpace', { spaceId: resolvedSpaceId }, { signal });
+      } catch (error) {
+        return failed({ text: safeFailureText(error?.message ?? 'The space lookup tool failed.') });
+      }
+      const space = detail?.space ?? detail ?? {};
+      spaceName = clean(space.name) || resolvedSpaceId;
+      spaceSummary = { id: resolvedSpaceId, name: spaceName };
+      // Use already-fetched member list from readSpace.
+      const members = Array.isArray(space.members) ? space.members : [];
+      const memberById = new Map(members.map((member) => [member.userId, member]));
+      return this._resolveUsersAndPropose({
+        client, slots, slots_action: action, memberQueries, role,
+        spaceSummary, spaceName, memberById, resolvedUserId, signal, nowMs,
+      });
+    }
+
     const ref = normalizeSpaceRef(slots?.spaceRef);
     let listed;
     try {
@@ -181,10 +204,21 @@ export const manageSpaceMembersWorkflow = () => ({
       return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
     }
     if (spaceMatches.length > 1) {
-      return needsInput({ text: `Multiple spaces are called "${ref}". Which one do you mean?` });
+      // Ambiguous space — offer durable candidate list.
+      const candidates = spaceMatches.map((s) => ({ id: s.id, name: s.name }));
+      const continuation = buildCandidateContinuation({
+        kind: 'manage_space_members_space',
+        candidates,
+        nowMs: nowMs ?? Date.now(),
+        slots,
+      });
+      return needsInput({
+        text: `Multiple spaces are called "${ref}". Which one do you mean?\n${candidates.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}`,
+        continuation,
+      });
     }
-    const spaceSummary = spaceMatches[0];
-    const spaceName = clean(spaceSummary.name) || ref;
+    spaceSummary = spaceMatches[0];
+    spaceName = clean(spaceSummary.name) || ref;
 
     // 2. Read the current members (with roles) for the guards.
     let detail;
@@ -193,13 +227,32 @@ export const manageSpaceMembersWorkflow = () => ({
     } catch (error) {
       return failed({ text: safeFailureText(error?.message ?? 'The space lookup tool failed.') });
     }
-    const space = detail?.space ?? detail ?? {};
-    const members = Array.isArray(space.members) ? space.members : [];
+    const spaceDetail = detail?.space ?? detail ?? {};
+    const members = Array.isArray(spaceDetail.members) ? spaceDetail.members : [];
     const memberById = new Map(members.map((member) => [member.userId, member]));
 
+    return this._resolveUsersAndPropose({
+      client, slots, slots_action: action, memberQueries, role,
+      spaceSummary, spaceName, memberById, resolvedUserId, signal, nowMs,
+    });
+  },
+
+  // Internal: resolves member queries and builds the plan proposal.
+  // Called from both the direct path and the continuation-resumed path.
+  async _resolveUsersAndPropose({
+    client, slots, slots_action: action, memberQueries, role,
+    spaceSummary, spaceName, memberById, resolvedUserId, signal, nowMs,
+  }) {
     // 3. Resolve each member query to exactly one user (ambiguous/not-found → ask).
     const resolved = [];
-    for (const query of memberQueries) {
+
+    // If a single user was already resolved from a continuation, use it directly.
+    if (resolvedUserId) {
+      // The user is already known; look them up by id from a searchUsers call
+      // (we need their full record for the member guards). We search by query that
+      // will return at least this user; any that match are filtered to the exact id.
+      // Simpler: call searchUsers with the first memberQuery to get the full record.
+      const query = memberQueries[0] ?? '';
       let res;
       try {
         res = await client.call('searchUsers', { query }, { signal });
@@ -207,13 +260,40 @@ export const manageSpaceMembersWorkflow = () => ({
         return failed({ text: safeFailureText(error?.message ?? 'The user lookup tool failed.') });
       }
       const users = Array.isArray(res?.users) ? res.users : [];
-      if (users.length === 0) {
-        return needsInput({ text: `I could not find anyone matching "${query}". Who do you mean?` });
+      const user = users.find((u) => u.userId === resolvedUserId);
+      if (!user) {
+        return failed({ text: 'I could not find the selected user. Please try again.' });
       }
-      if (users.length > 1) {
-        return needsInput({ text: `More than one person matches "${query}". Who do you mean?` });
+      resolved.push(user);
+    } else {
+      for (const query of memberQueries) {
+        let res;
+        try {
+          res = await client.call('searchUsers', { query }, { signal });
+        } catch (error) {
+          return failed({ text: safeFailureText(error?.message ?? 'The user lookup tool failed.') });
+        }
+        const users = Array.isArray(res?.users) ? res.users : [];
+        if (users.length === 0) {
+          return needsInput({ text: `I could not find anyone matching "${query}". Who do you mean?` });
+        }
+        if (users.length > 1) {
+          // Ambiguous user — offer durable candidate list carrying the resolved space.
+          const candidates = users.map((u) => ({ id: u.userId, name: u.name ?? u.email ?? u.userId }));
+          const continuation = buildCandidateContinuation({
+            kind: 'manage_space_members_user',
+            candidates,
+            nowMs: nowMs ?? Date.now(),
+            slots,
+            resolvedSpaceId: spaceSummary.id,
+          });
+          return needsInput({
+            text: `More than one person matches "${query}". Who do you mean?\n${candidates.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}`,
+            continuation,
+          });
+        }
+        resolved.push(users[0]);
       }
-      resolved.push(users[0]);
     }
 
     // 4. Apply the deterministic guards and build the operation.
@@ -269,5 +349,39 @@ export const manageSpaceMembersWorkflow = () => ({
       successText,
       successSummary: { workflowKind: KIND, target: spaceName, label: action },
     });
+  },
+
+  // Resolve a candidate pick from a continuation follow-up.
+  // Returns { status:'matched', ctx } | { status:'needs_input'|'expired', text }.
+  resumeContinuation({ pending, prompt, nowMs }) {
+    const kind = pending?.kind;
+    if (kind !== 'manage_space_members_space' && kind !== 'manage_space_members_user') {
+      return { status: 'needs_input', text: 'I no longer have pending candidates for this request. Please start over.' };
+    }
+
+    const result = resumeFromCandidates({ pending, prompt, nowMs: nowMs ?? Date.now(), kind });
+    if (result.status !== 'matched') {
+      return result; // needs_input | expired | missing — pass through
+    }
+
+    const { choice } = result;
+    if (kind === 'manage_space_members_space') {
+      return {
+        status: 'matched',
+        ctx: {
+          slots: pending.slots,
+          resolvedSpaceId: choice.id,
+        },
+      };
+    }
+    // manage_space_members_user
+    return {
+      status: 'matched',
+      ctx: {
+        slots: pending.slots,
+        resolvedSpaceId: pending.resolvedSpaceId,
+        resolvedUserId: choice.id,
+      },
+    };
   },
 });
