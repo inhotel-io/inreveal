@@ -36,6 +36,7 @@ import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
+import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -238,6 +239,7 @@ export type ServiceOverrides = {
   event: EventRepository;
   faceIdentity: FaceIdentityRepository;
   faceRepair: FaceRepairRepository;
+  faceRepairScan: FaceRepairScanRepository;
   job: JobRepository;
   library: LibraryRepository;
   logger: LoggingRepository;
@@ -326,6 +328,7 @@ export const getMocks = () => {
     event: automock(EventRepository, { args: [, , loggerMock], strict: false }),
     faceIdentity: automock(FaceIdentityRepository, { strict: false }),
     faceRepair: automock(FaceRepairRepository, { strict: false }),
+    faceRepairScan: automock(FaceRepairScanRepository, { strict: false }),
     job: newJobRepositoryMock(),
     apiKey: automock(ApiKeyRepository),
     library: automock(LibraryRepository, { strict: false }),
@@ -400,6 +403,7 @@ export const newTestService = <T extends BaseService>(
     overrides.event || (mocks.event as As<EventRepository>),
     overrides.faceIdentity || (mocks.faceIdentity as As<FaceIdentityRepository>),
     overrides.faceRepair || (mocks.faceRepair as As<FaceRepairRepository>),
+    overrides.faceRepairScan || (mocks.faceRepairScan as As<FaceRepairScanRepository>),
     overrides.job || (mocks.job as As<JobRepository>),
     overrides.library || (mocks.library as As<LibraryRepository>),
     overrides.machineLearning || (mocks.machineLearning as As<MachineLearningRepository>),

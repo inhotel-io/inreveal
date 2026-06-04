@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { JobName, QueueName } from 'src/enum';
+import { OnJob } from 'src/decorators';
+import { JobName, JobStatus, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
-import { FlagParams, ReattributionTally, decideReattribution, tallyReattribution } from 'src/utils/face-repair';
+import { JobOf } from 'src/types';
+import { FlagParams, ReattributionTally, classifyFlaggedPerson, decideReattribution, tallyReattribution } from 'src/utils/face-repair';
 
 export interface ReattributionCandidate extends ReattributionTally {
   assetFaceId: string;
@@ -29,6 +31,9 @@ const DEFAULT_VOTE_WINDOW = 200;
 const DEFAULT_VOTE_MARGIN = 2;
 const DEFAULT_MAX_ATTRIBUTION_DISTANCE = 0.35;
 const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;
+export const DEFAULT_LARGE_CLUSTER_THRESHOLD = 50;
+
+const SCAN_PROGRESS_INTERVAL = 200;
 
 export interface RunRepairOptions {
   dryRun?: boolean;
@@ -206,5 +211,124 @@ export class FaceRepairService extends BaseService {
         ...tallyReattribution(face.personId, neighbors),
       };
     }
+  }
+
+  async runScan(scanId: string): Promise<void> {
+    await this.faceRepairScanRepository.updateScanProgress(scanId, { status: 'running', startedAt: new Date() });
+
+    try {
+      // Step 2: read stored scan params; fall back to config defaults if none
+      const storedScan = await this.faceRepairScanRepository.getScanById(scanId);
+      const { machineLearning } = await this.getConfig({ withCache: true });
+      const recognition = machineLearning.facialRecognition;
+
+      const storedParams = storedScan?.params as {
+        ownerId?: string;
+        maxDistance?: number;
+        minFaces?: number;
+        voteWindow?: number;
+        voteMargin?: number;
+        maxAttributionDistance?: number;
+        maxFlaggedFraction?: number;
+        largeClusterThreshold?: number;
+      } | undefined;
+
+      const ownerId = storedParams?.ownerId;
+      const maxDistance = storedParams?.maxDistance ?? recognition.maxDistance;
+      const minFaces = storedParams?.minFaces ?? recognition.minFaces;
+      const voteWindow = storedParams?.voteWindow ?? DEFAULT_VOTE_WINDOW;
+      const voteMargin = storedParams?.voteMargin ?? DEFAULT_VOTE_MARGIN;
+      const maxAttributionDistance = storedParams?.maxAttributionDistance ?? DEFAULT_MAX_ATTRIBUTION_DISTANCE;
+      const maxFlaggedFraction = storedParams?.maxFlaggedFraction ?? DEFAULT_MAX_FLAGGED_FRACTION;
+      const largeClusterThreshold = storedParams?.largeClusterThreshold ?? DEFAULT_LARGE_CLUSTER_THRESHOLD;
+
+      // Step 3: count eligible faces for progress tracking
+      const total = await this.faceRepairRepository.countEligibleFaces({ ownerId });
+
+      // Step 4: build plan with progress callback (throttled every SCAN_PROGRESS_INTERVAL + final update)
+      let lastReported = 0;
+      const onProgress = async (scanned: number) => {
+        if (scanned - lastReported >= SCAN_PROGRESS_INTERVAL || scanned >= total) {
+          lastReported = scanned;
+          await this.faceRepairScanRepository.updateScanProgress(scanId, { progress: { scanned, total } });
+        }
+      };
+
+      const plan = await this.buildRepairPlan({
+        ownerId,
+        maxDistance,
+        voteWindow,
+        minFaces,
+        voteMargin,
+        maxAttributionDistance,
+        maxFlaggedFraction,
+        onProgress,
+      });
+
+      // Final progress update after stream ends (fires even when total candidates < SCAN_PROGRESS_INTERVAL)
+      const streamedCount = plan.perPerson.reduce((sum, p) => sum + p.eligible, 0);
+      if (streamedCount !== lastReported) {
+        await this.faceRepairScanRepository.updateScanProgress(scanId, {
+          progress: { scanned: streamedCount, total },
+        });
+      }
+
+      // Step 5: reviewOnlyPersonIds set
+      const reviewOnlyPersonIds = new Set(plan.reviewOnlyPersonIds);
+
+      // Step 6: group flagged faces by person to build suspectedOwnerIds per flagged person
+      const allFlaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces];
+      const suspectedOwnersByPerson = new Map<string, string[]>();
+      for (const face of allFlaggedFaces) {
+        const owners = suspectedOwnersByPerson.get(face.currentPersonId) ?? [];
+        owners.push(face.suspectedOwnerId);
+        suspectedOwnersByPerson.set(face.currentPersonId, owners);
+      }
+
+      const enrichInput = plan.perPerson
+        .filter((p) => p.flagged > 0)
+        .map((p) => ({
+          personId: p.personId,
+          eligible: p.eligible,
+          flagged: p.flagged,
+          flaggedFraction: p.flaggedFraction,
+          suspectedOwnerIds: suspectedOwnersByPerson.get(p.personId) ?? [],
+        }));
+
+      // Step 7: enrich with person metadata
+      const enriched = await this.faceRepairScanRepository.enrichReportPersons(enrichInput);
+
+      // Step 8: classify each flagged person and overwrite placeholder recommendation/reviewReasons
+      for (const p of enriched) {
+        const decision = classifyFlaggedPerson(
+          {
+            personName: p.personName,
+            faceCount: p.faceCount,
+            suspectedOwnerIds: p.suspectedOwners.map((o) => o.ownerPersonId),
+          },
+          { reviewOnlyPersonIds, largeClusterThreshold },
+        );
+        p.recommendation = decision.recommendation;
+        p.reviewReasons = decision.reviewReasons;
+      }
+
+      // Step 9: compute totals
+      const { totals } = summarizeRepairPlan(plan);
+
+      // Step 10: persist completed scan
+      await this.faceRepairScanRepository.completeScan(scanId, { totals, persons: enriched });
+
+      // Step 11: prune old scans
+      await this.faceRepairScanRepository.pruneSupersededScans();
+    } catch (error) {
+      await this.faceRepairScanRepository.failScan(scanId, String(error));
+      throw error;
+    }
+  }
+
+  @OnJob({ name: JobName.FaceRepairScan, queue: QueueName.BackgroundTask })
+  async handleFaceRepairScan({ scanId }: JobOf<JobName.FaceRepairScan>): Promise<JobStatus> {
+    await this.runScan(scanId);
+    return JobStatus.Success;
   }
 }

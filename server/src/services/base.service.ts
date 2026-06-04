@@ -32,6 +32,7 @@ import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
+import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -112,6 +113,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   EventRepository,
   FaceIdentityRepository,
   FaceRepairRepository,
+  FaceRepairScanRepository,
   JobRepository,
   LibraryRepository,
   MachineLearningRepository,
@@ -177,6 +179,7 @@ export class BaseService {
     protected eventRepository: EventRepository,
     protected faceIdentityRepository: FaceIdentityRepository,
     protected faceRepairRepository: FaceRepairRepository,
+    protected faceRepairScanRepository: FaceRepairScanRepository,
     protected jobRepository: JobRepository,
     protected libraryRepository: LibraryRepository,
     protected machineLearningRepository: MachineLearningRepository,
