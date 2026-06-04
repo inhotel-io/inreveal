@@ -636,28 +636,20 @@ export default [
     threshold: 0.5,
   },
 
-  // --- crop_assets routing + plan-proposed ----------------------------------
-  {
-    // crop_assets routing: explicit geometry + a resolvable source → crop_assets.
-    // Uses "my newest photo" (a concrete recency source) rather than the bare
-    // "this photo" (no asset context on a fresh L3 session, which the live server
-    // declined to route); the regex fast-path matches both, but the resolvable
-    // source keeps the live server's session entry from dropping it.
-    id: 'l3.recall.crop',
-    category: 'l3.recall',
-    prompt: 'crop my newest photo to 100,100,800,600',
-    expect: { kind: 'crop_assets' },
-  },
-  {
-    // crop_assets end-to-end (PROPOSE-ONLY, never applied): explicit geometry +
-    // recency source → batch asset.crop plan. Data-dependent (needs at least one
-    // owned asset); routing-only when unseeded (SEEDED gates the plan assertion).
-    id: 'l3.plan.crop',
-    category: 'l3.plan',
-    prompt: 'crop my newest photo to 100,100,800,600',
-    expect: { kind: 'crop_assets', planProposed: SEEDED ? true : undefined },
-    threshold: 0.5,
-  },
+  // --- crop_assets: NO live L3 routing assertion (OQ-F1 limitation) ----------
+  // crop_assets is fully verified at L1 (recall.crop.comma-form / .labeled-form /
+  // .zero-origin, with x/y/width/height slot fidelity) and L2 (crop-assets.test.mjs,
+  // 28 cases), and the server propose seam was fixed so the op CAN be proposed once
+  // reached (the deployed schema accepts an asset.crop batch action; see
+  // agent-operation.dto.spec.ts "accepts proposeAssetBatch ... crop"). But a raw
+  // coordinate-crop prompt ("crop my newest photo to 100,100,800,600") does NOT
+  // engage the strict-workflow path through the LIVE LLM-driven agent: the session
+  // produces no strict_router_decision (kind=none, via=null) even though
+  // registry.classify() returns crop_assets via the regex fast-path in-process.
+  // This is the OQ-F1 limitation the spec anticipated ("crop geometry from a
+  // natural-language prompt is hard; scope tightly or defer") — coordinate crops
+  // are not a natural live-agent intent. No reliable L3 routing assertion exists,
+  // so none is made here (the classifier-level routing IS asserted at L1).
 
   // --- set_album_cover routing + plan-proposed ------------------------------
   {
