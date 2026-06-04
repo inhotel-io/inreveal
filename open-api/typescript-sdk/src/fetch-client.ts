@@ -1060,6 +1060,17 @@ export type AgentProposeAlbumOperationsDto = {
         assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
+    } | {
+        "type": AgentAssetRestoreOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
     })[];
     summary: string;
 };
@@ -1376,6 +1387,17 @@ export type AgentReviseAlbumOperationsDto = {
         };
     } | {
         "type": AgentAssetTrashOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+    } | {
+        "type": AgentAssetRestoreOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -10566,7 +10588,8 @@ export enum AgentOperationType {
     AssetUpdateMetadata = "asset.updateMetadata",
     AssetAddTag = "asset.addTag",
     AssetRemoveTag = "asset.removeTag",
-    AssetTrash = "asset.trash"
+    AssetTrash = "asset.trash",
+    AssetRestore = "asset.restore"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10687,6 +10710,9 @@ export enum AgentAssetRemoveTagOperationType {
 }
 export enum AgentAssetTrashOperationType {
     AssetTrash = "asset.trash"
+}
+export enum AgentAssetRestoreOperationType {
+    AssetRestore = "asset.restore"
 }
 export enum Status {
     Success = "success"

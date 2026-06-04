@@ -606,6 +606,17 @@ const trashOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetTrash);
   });
 
+const restoreOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetRestore).meta({ id: 'AgentAssetRestoreOperationType' }),
+    ...assetBatchBase,
+    // Restore is non-destructive — Low risk (uses the same trashAssets write-scope)
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRestore);
+  });
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -639,6 +650,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   addTagOperationSchema,
   removeTagOperationSchema,
   trashOperationSchema,
+  restoreOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>

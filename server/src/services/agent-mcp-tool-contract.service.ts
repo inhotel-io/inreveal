@@ -1773,6 +1773,21 @@ const planningProposalExamples: AgentMcpToolExample[] = [
       ],
     },
   },
+  {
+    name: 'restore-assets',
+    description: 'Restore selected assets from Trash (non-destructive, Low risk).',
+    arguments: {
+      summary: 'Restore selected photos from Trash.',
+      operations: [
+        {
+          type: AgentOperationType.AssetRestore,
+          summary: 'Restore selected photos from Trash.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
+        },
+      ],
+    },
+  },
 ];
 
 const planningCommonMistakes: AgentMcpCommonMistake[] = [

@@ -48,6 +48,7 @@ import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
+import { TrashService } from 'src/services/trash.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { AgentToolOperationPlanRequestMetadata } from 'src/types/agent-tool.types';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -268,6 +269,7 @@ describe(AgentOperationPlanService.name, () => {
   let sharedSpaceService: ReturnType<typeof automock<SharedSpaceService>>;
   let assetService: ReturnType<typeof automock<AssetService>>;
   let tagService: ReturnType<typeof automock<TagService>>;
+  let trashService: ReturnType<typeof automock<TrashService>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
@@ -286,6 +288,7 @@ describe(AgentOperationPlanService.name, () => {
     sharedSpaceService = mockBaseService(SharedSpaceService);
     assetService = mockBaseService(AssetService);
     tagService = mockBaseService(TagService);
+    trashService = mockBaseService(TrashService);
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
@@ -324,6 +327,7 @@ describe(AgentOperationPlanService.name, () => {
       sharedSpaceService,
       assetService,
       tagService,
+      trashService,
       activityEventService,
     );
   });
@@ -8973,6 +8977,276 @@ describe(AgentOperationPlanService.name, () => {
           expect.objectContaining({
             type: AgentOperationType.AssetTrash,
             riskLevel: AgentOperationRiskLevel.High,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  // ── asset.restore write-scope gate ───────────────────────────────────────────
+
+  it('validateWriteScope throws for asset.restore when trashAssets is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, trashAssets: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Restore matching photos from Trash.',
+        operations: [
+          {
+            type: AgentOperationType.AssetRestore,
+            summary: 'Restore matching photos from Trash.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [newUuid()],
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow moving assets to trash');
+  });
+
+  it('validateWriteScope passes for asset.restore when trashAssets is true', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, trashAssets: true },
+      },
+    });
+    const assetIds = [newUuid()];
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetRestore,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Restore matching photos from Trash.',
+      operations: [
+        {
+          type: AgentOperationType.AssetRestore,
+          summary: 'Restore matching photos from Trash.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+  });
+
+  // ── requiresWritableAssets: restore included ─────────────────────────────────
+
+  it('asset.restore requires writable asset access (write-only access rejected, not just read)', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, trashAssets: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    // Both owner and space-edit access granted → should succeed (writable)
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetRestore,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Restore matching photos from Trash.',
+      operations: [
+        {
+          type: AgentOperationType.AssetRestore,
+          summary: 'Restore matching photos from Trash.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+    // Both owner+space-edit access → propose succeeds
+    expect(result.status).not.toBe('error');
+    // Write-access repositories were called (confirming requiresWritableAssets path was taken)
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalled();
+  });
+
+  // ── apply: asset.restore calls trashService.restoreAssets ────────────────────
+
+  it('applying asset.restore calls trashService.restoreAssets with the resolved ids', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetRestore,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    trashService.restoreAssets.mockResolvedValue({ count: assetIds.length });
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(trashService.restoreAssets).toHaveBeenCalledWith(auth, { ids: assetIds });
+  });
+
+  it('applying asset.restore returns an applied result with the asset ids', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetRestore,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    trashService.restoreAssets.mockResolvedValue({ count: assetIds.length });
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(planRepository.completeApply).toHaveBeenCalledWith(
+      plan.id,
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: operation.id,
+          status: AgentOperationStatus.Applied,
+          result: expect.objectContaining({ assetIds }),
+        }),
+      ]),
+    );
+  });
+
+  it('asset.restore riskLevel is Low by default', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, trashAssets: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetRestore,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Restore matching photos from Trash.',
+      operations: [
+        {
+          type: AgentOperationType.AssetRestore,
+          summary: 'Restore matching photos from Trash.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.AssetRestore,
+            riskLevel: AgentOperationRiskLevel.Low,
           }),
         ]),
       }),

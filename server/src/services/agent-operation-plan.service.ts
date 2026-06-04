@@ -68,6 +68,7 @@ import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
+import { TrashService } from 'src/services/trash.service';
 import type {
   AgentAssetSourceInput,
   AgentDeclarativeAssetFilters,
@@ -250,6 +251,7 @@ export class AgentOperationPlanService {
     private readonly sharedSpaceService: SharedSpaceService,
     private readonly assetService: AssetService,
     private readonly tagService: TagService,
+    private readonly trashService: TrashService,
     @Optional()
     @Inject(AgentSessionActivityEventService)
     private readonly activityEventService?: Pick<AgentSessionActivityEventService, 'createSystemEvent'>,
@@ -1091,6 +1093,7 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetAddTag,
       AgentOperationType.AssetRemoveTag,
       AgentOperationType.AssetTrash,
+      AgentOperationType.AssetRestore,
     ].includes(type);
   }
 
@@ -1419,7 +1422,8 @@ export class AgentOperationPlanService {
       type === AgentOperationType.AssetUpdateMetadata ||
       type === AgentOperationType.AssetAddTag ||
       type === AgentOperationType.AssetRemoveTag ||
-      type === AgentOperationType.AssetTrash
+      type === AgentOperationType.AssetTrash ||
+      type === AgentOperationType.AssetRestore
     );
   }
 
@@ -1945,7 +1949,10 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow tagging assets');
     }
 
-    if (type === AgentOperationType.AssetTrash && !writeScope.trashAssets) {
+    if (
+      (type === AgentOperationType.AssetTrash || type === AgentOperationType.AssetRestore) &&
+      !writeScope.trashAssets
+    ) {
       throw new BadRequestException('Agent permission policy does not allow moving assets to trash');
     }
   }
@@ -2771,6 +2778,11 @@ export class AgentOperationPlanService {
 
       case AgentOperationType.AssetTrash: {
         await this.assetService.deleteAll(auth, { ids: operation.assetIds, force: false });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.AssetRestore: {
+        await this.trashService.restoreAssets(auth, { ids: operation.assetIds });
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 
