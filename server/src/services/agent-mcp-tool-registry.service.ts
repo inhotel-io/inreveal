@@ -213,6 +213,13 @@ const getToolContract = (
 const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolContract>): AgentMcpToolDefinition[] =>
   [
     defineTool({
+      name: AgentToolName.ResolveLocation,
+      title: 'Resolve location',
+      description: `Forward-geocode a place name to coordinates using the geodata_places database.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.ResolveLocation],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
       name: AgentToolName.ResolveAssetSearchFilters,
       title: 'Resolve asset search filters',
       description: `Resolve user-facing names into searchAssets-compatible filter ids and values.${approvedRequestInstruction}`,

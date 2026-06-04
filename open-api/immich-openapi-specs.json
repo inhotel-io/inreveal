@@ -29290,6 +29290,7 @@
           "readSelectionMetadata",
           "curateSelection",
           "resolveAssetSearchFilters",
+          "resolveLocation",
           "readAssetMetadata",
           "readAssetPreviews",
           "readAssetOriginals",

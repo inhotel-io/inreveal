@@ -688,6 +688,27 @@ const AgentSearchUsersToolRequestSchema = z
   .transform((value) => (value.toolCallId ? value : { query: value.query ?? '', limit: value.limit ?? 20 }))
   .meta({ id: 'AgentSearchUsersToolRequestDto' });
 
+const AgentResolveLocationToolRequestSchema = z
+  .strictObject({
+    query: z.string().trim().min(1).max(200).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.toolCallId && value.query !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either query or toolCallId, not both',
+      });
+    }
+    if (!value.toolCallId && !value.query) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide a query string to forward-geocode',
+      });
+    }
+  })
+  .meta({ id: 'AgentResolveLocationToolRequestDto' });
+
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
   [AgentToolName.FindTripCandidates]: AgentFindTripCandidatesToolRequestSchema,
@@ -703,6 +724,7 @@ export const AgentReadToolRequestSchemas = {
   [AgentToolName.ReadSpace]: AgentReadSpaceToolRequestSchema,
   [AgentToolName.SearchUsers]: AgentSearchUsersToolRequestSchema,
   [AgentToolName.ListDuplicateGroups]: AgentListDuplicateGroupsToolRequestSchema,
+  [AgentToolName.ResolveLocation]: AgentResolveLocationToolRequestSchema,
 } as const;
 
 const AgentToolApprovalSchema = z
@@ -1277,6 +1299,50 @@ const AgentSearchUsersToolResponseSchema = z
   ])
   .meta({ id: 'AgentSearchUsersToolResponseDto' });
 
+const AgentResolveLocationChoiceSchema = z
+  .object({
+    latitude: z.number(),
+    longitude: z.number(),
+    label: z.string(),
+    countryCode: z.string(),
+  })
+  .meta({ id: 'AgentResolveLocationChoice' });
+
+const AgentResolveLocationResultSchema = z
+  .discriminatedUnion('status', [
+    z.object({ status: z.literal('not_found') }).meta({ id: 'AgentResolveLocationNotFoundResult' }),
+    z
+      .object({
+        status: z.literal('matched'),
+        latitude: z.number(),
+        longitude: z.number(),
+        label: z.string(),
+      })
+      .meta({ id: 'AgentResolveLocationMatchedResult' }),
+    z
+      .object({
+        status: z.literal('ambiguous'),
+        choices: z.array(AgentResolveLocationChoiceSchema).max(5),
+      })
+      .meta({ id: 'AgentResolveLocationAmbiguousResult' }),
+  ])
+  .meta({ id: 'AgentResolveLocationResult' });
+
+const AgentResolveLocationToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentResolveLocationToolApprovalRequiredResponse'),
+    deniedResponse('AgentResolveLocationToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
+        location: AgentResolveLocationResultSchema,
+      })
+      .meta({ id: 'AgentResolveLocationToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentResolveLocationToolResponseDto' });
+
 const AgentToolCallParamsSchema = z
   .object({
     id: uuid,
@@ -1308,6 +1374,7 @@ export class AgentListSpacesToolRequestDto extends createZodDto(AgentListSpacesT
 export class AgentReadSpaceToolRequestDto extends createZodDto(AgentReadSpaceToolRequestSchema) {}
 export class AgentSearchUsersToolRequestDto extends createZodDto(AgentSearchUsersToolRequestSchema) {}
 export class AgentListDuplicateGroupsToolRequestDto extends createZodDto(AgentListDuplicateGroupsToolRequestSchema) {}
+export class AgentResolveLocationToolRequestDto extends createZodDto(AgentResolveLocationToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
@@ -1383,3 +1450,8 @@ export const AgentListDuplicateGroupsToolResponseDto = namedZodDto(
   AgentListDuplicateGroupsToolResponseSchema,
 );
 export type AgentListDuplicateGroupsToolResponseDto = z.output<typeof AgentListDuplicateGroupsToolResponseSchema>;
+export const AgentResolveLocationToolResponseDto = namedZodDto(
+  'AgentResolveLocationToolResponseDto',
+  AgentResolveLocationToolResponseSchema,
+);
+export type AgentResolveLocationToolResponseDto = z.output<typeof AgentResolveLocationToolResponseSchema>;
