@@ -98,6 +98,7 @@ part 'model/agent_asset_metadata_result.dart';
 part 'model/agent_asset_metadata_result_exif_info.dart';
 part 'model/agent_asset_metadata_tag.dart';
 part 'model/agent_asset_remove_tag_operation_type.dart';
+part 'model/agent_asset_restore_operation_type.dart';
 part 'model/agent_asset_rotate_operation_type.dart';
 part 'model/agent_asset_set_archive_operation_type.dart';
 part 'model/agent_asset_set_favorite_operation_type.dart';
@@ -209,6 +210,7 @@ part 'model/agent_propose_album_operations_dto_operations_inner_one_of16_payload
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of17.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of17_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of18.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of19.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of2.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3_payload.dart';
