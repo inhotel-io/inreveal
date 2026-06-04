@@ -93,6 +93,15 @@ const makeValidRestoreOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeValidCropOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetCrop,
+  summary: 'Crop image to region.',
+  targetKind: AgentOperationTargetKind.ImageEditBatch,
+  assetIds: [factory.uuid()],
+  payload: { x: 10, y: 20, width: 400, height: 300 },
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -2492,6 +2501,154 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidRestoreOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('asset.crop operation schema', () => {
+    it('accepts a valid asset.crop operation with default Low riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetCrop);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.Low);
+      }
+    });
+
+    it('accepts a valid asset.crop with x=0, y=0 (min boundary)', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp({ payload: { x: 0, y: 0, width: 1, height: 1 } }));
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a valid asset.crop with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidCropOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects asset.crop with missing payload', () => {
+      const { payload: _payload, ...withoutPayload } = makeValidCropOp();
+      const result = parseSingleOperationProposal(withoutPayload);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.some((issue) => issue.path.join('.') === 'operations.0.payload')).toBe(true);
+    });
+
+    it('rejects asset.crop with missing x', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp({ payload: { y: 20, width: 400, height: 300 } }));
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some(
+          (issue) => issue.path.join('.').includes('payload') && issue.path.join('.').includes('x'),
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects asset.crop with missing y', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, width: 400, height: 300 } }));
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some(
+          (issue) => issue.path.join('.').includes('payload') && issue.path.join('.').includes('y'),
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects asset.crop with missing width', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: 20, height: 300 } }));
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some(
+          (issue) => issue.path.join('.').includes('payload') && issue.path.join('.').includes('width'),
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects asset.crop with missing height', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: 20, width: 400 } }));
+      expect(result.success).toBe(false);
+      expect(
+        result.error?.issues.some(
+          (issue) => issue.path.join('.').includes('payload') && issue.path.join('.').includes('height'),
+        ),
+      ).toBe(true);
+    });
+
+    it('rejects asset.crop with negative x', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ payload: { x: -1, y: 20, width: 400, height: 300 } })),
+        ['operations', 0, 'payload', 'x'],
+        'Too small',
+      );
+    });
+
+    it('rejects asset.crop with negative y', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: -1, width: 400, height: 300 } })),
+        ['operations', 0, 'payload', 'y'],
+        'Too small',
+      );
+    });
+
+    it('rejects asset.crop with zero width', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: 20, width: 0, height: 300 } })),
+        ['operations', 0, 'payload', 'width'],
+        'Too small',
+      );
+    });
+
+    it('rejects asset.crop with zero height', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: 20, width: 400, height: 0 } })),
+        ['operations', 0, 'payload', 'height'],
+        'Too small',
+      );
+    });
+
+    it('rejects asset.crop with negative width', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ payload: { x: 10, y: 20, width: -1, height: 300 } })),
+        ['operations', 0, 'payload', 'width'],
+        'Too small',
+      );
+    });
+
+    it('rejects asset.crop with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.crop requires an image_edit_batch target',
+      );
+    });
+
+    it('rejects asset.crop with a targetId', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ targetId: factory.uuid() })),
+        ['operations', 0, 'targetId'],
+        'targetId is not valid for asset batch targets',
+      );
+    });
+
+    it('rejects asset.crop with no asset selection mechanism', () => {
+      expectIssue(
+        parseSingleOperationProposal({ ...makeValidCropOp(), assetIds: undefined }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects asset.crop with multiple asset selection mechanisms', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidCropOp({ assetSelectionHandleId: factory.uuid() })),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidCropOp());
       expect(result.success).toBe(true);
     });
   });
