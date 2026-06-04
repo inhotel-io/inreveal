@@ -114,6 +114,13 @@ const CASES = [
   ['make an album of the best photos', 'none'],
   ['how many photos do I have?', 'none'],
   ['thanks, that looks great', 'none'],
+  // restore_assets (restore/recover/untrash/bring-back verbs; disjoint from trash)
+  ['restore my newest 20 from trash', 'restore_assets'],
+  ['recover the photos I just trashed', 'restore_assets'],
+  ['untrash these photos', 'restore_assets'],
+  // restore_assets must NOT steal trash_assets or untag_assets
+  ['trash my newest 20', 'trash_assets'],
+  ['remove the Travel tag from my newest 20', 'untag_assets'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {
