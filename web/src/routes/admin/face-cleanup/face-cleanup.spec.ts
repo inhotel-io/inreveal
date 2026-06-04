@@ -10,7 +10,12 @@ type PersonOverride = {
   eligible?: number;
   flagged?: number;
   flaggedFraction?: number;
-  suspectedOwners?: { ownerPersonId: string; ownerName: string | null; thumbnailFaceId: string | null; count: number }[];
+  suspectedOwners?: {
+    ownerPersonId: string;
+    ownerName: string | null;
+    thumbnailFaceId: string | null;
+    count: number;
+  }[];
   recommendation?: 'confident' | 'review-first';
   reviewReasons?: string[];
 };

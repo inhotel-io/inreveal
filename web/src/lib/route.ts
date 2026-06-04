@@ -159,6 +159,10 @@ export const Route = {
   workflows: () => '/utilities/workflows',
   viewWorkflow: ({ id }: { id: string }) => `/utilities/workflows/${id}`,
 
+  // face cleanup
+  faceCleanup: () => '/admin/face-cleanup',
+  viewFaceCleanupPerson: ({ id }: { id: string }) => `/admin/face-cleanup/${id}`,
+
   // queues
   queues: () => '/admin/queues',
   viewQueue: ({ name }: { name: QueueName }) => `/admin/queues/${asQueueSlug(name)}`,
