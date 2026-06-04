@@ -139,7 +139,7 @@
       href={Route.faceCleanup()}
       class="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
     >
-      <Icon path={mdiArrowLeft} size="16" />
+      <Icon icon={mdiArrowLeft} size="16" />
       {$t('admin.face_cleanup_review_back')}
     </a>
 
@@ -233,7 +233,7 @@
           class="flex items-center justify-center border-x border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
         >
           <div class="rounded-full border border-gray-200 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-800">
-            <Icon path={mdiArrowRight} size="16" class="text-gray-400" />
+            <Icon icon={mdiArrowRight} size="16" class="text-gray-400" />
           </div>
         </div>
 
@@ -267,7 +267,7 @@
         >
           <span class="flex-1">{applyError}</span>
           <button type="button" onclick={() => (applyError = null)} class="flex-none text-red-400 hover:text-red-600">
-            <Icon path={mdiClose} size="16" />
+            <Icon icon={mdiClose} size="16" />
           </button>
         </div>
       {/if}
@@ -370,7 +370,7 @@
         {$t('admin.face_cleanup_review_cancel')}
       </Button>
       <Button color="primary" disabled={vm.movingCount === 0 || applying} onclick={handleMove} data-testid="move-btn">
-        <Icon path={mdiArrowRight} size="16" />
+        <Icon icon={mdiArrowRight} size="16" />
         {$t('admin.face_cleanup_review_move', { values: { count: vm.movingCount.toLocaleString() } })}
       </Button>
     </div>

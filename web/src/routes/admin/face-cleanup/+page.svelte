@@ -211,7 +211,7 @@
           onclick={handleRescan}
           class="gap-2"
         >
-          <Icon path={mdiRefresh} size="16" />
+          <Icon icon={mdiRefresh} size="16" />
           {$t('admin.face_cleanup_rescan')}
         </Button>
       </div>
@@ -383,7 +383,7 @@
           >
             <span class="flex-1">{applyError}</span>
             <button type="button" onclick={() => (applyError = null)} class="flex-none text-red-400 hover:text-red-600">
-              <Icon path={mdiClose} size="16" />
+              <Icon icon={mdiClose} size="16" />
             </button>
           </div>
         {/if}

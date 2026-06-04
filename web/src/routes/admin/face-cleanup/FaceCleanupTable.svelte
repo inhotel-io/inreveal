@@ -79,7 +79,7 @@
     <div
       class="flex items-center gap-2 bg-amber-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
     >
-      <Icon path={mdiAlertCircle} size="16" />
+      <Icon icon={mdiAlertCircle} size="16" />
       <span>{$t('admin.face_cleanup_group_review')}</span>
       <span class="font-normal normal-case tracking-normal text-gray-400">
         {$t('admin.face_cleanup_group_review_sub')}
@@ -95,7 +95,7 @@
     <div
       class="flex items-center gap-2 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
     >
-      <Icon path={mdiCheckCircle} size="16" />
+      <Icon icon={mdiCheckCircle} size="16" />
       <span>{$t('admin.face_cleanup_group_confident')}</span>
       <span class="font-normal normal-case tracking-normal text-gray-400">
         {$t('admin.face_cleanup_group_confident_sub')}
@@ -191,7 +191,7 @@
     <!-- Suspected owner -->
     <div class="flex min-w-0 items-center gap-2">
       {#if primaryOwner}
-        <Icon path={mdiArrowRight} size="16" class="flex-none text-gray-300" />
+        <Icon icon={mdiArrowRight} size="16" class="flex-none text-gray-300" />
         <img
           src={thumbUrl(primaryOwner.ownerPersonId)}
           alt=""
