@@ -88,6 +88,15 @@ export default [
     expect: { kind: 'archive_assets' },
   },
   {
+    // verb parity: the same "screenshots" source rides the trash verb → trash_assets
+    // (not archive). Confirms the source is verb-agnostic and the bounded
+    // (non-"all") phrasing is not declined like the "delete all my screenshots" neg.
+    id: 'l3.recall.screenshots.trash',
+    category: 'l3.recall',
+    prompt: 'trash my screenshots',
+    expect: { kind: 'trash_assets' },
+  },
+  {
     id: 'l3.recall.favorite',
     category: 'l3.recall',
     prompt: 'favorite my newest 10 photos',
@@ -522,6 +531,30 @@ export default [
     category: 'l3.multiturn',
     turns: ['add my newest 20 photos to one of my shared spaces', 'the first one'],
     expect: { kind: 'manage_space_assets', minTurnsWithOutcome: SEEDED ? 2 : undefined },
+    threshold: 0.5,
+  },
+  {
+    // Two-stage durable disambiguation (manage_space_members): turn 1 is an
+    // ambiguous SPACE reference for a member op; turn 2 ("the first one") re-enters
+    // via the persisted space-selection continuation (kind manage_space_members_space)
+    // and proceeds to the member step (which may itself ask, when the user is
+    // ambiguous, via a second continuation). Routing to manage_space_members always
+    // holds; the two-turn re-entry is gated on SEEDED (needs 2+ matching spaces).
+    id: 'l3.multiturn.spacepick.members',
+    category: 'l3.multiturn',
+    turns: ['add {user} to one of my shared spaces as editor', 'the first one'],
+    expect: { kind: 'manage_space_members', minTurnsWithOutcome: SEEDED ? 2 : undefined },
+    threshold: 0.5,
+  },
+  {
+    // Two-stage durable disambiguation (change_member_role): turn 1 is an ambiguous
+    // SPACE reference for a role change; turn 2 picks by ordinal and re-enters via
+    // the continuation (kind change_member_role_space). Routing always holds; the
+    // re-entry is gated on SEEDED.
+    id: 'l3.multiturn.spacepick.role',
+    category: 'l3.multiturn',
+    turns: ['make {user} an editor in one of my shared spaces', 'the first one'],
+    expect: { kind: 'change_member_role', minTurnsWithOutcome: SEEDED ? 2 : undefined },
     threshold: 0.5,
   },
 
