@@ -92,6 +92,18 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.matrixRow.capability);
   });
 
+  it('describes crop_assets as a hybrid workflow with its tools', () => {
+    const entry = getWorkflowManifestEntry('crop_assets');
+    assert.equal(entry.flow, 'hybrid');
+    assert.equal(entry.planTool, 'proposeAssetBatchFromSelection');
+    assert.ok(entry.requiredReadTools.includes('searchAssets'), 'requiredReadTools includes searchAssets');
+    assert.equal(entry.supportsContinuation, false);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.equal(entry.matrixRow.capability, 'Crop assets');
+    assert.equal(entry.matrixRow.tier, 'Solid now');
+  });
+
   it('describes create_space_from_source as a hybrid workflow with its tools', () => {
     const entry = getWorkflowManifestEntry('create_space_from_source');
     assert.equal(entry.flow, 'hybrid');
