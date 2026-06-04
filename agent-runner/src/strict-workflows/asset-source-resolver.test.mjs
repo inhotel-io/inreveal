@@ -162,10 +162,20 @@ describe('resolveAssetSource', () => {
     );
   });
 
-  it('hands off a non-type media noun ("screenshots")', async () => {
-    const client = makeContractClient();
+  it('"my screenshots" no longer hands off — resolves via Screenshots tag (E1)', async () => {
+    // Screenshots is now a tag-first entity: resolveAssetSearchFilters is called.
+    // When the instance has no Screenshots tag the resolver discloses; when it does,
+    // it resolves. Use default client (empty resolvedFilters) to confirm it tries
+    // resolveAssetSearchFilters and does NOT produce a silent searchAssets call.
+    const client = makeContractClient(); // resolvedFilters={} → handoff (no bound after tag lookup)
     const result = await resolveAssetSource({ client, sourceDescription: 'my screenshots', now: NOW });
-    assert.equal(result.status, 'handoff');
+    // With default client (no resolveResults, resolvedFilters={}), the entity path
+    // resolves empty filters → handoff (no usable filter + no recency bound).
+    // The key assertion: resolveAssetSearchFilters IS called (not skipped).
+    assert.ok(
+      client.calls.some((c) => c.name === 'resolveAssetSearchFilters'),
+      'resolveAssetSearchFilters must be called for screenshots',
+    );
     assert.equal(
       client.calls.some((c) => c.name === 'searchAssets'),
       false,
@@ -423,7 +433,7 @@ describe('isCleanSource', () => {
     ['my newest 20 photos', true],
     ['the best ones', false],
     ['the best Berlin photos', false],
-    ['my screenshots', false],
+    ['my screenshots', true], // screenshots noun is now consumed (E1 tag entity)
   ]) {
     it(`isCleanSource(${JSON.stringify(input)}) → ${expected}`, () => {
       assert.equal(isCleanSource(input), expected);
@@ -779,6 +789,142 @@ describe('resolveAssetSource — upload sources', () => {
     const result = await resolveAssetSource({ client, sourceDescription: 'photos I uploaded', now: NOW });
     assert.equal(result.status, 'handoff');
     assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slice E1 — screenshots noun → tag-first resolution
+// ---------------------------------------------------------------------------
+
+describe('parseEntitySource — screenshots noun', () => {
+  for (const input of ['my screenshots', 'screenshots', 'screen shots', 'screen captures', 'screenshot']) {
+    it(`parseEntitySource(${JSON.stringify(input)}) → {tags:['Screenshots'], screenshotSource:true}`, () => {
+      const entity = parseEntitySource(input);
+      assert.deepEqual(entity?.tags, ['Screenshots']);
+      assert.equal(entity?.screenshotSource, true);
+    });
+  }
+
+  it('parseEntitySource("my screenshots from last week") → tags:["Screenshots"], screenshotSource:true (date not in entity)', () => {
+    // Date tokens are not entity-level; entity only tracks the tag injection.
+    const entity = parseEntitySource('my screenshots from last week');
+    assert.deepEqual(entity?.tags, ['Screenshots']);
+    assert.equal(entity?.screenshotSource, true);
+  });
+
+  it('parseEntitySource("my Sony photos") unchanged (regression)', () => {
+    assert.deepEqual(parseEntitySource('my Sony photos'), { cameras: ['Sony'] });
+  });
+
+  it('parseEntitySource("my videos") → undefined (not screenshots)', () => {
+    assert.equal(parseEntitySource('my videos'), undefined);
+  });
+});
+
+describe('isCleanSource — screenshots noun', () => {
+  it('"my screenshots" is clean after screenshots noun is consumed', () => {
+    assert.equal(isCleanSource('my screenshots'), true);
+  });
+
+  it('"screenshots from last week" is clean', () => {
+    assert.equal(isCleanSource('screenshots from last week'), true);
+  });
+});
+
+describe('resolveAssetSource — screenshots (E1)', () => {
+  it('"my screenshots" → calls resolveAssetSearchFilters({tags:["Screenshots"]}); resolved with tagIds', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my screenshots', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.ok(resolveCall, 'resolveAssetSearchFilters must be called');
+    assert.deepEqual(resolveCall.args, { tags: ['Screenshots'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { tagIds: ['tag-sc-1'] });
+  });
+
+  it('"screenshots" (bare) → resolves same as "my screenshots"', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'screenshots', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Screenshots'] });
+  });
+
+  it('"screen shots" (two words) → resolves via Screenshots tag', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'screen shots', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Screenshots'] });
+  });
+
+  it('"screen captures" → resolves via Screenshots tag', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'screen captures', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Screenshots'] });
+  });
+
+  it('"screenshot" (singular) → resolves via Screenshots tag', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'screenshot', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { tags: ['Screenshots'] });
+  });
+
+  it('tag-not-found (both Screenshots and Auto/Screenshots absent) → needs_input disclosure, no searchAssets', async () => {
+    // Stub: not_found for both Screenshots and Auto/Screenshots
+    const client = makeContractClient({
+      resolveResults: [
+        { kind: 'tag', query: 'Screenshots', status: 'not_found', choices: [], message: '' },
+        { kind: 'tag', query: 'Auto/Screenshots', status: 'not_found', choices: [], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my screenshots', now: NOW });
+    assert.equal(result.status, 'needs_input');
+    // Must mention screenshots being untagged, not silently match everything
+    assert.ok(/screenshot/i.test(result.text), `text should mention screenshots but got: ${result.text}`);
+    assert.equal(client.calls.some((c) => c.name === 'searchAssets'), false);
+  });
+
+  it('Auto/Screenshots fallback: Screenshots not_found, Auto/Screenshots matched → resolved with Auto/Screenshots tagId', async () => {
+    // Stub: Screenshots not found, Auto/Screenshots matched
+    const client = makeContractClient({
+      resolvedFilters: { tagIds: ['tag-auto-sc-1'] },
+      resolveResults: [
+        { kind: 'tag', query: 'Screenshots', status: 'not_found', choices: [], message: '' },
+        { kind: 'tag', query: 'Auto/Screenshots', status: 'matched', choices: [], message: '' },
+      ],
+    });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my screenshots', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { tagIds: ['tag-auto-sc-1'] });
+  });
+
+  it('"screenshots from last week" → tagIds + date filter both survive', async () => {
+    const client = makeContractClient({ resolvedFilters: { tagIds: ['tag-sc-1'] } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'screenshots from last week', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, {
+      tagIds: ['tag-sc-1'],
+      takenAfter: '2026-05-04T00:00:00.000Z',
+      takenBefore: '2026-05-10T23:59:59.999Z',
+    });
+  });
+
+  it('regression: "my Sony photos" unchanged (no screenshots leakage)', async () => {
+    const client = makeContractClient({ resolvedFilters: { make: 'Sony' } });
+    const result = await resolveAssetSource({ client, sourceDescription: 'my Sony photos', now: NOW });
+    assert.equal(result.status, 'resolved');
+    const resolveCall = client.calls.find((c) => c.name === 'resolveAssetSearchFilters');
+    assert.deepEqual(resolveCall.args, { cameraMakes: ['Sony'] });
+    const searchCall = client.calls.find((c) => c.name === 'searchAssets');
+    assert.deepEqual(searchCall.args.filters, { make: 'Sony' });
   });
 });
 
