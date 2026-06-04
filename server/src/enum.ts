@@ -184,6 +184,7 @@ export enum AgentOperationType {
   AssetAddTag = 'asset.addTag',
   AssetRemoveTag = 'asset.removeTag',
   AssetTrash = 'asset.trash',
+  AssetRestore = 'asset.restore',
 }
 
 export enum AgentOperationTargetKind {
