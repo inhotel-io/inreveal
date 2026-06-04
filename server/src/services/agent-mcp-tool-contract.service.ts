@@ -843,6 +843,54 @@ const resolverApprovedRetryMode: AgentMcpArgumentMode = {
   whenToUse: 'Use only after Gallery resumes the assistant from an approved resolver request.',
 };
 
+const resolveLocationContract: AgentMcpToolContract<AgentToolName.ResolveLocation> = {
+  name: AgentToolName.ResolveLocation,
+  title: 'Resolve location',
+  description:
+    'Forward-geocode a place name to coordinates. Returns matched (single clear result), ambiguous (up to 5 candidate places), or not_found.',
+  usage:
+    'Use when a user specifies a place name to set as a photo location. If the result is ambiguous, present the choices to the user and ask them to pick one. If not_found, tell the user the place was not recognised and ask for a more specific name.',
+  argumentModes: [
+    {
+      name: 'forward-geocode',
+      description: 'Forward-geocode a place name string.',
+      requiredFields: ['query'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use when you have a place name from the user that needs to be resolved to coordinates.',
+    },
+    {
+      name: 'approved-retry',
+      description: 'Retry a location resolve request that Gallery already approved.',
+      requiredFields: ['toolCallId'],
+      forbiddenFields: ['query'],
+      whenToUse: 'Use only after Gallery resumes the assistant from an approved resolve-location request.',
+    },
+  ],
+  examples: [
+    {
+      name: 'resolve-paris-matched',
+      description: 'Forward-geocode "Paris" — likely returns matched with Île-de-France coordinates.',
+      arguments: { query: 'Paris, France' },
+    },
+    {
+      name: 'resolve-paris-ambiguous',
+      description: 'Forward-geocode "Paris" without a country — may return ambiguous with FR and US choices.',
+      arguments: { query: 'Paris' },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'resolve-location-missing-query',
+      match: { messageIncludes: 'Provide a query string' },
+      hint: 'Provide the query field with the place name string to forward-geocode.',
+      exampleName: 'resolve-paris-matched',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.ResolveAssetSearchFilters> = {
   name: AgentToolName.ResolveAssetSearchFilters,
   title: 'Resolve asset search filters',
@@ -1241,6 +1289,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 };
 
 const readToolContracts: AgentMcpReadToolContract[] = [
+  resolveLocationContract,
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
   findTripCandidatesContract,
