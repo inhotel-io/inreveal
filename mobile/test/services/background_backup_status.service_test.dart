@@ -143,4 +143,66 @@ void main() {
     expect(status.lastRemainingCount, 0);
     expect(status.lastFullBackupCompletedAt, isNotNull);
   });
+
+  test('recordQueueProgress keeps the failure reason sticky once a session has any failure', () async {
+    await sut.recordSessionStart();
+    await sut.recordQueueProgress(
+      queuedCount: 2,
+      completedCount: 0,
+      failedCount: 1,
+      skippedCount: 0,
+      enqueueFailedCount: 0,
+      remainingCount: 0,
+    );
+    expect((await sut.read()).lastBackgroundFailureReason, BackgroundBackupFailureReason.uploadFailed);
+
+    // A later progress update with the same (nonzero) failure count must NOT clear it.
+    await sut.recordQueueProgress(
+      queuedCount: 2,
+      completedCount: 1,
+      failedCount: 1,
+      skippedCount: 0,
+      enqueueFailedCount: 0,
+      remainingCount: 0,
+    );
+    expect((await sut.read()).lastBackgroundFailureReason, BackgroundBackupFailureReason.uploadFailed);
+  });
+
+  test('recordSessionStart resets session counts and failure reason', () async {
+    await sut.recordQueueProgress(
+      queuedCount: 100,
+      completedCount: 50,
+      failedCount: 3,
+      skippedCount: 2,
+      enqueueFailedCount: 1,
+      remainingCount: 40,
+    );
+
+    await sut.recordSessionStart();
+
+    final status = await sut.read();
+    expect(status.lastQueuedCount, 0);
+    expect(status.lastCompletedCount, 0);
+    expect(status.lastFailedCount, 0);
+    expect(status.lastSkippedCount, 0);
+    expect(status.lastEnqueueFailedCount, 0);
+    expect(status.lastRemainingCount, 0);
+    expect(status.lastBackgroundFailureReason, BackgroundBackupFailureReason.none);
+  });
+
+  test('recordBackupComplete resets session counts', () async {
+    await sut.recordQueueProgress(
+      queuedCount: 17,
+      completedCount: 17,
+      failedCount: 0,
+      skippedCount: 0,
+      enqueueFailedCount: 0,
+      remainingCount: 0,
+    );
+    await sut.recordBackupComplete();
+    final status = await sut.read();
+    expect(status.lastCompletedCount, 0);
+    expect(status.lastQueuedCount, 0);
+    expect(status.lastFullBackupCompletedAt, isNotNull);
+  });
 }

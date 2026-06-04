@@ -16,12 +16,11 @@ class BackgroundBackupStatusService {
   final StoreService store;
   final DateTime Function() _now;
 
-  // Background-downloader status callbacks (recordUploadSuccess / recordFailure)
-  // fire once per completed task and each does a read-modify-write of one JSON
-  // blob. Without serialization two callbacks can both read the old status and
-  // the second write clobbers the first (e.g. a late recordFailure dropping a
-  // just-written lastUploadSuccessAt). Chain every mutation through a single
-  // tail future so reads always observe the previous write.
+  // The coordinator drives cumulative session counts and calls recordQueueProgress
+  // / recordQueueDrained / recordBackupComplete. It calls recordSessionStart at
+  // the top of each backup session to zero the counts and clear any prior failure
+  // reason. Each mutation goes through a single tail future so concurrent calls
+  // cannot clobber each other.
   Future<void> _writeTail = Future.value();
 
   // `read()` is intentionally NOT serialized — it is a pure load with no write.
@@ -100,9 +99,23 @@ class BackgroundBackupStatusService {
         lastRemainingCount: remainingCount,
         lastUploadEnqueueAt: queuedCount > current.lastQueuedCount ? _now() : current.lastUploadEnqueueAt,
         lastUploadSuccessAt: completedCount > current.lastCompletedCount ? _now() : current.lastUploadSuccessAt,
-        lastBackgroundFailureReason: failedCount > current.lastFailedCount
+        lastBackgroundFailureReason: failedCount > 0
             ? BackgroundBackupFailureReason.uploadFailed
             : BackgroundBackupFailureReason.none,
+      ),
+    );
+  }
+
+  Future<void> recordSessionStart() {
+    return _mutate(
+      (current) => current.copyWith(
+        lastQueuedCount: 0,
+        lastCompletedCount: 0,
+        lastFailedCount: 0,
+        lastSkippedCount: 0,
+        lastEnqueueFailedCount: 0,
+        lastRemainingCount: 0,
+        lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
       ),
     );
   }
@@ -116,6 +129,11 @@ class BackgroundBackupStatusService {
       (current) => current.copyWith(
         lastFullBackupCompletedAt: _now(),
         lastCandidateCount: 0,
+        lastQueuedCount: 0,
+        lastCompletedCount: 0,
+        lastFailedCount: 0,
+        lastSkippedCount: 0,
+        lastEnqueueFailedCount: 0,
         lastRemainingCount: 0,
         lastBackgroundFailureReason: BackgroundBackupFailureReason.none,
       ),

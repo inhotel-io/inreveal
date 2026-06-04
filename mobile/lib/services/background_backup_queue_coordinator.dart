@@ -37,6 +37,8 @@ class BackgroundBackupQueueCoordinator {
   bool get isActive => _activeUserId != null;
 
   Future<void> start(String userId) async {
+    _clearSessionSets();
+    await _statusService?.recordSessionStart();
     _activeUserId = userId;
     final generation = ++_sessionGeneration;
     _logger.info('Starting background backup session');
@@ -72,6 +74,7 @@ class BackgroundBackupQueueCoordinator {
     _refillTail = (_refillTail ?? Future.value()).then((_) async {
       try {
         _recordTerminalStatus(update);
+        await _recordProgress();
         await _refillIfDrained(userId, generation);
       } catch (error, stackTrace) {
         _logger.severe('Background backup refill failed', error, stackTrace);
@@ -117,6 +120,7 @@ class BackgroundBackupQueueCoordinator {
       return;
     }
 
+    await _statusService?.recordQueueDrained(remainingCount: _remainingEligibleCount);
     await _enqueueNextBatch(userId, generation);
   }
 
@@ -222,5 +226,6 @@ class BackgroundBackupQueueCoordinator {
     _failedLocalAssetIds.clear();
     _skippedLocalAssetIds.clear();
     _enqueueFailedLocalAssetIds.clear();
+    _remainingEligibleCount = 0;
   }
 }

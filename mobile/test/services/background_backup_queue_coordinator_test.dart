@@ -4,7 +4,11 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
+import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
+import 'package:mocktail/mocktail.dart';
+
+class MockBackgroundBackupStatusService extends Mock implements BackgroundBackupStatusService {}
 
 class FakeBackgroundUploadQueue implements BackgroundBackupQueuePort {
   FakeBackgroundUploadQueue({Iterable<String> candidateIds = const []}) {
@@ -327,5 +331,60 @@ void main() {
 
     expect(queue.queuedBatches, isEmpty);
     expect(sut.isActive, false);
+  });
+
+  test('records a session start and persists progress on each completion and drain', () async {
+    final status = MockBackgroundBackupStatusService();
+    when(() => status.recordSessionStart()).thenAnswer((_) async {});
+    when(
+      () => status.recordQueueProgress(
+        queuedCount: any(named: 'queuedCount'),
+        completedCount: any(named: 'completedCount'),
+        failedCount: any(named: 'failedCount'),
+        skippedCount: any(named: 'skippedCount'),
+        enqueueFailedCount: any(named: 'enqueueFailedCount'),
+        remainingCount: any(named: 'remainingCount'),
+      ),
+    ).thenAnswer((_) async {});
+    when(
+      () => status.recordQueueDrained(remainingCount: any(named: 'remainingCount')),
+    ).thenAnswer((_) async {});
+    when(() => status.recordBackupComplete()).thenAnswer((_) async {});
+
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1'])..batchSize = 1;
+    final sut = BackgroundBackupQueueCoordinator(queue, statusService: status);
+
+    await sut.start('user-1'); // enqueues asset-0
+    final task = queue.activeTasks.remove('asset-0')!;
+    await sut.handleStatus(TaskStatusUpdate(task, TaskStatus.complete)); // drains → records drained → refill asset-1
+
+    verify(() => status.recordSessionStart()).called(1);
+    verify(
+      () => status.recordQueueDrained(remainingCount: any(named: 'remainingCount')),
+    ).called(greaterThanOrEqualTo(1));
+    verify(
+      () => status.recordQueueProgress(
+        queuedCount: any(named: 'queuedCount'),
+        completedCount: any(named: 'completedCount'),
+        failedCount: any(named: 'failedCount'),
+        skippedCount: any(named: 'skippedCount'),
+        enqueueFailedCount: any(named: 'enqueueFailedCount'),
+        remainingCount: any(named: 'remainingCount'),
+      ),
+    ).called(greaterThanOrEqualTo(2)); // at least: after enqueue + after the completion
+  });
+
+  test('clears prior-session counts on a fresh start', () async {
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0']);
+    final sut = BackgroundBackupQueueCoordinator(queue);
+    await sut.start('user-1');
+    final task = queue.activeTasks.remove('asset-0')!;
+    await sut.handleStatus(TaskStatusUpdate(task, TaskStatus.complete)); // session completes; sets retain asset-0
+
+    // New session: sets must be cleared so excludedSnapshots don't carry asset-0 from before.
+    queue.candidateIds.add('asset-1');
+    queue.excludedSnapshots.clear();
+    await sut.start('user-1');
+    expect(queue.excludedSnapshots.first, isNot(contains('asset-0')));
   });
 }
