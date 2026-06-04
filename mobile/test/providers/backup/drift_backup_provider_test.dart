@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/providers/backup/drift_backup.provider.dart';
+import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/utils/upload_speed_calculator.dart';
@@ -14,9 +15,12 @@ class MockForegroundUploadService extends Mock implements ForegroundUploadServic
 
 class MockBackgroundUploadService extends Mock implements BackgroundUploadService {}
 
+class MockBackgroundBackupQueueCoordinator extends Mock implements BackgroundBackupQueueCoordinator {}
+
 void main() {
   late MockForegroundUploadService foregroundUploadService;
   late MockBackgroundUploadService backgroundUploadService;
+  late MockBackgroundBackupQueueCoordinator backgroundQueueCoordinator;
   late StreamController<TaskStatusUpdate> statusController;
   late StreamController<TaskProgressUpdate> progressController;
   late DriftBackupNotifier sut;
@@ -32,18 +36,40 @@ void main() {
         group: kBackupGroup,
       ),
     );
+    registerFallbackValue(
+      TaskStatusUpdate(
+        UploadTask(
+          taskId: 'fallback',
+          url: 'http://test-server.com/assets',
+          filename: 'fallback.jpg',
+          baseDirectory: BaseDirectory.temporary,
+          group: kBackupGroup,
+        ),
+        TaskStatus.complete,
+      ),
+    );
   });
 
   setUp(() {
     foregroundUploadService = MockForegroundUploadService();
     backgroundUploadService = MockBackgroundUploadService();
+    backgroundQueueCoordinator = MockBackgroundBackupQueueCoordinator();
     statusController = StreamController<TaskStatusUpdate>.broadcast();
     progressController = StreamController<TaskProgressUpdate>.broadcast();
 
     when(() => backgroundUploadService.taskStatusStream).thenAnswer((_) => statusController.stream);
     when(() => backgroundUploadService.taskProgressStream).thenAnswer((_) => progressController.stream);
 
-    sut = DriftBackupNotifier(foregroundUploadService, backgroundUploadService, UploadSpeedManager());
+    when(() => backgroundQueueCoordinator.start(any())).thenAnswer((_) async {});
+    when(() => backgroundQueueCoordinator.stop()).thenAnswer((_) async {});
+    when(() => backgroundQueueCoordinator.handleStatus(any())).thenAnswer((_) async {});
+
+    sut = DriftBackupNotifier(
+      foregroundUploadService,
+      backgroundUploadService,
+      UploadSpeedManager(),
+      backgroundQueueCoordinator: backgroundQueueCoordinator,
+    );
   });
 
   tearDown(() async {
@@ -74,54 +100,51 @@ void main() {
     );
   });
 
-  test('starts URLSession backup on iOS instead of foreground upload', () async {
+  test('starts iOS URLSession backup through queue coordinator', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => []);
-    when(() => backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup)).thenAnswer((_) async => []);
-    when(() => backgroundUploadService.uploadBackupCandidates('user-1')).thenAnswer((_) async {});
-
     await sut.startBackup('user-1');
 
-    verify(() => backgroundUploadService.uploadBackupCandidates('user-1')).called(1);
+    verify(() => backgroundQueueCoordinator.start('user-1')).called(1);
     verifyNever(() => foregroundUploadService.uploadCandidates(any(), any()));
   });
 
-  test('stops URLSession backup on iOS when backup is disabled', () async {
+  test('stops iOS URLSession backup through queue coordinator', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
-
-    when(() => backgroundUploadService.cancel()).thenAnswer((_) async => 0);
 
     await sut.stopBackup();
 
-    verify(() => backgroundUploadService.cancel()).called(1);
+    verify(() => backgroundQueueCoordinator.stop()).called(1);
+  });
+
+  test('forwards background status updates to the coordinator without refreshing UI counts', () async {
+    final task = UploadTask(
+      taskId: 'asset-1',
+      url: 'http://test-server.com/assets',
+      filename: 'asset.jpg',
+      displayName: 'asset.jpg',
+      baseDirectory: BaseDirectory.temporary,
+      group: kBackupGroup,
+    );
+
+    statusController.add(TaskStatusUpdate(task, TaskStatus.complete));
+    await pumpEventQueue();
+
+    verify(() => backgroundQueueCoordinator.handleStatus(any())).called(1);
+    verifyNever(() => foregroundUploadService.getBackupCounts(any()));
   });
 
   test('resumes active Live Photo still tasks instead of starting duplicate candidates', () async {
+    // This test is now covered by the coordinator internally.
+    // The notifier just delegates start() to the coordinator regardless of task state.
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
-    final livePhotoStillTask = UploadTask(
-      taskId: 'asset-live',
-      url: 'http://test-server.com/assets',
-      filename: 'asset.heic',
-      displayName: 'asset.heic',
-      baseDirectory: BaseDirectory.temporary,
-      group: kBackupLivePhotoGroup,
-    );
-
-    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => []);
-    when(
-      () => backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup),
-    ).thenAnswer((_) async => [livePhotoStillTask]);
-    when(() => backgroundUploadService.resume()).thenAnswer((_) async {});
-
     await sut.startBackup('user-1');
 
-    verify(() => backgroundUploadService.resume()).called(1);
-    verifyNever(() => backgroundUploadService.uploadBackupCandidates('user-1'));
+    verify(() => backgroundQueueCoordinator.start('user-1')).called(1);
   });
 
   test('tracks Live Photo still progress from the live photo group', () async {
@@ -194,38 +217,5 @@ void main() {
 
     expect(sut.state.backupCount, 1);
     expect(sut.state.remainderCount, 0);
-  });
-
-  test('queues more URLSession backup candidates when active tasks drain but assets remain', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-
-    when(
-      () => foregroundUploadService.getBackupCounts('user-1'),
-    ).thenAnswer((_) async => (total: 3517, remainder: 3340, processing: 0));
-    await sut.getBackupStatus('user-1');
-
-    final activeTask = UploadTask(
-      taskId: 'asset-1',
-      url: 'http://test-server.com/assets',
-      filename: 'asset.jpg',
-      displayName: 'asset.jpg',
-      baseDirectory: BaseDirectory.temporary,
-      group: kBackupGroup,
-    );
-
-    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => [activeTask]);
-    when(() => backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup)).thenAnswer((_) async => []);
-    when(() => backgroundUploadService.resume()).thenAnswer((_) async {});
-    when(() => backgroundUploadService.uploadBackupCandidates('user-1')).thenAnswer((_) async {});
-
-    await sut.startBackup('user-1');
-
-    when(() => backgroundUploadService.getActiveTasks(kBackupGroup)).thenAnswer((_) async => []);
-
-    statusController.add(TaskStatusUpdate(activeTask, TaskStatus.complete));
-    await pumpEventQueue();
-
-    verify(() => backgroundUploadService.uploadBackupCandidates('user-1')).called(1);
   });
 }

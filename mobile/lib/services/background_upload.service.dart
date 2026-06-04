@@ -204,55 +204,6 @@ class BackgroundUploadService implements BackgroundBackupQueuePort {
     return _uploadRepository.getActiveTasks(group);
   }
 
-  /// Start background upload using iOS URLSession
-  ///
-  /// Finds backup candidates, builds upload tasks, and enqueues them
-  /// for background processing.
-  Future<void> uploadBackupCandidates(String userId) async {
-    await _storageRepository.clearCache();
-    shouldAbortQueuingTasks = false;
-
-    final candidates = await _backupRepository.getCandidates(userId);
-    await _backgroundBackupStatusService.recordCandidateCount(candidates.length);
-    if (candidates.isEmpty) {
-      _logger.info("No new backup candidates found, finishing background upload");
-      return;
-    }
-
-    _logger.info("Found ${candidates.length} backup candidates for background tasks");
-
-    const batchSize = 100;
-    var enqueuedCount = 0;
-
-    for (var start = 0; start < candidates.length && !shouldAbortQueuingTasks; start += batchSize) {
-      final batch = candidates.skip(start).take(batchSize);
-      final tasks = <UploadTask>[];
-
-      for (final asset in batch) {
-        if (shouldAbortQueuingTasks) {
-          break;
-        }
-
-        final task = await getUploadTask(asset);
-        if (task != null) {
-          tasks.add(task);
-        }
-      }
-
-      if (tasks.isEmpty || shouldAbortQueuingTasks) {
-        continue;
-      }
-
-      _logger.info("Enqueuing ${tasks.length} background upload tasks");
-      final results = await enqueueTasks(tasks);
-      enqueuedCount += results.where((success) => success).length;
-    }
-
-    if (enqueuedCount > 0) {
-      await _backgroundBackupStatusService.recordUploadEnqueue(candidateCount: enqueuedCount);
-    }
-  }
-
   /// Enqueue exactly one bounded batch of eligible backup candidates.
   ///
   /// [excludedLocalAssetIds] are asset IDs already queued or in-flight — they

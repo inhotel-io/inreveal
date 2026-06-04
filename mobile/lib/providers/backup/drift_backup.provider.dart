@@ -10,8 +10,10 @@ import 'package:immich_mobile/domain/models/album/local_album.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/platform_extensions.dart';
 import 'package:immich_mobile/utils/upload_speed_calculator.dart';
+import 'package:immich_mobile/providers/backup/background_backup_queue.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
+import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
 
@@ -186,22 +188,29 @@ final driftBackupProvider = StateNotifierProvider<DriftBackupNotifier, DriftBack
     ref.watch(foregroundUploadServiceProvider),
     ref.watch(backgroundUploadServiceProvider),
     UploadSpeedManager(),
+    backgroundQueueCoordinator: ref.watch(backgroundBackupQueueCoordinatorProvider),
   );
 });
 
 class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
-  DriftBackupNotifier(this._foregroundUploadService, this._backgroundUploadService, this._uploadSpeedManager)
-    : super(
-        const DriftBackupState(
-          totalCount: 0,
-          backupCount: 0,
-          remainderCount: 0,
-          processingCount: 0,
-          isSyncing: false,
-          uploadItems: {},
-          error: BackupError.none,
-        ),
-      ) {
+  DriftBackupNotifier(
+    this._foregroundUploadService,
+    this._backgroundUploadService,
+    this._uploadSpeedManager, {
+    BackgroundBackupQueueCoordinator? backgroundQueueCoordinator,
+  }) : _backgroundQueueCoordinator =
+           backgroundQueueCoordinator ?? BackgroundBackupQueueCoordinator(_backgroundUploadService),
+       super(
+         const DriftBackupState(
+           totalCount: 0,
+           backupCount: 0,
+           remainderCount: 0,
+           processingCount: 0,
+           isSyncing: false,
+           uploadItems: {},
+           error: BackupError.none,
+         ),
+       ) {
     _backgroundProgressSubscription = _backgroundUploadService.taskProgressStream.listen(
       _handleBackgroundBackupProgress,
     );
@@ -211,9 +220,8 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
   final ForegroundUploadService _foregroundUploadService;
   final BackgroundUploadService _backgroundUploadService;
   final UploadSpeedManager _uploadSpeedManager;
+  final BackgroundBackupQueueCoordinator _backgroundQueueCoordinator;
   Completer<void>? _cancelToken;
-  String? _activeBackgroundBackupUserId;
-  bool _isCheckingForMoreBackgroundTasks = false;
   late final StreamSubscription<TaskProgressUpdate> _backgroundProgressSubscription;
   late final StreamSubscription<TaskStatusUpdate> _backgroundStatusSubscription;
 
@@ -275,6 +283,8 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
       return;
     }
 
+    unawaited(_backgroundQueueCoordinator.handleStatus(update));
+
     final taskId = update.task.taskId;
     switch (update.status) {
       case TaskStatus.complete:
@@ -284,7 +294,6 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             _removeUploadItem(taskId);
           });
         }
-        unawaited(_queueMoreBackgroundBackupCandidatesIfNeeded());
         break;
       case TaskStatus.failed:
       case TaskStatus.notFound:
@@ -304,36 +313,9 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             ),
           },
         );
-        unawaited(_queueMoreBackgroundBackupCandidatesIfNeeded());
         break;
       default:
         break;
-    }
-  }
-
-  Future<void> _queueMoreBackgroundBackupCandidatesIfNeeded() async {
-    final userId = _activeBackgroundBackupUserId;
-    if (userId == null || _isCheckingForMoreBackgroundTasks || state.remainderCount <= 0) {
-      return;
-    }
-
-    _isCheckingForMoreBackgroundTasks = true;
-    try {
-      final taskGroups = await Future.wait([
-        _backgroundUploadService.getActiveTasks(kBackupGroup),
-        _backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup),
-      ]);
-      if (!mounted || _activeBackgroundBackupUserId != userId || state.remainderCount <= 0) {
-        return;
-      }
-
-      final activeTaskCount = taskGroups.fold<int>(0, (count, tasks) => count + tasks.length);
-      if (activeTaskCount == 0) {
-        _logger.info("Background upload queue drained with ${state.remainderCount} assets remaining, queueing more");
-        await _backgroundUploadService.uploadBackupCandidates(userId);
-      }
-    } finally {
-      _isCheckingForMoreBackgroundTasks = false;
     }
   }
 
@@ -413,8 +395,7 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
 
   Future<void> stopBackup() async {
     if (CurrentPlatform.isIOS) {
-      await _backgroundUploadService.cancel();
-      _activeBackgroundBackupUserId = null;
+      await _backgroundQueueCoordinator.stop();
       _uploadSpeedManager.clear();
       state = state.copyWith(uploadItems: {}, iCloudDownloadProgress: {});
       return;
@@ -518,32 +499,9 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
     _uploadSpeedManager.removeTask(localAssetId);
   }
 
-  Future<void> startBackupWithURLSession(String userId) async {
-    if (!mounted) {
-      _logger.warning("Skip handleBackupResume (pre-call): notifier disposed");
-      return;
-    }
-    _logger.info("Start background backup sequence");
-    _activeBackgroundBackupUserId = userId;
+  Future<void> startBackupWithURLSession(String userId) {
     state = state.copyWith(error: BackupError.none);
-    final taskGroups = await Future.wait([
-      _backgroundUploadService.getActiveTasks(kBackupGroup),
-      _backgroundUploadService.getActiveTasks(kBackupLivePhotoGroup),
-    ]);
-    final tasks = taskGroups.expand((group) => group).toList(growable: false);
-    if (!mounted) {
-      _logger.warning("Skip handleBackupResume (post-call): notifier disposed");
-      return;
-    }
-    _logger.info("Found ${tasks.length} pending tasks");
-
-    if (tasks.isEmpty) {
-      _logger.info("No pending tasks, starting new upload");
-      return _backgroundUploadService.uploadBackupCandidates(userId);
-    }
-
-    _logger.info("Resuming upload ${tasks.length} assets");
-    return _backgroundUploadService.resume();
+    return _backgroundQueueCoordinator.start(userId);
   }
 }
 
