@@ -292,7 +292,7 @@ describe(MapRepository.name, () => {
           },
           {
             id: 100_000_004,
-            name: `Zuerich${suffix}`,
+            name: `Zürich${suffix}`,
             longitude: 8.5417,
             latitude: 47.3769,
             countryCode: 'CH',
@@ -334,11 +334,11 @@ describe(MapRepository.name, () => {
       expect(results[0].name).toBe(`Tokyo${suffix}`);
     });
 
-    it('searchPlaces("zurich") matches Zuerich via unaccent-equivalent trigram', async () => {
+    it('searchPlaces("zurich") matches Zürich via f_unaccent (umlaut stripped, case-folded)', async () => {
       const { sut } = setup();
-      const results = await sut.searchPlaces(`zuerich${suffix}`);
+      const results = await sut.searchPlaces(`zurich${suffix}`);
       expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(results[0].name).toBe(`Zuerich${suffix}`);
+      expect(results[0].name).toBe(`Zürich${suffix}`);
     });
 
     it('searchPlaces("zzzqqq") returns empty array', async () => {

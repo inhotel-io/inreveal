@@ -157,6 +157,12 @@ export default [
     prompt: 'make an album of my newest 20 photos called eval-l3',
     expect: { kind: 'create_album_from_source' },
   },
+  {
+    id: 'l3.recall.geocode',
+    category: 'l3.recall',
+    prompt: 'set the location on my newest 20 to Paris',
+    expect: { kind: 'update_asset_metadata' },
+  },
 
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
@@ -262,6 +268,18 @@ export default [
     category: 'l3.plan',
     prompt: 'add my newest 20 photos to {album}',
     expect: { kind: 'add_photos_to_album', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // update_asset_metadata place-name geocoding end-to-end: "Paris" resolves to
+    // coordinates via resolveLocation (forward geocode over geodata_places) and
+    // proposes an asset.updateMetadata with the resolved lat/lng over a bounded
+    // newest-N selection — proposed, never applied. Data-dependent (needs
+    // geodata_places loaded + owned assets); routing-only when unseeded.
+    id: 'l3.plan.geocode',
+    category: 'l3.plan',
+    prompt: 'set the location on my newest 20 to Paris',
+    expect: { kind: 'update_asset_metadata', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
