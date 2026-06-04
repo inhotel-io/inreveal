@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 0.997,
+  "overall": 1,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 0.889
+    "copy": 1
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -56,6 +56,8 @@
     "recall.metadata.describe": 1,
     "recall.metadata.rating": 1,
     "recall.metadata.caption": 1,
+    "recall.metadata.location.placename": 1,
+    "recall.metadata.location.coords": 1,
     "recall.remove.canonical": 1,
     "recall.remove.takeout": 1,
     "recall.remove.llm": 1,
@@ -95,6 +97,7 @@
     "neg.createalbum.subjective": 1,
     "neg.metadata.album": 1,
     "neg.metadata.placename": 1,
+    "neg.metadata.placename.cover": 1,
     "neg.metadata.filename": 1,
     "neg.spaceassets.member": 1,
     "neg.remove.tag-not-album": 1,
@@ -129,7 +132,7 @@
     "slots.rotate.ccw-polarity": 1,
     "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 0.667,
+    "copy.trip.italy.no-exclusions": 1,
     "copy.trip.long-name": 1
   }
 }
