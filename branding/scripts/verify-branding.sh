@@ -105,6 +105,18 @@ if [[ -f "$help_modal" ]]; then
   fi
 fi
 
+# App download modal (issue #649) — store badges must not point at the Immich apps.
+# Noodle has no F-Droid listing, so that badge is replaced with a GitHub link.
+app_download_modal="$REPO_ROOT/web/src/lib/modals/AppDownloadModal.svelte"
+if [[ -f "$app_download_modal" ]]; then
+  if grep -qE "app\.alextran\.immich|app/immich/id1613945652|f-droid\.org|fdroidBadge" "$app_download_modal"; then
+    echo "  WARN: Immich store link/F-Droid badge still present in AppDownloadModal.svelte"
+    EXIT_CODE=1
+  else
+    echo "  OK: AppDownloadModal.svelte (store links patched)"
+  fi
+fi
+
 # Check Dockerfiles for upstream repo references
 echo "--- Checking Dockerfiles ---"
 for dockerfile in "server/Dockerfile" "machine-learning/Dockerfile"; do
@@ -182,6 +194,63 @@ fi
 if [[ $EXIT_CODE -eq 0 ]]; then
   echo "Open-in-app scheme registration verified"
 fi
+
+# Email/notification templates must not leak upstream branding (issue #636):
+# logo image, "Immich" wordmark, app-store badges/links, project credit, subjects.
+echo "--- Checking email templates ---"
+
+email_layout="$REPO_ROOT/server/src/emails/components/immich.layout.tsx"
+if [[ -f "$email_layout" ]]; then
+  if grep -q "immich\.app/img" "$email_layout" || grep -q 'alt="Immich"' "$email_layout"; then
+    echo "  WARN: Immich logo/branding still in immich.layout.tsx"
+    EXIT_CODE=1
+  else
+    echo "  OK: immich.layout.tsx"
+  fi
+fi
+
+email_footer="$REPO_ROOT/server/src/emails/components/footer.template.tsx"
+if [[ -f "$email_footer" ]]; then
+  if grep -qE "immich\.app|app\.alextran\.immich|apps\.apple\.com/sg/app/immich|>Immich</Link>" "$email_footer"; then
+    echo "  WARN: Immich store links/credit still in footer.template.tsx"
+    EXIT_CODE=1
+  else
+    echo "  OK: footer.template.tsx"
+  fi
+fi
+
+email_test="$REPO_ROOT/server/src/emails/test.email.tsx"
+if [[ -f "$email_test" ]]; then
+  if grep -qE "test email from Immich|Immich Instance" "$email_test"; then
+    echo "  WARN: Immich wordmark still in test.email.tsx"
+    EXIT_CODE=1
+  else
+    echo "  OK: test.email.tsx"
+  fi
+fi
+
+email_welcome="$REPO_ROOT/server/src/emails/welcome.email.tsx"
+if [[ -f "$email_welcome" ]]; then
+  if grep -q "a new Immich instance" "$email_welcome"; then
+    echo "  WARN: Immich wordmark still in welcome.email.tsx"
+    EXIT_CODE=1
+  else
+    echo "  OK: welcome.email.tsx"
+  fi
+fi
+
+for notification_svc in \
+  "$REPO_ROOT/server/src/services/notification.service.ts" \
+  "$REPO_ROOT/server/src/services/notification-admin.service.ts"; do
+  if [[ -f "$notification_svc" ]]; then
+    if grep -qE "subject: 'Test email from Immich'|subject: 'Welcome to Immich'" "$notification_svc"; then
+      echo "  WARN: Immich wordmark still in $(basename "$notification_svc") subjects"
+      EXIT_CODE=1
+    else
+      echo "  OK: $(basename "$notification_svc") subjects"
+    fi
+  fi
+done
 
 echo "--- Checking mobile image assets ---"
 if ! bash "$SCRIPT_DIR/verify-mobile-assets.sh"; then

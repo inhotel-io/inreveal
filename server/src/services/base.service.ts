@@ -31,6 +31,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LibraryRepository } from 'src/repositories/library.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -69,6 +70,7 @@ import { ViewRepository } from 'src/repositories/view-repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { WorkflowRepository } from 'src/repositories/workflow.repository';
 import { UserTable } from 'src/schema/tables/user.table';
+import { IdentityMergePropagationService } from 'src/services/identity-merge-propagation.service';
 import { GenerateThumbnailOptions, ImageDimensions } from 'src/types';
 import { AccessRequest, checkAccess, requireAccess } from 'src/utils/access';
 import { getConfig, updateConfig } from 'src/utils/config';
@@ -109,6 +111,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
   EmailRepository,
   EventRepository,
   FaceIdentityRepository,
+  FaceRepairRepository,
   JobRepository,
   LibraryRepository,
   MachineLearningRepository,
@@ -150,6 +153,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
 @Injectable()
 export class BaseService {
   protected storageCore: StorageCore;
+  protected identityMergePropagationService: IdentityMergePropagationService;
 
   constructor(
     protected logger: LoggingRepository,
@@ -172,6 +176,7 @@ export class BaseService {
     protected emailRepository: EmailRepository,
     protected eventRepository: EventRepository,
     protected faceIdentityRepository: FaceIdentityRepository,
+    protected faceRepairRepository: FaceRepairRepository,
     protected jobRepository: JobRepository,
     protected libraryRepository: LibraryRepository,
     protected machineLearningRepository: MachineLearningRepository,
@@ -220,6 +225,14 @@ export class BaseService {
       systemMetadataRepository,
       this.logger,
     );
+    this.identityMergePropagationService = new IdentityMergePropagationService({
+      databaseRepository,
+      faceIdentityRepository,
+      jobRepository,
+      logger: this.logger,
+      personRepository,
+      sharedSpaceRepository,
+    });
   }
 
   get worker() {

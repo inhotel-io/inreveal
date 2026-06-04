@@ -17,6 +17,7 @@ import { ClassificationController } from 'src/controllers/classification.control
 import { DatabaseBackupController } from 'src/controllers/database-backup.controller';
 import { DownloadController } from 'src/controllers/download.controller';
 import { DuplicateController } from 'src/controllers/duplicate.controller';
+import { FaceRepairAdminController } from 'src/controllers/face-repair-admin.controller';
 import { FaceController } from 'src/controllers/face.controller';
 import { GalleryMapController } from 'src/controllers/gallery-map.controller';
 import { JobController } from 'src/controllers/job.controller';
@@ -71,6 +72,7 @@ export const controllers = [
   DownloadController,
   DuplicateController,
   FaceController,
+  FaceRepairAdminController,
   GalleryMapController,
   JobController,
   LibraryController,

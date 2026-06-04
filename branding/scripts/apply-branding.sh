@@ -20,12 +20,18 @@ DEEP_LINK_SCHEME=$(jq -r '.mobile.deep_link_scheme' "$CONFIG")
 SHARED_GROUP=$(jq -r '.mobile.shared_group' "$CONFIG")
 BG_TASK_PREFIX=$(jq -r '.mobile.background_task_prefix' "$CONFIG")
 APPLE_TEAM_ID=$(jq -r '.mobile.apple_team_id' "$CONFIG")
+APP_STORE_URL=$(jq -r '.mobile.app_store_url' "$CONFIG")
+PLAY_STORE_URL=$(jq -r '.mobile.play_store_url' "$CONFIG")
+
+# Email — public host that serves the brand logo + store badges in sent mail
+EMAIL_ASSET_BASE_URL=$(jq -r '.email.asset_base_url' "$CONFIG")
 
 # Repository
 REPO_NAME=$(jq -r '.repository.name' "$CONFIG")
 REPO_URL=$(jq -r '.repository.url' "$CONFIG")
 REPO_DOCS_URL=$(jq -r '.repository.docs_url' "$CONFIG")
 REPO_ISSUES_URL=$(jq -r '.repository.issues_url' "$CONFIG")
+REPO_RELEASES_URL=$(jq -r '.repository.releases_url' "$CONFIG")
 
 # Docker
 DOCKER_REGISTRY=$(jq -r '.docker.registry' "$CONFIG")
@@ -45,8 +51,6 @@ else
   FORK_VERSION=$(git -C "$REPO_ROOT" describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || { git -C "$REPO_ROOT" tag -l 'v*.*.*' --sort=-v:refname 2>/dev/null | head -1; })
   FORK_VERSION="${FORK_VERSION#v}"
 fi
-
-echo "=== Applying branding: $NAME ==="
 
 #
 # --- i18n ---
@@ -152,6 +156,117 @@ patch_web() {
     # Replace remaining user-facing "Immich" in API descriptions
     sed -i "s/Immich/${NAME}/g" "$openapi"
     echo "  Patched OpenAPI spec"
+  fi
+}
+
+#
+# --- App download modal ---
+#
+# The "App download links" modal (Tools menu + onboarding) hardcodes the upstream
+# Immich Play Store, App Store, and F-Droid badges (issue #649). Repoint the two
+# store badges to the Noodle Gallery apps. Noodle Gallery is not published on
+# F-Droid, so that badge is replaced with a link to the GitHub releases page.
+patch_app_download_modal() {
+  echo "--- Patching app download modal ---"
+  local modal="$REPO_ROOT/web/src/lib/modals/AppDownloadModal.svelte"
+  [[ -f "$modal" ]] || return 0
+
+  # Repoint the Play Store + App Store badges to the Noodle Gallery apps.
+  sed -i "s|https://play\.google\.com/store/apps/details?id=app\.alextran\.immich|${PLAY_STORE_URL}|g" "$modal"
+  sed -i "s|https://apps\.apple\.com/us/app/immich/id1613945652|${APP_STORE_URL}|g" "$modal"
+
+  # Replace the F-Droid badge (no Noodle F-Droid app) with a GitHub releases
+  # link. Mirrors patch_help_modal's awk block-rewrite: swap the <a id="fdroid-link">
+  # ...</a> anchor for a text link styled like the adjacent Obtainium link.
+  local tmp
+  tmp=$(mktemp)
+  awk -v url="$REPO_RELEASES_URL" '
+    /id="fdroid-link"/ { skip = 1 }
+    skip && /<\/a>/ {
+      skip = 0
+      print "    <a"
+      print "      href=\"" url "\""
+      print "      target=\"_blank\""
+      print "      rel=\"noreferrer\""
+      print "      id=\"github-release-link\""
+      print "      class=\"mt-2 text-center underline text-sm immich-form-label\""
+      print "    >"
+      print "      Get it on GitHub"
+      print "    </a>"
+      next
+    }
+    skip { next }
+    { print }
+  ' "$modal" > "$tmp"
+  chmod 644 "$tmp"
+  mv "$tmp" "$modal"
+
+  # fdroidBadge import is now unused — drop it to keep the build lint-clean
+  # regardless of where it sits in the destructured import list.
+  sed -i "s/, fdroidBadge//g; s/fdroidBadge, //g" "$modal"
+
+  echo "  Patched AppDownloadModal.svelte"
+}
+
+#
+# --- Emails ---
+#
+# The notification/email templates (server/src/emails) hardcode upstream Immich
+# branding that the system-config UI can't fully override: the logo image, the
+# "Immich" wordmark, the app-store badges + links, the project credit, and the
+# default subject lines. Rewrite them to Noodle Gallery so sent mail is branded.
+patch_emails() {
+  echo "--- Patching email templates ---"
+
+  local emails="$REPO_ROOT/server/src/emails"
+  local layout="$emails/components/immich.layout.tsx"
+  local footer="$emails/components/footer.template.tsx"
+  local test_email="$emails/test.email.tsx"
+  local welcome_email="$emails/welcome.email.tsx"
+  local notification="$REPO_ROOT/server/src/services/notification.service.ts"
+  local notification_admin="$REPO_ROOT/server/src/services/notification-admin.service.ts"
+
+  # Shared layout — brand logo image + alt text
+  if [[ -f "$layout" ]]; then
+    sed -i "s|https://immich\.app/img/immich-logo-inline-light\.png|${EMAIL_ASSET_BASE_URL}/immich-logo-inline-light.png|g" "$layout"
+    sed -i "s|alt=\"Immich\"|alt=\"${NAME}\"|g" "$layout"
+    echo "  Patched immich.layout.tsx"
+  fi
+
+  # Footer — store badges (link + image) and the project credit line
+  if [[ -f "$footer" ]]; then
+    sed -i "s|https://play\.google\.com/store/apps/details?id=app\.alextran\.immich|${PLAY_STORE_URL}|g" "$footer"
+    sed -i "s|https://immich\.app/img/google-play-badge\.png|${EMAIL_ASSET_BASE_URL}/google-play-badge.png|g" "$footer"
+    sed -i "s|https://apps\.apple\.com/sg/app/immich/id1613945652|${APP_STORE_URL}|g" "$footer"
+    sed -i "s|https://immich\.app/img/ios-app-store-badge\.png|${EMAIL_ASSET_BASE_URL}/ios-app-store-badge.png|g" "$footer"
+    sed -i "s|<Link href=\"https://immich\.app\">Immich</Link>|<Link href=\"${REPO_URL}\">${NAME}</Link>|g" "$footer"
+    echo "  Patched footer.template.tsx"
+  fi
+
+  # Test email — preview + body copy
+  if [[ -f "$test_email" ]]; then
+    sed -i "s|This is a test email from Immich\.|This is a test email from ${NAME}.|g" "$test_email"
+    sed -i "s|This is a test email from your Immich Instance!|This is a test email from your ${NAME} Instance!|g" "$test_email"
+    echo "  Patched test.email.tsx"
+  fi
+
+  # Welcome email — preview copy
+  if [[ -f "$welcome_email" ]]; then
+    sed -i "s|You have been invited to a new Immich instance\.|You have been invited to a new ${NAME} instance.|g" "$welcome_email"
+    echo "  Patched welcome.email.tsx"
+  fi
+
+  # Notification service — default email subject lines
+  if [[ -f "$notification" ]]; then
+    sed -i "s|subject: 'Test email from Immich'|subject: 'Test email from ${NAME}'|g" "$notification"
+    sed -i "s|subject: 'Welcome to Immich'|subject: 'Welcome to ${NAME}'|g" "$notification"
+    echo "  Patched notification.service.ts subjects"
+  fi
+
+  # Admin notification service — "Send test email" subject
+  if [[ -f "$notification_admin" ]]; then
+    sed -i "s|subject: 'Test email from Immich'|subject: 'Test email from ${NAME}'|g" "$notification_admin"
+    echo "  Patched notification-admin.service.ts subject"
   fi
 }
 
@@ -652,9 +767,12 @@ patch_versions() {
 # --- Main ---
 #
 main() {
+  echo "=== Applying branding: $NAME ==="
   patch_versions
   patch_i18n
   patch_web
+  patch_app_download_modal
+  patch_emails
   patch_help_modal
   patch_assets
   patch_android
@@ -666,4 +784,9 @@ main() {
   echo "=== Branding applied successfully ==="
 }
 
-main "$@"
+# Run main only when executed directly. When sourced (e.g. by the branding
+# tests), this guard lets callers invoke individual patch_* functions without
+# triggering a full branding pass.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
