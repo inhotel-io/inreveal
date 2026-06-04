@@ -87,3 +87,44 @@ export const decideReattribution = (tally: ReattributionTally, params: FlagParam
   const flagged = topOtherCount - ownCount >= params.voteMargin || ownCount < params.minFaces;
   return { flagged, suspectedOwnerId: flagged ? topOtherPersonId : null };
 };
+
+export type ClassifyRecommendation = 'confident' | 'review-first';
+export type ClassifyReason = 'named' | 'large-cluster' | 'multiple-owners' | 'bad-target';
+
+export interface ClassifyPersonInput {
+  personName: string | null; // null or '' (whitespace-only) = unnamed
+  faceCount: number;
+  suspectedOwnerIds: string[]; // owner person ids for this person's flagged faces (may repeat)
+}
+
+export interface ClassifyContext {
+  reviewOnlyPersonIds: ReadonlySet<string>;
+  largeClusterThreshold: number;
+}
+
+export interface ClassifyDecision {
+  recommendation: ClassifyRecommendation;
+  reviewReasons: ClassifyReason[];
+}
+
+// A flagged person is "review-first" if ANY reason applies; otherwise "confident". Reason order is fixed
+// (named → large-cluster → multiple-owners → bad-target) so output is deterministic.
+export const classifyFlaggedPerson = (person: ClassifyPersonInput, ctx: ClassifyContext): ClassifyDecision => {
+  const reviewReasons: ClassifyReason[] = [];
+
+  if (person.personName !== null && person.personName.trim() !== '') {
+    reviewReasons.push('named');
+  }
+  if (person.faceCount > ctx.largeClusterThreshold) {
+    reviewReasons.push('large-cluster');
+  }
+  const distinctOwners = new Set(person.suspectedOwnerIds);
+  if (distinctOwners.size > 1) {
+    reviewReasons.push('multiple-owners');
+  }
+  if ([...distinctOwners].some((ownerId) => ctx.reviewOnlyPersonIds.has(ownerId))) {
+    reviewReasons.push('bad-target');
+  }
+
+  return { recommendation: reviewReasons.length > 0 ? 'review-first' : 'confident', reviewReasons };
+};

@@ -1,4 +1,7 @@
 import {
+  ClassifyContext,
+  ClassifyPersonInput,
+  classifyFlaggedPerson,
   decideReattribution,
   ReattributionNeighbor,
   ReattributionTally,
@@ -142,5 +145,79 @@ describe('tallyReattribution', () => {
     // 'A' < 'B' lexically — A must win regardless of input order
     expect(t1.topOtherPersonId).toBe('A');
     expect(t2.topOtherPersonId).toBe('A');
+  });
+});
+
+const ctx = (over: Partial<ClassifyContext> = {}): ClassifyContext => ({
+  reviewOnlyPersonIds: new Set<string>(),
+  largeClusterThreshold: 50,
+  ...over,
+});
+
+const person = (over: Partial<ClassifyPersonInput> = {}): ClassifyPersonInput => ({
+  personName: null,
+  faceCount: 10,
+  suspectedOwnerIds: ['owner-1'],
+  ...over,
+});
+
+describe('classifyFlaggedPerson', () => {
+  it('confident: unnamed, small, single clean owner', () => {
+    expect(classifyFlaggedPerson(person(), ctx())).toEqual({ recommendation: 'confident', reviewReasons: [] });
+  });
+
+  it('review-first: named person (even with one clean owner)', () => {
+    expect(classifyFlaggedPerson(person({ personName: 'Jula' }), ctx())).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['named'],
+    });
+  });
+
+  it('treats empty / whitespace name as unnamed', () => {
+    expect(classifyFlaggedPerson(person({ personName: '' }), ctx()).reviewReasons).toEqual([]);
+    expect(classifyFlaggedPerson(person({ personName: '   ' }), ctx()).reviewReasons).toEqual([]);
+  });
+
+  it('large-cluster boundary: 50 is confident, 51 is review-first', () => {
+    expect(classifyFlaggedPerson(person({ faceCount: 50 }), ctx()).recommendation).toBe('confident');
+    expect(classifyFlaggedPerson(person({ faceCount: 51 }), ctx())).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['large-cluster'],
+    });
+  });
+
+  it('uses the ctx largeClusterThreshold, not a hard-coded 50', () => {
+    const c = ctx({ largeClusterThreshold: 10 });
+    expect(classifyFlaggedPerson(person({ faceCount: 10 }), c).recommendation).toBe('confident');
+    expect(classifyFlaggedPerson(person({ faceCount: 11 }), c).reviewReasons).toEqual(['large-cluster']);
+  });
+
+  it('review-first: more than one distinct suspected owner', () => {
+    expect(classifyFlaggedPerson(person({ suspectedOwnerIds: ['owner-1', 'owner-2'] }), ctx()).reviewReasons).toEqual([
+      'multiple-owners',
+    ]);
+  });
+
+  it('does NOT flag multiple-owners when the same owner repeats', () => {
+    expect(
+      classifyFlaggedPerson(person({ suspectedOwnerIds: ['owner-1', 'owner-1', 'owner-1'] }), ctx()).reviewReasons,
+    ).toEqual([]);
+  });
+
+  it('review-first: suspected owner is itself in reviewOnlyPersonIds (bad-target)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['owner-1']) });
+    expect(classifyFlaggedPerson(person(), c).reviewReasons).toEqual(['bad-target']);
+  });
+
+  it('accumulates reasons in deterministic order (named + large + multi + bad-target)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['owner-2']) });
+    const result = classifyFlaggedPerson(
+      person({ personName: 'Jula', faceCount: 99, suspectedOwnerIds: ['owner-1', 'owner-2'] }),
+      c,
+    );
+    expect(result).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['named', 'large-cluster', 'multiple-owners', 'bad-target'],
+    });
   });
 });
