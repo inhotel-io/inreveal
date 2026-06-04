@@ -236,11 +236,11 @@
       "searchAssets"
     ],
     "planTool": "proposeAddAssetsToSpaceFromSearch",
-    "supportsContinuation": false,
+    "supportsContinuation": true,
     "matrixRow": {
       "capability": "Add/remove photos in a space",
       "tier": "Solid now",
-      "workflowOrBoundary": "Pi resolves the space and source; Gallery owns the space add (from-search) / remove (space.removeAssets) plan from the handle."
+      "workflowOrBoundary": "Pi resolves the space and source; Gallery owns the space add (from-search) / remove (space.removeAssets) plan from the handle. Durable space disambiguation: ambiguous space gets a storable candidate list."
     }
   },
   {
@@ -681,11 +681,11 @@
       "listSpaces"
     ],
     "planTool": "proposeAlbumOperations",
-    "supportsContinuation": false,
+    "supportsContinuation": true,
     "matrixRow": {
       "capability": "Update space details",
       "tier": "Solid now",
-      "workflowOrBoundary": "Direct space-detail update plan; preserve unspecified fields."
+      "workflowOrBoundary": "Direct space-detail update plan; preserve unspecified fields. Durable space disambiguation: ambiguous space gets a storable candidate list."
     }
   },
   {
