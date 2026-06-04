@@ -358,11 +358,16 @@ describe(AgentSessionService.name, () => {
     expect(
       AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.updateAssetMetadata,
     ).toBe(true);
-    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope).toEqual(
-      expandedWriteScope,
-    );
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope).toEqual({
+      ...expandedWriteScope,
+      // LocalPowerUser is the only preset that grants the outward-facing share scope.
+      createSharedLinks: true,
+    });
     expect(
       AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata,
+    ).toBe(true);
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.createSharedLinks,
     ).toBe(true);
   });
 
