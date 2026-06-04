@@ -124,6 +124,13 @@ const CASES = [
   // restore_assets must NOT steal trash_assets or untag_assets
   ['trash my newest 20', 'trash_assets'],
   ['remove the Travel tag from my newest 20', 'untag_assets'],
+  // share_assets (outward-facing, propose-only; share verb + link/shareable)
+  ['share these photos as a link', 'share_assets'],
+  ['create a share link for my newest 20', 'share_assets'],
+  ['make a shareable link for these, expires in 7 days', 'share_assets'],
+  // share_assets must NOT steal trash/archive/rotate
+  ['trash my newest 20 photos', 'trash_assets'],
+  ['archive my newest 50 photos', 'archive_assets'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {

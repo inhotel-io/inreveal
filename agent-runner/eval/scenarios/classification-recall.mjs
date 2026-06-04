@@ -551,6 +551,37 @@ export default [
     expect: { kind: 'crop_assets', slotsSurvive: true, slots: { x: 0, y: 0, width: 1000, height: 1000 } },
   },
 
+  // share_assets (propose-only / outward-facing) --------------------------------
+  {
+    // OUTWARD-FACING safety note: createSharedLinks write-scope defaults false
+    // in every preset, so this workflow is propose-only in all evals. The L1
+    // recall test only asserts routing — no link is ever created.
+    id: 'recall.share.as-link',
+    category: 'recall',
+    prompt: 'share these as a link',
+    expect: { kind: 'share_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.share.create-link',
+    category: 'recall',
+    prompt: 'create a share link for my newest 20',
+    expect: { kind: 'share_assets', slotsSurvive: true, slots: { sourceDescription: /newest 20/i } },
+  },
+  {
+    // Negative: trash must NOT be stolen by share_assets.
+    id: 'recall.share.neg.trash',
+    category: 'recall',
+    prompt: 'trash my newest 20 photos',
+    expect: { kind: 'trash_assets', slotsSurvive: true },
+  },
+  {
+    // Negative: album-level share declines (not asset share).
+    id: 'recall.share.neg.album',
+    category: 'recall',
+    prompt: 'share the Family album',
+    expect: { kind: 'none' },
+  },
+
   // set_album_cover -----------------------------------------------------------
   {
     id: 'recall.cover.index',

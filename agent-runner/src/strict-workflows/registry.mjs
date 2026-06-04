@@ -19,6 +19,7 @@ import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
 import { cropAssetsWorkflow } from './workflows/crop-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
+import { shareAssetsWorkflow } from './workflows/share-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -68,6 +69,13 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     ordering relative to rotate does not matter for the regex fast-path, but
 //     adjacency groups the two image-edit workflows together for readability.
 //     `crop_assets` requires EXPLICIT geometry — no geometry → needs_input.
+//   - `share_assets` is placed after `trash_assets`/`restore_assets` (all three
+//     operate on a resolved asset source and route via proposeAlbumOperations).
+//     The share verbs ("share … as a link", "create a share link for …") are
+//     fully disjoint from trash/archive/rotate/crop, so ordering relative to
+//     those does not matter for the regex fast-path. OUTWARD-FACING and High
+//     risk; propose-only (createSharedLinks scope defaults false in every
+//     preset); see OQ-F2.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -80,6 +88,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   visualCleanupWorkflow,
   trashAssetsWorkflow,
   restoreAssetsWorkflow,
+  shareAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
   untagAssetsWorkflow,
