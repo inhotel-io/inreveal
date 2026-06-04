@@ -23518,13 +23518,15 @@
             "type": "boolean"
           },
           "maxAttributionDistance": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": true,
             "maximum": 2,
+            "minimum": 0,
             "type": "number"
           },
           "maxDistance": {
-            "exclusiveMinimum": 0,
+            "exclusiveMinimum": true,
             "maximum": 2,
+            "minimum": 0,
             "type": "number"
           },
           "maxFlaggedFraction": {
