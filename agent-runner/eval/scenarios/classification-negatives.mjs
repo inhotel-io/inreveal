@@ -146,6 +146,22 @@ export default [
     expect: { kind: 'untag_assets' },
   },
 
+  // crop_assets boundaries ---------------------------------------------------
+  {
+    // No geometry → crop without coordinates cannot plan → not crop_assets.
+    id: 'neg.crop.no-geometry',
+    category: 'negatives',
+    prompt: 'crop this photo',
+    expect: { kind: 'none' },
+  },
+  {
+    // crop ≠ rotate: rotate phrasing must NOT route to crop_assets.
+    id: 'neg.crop.not-rotate',
+    category: 'negatives',
+    prompt: 'rotate my newest 20 photos 90 clockwise',
+    expect: { kind: 'rotate_assets' },
+  },
+
   // set_album_cover boundaries -----------------------------------------------
   {
     // Subjective cover reference — no explicit position.
