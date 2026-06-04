@@ -80,6 +80,14 @@ export default [
     expect: { kind: 'archive_assets' },
   },
   {
+    // screenshot cleanup routing: the "screenshots" source rides the archive verb
+    // (routing is pre-resolution); the source resolves tag-first at run time.
+    id: 'l3.recall.screenshots',
+    category: 'l3.recall',
+    prompt: 'archive my screenshots',
+    expect: { kind: 'archive_assets' },
+  },
+  {
     id: 'l3.recall.favorite',
     category: 'l3.recall',
     prompt: 'favorite my newest 10 photos',
@@ -297,6 +305,18 @@ export default [
     category: 'l3.plan',
     prompt: 'archive my newest 20 photos',
     expect: { kind: 'archive_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // screenshot cleanup end-to-end: "my screenshots" resolves tag-first to the
+    // Screenshots / Auto/Screenshots classification tag and proposes a batch
+    // asset.setArchive — proposed, never applied. Data-dependent (needs a
+    // Screenshots classification category configured + tagged assets); routing-only
+    // when unseeded (the resolver discloses + hands off if untagged).
+    id: 'l3.plan.screenshots',
+    category: 'l3.plan',
+    prompt: 'archive my screenshots',
+    expect: { kind: 'archive_assets', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
