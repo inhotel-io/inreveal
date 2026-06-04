@@ -84,6 +84,7 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
       trashAssets: true,
+      createSharedLinks: false,
     },
   },
   permissionPreset: AgentPermissionPreset.Careful,

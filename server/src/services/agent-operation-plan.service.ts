@@ -37,6 +37,7 @@ import {
   AlbumUserRole,
   AssetType,
   AssetVisibility,
+  SharedLinkType,
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
@@ -66,6 +67,7 @@ import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
+import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
 import { TrashService } from 'src/services/trash.service';
@@ -252,6 +254,7 @@ export class AgentOperationPlanService {
     private readonly assetService: AssetService,
     private readonly tagService: TagService,
     private readonly trashService: TrashService,
+    private readonly sharedLinkService: SharedLinkService,
     @Optional()
     @Inject(AgentSessionActivityEventService)
     private readonly activityEventService?: Pick<AgentSessionActivityEventService, 'createSystemEvent'>,
@@ -1095,6 +1098,7 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetRemoveTag,
       AgentOperationType.AssetTrash,
       AgentOperationType.AssetRestore,
+      AgentOperationType.ShareLinkCreate,
     ].includes(type);
   }
 
@@ -1425,7 +1429,8 @@ export class AgentOperationPlanService {
       type === AgentOperationType.AssetAddTag ||
       type === AgentOperationType.AssetRemoveTag ||
       type === AgentOperationType.AssetTrash ||
-      type === AgentOperationType.AssetRestore
+      type === AgentOperationType.AssetRestore ||
+      type === AgentOperationType.ShareLinkCreate
     );
   }
 
@@ -1956,6 +1961,10 @@ export class AgentOperationPlanService {
       !writeScope.trashAssets
     ) {
       throw new BadRequestException('Agent permission policy does not allow moving assets to trash');
+    }
+
+    if (type === AgentOperationType.ShareLinkCreate && !writeScope.createSharedLinks) {
+      throw new BadRequestException('Agent permission policy does not allow creating shared links');
     }
   }
 
@@ -2792,6 +2801,10 @@ export class AgentOperationPlanService {
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 
+      case AgentOperationType.ShareLinkCreate: {
+        return this.applyShareLinkCreateOperation(auth, operation);
+      }
+
       default: {
         throw new BadRequestException(`${operation.type} is not supported for apply yet`);
       }
@@ -3171,6 +3184,29 @@ export class AgentOperationPlanService {
     }
 
     return this.appliedOperation(operation.id, result);
+  }
+
+  private async applyShareLinkCreateOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const payload = this.requireObjectPayload(operation.payload) as {
+      password?: string;
+      expiresAt?: string;
+      showMetadata?: boolean;
+      allowDownload?: boolean;
+    };
+
+    await this.sharedLinkService.create(auth, {
+      type: SharedLinkType.Individual,
+      assetIds: operation.assetIds,
+      password: payload.password,
+      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+      showMetadata: payload.showMetadata,
+      allowDownload: payload.allowDownload,
+    });
+
+    return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
   }
 
   private requireCropPayload(payload: unknown): CropParameters {
