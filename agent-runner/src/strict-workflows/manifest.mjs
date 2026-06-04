@@ -599,11 +599,11 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
     requiredReadTools: Object.freeze(['listSpaces', 'readSpace', 'searchUsers']),
     planTool: 'proposeAlbumOperations',
-    supportsContinuation: false,
+    supportsContinuation: true,
     matrixRow: Object.freeze({
       capability: 'Add or remove space members',
       tier: 'Solid now',
-      workflowOrBoundary: 'Resolve members; guard owner/self/last-owner removal; propose the membership plan.',
+      workflowOrBoundary: 'Resolve members; guard owner/self/last-owner removal; propose the membership plan. Durable two-stage disambiguation: ambiguous space then ambiguous user each get a storable candidate list.',
     }),
   }),
   Object.freeze({
