@@ -37,6 +37,23 @@ export class FaceRepairRepository {
       .stream();
   }
 
+  async countEligibleFaces(options: { ownerId?: string; personId?: string }): Promise<number> {
+    const { count } = await this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select((eb) => eb.fn.countAll().as('count'))
+      .where('asset_face.personId', 'is not', null)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
+      .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
+      .executeTakeFirstOrThrow();
+    return Number(count);
+  }
+
   // Unassign the given faces ONLY if still assigned to `personId` and machine-learning-sourced (eligibility
   // re-check at write — a face moved by a concurrent job since planning is skipped). Returns the ids actually
   // unassigned (so the caller unlinks/queues exactly those).

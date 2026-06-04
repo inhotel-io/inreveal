@@ -60,12 +60,14 @@ export class FaceRepairService extends BaseService {
       maxDistance: number;
       voteWindow: number;
       maxFlaggedFraction: number;
+      onProgress?: (scanned: number) => Promise<void> | void;
     } & FlagParams,
   ): Promise<RepairPlan> {
     const eligibleByPerson = new Map<string, number>();
     const flaggedByPerson = new Map<string, FlaggedFace[]>();
     const unAttributableFaces: { assetFaceId: string; currentPersonId: string }[] = [];
 
+    let scanned = 0;
     for await (const candidate of this.findReattributionCandidates(options)) {
       eligibleByPerson.set(candidate.currentPersonId, (eligibleByPerson.get(candidate.currentPersonId) ?? 0) + 1);
       const decision = decideReattribution(candidate, options);
@@ -86,6 +88,8 @@ export class FaceRepairService extends BaseService {
       ) {
         unAttributableFaces.push({ assetFaceId: candidate.assetFaceId, currentPersonId: candidate.currentPersonId });
       }
+      scanned++;
+      await options.onProgress?.(scanned);
     }
 
     const reviewOnlyPersonIds = new Set<string>();
