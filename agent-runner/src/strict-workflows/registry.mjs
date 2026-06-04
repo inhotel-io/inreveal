@@ -17,6 +17,7 @@ import { trashAssetsWorkflow } from './workflows/trash-assets.mjs';
 import { restoreAssetsWorkflow } from './workflows/restore-assets.mjs';
 import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
+import { cropAssetsWorkflow } from './workflows/crop-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
@@ -62,6 +63,11 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     untrash/bring-back) are fully disjoint from the trash verb set, so ordering
 //     relative to trash does not matter for the regex fast-path, but adjacency
 //     groups the two lifecycle-state workflows together for readability.
+//   - `crop_assets` is placed adjacent to `rotate_assets` (both image-edit
+//     workflows). Its verb (`crop`) is fully disjoint from rotate/flip/spin, so
+//     ordering relative to rotate does not matter for the regex fast-path, but
+//     adjacency groups the two image-edit workflows together for readability.
+//     `crop_assets` requires EXPLICIT geometry — no geometry → needs_input.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -79,6 +85,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   untagAssetsWorkflow,
   updateAssetMetadataWorkflow,
   rotateAssetsWorkflow,
+  cropAssetsWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   removePhotosFromAlbumWorkflow,

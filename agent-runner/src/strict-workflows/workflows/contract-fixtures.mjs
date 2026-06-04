@@ -24,6 +24,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'space.removeMembers',
   'space.updateMemberRole',
   'asset.rotate',
+  'asset.crop',
   'asset.setFavorite',
   'asset.setArchive',
   'asset.updateMetadata',
@@ -39,6 +40,7 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.setArchive',
   'asset.addTag',
   'asset.rotate',
+  'asset.crop',
   'asset.updateMetadata',
 ]);
 
@@ -154,6 +156,18 @@ const validateBatchAction = (action) => {
   if (type === 'asset.rotate') {
     if (![90, 180, 270].includes(action.angle)) fail('asset.rotate angle must be 90, 180, or 270');
   }
+  if (type === 'asset.crop') {
+    validateAssetCropAction(action);
+  }
+};
+
+// Mirror CropParametersSchema: x/y >= 0, width/height >= 1, all integers.
+export const validateAssetCropAction = (action) => {
+  const { x, y, width, height } = action;
+  if (typeof x !== 'number' || !Number.isInteger(x) || x < 0) fail('asset.crop x must be an integer >= 0');
+  if (typeof y !== 'number' || !Number.isInteger(y) || y < 0) fail('asset.crop y must be an integer >= 0');
+  if (typeof width !== 'number' || !Number.isInteger(width) || width < 1) fail('asset.crop width must be an integer >= 1');
+  if (typeof height !== 'number' || !Number.isInteger(height) || height < 1) fail('asset.crop height must be an integer >= 1');
 };
 
 // space.updateDetails payload is a strictObject with ≥1 of these (mirrors the DTO).

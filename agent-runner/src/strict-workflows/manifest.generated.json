@@ -646,6 +646,60 @@
     }
   },
   {
+    "kind": "crop_assets",
+    "flow": "hybrid",
+    "title": "Crop photos (explicit geometry)",
+    "classifierDescription": "User wants to crop a photo to EXPLICIT pixel geometry (x, y, width, height supplied in the prompt). Comma form \"crop this photo to 100,100,800,600\" or labeled form \"crop to x=N y=N w=N h=N\". No geometry → asks for x/y/width/height; never guesses coordinates.",
+    "positiveExamples": [
+      "crop this photo to 100,100,800,600",
+      "crop to x=10 y=20 w=300 h=400",
+      "crop my newest photo to x=0 y=0 width=1920 height=1080"
+    ],
+    "negativeExamples": [
+      "crop this photo",
+      "crop my newest 20 photos",
+      "rotate my newest 20 photos 90 clockwise"
+    ],
+    "slots": {
+      "x": {
+        "type": "number",
+        "required": true,
+        "description": "Left edge of the crop rectangle (pixels, >= 0)."
+      },
+      "y": {
+        "type": "number",
+        "required": true,
+        "description": "Top edge of the crop rectangle (pixels, >= 0)."
+      },
+      "width": {
+        "type": "number",
+        "required": true,
+        "description": "Width of the crop rectangle (pixels, >= 1)."
+      },
+      "height": {
+        "type": "number",
+        "required": true,
+        "description": "Height of the crop rectangle (pixels, >= 1)."
+      },
+      "sourceDescription": {
+        "type": "string",
+        "required": true,
+        "description": "Metadata description of the photo to crop."
+      }
+    },
+    "requiredReadTools": [
+      "resolveAssetSearchFilters",
+      "searchAssets"
+    ],
+    "planTool": "proposeAssetBatchFromSelection",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Crop assets",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the source + explicit geometry (x/y/width/height); Gallery owns the batch asset.crop plan from the handle. No-geometry → asks for coordinates; never guesses."
+    }
+  },
+  {
     "kind": "rename_or_describe_space",
     "flow": "strict",
     "title": "Rename or describe space",
