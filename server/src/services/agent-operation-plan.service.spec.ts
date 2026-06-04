@@ -9608,7 +9608,7 @@ describe(AgentOperationPlanService.name, () => {
     expect(result.status).not.toBe('error');
   });
 
-  // ── preset: createSharedLinks is false on every preset ───────────────────────
+  // ── preset: createSharedLinks granted ONLY in LocalPowerUser (outward-facing) ─
 
   it('Careful preset does NOT grant createSharedLinks', () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.createSharedLinks).toBe(
@@ -9622,10 +9622,10 @@ describe(AgentOperationPlanService.name, () => {
     ).toBe(false);
   });
 
-  it('LocalPowerUser preset does NOT grant createSharedLinks', () => {
+  it('LocalPowerUser preset grants createSharedLinks (the only preset that does)', () => {
     expect(
       AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.createSharedLinks,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   // ── apply: shareLink.create calls sharedLinkService.create ───────────────────
