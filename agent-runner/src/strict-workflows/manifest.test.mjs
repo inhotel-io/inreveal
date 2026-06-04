@@ -76,7 +76,6 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.planTool, 'planTool must be present');
     assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
     assert.ok(entry.requiredReadTools.includes('searchAssets'), 'requiredReadTools includes searchAssets');
-    assert.equal(entry.supportsContinuation, false);
     assert.ok(entry.positiveExamples.length > 0);
     assert.ok(entry.negativeExamples.length > 0);
     assert.ok(entry.matrixRow.capability);
@@ -122,6 +121,28 @@ describe('strict/hybrid workflow manifest', () => {
     assert.equal(entry.planTool, 'proposeAlbumOperations');
     assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
     assert.ok(entry.requiredReadTools.includes('searchUsers'), 'requiredReadTools includes searchUsers');
+    assert.equal(entry.supportsContinuation, true);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
+
+  it('describes rename_or_describe_space as a strict workflow with supportsContinuation true', () => {
+    const entry = getWorkflowManifestEntry('rename_or_describe_space');
+    assert.equal(entry.flow, 'strict');
+    assert.equal(entry.planTool, 'proposeAlbumOperations');
+    assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
+    assert.equal(entry.supportsContinuation, true);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
+
+  it('describes manage_space_assets as a hybrid workflow with supportsContinuation true', () => {
+    const entry = getWorkflowManifestEntry('manage_space_assets');
+    assert.equal(entry.flow, 'hybrid');
+    assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
+    assert.ok(entry.requiredReadTools.includes('searchAssets'), 'requiredReadTools includes searchAssets');
     assert.equal(entry.supportsContinuation, true);
     assert.ok(entry.positiveExamples.length > 0);
     assert.ok(entry.negativeExamples.length > 0);
