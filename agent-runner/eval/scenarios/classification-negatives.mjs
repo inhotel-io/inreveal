@@ -130,6 +130,22 @@ export default [
     expect: { kind: 'cleanup_duplicates' },
   },
 
+  // restore_assets boundaries ------------------------------------------------
+  {
+    // Plain trash must NOT be stolen by restore_assets.
+    id: 'neg.restore.trash-stays-trash',
+    category: 'negatives',
+    prompt: 'trash my newest 20',
+    expect: { kind: 'trash_assets' },
+  },
+  {
+    // Tag removal must NOT be stolen by restore_assets.
+    id: 'neg.restore.untag-stays-untag',
+    category: 'negatives',
+    prompt: 'remove the Travel tag from my newest 20',
+    expect: { kind: 'untag_assets' },
+  },
+
   // set_album_cover boundaries -----------------------------------------------
   {
     // Subjective cover reference — no explicit position.

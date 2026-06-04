@@ -30,6 +30,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.addTag',
   'asset.removeTag',
   'asset.trash',
+  'asset.restore',
 ]);
 
 // Action types accepted by proposeAssetBatchFromSelection's discriminated union.
@@ -57,6 +58,7 @@ const KNOWN_SEARCH_FILTER_KEYS = new Set([
   'city', 'state', 'country', 'make', 'model', 'lensModel', 'isFavorite', 'isNotInAlbum', 'type',
   'rating', 'tagIds', 'tagMatchAny', 'albumIds', 'albumMatchAny', 'personIds', 'personMatchAny',
   'spaceId', 'spacePersonIds', 'withSharedSpaces', 'visibility', 'maxSharpness', 'maxBrightness', 'maxQuality',
+  'isTrashed',
 ]);
 const QUALITY_FILTER_KEYS = ['maxSharpness', 'maxBrightness', 'maxQuality'];
 
@@ -252,6 +254,37 @@ const validateAssetTrash = (op) => {
   }
 };
 
+// Mirror asset.restore: same selection constraints as asset.trash but riskLevel low.
+const validateAssetRestore = (op) => {
+  if (op.targetKind !== 'asset_batch') fail('asset.restore requires targetKind "asset_batch"');
+  if (op.targetId !== undefined) fail('asset.restore must not set targetId');
+  if (op.temporaryTargetId !== undefined) fail('asset.restore must not set temporaryTargetId');
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0) fail('asset.restore must not set a payload');
+
+  const hasSource = op.assetSource !== undefined;
+  const hasIds = op.assetIds !== undefined;
+  const hasHandleId = op.assetSelectionHandleId !== undefined;
+  const mechanismCount = Number(hasSource) + Number(hasIds) + Number(hasHandleId);
+
+  if (mechanismCount === 0) {
+    fail('asset.restore requires exactly one selection mechanism: assetSource (selectionHandle), assetIds, or assetSelectionHandleId');
+  }
+  if (mechanismCount > 1) {
+    fail('asset.restore requires exactly one selection mechanism; multiple mechanisms are not allowed');
+  }
+
+  if (hasSource) {
+    if (!op.assetSource || op.assetSource.kind !== 'selectionHandle' || !op.assetSource.selectionHandleId) {
+      fail('asset.restore assetSource must be a selectionHandle with a selectionHandleId');
+    }
+  }
+  if (hasIds) {
+    if (!Array.isArray(op.assetIds) || op.assetIds.length === 0) {
+      fail('asset.restore assetIds must be a non-empty array');
+    }
+  }
+};
+
 const validateAssetRemoveTag = (op) => {
   if (op.targetKind !== 'asset_batch') fail('asset.removeTag requires targetKind "asset_batch"');
   if (op.targetId !== undefined) fail('asset.removeTag must not set targetId');
@@ -288,6 +321,7 @@ const ALBUM_OP_VALIDATORS = {
   'album.setCover': validateAlbumSetCover,
   'asset.removeTag': validateAssetRemoveTag,
   'asset.trash': validateAssetTrash,
+  'asset.restore': validateAssetRestore,
 };
 
 const validateOperations = (operations) => {

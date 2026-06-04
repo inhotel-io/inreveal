@@ -330,6 +330,41 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'restore_assets',
+    flow: 'hybrid',
+    title: 'Restore photos from Trash',
+    classifierDescription:
+      'User wants to restore (untrash/recover/bring back) a metadata-describable set of photos from the Trash back to their library. The source is always resolved within the Trash. Reversible; non-destructive; album/space deletion and subjective sources are out of scope.',
+    positiveExamples: Object.freeze([
+      'Restore my newest 20 from trash',
+      'Recover the photos I just trashed',
+      'Get my photos back from the trash',
+      'Untrash these photos',
+    ]),
+    negativeExamples: Object.freeze([
+      'Trash my newest 20 photos',
+      'Delete my 2024 screenshots',
+      'Remove the Travel tag from my newest 20',
+      'Archive my newest 20',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the trashed photos to restore.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Restore from trash',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves a bounded trashed-asset source (isTrashed:true injected automatically); Gallery owns the Low-risk, reversible asset.restore plan.',
+    }),
+  }),
+  Object.freeze({
     kind: 'favorite_assets',
     flow: 'hybrid',
     title: 'Favorite or unfavorite photos',

@@ -245,6 +245,26 @@ export default [
     expect: { kind: 'trash_assets', slotsSurvive: true },
   },
 
+  // restore_assets ------------------------------------------------------------
+  {
+    id: 'recall.restore.canonical',
+    category: 'recall',
+    prompt: 'restore my newest 20 from trash',
+    expect: { kind: 'restore_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.restore.recover',
+    category: 'recall',
+    prompt: 'recover the photos I just trashed',
+    expect: { kind: 'restore_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.restore.untrash',
+    category: 'recall',
+    prompt: 'untrash these photos',
+    expect: { kind: 'restore_assets', slotsSurvive: true },
+  },
+
   // rename_or_describe_space ------------------------------------------------
   {
     id: 'recall.space.rename',
