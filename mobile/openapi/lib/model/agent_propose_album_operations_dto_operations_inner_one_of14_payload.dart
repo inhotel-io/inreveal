@@ -13,26 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload({
-    required this.archived,
+    required this.favorite,
   });
 
-  bool archived;
+  bool favorite;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload &&
-    other.archived == archived;
+    other.favorite == favorite;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (archived.hashCode);
+    (favorite.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload[archived=$archived]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload[favorite=$favorite]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'archived'] = this.archived;
+      json[r'favorite'] = this.favorite;
     return json;
   }
 
@@ -45,7 +45,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload(
-        archived: mapValueOfType<bool>(json, r'archived')!,
+        favorite: mapValueOfType<bool>(json, r'favorite')!,
       );
     }
     return null;
@@ -93,7 +93,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf14Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'archived',
+    'favorite',
   };
 }
 

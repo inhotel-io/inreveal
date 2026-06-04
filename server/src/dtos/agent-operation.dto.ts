@@ -409,6 +409,13 @@ const assetRotatePayloadSchema = z.strictObject({
     }),
 });
 
+const assetCropPayloadSchema = z.strictObject({
+  x: z.number().min(0),
+  y: z.number().min(0),
+  width: z.number().min(1),
+  height: z.number().min(1),
+});
+
 const assetSetFavoritePayloadSchema = z.strictObject({ favorite: z.boolean() });
 
 const assetSetArchivePayloadSchema = z.strictObject({ archived: z.boolean() });
@@ -529,6 +536,17 @@ const rotateOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetRotate);
   });
 
+const cropOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetCrop).meta({ id: 'AgentAssetCropOperationType' }),
+    ...assetBatchBase,
+    payload: assetCropPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetCrop);
+  });
+
 const setFavoriteOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.AssetSetFavorite).meta({ id: 'AgentAssetSetFavoriteOperationType' }),
@@ -644,6 +662,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   spaceRemoveMembersOperationSchema,
   spaceUpdateMemberRoleOperationSchema,
   rotateOperationSchema,
+  cropOperationSchema,
   setFavoriteOperationSchema,
   setArchiveOperationSchema,
   updateMetadataOperationSchema,

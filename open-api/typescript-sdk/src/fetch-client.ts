@@ -966,6 +966,23 @@ export type AgentProposeAlbumOperationsDto = {
             angle: number;
         };
     } | {
+        "type": AgentAssetCropOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+        };
+    } | {
         "type": AgentAssetSetFavoriteOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
@@ -1300,6 +1317,23 @@ export type AgentReviseAlbumOperationsDto = {
         enabled?: boolean;
         payload: {
             angle: number;
+        };
+    } | {
+        "type": AgentAssetCropOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            x: number;
+            y: number;
+            width: number;
+            height: number;
         };
     } | {
         "type": AgentAssetSetFavoriteOperationType;
@@ -10583,6 +10617,7 @@ export enum AgentOperationType {
     SpaceRemoveMembers = "space.removeMembers",
     SpaceUpdateMemberRole = "space.updateMemberRole",
     AssetRotate = "asset.rotate",
+    AssetCrop = "asset.crop",
     AssetSetFavorite = "asset.setFavorite",
     AssetSetArchive = "asset.setArchive",
     AssetUpdateMetadata = "asset.updateMetadata",
@@ -10689,6 +10724,9 @@ export enum AgentSpaceUpdateMemberRoleOperationType {
 }
 export enum AgentAssetRotateOperationType {
     AssetRotate = "asset.rotate"
+}
+export enum AgentAssetCropOperationType {
+    AssetCrop = "asset.crop"
 }
 export enum AgentAssetSetFavoriteOperationType {
     AssetSetFavorite = "asset.setFavorite"
