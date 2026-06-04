@@ -2475,6 +2475,29 @@ Move selected assets to Trash (recoverable).
 }
 ```
 
+#### restore-assets
+
+Restore selected assets from Trash (non-destructive, Low risk).
+
+<!-- mcp-docs:tool-arguments tool="proposeAlbumOperations" example="restore-assets" -->
+
+```json
+{
+  "summary": "Restore selected photos from Trash.",
+  "operations": [
+    {
+      "type": "asset.restore",
+      "summary": "Restore selected photos from Trash.",
+      "targetKind": "asset_batch",
+      "assetSource": {
+        "kind": "selectionHandle",
+        "selectionHandleId": "<selectionHandle.id from searchAssets>"
+      }
+    }
+  ]
+}
+```
+
 ### Revise proposed operations
 
 MCP tool name: `reviseProposedOperations`
@@ -3181,6 +3204,31 @@ Revise a plan to move selected assets to Trash (recoverable).
     {
       "type": "asset.trash",
       "summary": "Move selected photos to Trash (recoverable).",
+      "targetKind": "asset_batch",
+      "assetSource": {
+        "kind": "selectionHandle",
+        "selectionHandleId": "<selectionHandle.id from searchAssets>"
+      }
+    }
+  ]
+}
+```
+
+#### revise-restore-assets
+
+Revise a plan to restore selected assets from Trash (non-destructive, Low risk).
+
+<!-- mcp-docs:tool-arguments tool="reviseProposedOperations" example="revise-restore-assets" -->
+
+```json
+{
+  "planId": "<plan.id from proposed plan>",
+  "feedback": "Use this revised operation plan.",
+  "summary": "Restore selected photos from Trash.",
+  "operations": [
+    {
+      "type": "asset.restore",
+      "summary": "Restore selected photos from Trash.",
       "targetKind": "asset_batch",
       "assetSource": {
         "kind": "selectionHandle",

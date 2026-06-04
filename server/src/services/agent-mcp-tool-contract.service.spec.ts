@@ -76,6 +76,7 @@ const expectedPlanningOperationTypes = [
   AgentOperationType.AssetAddTag,
   AgentOperationType.AssetRemoveTag,
   AgentOperationType.AssetTrash,
+  AgentOperationType.AssetRestore,
 ] as const;
 
 const forbiddenContractPattern =
