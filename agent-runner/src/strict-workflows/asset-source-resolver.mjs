@@ -241,6 +241,15 @@ export const parseEntitySource = (source) => {
     setDirect('visibility', 'archive');
     text = text.replace(/\barchived\b/gi, ' ');
   }
+  // (7b) trashed: "trashed" / "in the trash" / "in trash" / "from trash".
+  // Maps to isTrashed:true so a source like "my trashed photos" or "photos in
+  // the trash" resolves with the isTrashed filter automatically. Workflows that
+  // always want trashed sources (restore_assets) also inject isTrashed:true via
+  // extraFilters; this token makes it available for general entity-source use.
+  if (/\btrashed\b|\bin\s+(?:the\s+)?trash\b|\bfrom\s+(?:the\s+)?trash\b/i.test(text)) {
+    setDirect('isTrashed', true);
+    text = text.replace(/\btrashed\b|\bin\s+(?:the\s+)?trash\b|\bfrom\s+(?:the\s+)?trash\b/gi, ' ');
+  }
   // (8) camera (bare): "my <Make> photos" where Make is a known make.
   const bareNoun = new RegExp(`\\b([A-Z][A-Za-z]+)\\b(?=\\s+${PHOTO_NOUN}\\b)`, 'g');
   text = text.replace(bareNoun, (m, n) =>
@@ -347,7 +356,7 @@ const DATE_STRIP = new RegExp(
 
 // Entity connector/keyword tokens consumed alongside recognized entity names so an
 // entity source reads as "clean".
-const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rite[ds]?|archived|albums?)\b/gi;
+const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rite[ds]?|archived|albums?|trashed|in\s+(?:the\s+)?trash|from\s+(?:the\s+)?trash)\b/gi;
 
 // A source is "clean" when, after removing recency / date / generic-noun / filler AND
 // recognized entity tokens, nothing substantive remains. Subjective qualifiers
