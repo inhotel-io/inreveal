@@ -269,3 +269,217 @@ describe('manage_space_members execution + safety guards', () => {
     assert.equal(/prepared/i.test(outcome.text), false);
   });
 });
+
+// ─── D2: durable disambiguation (continuation) ────────────────────────────────
+
+const NOW = 1_000_000;
+
+// A client with two spaces both named "Family" (ambiguous space).
+const ambiguousSpaceClient = () =>
+  makeContractClient({
+    spaces: [
+      { id: 'spc-a', name: 'Family', members: [] },
+      { id: 'spc-b', name: 'Family', members: [] },
+    ],
+    users: [{ userId: 'u-alex', name: 'Alex', email: 'alex@x.com' }],
+  });
+
+// A client with one space but two users matching "Al" (ambiguous user).
+const ambiguousUserClient = () =>
+  makeContractClient({
+    spaces: [{ id: 'spc-1', name: 'Family', members: [{ userId: 'u-owner', name: 'Pierre', role: 'owner' }] }],
+    users: [
+      { userId: 'u-alex', name: 'Alex', email: 'alex@x.com' },
+      { userId: 'u-alice', name: 'Alice', email: 'alice@x.com' },
+    ],
+  });
+
+describe('manage_space_members durable disambiguation (D2)', () => {
+  // ── non-ambiguous path unchanged (regression) ────────────────────────────────
+  it('non-ambiguous path: plans directly, no continuation', async () => {
+    const client = spaceClient();
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'planned');
+    assert.equal(outcome.continuation, undefined);
+  });
+
+  // ── "not found" keeps bare needs_input (no empty candidate list) ─────────────
+  it('not-found space stays bare needs_input without a continuation', async () => {
+    const client = spaceClient();
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Nope', role: 'viewer' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(outcome.continuation, undefined);
+  });
+
+  // ── ambiguous SPACE: produces continuation with kind + candidates ─────────────
+  it('ambiguous space yields needs_input with continuation (kind + candidates, no raw ids leaked)', async () => {
+    const client = ambiguousSpaceClient();
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(outcome.continuation, 'continuation must be present');
+    assert.equal(outcome.continuation.kind, 'manage_space_members_space');
+    assert.equal(Array.isArray(outcome.continuation.candidates), true);
+    assert.equal(outcome.continuation.candidates.length, 2);
+    // Candidates must be {index,id,name} only — no raw extra fields from the space.
+    for (const c of outcome.continuation.candidates) {
+      assert.deepEqual(Object.keys(c).sort(), ['id', 'index', 'name']);
+    }
+    // slots are carried for the next stage
+    assert.ok(outcome.continuation.slots, 'slots must be carried');
+    // no raw space members arrays leaked into the continuation
+    // (the kind string contains 'members' so we check the candidates array directly)
+    for (const c of outcome.continuation.candidates) {
+      assert.equal('members' in c, false, 'candidate must not carry a members array');
+    }
+  });
+
+  // ── resume space: "the first one" picks spc-a → proceeds to plan (user unambiguous) ──
+  it('resume "the first one" resolves space, then plans when user is unambiguous', async () => {
+    const client = ambiguousSpaceClient();
+    // Turn 1: get the continuation
+    const outcome1 = await wf.run({
+      client,
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome1.status, 'needs_input');
+    const pending = outcome1.continuation;
+
+    // Turn 2: resume "the first one"
+    const resumed = wf.resumeContinuation({ pending, prompt: 'the first one', nowMs: NOW + 1000 });
+    assert.equal(resumed.status, 'matched');
+    assert.equal(resumed.ctx.resolvedSpaceId, 'spc-a');
+    assert.ok(resumed.ctx.slots, 'slots must be in ctx');
+
+    // Turn 2 run: with resolvedSpaceId, the client with spc-a must have member data
+    const client2 = makeContractClient({
+      spaces: [
+        { id: 'spc-a', name: 'Family', members: [{ userId: 'u-owner', name: 'Pierre', role: 'owner' }] },
+        { id: 'spc-b', name: 'Family', members: [] },
+      ],
+      users: [{ userId: 'u-alex', name: 'Alex', email: 'alex@x.com' }],
+    });
+    const outcome2 = await wf.run({
+      client: client2,
+      slots: resumed.ctx.slots,
+      resolvedSpaceId: resumed.ctx.resolvedSpaceId,
+      nowMs: NOW + 1000,
+    });
+    assert.equal(outcome2.status, 'planned');
+  });
+
+  // ── two-stage: space resolved, user ambiguous → continuation with resolvedSpaceId ──
+  it('two-stage: space resolved but ambiguous user yields continuation with resolvedSpaceId', async () => {
+    const client = ambiguousUserClient();
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', memberQueries: ['Al'], spaceRef: 'Family', role: 'viewer' },
+      resolvedSpaceId: 'spc-1',
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(outcome.continuation, 'continuation must be present');
+    assert.equal(outcome.continuation.kind, 'manage_space_members_user');
+    assert.equal(outcome.continuation.candidates.length, 2);
+    // resolvedSpaceId must be carried so the next run skips space lookup
+    assert.equal(outcome.continuation.resolvedSpaceId, 'spc-1');
+    assert.ok(outcome.continuation.slots, 'slots must be carried');
+  });
+
+  // ── resume user: "2" picks the 2nd user → run() with resolvedSpaceId+resolvedUserId proposes ──
+  it('resume "2" picks the 2nd user; run with resolvedSpaceId+resolvedUserId proposes', async () => {
+    const client = ambiguousUserClient();
+    // Simulate the continuation already stored after stage-1 resolved
+    const pending = {
+      kind: 'manage_space_members_user',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'u-alex', name: 'Alex' },
+        { index: 2, id: 'u-alice', name: 'Alice' },
+      ],
+      resolvedSpaceId: 'spc-1',
+      slots: { action: 'add', memberQueries: ['Al'], spaceRef: 'Family', role: 'viewer' },
+    };
+    const resumed = wf.resumeContinuation({ pending, prompt: '2', nowMs: NOW + 500 });
+    assert.equal(resumed.status, 'matched');
+    assert.equal(resumed.ctx.resolvedUserId, 'u-alice');
+    assert.equal(resumed.ctx.resolvedSpaceId, 'spc-1');
+
+    // Run with both resolved ids
+    const client2 = makeContractClient({
+      spaces: [{ id: 'spc-1', name: 'Family', members: [{ userId: 'u-owner', name: 'Pierre', role: 'owner' }] }],
+      users: [
+        { userId: 'u-alex', name: 'Alex', email: 'alex@x.com' },
+        { userId: 'u-alice', name: 'Alice', email: 'alice@x.com' },
+      ],
+    });
+    const outcome = await wf.run({
+      client: client2,
+      slots: resumed.ctx.slots,
+      resolvedSpaceId: resumed.ctx.resolvedSpaceId,
+      resolvedUserId: resumed.ctx.resolvedUserId,
+      nowMs: NOW + 500,
+    });
+    assert.equal(outcome.status, 'planned');
+  });
+
+  // ── edge: out-of-range ordinal → needs_input (keeps pending) ─────────────────
+  it('out-of-range ordinal in resume → needs_input', () => {
+    const pending = {
+      kind: 'manage_space_members_space',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'spc-a', name: 'Family' },
+        { index: 2, id: 'spc-b', name: 'Family' },
+      ],
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: '5', nowMs: NOW + 1000 });
+    assert.equal(result.status, 'needs_input');
+  });
+
+  // ── edge: name not in list → needs_input ─────────────────────────────────────
+  it('name not in list → needs_input', () => {
+    const pending = {
+      kind: 'manage_space_members_space',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'spc-a', name: 'Family' },
+        { index: 2, id: 'spc-b', name: 'Family 2' },
+      ],
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: 'Trips', nowMs: NOW + 1000 });
+    assert.equal(result.status, 'needs_input');
+  });
+
+  // ── edge: expired continuation → expired message ──────────────────────────────
+  it('expired continuation → expired message', () => {
+    const pending = {
+      kind: 'manage_space_members_space',
+      createdAtMs: NOW,
+      candidates: [{ index: 1, id: 'spc-a', name: 'Family' }],
+      slots: { action: 'add', memberQueries: ['Alex'], spaceRef: 'Family', role: 'viewer' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: '1', nowMs: NOW + 15 * 60 * 1000 });
+    assert.equal(result.status, 'expired');
+    assert.match(result.text, /expired/i);
+  });
+
+  // ── resumeContinuation is exposed on the workflow object ─────────────────────
+  it('workflow exposes resumeContinuation', () => {
+    assert.equal(typeof wf.resumeContinuation, 'function');
+  });
+});
