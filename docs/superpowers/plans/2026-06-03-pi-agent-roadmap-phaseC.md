@@ -25,6 +25,7 @@ Branch: `explore/pi-agent-brainstorm`. Mirrors the shipped `asset.trash` op + `t
 ## Slice C1 — `isTrashed` agent search filter (server, TDD)
 
 **Tests first** (`agent-tool.service.spec.ts` + medium `asset.repository` if needed):
+
 - searchAssets handler with `isTrashed:true` passes the trashed option to the asset repo (assert the repo search
   arg includes the trashed/withDeleted flag); default (omitted/false) excludes trashed (regression).
 - (medium, if the repo path isn't already covered) a trashed asset is returned only when `isTrashed:true`.
@@ -44,6 +45,7 @@ Commit `feat(agent): isTrashed search filter for trashed-asset sources (C1)`; pu
 
 **Tests first** (`agent-operation.dto.spec.ts` mirroring the `asset.trash operation schema` describe block +
 `agent-operation-plan.service.spec.ts` for apply/scope):
+
 - accepts a valid `asset.restore` (no payload, asset_batch target, default **Low** risk).
 - rejects: payload field present; targetId present; wrong targetKind; no asset selection; multiple selection
   mechanisms (mirror the trash describe cases exactly).
@@ -67,6 +69,7 @@ Commit `feat(agent): asset.restore reversible operation (C2)`; push.
 ## Slice C3 — `restore_assets` workflow (agent-runner, TDD) + matrix + L1
 
 **Tests first** (`restore-assets.test.mjs` mirroring `trash-assets.test.mjs`):
+
 - match accepts "restore my newest 20 from trash", "recover the photos I just trashed", "untag"→NO, "untrash
   these", "get my photos back from the trash"; rejects non-restore phrasings.
 - run resolves an `isTrashed` source and proposes `asset.restore` (type asset.restore, asset_batch, Low risk).
