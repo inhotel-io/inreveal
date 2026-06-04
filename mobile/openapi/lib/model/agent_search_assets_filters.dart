@@ -21,6 +21,7 @@ class AgentSearchAssetsFilters {
     this.createdBefore,
     this.isFavorite,
     this.isNotInAlbum,
+    this.isTrashed,
     this.lensModel,
     this.make,
     this.maxBrightness,
@@ -89,6 +90,14 @@ class AgentSearchAssetsFilters {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   bool? isNotInAlbum;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? isTrashed;
 
   String? lensModel;
 
@@ -228,6 +237,7 @@ class AgentSearchAssetsFilters {
     other.createdBefore == createdBefore &&
     other.isFavorite == isFavorite &&
     other.isNotInAlbum == isNotInAlbum &&
+    other.isTrashed == isTrashed &&
     other.lensModel == lensModel &&
     other.make == make &&
     other.maxBrightness == maxBrightness &&
@@ -261,6 +271,7 @@ class AgentSearchAssetsFilters {
     (createdBefore == null ? 0 : createdBefore!.hashCode) +
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
     (isNotInAlbum == null ? 0 : isNotInAlbum!.hashCode) +
+    (isTrashed == null ? 0 : isTrashed!.hashCode) +
     (lensModel == null ? 0 : lensModel!.hashCode) +
     (make == null ? 0 : make!.hashCode) +
     (maxBrightness == null ? 0 : maxBrightness!.hashCode) +
@@ -284,7 +295,7 @@ class AgentSearchAssetsFilters {
     (withSharedSpaces == null ? 0 : withSharedSpaces!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, albumMatchAny=$albumMatchAny, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, lensModel=$lensModel, make=$make, maxBrightness=$maxBrightness, maxQuality=$maxQuality, maxSharpness=$maxSharpness, model=$model, personIds=$personIds, personMatchAny=$personMatchAny, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, tagMatchAny=$tagMatchAny, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
+  String toString() => 'AgentSearchAssetsFilters[albumIds=$albumIds, albumMatchAny=$albumMatchAny, city=$city, country=$country, createdAfter=$createdAfter, createdBefore=$createdBefore, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, isTrashed=$isTrashed, lensModel=$lensModel, make=$make, maxBrightness=$maxBrightness, maxQuality=$maxQuality, maxSharpness=$maxSharpness, model=$model, personIds=$personIds, personMatchAny=$personMatchAny, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, state=$state, tagIds=$tagIds, tagMatchAny=$tagMatchAny, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, updatedAfter=$updatedAfter, updatedBefore=$updatedBefore, visibility=$visibility, withSharedSpaces=$withSharedSpaces]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -327,6 +338,11 @@ class AgentSearchAssetsFilters {
       json[r'isNotInAlbum'] = this.isNotInAlbum;
     } else {
     //  json[r'isNotInAlbum'] = null;
+    }
+    if (this.isTrashed != null) {
+      json[r'isTrashed'] = this.isTrashed;
+    } else {
+    //  json[r'isTrashed'] = null;
     }
     if (this.lensModel != null) {
       json[r'lensModel'] = this.lensModel;
@@ -451,6 +467,7 @@ class AgentSearchAssetsFilters {
         createdBefore: mapDateTime(json, r'createdBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
         isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
+        isTrashed: mapValueOfType<bool>(json, r'isTrashed'),
         lensModel: mapValueOfType<String>(json, r'lensModel'),
         make: mapValueOfType<String>(json, r'make'),
         maxBrightness: mapValueOfType<int>(json, r'maxBrightness'),
