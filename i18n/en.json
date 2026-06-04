@@ -726,6 +726,7 @@
   "assistant_agent_tool_name_readSelectionMetadata": "Read selection metadata",
   "assistant_agent_tool_name_readSpace": "Read space",
   "assistant_agent_tool_name_resolveAssetSearchFilters": "Resolve search filters",
+  "assistant_agent_tool_name_resolveLocation": "Resolve location",
   "assistant_agent_tool_name_reviseProposedOperations": "Revise proposed operations",
   "assistant_agent_tool_name_searchAssets": "Search assets",
   "assistant_agent_tool_name_searchUsers": "Search users",
