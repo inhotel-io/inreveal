@@ -9252,4 +9252,274 @@ describe(AgentOperationPlanService.name, () => {
       }),
     );
   });
+
+  // ── asset.crop ────────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for asset.crop when editAssets is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, editAssets: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Crop image.',
+        operations: [
+          {
+            type: AgentOperationType.AssetCrop,
+            summary: 'Crop to region.',
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds: [newUuid()],
+            payload: { x: 10, y: 20, width: 400, height: 300 },
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow editing assets');
+  });
+
+  it('asset.crop requires writable asset access (requiresWritableAssets includes crop)', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetCrop,
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds,
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Crop image.',
+      operations: [
+        {
+          type: AgentOperationType.AssetCrop,
+          summary: 'Crop to region.',
+          targetKind: AgentOperationTargetKind.ImageEditBatch,
+          assetIds,
+          payload: { x: 10, y: 20, width: 400, height: 300 },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+    expect(accessRepository.asset.checkOwnerAccess).toHaveBeenCalled();
+  });
+
+  it('asset.crop riskLevel is Low by default', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetCrop,
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Crop image.',
+      operations: [
+        {
+          type: AgentOperationType.AssetCrop,
+          summary: 'Crop to region.',
+          targetKind: AgentOperationTargetKind.ImageEditBatch,
+          assetIds,
+          payload: { x: 10, y: 20, width: 400, height: 300 },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.AssetCrop,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('crops selected editable images placing Crop edit first and reporting per-asset failures', async () => {
+    const auth = AuthFactory.create();
+    const editableAssetId = newUuid();
+    const videoAssetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const cropPayload = { x: 10, y: 20, width: 400, height: 300 };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetCrop,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [editableAssetId, videoAssetId],
+      payload: cropPayload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getForEdit.mockImplementation((id: string) =>
+      Promise.resolve({
+        type: id === videoAssetId ? AssetType.Video : AssetType.Image,
+        livePhotoVideoId: null,
+        originalPath: '/photos/image.jpg',
+        originalFileName: 'image.jpg',
+        duration: null,
+        exifImageWidth: 800,
+        exifImageHeight: 600,
+        orientation: null,
+        projectionType: null,
+      }),
+    );
+    // editableAssetId already has a Rotate edit; crop must come FIRST in merged list
+    assetService.getAssetEdits.mockImplementation((_: typeof auth, id: string) =>
+      Promise.resolve({
+        assetId: id,
+        edits:
+          id === editableAssetId ? [{ id: newUuid(), action: AssetEditAction.Rotate, parameters: { angle: 90 } }] : [],
+      } as never),
+    );
+    assetService.editAsset.mockResolvedValue({ assetId: editableAssetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, editableAssetId, {
+      edits: [
+        // Crop MUST be first
+        { action: AssetEditAction.Crop, parameters: cropPayload },
+        { action: AssetEditAction.Rotate, parameters: { angle: 90 } },
+      ],
+    });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: expect.objectContaining({
+          assetIds: [editableAssetId],
+          assetResults: expect.arrayContaining([
+            expect.objectContaining({ id: editableAssetId, success: true }),
+            expect.objectContaining({ id: videoAssetId, success: false, errorMessage: 'Only images can be edited' }),
+          ]),
+        }),
+        error: 'Failed to crop 1 asset(s)',
+      }),
+    ]);
+  });
+
+  it('crop on asset with existing crop replaces the crop edit (crop-first)', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const newCropPayload = { x: 5, y: 5, width: 200, height: 150 };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetCrop,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [assetId],
+      payload: newCropPayload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getForEdit.mockResolvedValue({
+      type: AssetType.Image,
+      livePhotoVideoId: null,
+      originalPath: '/photos/image.jpg',
+      originalFileName: 'image.jpg',
+      duration: null,
+      exifImageWidth: 800,
+      exifImageHeight: 600,
+      orientation: null,
+      projectionType: null,
+    });
+    // Asset already has a Crop edit followed by a Rotate edit
+    assetService.getAssetEdits.mockResolvedValue({
+      assetId,
+      edits: [
+        { id: newUuid(), action: AssetEditAction.Crop, parameters: { x: 0, y: 0, width: 100, height: 100 } },
+        { id: newUuid(), action: AssetEditAction.Rotate, parameters: { angle: 180 } },
+      ],
+    } as never);
+    assetService.editAsset.mockResolvedValue({ assetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, assetId, {
+      edits: [
+        // New crop replaces old, still first
+        { action: AssetEditAction.Crop, parameters: newCropPayload },
+        { action: AssetEditAction.Rotate, parameters: { angle: 180 } },
+      ],
+    });
+  });
 });
