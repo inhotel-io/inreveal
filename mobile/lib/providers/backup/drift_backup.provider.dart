@@ -397,7 +397,14 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
     if (CurrentPlatform.isIOS) {
       await _backgroundQueueCoordinator.stop();
       _uploadSpeedManager.clear();
-      state = state.copyWith(uploadItems: {}, iCloudDownloadProgress: {});
+      state = state.copyWith(
+        backupCount: 0,
+        remainderCount: 0,
+        processingCount: 0,
+        totalCount: 0,
+        uploadItems: {},
+        iCloudDownloadProgress: {},
+      );
       return;
     }
 

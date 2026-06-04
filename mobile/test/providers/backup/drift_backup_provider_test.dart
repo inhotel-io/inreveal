@@ -218,4 +218,24 @@ void main() {
     expect(sut.state.backupCount, 1);
     expect(sut.state.remainderCount, 0);
   });
+
+  test('resets live counts when iOS backup is stopped', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    when(() => backgroundQueueCoordinator.stop()).thenAnswer((_) async {});
+
+    // Seed live progress via getBackupStatus
+    when(
+      () => foregroundUploadService.getBackupCounts('user-1'),
+    ).thenAnswer((_) async => (total: 15, remainder: 10, processing: 2));
+    await sut.getBackupStatus('user-1');
+
+    await sut.stopBackup();
+
+    expect(sut.state.backupCount, 0);
+    expect(sut.state.remainderCount, 0);
+    expect(sut.state.processingCount, 0);
+    expect(sut.state.totalCount, 0);
+    expect(sut.state.uploadItems, isEmpty);
+  });
 }
