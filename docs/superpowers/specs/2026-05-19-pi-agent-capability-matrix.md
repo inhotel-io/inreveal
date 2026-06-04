@@ -119,6 +119,7 @@ retried only when the correction is mechanical.
 | Add or remove tags               | Hybrid              | `tag_assets` adds (`asset.addTag`) and `untag_assets` removes (`asset.removeTag`, resolving the tag name to an id) from a resolved source; subjective sources hand off.                                                           |
 | Batch asset metadata edits       | Hybrid              | `update_asset_metadata`: Pi resolves a loose-asset source; Gallery owns the `asset.updateMetadata` plan (description/rating/date/timezone/lat+lng; place names resolve to coordinates via `resolveLocation`).                     |
 | Rotate assets                    | Hybrid              | `rotate_assets`: Pi resolves the source + explicit angle (90/180/270); Gallery owns the batch `asset.rotate` plan. No-angle / subjective declines.                                                                                |
+| Crop assets                      | Hybrid              | `crop_assets`: Pi resolves the source + explicit geometry (x/y/width/height); Gallery owns the batch `asset.crop` plan. No-geometry → asks for coordinates; never guesses.                                                       |
 | Answer album/library questions   | Open read flow      | Pi may use read/search tools and answer without write planning.                                                                                                                                                                   |
 | Summarize a proposed plan        | Strict              | Summary must be generated from a persisted plan.                                                                                                                                                                                  |
 | Revise a plan                    | Strict              | Revision must replace a persisted plan and never apply it.                                                                                                                                                                        |
@@ -152,6 +153,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
 | `update_asset_metadata`    | Hybrid | `resolveAssetSearchFilters`, `searchAssets`, `resolveLocation` | `proposeAssetBatchFromSelection`    |
 | `rotate_assets`            | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
+| `crop_assets`              | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
 | `rename_or_describe_space` | Strict | `listSpaces`                                                   | `proposeAlbumOperations`            |
 | `manage_space_members`     | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
 | `change_member_role`       | Strict | `listSpaces`, `readSpace`, `searchUsers`                       | `proposeAlbumOperations`            |
@@ -205,12 +207,13 @@ semantic search.
 
 Next expansion candidates: richer image-edit operation families beyond crop,
 then sharing/export workflows. (Reversible trash, metadata-only duplicate
-cleanup, objective image quality filters, and forward geocoding for place-name
-location edits shipped — see the Flow Ownership Matrix.)
+cleanup, objective image quality filters, forward geocoding for place-name
+location edits, and explicit-geometry crop shipped — see the Flow Ownership
+Matrix.)
 
 | Capability                              | Missing capability                                                      | Candidate tool direction                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Edits beyond rotation                   | No crop, enhance, or batch adjustments.                                 | Separate image-edit operation family with preview artifacts.                      |
+| Edits beyond rotation                   | No enhance/filters or batch adjustments (crop now ships).               | Separate image-edit operation family with preview artifacts.                      |
 | Sharing/export/download workflows       | No direct operation plan for sharing links, exports, or downloads.      | Sharing/export tools with explicit privacy review.                                |
 
 ## Out Of Scope Until Policy Changes
