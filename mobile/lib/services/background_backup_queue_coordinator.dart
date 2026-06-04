@@ -38,10 +38,14 @@ class BackgroundBackupQueueCoordinator {
 
   Future<void> start(String userId) async {
     _clearSessionSets();
-    await _statusService?.recordSessionStart();
     _activeUserId = userId;
     final generation = ++_sessionGeneration;
     _logger.info('Starting background backup session');
+
+    await _statusService?.recordSessionStart();
+    if (!_isCurrentSession(userId, generation)) {
+      return;
+    }
 
     final activeTasks = await _activeTasks();
     if (!_isCurrentSession(userId, generation)) {
