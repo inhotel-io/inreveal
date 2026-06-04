@@ -2903,6 +2903,55 @@ describe(AgentToolService.name, () => {
     expect(searchRepository.searchMetadata).toHaveBeenCalledWith({ page: 3, size: 50 }, expect.any(Object));
   });
 
+  it('searchAssets passes withDeleted to the search repository when isTrashed is true', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+
+    await sut.searchAssets(auth, session.id, { filters: { isTrashed: true }, limit: 10 });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ withDeleted: true }),
+    );
+  });
+
+  it('searchAssets does not pass withDeleted to the search repository when isTrashed is false', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    searchRepository.searchMetadata.mockResolvedValue({ items: [{ id: assetId }] as never, hasNextPage: false });
+
+    await sut.searchAssets(auth, session.id, { filters: { isTrashed: false }, limit: 10 });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.not.objectContaining({ withDeleted: expect.anything() }),
+    );
+  });
+
+  it('searchAssets does not pass withDeleted to the search repository when isTrashed is absent (regression: default excludes trashed)', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, approvalMode: AgentApprovalMode.PlanOnly });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    searchRepository.searchMetadata.mockResolvedValue({ items: [], hasNextPage: false });
+
+    await sut.searchAssets(auth, session.id, { filters: {}, limit: 10 });
+
+    expect(searchRepository.searchMetadata).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.not.objectContaining({ withDeleted: expect.anything() }),
+    );
+  });
+
   it('uses contract defaults for empty service-level search requests', async () => {
     const auth = AuthFactory.create();
     const session = makeSession({
