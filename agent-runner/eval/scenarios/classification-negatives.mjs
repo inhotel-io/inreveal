@@ -43,10 +43,17 @@ export default [
     expect: { kind: 'rename_or_describe_album' },
   },
   {
-    // Place-name-only location edit is unsupported (no lat+lng) → none.
+    // Place-name location edit is now supported (B2: resolveLocation) → update_asset_metadata.
     id: 'neg.metadata.placename',
     category: 'negatives',
     prompt: 'set the location on these photos to Paris',
+    expect: { kind: 'update_asset_metadata' },
+  },
+  {
+    // "set Paris as the album cover" must NOT route to update_asset_metadata (no loose-asset source).
+    id: 'neg.metadata.placename.cover',
+    category: 'negatives',
+    prompt: 'set Paris as the album cover',
     expect: { kind: 'none' },
   },
   {

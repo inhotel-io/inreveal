@@ -53,6 +53,11 @@ const LOCATION_RE = new RegExp(
   'i',
 );
 
+// Place-name location: "set [the] (location|place) on <source> to <placeName>"
+// where <placeName> does NOT start with "lat" (which would be the numeric form above).
+const PLACE_RE =
+  /\bset\s+(?:the\s+)?(?:location|place)\s+on\s+(?<source>.+?)\s+to\s+(?<placeName>(?!lat(?:itude)?\s+-?\d)[\w\s,.\-']+?)$/i;
+
 // Each extractor returns { field, ...typed, source } | undefined.
 const EXTRACTORS = [
   (p) => {
@@ -88,6 +93,12 @@ const EXTRACTORS = [
     return m?.groups
       ? { field: 'location', latitude: Number(m.groups.lat), longitude: Number(m.groups.lng), source: m.groups.source }
       : undefined;
+  },
+  (p) => {
+    const m = PLACE_RE.exec(p);
+    if (!m?.groups) return undefined;
+    const placeName = clean(m.groups.placeName);
+    return placeName ? { field: 'location', placeName, source: m.groups.source } : undefined;
   },
   (p) => {
     const m = /\bset\s+(?:the\s+)?(?:date|datetime|date\s*time|timestamp)\s+(?:on|of|for)\s+(?<source>.+?)\s+to\s+(?<date>.+)$/i.exec(p);
@@ -233,13 +244,47 @@ export const updateAssetMetadataWorkflow = () => ({
     if (!sourceDescription) {
       return null;
     }
+    // Place-name path: field='location' + placeName present but no numeric coords.
+    const placeName = clean(rawSlots?.placeName);
+    if (placeName && rawSlots?.latitude === undefined && rawSlots?.longitude === undefined) {
+      return { sourceDescription, placeName, payload: {} };
+    }
     const payload = buildPayload(rawSlots);
     return payload ? { sourceDescription, payload } : null;
   },
 
   async run({ client, slots, signal }) {
     const sourceDescription = clean(slots?.sourceDescription);
-    const payload = slots?.payload && typeof slots.payload === 'object' ? slots.payload : null;
+    const placeName = clean(slots?.placeName);
+    let payload = slots?.payload && typeof slots.payload === 'object' ? { ...slots.payload } : null;
+
+    // Place-name path: resolve via resolveLocation when placeName is present and no explicit coords.
+    if (placeName && payload?.latitude === undefined && payload?.longitude === undefined) {
+      if (!sourceDescription) {
+        return needsInput({ text: 'Tell me which photos to update and what to change.' });
+      }
+      let locationResult;
+      try {
+        const locationResponse = await client.call('resolveLocation', { query: placeName }, { signal });
+        locationResult = locationResponse?.location;
+      } catch (error) {
+        return failed({ text: safeFailureText(error?.message ?? 'The location lookup failed.') });
+      }
+      if (!locationResult || locationResult.status === 'not_found') {
+        return needsInput({
+          text: `I could not find a place called "${placeName}". Try a more specific name or provide explicit coordinates (latitude and longitude).`,
+        });
+      }
+      if (locationResult.status === 'ambiguous') {
+        const choiceList = (locationResult.choices ?? []).map((c) => `• ${c.label}`).join('\n');
+        return needsInput({
+          text: `"${placeName}" is ambiguous. Which location do you mean?\n${choiceList}`,
+        });
+      }
+      // Matched: inject resolved lat/lng into payload.
+      payload = { latitude: locationResult.latitude, longitude: locationResult.longitude };
+    }
+
     if (!sourceDescription || !payload || Object.keys(payload).length === 0) {
       return needsInput({ text: 'Tell me which photos to update and what to change.' });
     }
