@@ -4,6 +4,7 @@ import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 
 const expectedReadToolNames = [
+  AgentToolName.ResolveLocation,
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.FindTripCandidates,
@@ -439,7 +440,8 @@ describe(AgentMcpToolContractService.name, () => {
     const contracts = sut.listReadToolContracts();
     const contract = sut.getReadToolContract(AgentToolName.ReadSelectionMetadata);
 
-    expect(contracts.map((item) => item.name).slice(0, 6)).toEqual([
+    expect(contracts.map((item) => item.name).slice(0, 7)).toEqual([
+      AgentToolName.ResolveLocation,
       AgentToolName.ResolveAssetSearchFilters,
       AgentToolName.SearchAssets,
       AgentToolName.FindTripCandidates,

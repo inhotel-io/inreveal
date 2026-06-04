@@ -26,6 +26,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentResolveAssetSearchFiltersToolRequestDto,
   AgentResolveAssetSearchFiltersToolResponseDto,
+  AgentResolveLocationToolRequestDto,
+  AgentResolveLocationToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
   AgentSearchUsersToolRequestDto,
@@ -56,6 +58,7 @@ import { ConfigRepository } from 'src/repositories/config.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
+import { MapRepository } from 'src/repositories/map.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -88,6 +91,7 @@ import {
   AgentDuplicateGroup,
   AgentReadSelectionMetadataCounts,
   AgentResolvedAssetSearchFilterResult,
+  AgentResolveLocationResult,
   AgentSearchAssetResult,
   AgentSearchAssetsDetail,
   AgentSearchAssetsFilters,
@@ -256,6 +260,7 @@ export class AgentToolService {
     private readonly agentRunnerService: AgentRunnerService,
     private readonly userService: UserService,
     private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
+    private readonly mapRepository: MapRepository,
   ) {
     this.tripCandidateService = new TripCandidateService(assetRepository);
   }
@@ -298,6 +303,14 @@ export class AgentToolService {
     dto: AgentResolveAssetSearchFiltersToolRequestDto,
   ): Promise<AgentResolveAssetSearchFiltersToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.resolveAssetSearchFiltersDescriptor());
+  }
+
+  async resolveLocation(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentResolveLocationToolRequestDto,
+  ): Promise<AgentResolveLocationToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.resolveLocationDescriptor());
   }
 
   async readAssetMetadata(
@@ -477,6 +490,9 @@ export class AgentToolService {
       }
       case AgentToolName.ResolveAssetSearchFilters: {
         return this.resolveAssetSearchFilters(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.ResolveLocation: {
+        return this.resolveLocation(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ReadAssetMetadata: {
         return this.readAssetMetadata(auth, session.id, { toolCallId: toolCall.id });
@@ -1521,6 +1537,88 @@ export class AgentToolService {
       }),
       failedReason: 'Search filter resolution failed',
     };
+  }
+
+  private resolveLocationDescriptor(): AgentReadToolDescriptor<
+    AgentResolveLocationToolRequestDto,
+    { location: AgentResolveLocationResult }
+  > {
+    return {
+      toolName: AgentToolName.ResolveLocation,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Resolve location: ${request.query ?? '(retry)'}`,
+      requestMetadata: (request) => ({ query: request.query ?? '' }) as AgentToolCall['redactedRequestMetadata'],
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: () => Number.MAX_SAFE_INTEGER,
+      validateAccess: () => Promise.resolve(null),
+      execute: async (_auth, _session, request) => {
+        const query = request.query ?? '';
+        if (!query) {
+          return { location: { status: 'not_found' } };
+        }
+        const rows = await this.mapRepository.searchPlaces(query);
+        return { location: this.decideLocation(rows) };
+      },
+      responseSummary: (result) => {
+        const loc = result.location;
+        if (loc.status === 'matched') {
+          return `Resolved location: ${loc.label}`;
+        }
+        if (loc.status === 'ambiguous') {
+          return `Ambiguous location — ${loc.choices?.length ?? 0} choice(s)`;
+        }
+        return 'Location not found';
+      },
+      responseMetadata: (result) =>
+        ({ locationStatus: result.location.status }) as AgentToolCall['redactedResponseMetadata'],
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      resultSize: () => ({ returnedItems: 1, hasMore: false, nextPage: null }),
+      failedReason: 'Location resolution failed',
+    };
+  }
+
+  private decideLocation(rows: Awaited<ReturnType<MapRepository['searchPlaces']>>): AgentResolveLocationResult {
+    if (rows.length === 0) {
+      return { status: 'not_found' };
+    }
+
+    // Dedupe to distinct (name, admin1Name, countryCode)
+    const seen = new Map<string, (typeof rows)[0]>();
+    for (const row of rows) {
+      const key = `${row.name}|${row.admin1Name ?? ''}|${row.countryCode}`;
+      if (!seen.has(key)) {
+        seen.set(key, row);
+      }
+    }
+    const distinct = [...seen.values()];
+
+    const best = distinct[0];
+    if (best.similarity < 0.3) {
+      return { status: 'not_found' };
+    }
+
+    const isMatched =
+      distinct.length === 1 || (distinct.length > 1 && best.similarity - distinct[1].similarity >= 0.15);
+
+    if (isMatched) {
+      const label = this.buildLocationLabel(best.name, best.admin1Name, best.countryCode);
+      return { status: 'matched', latitude: best.latitude, longitude: best.longitude, label };
+    }
+
+    const choices = distinct.slice(0, 5).map((row) => ({
+      latitude: row.latitude,
+      longitude: row.longitude,
+      label: this.buildLocationLabel(row.name, row.admin1Name, row.countryCode),
+      countryCode: row.countryCode,
+    }));
+    return { status: 'ambiguous', choices };
+  }
+
+  private buildLocationLabel(name: string, admin1Name: string | null, countryCode: string): string {
+    return admin1Name ? `${name}, ${admin1Name}, ${countryCode}` : `${name}, ${countryCode}`;
   }
 
   private getResolverTermCount(request: AgentResolveAssetSearchFiltersToolRequestDto): number {

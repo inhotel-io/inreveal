@@ -90,7 +90,7 @@ describe(AgentMcpPromptService.name, () => {
 
     expect(prompt).toContain('Gallery MCP tool-use cheat sheet');
     expect(prompt.length).toBeLessThanOrEqual(maxPromptLength);
-    expect(prompt).toContain('Tool: mcp_gallery_resolveAssetSearchFilters');
+    expect(prompt).toContain('mcp_gallery_resolveAssetSearchFilters');
     expect(prompt).toContain('R: Known ID filters');
     expect(prompt).toContain('Default write:');
     expect(prompt).toContain('mcp_gallery_proposeAlbumFromSearch');

@@ -28,6 +28,7 @@ import { ConfigRepository } from 'src/repositories/config.repository';
 import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
+import { MapRepository } from 'src/repositories/map.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -360,6 +361,7 @@ describe(AgentToolService.name, () => {
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
   let assetSearchFilterResolverService: AgentAssetSearchFilterResolverService;
+  let mapRepository: ReturnType<typeof automock<MapRepository>>;
   let userService: { search: ReturnType<typeof vi.fn> };
   let tripCandidateService: {
     findRecentTripCandidates: ReturnType<typeof vi.fn>;
@@ -382,6 +384,7 @@ describe(AgentToolService.name, () => {
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
+    mapRepository = automock(MapRepository, { args: [undefined, undefined, { setContext: () => {} }, undefined] });
     assetSearchFilterResolverService = new AgentAssetSearchFilterResolverService(
       searchRepository,
       albumRepository,
@@ -409,6 +412,7 @@ describe(AgentToolService.name, () => {
       agentRunnerService,
       userService as unknown as UserService,
       assetSearchFilterResolverService,
+      mapRepository,
     );
     (sut as unknown as { tripCandidateService: typeof tripCandidateService }).tripCandidateService =
       tripCandidateService;
@@ -490,6 +494,7 @@ describe(AgentToolService.name, () => {
     sharedSpaceRepository.getRecentAssets.mockResolvedValue([]);
     sharedSpaceRepository.getAssetIdsInSpacePage.mockResolvedValue([]);
     agentRunnerService.resumeAfterToolApproval.mockResolvedValue();
+    mapRepository.searchPlaces.mockResolvedValue([]);
     userService.search.mockResolvedValue([]);
   });
 
@@ -8292,5 +8297,345 @@ describe(AgentToolService.name, () => {
       return;
     }
     expect(result.groups).toHaveLength(0);
+  });
+
+  it('resolveLocation returns matched when a single strong row is returned', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Paris',
+        admin1Name: 'Île-de-France',
+        admin2Name: null,
+        countryCode: 'FR',
+        latitude: 48.8566,
+        longitude: 2.3522,
+        similarity: 1,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Paris' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location).toEqual({
+      status: 'matched',
+      latitude: 48.8566,
+      longitude: 2.3522,
+      label: 'Paris, Île-de-France, FR',
+    });
+  });
+
+  it('resolveLocation returns ambiguous when two top places have near-equal similarity', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Paris',
+        admin1Name: 'Île-de-France',
+        admin2Name: null,
+        countryCode: 'FR',
+        latitude: 48.8566,
+        longitude: 2.3522,
+        similarity: 0.95,
+      },
+      {
+        name: 'Paris',
+        admin1Name: 'Texas',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 33.6609,
+        longitude: -95.5555,
+        similarity: 0.9,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Paris' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location.status).toBe('ambiguous');
+    if (result.location.status !== 'ambiguous') {
+      return;
+    }
+    expect(result.location.choices).toHaveLength(2);
+    expect(result.location.choices![0]).toMatchObject({
+      latitude: 48.8566,
+      longitude: 2.3522,
+      label: 'Paris, Île-de-France, FR',
+      countryCode: 'FR',
+    });
+    expect(result.location.choices![1]).toMatchObject({
+      latitude: 33.6609,
+      longitude: -95.5555,
+      label: 'Paris, Texas, US',
+      countryCode: 'US',
+    });
+  });
+
+  it('resolveLocation returns not_found when repo returns empty array', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'zzzqqq' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location).toEqual({ status: 'not_found' });
+  });
+
+  it('resolveLocation returns matched for fuzzy query "Pariss" when repo returns Paris', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Paris',
+        admin1Name: 'Île-de-France',
+        admin2Name: null,
+        countryCode: 'FR',
+        latitude: 48.8566,
+        longitude: 2.3522,
+        similarity: 0.75,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Pariss' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location.status).toBe('matched');
+  });
+
+  it('resolveLocation returns not_found when best similarity is below 0.30 floor', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Parma',
+        admin1Name: 'Emilia-Romagna',
+        admin2Name: null,
+        countryCode: 'IT',
+        latitude: 44.8015,
+        longitude: 10.3279,
+        similarity: 0.2,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'xyz' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location).toEqual({ status: 'not_found' });
+  });
+
+  it('resolveLocation gap rule: top 0.95 vs second 0.50 resolves as matched', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Tokyo',
+        admin1Name: 'Tokyo',
+        admin2Name: null,
+        countryCode: 'JP',
+        latitude: 35.6762,
+        longitude: 139.6503,
+        similarity: 0.95,
+      },
+      {
+        name: 'Tokyu',
+        admin1Name: null,
+        admin2Name: null,
+        countryCode: 'JP',
+        latitude: 35.66,
+        longitude: 139.7,
+        similarity: 0.5,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Tokyo' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location.status).toBe('matched');
+    if (result.location.status !== 'matched') {
+      return;
+    }
+    expect(result.location.label).toBe('Tokyo, Tokyo, JP');
+  });
+
+  it('resolveLocation gap rule: two exact homonyms with equal similarity resolves as ambiguous', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Paris',
+        admin1Name: 'Île-de-France',
+        admin2Name: null,
+        countryCode: 'FR',
+        latitude: 48.8566,
+        longitude: 2.3522,
+        similarity: 1,
+      },
+      {
+        name: 'Paris',
+        admin1Name: 'Texas',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 33.6609,
+        longitude: -95.5555,
+        similarity: 1,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Paris' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location.status).toBe('ambiguous');
+  });
+
+  it('resolveLocation limits ambiguous choices to 5', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    mapRepository.searchPlaces.mockResolvedValue([
+      {
+        name: 'Springfield',
+        admin1Name: 'Illinois',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 39.7817,
+        longitude: -89.6501,
+        similarity: 0.9,
+      },
+      {
+        name: 'Springfield',
+        admin1Name: 'Missouri',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 37.2153,
+        longitude: -93.2982,
+        similarity: 0.85,
+      },
+      {
+        name: 'Springfield',
+        admin1Name: 'Oregon',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 44.0462,
+        longitude: -123.022,
+        similarity: 0.82,
+      },
+      {
+        name: 'Springfield',
+        admin1Name: 'Massachusetts',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 42.1015,
+        longitude: -72.5898,
+        similarity: 0.8,
+      },
+      {
+        name: 'Springfield',
+        admin1Name: 'Ohio',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 39.9242,
+        longitude: -83.8088,
+        similarity: 0.78,
+      },
+      {
+        name: 'Springfield',
+        admin1Name: 'Tennessee',
+        admin2Name: null,
+        countryCode: 'US',
+        latitude: 36.509,
+        longitude: -86.8853,
+        similarity: 0.75,
+      },
+    ]);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Springfield' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.location.status).toBe('ambiguous');
+    if (result.location.status !== 'ambiguous') {
+      return;
+    }
+    expect(result.location.choices!.length).toBeLessThanOrEqual(5);
+  });
+
+  it('resolveLocation creates pending approval in strict mode', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.resolveLocation(auth, session.id, { query: 'Paris' });
+
+    expect(result.status).toBe('approval-required');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.ResolveLocation,
+        requestSummary: 'Resolve location: Paris',
+      }),
+    );
   });
 });
