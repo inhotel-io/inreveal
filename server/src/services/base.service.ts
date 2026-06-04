@@ -260,6 +260,7 @@ export class BaseService {
       ctx.emailRepository,
       ctx.eventRepository,
       ctx.faceIdentityRepository,
+      ctx.faceRepairRepository,
       ctx.jobRepository,
       ctx.libraryRepository,
       ctx.machineLearningRepository,
