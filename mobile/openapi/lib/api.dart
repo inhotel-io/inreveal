@@ -182,6 +182,7 @@ part 'model/face_repair_response_dto_report_persons_inner.dart';
 part 'model/face_repair_response_dto_report_persons_inner_suspected_owners_inner.dart';
 part 'model/face_repair_response_dto_report_totals.dart';
 part 'model/face_repair_response_dto_report_totals_review_only_by_reason.dart';
+part 'model/face_repair_scan_trigger_response_dto.dart';
 part 'model/facial_recognition_config.dart';
 part 'model/filter_suggestions_person_dto.dart';
 part 'model/filter_suggestions_response_dto.dart';

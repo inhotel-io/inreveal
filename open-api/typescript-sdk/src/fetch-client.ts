@@ -119,6 +119,9 @@ export type FaceRepairResponseDto = {
         };
     };
 };
+export type FaceRepairScanTriggerResponseDto = {
+    scanId: string;
+};
 export type SetMaintenanceModeDto = {
     action: MaintenanceAction;
     /** Restore backup filename */
@@ -4181,6 +4184,29 @@ export function runFaceRepair({ faceRepairRequestDto }: {
         method: "POST",
         body: faceRepairRequestDto
     })));
+}
+/**
+ * Trigger a face-repair scan
+ */
+export function triggerScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairScanTriggerResponseDto;
+    }>("/admin/face-repair/scan", {
+        ...opts,
+        method: "POST"
+    }));
+}
+/**
+ * Get the latest face-repair scan
+ */
+export function getLatestScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: object;
+    }>("/admin/face-repair/scan/latest", {
+        ...opts
+    }));
 }
 /**
  * Set maintenance mode
@@ -9043,6 +9069,7 @@ export enum JobName {
     FacialRecognition = "FacialRecognition",
     FaceIdentityBackfill = "FaceIdentityBackfill",
     FaceIdentityMaintenanceAfterRecognition = "FaceIdentityMaintenanceAfterRecognition",
+    FaceRepairScan = "FaceRepairScan",
     FileDelete = "FileDelete",
     FileMigrationQueueAll = "FileMigrationQueueAll",
     LibraryDeleteCheck = "LibraryDeleteCheck",
