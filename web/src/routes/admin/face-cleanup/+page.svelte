@@ -68,6 +68,14 @@
 
   // Filter / search state
   let filter = $state<'all' | 'review-first' | 'confident' | 'named'>('all');
+
+  // Static literal key map — the typed $t() rejects a dynamically-built template-literal key.
+  const FILTER_LABEL_KEYS = {
+    all: 'admin.face_cleanup_filter_all',
+    'review-first': 'admin.face_cleanup_filter_review_first',
+    confident: 'admin.face_cleanup_filter_confident',
+    named: 'admin.face_cleanup_filter_named',
+  } as const;
   let searchQuery = $state('');
 
   // The view-model: rebuilt when scan.persons changes
@@ -346,7 +354,7 @@
                 ].join(' ')}
                 onclick={() => (filter = f)}
               >
-                {$t(`admin.face_cleanup_filter_${f.replace('-', '_')}`)}
+                {$t(FILTER_LABEL_KEYS[f])}
                 <span class="ml-1 text-gray-400">
                   {#if f === 'all'}{filterCounts.all}{/if}
                   {#if f === 'review-first'}{filterCounts.reviewFirst}{/if}
