@@ -143,7 +143,7 @@ export class AgentSessionService {
         tagAssets: true,
         updateAssetMetadata: true,
         trashAssets: true,
-        createSharedLinks: false,
+        createSharedLinks: true,
       },
       limits: {
         maxAssetsPerToolCall: 5000,
