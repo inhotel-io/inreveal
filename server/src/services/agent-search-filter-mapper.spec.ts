@@ -258,6 +258,36 @@ describe(buildAgentMetadataSearch.name, () => {
     expect(result.options).not.toHaveProperty('tagIds');
     expect(result.options).not.toHaveProperty('albumIds');
   });
+
+  it('sets withDeleted when isTrashed filter is true', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: { mode: 'metadata', filters: { isTrashed: true }, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).toEqual(expect.objectContaining({ withDeleted: true }));
+  });
+
+  it('does not set withDeleted when isTrashed filter is false', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: { mode: 'metadata', filters: { isTrashed: false }, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).not.toHaveProperty('withDeleted');
+  });
+
+  it('does not set withDeleted when isTrashed filter is absent', () => {
+    const result = buildAgentMetadataSearch({
+      userId,
+      request: { mode: 'metadata', filters: {}, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.options).not.toHaveProperty('withDeleted');
+  });
 });
 
 describe(buildAgentSearch.name, () => {
@@ -376,5 +406,39 @@ describe(buildAgentSearch.name, () => {
 
     expect(result.kind).toBe('smart');
     expect(result.options).toEqual(expect.objectContaining({ userIds: [userId], timelineSpaceIds: [sharedSpaceId] }));
+  });
+
+  it('threads isTrashed:true to withDeleted in metadata search', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: { mode: 'metadata', filters: { isTrashed: true }, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.kind).toBe('metadata');
+    expect(result.options).toEqual(expect.objectContaining({ withDeleted: true }));
+  });
+
+  it('threads isTrashed:true to withDeleted in smart search', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: { mode: 'smart', query: 'trashed', filters: { isTrashed: true }, limit: 10, page: 1 },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+      smartEmbedding: '[1,2,3]',
+    });
+
+    expect(result.kind).toBe('smart');
+    expect(result.options).toEqual(expect.objectContaining({ withDeleted: true }));
+  });
+
+  it('does not set withDeleted when isTrashed is absent (default excludes trashed)', () => {
+    const result = buildAgentSearch({
+      userId,
+      request: { mode: 'metadata', filters: {}, limit: 10, page: 1, order: 'desc' },
+      scope: { owned: true, sharedSpaces: false, locked: false, timelineSpaceIds: [] },
+    });
+
+    expect(result.kind).toBe('metadata');
+    expect(result.options).not.toHaveProperty('withDeleted');
   });
 });
