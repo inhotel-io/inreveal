@@ -353,6 +353,18 @@ export default [
     prompt: 'set the caption on my newest 20 photos to Beach day',
     expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
   },
+  {
+    id: 'recall.metadata.location.placename',
+    category: 'recall',
+    prompt: 'set the location on my newest 20 to Paris',
+    expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20/i } },
+  },
+  {
+    id: 'recall.metadata.location.coords',
+    category: 'recall',
+    prompt: 'set my newest 20 photos to latitude 48.8566 and longitude 2.3522',
+    expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
+  },
 
   // remove_photos_from_album -------------------------------------------------
   {

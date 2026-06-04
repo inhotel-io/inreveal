@@ -47,8 +47,12 @@ describe('update_asset_metadata match — description', () => {
     assert.equal(wf.match('set the description on the best photos to X'), undefined);
   });
 
-  it('declines place-name-only location prompt', () => {
-    assert.equal(wf.match('set the location on these photos to Paris'), undefined);
+  it('place-name location prompt now routes to update_asset_metadata (B2)', () => {
+    // After B2 this should match with a placeName slot, not be declined.
+    const result = wf.match('set the location on these photos to Paris');
+    assert.ok(result !== undefined, 'should match place-name location prompt');
+    assert.equal(result?.slots?.field, 'location');
+    assert.equal(result?.slots?.placeName, 'Paris');
   });
 
   it('declines rename verb', () => {
@@ -90,11 +94,50 @@ describe('update_asset_metadata match — timezone', () => {
   });
 });
 
-describe('update_asset_metadata match — location', () => {
-  it('set lat/lng on newest photos', () => {
+describe('update_asset_metadata match — location (numeric coords)', () => {
+  it('set lat/lng on newest photos (regression: numeric path unchanged)', () => {
     assert.deepEqual(wf.match('set my newest 20 photos to latitude 48.8566 and longitude 2.3522'), {
       slots: { field: 'location', latitude: 48.8566, longitude: 2.3522, sourceDescription: 'my newest 20 photos' },
     });
+  });
+
+  it('set location on newest 20 to lat 48.8 and lon 2.3 (regression: short form)', () => {
+    const result = wf.match('set the location on my newest 20 photos to lat 48.8 and lon 2.3');
+    assert.equal(result?.slots?.field, 'location');
+    assert.equal(result?.slots?.latitude, 48.8);
+    assert.equal(result?.slots?.longitude, 2.3);
+  });
+});
+
+describe('update_asset_metadata match — location (place name, B2)', () => {
+  it('set location on newest 20 to Paris', () => {
+    const result = wf.match('set the location on my newest 20 to Paris');
+    assert.ok(result !== undefined);
+    assert.equal(result?.slots?.field, 'location');
+    assert.equal(result?.slots?.placeName, 'Paris');
+    assert.match(result?.slots?.sourceDescription, /newest 20/i);
+  });
+
+  it('set place on these to Tokyo', () => {
+    const result = wf.match('set place on these photos to Tokyo');
+    assert.ok(result !== undefined);
+    assert.equal(result?.slots?.field, 'location');
+    assert.equal(result?.slots?.placeName, 'Tokyo');
+  });
+
+  it('does NOT match "set Paris as the album cover" (negative: album cover routing)', () => {
+    const result = wf.match('set Paris as the album cover');
+    assert.equal(result, undefined);
+  });
+
+  it('place + explicit coords: prefer explicit coords, no placeName', () => {
+    // When both place name and numeric coords appear, numeric LOCATION_RE should match first.
+    // (Numeric LOCATION_RE is in EXTRACTORS before PLACE_RE so it wins.)
+    // Just check that if a numeric-lat/lon form is given, the numeric path is used.
+    const result = wf.match('set the location on my newest 20 to lat 48.8566 and lon 2.3522');
+    assert.equal(result?.slots?.field, 'location');
+    assert.equal(result?.slots?.latitude, 48.8566);
+    assert.ok(result?.slots?.placeName === undefined, 'should not have placeName when coords supplied');
   });
 });
 
@@ -384,5 +427,120 @@ describe('update_asset_metadata execution', () => {
     });
     assert.ok(outcome.text.includes('1 photo'));
     assert.equal(outcome.text.includes('1 photos'), false);
+  });
+});
+
+// --- B2: place-name location resolution via resolveLocation -------------------
+
+/**
+ * Build a contract client that also handles resolveLocation with a canned response.
+ * @param resolveLocationResult  What client.call('resolveLocation') should return
+ * @param config                 Passed to makeContractClient
+ */
+const makeLocationClient = (resolveLocationResult, config = {}) => {
+  const base = makeContractClient(config);
+  const resolveLocationCalls = [];
+  return {
+    calls: base.calls,
+    resolveLocationCalls,
+    async call(name, args) {
+      base.calls.push({ name, args });
+      if (name === 'resolveLocation') {
+        resolveLocationCalls.push({ name, args });
+        return resolveLocationResult;
+      }
+      return base.call(name, args);
+    },
+  };
+};
+
+describe('update_asset_metadata — place-name location (B2)', () => {
+  it('run: matched place → proposes asset.updateMetadata with resolved lat/lng', async () => {
+    const client = makeLocationClient({
+      location: { status: 'matched', latitude: 48.8566, longitude: 2.3522, label: 'Paris, Île-de-France, FR' },
+    });
+    // Slots come from parseSlots on a place-name parse result.
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', placeName: 'Paris', payload: {} },
+    });
+    assert.equal(outcome.status, 'planned');
+    // resolveLocation should have been called with query:'Paris'
+    assert.equal(client.resolveLocationCalls.length, 1);
+    assert.deepEqual(client.resolveLocationCalls[0].args, { query: 'Paris' });
+    // The proposed action must include the resolved lat/lng
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.ok(propose, 'proposeAssetBatchFromSelection should have been called');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', latitude: 48.8566, longitude: 2.3522 });
+  });
+
+  it('run: not_found → needs_input mentioning place not found', async () => {
+    const client = makeLocationClient({ location: { status: 'not_found' } });
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', placeName: 'Parisxyz', payload: {} },
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.match(outcome.text, /Parisxyz|not found|could not find/i);
+    assert.equal(client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'), false);
+  });
+
+  it('run: ambiguous → needs_input listing choices', async () => {
+    const client = makeLocationClient({
+      location: {
+        status: 'ambiguous',
+        choices: [
+          { latitude: 48.8566, longitude: 2.3522, label: 'Paris, Île-de-France, FR', countryCode: 'FR' },
+          { latitude: 33.6609, longitude: -95.5555, label: 'Paris, Texas, US', countryCode: 'US' },
+        ],
+      },
+    });
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', placeName: 'Paris', payload: {} },
+    });
+    assert.equal(outcome.status, 'needs_input');
+    // Should mention the ambiguous choices
+    assert.ok(outcome.text.includes('Paris'), 'text should mention Paris');
+    assert.equal(client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'), false);
+  });
+
+  it('run: place + explicit coords → prefer coords, do NOT call resolveLocation', async () => {
+    const client = makeLocationClient({ location: { status: 'matched', latitude: 0, longitude: 0, label: 'Null Island' } });
+    // When payload already has lat/lng, resolveLocation should NOT be called.
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', placeName: 'Paris', payload: { latitude: 48.8566, longitude: 2.3522 } },
+    });
+    assert.equal(outcome.status, 'planned');
+    assert.equal(client.resolveLocationCalls.length, 0, 'resolveLocation must NOT be called when explicit coords present');
+    const propose = client.calls.find((c) => c.name === 'proposeAssetBatchFromSelection');
+    assert.deepEqual(propose.args.action, { type: 'asset.updateMetadata', latitude: 48.8566, longitude: 2.3522 });
+  });
+
+  it('run: empty selection with placeName → needs_input', async () => {
+    const client = makeLocationClient(
+      { location: { status: 'matched', latitude: 48.8566, longitude: 2.3522, label: 'Paris, FR' } },
+      { handleAssetCount: 0 },
+    );
+    const outcome = await wf.run({
+      client,
+      slots: { sourceDescription: 'my newest 20 photos', placeName: 'Paris', payload: {} },
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(client.calls.some((c) => c.name === 'proposeAssetBatchFromSelection'), false);
+  });
+
+  it('parseSlots: place-name match output → preserves placeName alongside empty payload', () => {
+    // match() for place-name returns { field:'location', placeName:'Paris', sourceDescription:'...' }
+    // parseSlots should pass through placeName and produce a payload that signals location edit
+    const result = wf.parseSlots({
+      field: 'location',
+      placeName: 'Paris',
+      sourceDescription: 'my newest 20 photos',
+    });
+    assert.ok(result !== null, 'parseSlots should not return null for place-name location');
+    assert.equal(result?.sourceDescription, 'my newest 20 photos');
+    assert.equal(result?.placeName, 'Paris');
   });
 });
