@@ -584,6 +584,7 @@ export type AgentPermissionPlan = {
         addMembersToSpaces: boolean;
         archiveAssets: boolean;
         createAlbum: boolean;
+        createSharedLinks: boolean;
         createSpace: boolean;
         editAssets: boolean;
         favoriteAssets: boolean;
@@ -1088,6 +1089,23 @@ export type AgentProposeAlbumOperationsDto = {
         assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
+    } | {
+        "type": AgentShareLinkCreateOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            password?: string;
+            expiresAt?: string;
+            showMetadata?: boolean;
+            allowDownload?: boolean;
+        };
     })[];
     summary: string;
 };
@@ -1441,6 +1459,23 @@ export type AgentReviseAlbumOperationsDto = {
         assetSelectionHandleId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
+    } | {
+        "type": AgentShareLinkCreateOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            password?: string;
+            expiresAt?: string;
+            showMetadata?: boolean;
+            allowDownload?: boolean;
+        };
     })[];
     summary: string;
 };
@@ -10624,7 +10659,8 @@ export enum AgentOperationType {
     AssetAddTag = "asset.addTag",
     AssetRemoveTag = "asset.removeTag",
     AssetTrash = "asset.trash",
-    AssetRestore = "asset.restore"
+    AssetRestore = "asset.restore",
+    ShareLinkCreate = "shareLink.create"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10751,6 +10787,9 @@ export enum AgentAssetTrashOperationType {
 }
 export enum AgentAssetRestoreOperationType {
     AssetRestore = "asset.restore"
+}
+export enum AgentShareLinkCreateOperationType {
+    ShareLinkCreate = "shareLink.create"
 }
 export enum Status {
     Success = "success"

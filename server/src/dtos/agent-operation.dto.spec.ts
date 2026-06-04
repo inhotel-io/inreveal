@@ -102,6 +102,15 @@ const makeValidCropOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeValidShareLinkCreateOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.ShareLinkCreate,
+  summary: 'Create a public share link for the selected photos.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  payload: {},
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -2649,6 +2658,88 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidCropOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('shareLink.create operation schema', () => {
+    it('accepts a valid shareLink.create operation with default High riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.ShareLinkCreate);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.High);
+      }
+    });
+
+    it('accepts optional payload fields: password, expiresAt, showMetadata, allowDownload', () => {
+      const futureDate = new Date(Date.now() + 86_400_000).toISOString();
+      const result = parseSingleOperationProposal(
+        makeValidShareLinkCreateOp({
+          payload: { password: 'secret', expiresAt: futureDate, showMetadata: false, allowDownload: false },
+        }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts minimal payload (all options omitted)', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateOp({ payload: {} }));
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts a valid shareLink.create with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidShareLinkCreateOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects shareLink.create with expiresAt in the past', () => {
+      const pastDate = new Date(Date.now() - 86_400_000).toISOString();
+      expectIssue(
+        parseSingleOperationProposal(makeValidShareLinkCreateOp({ payload: { expiresAt: pastDate } })),
+        ['operations', 0, 'payload', 'expiresAt'],
+        'expiresAt must be in the future',
+      );
+    });
+
+    it('rejects shareLink.create with no asset selection mechanism', () => {
+      expectIssue(
+        parseSingleOperationProposal({ ...makeValidShareLinkCreateOp(), assetIds: undefined }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects shareLink.create with multiple asset selection mechanisms', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidShareLinkCreateOp({ assetSelectionHandleId: factory.uuid() })),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('rejects shareLink.create with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(
+          makeValidShareLinkCreateOp({ targetKind: AgentOperationTargetKind.ExistingAlbum }),
+        ),
+        ['operations', 0, 'targetKind'],
+        'shareLink.create requires an asset_batch target',
+      );
+    });
+
+    it('rejects shareLink.create with a targetId', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidShareLinkCreateOp({ targetId: factory.uuid() })),
+        ['operations', 0, 'targetId'],
+        'targetId is not valid for asset batch targets',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateOp());
       expect(result.success).toBe(true);
     });
   });

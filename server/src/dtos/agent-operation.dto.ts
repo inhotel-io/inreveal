@@ -416,6 +416,18 @@ const assetCropPayloadSchema = z.strictObject({
   height: z.number().min(1),
 });
 
+const shareLinkCreatePayloadSchema = z.strictObject({
+  password: z.string().optional(),
+  expiresAt: z
+    .string()
+    .optional()
+    .refine((value) => value === undefined || new Date(value) > new Date(), {
+      message: 'expiresAt must be in the future',
+    }),
+  showMetadata: z.boolean().optional(),
+  allowDownload: z.boolean().optional(),
+});
+
 const assetSetFavoritePayloadSchema = z.strictObject({ favorite: z.boolean() });
 
 const assetSetArchivePayloadSchema = z.strictObject({ archived: z.boolean() });
@@ -635,6 +647,19 @@ const restoreOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRestore);
   });
 
+const shareLinkCreateOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.ShareLinkCreate).meta({ id: 'AgentShareLinkCreateOperationType' }),
+    ...assetBatchBase,
+    // Always High risk — outward-facing, privacy-sensitive
+    riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.High),
+    payload: shareLinkCreatePayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.ShareLinkCreate);
+  });
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -670,6 +695,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   removeTagOperationSchema,
   trashOperationSchema,
   restoreOperationSchema,
+  shareLinkCreateOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>

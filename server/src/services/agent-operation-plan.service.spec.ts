@@ -22,6 +22,7 @@ import {
   AgentToolName,
   AssetType,
   AssetVisibility,
+  SharedLinkType,
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
@@ -46,6 +47,7 @@ import { AgentSessionActivityEventService } from 'src/services/agent-session-act
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
+import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TagService } from 'src/services/tag.service';
 import { TrashService } from 'src/services/trash.service';
@@ -94,6 +96,7 @@ const expandedWriteScope = {
   tagAssets: true,
   updateAssetMetadata: true,
   trashAssets: true,
+  createSharedLinks: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -270,6 +273,7 @@ describe(AgentOperationPlanService.name, () => {
   let assetService: ReturnType<typeof automock<AssetService>>;
   let tagService: ReturnType<typeof automock<TagService>>;
   let trashService: ReturnType<typeof automock<TrashService>>;
+  let sharedLinkService: ReturnType<typeof mockBaseService<SharedLinkService>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
@@ -289,6 +293,7 @@ describe(AgentOperationPlanService.name, () => {
     assetService = mockBaseService(AssetService);
     tagService = mockBaseService(TagService);
     trashService = mockBaseService(TrashService);
+    sharedLinkService = mockBaseService(SharedLinkService);
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
@@ -328,6 +333,7 @@ describe(AgentOperationPlanService.name, () => {
       assetService,
       tagService,
       trashService,
+      sharedLinkService,
       activityEventService,
     );
   });
@@ -9521,5 +9527,254 @@ describe(AgentOperationPlanService.name, () => {
         { action: AssetEditAction.Rotate, parameters: { angle: 180 } },
       ],
     });
+  });
+
+  // ── shareLink.create ─────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for shareLink.create when createSharedLinks is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, createSharedLinks: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Create a share link.',
+        operations: [
+          {
+            type: AgentOperationType.ShareLinkCreate,
+            summary: 'Share selected photos.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [newUuid()],
+            riskLevel: AgentOperationRiskLevel.High,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow creating shared links');
+  });
+
+  it('validateWriteScope passes for shareLink.create when createSharedLinks is true', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, createSharedLinks: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.ShareLinkCreate,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Create a share link.',
+      operations: [
+        {
+          type: AgentOperationType.ShareLinkCreate,
+          summary: 'Share selected photos.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          riskLevel: AgentOperationRiskLevel.High,
+          enabled: true,
+          payload: {},
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+  });
+
+  // ── preset: createSharedLinks is false on every preset ───────────────────────
+
+  it('Careful preset does NOT grant createSharedLinks', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.createSharedLinks).toBe(
+      false,
+    );
+  });
+
+  it('VisualOrganizer preset does NOT grant createSharedLinks', () => {
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.createSharedLinks,
+    ).toBe(false);
+  });
+
+  it('LocalPowerUser preset does NOT grant createSharedLinks', () => {
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.createSharedLinks,
+    ).toBe(false);
+  });
+
+  // ── apply: shareLink.create calls sharedLinkService.create ───────────────────
+
+  it('applying shareLink.create calls sharedLinkService.create with type Individual and resolved assetIds', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.ShareLinkCreate,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: { password: 'secret', showMetadata: false, allowDownload: false },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    sharedLinkService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(sharedLinkService.create).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        type: SharedLinkType.Individual,
+        assetIds,
+        password: 'secret',
+        showMetadata: false,
+        allowDownload: false,
+      }),
+    );
+  });
+
+  it('applying shareLink.create with minimal payload uses defaults', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.ShareLinkCreate,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    sharedLinkService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(sharedLinkService.create).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        type: SharedLinkType.Individual,
+        assetIds,
+      }),
+    );
+  });
+
+  it('shareLink.create riskLevel is High by default', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, createSharedLinks: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.ShareLinkCreate,
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds,
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Create a share link.',
+      operations: [
+        {
+          type: AgentOperationType.ShareLinkCreate,
+          summary: 'Share selected photos.',
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          riskLevel: AgentOperationRiskLevel.High,
+          enabled: true,
+          payload: {},
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.ShareLinkCreate,
+            riskLevel: AgentOperationRiskLevel.High,
+          }),
+        ]),
+      }),
+    );
   });
 });
