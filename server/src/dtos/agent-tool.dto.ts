@@ -341,6 +341,7 @@ const AgentSearchAssetsFilterFields = {
   model: z.string().trim().nullable().optional(),
   lensModel: z.string().trim().nullable().optional(),
   isFavorite: z.boolean().optional(),
+  isTrashed: z.boolean().optional(),
   isNotInAlbum: z.boolean().optional(),
   type: AssetTypeSchema.optional(),
   rating: z.number().int().min(1).max(5).nullable().optional(),
