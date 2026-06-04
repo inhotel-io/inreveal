@@ -330,6 +330,56 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'share_assets',
+    flow: 'hybrid',
+    title: 'Share photos as a link',
+    classifierDescription:
+      'User wants to create an outward-facing share link for a metadata-describable set of photos. Optional: expiry ("expires in N days"), password ("with password X"), or "hide metadata". OUTWARD-FACING / High risk / propose-only — the createSharedLinks write-scope defaults false in every preset so no link is ever created during tests or evals.',
+    positiveExamples: Object.freeze([
+      'share these photos as a link',
+      'create a share link for my newest 20',
+      'make a shareable link for these, expires in 7 days',
+      'share my newest 10 with password hunter2',
+    ]),
+    negativeExamples: Object.freeze([
+      'trash my newest 20 photos',
+      'archive my newest 50 photos',
+      'share the album',
+      'add my newest 20 photos to Family',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to share.',
+      }),
+      expiryDays: Object.freeze({
+        type: 'number',
+        required: false,
+        description: 'How many days until the link expires (e.g. 7 for "expires in 7 days").',
+      }),
+      password: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Optional link password.',
+      }),
+      showMetadata: Object.freeze({
+        type: 'boolean',
+        required: false,
+        description: 'false to hide EXIF/location metadata on the share page (default: show).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Share links',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        '`share_assets` resolves a bounded source and proposes a shareLink.create op (High risk; outward-facing; createSharedLinks write-scope defaults false in every preset — propose-only path; no link is ever created in tests or evals).',
+    }),
+  }),
+  Object.freeze({
     kind: 'restore_assets',
     flow: 'hybrid',
     title: 'Restore photos from Trash',

@@ -125,6 +125,7 @@ retried only when the correction is mechanical.
 | Revise a plan                    | Strict              | Revision must replace a persisted plan and never apply it.                                                                                                                                                                        |
 | “Best photos” curation           | Hybrid              | Open bounded curation; strict resulting album, favorite, archive, tag, or metadata plan.                                                                                                                                          |
 | Visual cleanup                   | Hybrid              | `visual_cleanup`: Pi resolves a bounded source, derives a quality-filtered handle (`maxSharpness`/`maxBrightness`/`maxQuality`), then feeds it into a reviewable, recoverable `asset.trash` proposal owned by Gallery.            |
+| Share links                      | Hybrid              | `share_assets`: Pi resolves a bounded source and proposes a `shareLink.create` op (High risk; OUTWARD-FACING). The `createSharedLinks` write-scope defaults **false in every preset** — propose-only path; no link is ever created in tests or evals. Optional payload: expiry, password, hide-metadata. |
 | Recent upload organization       | Strict when bounded | The source resolver maps “uploaded/added/recent uploads” to upload-date filters (`createdAfter`/`createdBefore`); the bounded handle then drives a deterministic source workflow (archive/tag/album/etc.).                        |
 | Screenshot/document cleanup      | Hybrid              | The "screenshots" source resolves tag-first to the `Screenshots` / `Auto/Screenshots` classification tag, then the verb's workflow (archive/trash/space) owns the plan; if the tag isn't configured the resolver discloses and hands off (no visual heuristic). Other metadata/OCR-identifiable cleanup can be strict; visual-only cleanup remains open discovery before plan creation. |
 | Story/memory albums              | Hybrid              | Open source resolution until a date/person/place source is concrete, then strict album plan creation.                                                                                                                             |
@@ -147,6 +148,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `cleanup_duplicates`       | Hybrid | `listDuplicateGroups`                                          | `proposeAlbumOperations`            |
 | `visual_cleanup`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`, `curateSelection` | `proposeAlbumOperations`            |
 | `trash_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
+| `share_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
 | `restore_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
 | `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
 | `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
@@ -206,15 +208,18 @@ semantic search.
 ## Needs New MCP Tool
 
 Next expansion candidates: richer image-edit operation families beyond crop,
-then sharing/export workflows. (Reversible trash, metadata-only duplicate
+then export/download workflows. (Reversible trash, metadata-only duplicate
 cleanup, objective image quality filters, forward geocoding for place-name
-location edits, and explicit-geometry crop shipped — see the Flow Ownership
-Matrix.)
+location edits, explicit-geometry crop, and sharing shipped — see the Flow
+Ownership Matrix. Sharing now has a propose-only path via `share_assets` /
+`shareLink.create`; it is High risk, OUTWARD-FACING, and the
+`createSharedLinks` scope defaults false in every preset — propose-only in all
+tests and evals.)
 
 | Capability                              | Missing capability                                                      | Candidate tool direction                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Edits beyond rotation                   | No enhance/filters or batch adjustments (crop now ships).               | Separate image-edit operation family with preview artifacts.                      |
-| Sharing/export/download workflows       | No direct operation plan for sharing links, exports, or downloads.      | Sharing/export tools with explicit privacy review.                                |
+| Export/download workflows               | No direct operation plan for exports or downloads (sharing now ships propose-only). | Export/download tools with explicit privacy review.              |
 
 ## Out Of Scope Until Policy Changes
 
