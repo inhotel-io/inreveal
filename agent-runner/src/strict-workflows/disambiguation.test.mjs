@@ -67,6 +67,9 @@ const CASES = [
   // rotate_assets (explicit angle required; subjective source → none)
   ['rotate my newest 20 photos 90 clockwise', 'rotate_assets'],
   ['flip my newest 5 photos upside down', 'rotate_assets'],
+  // crop_assets (explicit geometry required; no geometry → none at regex path)
+  ['crop this photo to 100,100,800,600', 'crop_assets'],
+  ['crop this image to 0,0,1000,1000', 'crop_assets'],
   // set_album_cover
   ['set the cover of the Family album to the 3rd photo', 'set_album_cover'],
   ['make the Family album cover the first photo', 'set_album_cover'],

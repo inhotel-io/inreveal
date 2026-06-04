@@ -531,6 +531,26 @@ export default [
     },
   },
 
+  // crop_assets ---------------------------------------------------------------
+  {
+    id: 'recall.crop.comma-form',
+    category: 'recall',
+    prompt: 'crop this photo to 100,100,800,600',
+    expect: { kind: 'crop_assets', slotsSurvive: true, slots: { x: 100, y: 100, width: 800, height: 600 } },
+  },
+  {
+    id: 'recall.crop.labeled-form',
+    category: 'recall',
+    prompt: 'crop this image to x=10 y=20 w=300 h=400',
+    expect: { kind: 'crop_assets', slotsSurvive: true, slots: { x: 10, y: 20, width: 300, height: 400 } },
+  },
+  {
+    id: 'recall.crop.zero-origin',
+    category: 'recall',
+    prompt: 'crop this image to 0,0,1000,1000',
+    expect: { kind: 'crop_assets', slotsSurvive: true, slots: { x: 0, y: 0, width: 1000, height: 1000 } },
+  },
+
   // set_album_cover -----------------------------------------------------------
   {
     id: 'recall.cover.index',
