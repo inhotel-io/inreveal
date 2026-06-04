@@ -32,6 +32,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.removeTag',
   'asset.trash',
   'asset.restore',
+  'shareLink.create',
 ]);
 
 // Action types accepted by proposeAssetBatchFromSelection's discriminated union.
@@ -299,6 +300,40 @@ const validateAssetRestore = (op) => {
   }
 };
 
+// Mirror shareLinkCreatePayloadSchema: optional password, expiresAt (future ISO),
+// showMetadata bool, allowDownload bool. targetKind must be asset_batch.
+// assetSource selectionHandle required.
+export const validateShareLinkCreate = (op) => {
+  if (op.targetKind !== 'asset_batch') fail('shareLink.create requires targetKind "asset_batch"');
+  if (op.targetId !== undefined) fail('shareLink.create must not set targetId');
+  if (op.temporaryTargetId !== undefined) fail('shareLink.create must not set temporaryTargetId');
+  const source = op.assetSource;
+  if (!source || source.kind !== 'selectionHandle' || !source.selectionHandleId) {
+    fail('shareLink.create requires an assetSource selectionHandle with selectionHandleId');
+  }
+  if (op.payload !== undefined) {
+    const p = op.payload;
+    if (typeof p !== 'object' || p === null) fail('shareLink.create payload must be an object');
+    const KNOWN_PAYLOAD_KEYS = new Set(['password', 'expiresAt', 'showMetadata', 'allowDownload']);
+    for (const key of Object.keys(p)) {
+      if (!KNOWN_PAYLOAD_KEYS.has(key)) fail(`shareLink.create: unknown payload key "${key}"`);
+    }
+    if (p.password !== undefined && (typeof p.password !== 'string' || !p.password)) {
+      fail('shareLink.create payload.password must be a non-empty string');
+    }
+    if (p.expiresAt !== undefined) {
+      if (typeof p.expiresAt !== 'string') fail('shareLink.create payload.expiresAt must be an ISO string');
+      if (isNaN(new Date(p.expiresAt).getTime())) fail('shareLink.create payload.expiresAt must be a valid date');
+    }
+    if (p.showMetadata !== undefined && typeof p.showMetadata !== 'boolean') {
+      fail('shareLink.create payload.showMetadata must be a boolean');
+    }
+    if (p.allowDownload !== undefined && typeof p.allowDownload !== 'boolean') {
+      fail('shareLink.create payload.allowDownload must be a boolean');
+    }
+  }
+};
+
 const validateAssetRemoveTag = (op) => {
   if (op.targetKind !== 'asset_batch') fail('asset.removeTag requires targetKind "asset_batch"');
   if (op.targetId !== undefined) fail('asset.removeTag must not set targetId');
@@ -336,6 +371,7 @@ const ALBUM_OP_VALIDATORS = {
   'asset.removeTag': validateAssetRemoveTag,
   'asset.trash': validateAssetTrash,
   'asset.restore': validateAssetRestore,
+  'shareLink.create': validateShareLinkCreate,
 };
 
 const validateOperations = (operations) => {
