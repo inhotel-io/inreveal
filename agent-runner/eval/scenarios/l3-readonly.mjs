@@ -180,6 +180,37 @@ export default [
     expect: { kind: 'update_asset_metadata' },
   },
 
+  // --- share_assets: propose-only (NEVER APPLIED) --------------------------
+  // OUTWARD-FACING safety: createSharedLinks write-scope defaults false in every
+  // preset (including the L3 VisualOrganizer/PowerUser presets). This means the
+  // agent can PROPOSE a shareLink.create plan but CANNOT APPLY it — the server
+  // will reject the apply with a write-scope error. The L3 eval is read-only
+  // (audit confirms no plan is applied), so no outward-facing link is created
+  // in any eval run regardless of the routing result.
+  {
+    // Routing-only: the share verb routes to share_assets (regex fast-path).
+    // Holds against any instance including an empty dev stack.
+    id: 'l3.recall.share',
+    category: 'l3.recall',
+    prompt: 'share my newest 20 as a link',
+    expect: { kind: 'share_assets' },
+  },
+  {
+    // Plan scenario: recency → shareLink.create plan (PROPOSE-ONLY, NEVER APPLIED).
+    // createSharedLinks is NOT granted in any preset, so even if the workflow
+    // resolves a non-empty source and reaches proposeAlbumOperations, the apply
+    // step would be blocked by the server write-scope guard. The eval runner is
+    // read-only and never applies plans — asserting routing only (planProposed
+    // is gated on SEEDED to avoid false failures on empty stacks, but even when
+    // SEEDED the plan is proposed, never applied).
+    id: 'l3.plan.share',
+    category: 'l3.plan',
+    prompt: 'share my newest 20 photos as a link',
+    expect: { kind: 'share_assets', planProposed: SEEDED ? true : undefined },
+    // Conservative threshold — data-dependent (needs at least one owned asset).
+    threshold: 0.5,
+  },
+
   // --- negatives: must NOT fabricate a strict workflow ----------------------
   {
     id: 'l3.neg.count',
