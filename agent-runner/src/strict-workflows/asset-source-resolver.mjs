@@ -196,6 +196,10 @@ export const parseMediaType = (source) => {
   return undefined;
 };
 
+// Screenshots noun pattern: "screenshots?", "screen shots?", "screen captures?".
+// Matched regardless of case; consumed early before tag/place rules can absorb tokens.
+const SCREENSHOTS_PATTERN = /\bscreenshots?\b|\bscreen\s+shots?\b|\bscreen\s+captures?\b/gi;
+
 // Classify which named-entity / direct-metadata classes a source mentions. Pure;
 // proposes candidate name strings (the server/tool layer decides matched/ambiguous/
 // not_found in Slice 2). Returns undefined when the source has no entity (recency /
@@ -217,6 +221,16 @@ export const parseEntitySource = (source) => {
   const setDirect = (key, value) => {
     (result.directFilters ??= {})[key] = value;
   };
+
+  // (0) screenshots: recognized noun → tag-first entity (E1). Consumed before all
+  // other rules so no tag/place rule re-matches parts of "screenshots".
+  if (SCREENSHOTS_PATTERN.test(text)) {
+    SCREENSHOTS_PATTERN.lastIndex = 0; // reset global regex after test()
+    pushName('tags', 'Screenshots');
+    result.screenshotSource = true;
+    text = text.replace(SCREENSHOTS_PATTERN, ' ');
+  }
+  SCREENSHOTS_PATTERN.lastIndex = 0;
 
   // (1) album: "in the <Album> album" — before place "in <X>".
   text = text.replace(/\bin\s+the\s+([A-Za-z][\w' -]*?)\s+albums?\b/gi, (_m, n) => (pushName('albums', n), ' '));
@@ -355,8 +369,9 @@ const DATE_STRIP = new RegExp(
 );
 
 // Entity connector/keyword tokens consumed alongside recognized entity names so an
-// entity source reads as "clean".
-const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rite[ds]?|archived|albums?|trashed|in\s+(?:the\s+)?trash|from\s+(?:the\s+)?trash)\b/gi;
+// entity source reads as "clean". Screenshots variants are included here because
+// parseEntitySource consumes the noun but isCleanSource works on the original text.
+const ENTITY_KEYWORD_STRIP = /\b(?:tagged|shot\s+(?:on|with)|rated|stars?|favou?rite[ds]?|archived|albums?|trashed|in\s+(?:the\s+)?trash|from\s+(?:the\s+)?trash|screenshots?|screen\s+shots?|screen\s+captures?)\b/gi;
 
 // A source is "clean" when, after removing recency / date / generic-noun / filler AND
 // recognized entity tokens, nothing substantive remains. Subjective qualifiers
@@ -425,8 +440,61 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
     // NAME-LOOKUP entities resolve to id-based filters via resolveAssetSearchFilters
     // (structured args, never a free-text query). DIRECT metadata (place/rating/
     // favorite/visibility) maps straight in. Everything merges into ONE filters object.
-    const nameRequest = buildResolverNameRequest(entity);
+
+    // Screenshots source: two-step tag lookup (Screenshots first, Auto/Screenshots
+    // fallback). Handled before the generic nameRequest path so the Screenshots tag
+    // injected by parseEntitySource gets special resolution instead of a raw not-found.
     let resolvedFilters = {};
+    if (entity.screenshotSource) {
+      // Build the request without the injected 'Screenshots' tag — we drive the
+      // lookup manually so we can fall back to 'Auto/Screenshots'.
+      const nonScreenshotsTags = (entity.tags ?? []).filter((t) => t !== 'Screenshots');
+      const entityWithoutScreenshots = { ...entity, tags: nonScreenshotsTags.length > 0 ? nonScreenshotsTags : undefined };
+      const baseRequest = buildResolverNameRequest(entityWithoutScreenshots);
+
+      // Step 1: resolve 'Screenshots'.
+      const step1 = await client.call('resolveAssetSearchFilters', { ...baseRequest, tags: ['Screenshots'] }, { signal });
+      const step1Results = step1?.results ?? [];
+      const screenshotsResult = step1Results.find((r) => r?.query === 'Screenshots');
+      const screenshotsNotFound = screenshotsResult?.status === 'not_found' || (!screenshotsResult && Object.keys(step1?.resolvedFilters ?? {}).length === 0 && step1Results.length > 0);
+
+      // Check ambiguity / not-found for other (non-screenshots) lookups in step1.
+      const otherAmbiguous = step1Results.filter((r) => r?.query !== 'Screenshots' && r?.status === 'ambiguous');
+      if (otherAmbiguous.length > 0) {
+        return { status: 'needs_input', text: ambiguousNeedsInputText(otherAmbiguous) };
+      }
+      const otherNotFound = step1Results.filter((r) => r?.query !== 'Screenshots' && r?.status === 'not_found');
+      if (otherNotFound.length > 0) {
+        return { status: 'needs_input', text: notFoundNeedsInputText(otherNotFound) };
+      }
+
+      if (screenshotsNotFound) {
+        // Step 2: try 'Auto/Screenshots'.
+        const step2 = await client.call('resolveAssetSearchFilters', { ...baseRequest, tags: ['Auto/Screenshots'] }, { signal });
+        const step2Results = step2?.results ?? [];
+        const autoResult = step2Results.find((r) => r?.query === 'Auto/Screenshots');
+        const autoNotFound = autoResult?.status === 'not_found' || (!autoResult && Object.keys(step2?.resolvedFilters ?? {}).length === 0 && step2Results.length > 0);
+
+        if (autoNotFound) {
+          // Both tag names absent on this instance — disclose rather than silently match.
+          return {
+            status: 'needs_input',
+            text: 'Your screenshots aren\'t tagged on this instance. To use this, enable a "Screenshots" classification category so assets are automatically tagged.',
+          };
+        }
+        // Auto/Screenshots found — use its resolved filters.
+        resolvedFilters = step2?.resolvedFilters ?? {};
+        if (Object.keys(resolvedFilters).length === 0) {
+          resolvedFilters = mergeResultSearchFilters(step2Results);
+        }
+      } else {
+        resolvedFilters = step1?.resolvedFilters ?? {};
+        if (Object.keys(resolvedFilters).length === 0) {
+          resolvedFilters = mergeResultSearchFilters(step1Results);
+        }
+      }
+    } else {
+    const nameRequest = buildResolverNameRequest(entity);
     if (Object.keys(nameRequest).length > 0) {
       const resolution = await client.call('resolveAssetSearchFilters', nameRequest, { signal });
       const results = resolution?.results ?? [];
@@ -444,6 +512,7 @@ export const resolveAssetSource = async ({ client, sourceDescription, signal, no
       if (Object.keys(resolvedFilters).length === 0) {
         resolvedFilters = mergeResultSearchFilters(results);
       }
+    }
     }
     filters = {
       ...dateFilters,

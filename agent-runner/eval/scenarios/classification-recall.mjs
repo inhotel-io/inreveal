@@ -138,8 +138,9 @@ export default [
     expect: { kind: 'archive_assets', slotsSurvive: true },
   },
   {
-    // Routes at classify-time even though the resolver hands off "screenshots" at
-    // run-time — routing is the only thing L1 observes (relocated from negatives).
+    // Routes at classify-time. The resolver now resolves "screenshots" tag-first
+    // (Screenshots / Auto/Screenshots) when the tag is configured on the instance;
+    // discloses and hands off when neither tag exists. L1 only observes routing.
     id: 'recall.archive.screenshots',
     category: 'recall',
     prompt: 'archive old screenshots from 2024',
