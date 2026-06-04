@@ -4,6 +4,7 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/constants/constants.dart';
 import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
+import 'package:immich_mobile/services/background_backup_queue_port.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
 import 'package:mocktail/mocktail.dart';

@@ -2,16 +2,10 @@ import 'dart:async';
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:immich_mobile/constants/constants.dart';
+import 'package:immich_mobile/services/background_backup_queue_port.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/background_upload.service.dart';
 import 'package:logging/logging.dart';
-
-abstract interface class BackgroundBackupQueuePort {
-  Future<List<Task>> getActiveTasks(String group);
-  Future<BackgroundBackupQueueResult> enqueueNextBackupBatch(String userId, {Set<String> excludedLocalAssetIds});
-  Future<void> resume();
-  Future<int> cancel();
-}
 
 class BackgroundBackupQueueCoordinator {
   BackgroundBackupQueueCoordinator(this._queue, {BackgroundBackupStatusService? statusService})

@@ -20,7 +20,7 @@ import 'package:immich_mobile/providers/infrastructure/storage.provider.dart';
 import 'package:immich_mobile/repositories/asset_media.repository.dart';
 import 'package:immich_mobile/repositories/upload.repository.dart';
 import 'package:immich_mobile/services/api.service.dart';
-import 'package:immich_mobile/services/background_backup_queue_coordinator.dart';
+import 'package:immich_mobile/services/background_backup_queue_port.dart';
 import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
 import 'package:immich_mobile/utils/debug_print.dart';
@@ -94,29 +94,6 @@ class UploadTaskMetadata {
 
   @override
   int get hashCode => localAssetId.hashCode ^ isLivePhotos.hashCode ^ livePhotoVideoId.hashCode;
-}
-
-/// Result of a single bounded background backup enqueue pass.
-class BackgroundBackupQueueResult {
-  const BackgroundBackupQueueResult({
-    required this.totalCandidateCount,
-    required this.eligibleCandidateCount,
-    required this.enqueuedLocalAssetIds,
-    required this.skippedLocalAssetIds,
-    required this.enqueueFailedLocalAssetIds,
-    required this.remainingEligibleCandidateCount,
-  });
-
-  final int totalCandidateCount;
-  final int eligibleCandidateCount;
-  final List<String> enqueuedLocalAssetIds;
-  final List<String> skippedLocalAssetIds;
-  final List<String> enqueueFailedLocalAssetIds;
-  final int remainingEligibleCandidateCount;
-
-  int get enqueuedCount => enqueuedLocalAssetIds.length;
-  bool get queuedAny => enqueuedLocalAssetIds.isNotEmpty;
-  bool get hasMoreEligibleCandidates => remainingEligibleCandidateCount > 0;
 }
 
 /// Service for handling background uploads using iOS URLSession (background_downloader)
