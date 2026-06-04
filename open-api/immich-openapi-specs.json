@@ -24348,7 +24348,8 @@
           "asset.addTag",
           "asset.removeTag",
           "asset.trash",
-          "asset.restore"
+          "asset.restore",
+          "shareLink.create"
         ],
         "type": "string"
       },
@@ -24480,6 +24481,9 @@
               "createAlbum": {
                 "type": "boolean"
               },
+              "createSharedLinks": {
+                "type": "boolean"
+              },
               "createSpace": {
                 "type": "boolean"
               },
@@ -24538,7 +24542,8 @@
               "archiveAssets",
               "tagAssets",
               "updateAssetMetadata",
-              "trashAssets"
+              "trashAssets",
+              "createSharedLinks"
             ],
             "type": "object"
           }
@@ -26009,6 +26014,84 @@
                     "type",
                     "summary",
                     "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentShareLinkCreateOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "password": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "showMetadata": {
+                          "type": "boolean"
+                        },
+                        "allowDownload": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
                   ],
                   "additionalProperties": false
                 }
@@ -28151,6 +28234,84 @@
                     "targetKind"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentShareLinkCreateOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "password": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "showMetadata": {
+                          "type": "boolean"
+                        },
+                        "allowDownload": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },
@@ -29255,6 +29416,12 @@
           "title"
         ],
         "type": "object"
+      },
+      "AgentShareLinkCreateOperationType": {
+        "enum": [
+          "shareLink.create"
+        ],
+        "type": "string"
       },
       "AgentSpaceAddMembersOperationType": {
         "enum": [

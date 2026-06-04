@@ -33,6 +33,7 @@ const fullWriteScope = {
   removeMembersFromSpaces: true,
   updateSpaceMemberRoles: true,
   trashAssets: true,
+  createSharedLinks: true,
 };
 const expandedWriteScopeKeys = [
   'removeAssets',
@@ -49,6 +50,7 @@ const expandedWriteScopeKeys = [
   'removeMembersFromSpaces',
   'updateSpaceMemberRoles',
   'trashAssets',
+  'createSharedLinks',
 ];
 
 const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
@@ -357,6 +359,7 @@ describe('Generated agent permission contracts', () => {
     expect(sdk).toContain('AssetRemoveTag = "asset.removeTag"');
     expect(sdk).toContain('AssetTrash = "asset.trash"');
     expect(sdk).toContain('AssetRestore = "asset.restore"');
+    expect(sdk).toContain('ShareLinkCreate = "shareLink.create"');
     expect(sdk).toContain('NewSpace = "new_space"');
     expect(sdk).toContain('ExistingSpace = "existing_space"');
     expect(sdk).toContain('AssetBatch = "asset_batch"');
@@ -419,6 +422,7 @@ describe('AgentSessionResponseDto', () => {
       addMembersToSpaces: false,
       removeMembersFromSpaces: false,
       updateSpaceMemberRoles: false,
+      createSharedLinks: false,
     });
   });
 });
