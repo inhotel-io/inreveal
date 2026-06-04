@@ -116,6 +116,18 @@ describe('strict/hybrid workflow manifest', () => {
     assert.ok(entry.matrixRow.capability);
   });
 
+  it('describes change_member_role as a strict workflow with supportsContinuation true', () => {
+    const entry = getWorkflowManifestEntry('change_member_role');
+    assert.equal(entry.flow, 'strict');
+    assert.equal(entry.planTool, 'proposeAlbumOperations');
+    assert.ok(entry.requiredReadTools.includes('listSpaces'), 'requiredReadTools includes listSpaces');
+    assert.ok(entry.requiredReadTools.includes('searchUsers'), 'requiredReadTools includes searchUsers');
+    assert.equal(entry.supportsContinuation, true);
+    assert.ok(entry.positiveExamples.length > 0);
+    assert.ok(entry.negativeExamples.length > 0);
+    assert.ok(entry.matrixRow.capability);
+  });
+
   it('describes set_album_cover as a strict workflow with its tools', () => {
     const entry = getWorkflowManifestEntry('set_album_cover');
     assert.equal(entry.flow, 'strict');

@@ -628,11 +628,11 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
     requiredReadTools: Object.freeze(['listSpaces', 'readSpace', 'searchUsers']),
     planTool: 'proposeAlbumOperations',
-    supportsContinuation: false,
+    supportsContinuation: true,
     matrixRow: Object.freeze({
       capability: 'Change space member roles',
       tier: 'Solid now',
-      workflowOrBoundary: 'Resolve the member; guard owner/self/no-op; propose the role-change plan.',
+      workflowOrBoundary: 'Resolve the member; guard owner/self/no-op; propose the role-change plan. Durable two-stage disambiguation: ambiguous space then ambiguous user each get a storable candidate list.',
     }),
   }),
   Object.freeze({
