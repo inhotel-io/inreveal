@@ -19,7 +19,7 @@ import {
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import type { AssetBulkUpdateDto } from 'src/dtos/asset.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
+import { AssetEditAction, AssetEditActionItem, CropParameters } from 'src/dtos/editing.dto';
 import {
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
@@ -1087,6 +1087,7 @@ export class AgentOperationPlanService {
   private requiresWritableAssets(type: AgentOperationType) {
     return [
       AgentOperationType.AssetRotate,
+      AgentOperationType.AssetCrop,
       AgentOperationType.AssetSetFavorite,
       AgentOperationType.AssetSetArchive,
       AgentOperationType.AssetUpdateMetadata,
@@ -1417,6 +1418,7 @@ export class AgentOperationPlanService {
       type === AgentOperationType.SpaceAddAssets ||
       type === AgentOperationType.SpaceRemoveAssets ||
       type === AgentOperationType.AssetRotate ||
+      type === AgentOperationType.AssetCrop ||
       type === AgentOperationType.AssetSetFavorite ||
       type === AgentOperationType.AssetSetArchive ||
       type === AgentOperationType.AssetUpdateMetadata ||
@@ -1926,7 +1928,7 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow updating space member roles');
     }
 
-    if (type === AgentOperationType.AssetRotate && !writeScope.editAssets) {
+    if ((type === AgentOperationType.AssetRotate || type === AgentOperationType.AssetCrop) && !writeScope.editAssets) {
       throw new BadRequestException('Agent permission policy does not allow editing assets');
     }
 
@@ -2776,6 +2778,10 @@ export class AgentOperationPlanService {
         return this.applyRotateOperation(auth, operation);
       }
 
+      case AgentOperationType.AssetCrop: {
+        return this.applyCropOperation(auth, operation);
+      }
+
       case AgentOperationType.AssetTrash: {
         await this.assetService.deleteAll(auth, { ids: operation.assetIds, force: false });
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
@@ -3110,6 +3116,86 @@ export class AgentOperationPlanService {
     }
 
     return angle;
+  }
+
+  private async applyCropOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const cropParams = this.requireCropPayload(operation.payload);
+    const assetResults: BulkIdResponseDto[] = [];
+    const successfulAssetIds: string[] = [];
+
+    for (const assetId of operation.assetIds) {
+      try {
+        const editableAsset = await this.assetRepository.getForEdit(assetId);
+        if (!editableAsset) {
+          throw new BadRequestException('Asset not found');
+        }
+        if (editableAsset.type !== AssetType.Image) {
+          throw new BadRequestException('Only images can be edited');
+        }
+
+        const { edits } = await this.assetService.getAssetEdits(auth, assetId);
+        // Crop must be first; replace any existing Crop edit, keep all others after it
+        const mergedEdits = this.mergeCropEdits(
+          edits.map(({ action, parameters }) => ({ action, parameters }) as AssetEditActionItem),
+          cropParams,
+        );
+        await this.assetService.editAsset(auth, assetId, { edits: mergedEdits });
+
+        successfulAssetIds.push(assetId);
+        assetResults.push({ id: assetId, success: true });
+      } catch (error) {
+        assetResults.push({
+          id: assetId,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : 'Failed to crop asset',
+        });
+      }
+    }
+
+    const failedAssetCount = assetResults.length - successfulAssetIds.length;
+    const result = {
+      assetIds: successfulAssetIds,
+      assetResults: assetResults.map(({ id, success, error, errorMessage }) => ({ id, success, error, errorMessage })),
+    };
+
+    if (failedAssetCount > 0) {
+      return {
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result,
+        error: `Failed to crop ${failedAssetCount} asset(s)`,
+      };
+    }
+
+    return this.appliedOperation(operation.id, result);
+  }
+
+  private requireCropPayload(payload: unknown): CropParameters {
+    const objectPayload = this.requireObjectPayload(payload);
+    const { x, y, width, height } = objectPayload as Record<string, unknown>;
+    if (
+      typeof x !== 'number' ||
+      typeof y !== 'number' ||
+      typeof width !== 'number' ||
+      typeof height !== 'number' ||
+      x < 0 ||
+      y < 0 ||
+      width < 1 ||
+      height < 1
+    ) {
+      throw new BadRequestException('asset.crop requires valid x, y, width, height');
+    }
+
+    return { x, y, width, height };
+  }
+
+  private mergeCropEdits(edits: AssetEditActionItem[], cropParams: CropParameters): AssetEditActionItem[] {
+    // Crop must always be first; replace any existing Crop, keep non-Crop edits after it
+    const nonCropEdits = edits.filter((edit) => edit.action !== AssetEditAction.Crop);
+    return [{ action: AssetEditAction.Crop, parameters: cropParams }, ...nonCropEdits];
   }
 
   private requireAssetUpdateMetadataPayload(payload: unknown, summary: string): AssetUpdateMetadataApplyPayload {

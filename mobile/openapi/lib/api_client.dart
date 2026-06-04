@@ -210,6 +210,8 @@ class ApiClient {
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentAssetAddTagOperationType':
           return AgentAssetAddTagOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetCropOperationType':
+          return AgentAssetCropOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetMediaReference':
           return AgentAssetMediaReference.fromJson(value);
         case 'AgentAssetMetadataDetail':
@@ -450,10 +452,14 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf17Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf19':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf19.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf20':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':
