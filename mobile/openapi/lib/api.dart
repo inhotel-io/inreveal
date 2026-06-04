@@ -90,6 +90,7 @@ part 'model/agent_album_summary.dart';
 part 'model/agent_album_update_details_operation_type.dart';
 part 'model/agent_approval_mode.dart';
 part 'model/agent_asset_add_tag_operation_type.dart';
+part 'model/agent_asset_crop_operation_type.dart';
 part 'model/agent_asset_media_reference.dart';
 part 'model/agent_asset_metadata_detail.dart';
 part 'model/agent_asset_metadata_field.dart';
@@ -210,8 +211,10 @@ part 'model/agent_propose_album_operations_dto_operations_inner_one_of16_payload
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of17.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of17_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of18.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of18_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of19.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of2.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of20.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of4.dart';
