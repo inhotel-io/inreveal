@@ -30,6 +30,7 @@ Spec: `docs/superpowers/specs/2026-05-31-pi-agent-capability-roadmap.md` (Phase 
 CRITICAL STYLE: agent-runner single-quote, NOT prettier-gated/CI'd. Do NOT run prettier on agent-runner files.
 
 **Tests first** (`asset-source-resolver.test.mjs`):
+
 - `parseEntitySource`/`resolveAssetSource` for "my screenshots" / "screenshots" / "screen shots" / "screen captures"
   / singular "screenshot" → emits a tag entity `Screenshots` (the resolver calls
   `resolveAssetSearchFilters({ tags:['Screenshots'] })`). Use the existing test harness's resolveAssetSearchFilters
@@ -42,10 +43,11 @@ CRITICAL STYLE: agent-runner single-quote, NOT prettier-gated/CI'd. Do NOT run p
   both `Screenshots` and, if the first misses, `Auto/Screenshots`; assert the resolver tries the path form).
 - regression: a non-screenshot source ("my Sony photos") is unchanged; "screenshots" does not leak into unrelated
   sources.
-RUN red → implement (single quotes; hook the screenshot noun in parseEntitySource to push 'Screenshots' onto the
-tags entity, and strip the matched noun so it isn't leftover text) → GREEN.
+  RUN red → implement (single quotes; hook the screenshot noun in parseEntitySource to push 'Screenshots' onto the
+  tags entity, and strip the matched noun so it isn't leftover text) → GREEN.
 
 **L1** (routing unchanged — screenshots is a source modifier; verb owns routing):
+
 - Update the `recall.archive.screenshots` comment (resolver now RESOLVES screenshots tag-first when configured,
   discloses otherwise). Add recall coverage if useful ("trash my screenshots" → trash_assets — already implied by
   verb; only add if it tightens slot survival). Ensure negatives stay intact: "delete all my screenshots" must NOT
@@ -68,4 +70,4 @@ Heuristic `make:null` fallback intentionally not implemented (precision/safety �
 - L3 (`l3-readonly.mjs`, single quotes): `l3.recall.screenshots` ("archive my screenshots" → archive_assets) +
   a propose-only `l3.plan.screenshots` gated `planProposed: SEEDED ? true : undefined` (needs a Screenshots tag on
   the instance). Live run deferred to the consolidated end RC.
-Commit `test(agent): screenshot cleanup matrix + L3 (E3)`; push.
+  Commit `test(agent): screenshot cleanup matrix + L3 (E3)`; push.
