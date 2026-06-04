@@ -449,6 +449,30 @@ export default [
     expect: { kind: 'visual_cleanup', minTurnsWithOutcome: 2 },
     threshold: 0.5,
   },
+  {
+    // Durable space disambiguation resume (Phase D): turn 1 routes to the space
+    // workflow and, when 2+ similarly-named spaces exist, asks with a stored
+    // candidate list; turn 2 ("the first one") re-enters via the persisted
+    // continuation and proposes. The ambiguous-space data is library-specific, so
+    // the two-turn re-entry (minTurnsWithOutcome) is asserted only when seeded;
+    // routing to rename_or_describe_space always holds (even a single space routes,
+    // resolving on turn 1 without needing the resume).
+    id: 'l3.multiturn.spacepick.describe',
+    category: 'l3.multiturn',
+    turns: ['set the description on one of my shared spaces to Shared memories', 'the first one'],
+    expect: { kind: 'rename_or_describe_space', minTurnsWithOutcome: SEEDED ? 2 : undefined },
+    threshold: 0.5,
+  },
+  {
+    // Same durable-disambiguation resume for the space-asset workflow: turn 1 is an
+    // ambiguous space reference, turn 2 picks by ordinal. Re-entry gated on SEEDED
+    // (needs 2+ matching spaces); routing always holds.
+    id: 'l3.multiturn.spacepick.assets',
+    category: 'l3.multiturn',
+    turns: ['add my newest 20 photos to one of my shared spaces', 'the first one'],
+    expect: { kind: 'manage_space_assets', minTurnsWithOutcome: SEEDED ? 2 : undefined },
+    threshold: 0.5,
+  },
 
   // --- update_asset_metadata routing + plan-proposed -----------------------
   {
