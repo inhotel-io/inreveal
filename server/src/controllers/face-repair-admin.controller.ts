@@ -1,9 +1,15 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
-import { FaceRepairRequestDto, FaceRepairResponseDto } from 'src/dtos/face-repair.dto';
+import { AuthDto } from 'src/dtos/auth.dto';
+import {
+  FaceRepairRequestDto,
+  FaceRepairResponseDto,
+  FaceRepairScanStatusDto,
+  FaceRepairScanTriggerResponseDto,
+} from 'src/dtos/face-repair.dto';
 import { ApiTag } from 'src/enum';
-import { Authenticated } from 'src/middleware/auth.guard';
+import { Auth, Authenticated } from 'src/middleware/auth.guard';
 import { FaceRepairService } from 'src/services/face-repair.service';
 
 @ApiTags(ApiTag.Faces)
@@ -19,5 +25,19 @@ export class FaceRepairAdminController {
   })
   runFaceRepair(@Body() dto: FaceRepairRequestDto): Promise<FaceRepairResponseDto> {
     return this.service.runRepair(dto) as Promise<FaceRepairResponseDto>;
+  }
+
+  @Post('scan')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Trigger a face-repair scan', history: new HistoryBuilder().added('v1') })
+  triggerScan(@Auth() auth: AuthDto): Promise<FaceRepairScanTriggerResponseDto> {
+    return this.service.triggerScan(auth.user.id) as Promise<FaceRepairScanTriggerResponseDto>;
+  }
+
+  @Get('scan/latest')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Get the latest face-repair scan', history: new HistoryBuilder().added('v1') })
+  getLatestScan(): Promise<FaceRepairScanStatusDto | null> {
+    return this.service.getLatestScanStatus() as Promise<FaceRepairScanStatusDto | null>;
   }
 }

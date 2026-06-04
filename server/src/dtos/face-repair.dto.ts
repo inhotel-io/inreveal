@@ -48,3 +48,52 @@ export const FaceRepairResponseSchema = z
   .meta({ id: 'FaceRepairResponseDto' });
 
 export class FaceRepairResponseDto extends createZodDto(FaceRepairResponseSchema) {}
+
+export const FaceRepairScanTriggerResponseSchema = z
+  .object({ scanId: z.string() })
+  .meta({ id: 'FaceRepairScanTriggerResponseDto' });
+export class FaceRepairScanTriggerResponseDto extends createZodDto(FaceRepairScanTriggerResponseSchema) {}
+
+const ScanSuspectedOwnerSchema = z.object({
+  ownerPersonId: z.string(),
+  ownerName: z.string().nullable(),
+  thumbnailFaceId: z.string().nullable(),
+  count: z.number(),
+});
+const ScanPersonSchema = z.object({
+  personId: z.string(),
+  ownerId: z.string(),
+  personName: z.string().nullable(),
+  faceCount: z.number(),
+  thumbnailFaceId: z.string().nullable(),
+  eligible: z.number(),
+  flagged: z.number(),
+  flaggedFraction: z.number(),
+  suspectedOwners: z.array(ScanSuspectedOwnerSchema),
+  recommendation: z.enum(['confident', 'review-first']),
+  reviewReasons: z.array(z.string()),
+});
+export const FaceRepairScanStatusSchema = z
+  .object({
+    id: z.string(),
+    status: z.enum(['pending', 'running', 'completed', 'failed']),
+    progress: z.object({ scanned: z.number(), total: z.number() }).nullable(),
+    totals: z
+      .object({
+        eligibleFaces: z.number(),
+        flaggedFaces: z.number(),
+        toRepair: z.number(),
+        reviewOnlyFaces: z.number(),
+        reviewOnlyPersons: z.number(),
+        affectedPersons: z.number(),
+        reviewOnlyByReason: z.object({ overCap: z.number(), badTarget: z.number(), unAttributable: z.number() }),
+      })
+      .nullable(),
+    persons: z.array(ScanPersonSchema),
+    error: z.string().nullable(),
+    startedAt: z.date().nullable(),
+    finishedAt: z.date().nullable(),
+    createdAt: z.date(),
+  })
+  .meta({ id: 'FaceRepairScanStatusDto' });
+export class FaceRepairScanStatusDto extends createZodDto(FaceRepairScanStatusSchema) {}

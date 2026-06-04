@@ -2,9 +2,11 @@ import { EligibleFaceRow } from 'src/repositories/face-repair.repository';
 import { FaceRepairService, RepairPlan } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
 
-/** Sync iterable that yields one eligible face row for the progress test. */
-function* singleFaceStream(): Iterable<EligibleFaceRow> {
-  yield { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' };
+/** Sync generator cast to AsyncIterableIterator for the progress test mock. */
+function singleFaceStream(): AsyncIterableIterator<EligibleFaceRow> {
+  return (function* () {
+    yield { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' };
+  })() as unknown as AsyncIterableIterator<EligibleFaceRow>;
 }
 
 /** A minimal RepairPlan with one flagged person P → suspected owner Q */
@@ -28,7 +30,8 @@ describe(FaceRepairService.name, () => {
 
     // Default: no stored scan row → params come from config defaults
     mocks.systemMetadata.get.mockResolvedValue(null);
-    mocks.faceRepairScan.getScanById.mockResolvedValue();
+    // eslint-disable-next-line unicorn/no-useless-undefined
+    mocks.faceRepairScan.getScanById.mockResolvedValue(undefined);
     mocks.faceRepairScan.updateScanProgress.mockResolvedValue();
     mocks.faceRepairScan.completeScan.mockResolvedValue();
     mocks.faceRepairScan.failScan.mockResolvedValue();

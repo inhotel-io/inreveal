@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
@@ -330,5 +330,34 @@ export class FaceRepairService extends BaseService {
   async handleFaceRepairScan({ scanId }: JobOf<JobName.FaceRepairScan>): Promise<JobStatus> {
     await this.runScan(scanId);
     return JobStatus.Success;
+  }
+
+  async triggerScan(requestedBy: string): Promise<{ scanId: string }> {
+    if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
+      throw new ConflictException('Refusing to scan while facial recognition is active');
+    }
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    const params = {
+      maxDistance: recognition.maxDistance,
+      minFaces: recognition.minFaces,
+      voteWindow: DEFAULT_VOTE_WINDOW,
+      voteMargin: DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+      largeClusterThreshold: DEFAULT_LARGE_CLUSTER_THRESHOLD,
+    };
+    let scan;
+    try {
+      scan = await this.faceRepairScanRepository.createScan({ requestedBy, params });
+    } catch {
+      throw new ConflictException('A face-repair scan is already in progress');
+    }
+    await this.jobRepository.queue({ name: JobName.FaceRepairScan, data: { scanId: scan.id } });
+    return { scanId: scan.id };
+  }
+
+  async getLatestScanStatus() {
+    return (await this.faceRepairScanRepository.getLatestScan()) ?? null;
   }
 }
