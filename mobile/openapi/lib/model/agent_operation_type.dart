@@ -42,6 +42,7 @@ class AgentOperationType {
   static const assetPeriodAddTag = AgentOperationType._(r'asset.addTag');
   static const assetPeriodRemoveTag = AgentOperationType._(r'asset.removeTag');
   static const assetPeriodTrash = AgentOperationType._(r'asset.trash');
+  static const assetPeriodRestore = AgentOperationType._(r'asset.restore');
 
   /// List of all possible values in this [enum][AgentOperationType].
   static const values = <AgentOperationType>[
@@ -64,6 +65,7 @@ class AgentOperationType {
     assetPeriodAddTag,
     assetPeriodRemoveTag,
     assetPeriodTrash,
+    assetPeriodRestore,
   ];
 
   static AgentOperationType? fromJson(dynamic value) => AgentOperationTypeTypeTransformer().decode(value);
@@ -121,6 +123,7 @@ class AgentOperationTypeTypeTransformer {
         case r'asset.addTag': return AgentOperationType.assetPeriodAddTag;
         case r'asset.removeTag': return AgentOperationType.assetPeriodRemoveTag;
         case r'asset.trash': return AgentOperationType.assetPeriodTrash;
+        case r'asset.restore': return AgentOperationType.assetPeriodRestore;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

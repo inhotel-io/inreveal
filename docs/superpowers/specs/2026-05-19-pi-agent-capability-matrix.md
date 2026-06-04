@@ -61,7 +61,8 @@ Current reviewable operation types:
   `space.updateMemberRole`.
 - Assets: `asset.rotate`, `asset.setFavorite`, `asset.setArchive`,
   `asset.addTag`, `asset.removeTag`, `asset.updateMetadata`, `asset.trash`
-  (reversible move to Trash; High risk; `trashAssets` write-scope).
+  (reversible move to Trash; High risk; `trashAssets` write-scope),
+  `asset.restore` (reversible un-trash; Low risk; `trashAssets` write-scope).
 
 Safety invariant: MCP tools do not directly mutate the gallery. Writes must be
 represented as operation plans and applied by Gallery after user review.
