@@ -53,13 +53,13 @@ describe('Pi agent capability matrix', () => {
     const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
     expect(needsNewToolSection).not.toContain('Natural-language semantic search');
     expect(needsNewToolSection).not.toContain('Large-library pagination');
-    expect(markdown).toContain('Next expansion candidates: a forward geocoder');
+    expect(markdown).toContain('Next expansion candidates: richer image-edit operation families');
     // Reversible trash + duplicate cleanup shipped — no longer new-tool gaps.
     expect(needsNewToolSection).not.toContain('| Trash/delete ');
     expect(needsNewToolSection).not.toContain('| Duplicate/similar-photo cleanup ');
   });
 
-  it('documents explicit batch asset metadata edits as solid while place-name geocoding remains missing', () => {
+  it('documents explicit batch asset metadata edits and place-name geocoding as solid', () => {
     const markdown = readMatrix();
     const coreMatrix = sectionBetween(markdown, '## Core Capability Matrix', '## High-Value Constrained Capabilities');
 
@@ -72,7 +72,8 @@ describe('Pi agent capability matrix', () => {
     expect(metadataEditRow).toContain('date/time');
     expect(metadataEditRow).toContain('timezone');
     expect(metadataEditRow).toContain('latitude/longitude');
-    expect(metadataEditRow).toMatch(/ask.*coordinates|coordinates.*ask/i);
+    // Place names now resolve to coordinates via the forward geocoder.
+    expect(metadataEditRow).toContain('resolveLocation');
 
     for (const prompt of [
       'Set the description on the 5 newest photos to Test batch.',
@@ -88,8 +89,9 @@ describe('Pi agent capability matrix', () => {
     expect(needsNewToolHeadingIndex).not.toBe(-1);
     const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
     expect(needsNewToolSection).not.toContain('| Metadata edits ');
-    expect(needsNewToolSection).toContain('Place-name-to-coordinate metadata edits');
-    expect(needsNewToolSection).toMatch(/forward geocoder|geocod/i);
+    // Forward geocoding shipped — place-name geocoding is no longer a new-tool gap.
+    expect(needsNewToolSection).not.toContain('Place-name-to-coordinate metadata edits');
+    expect(needsNewToolSection).not.toContain('No forward geocoder');
   });
 
   it('documents bounded highlight curation and visual cleanup with objective quality signals', () => {
