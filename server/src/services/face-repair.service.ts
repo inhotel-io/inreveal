@@ -62,6 +62,8 @@ export class FaceRepairService extends BaseService {
     options: {
       ownerId?: string;
       personId?: string;
+      personIds?: string[];
+      approvedPersonIds?: string[];
       maxDistance: number;
       voteWindow: number;
       maxFlaggedFraction: number;
@@ -105,9 +107,16 @@ export class FaceRepairService extends BaseService {
       }
     }
 
+    const approved = new Set(options.approvedPersonIds);
     const toRepair: FlaggedFace[] = [];
     const reviewOnlyFaces: (FlaggedFace & { reason: ReviewOnlyReason })[] = [];
     for (const [personId, faces] of flaggedByPerson) {
+      if (approved.has(personId)) {
+        for (const face of faces) {
+          toRepair.push(face); // approved: exempt from over-cap AND bad-target
+        }
+        continue;
+      }
       if (reviewOnlyPersonIds.has(personId)) {
         for (const face of faces) {
           reviewOnlyFaces.push({ ...face, reason: 'over-cap' });
@@ -359,5 +368,33 @@ export class FaceRepairService extends BaseService {
 
   async getLatestScanStatus() {
     return (await this.faceRepairScanRepository.getLatestScan()) ?? null;
+  }
+
+  async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<{ unassigned: number; requeued: number }> {
+    if (input.approvedPersonIds.length === 0) {
+      return { unassigned: 0, requeued: 0 };
+    }
+    if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
+      throw new ConflictException('Refusing to apply while facial recognition is active');
+    }
+    const latest = await this.faceRepairScanRepository.getLatestScan();
+    if (latest && (latest.status === 'pending' || latest.status === 'running')) {
+      throw new ConflictException('Refusing to apply while a scan is in progress');
+    }
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    const plan = await this.buildRepairPlan({
+      maxDistance: recognition.maxDistance,
+      minFaces: recognition.minFaces,
+      voteWindow: DEFAULT_VOTE_WINDOW,
+      voteMargin: DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+      personIds: input.approvedPersonIds,
+      approvedPersonIds: input.approvedPersonIds,
+    });
+    const exclude = new Set(input.excludeFaceIds);
+    const scopedPlan = { ...plan, toRepair: plan.toRepair.filter((face) => !exclude.has(face.assetFaceId)) };
+    return this.executeRepair(scopedPlan);
   }
 }

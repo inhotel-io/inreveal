@@ -15,7 +15,7 @@ export class FaceRepairRepository {
 
   // Non-Timeline faces (e.g. Archive) are intentionally eligible: they may be left unassigned
   // after repair if recognition cannot re-home them, which is the accepted outcome (blank > wrong).
-  streamEligibleFaces(options: { ownerId?: string; personId?: string }) {
+  streamEligibleFaces(options: { ownerId?: string; personId?: string; personIds?: string[] }) {
     return this.db
       .selectFrom('asset_face')
       .innerJoin('asset', 'asset.id', 'asset_face.assetId')
@@ -33,6 +33,9 @@ export class FaceRepairRepository {
       .where('asset.deletedAt', 'is', null)
       .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
+      .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
+        qb.where('asset_face.personId', 'in', options.personIds!),
+      )
       .$narrowType<{ personId: string }>()
       .stream();
   }
