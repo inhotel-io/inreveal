@@ -131,9 +131,7 @@ void main() {
   });
 
   test('full backup refills 3517 assets without UI calls and excludes completed ids until session ends', () async {
-    final queue = FakeBackgroundUploadQueue(
-      candidateIds: List.generate(3517, (index) => 'asset-$index'),
-    );
+    final queue = FakeBackgroundUploadQueue(candidateIds: List.generate(3517, (index) => 'asset-$index'));
     final sut = BackgroundBackupQueueCoordinator(queue);
 
     await sut.start('user-1');
@@ -153,8 +151,7 @@ void main() {
   });
 
   test('concurrent terminal callbacks trigger at most one refill', () async {
-    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1', 'asset-2'])
-      ..batchSize = 2;
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1', 'asset-2'])..batchSize = 2;
     final sut = BackgroundBackupQueueCoordinator(queue);
     await sut.start('user-1');
 
@@ -228,8 +225,7 @@ void main() {
   });
 
   test('failed uploads are excluded from immediate same-session retry', () async {
-    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1'])
-      ..batchSize = 1;
+    final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1'])..batchSize = 1;
     final sut = BackgroundBackupQueueCoordinator(queue);
 
     await sut.start('user-1');
@@ -346,9 +342,7 @@ void main() {
         remainingCount: any(named: 'remainingCount'),
       ),
     ).thenAnswer((_) async {});
-    when(
-      () => status.recordQueueDrained(remainingCount: any(named: 'remainingCount')),
-    ).thenAnswer((_) async {});
+    when(() => status.recordQueueDrained(remainingCount: any(named: 'remainingCount'))).thenAnswer((_) async {});
     when(() => status.recordBackupComplete()).thenAnswer((_) async {});
 
     final queue = FakeBackgroundUploadQueue(candidateIds: ['asset-0', 'asset-1'])..batchSize = 1;

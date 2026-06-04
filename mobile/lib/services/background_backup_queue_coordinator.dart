@@ -8,10 +8,7 @@ import 'package:logging/logging.dart';
 
 abstract interface class BackgroundBackupQueuePort {
   Future<List<Task>> getActiveTasks(String group);
-  Future<BackgroundBackupQueueResult> enqueueNextBackupBatch(
-    String userId, {
-    Set<String> excludedLocalAssetIds,
-  });
+  Future<BackgroundBackupQueueResult> enqueueNextBackupBatch(String userId, {Set<String> excludedLocalAssetIds});
   Future<void> resume();
   Future<int> cancel();
 }
@@ -132,10 +129,7 @@ class BackgroundBackupQueueCoordinator {
     while (true) {
       final BackgroundBackupQueueResult result;
       try {
-        result = await _queue.enqueueNextBackupBatch(
-          userId,
-          excludedLocalAssetIds: _excludedLocalAssetIds(),
-        );
+        result = await _queue.enqueueNextBackupBatch(userId, excludedLocalAssetIds: _excludedLocalAssetIds());
       } catch (error, stackTrace) {
         _logger.severe('Background backup enqueue failed; ending session', error, stackTrace);
         if (_isCurrentSession(userId, generation)) {

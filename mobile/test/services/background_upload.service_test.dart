@@ -134,33 +134,33 @@ void main() {
       );
     });
 
-    test('does not record upload success or failure from background downloader callbacks (coordinator owns progress)',
-        () async {
-      final successTask = UploadTask(
-        taskId: 'asset-1',
-        url: 'http://test-server.com/assets',
-        filename: 'asset.jpg',
-        baseDirectory: BaseDirectory.temporary,
-        group: kBackupGroup,
-      );
-      final failureTask = UploadTask(
-        taskId: 'asset-2',
-        url: 'http://test-server.com/assets',
-        filename: 'asset-2.jpg',
-        baseDirectory: BaseDirectory.temporary,
-        group: kBackupGroup,
-      );
+    test(
+      'does not record upload success or failure from background downloader callbacks (coordinator owns progress)',
+      () async {
+        final successTask = UploadTask(
+          taskId: 'asset-1',
+          url: 'http://test-server.com/assets',
+          filename: 'asset.jpg',
+          baseDirectory: BaseDirectory.temporary,
+          group: kBackupGroup,
+        );
+        final failureTask = UploadTask(
+          taskId: 'asset-2',
+          url: 'http://test-server.com/assets',
+          filename: 'asset-2.jpg',
+          baseDirectory: BaseDirectory.temporary,
+          group: kBackupGroup,
+        );
 
-      final onStatus = capturedStatusCallback();
-      onStatus(TaskStatusUpdate(successTask, TaskStatus.complete));
-      onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
-      await pumpEventQueue();
+        final onStatus = capturedStatusCallback();
+        onStatus(TaskStatusUpdate(successTask, TaskStatus.complete));
+        onStatus(TaskStatusUpdate(failureTask, TaskStatus.failed));
+        await pumpEventQueue();
 
-      verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
-      verifyNever(
-        () => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed),
-      );
-    });
+        verifyNever(() => mockBackgroundBackupStatusService.recordUploadSuccess());
+        verifyNever(() => mockBackgroundBackupStatusService.recordFailure(BackgroundBackupFailureReason.uploadFailed));
+      },
+    );
 
     test('enqueueNextBackupBatch queues one bounded eligible batch and reports exact counts', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
@@ -186,16 +186,16 @@ void main() {
 
       for (final asset in candidates) {
         when(() => mockStorageRepository.getAssetEntityForAsset(asset)).thenAnswer((_) async => mockEntity);
-        when(() => mockStorageRepository.getFileForAsset(asset.id)).thenAnswer((_) async => File('/path/${asset.id}.jpg'));
+        when(
+          () => mockStorageRepository.getFileForAsset(asset.id),
+        ).thenAnswer((_) async => File('/path/${asset.id}.jpg'));
         when(() => mockAssetMediaRepository.getOriginalFilename(asset.id)).thenAnswer((_) async => asset.name);
       }
 
-      final result = await sut.enqueueNextBackupBatch(
-        'user-1',
-        excludedLocalAssetIds: {'asset-0', 'asset-1'},
-      );
+      final result = await sut.enqueueNextBackupBatch('user-1', excludedLocalAssetIds: {'asset-0', 'asset-1'});
 
-      final batch = verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured.single as List<UploadTask>;
+      final batch =
+          verify(() => mockUploadRepository.enqueueBackgroundAll(captureAny())).captured.single as List<UploadTask>;
       expect(batch.map((task) => task.taskId), List.generate(100, (index) => 'asset-${index + 2}'));
       expect(result.totalCandidateCount, 250);
       expect(result.eligibleCandidateCount, 248);
