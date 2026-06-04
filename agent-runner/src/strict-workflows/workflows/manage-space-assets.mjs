@@ -1,3 +1,4 @@
+import { buildCandidateContinuation, resumeFromCandidates } from '../candidate-disambiguation.mjs';
 import { SUBJECTIVE_PATTERN, resolveAssetSource } from '../asset-source-resolver.mjs';
 import { failed, handoffOpen, needsInput } from '../protocol.mjs';
 import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
@@ -105,25 +106,54 @@ export const manageSpaceAssetsWorkflow = () => ({
     return { action, spaceRef, sourceDescription };
   },
 
-  async run({ client, slots, signal }) {
+  async run({ client, slots, resolvedSpaceId, signal, nowMs }) {
     const action = clean(slots?.action).toLowerCase();
     const sourceDescription = cleanSource(slots?.sourceDescription);
 
-    // 1. Resolve the space (none/ambiguous → ask).
-    let ref, matches;
-    try {
-      ({ ref, matches } = await resolveSpace({ client, spaceRef: slots?.spaceRef, signal }));
-    } catch (error) {
-      return failed({ text: safeFailureText(error?.message ?? 'The space lookup failed.') });
+    // 1. Resolve the space (skip when already resolved via continuation).
+    let space;
+    let spaceName;
+
+    if (resolvedSpaceId) {
+      // Continuation path: we know the id; retrieve the space name from listSpaces
+      // so the success text is correct (an extra round-trip is cheap here).
+      let listed;
+      try {
+        listed = await client.call('listSpaces', {}, { signal });
+      } catch (error) {
+        return failed({ text: safeFailureText(error?.message ?? 'The space lookup failed.') });
+      }
+      const spaces = Array.isArray(listed?.spaces) ? listed.spaces : [];
+      const found = spaces.find((s) => s.id === resolvedSpaceId);
+      space = found ?? { id: resolvedSpaceId, name: resolvedSpaceId };
+      spaceName = clean(space.name) || resolvedSpaceId;
+    } else {
+      let ref, matches;
+      try {
+        ({ ref, matches } = await resolveSpace({ client, spaceRef: slots?.spaceRef, signal }));
+      } catch (error) {
+        return failed({ text: safeFailureText(error?.message ?? 'The space lookup failed.') });
+      }
+      if (matches.length === 0) {
+        return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
+      }
+      if (matches.length > 1) {
+        // Ambiguous space — offer durable candidate list.
+        const candidates = matches.map((s) => ({ id: s.id, name: s.name }));
+        const continuation = buildCandidateContinuation({
+          kind: 'manage_space_assets_space',
+          candidates,
+          nowMs: nowMs ?? Date.now(),
+          slots,
+        });
+        return needsInput({
+          text: `Multiple spaces are called "${ref}". Which one do you mean?\n${candidates.map((c, i) => `${i + 1}. ${c.name}`).join('\n')}`,
+          continuation,
+        });
+      }
+      space = matches[0];
+      spaceName = clean(space.name) || ref;
     }
-    if (matches.length === 0) {
-      return needsInput({ text: `I could not find a space called "${ref}". Which space do you mean?` });
-    }
-    if (matches.length > 1) {
-      return needsInput({ text: `Multiple spaces are called "${ref}". Which one do you mean?` });
-    }
-    const space = matches[0];
-    const spaceName = clean(space.name) || ref;
 
     // 2. Resolve the source into a selection handle.
     let resolution;
@@ -193,5 +223,27 @@ export const manageSpaceAssetsWorkflow = () => ({
       successText: `I prepared a plan to ${verb} ${assetCount} matching ${assetCount === 1 ? 'photo' : 'photos'} ${preposition} the "${spaceName}" space. Review the plan before applying it.`,
       successSummary: { workflowKind: KIND, spaceName, assetCount, action },
     });
+  },
+
+  // Resolve a candidate pick from a continuation follow-up.
+  // Returns { status:'matched', ctx } | { status:'needs_input'|'expired', text }.
+  resumeContinuation({ pending, prompt, nowMs }) {
+    const kind = pending?.kind;
+    if (kind !== 'manage_space_assets_space') {
+      return { status: 'needs_input', text: 'I no longer have pending candidates for this request. Please start over.' };
+    }
+
+    const result = resumeFromCandidates({ pending, prompt, nowMs: nowMs ?? Date.now(), kind });
+    if (result.status !== 'matched') {
+      return result; // needs_input | expired | missing — pass through
+    }
+
+    return {
+      status: 'matched',
+      ctx: {
+        slots: pending.slots,
+        resolvedSpaceId: result.choice.id,
+      },
+    };
   },
 });

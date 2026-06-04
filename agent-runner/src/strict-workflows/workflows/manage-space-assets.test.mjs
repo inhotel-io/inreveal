@@ -310,3 +310,186 @@ describe('manage_space_assets execution', () => {
     assert.deepEqual(result, { status: 'success', plan: { id: 'plan-1' } });
   });
 });
+
+// ─── D4b: durable space disambiguation (continuation) ─────────────────────────
+
+const NOW = 1_000_000;
+
+describe('manage_space_assets durable disambiguation (D4)', () => {
+  // ── non-ambiguous path unchanged (regression) ────────────────────────────────
+  it('non-ambiguous path: plans directly, no continuation', async () => {
+    const client = makeContractClient();
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'planned');
+    assert.equal(outcome.continuation, undefined);
+  });
+
+  // ── "not found" stays bare needs_input (no continuation) ────────────────────
+  it('not-found space stays bare needs_input without a continuation', async () => {
+    const client = makeContractClient({ spaces: [] });
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', spaceRef: 'Nope', sourceDescription: 'my newest 20 photos' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.equal(outcome.continuation, undefined);
+  });
+
+  // ── ambiguous space: produces continuation with kind + candidates ─────────────
+  it('ambiguous space yields needs_input with continuation (kind + candidates, no raw ids leaked)', async () => {
+    const client = makeContractClient({
+      spaces: [
+        { id: 'spc-a', name: 'Family', members: [] },
+        { id: 'spc-b', name: 'Family', members: [] },
+      ],
+    });
+    const outcome = await wf.run({
+      client,
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome.status, 'needs_input');
+    assert.ok(outcome.continuation, 'continuation must be present');
+    assert.equal(outcome.continuation.kind, 'manage_space_assets_space');
+    assert.equal(Array.isArray(outcome.continuation.candidates), true);
+    assert.equal(outcome.continuation.candidates.length, 2);
+    // Candidates must be {index,id,name} only
+    for (const c of outcome.continuation.candidates) {
+      assert.deepEqual(Object.keys(c).sort(), ['id', 'index', 'name']);
+    }
+    // slots are carried for the next stage
+    assert.ok(outcome.continuation.slots, 'slots must be carried');
+    // members array must not leak into candidates
+    for (const c of outcome.continuation.candidates) {
+      assert.equal('members' in c, false, 'candidate must not carry a members array');
+    }
+  });
+
+  // ── resume "the first one" → matched ctx resolvedSpaceId → run plans add ──────
+  it('resume "the first one" resolves space, then plans add', async () => {
+    const ambig = makeContractClient({
+      spaces: [
+        { id: 'spc-a', name: 'Family', members: [] },
+        { id: 'spc-b', name: 'Family', members: [] },
+      ],
+    });
+    // Turn 1: get the continuation
+    const outcome1 = await wf.run({
+      client: ambig,
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'my newest 20 photos' },
+      nowMs: NOW,
+    });
+    assert.equal(outcome1.status, 'needs_input');
+    const pending = outcome1.continuation;
+
+    // Turn 2: resume
+    const resumed = wf.resumeContinuation({ pending, prompt: 'the first one', nowMs: NOW + 1000 });
+    assert.equal(resumed.status, 'matched');
+    assert.equal(resumed.ctx.resolvedSpaceId, 'spc-a');
+    assert.ok(resumed.ctx.slots, 'slots must be in ctx');
+
+    // Turn 2 run: proposes the add
+    const client2 = makeContractClient({
+      spaces: [
+        { id: 'spc-a', name: 'Family', members: [] },
+        { id: 'spc-b', name: 'Family', members: [] },
+      ],
+    });
+    const outcome2 = await wf.run({
+      client: client2,
+      slots: resumed.ctx.slots,
+      resolvedSpaceId: resumed.ctx.resolvedSpaceId,
+      nowMs: NOW + 1000,
+    });
+    assert.equal(outcome2.status, 'planned');
+    const proposeCall = client2.calls.find((c) => c.name === 'proposeAddAssetsToSpaceFromSearch');
+    assert.ok(proposeCall, 'proposeAddAssetsToSpaceFromSearch was called');
+    assert.equal(proposeCall.args.spaceId, 'spc-a');
+  });
+
+  // ── resume "2" → plans remove for spc-b ──────────────────────────────────────
+  it('resume "2" resolves second space, then plans remove', async () => {
+    const pending = {
+      kind: 'manage_space_assets_space',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'spc-a', name: 'Family' },
+        { index: 2, id: 'spc-b', name: 'Family' },
+      ],
+      slots: { action: 'remove', spaceRef: 'Family', sourceDescription: 'my photos from 2024' },
+    };
+    const resumed = wf.resumeContinuation({ pending, prompt: '2', nowMs: NOW + 500 });
+    assert.equal(resumed.status, 'matched');
+    assert.equal(resumed.ctx.resolvedSpaceId, 'spc-b');
+
+    const client2 = makeContractClient({
+      spaces: [
+        { id: 'spc-a', name: 'Family', members: [] },
+        { id: 'spc-b', name: 'Family', members: [] },
+      ],
+    });
+    const outcome = await wf.run({
+      client: client2,
+      slots: resumed.ctx.slots,
+      resolvedSpaceId: resumed.ctx.resolvedSpaceId,
+      nowMs: NOW + 500,
+    });
+    assert.equal(outcome.status, 'planned');
+    const proposeCall = client2.calls.find((c) => c.name === 'proposeAlbumOperations');
+    assert.ok(proposeCall, 'proposeAlbumOperations was called');
+    assert.equal(proposeCall.args.operations[0].targetId, 'spc-b');
+  });
+
+  // ── edge: out-of-range ordinal → needs_input ──────────────────────────────────
+  it('out-of-range ordinal in resume → needs_input', () => {
+    const pending = {
+      kind: 'manage_space_assets_space',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'spc-a', name: 'Family' },
+        { index: 2, id: 'spc-b', name: 'Family' },
+      ],
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'x' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: '5', nowMs: NOW + 1000 });
+    assert.equal(result.status, 'needs_input');
+  });
+
+  // ── edge: name not in list → needs_input ──────────────────────────────────────
+  it('name not in list → needs_input', () => {
+    const pending = {
+      kind: 'manage_space_assets_space',
+      createdAtMs: NOW,
+      candidates: [
+        { index: 1, id: 'spc-a', name: 'Family' },
+        { index: 2, id: 'spc-b', name: 'Family 2' },
+      ],
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'x' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: 'Trips', nowMs: NOW + 1000 });
+    assert.equal(result.status, 'needs_input');
+  });
+
+  // ── edge: expired continuation → expired message ──────────────────────────────
+  it('expired continuation → expired message', () => {
+    const pending = {
+      kind: 'manage_space_assets_space',
+      createdAtMs: NOW,
+      candidates: [{ index: 1, id: 'spc-a', name: 'Family' }],
+      slots: { action: 'add', spaceRef: 'Family', sourceDescription: 'x' },
+    };
+    const result = wf.resumeContinuation({ pending, prompt: '1', nowMs: NOW + 15 * 60 * 1000 });
+    assert.equal(result.status, 'expired');
+    assert.match(result.text, /expired/i);
+  });
+
+  // ── workflow exposes resumeContinuation ───────────────────────────────────────
+  it('workflow exposes resumeContinuation', () => {
+    assert.equal(typeof wf.resumeContinuation, 'function');
+  });
+});
