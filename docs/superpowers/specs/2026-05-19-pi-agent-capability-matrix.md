@@ -114,6 +114,7 @@ retried only when the correction is mechanical.
 | Mark favorites                   | Hybrid              | `favorite_assets`: Open curation for subjective "best"; strict favorite plan once a bounded source exists.                                                                                                                        |
 | Archive assets                   | Hybrid              | `archive_assets`: recency/date/type source -> batch `asset.setArchive` plan; subjective or qualified sources hand off.                                                                                                            |
 | Trash photos                     | Hybrid              | `trash_assets`: Pi resolves the source; Gallery owns the High-risk, reversible `asset.trash` plan (recoverable Trash); album/space deletion and subjective sources hand off.                                                      |
+| Restore from trash               | Hybrid              | `restore_assets`: Pi resolves a bounded trashed-asset source (isTrashed:true injected automatically); Gallery owns the Low-risk, reversible `asset.restore` plan (moves assets back to the library).                              |
 | Duplicate cleanup                | Hybrid              | `cleanup_duplicates`: reads `listDuplicateGroups`, picks one keeper per group (favorite > rating > sharpness > resolution > age > id), and proposes a High-risk, reversible `asset.trash` over the explicit non-keeper asset IDs. |
 | Add or remove tags               | Hybrid              | `tag_assets` adds (`asset.addTag`) and `untag_assets` removes (`asset.removeTag`, resolving the tag name to an id) from a resolved source; subjective sources hand off.                                                           |
 | Batch asset metadata edits       | Hybrid              | `update_asset_metadata`: Pi resolves a loose-asset source; Gallery owns the `asset.updateMetadata` plan (description/rating/date/timezone/lat+lng; place names resolve to coordinates via `resolveLocation`).                     |
@@ -145,6 +146,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `cleanup_duplicates`       | Hybrid | `listDuplicateGroups`                                          | `proposeAlbumOperations`            |
 | `visual_cleanup`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`, `curateSelection` | `proposeAlbumOperations`            |
 | `trash_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
+| `restore_assets`           | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |
 | `favorite_assets`          | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
 | `tag_assets`               | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
 | `untag_assets`             | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAlbumOperations`            |

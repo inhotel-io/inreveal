@@ -14,6 +14,7 @@ import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-sp
 import { setAlbumCoverWorkflow } from './workflows/set-album-cover.mjs';
 import { tagAssetsWorkflow } from './workflows/tag-assets.mjs';
 import { trashAssetsWorkflow } from './workflows/trash-assets.mjs';
+import { restoreAssetsWorkflow } from './workflows/restore-assets.mjs';
 import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
@@ -56,6 +57,11 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //   - `trash_assets` is adjacent to `archive_assets` (both source-state workflows).
 //     Its distinct verbs (trash/delete/bin/move-to-trash) do not collide with
 //     `remove_photos_from_album` ("remove … from") or `untag_assets` ("remove … tag").
+//   - `restore_assets` is placed immediately after `trash_assets` (complementary
+//     inverse operation: restore/recover/untrash). Its verbs (restore/recover/
+//     untrash/bring-back) are fully disjoint from the trash verb set, so ordering
+//     relative to trash does not matter for the regex fast-path, but adjacency
+//     groups the two lifecycle-state workflows together for readability.
 const WORKFLOW_FACTORIES = Object.freeze([
   createRecentTripAlbumWorkflow,
   createAlbumFromSourceWorkflow,
@@ -67,6 +73,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   cleanupDuplicatesWorkflow,
   visualCleanupWorkflow,
   trashAssetsWorkflow,
+  restoreAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,
   untagAssetsWorkflow,
