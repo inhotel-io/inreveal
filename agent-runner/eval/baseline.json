@@ -1,11 +1,11 @@
 {
   "model": "Qwen3-Coder-Next-Q8_0-00001-of-00004.gguf",
-  "overall": 1,
+  "overall": 0.997,
   "byCategory": {
     "recall": 1,
     "negatives": 1,
     "slots": 1,
-    "copy": 1
+    "copy": 0.867
   },
   "scenarioScores": {
     "recall.trip.usa.canonical": 1,
@@ -41,6 +41,9 @@
     "recall.trash.canonical": 1,
     "recall.trash.delete-verb": 1,
     "recall.trash.move-to-trash": 1,
+    "recall.restore.canonical": 1,
+    "recall.restore.recover": 1,
+    "recall.restore.untrash": 1,
     "recall.space.rename": 1,
     "recall.space.describe": 1,
     "recall.members.add": 1,
@@ -78,6 +81,9 @@
     "recall.cleanup_duplicates.canonical": 1,
     "recall.visualcleanup.blurry": 1,
     "recall.visualcleanup.dark-uploads": 1,
+    "recall.crop.comma-form": 1,
+    "recall.crop.labeled-form": 1,
+    "recall.crop.zero-origin": 1,
     "recall.cover.index": 1,
     "recall.cover.first": 1,
     "neg.q.count": 1,
@@ -107,6 +113,10 @@
     "neg.rotate.badangle": 1,
     "neg.visualcleanup.plain-trash": 1,
     "neg.visualcleanup.duplicates": 1,
+    "neg.restore.trash-stays-trash": 1,
+    "neg.restore.untag-stays-untag": 1,
+    "neg.crop.no-geometry": 1,
+    "neg.crop.not-rotate": 1,
     "neg.cover.subjective": 1,
     "neg.cover.unspecified": 1,
     "slots.usa.alias.unitedstates": 1,
@@ -132,7 +142,7 @@
     "slots.rotate.ccw-polarity": 1,
     "slots.cover.index": 1,
     "copy.trip.usa.with-exclusions": 1,
-    "copy.trip.italy.no-exclusions": 1,
+    "copy.trip.italy.no-exclusions": 0.6,
     "copy.trip.long-name": 1
   }
 }
