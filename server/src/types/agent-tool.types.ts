@@ -417,6 +417,18 @@ export type AgentUserLookupResult = {
   profileImagePath: string | null;
 };
 
+export type AgentResolveLocationChoice = {
+  latitude: number;
+  longitude: number;
+  label: string;
+  countryCode: string;
+};
+
+export type AgentResolveLocationResult =
+  | { status: 'not_found' }
+  | { status: 'matched'; latitude: number; longitude: number; label: string }
+  | { status: 'ambiguous'; choices: AgentResolveLocationChoice[] };
+
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolFindTripCandidatesRequestMetadata
