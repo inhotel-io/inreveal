@@ -27,15 +27,16 @@ Shared helper (DRY) reused by all four workflows — `candidate-disambiguation.m
 - `change-member-role.mjs`: multiple spaces (:118), multiple persons (:146). [two-stage]
 - `rename-or-describe-space.mjs`: multiple spaces (:99/:102). [space only]
 - `manage-space-assets.mjs`: multiple spaces (:123/:142). [space only]
-("not found" cases keep bare needs_input — no candidates to offer.)
+  ("not found" cases keep bare needs_input — no candidates to offer.)
 
 ## Slice D1 — Shared disambiguation-continuation helper (TDD)
 
 New `agent-runner/src/strict-workflows/candidate-disambiguation.mjs` (single-quote style). Self-contained
 (own small ordinal + normalize helpers, OR import `ordinalChoice` from strict-workflows.mjs — prefer self-contained
 to avoid coupling). Exports:
+
 - `buildCandidateContinuation({ kind, candidates, nowMs, ...extra })` → `{ kind, createdAtMs: nowMs,
-  candidates: candidates.map((c,i)=>({index:i+1, id:c.id, name:c.name})).slice(0,5), ...extra }`. `extra` carries
+candidates: candidates.map((c,i)=>({index:i+1, id:c.id, name:c.name})).slice(0,5), ...extra }`. `extra` carries
   already-resolved context for multi-stage flows (e.g. `resolvedSpaceId`).
 - `resumeFromCandidates({ pending, prompt, nowMs, ttlMs, kind })` → guards `pending.kind===kind`; TTL → `{status:'expired', text}`;
   ordinal pick; single-candidate yes; exact/substring name match → `{status:'matched', choice:{index,id,name}, pending}`
@@ -69,6 +70,7 @@ Commit `feat(agent): durable space/user disambiguation in manage_space_members (
 ## Slice D3 — `change_member_role` adopts (same two-stage pattern). TDD + same edge cases. Commit (D3); push.
 
 ## Slice D4 — `rename_or_describe_space` + `manage_space_assets` adopt (space-only, one stage each). TDD + edge
+
 cases (out-of-range ordinal, name-not-in-list, expired). Commit (D4); push.
 
 ## Slice D5 — Hardening: L1 + L3 + matrix
@@ -81,4 +83,4 @@ cases (out-of-range ordinal, name-not-in-list, expired). Commit (D4); push.
   data-dependent picks on SEEDED; routing + re-entry are data-independent.
 - Matrix: note durable disambiguation in the Flow Ownership invariants / the space-capability rows; keep
   `agent-capability-matrix.spec.ts` green (do not run prettier on the .md).
-Commit `test(agent): disambiguation L1/L3 + matrix note (D5)`; push.
+  Commit `test(agent): disambiguation L1/L3 + matrix note (D5)`; push.
