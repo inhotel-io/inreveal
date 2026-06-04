@@ -215,6 +215,8 @@ part 'model/agent_propose_album_operations_dto_operations_inner_one_of18_payload
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of19.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of2.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of20.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of21.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of21_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of4.dart';
@@ -291,6 +293,7 @@ part 'model/agent_session_create_dto.dart';
 part 'model/agent_session_response_dto.dart';
 part 'model/agent_session_status.dart';
 part 'model/agent_session_update_dto.dart';
+part 'model/agent_share_link_create_operation_type.dart';
 part 'model/agent_space_add_members_operation_type.dart';
 part 'model/agent_space_create_operation_type.dart';
 part 'model/agent_space_detail.dart';

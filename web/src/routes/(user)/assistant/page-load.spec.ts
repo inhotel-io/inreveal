@@ -87,6 +87,7 @@ const sessions: AgentSessionResponseDto[] = [
         updateSpaceDetails: true,
         updateSpaceMemberRoles: true,
         trashAssets: true,
+        createSharedLinks: false,
       },
     },
     initialContextSnapshot: {},

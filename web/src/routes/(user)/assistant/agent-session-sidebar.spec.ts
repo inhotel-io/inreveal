@@ -86,6 +86,7 @@ const makeSession = (
       updateSpaceDetails: true,
       updateSpaceMemberRoles: true,
       trashAssets: true,
+      createSharedLinks: false,
     },
   },
   permissionPreset: AgentPermissionPreset.Careful,
