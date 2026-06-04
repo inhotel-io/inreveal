@@ -28077,6 +28077,9 @@
           "isNotInAlbum": {
             "type": "boolean"
           },
+          "isTrashed": {
+            "type": "boolean"
+          },
           "lensModel": {
             "nullable": true,
             "type": "string"

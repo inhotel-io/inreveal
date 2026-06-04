@@ -62,6 +62,7 @@ const buildBaseSearch = ({ userId, request, scope }: AgentMetadataSearchBuildInp
   const mappedFilters = omitUndefined({
     type: filters.type,
     isFavorite: filters.isFavorite,
+    withDeleted: filters.isTrashed === true ? true : undefined,
     isNotInAlbum: filters.isNotInAlbum,
     takenAfter: filters.takenAfter,
     takenBefore: filters.takenBefore,

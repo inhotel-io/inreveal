@@ -1744,6 +1744,7 @@ export type AgentSearchAssetsFilters = {
     createdBefore?: string;
     isFavorite?: boolean;
     isNotInAlbum?: boolean;
+    isTrashed?: boolean;
     lensModel?: string | null;
     make?: string | null;
     maxBrightness?: number;
