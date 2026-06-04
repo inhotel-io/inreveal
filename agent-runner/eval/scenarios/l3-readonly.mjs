@@ -115,6 +115,14 @@ export default [
     expect: { kind: 'trash_assets' },
   },
   {
+    // restore_assets routing: un-trash reaches the new workflow live (must NOT
+    // be stolen by trash_assets — the "from trash"/"restore" verb owns it).
+    id: 'l3.recall.restore',
+    category: 'l3.recall',
+    prompt: 'restore my newest 20 from trash',
+    expect: { kind: 'restore_assets' },
+  },
+  {
     // cleanup_duplicates routing: the duplicate keyword owns it (not trash_assets).
     id: 'l3.recall.duplicates',
     category: 'l3.recall',
@@ -320,6 +328,17 @@ export default [
     category: 'l3.plan',
     prompt: 'trash my newest 20 photos',
     expect: { kind: 'trash_assets', planProposed: true },
+    threshold: 0.5,
+  },
+  {
+    // restore_assets end-to-end (PROPOSE-ONLY, never applied): a trashed-asset
+    // source (isTrashed:true injected) resolves to a selection handle and proposes
+    // a reversible asset.restore plan. Data-dependent (needs assets in the trash);
+    // routing-only when unseeded. The read-only audit must confirm NO plan applied.
+    id: 'l3.plan.restore',
+    category: 'l3.plan',
+    prompt: 'restore my newest 20 from trash',
+    expect: { kind: 'restore_assets', planProposed: SEEDED ? true : undefined },
     threshold: 0.5,
   },
   {
