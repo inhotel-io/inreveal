@@ -107,3 +107,9 @@ export const FaceRepairApplyResponseSchema = z
   .object({ unassigned: z.number(), requeued: z.number() })
   .meta({ id: 'FaceRepairApplyResponseDto' });
 export class FaceRepairApplyResponseDto extends createZodDto(FaceRepairApplyResponseSchema) {}
+
+const FlaggedFaceSchema = z.object({ assetFaceId: z.string(), suspectedOwnerId: z.string() });
+export const FaceRepairPersonFacesSchema = z
+  .object({ personId: z.string(), flaggedFaces: z.array(FlaggedFaceSchema) })
+  .meta({ id: 'FaceRepairPersonFacesDto' });
+export class FaceRepairPersonFacesDto extends createZodDto(FaceRepairPersonFacesSchema) {}

@@ -388,6 +388,10 @@ class ApiClient {
           return FaceRepairApplyRequestDto.fromJson(value);
         case 'FaceRepairApplyResponseDto':
           return FaceRepairApplyResponseDto.fromJson(value);
+        case 'FaceRepairPersonFacesDto':
+          return FaceRepairPersonFacesDto.fromJson(value);
+        case 'FaceRepairPersonFacesDtoFlaggedFacesInner':
+          return FaceRepairPersonFacesDtoFlaggedFacesInner.fromJson(value);
         case 'FaceRepairRequestDto':
           return FaceRepairRequestDto.fromJson(value);
         case 'FaceRepairResponseDto':

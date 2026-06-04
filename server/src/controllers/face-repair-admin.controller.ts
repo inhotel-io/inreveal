@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   FaceRepairApplyRequestDto,
   FaceRepairApplyResponseDto,
+  FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
   FaceRepairResponseDto,
   FaceRepairScanStatusDto,
@@ -41,6 +42,15 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Get the latest face-repair scan', history: new HistoryBuilder().added('v1') })
   getLatestScan(): Promise<FaceRepairScanStatusDto | null> {
     return this.service.getLatestScanStatus() as Promise<FaceRepairScanStatusDto | null>;
+  }
+
+  @Get('scan/person/:personId')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: "Get a person's flagged faces for review", history: new HistoryBuilder().added('v1') })
+  getFaceRepairPersonFaces(
+    @Param('personId', new ParseUUIDPipe({ version: '4' })) personId: string,
+  ): Promise<FaceRepairPersonFacesDto> {
+    return this.service.getPersonFlaggedFaces(personId) as Promise<FaceRepairPersonFacesDto>;
   }
 
   @Post('apply')

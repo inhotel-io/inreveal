@@ -155,6 +155,7 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**applyFaceRepair**](doc//FacesApi.md#applyfacerepair) | **POST** /admin/face-repair/apply | Apply face re-attribution for approved persons
 *FacesApi* | [**createFace**](doc//FacesApi.md#createface) | **POST** /faces | Create a face
 *FacesApi* | [**deleteFace**](doc//FacesApi.md#deleteface) | **DELETE** /faces/{id} | Delete a face
+*FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
 *FacesApi* | [**getFaces**](doc//FacesApi.md#getfaces) | **GET** /faces | Retrieve faces for asset
 *FacesApi* | [**getLatestScan**](doc//FacesApi.md#getlatestscan) | **GET** /admin/face-repair/scan/latest | Get the latest face-repair scan
 *FacesApi* | [**reassignFacesById**](doc//FacesApi.md#reassignfacesbyid) | **PUT** /faces/{id} | Re-assign a face to another person
@@ -489,6 +490,8 @@ Class | Method | HTTP request | Description
  - [FaceDto](doc//FaceDto.md)
  - [FaceRepairApplyRequestDto](doc//FaceRepairApplyRequestDto.md)
  - [FaceRepairApplyResponseDto](doc//FaceRepairApplyResponseDto.md)
+ - [FaceRepairPersonFacesDto](doc//FaceRepairPersonFacesDto.md)
+ - [FaceRepairPersonFacesDtoFlaggedFacesInner](doc//FaceRepairPersonFacesDtoFlaggedFacesInner.md)
  - [FaceRepairRequestDto](doc//FaceRepairRequestDto.md)
  - [FaceRepairResponseDto](doc//FaceRepairResponseDto.md)
  - [FaceRepairResponseDtoExecuted](doc//FaceRepairResponseDtoExecuted.md)

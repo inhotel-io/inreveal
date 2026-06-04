@@ -765,6 +765,55 @@
         ]
       }
     },
+    "/admin/face-repair/scan/person/{personId}": {
+      "get": {
+        "operationId": "getFaceRepairPersonFaces",
+        "parameters": [
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairPersonFacesDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get a person's flagged faces for review",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/maintenance": {
       "post": {
         "description": "Put Immich into or take it out of maintenance mode",
@@ -23237,6 +23286,36 @@
         "required": [
           "requeued",
           "unassigned"
+        ],
+        "type": "object"
+      },
+      "FaceRepairPersonFacesDto": {
+        "properties": {
+          "flaggedFaces": {
+            "items": {
+              "properties": {
+                "assetFaceId": {
+                  "type": "string"
+                },
+                "suspectedOwnerId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "assetFaceId",
+                "suspectedOwnerId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "personId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "flaggedFaces",
+          "personId"
         ],
         "type": "object"
       },

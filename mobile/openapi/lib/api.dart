@@ -176,6 +176,8 @@ part 'model/exif_response_dto.dart';
 part 'model/face_dto.dart';
 part 'model/face_repair_apply_request_dto.dart';
 part 'model/face_repair_apply_response_dto.dart';
+part 'model/face_repair_person_faces_dto.dart';
+part 'model/face_repair_person_faces_dto_flagged_faces_inner.dart';
 part 'model/face_repair_request_dto.dart';
 part 'model/face_repair_response_dto.dart';
 part 'model/face_repair_response_dto_executed.dart';

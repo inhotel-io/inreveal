@@ -370,6 +370,27 @@ export class FaceRepairService extends BaseService {
     return (await this.faceRepairScanRepository.getLatestScan()) ?? null;
   }
 
+  async getPersonFlaggedFaces(
+    personId: string,
+  ): Promise<{ personId: string; flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }> {
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    const plan = await this.buildRepairPlan({
+      maxDistance: recognition.maxDistance,
+      minFaces: recognition.minFaces,
+      voteWindow: DEFAULT_VOTE_WINDOW,
+      voteMargin: DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+      personIds: [personId],
+    });
+    const flaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => ({
+      assetFaceId: f.assetFaceId,
+      suspectedOwnerId: f.suspectedOwnerId,
+    }));
+    return { personId, flaggedFaces };
+  }
+
   async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<{ unassigned: number; requeued: number }> {
     if (input.approvedPersonIds.length === 0) {
       return { unassigned: 0, requeued: 0 };

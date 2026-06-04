@@ -130,6 +130,13 @@ export type FaceRepairApplyResponseDto = {
 export type FaceRepairScanTriggerResponseDto = {
     scanId: string;
 };
+export type FaceRepairPersonFacesDto = {
+    flaggedFaces: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    personId: string;
+};
 export type SetMaintenanceModeDto = {
     action: MaintenanceAction;
     /** Restore backup filename */
@@ -4228,6 +4235,19 @@ export function getLatestScan(opts?: Oazapfts.RequestOpts) {
         status: 200;
         data: object;
     }>("/admin/face-repair/scan/latest", {
+        ...opts
+    }));
+}
+/**
+ * Get a person's flagged faces for review
+ */
+export function getFaceRepairPersonFaces({ personId }: {
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairPersonFacesDto;
+    }>(`/admin/face-repair/scan/person/${encodeURIComponent(personId)}`, {
         ...opts
     }));
 }
