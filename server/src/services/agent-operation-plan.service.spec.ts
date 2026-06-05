@@ -9783,6 +9783,216 @@ describe(AgentOperationPlanService.name, () => {
     );
   });
 
+  // ── shareLink.createAlbum ─────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for shareLink.createAlbum when createSharedLinks is false', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, createSharedLinks: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Create a share link for the album.',
+        operations: [
+          {
+            type: AgentOperationType.ShareLinkCreateAlbum,
+            summary: 'Create an album share link.',
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            riskLevel: AgentOperationRiskLevel.High,
+            enabled: true,
+            payload: {},
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow creating shared links');
+  });
+
+  it('validateWriteScope passes for shareLink.createAlbum when createSharedLinks is true', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, createSharedLinks: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.ShareLinkCreateAlbum,
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            assetIds: [],
+            payload: {},
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Create a share link for the album.',
+      operations: [
+        {
+          type: AgentOperationType.ShareLinkCreateAlbum,
+          summary: 'Create an album share link.',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          riskLevel: AgentOperationRiskLevel.High,
+          enabled: true,
+          payload: {},
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+  });
+
+  it('applying shareLink.createAlbum calls sharedLinkService.create with type Album and albumId', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.ShareLinkCreateAlbum,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      assetIds: [],
+      payload: { password: 'secret', showMetadata: false, allowDownload: false },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    sharedLinkService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(sharedLinkService.create).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        type: SharedLinkType.Album,
+        albumId,
+        password: 'secret',
+        showMetadata: false,
+        allowDownload: false,
+      }),
+    );
+  });
+
+  it('applying shareLink.createAlbum with minimal payload omits optional fields', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.ShareLinkCreateAlbum,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      assetIds: [],
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    sharedLinkService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(sharedLinkService.create).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        type: SharedLinkType.Album,
+        albumId,
+      }),
+    );
+  });
+
+  it('applying shareLink.create (individual) path is unchanged (regression)', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.ShareLinkCreate,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    sharedLinkService.create.mockResolvedValue({ id: newUuid() } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(sharedLinkService.create).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        type: SharedLinkType.Individual,
+        assetIds,
+      }),
+    );
+  });
+
   // ── asset.stack ───────────────────────────────────────────────────────────────
 
   it('validateWriteScope throws for asset.stack when manageStacks is false', async () => {

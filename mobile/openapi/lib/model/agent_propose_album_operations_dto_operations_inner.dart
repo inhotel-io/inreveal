@@ -26,11 +26,11 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetSelectionHandleId,
   });
 
-  AgentShareLinkCreateOperationType type;
+  AgentShareLinkCreateAlbumOperationType type;
 
   String summary;
 
-  AgentOperationTargetKind targetKind;
+  AgentOperationExistingAlbumTargetKind targetKind;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -155,9 +155,9 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentShareLinkCreateOperationType.fromJson(json[r'type'])!,
+        type: AgentShareLinkCreateAlbumOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
-        targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
+        targetKind: AgentOperationExistingAlbumTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,

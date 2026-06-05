@@ -682,6 +682,19 @@ const shareLinkCreateOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.ShareLinkCreate);
   });
 
+const shareLinkCreateAlbumOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.ShareLinkCreateAlbum).meta({ id: 'AgentShareLinkCreateAlbumOperationType' }),
+    summary,
+    targetKind: ExistingAlbumTargetKindSchema,
+    targetId: uuid.optional(),
+    // Always High risk — outward-facing, privacy-sensitive
+    riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.High),
+    enabled: operationDefaults.enabled,
+    payload: shareLinkCreatePayloadSchema,
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -720,6 +733,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   stackOperationSchema,
   unstackOperationSchema,
   shareLinkCreateOperationSchema,
+  shareLinkCreateAlbumOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>
