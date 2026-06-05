@@ -341,13 +341,13 @@
         <!-- Filter toolbar -->
         <div class="mb-4 flex flex-wrap items-center gap-3">
           <div
-            class="flex gap-0.5 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
+            class="flex items-center gap-0.5 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
           >
             {#each ['all', 'review-first', 'confident', 'named'] as const as f (f)}
               <button
                 type="button"
                 class={[
-                  'rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+                  'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold leading-none transition-colors',
                   filter === f
                     ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
                     : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
@@ -355,7 +355,7 @@
                 onclick={() => (filter = f)}
               >
                 {$t(FILTER_LABEL_KEYS[f])}
-                <span class="ml-1 text-gray-400">
+                <span class="text-gray-400">
                   {#if f === 'all'}{filterCounts.all}{/if}
                   {#if f === 'review-first'}{filterCounts.reviewFirst}{/if}
                   {#if f === 'confident'}{filterCounts.confident}{/if}
