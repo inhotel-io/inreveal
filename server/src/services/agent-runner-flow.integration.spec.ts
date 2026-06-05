@@ -867,6 +867,7 @@ const setup = () => {
     assetService as never,
     {} as never,
     {} as never,
+    {} as never,
     activityService as never,
   );
   const mcpService = new AgentMcpService(

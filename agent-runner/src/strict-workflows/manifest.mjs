@@ -652,6 +652,72 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'stack_assets',
+    flow: 'hybrid',
+    title: 'Stack photos',
+    classifierDescription:
+      'User wants to stack (group into a stack) a metadata-describable set of photos. The server automatically selects the stack cover using: favorite > highest rating > newest > id. Requires at least two photos — fewer asks the user to broaden the selection.',
+    positiveExamples: Object.freeze([
+      'stack my newest 10 photos',
+      'group my photos from 2024 into a stack',
+      'stack my Berlin photos',
+    ]),
+    negativeExamples: Object.freeze([
+      'stack the best ones',
+      'group my photos by date',
+      'unstack my newest 10 photos',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to stack.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Stack photos',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves a bounded source (≥2 required); Gallery owns the batch stack plan from the handle. Cover rule: favorite > highest rating > newest > id.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'unstack_assets',
+    flow: 'hybrid',
+    title: 'Unstack photos',
+    classifierDescription:
+      'User wants to unstack (dissolve a stack of) a metadata-describable set of photos. Assets in no stack are silently skipped; no minimum count required.',
+    positiveExamples: Object.freeze([
+      'unstack my newest 10 photos',
+      'un-stack my Berlin photos',
+      'ungroup my photos from 2024',
+    ]),
+    negativeExamples: Object.freeze([
+      'unstack the best ones',
+      'stack my newest 10 photos',
+      'archive my newest 10 photos',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to unstack.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Unstack photos',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves a bounded source; Gallery owns the batch unstack plan from the handle. Assets not in a stack are silently skipped.',
+    }),
+  }),
+  Object.freeze({
     kind: 'rename_or_describe_space',
     flow: 'strict',
     title: 'Rename or describe space',

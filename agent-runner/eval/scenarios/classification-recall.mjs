@@ -612,4 +612,32 @@ export default [
     prompt: 'make the Family album cover the first photo',
     expect: { kind: 'set_album_cover', slotsSurvive: true, slots: { albumRef: 'Family' } },
   },
+
+  // stack_assets ---------------------------------------------------------------
+  {
+    id: 'recall.stack.basic',
+    category: 'recall',
+    prompt: 'stack my 5 newest photos',
+    expect: { kind: 'stack_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.stack.group-form',
+    category: 'recall',
+    prompt: 'group my photos from 2024 into a stack',
+    expect: { kind: 'stack_assets', slotsSurvive: true },
+  },
+
+  // unstack_assets -------------------------------------------------------------
+  {
+    id: 'recall.unstack.basic',
+    category: 'recall',
+    prompt: 'unstack these photos',
+    expect: { kind: 'unstack_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.unstack.ungroup',
+    category: 'recall',
+    prompt: 'ungroup my newest 10 photos',
+    expect: { kind: 'unstack_assets', slotsSurvive: true },
+  },
 ];

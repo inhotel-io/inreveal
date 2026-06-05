@@ -49,6 +49,7 @@ import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
+import { StackService } from 'src/services/stack.service';
 import { TagService } from 'src/services/tag.service';
 import { TrashService } from 'src/services/trash.service';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
@@ -97,6 +98,7 @@ const expandedWriteScope = {
   updateAssetMetadata: true,
   trashAssets: true,
   createSharedLinks: true,
+  manageStacks: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -271,6 +273,7 @@ describe(AgentOperationPlanService.name, () => {
   let albumService: ReturnType<typeof automock<AlbumService>>;
   let sharedSpaceService: ReturnType<typeof automock<SharedSpaceService>>;
   let assetService: ReturnType<typeof automock<AssetService>>;
+  let stackService: ReturnType<typeof mockBaseService<StackService>>;
   let tagService: ReturnType<typeof automock<TagService>>;
   let trashService: ReturnType<typeof automock<TrashService>>;
   let sharedLinkService: ReturnType<typeof mockBaseService<SharedLinkService>>;
@@ -291,6 +294,7 @@ describe(AgentOperationPlanService.name, () => {
     albumService = mockBaseService(AlbumService);
     sharedSpaceService = mockBaseService(SharedSpaceService);
     assetService = mockBaseService(AssetService);
+    stackService = mockBaseService(StackService);
     tagService = mockBaseService(TagService);
     trashService = mockBaseService(TrashService);
     sharedLinkService = mockBaseService(SharedLinkService);
@@ -331,6 +335,7 @@ describe(AgentOperationPlanService.name, () => {
       websocketRepository,
       sharedSpaceService,
       assetService,
+      stackService,
       tagService,
       trashService,
       sharedLinkService,
@@ -9776,5 +9781,395 @@ describe(AgentOperationPlanService.name, () => {
         ]),
       }),
     );
+  });
+
+  // ── asset.stack ───────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for asset.stack when manageStacks is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, manageStacks: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Stack matching photos.',
+        operations: [
+          {
+            type: AgentOperationType.AssetStack,
+            summary: 'Stack matching photos.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [newUuid()],
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow stacking assets');
+  });
+
+  it('validateWriteScope throws for asset.unstack when manageStacks is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, manageStacks: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Unstack matching photos.',
+        operations: [
+          {
+            type: AgentOperationType.AssetUnstack,
+            summary: 'Unstack matching photos.',
+            targetKind: AgentOperationTargetKind.AssetBatch,
+            assetIds: [newUuid()],
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow stacking assets');
+  });
+
+  it('VisualOrganizer preset grants manageStacks', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.manageStacks).toBe(
+      true,
+    );
+  });
+
+  it('LocalPowerUser preset grants manageStacks', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.manageStacks).toBe(
+      true,
+    );
+  });
+
+  it('Careful preset does NOT grant manageStacks', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.manageStacks).toBe(false);
+  });
+
+  it('proposeAssetBatchFromSelection maps asset.stack → summary / AssetBatch / payload {} / Low', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-06-05T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AssetStack,
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Low,
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    const result = await sut.proposeAssetBatchFromSelection(auth, session.id, {
+      summary: 'Stack matching photos.',
+      action: { type: AgentOperationType.AssetStack },
+      selectionHandleId,
+    });
+
+    expect(result.plan?.operations[0]).toMatchObject({
+      type: AgentOperationType.AssetStack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      riskLevel: AgentOperationRiskLevel.Low,
+    });
+  });
+
+  it('proposeAssetBatchFromSelection maps asset.unstack → summary / AssetBatch / payload {} / Low', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    const selectionHandleId = newUuid();
+    const assetIds = [newUuid(), newUuid()];
+
+    sessionRepository.getById.mockResolvedValue(session);
+    selectionHandleRepository.getValidForPlanning.mockResolvedValue({
+      id: selectionHandleId,
+      sessionId: session.id,
+      userId: auth.user.id,
+      sourceToolCallId: newUuid(),
+      assetIds,
+      assetCount: assetIds.length,
+      sampleAssetIds: assetIds,
+      expiresAt: new Date('2026-06-05T12:30:00.000Z'),
+      createdAt: now,
+      updateId: newUuid(),
+    });
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    const createdPlan = makePlan({
+      sessionId: session.id,
+      operations: [
+        makeOperation({
+          type: AgentOperationType.AssetUnstack,
+          targetKind: AgentOperationTargetKind.AssetBatch,
+          assetIds,
+          payload: {},
+          riskLevel: AgentOperationRiskLevel.Low,
+        }),
+      ],
+    });
+    planRepository.createReplacementRevision.mockResolvedValue(createdPlan);
+
+    const result = await sut.proposeAssetBatchFromSelection(auth, session.id, {
+      summary: 'Unstack matching photos.',
+      action: { type: AgentOperationType.AssetUnstack },
+      selectionHandleId,
+    });
+
+    expect(result.plan?.operations[0]).toMatchObject({
+      type: AgentOperationType.AssetUnstack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      riskLevel: AgentOperationRiskLevel.Low,
+    });
+  });
+
+  it('applying asset.stack selects primary by favorite > rating > newest, calls stackService.create', async () => {
+    const auth = AuthFactory.create();
+    const newestId = newUuid();
+    const favId = newUuid();
+    const highRatingId = newUuid();
+    const assetIds = [newestId, favId, highRatingId];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetStack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    // Favorite wins over rating and newest
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      { id: newestId, isFavorite: false, fileCreatedAt: new Date('2026-06-05'), exifInfo: { rating: null } },
+      { id: favId, isFavorite: true, fileCreatedAt: new Date('2026-01-01'), exifInfo: { rating: null } },
+      { id: highRatingId, isFavorite: false, fileCreatedAt: new Date('2026-01-01'), exifInfo: { rating: 5 } },
+    ] as never);
+    stackService.create.mockResolvedValue({ id: 'stack-1' } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(stackService.create).toHaveBeenCalledWith(auth, { assetIds: [favId, highRatingId, newestId] });
+  });
+
+  it('applying asset.stack: rating tie-break selects higher rating before newer', async () => {
+    const auth = AuthFactory.create();
+    const lowRatingId = newUuid();
+    const highRatingId = newUuid();
+    const assetIds = [lowRatingId, highRatingId];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetStack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      { id: lowRatingId, isFavorite: false, fileCreatedAt: new Date('2026-06-05'), exifInfo: { rating: 2 } },
+      { id: highRatingId, isFavorite: false, fileCreatedAt: new Date('2026-01-01'), exifInfo: { rating: 5 } },
+    ] as never);
+    stackService.create.mockResolvedValue({ id: 'stack-1' } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    // highRatingId (5) wins over lowRatingId (2) despite lowRatingId being newer
+    expect(stackService.create).toHaveBeenCalledWith(auth, { assetIds: [highRatingId, lowRatingId] });
+  });
+
+  it('applying asset.stack: newest tie-break selects newer fileCreatedAt when no favorite/rating', async () => {
+    const auth = AuthFactory.create();
+    const olderId = newUuid();
+    const newerId = newUuid();
+    const assetIds = [olderId, newerId];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetStack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentMetadataByIds.mockResolvedValue([
+      { id: olderId, isFavorite: false, fileCreatedAt: new Date('2025-01-01'), exifInfo: { rating: null } },
+      { id: newerId, isFavorite: false, fileCreatedAt: new Date('2026-06-05'), exifInfo: { rating: null } },
+    ] as never);
+    stackService.create.mockResolvedValue({ id: 'stack-1' } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    // newerId wins as primary
+    expect(stackService.create).toHaveBeenCalledWith(auth, { assetIds: [newerId, olderId] });
+  });
+
+  it('applying asset.unstack calls stackService.deleteAll with distinct stackIds', async () => {
+    const auth = AuthFactory.create();
+    const assetId1 = newUuid();
+    const assetId2 = newUuid();
+    const assetId3 = newUuid();
+    const assetIds = [assetId1, assetId2, assetId3];
+    const stackId = 'stack-42';
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetUnstack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    // Two assets share the same stack, one has no stack
+    assetRepository.getByIds.mockResolvedValue([
+      { id: assetId1, stackId },
+      { id: assetId2, stackId },
+      { id: assetId3, stackId: null },
+    ] as never);
+    stackService.deleteAll.mockResolvedValue(undefined as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    // Distinct stackIds only (assetId3 has no stack → skipped)
+    expect(stackService.deleteAll).toHaveBeenCalledWith(auth, { ids: [stackId] });
+  });
+
+  it('applying asset.unstack with no stacked assets is a no-op (returns applied)', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.AssetUnstack,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      assetIds,
+      payload: undefined,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetRepository.getByIds.mockResolvedValue([{ id: assetIds[0], stackId: null }] as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(stackService.deleteAll).not.toHaveBeenCalled();
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
   });
 });
