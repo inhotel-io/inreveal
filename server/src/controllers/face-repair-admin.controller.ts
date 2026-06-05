@@ -79,7 +79,7 @@ export class FaceRepairAdminController {
   @Authenticated({ admin: true })
   @Endpoint({ summary: 'List face-repair declines', history: new HistoryBuilder().added('v1') })
   getFaceRepairDeclines(): Promise<FaceRepairDeclineListDto> {
-    return this.service.listDeclines() as Promise<FaceRepairDeclineListDto>;
+    return this.service.listDeclines() as unknown as Promise<FaceRepairDeclineListDto>;
   }
 
   @Delete('decline')

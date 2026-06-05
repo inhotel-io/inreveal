@@ -91,9 +91,9 @@ export const FaceRepairScanStatusSchema = z
       .nullable(),
     persons: z.array(ScanPersonSchema),
     error: z.string().nullable(),
-    startedAt: z.date().nullable(),
-    finishedAt: z.date().nullable(),
-    createdAt: z.date(),
+    startedAt: z.string().meta({ format: 'date-time' }).nullable(),
+    finishedAt: z.string().meta({ format: 'date-time' }).nullable(),
+    createdAt: z.string().meta({ format: 'date-time' }),
   })
   .meta({ id: 'FaceRepairScanStatusDto' });
 export class FaceRepairScanStatusDto extends createZodDto(FaceRepairScanStatusSchema) {}
@@ -140,7 +140,7 @@ const DeclineItemSchema = z.object({
   personId: z.string().nullable(),
   personName: z.string().nullable(),
   personThumbnailFaceId: z.string().nullable(),
-  createdAt: z.date(),
+  createdAt: z.string().meta({ format: 'date-time' }),
 });
 export const FaceRepairDeclineListSchema = z
   .object({ declines: z.array(DeclineItemSchema) })
