@@ -111,6 +111,15 @@ const makeValidShareLinkCreateOp = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
+const makeValidShareLinkCreateAlbumOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.ShareLinkCreateAlbum,
+  summary: 'Create a public share link for the album.',
+  targetKind: AgentOperationTargetKind.ExistingAlbum,
+  targetId: factory.uuid(),
+  payload: {},
+  ...overrides,
+});
+
 const makeValidStackOp = (overrides: Record<string, unknown> = {}) => ({
   type: AgentOperationType.AssetStack,
   summary: 'Stack matching photos.',
@@ -2786,6 +2795,67 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidShareLinkCreateOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('shareLink.createAlbum operation schema', () => {
+    it('accepts a valid shareLink.createAlbum operation with default High riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.ShareLinkCreateAlbum);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.High);
+      }
+    });
+
+    it('accepts optional payload fields: password, expiresAt, showMetadata, allowDownload', () => {
+      const futureDate = new Date(Date.now() + 86_400_000).toISOString();
+      const result = parseSingleOperationProposal(
+        makeValidShareLinkCreateAlbumOp({
+          payload: { password: 'secret', expiresAt: futureDate, showMetadata: false, allowDownload: false },
+        }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts minimal payload (all options omitted)', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp({ payload: {} }));
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects shareLink.createAlbum with expiresAt in the past', () => {
+      const pastDate = new Date(Date.now() - 86_400_000).toISOString();
+      expectIssue(
+        parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp({ payload: { expiresAt: pastDate } })),
+        ['operations', 0, 'payload', 'expiresAt'],
+        'expiresAt must be in the future',
+      );
+    });
+
+    it('rejects shareLink.createAlbum with wrong targetKind (asset_batch)', () => {
+      const result = parseSingleOperationProposal(
+        makeValidShareLinkCreateAlbumOp({ targetKind: AgentOperationTargetKind.AssetBatch, targetId: undefined }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects shareLink.createAlbum with assetIds (no asset source allowed)', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp({ assetIds: [factory.uuid()] }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects shareLink.createAlbum missing targetId for existing_album', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp({ targetId: undefined })),
+        ['operations', 0, 'targetId'],
+        'targetId is required for existing album targets',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidShareLinkCreateAlbumOp());
       expect(result.success).toBe(true);
     });
   });
