@@ -411,7 +411,13 @@ export class FaceRepairService extends BaseService {
   }
 
   async getLatestScanStatus() {
-    return (await this.faceRepairScanRepository.getLatestScan()) ?? null;
+    const scan = await this.faceRepairScanRepository.getLatestScan();
+    if (!scan) {
+      return null;
+    }
+    // Refresh display names/thumbnails from the live person table — people get named after a scan and the
+    // persisted report is only a snapshot. Keeps the console legible without an expensive full re-scan.
+    return this.faceRepairScanRepository.withCurrentNames(scan);
   }
 
   async getPersonFlaggedFaces(

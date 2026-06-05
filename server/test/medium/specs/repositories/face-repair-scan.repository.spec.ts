@@ -135,6 +135,64 @@ describe(FaceRepairScanRepository.name, () => {
     await expect(sut.removePersonsFromLatestScan([])).resolves.toBeUndefined();
   });
 
+  describe('withCurrentNames', () => {
+    it('overlays the live person + owner names; a cluster named since the scan is promoted to review-first', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = mediumFactory.personInsert({ ownerId: user.id, name: '' });
+      const owner = mediumFactory.personInsert({ ownerId: user.id, name: '' });
+      await db
+        .insertInto('person')
+        .values([
+          { ...cluster, name: '' },
+          { ...owner, name: '' },
+        ])
+        .execute();
+
+      const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+      await sut.completeScan(scan.id, {
+        totals: zeroTotals(),
+        persons: [
+          {
+            personId: cluster.id,
+            ownerId: user.id,
+            personName: null, // unnamed at scan time
+            faceCount: 35,
+            thumbnailFaceId: null,
+            eligible: 35,
+            flagged: 20,
+            flaggedFraction: 20 / 35,
+            suspectedOwners: [{ ownerPersonId: owner.id, ownerName: null, thumbnailFaceId: null, count: 20 }],
+            recommendation: 'confident',
+            reviewReasons: [],
+          },
+        ],
+      });
+
+      // Both get named AFTER the scan ran.
+      await db.updateTable('person').set({ name: 'Karina' }).where('id', '=', cluster.id).execute();
+      await db.updateTable('person').set({ name: 'Christoph' }).where('id', '=', owner.id).execute();
+
+      const refreshed = await sut.withCurrentNames((await sut.getLatestScan())!);
+      const persons = refreshed.persons as unknown as RepairScanPerson[];
+
+      expect(persons[0].personName).toBe('Karina');
+      expect(persons[0].suspectedOwners[0].ownerName).toBe('Christoph');
+      // A cluster named after the scan must not stay in the auto-selected "confident" group.
+      expect(persons[0].recommendation).toBe('review-first');
+      expect(persons[0].reviewReasons).toContain('named');
+      // Flagging numbers are untouched (it is not a re-scan).
+      expect(persons[0].flagged).toBe(20);
+    });
+
+    it('leaves an empty report untouched', async () => {
+      const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+      await sut.completeScan(scan.id, { totals: zeroTotals(), persons: [] });
+      const refreshed = await sut.withCurrentNames((await sut.getLatestScan())!);
+      expect(refreshed.persons).toEqual([]);
+    });
+  });
+
   describe('enrichReportPersons', () => {
     let ownerId: string;
     let p: { id: string; faceAssetId: string | null; name: string };

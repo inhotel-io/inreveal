@@ -161,6 +161,47 @@ export class FaceRepairScanRepository {
     await this.db.deleteFrom('face_repair_scan').where('id', '!=', latest.id).execute();
   }
 
+  // The names/thumbnails in the persisted report are a point-in-time snapshot, but people get named (and their
+  // representative face changes) after a scan runs. Overlay the *current* person + suspected-owner names and
+  // thumbnails at read time so the console reflects reality without forcing a full, expensive re-scan. Flagging
+  // numbers stay as scanned. A cluster that has since been named is also promoted to `review-first` (reason
+  // `named`) so it is never silently bulk-applied.
+  async withCurrentNames(scan: RepairScanRow): Promise<RepairScanRow> {
+    const persons = (scan.persons ?? []) as unknown as RepairScanPerson[];
+    if (persons.length === 0) {
+      return scan;
+    }
+    const ids = [...new Set(persons.flatMap((p) => [p.personId, ...p.suspectedOwners.map((o) => o.ownerPersonId)]))];
+    const rows = await this.db
+      .selectFrom('person')
+      .select(['id', 'name', 'faceAssetId'])
+      .where('id', 'in', ids)
+      .execute();
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const nameOf = (id: string) => (byId.get(id)?.name ? byId.get(id)!.name : null);
+    const thumbOf = (id: string) => byId.get(id)?.faceAssetId ?? null;
+
+    const refreshed = persons.map((p) => {
+      const personName = nameOf(p.personId);
+      const namedNow = personName !== null;
+      const reviewReasons =
+        namedNow && !p.reviewReasons.includes('named') ? ['named', ...p.reviewReasons] : p.reviewReasons;
+      return {
+        ...p,
+        personName,
+        thumbnailFaceId: thumbOf(p.personId),
+        recommendation: (namedNow ? 'review-first' : p.recommendation) as RepairScanPerson['recommendation'],
+        reviewReasons,
+        suspectedOwners: p.suspectedOwners.map((o) => ({
+          ...o,
+          ownerName: nameOf(o.ownerPersonId),
+          thumbnailFaceId: thumbOf(o.ownerPersonId),
+        })),
+      };
+    });
+    return { ...scan, persons: refreshed as unknown as RepairScanRow['persons'] };
+  }
+
   async enrichReportPersons(
     rows: Array<{
       personId: string;
