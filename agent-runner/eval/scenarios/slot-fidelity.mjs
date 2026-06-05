@@ -105,6 +105,12 @@ export default [
     expect: { kind: 'update_asset_metadata', slots: { sourceDescription: 'my newest 20 photos' } },
   },
   {
+    id: 'slots.move.from-to',
+    category: 'slots',
+    prompt: 'move my newest 20 photos from Drafts to Keepers',
+    expect: { kind: 'move_photos_between_albums', slots: { sourceDescription: 'my newest 20 photos', fromAlbumRef: 'Drafts', toAlbumRef: 'Keepers' } },
+  },
+  {
     id: 'slots.remove.canonical',
     category: 'slots',
     prompt: 'remove my newest 5 photos from Family',
