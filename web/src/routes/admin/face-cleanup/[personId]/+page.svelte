@@ -133,7 +133,7 @@
 </script>
 
 <AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
-  <div class="mx-auto max-w-screen-xl p-6 pb-36">
+  <div class="mx-auto max-w-screen-xl p-6 pb-24">
     <!-- Back link -->
     <a
       href={Route.faceCleanup()}
@@ -347,32 +347,35 @@
     {/if}
   </div>
 
-  <!-- Sticky action bar -->
+  <!-- Sticky action bar — sticky (not fixed) so it stays within the admin content region and never slides
+       under the sidebar; inner content is centered to match the page body. -->
   {#if !loading && flaggedFaces.length > 0}
     <div
-      class="fixed inset-x-0 bottom-0 z-20 flex items-center gap-4 border-t border-gray-200 bg-white/90 px-6 py-4 shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/90"
+      class="sticky bottom-0 z-20 border-t border-gray-200 bg-white/90 py-4 shadow-lg backdrop-blur-sm dark:border-gray-700 dark:bg-gray-900/90"
       data-testid="action-bar"
     >
-      <div>
-        <div class="text-sm font-medium">
-          {$t('admin.face_cleanup_review_action_summary', {
-            values: { moving: vm.movingCount.toLocaleString(), owner: ownerName },
-          })}
-          <span class="text-gray-400">
-            {$t('admin.face_cleanup_review_action_kept', {
-              values: { kept: staysCount.toLocaleString() },
+      <div class="mx-auto flex max-w-screen-xl items-center gap-4 px-6">
+        <div class="min-w-0">
+          <div class="truncate text-sm font-medium">
+            {$t('admin.face_cleanup_review_action_summary', {
+              values: { moving: vm.movingCount.toLocaleString(), owner: ownerName },
             })}
-          </span>
+            <span class="text-gray-400">
+              {$t('admin.face_cleanup_review_action_kept', {
+                values: { kept: staysCount.toLocaleString() },
+              })}
+            </span>
+          </div>
         </div>
+        <div class="flex-1"></div>
+        <Button color="secondary" onclick={handleCancel} data-testid="cancel-btn">
+          {$t('admin.face_cleanup_review_cancel')}
+        </Button>
+        <Button color="primary" disabled={vm.movingCount === 0 || applying} onclick={handleMove} data-testid="move-btn">
+          <Icon icon={mdiArrowRight} size="16" />
+          {$t('admin.face_cleanup_review_move', { values: { count: vm.movingCount.toLocaleString() } })}
+        </Button>
       </div>
-      <div class="flex-1"></div>
-      <Button color="secondary" onclick={handleCancel} data-testid="cancel-btn">
-        {$t('admin.face_cleanup_review_cancel')}
-      </Button>
-      <Button color="primary" disabled={vm.movingCount === 0 || applying} onclick={handleMove} data-testid="move-btn">
-        <Icon icon={mdiArrowRight} size="16" />
-        {$t('admin.face_cleanup_review_move', { values: { count: vm.movingCount.toLocaleString() } })}
-      </Button>
     </div>
   {/if}
 </AdminPageLayout>

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { getPeopleThumbnailPath } from '@immich/sdk';
+  import UserAvatar from '$lib/components/shared-components/user-avatar.svelte';
+  import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiArrowRight, mdiCheckCircle, mdiAlertCircle } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -9,10 +10,13 @@
     vm: FaceCleanupModel;
     filter: 'all' | 'review-first' | 'confident' | 'named';
     searchQuery: string;
+    users: UserAdminResponseDto[];
     onOpen: (personId: string) => void;
   };
 
-  const { vm, filter, searchQuery, onOpen }: Props = $props();
+  const { vm, filter, searchQuery, users, onOpen }: Props = $props();
+
+  const usersById = $derived(new Map(users.map((u) => [u.id, u])));
 
   const thumbUrl = (personId: string) => `/api${getPeopleThumbnailPath(personId)}`;
 
@@ -118,6 +122,7 @@
   {@const canSelect = vm.canSelect(person.personId)}
   {@const isSelected = vm.selected.has(person.personId)}
   {@const primaryOwner = person.suspectedOwners[0]}
+  {@const ownerUser = usersById.get(person.ownerId)}
   {@const bad = isBadTarget(person)}
 
   <div
@@ -158,15 +163,13 @@
       </div>
     </div>
 
-    <!-- Owner (first suspected owner's owner person) -->
+    <!-- Owner (the gallery user whose library this cluster belongs to) -->
     <div class="flex min-w-0 items-center gap-2 text-sm text-gray-500">
-      {#if primaryOwner}
-        <img
-          src={thumbUrl(person.ownerId)}
-          alt=""
-          class="size-6 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
-        />
-        <span class="truncate">{$t('admin.face_cleanup_owner_label')}</span>
+      {#if ownerUser}
+        <div class="flex-none">
+          <UserAvatar user={ownerUser} size="sm" />
+        </div>
+        <span class="truncate" title={ownerUser.email}>{ownerUser.name}</span>
       {:else}
         <span class="text-gray-300">—</span>
       {/if}

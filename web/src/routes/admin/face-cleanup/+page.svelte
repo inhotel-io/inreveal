@@ -420,7 +420,7 @@
         </div>
 
         <!-- Table -->
-        <FaceCleanupTable {vm} {filter} {searchQuery} onOpen={handleOpen} />
+        <FaceCleanupTable {vm} {filter} {searchQuery} users={data.users} onOpen={handleOpen} />
 
         <!-- Footnote -->
         <p class="mt-4 max-w-3xl text-xs text-gray-400 dark:text-gray-500">

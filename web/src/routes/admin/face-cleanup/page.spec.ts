@@ -134,7 +134,7 @@ const makeCompletedScan = (persons = [makeScanPerson()]) => ({
   createdAt: new Date().toISOString(),
 });
 
-const makePageData = () => ({ meta: { title: 'Face cleanup' } });
+const makePageData = () => ({ users: [], meta: { title: 'Face cleanup' } });
 
 describe('+page.svelte (face cleanup)', () => {
   beforeEach(() => {
@@ -272,6 +272,26 @@ describe('+page.svelte (face cleanup)', () => {
 
     // review-first group should appear before confident group in DOM order
     expect(reviewHeader.compareDocumentPosition(confidentHeader)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  // ---- owner column ----
+
+  it('renders the owning user name in the owner column (not a broken person thumbnail)', async () => {
+    const owner = {
+      id: 'owner1',
+      name: 'Alice Owner',
+      email: 'alice@example.com',
+      profileImagePath: '',
+      avatarColor: 'primary',
+      profileChangedAt: new Date().toISOString(),
+    };
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([makeScanPerson()]) as unknown as object);
+
+    render(Page, { props: { data: { users: [owner], meta: { title: 'Face cleanup' } } } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice Owner')).toBeInTheDocument();
+    });
   });
 
   // ---- checkbox state ----
