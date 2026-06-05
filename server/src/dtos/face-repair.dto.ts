@@ -113,3 +113,46 @@ export const FaceRepairPersonFacesSchema = z
   .object({ personId: z.string(), flaggedFaces: z.array(FlaggedFaceSchema) })
   .meta({ id: 'FaceRepairPersonFacesDto' });
 export class FaceRepairPersonFacesDto extends createZodDto(FaceRepairPersonFacesSchema) {}
+
+const FaceDeclineSchema = z.object({ assetFaceId: z.uuidv4(), suspectedOwnerId: z.uuidv4() });
+const PersonDeclineSchema = z.object({ personId: z.uuidv4(), suspectedOwnerIds: z.array(z.uuidv4()) });
+
+export const FaceRepairDeclineRequestSchema = z
+  .object({
+    faces: z.array(FaceDeclineSchema).optional(),
+    persons: z.array(PersonDeclineSchema).optional(),
+  })
+  .meta({ id: 'FaceRepairDeclineRequestDto' });
+export class FaceRepairDeclineRequestDto extends createZodDto(FaceRepairDeclineRequestSchema) {}
+
+export const FaceRepairDeclineCreatedSchema = z
+  .object({ created: z.number() })
+  .meta({ id: 'FaceRepairDeclineCreatedDto' });
+export class FaceRepairDeclineCreatedDto extends createZodDto(FaceRepairDeclineCreatedSchema) {}
+
+const DeclineItemSchema = z.object({
+  id: z.string(),
+  type: z.enum(['face', 'person']),
+  assetFaceId: z.string().nullable(),
+  suspectedOwnerId: z.string().nullable(),
+  suspectedOwnerName: z.string().nullable(),
+  suspectedOwnerThumbnailFaceId: z.string().nullable(),
+  personId: z.string().nullable(),
+  personName: z.string().nullable(),
+  personThumbnailFaceId: z.string().nullable(),
+  createdAt: z.date(),
+});
+export const FaceRepairDeclineListSchema = z
+  .object({ declines: z.array(DeclineItemSchema) })
+  .meta({ id: 'FaceRepairDeclineListDto' });
+export class FaceRepairDeclineListDto extends createZodDto(FaceRepairDeclineListSchema) {}
+
+export const FaceRepairDeclineRemoveRequestSchema = z
+  .object({ ids: z.array(z.uuidv4()).min(1) })
+  .meta({ id: 'FaceRepairDeclineRemoveRequestDto' });
+export class FaceRepairDeclineRemoveRequestDto extends createZodDto(FaceRepairDeclineRemoveRequestSchema) {}
+
+export const FaceRepairDeclineRemovedSchema = z
+  .object({ removed: z.number() })
+  .meta({ id: 'FaceRepairDeclineRemovedDto' });
+export class FaceRepairDeclineRemovedDto extends createZodDto(FaceRepairDeclineRemovedSchema) {}
