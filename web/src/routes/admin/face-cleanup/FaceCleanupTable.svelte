@@ -12,9 +12,10 @@
     searchQuery: string;
     users: UserAdminResponseDto[];
     onOpen: (personId: string) => void;
+    onDismiss: (personId: string) => void;
   };
 
-  const { vm, filter, searchQuery, users, onOpen }: Props = $props();
+  const { vm, filter, searchQuery, users, onOpen, onDismiss }: Props = $props();
 
   const usersById = $derived(new Map(users.map((u) => [u.id, u])));
 
@@ -67,7 +68,7 @@
   <!-- Column header -->
   <div
     class="grid items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-700 dark:bg-gray-800"
-    style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 6rem"
+    style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 10rem"
   >
     <div></div>
     <div>{$t('admin.face_cleanup_col_person')}</div>
@@ -130,7 +131,7 @@
       'grid items-center gap-3 border-b border-gray-200 px-4 py-3 text-sm transition-colors last:border-b-0 dark:border-gray-700',
       isSelected ? 'bg-primary-50 dark:bg-primary-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
     ].join(' ')}
-    style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 6rem"
+    style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 10rem"
   >
     <!-- Checkbox -->
     <div>
@@ -248,8 +249,21 @@
       {/if}
     </div>
 
-    <!-- Review link -->
-    <div class="flex justify-end">
+    <!-- Review link + Dismiss -->
+    <div class="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onclick={() => {
+          if (confirm($t('admin.face_cleanup_dismiss_confirm', { values: { name: person.personName ?? person.personId } }))) {
+            onDismiss(person.personId);
+          }
+        }}
+        title={$t('admin.face_cleanup_dismiss')}
+        class="inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-500 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+        data-testid="dismiss-btn"
+      >
+        {$t('admin.face_cleanup_dismiss')}
+      </button>
       <a
         href="/admin/face-cleanup/{person.personId}"
         onclick={() => onOpen(person.personId)}

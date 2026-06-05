@@ -1,8 +1,9 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
+  import { Route } from '$lib/route';
   import { createFaceCleanupModel } from './face-cleanup.svelte';
   import FaceCleanupTable from './FaceCleanupTable.svelte';
-  import { applyFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
+  import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
   import { Button, Icon, toastManager } from '@immich/ui';
   import { mdiRefresh, mdiClose } from '@mdi/js';
   import { onDestroy, onMount } from 'svelte';
@@ -176,6 +177,23 @@
     }
   };
 
+  const handleDismiss = async (personId: string) => {
+    const person = scan?.persons.find((p) => p.personId === personId);
+    if (!person) {
+      return;
+    }
+    const suspectedOwnerIds = person.suspectedOwners.map((o) => o.ownerPersonId);
+    try {
+      await declineFaceRepair({ faceRepairDeclineRequestDto: { persons: [{ personId, suspectedOwnerIds }] } });
+      if (scan) {
+        scan = { ...scan, persons: scan.persons.filter((p) => p.personId !== personId) };
+      }
+      toastManager.success($t('admin.face_cleanup_dismiss'));
+    } catch {
+      toastManager.danger($t('admin.face_cleanup_scan_error'));
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) {
       return null;
@@ -213,6 +231,12 @@
             <div class="font-semibold text-gray-500">{formatDate(scan.finishedAt)}</div>
           </div>
         {/if}
+        <a
+          href={Route.faceCleanupDeclined()}
+          class="text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          {$t('admin.face_cleanup_view_declined')}
+        </a>
         <Button
           color="primary"
           disabled={scanning || (!!scan && isActive(scan.status))}
@@ -420,7 +444,7 @@
         </div>
 
         <!-- Table -->
-        <FaceCleanupTable {vm} {filter} {searchQuery} users={data.users} onOpen={handleOpen} />
+        <FaceCleanupTable {vm} {filter} {searchQuery} users={data.users} onOpen={handleOpen} onDismiss={handleDismiss} />
 
         <!-- Footnote -->
         <p class="mt-4 max-w-3xl text-xs text-gray-400 dark:text-gray-500">
