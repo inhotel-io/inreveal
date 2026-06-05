@@ -140,4 +140,20 @@ export default [
     prompt: 'set the cover of the Family album to the 3rd photo',
     expect: { kind: 'set_album_cover', slots: { albumRef: 'Family', coverRef: /3rd|third/i } },
   },
+
+  // stack_assets ---------------------------------------------------------------
+  {
+    id: 'slots.stack.source',
+    category: 'slots',
+    prompt: 'stack my photos from Berlin',
+    expect: { kind: 'stack_assets', slots: { sourceDescription: /berlin/i } },
+  },
+
+  // unstack_assets -------------------------------------------------------------
+  {
+    id: 'slots.unstack.source',
+    category: 'slots',
+    prompt: 'unstack my photos from Berlin',
+    expect: { kind: 'unstack_assets', slots: { sourceDescription: /berlin/i } },
+  },
 ];

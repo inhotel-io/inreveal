@@ -32,6 +32,8 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.removeTag',
   'asset.trash',
   'asset.restore',
+  'asset.stack',
+  'asset.unstack',
   'shareLink.create',
 ]);
 
@@ -43,6 +45,8 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.rotate',
   'asset.crop',
   'asset.updateMetadata',
+  'asset.stack',
+  'asset.unstack',
 ]);
 
 const KNOWN_SPACE_FROM_SEARCH_KEYS = new Set(['summary', 'spaceName', 'description', 'color', 'assetSource']);
