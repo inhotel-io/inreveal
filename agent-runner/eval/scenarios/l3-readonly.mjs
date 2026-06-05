@@ -189,6 +189,23 @@ export default [
     expect: { kind: 'update_asset_metadata' },
   },
 
+  // --- share_album: propose-only (NEVER APPLIED) ---------------------------
+  // OUTWARD-FACING safety: createSharedLinks write-scope defaults false in every
+  // preset (including the L3 VisualOrganizer preset used for eval). The agent
+  // can PROPOSE a shareLink.createAlbum plan but CANNOT APPLY it — the server
+  // will reject the apply with a write-scope error. The L3 eval is read-only
+  // (audit confirms no plan is applied), so no outward-facing link is created.
+  // NO planProposed assertion here — createSharedLinks is OFF in the eval
+  // preset, so the workflow is propose-blocked; routing-only is all we assert.
+  {
+    // Routing-only: the share verb + "album" noun routes to share_album.
+    // Holds against any instance including an empty dev stack.
+    id: 'l3.recall.share-album',
+    category: 'l3.recall',
+    prompt: 'share the Family album as a link',
+    expect: { kind: 'share_album' },
+  },
+
   // --- share_assets: propose-only (NEVER APPLIED) --------------------------
   // OUTWARD-FACING safety: createSharedLinks write-scope defaults false in every
   // preset (including the L3 VisualOrganizer/PowerUser presets). This means the

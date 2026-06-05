@@ -1989,7 +1989,10 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow moving assets to trash');
     }
 
-    if (type === AgentOperationType.ShareLinkCreate && !writeScope.createSharedLinks) {
+    if (
+      (type === AgentOperationType.ShareLinkCreate || type === AgentOperationType.ShareLinkCreateAlbum) &&
+      !writeScope.createSharedLinks
+    ) {
       throw new BadRequestException('Agent permission policy does not allow creating shared links');
     }
 
@@ -2846,6 +2849,10 @@ export class AgentOperationPlanService {
         return this.applyShareLinkCreateOperation(auth, operation);
       }
 
+      case AgentOperationType.ShareLinkCreateAlbum: {
+        return this.applyShareLinkCreateAlbumOperation(auth, operation);
+      }
+
       default: {
         throw new BadRequestException(`${operation.type} is not supported for apply yet`);
       }
@@ -3248,6 +3255,29 @@ export class AgentOperationPlanService {
     });
 
     return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+  }
+
+  private async applyShareLinkCreateAlbumOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const payload = this.requireObjectPayload(operation.payload) as {
+      password?: string;
+      expiresAt?: string;
+      showMetadata?: boolean;
+      allowDownload?: boolean;
+    };
+
+    await this.sharedLinkService.create(auth, {
+      type: SharedLinkType.Album,
+      albumId: operation.targetId ?? undefined,
+      password: payload.password,
+      expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : undefined,
+      showMetadata: payload.showMetadata,
+      allowDownload: payload.allowDownload,
+    });
+
+    return this.appliedOperation(operation.id, { albumId: operation.targetId ?? undefined });
   }
 
   private async applyStackOperation(

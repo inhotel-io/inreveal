@@ -141,6 +141,20 @@ export default [
     expect: { kind: 'set_album_cover', slots: { albumRef: 'Family', coverRef: /3rd|third/i } },
   },
 
+  // share_album ---------------------------------------------------------------
+  {
+    id: 'slots.share-album.ref',
+    category: 'slots',
+    prompt: 'share the Family album as a link',
+    expect: { kind: 'share_album', slots: { albumRef: 'Family' } },
+  },
+  {
+    id: 'slots.share-album.expiry',
+    category: 'slots',
+    prompt: 'share the Italy album as a link, expires in 7 days',
+    expect: { kind: 'share_album', slots: { albumRef: 'Italy', expiryDays: 7 } },
+  },
+
   // stack_assets ---------------------------------------------------------------
   {
     id: 'slots.stack.source',

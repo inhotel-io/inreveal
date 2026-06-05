@@ -411,6 +411,56 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'share_album',
+    flow: 'hybrid',
+    title: 'Share album as a link',
+    classifierDescription:
+      'User wants to create an outward-facing share link for a NAMED ALBUM (not for individual photos). The prompt must reference a specific album by name and contain the word "album". OUTWARD-FACING / High risk / propose-only — the createSharedLinks write-scope defaults false in every preset so no link is ever created during tests or evals.',
+    positiveExamples: Object.freeze([
+      'share the Family album as a link',
+      'create a public share link for the Italy album',
+      'make a shareable link for the Trips album',
+      'generate a share link for the Family album, expires in 7 days',
+    ]),
+    negativeExamples: Object.freeze([
+      'share these photos as a link',
+      'create a share link for my newest 20',
+      'share my newest 10 with password hunter2',
+      'trash my newest 20 photos',
+    ]),
+    slots: Object.freeze({
+      albumRef: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'How the user referred to the album (e.g. "Family album" or "Trips").',
+      }),
+      expiryDays: Object.freeze({
+        type: 'number',
+        required: false,
+        description: 'How many days until the link expires.',
+      }),
+      password: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'Optional link password.',
+      }),
+      showMetadata: Object.freeze({
+        type: 'boolean',
+        required: false,
+        description: 'false to hide EXIF/location metadata on the share page (default: show).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Album share links',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        '`share_album` resolves a named album and proposes a shareLink.createAlbum op (High risk; outward-facing; createSharedLinks write-scope defaults false in every preset — propose-only path; no link is ever created in tests or evals).',
+    }),
+  }),
+  Object.freeze({
     kind: 'restore_assets',
     flow: 'hybrid',
     title: 'Restore photos from Trash',

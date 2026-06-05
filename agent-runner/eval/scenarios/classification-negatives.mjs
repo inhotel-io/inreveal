@@ -98,6 +98,15 @@ export default [
     expect: { kind: 'none' },
   },
 
+  // share_album boundaries ---------------------------------------------------
+  {
+    // Asset-level share (no "album" noun) must NOT route to share_album → share_assets.
+    id: 'neg.share-album.assets',
+    category: 'negatives',
+    prompt: 'share these photos as a link',
+    expect: { kind: 'share_assets' },
+  },
+
   // create_space_from_source boundaries -------------------------------------
   {
     // Subjective space source declines — must not route to create_space_from_source.

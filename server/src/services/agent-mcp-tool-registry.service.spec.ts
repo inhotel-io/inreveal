@@ -969,7 +969,7 @@ describe(AgentMcpToolRegistryService.name, () => {
     const serialized = JSON.stringify(sut.listTools());
 
     expect(serialized).not.toMatch(
-      /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|createAlbum|addAssetsToAlbum(?!FromSearch)/i,
+      /\/api|agent\/internal|bearer|token|provider key|stack trace|applyAlbumOperations|applyOperations|(?<![A-Z.])createAlbum|addAssetsToAlbum(?!FromSearch)/i,
     );
   });
 

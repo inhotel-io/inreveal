@@ -568,6 +568,23 @@ export default [
     expect: { kind: 'crop_assets', slotsSurvive: true, slots: { x: 0, y: 0, width: 1000, height: 1000 } },
   },
 
+  // share_album (propose-only / outward-facing / album-targeted) ----------------
+  {
+    // OUTWARD-FACING safety note: createSharedLinks write-scope defaults false
+    // in every preset, so this workflow is propose-only in all evals. The L1
+    // recall test only asserts routing — no link is ever created.
+    id: 'recall.share-album.basic',
+    category: 'recall',
+    prompt: 'share the Family album as a link',
+    expect: { kind: 'share_album', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
+  {
+    id: 'recall.share-album.create-link',
+    category: 'recall',
+    prompt: 'create a share link for the Italy album',
+    expect: { kind: 'share_album', slotsSurvive: true, slots: { albumRef: 'Italy' } },
+  },
+
   // share_assets (propose-only / outward-facing) --------------------------------
   {
     // OUTWARD-FACING safety note: createSharedLinks write-scope defaults false
@@ -585,6 +602,13 @@ export default [
     expect: { kind: 'share_assets', slotsSurvive: true, slots: { sourceDescription: /newest 20/i } },
   },
   {
+    // Confirm asset-level share still works (share_album must not steal it).
+    id: 'recall.share.assets-still-works',
+    category: 'recall',
+    prompt: 'share my newest 20 as a link',
+    expect: { kind: 'share_assets', slotsSurvive: true },
+  },
+  {
     // Negative: trash must NOT be stolen by share_assets.
     id: 'recall.share.neg.trash',
     category: 'recall',
@@ -592,11 +616,11 @@ export default [
     expect: { kind: 'trash_assets', slotsSurvive: true },
   },
   {
-    // Negative: album-level share declines (not asset share).
+    // Negative: album-level share routes to share_album (not none).
     id: 'recall.share.neg.album',
     category: 'recall',
-    prompt: 'share the Family album',
-    expect: { kind: 'none' },
+    prompt: 'share the Family album as a link',
+    expect: { kind: 'share_album', slotsSurvive: true },
   },
 
   // set_album_cover -----------------------------------------------------------
