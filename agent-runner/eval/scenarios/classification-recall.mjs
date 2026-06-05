@@ -396,6 +396,14 @@ export default [
     expect: { kind: 'update_asset_metadata', slotsSurvive: true, slots: { sourceDescription: /newest 20 photos/i } },
   },
 
+  // move_photos_between_albums -----------------------------------------------
+  {
+    id: 'recall.move.basic',
+    category: 'recall',
+    prompt: 'move my newest 20 photos from Drafts to Keepers',
+    expect: { kind: 'move_photos_between_albums', slotsSurvive: true, slots: { fromAlbumRef: 'Drafts', toAlbumRef: 'Keepers' } },
+  },
+
   // remove_photos_from_album -------------------------------------------------
   {
     id: 'recall.remove.canonical',

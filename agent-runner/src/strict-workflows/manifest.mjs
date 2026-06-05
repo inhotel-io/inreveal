@@ -129,6 +129,37 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'move_photos_between_albums',
+    flow: 'hybrid',
+    title: 'Move photos between albums',
+    classifierDescription:
+      'User wants to MOVE a metadata-describable set of photos out of one album and into another (remove from album A, add to album B) in a single step. Requires both a source album ("from X") and a destination album ("to Y").',
+    positiveExamples: Object.freeze([
+      'Move my newest 20 photos from Drafts to Keepers',
+      'Move my 2024 photos from the Trips album to the Italy album',
+      'Move my Berlin photos from Drafts to Berlin Weekend',
+    ]),
+    negativeExamples: Object.freeze([
+      'Add my newest 20 photos to Keepers',
+      'Remove my newest 20 photos from Drafts',
+      'Move the best ones from Drafts to Keepers',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({ type: 'string', required: true, description: 'Metadata description of the photos to move.' }),
+      fromAlbumRef: Object.freeze({ type: 'string', required: true, description: 'The album to move photos out of.' }),
+      toAlbumRef: Object.freeze({ type: 'string', required: true, description: 'The album to move photos into.' }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums', 'resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Move photos between albums',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the source + both albums; Gallery owns the compound album.removeAssets + album.addAssets plan (requires both from and to; same-album declines).',
+    }),
+  }),
+  Object.freeze({
     kind: 'remove_photos_from_album',
     flow: 'hybrid',
     title: 'Remove photos from album',
