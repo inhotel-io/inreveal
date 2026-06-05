@@ -93,6 +93,43 @@ export const decideReattribution = (tally: ReattributionTally, params: FlagParam
   return { flagged, suspectedOwnerId: flagged ? topOtherPersonId : null };
 };
 
+export function isSubset(subset: Set<string>, superset: Set<string>): boolean {
+  for (const value of subset) {
+    if (!superset.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+interface FlaggedLike {
+  assetFaceId: string;
+  currentPersonId: string;
+  suspectedOwnerId: string;
+}
+
+// Mutates flaggedByPerson in place. (1) face-level: drop any face declined toward its current suspected owner.
+// (2) person-level: if the person was dismissed and its REMAINING suspected-owner set is a subset of the stored
+// fingerprint (no new evidence), drop the whole person. Face-level runs first so a face re-flagged toward a new
+// owner keeps its person surfaced.
+export function applyDeclineFilters<T extends FlaggedLike>(
+  flaggedByPerson: Map<string, T[]>,
+  maps: DeclineMaps,
+): void {
+  for (const [personId, faces] of flaggedByPerson) {
+    const kept = faces.filter((face) => !maps.declinedFaceOwners.get(face.assetFaceId)?.has(face.suspectedOwnerId));
+    const fingerprint = maps.dismissedPersons.get(personId);
+    if (fingerprint && kept.length > 0) {
+      const currentOwners = new Set(kept.map((face) => face.suspectedOwnerId));
+      if (isSubset(currentOwners, fingerprint)) {
+        flaggedByPerson.set(personId, []);
+        continue;
+      }
+    }
+    flaggedByPerson.set(personId, kept);
+  }
+}
+
 export type ClassifyRecommendation = 'confident' | 'review-first';
 export type ClassifyReason = 'named' | 'large-cluster' | 'multiple-owners' | 'bad-target';
 

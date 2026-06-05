@@ -1,10 +1,12 @@
 import {
   ClassifyContext,
-  classifyFlaggedPerson,
   ClassifyPersonInput,
-  decideReattribution,
   ReattributionNeighbor,
   ReattributionTally,
+  applyDeclineFilters,
+  classifyFlaggedPerson,
+  decideReattribution,
+  isSubset,
   tallyReattribution,
 } from 'src/utils/face-repair';
 
@@ -219,5 +221,68 @@ describe('classifyFlaggedPerson', () => {
       recommendation: 'review-first',
       reviewReasons: ['named', 'large-cluster', 'multiple-owners', 'bad-target'],
     });
+  });
+});
+
+const f = (assetFaceId: string, currentPersonId: string, suspectedOwnerId: string) => ({
+  assetFaceId,
+  currentPersonId,
+  suspectedOwnerId,
+});
+
+describe('isSubset', () => {
+  it('true when every element is present', () => {
+    expect(isSubset(new Set(['a']), new Set(['a', 'b']))).toBe(true);
+  });
+  it('false when an element is missing', () => {
+    expect(isSubset(new Set(['a', 'c']), new Set(['a', 'b']))).toBe(false);
+  });
+});
+
+describe('applyDeclineFilters', () => {
+  it('drops a face declined toward its current suspected owner', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map(),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
+  });
+
+  it('keeps a declined face if a DIFFERENT owner is now suspected (evidence changed)', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'R')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map(),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1']);
+  });
+
+  it('drops a whole dismissed person when its suspected set is a subset of the fingerprint', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map(),
+      dismissedPersons: new Map([['P', new Set(['Q', 'R'])]]),
+    });
+    expect(flagged.get('P')).toEqual([]);
+  });
+
+  it('re-surfaces a dismissed person when a NEW suspected owner appears', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map(),
+      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1', 'face2']);
+  });
+
+  it('applies face-level before person-level (a re-flagged new-owner face keeps the person)', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    });
+    // face1 dropped (declined); face2 toward NEW owner S keeps the person on the board
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
 });
