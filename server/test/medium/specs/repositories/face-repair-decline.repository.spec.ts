@@ -11,8 +11,6 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 // NOTE: Docker is required to run these tests. They are not run locally (no Docker) but are validated in CI.
 
-let defaultDatabase: Kysely<DB>;
-
 async function seedFaceAndPersons(db: Kysely<DB>) {
   const { ctx } = newMediumService(BaseService, {
     database: db,

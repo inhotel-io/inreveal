@@ -79,7 +79,7 @@ export class FaceRepairDeclineRepository {
         set.add(row.suspectedOwnerId);
         declinedFaceOwners.set(row.assetFaceId, set);
       } else if (row.type === 'person' && row.personId) {
-        dismissedPersons.set(row.personId, new Set((row.suspectedOwnerIds as unknown as string[]) ?? []));
+        dismissedPersons.set(row.personId, new Set(row.suspectedOwnerIds as unknown as string[]));
       }
     }
     return { declinedFaceOwners, dismissedPersons };
