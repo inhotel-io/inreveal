@@ -115,4 +115,82 @@ describe(FaceRepairAdminController.name, () => {
       );
     });
   });
+
+  describe('POST /admin/face-repair/decline', () => {
+    const uuid1 = '00000000-0000-4000-a000-000000000001';
+    const uuid2 = '00000000-0000-4000-a000-000000000002';
+    const adminUserId = '00000000-0000-4000-a000-000000000099';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/decline');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('should delegate to service.createDeclines with auth user id', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.createDeclines.mockResolvedValue({ created: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
+      expect(status).toBe(201);
+      expect(service.createDeclines).toHaveBeenCalledWith(
+        expect.objectContaining({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] }),
+      );
+    });
+
+    it('should reject a non-uuid assetFaceId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ faces: [{ assetFaceId: 'not-a-uuid', suspectedOwnerId: uuid2 }] });
+      expect(status).toBe(400);
+      expect(service.createDeclines).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /admin/face-repair/decline', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/admin/face-repair/decline');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('should delegate to service.listDeclines', async () => {
+      service.listDeclines.mockResolvedValue({ declines: [] });
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.listDeclines).toHaveBeenCalled();
+      expect(body).toMatchObject({ declines: [] });
+    });
+  });
+
+  describe('DELETE /admin/face-repair/decline', () => {
+    const uuid1 = '00000000-0000-4000-a000-000000000001';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).delete('/admin/face-repair/decline');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('should delegate to service.removeDeclines', async () => {
+      service.removeDeclines.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .delete('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ ids: [uuid1] });
+      expect(status).toBe(200);
+      expect(service.removeDeclines).toHaveBeenCalledWith([uuid1]);
+    });
+
+    it('should reject empty ids array with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .delete('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ ids: [] });
+      expect(status).toBe(400);
+      expect(service.removeDeclines).not.toHaveBeenCalled();
+    });
+  });
 });

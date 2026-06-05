@@ -1,10 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   FaceRepairApplyRequestDto,
   FaceRepairApplyResponseDto,
+  FaceRepairDeclineCreatedDto,
+  FaceRepairDeclineListDto,
+  FaceRepairDeclineRemoveRequestDto,
+  FaceRepairDeclineRemovedDto,
+  FaceRepairDeclineRequestDto,
   FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
   FaceRepairResponseDto,
@@ -58,5 +63,29 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Apply face re-attribution for approved persons', history: new HistoryBuilder().added('v1') })
   applyFaceRepair(@Body() dto: FaceRepairApplyRequestDto): Promise<FaceRepairApplyResponseDto> {
     return this.service.applyRepair(dto) as Promise<FaceRepairApplyResponseDto>;
+  }
+
+  @Post('decline')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Decline flagged faces / dismiss flagged persons', history: new HistoryBuilder().added('v1') })
+  declineFaceRepair(
+    @Auth() auth: AuthDto,
+    @Body() dto: FaceRepairDeclineRequestDto,
+  ): Promise<FaceRepairDeclineCreatedDto> {
+    return this.service.createDeclines({ ...dto, declinedBy: auth.user.id }) as Promise<FaceRepairDeclineCreatedDto>;
+  }
+
+  @Get('decline')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'List face-repair declines', history: new HistoryBuilder().added('v1') })
+  getFaceRepairDeclines(): Promise<FaceRepairDeclineListDto> {
+    return this.service.listDeclines() as Promise<FaceRepairDeclineListDto>;
+  }
+
+  @Delete('decline')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Remove face-repair declines', history: new HistoryBuilder().added('v1') })
+  removeFaceRepairDeclines(@Body() dto: FaceRepairDeclineRemoveRequestDto): Promise<FaceRepairDeclineRemovedDto> {
+    return this.service.removeDeclines(dto.ids) as Promise<FaceRepairDeclineRemovedDto>;
   }
 }
