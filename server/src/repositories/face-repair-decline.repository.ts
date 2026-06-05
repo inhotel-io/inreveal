@@ -23,7 +23,7 @@ export interface DeclineListRow {
   personId: string | null;
   personName: string | null;
   personThumbnailFaceId: string | null;
-  createdAt: Date;
+  createdAt: string;
 }
 
 export class FaceRepairDeclineRepository {
@@ -138,7 +138,7 @@ export class FaceRepairDeclineRepository {
       personId: r.personId,
       personName: nameOf(r.personId),
       personThumbnailFaceId: thumbOf(r.personId),
-      createdAt: r.createdAt as unknown as Date,
+      createdAt: r.createdAt as unknown as string,
     }));
   }
 

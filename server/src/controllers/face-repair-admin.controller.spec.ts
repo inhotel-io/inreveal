@@ -135,7 +135,7 @@ describe(FaceRepairAdminController.name, () => {
         .send({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
       expect(status).toBe(201);
       expect(service.createDeclines).toHaveBeenCalledWith(
-        expect.objectContaining({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] }),
+        expect.objectContaining({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }], declinedBy: adminUserId }),
       );
     });
 
