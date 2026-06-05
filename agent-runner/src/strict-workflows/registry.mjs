@@ -20,6 +20,7 @@ import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
 import { cropAssetsWorkflow } from './workflows/crop-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
+import { shareAlbumWorkflow } from './workflows/share-album.mjs';
 import { shareAssetsWorkflow } from './workflows/share-assets.mjs';
 import { stackAssetsWorkflow } from './workflows/stack-assets.mjs';
 import { unstackAssetsWorkflow } from './workflows/unstack-assets.mjs';
@@ -104,6 +105,12 @@ const WORKFLOW_FACTORIES = Object.freeze([
   visualCleanupWorkflow,
   trashAssetsWorkflow,
   restoreAssetsWorkflow,
+  //   - `share_album` BEFORE `share_assets` (container-noun gate: share_album
+  //     requires the literal "album" noun; share_assets declines when the source
+  //     ends with "album" or "space", so no collision — but share_album must win
+  //     first to avoid share_assets consuming album-level share prompts before
+  //     the album gate fires). OUTWARD-FACING and High risk; propose-only.
+  shareAlbumWorkflow,
   shareAssetsWorkflow,
   favoriteAssetsWorkflow,
   tagAssetsWorkflow,

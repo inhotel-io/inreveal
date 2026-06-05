@@ -208,6 +208,9 @@ String parameterToString(dynamic value) {
   if (value is AgentSessionStatus) {
     return AgentSessionStatusTypeTransformer().encode(value).toString();
   }
+  if (value is AgentShareLinkCreateAlbumOperationType) {
+    return AgentShareLinkCreateAlbumOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentShareLinkCreateOperationType) {
     return AgentShareLinkCreateOperationTypeTypeTransformer().encode(value).toString();
   }

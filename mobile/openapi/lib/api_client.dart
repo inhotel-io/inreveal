@@ -472,6 +472,8 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf24':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf24.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':
@@ -624,6 +626,8 @@ class ApiClient {
           return AgentSessionStatusTypeTransformer().decode(value);
         case 'AgentSessionUpdateDto':
           return AgentSessionUpdateDto.fromJson(value);
+        case 'AgentShareLinkCreateAlbumOperationType':
+          return AgentShareLinkCreateAlbumOperationTypeTypeTransformer().decode(value);
         case 'AgentShareLinkCreateOperationType':
           return AgentShareLinkCreateOperationTypeTypeTransformer().decode(value);
         case 'AgentSpaceAddMembersOperationType':
