@@ -15,7 +15,7 @@ import {
   fromTimelinePlainDate,
   fromTimelinePlainDateTime,
   fromTimelinePlainYearMonth,
-  fromISODateTimeUTC,
+  fromISODateTimeUTCToObject,
   getTimes,
   setDifference,
   type TimelineDateTime,
@@ -190,7 +190,10 @@ export class TimelineMonth {
         isVideo: !bucketAssets.isImage[i],
         livePhotoVideoId: bucketAssets.livePhotoVideoId[i],
         localDateTime,
-        createdAt: fromISODateTimeUTC(bucketAssets.createdAt[i]).setZone('local'),
+        // The server buckets createdAt by its UTC month (date_trunc(..., createdAt AT
+        // TIME ZONE 'UTC')); parse it tz-stably in UTC so boundary assets match the
+        // bucket for viewers behind UTC (otherwise /recently-added renders empty).
+        createdAt: fromISODateTimeUTCToObject(bucketAssets.createdAt[i]),
         fileCreatedAt,
         ownerId: bucketAssets.ownerId[i],
         projectionType: bucketAssets.projectionType[i],
