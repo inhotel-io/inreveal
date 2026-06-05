@@ -88,4 +88,32 @@ describe(FaceRepairDeclineRepository.name, () => {
     const removed = await sut.removeDeclines([target.id]);
     expect(removed).toBe(1);
   });
+
+  it('person re-dismiss replaces the stored fingerprint (one row per person, last-write-wins)', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    // Seed a third person to use as the expanded fingerprint
+    const { ctx } = newMediumService(BaseService, {
+      database: db,
+      real: [FaceRepairDeclineRepository, PersonRepository],
+      mock: [LoggingRepository],
+    });
+    const { user } = await ctx.newUser();
+    const { person: personR } = await ctx.newPerson({ ownerId: user.id });
+
+    // First dismiss: P suspected toward [Q]
+    await sut.createDeclines({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
+    // Second dismiss: P suspected toward [Q, R] — should replace, not duplicate
+    await sut.createDeclines({
+      persons: [{ personId: personP, suspectedOwnerIds: [personQ, personR.id] }],
+      declinedBy,
+    });
+
+    const maps = await sut.getDeclineMaps();
+    // Exactly one row for personP — latest fingerprint wins
+    expect(maps.dismissedPersons.get(personP)).toEqual(new Set([personQ, personR.id]));
+    // Confirm no duplicate rows exist for personP
+    const list = await sut.listDeclines();
+    const personPRows = list.filter((d) => d.personId === personP);
+    expect(personPRows).toHaveLength(1);
+  });
 });

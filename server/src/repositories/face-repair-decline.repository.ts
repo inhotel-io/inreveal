@@ -1,4 +1,4 @@
-import { Insertable, Kysely } from 'kysely';
+import { Insertable, Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
@@ -28,40 +28,62 @@ export class FaceRepairDeclineRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   // Insert face and/or person declines. Face rows are idempotent on the (assetFaceId, suspectedOwnerId) partial
-  // unique index — re-declining the same face/owner is a no-op. Returns the number of rows actually inserted.
+  // unique index — re-declining the same face/owner is a no-op. Person rows are last-write-wins: the dashboard
+  // always sends the person's current full suspected-owner set, so re-dismissing replaces the stored fingerprint.
+  // Returns the number of rows actually inserted.
   async createDeclines(input: {
     faces?: FaceDeclineInput[];
     persons?: PersonDeclineInput[];
     declinedBy: string | null;
   }): Promise<number> {
-    const rows: Insertable<FaceRepairDeclineTable>[] = [
-      ...(input.faces ?? []).map((f) => ({
-        type: 'face' as const,
-        assetFaceId: f.assetFaceId,
-        suspectedOwnerId: f.suspectedOwnerId,
-        personId: null,
-        suspectedOwnerIds: null,
-        declinedBy: input.declinedBy,
-      })),
-      ...(input.persons ?? []).map((p) => ({
-        type: 'person' as const,
-        assetFaceId: null,
-        suspectedOwnerId: null,
-        personId: p.personId,
-        suspectedOwnerIds: p.suspectedOwnerIds as unknown as Insertable<FaceRepairDeclineTable>['suspectedOwnerIds'],
-        declinedBy: input.declinedBy,
-      })),
-    ];
-    if (rows.length === 0) {
+    const faceRows = (input.faces ?? []).map((f) => ({
+      type: 'face' as const,
+      assetFaceId: f.assetFaceId,
+      suspectedOwnerId: f.suspectedOwnerId,
+      personId: null,
+      suspectedOwnerIds: null,
+      declinedBy: input.declinedBy,
+    }));
+    const personRows = (input.persons ?? []).map((p) => ({
+      type: 'person' as const,
+      assetFaceId: null,
+      suspectedOwnerId: null,
+      personId: p.personId,
+      suspectedOwnerIds: p.suspectedOwnerIds as unknown as Insertable<FaceRepairDeclineTable>['suspectedOwnerIds'],
+      declinedBy: input.declinedBy,
+    }));
+    if (faceRows.length === 0 && personRows.length === 0) {
       return 0;
     }
-    const inserted = await this.db
-      .insertInto('face_repair_decline')
-      .values(rows)
-      .onConflict((oc) => oc.constraint('face_repair_decline_face_owner_uq').doNothing())
-      .returning('id')
-      .execute();
-    return inserted.length;
+    return this.db.transaction().execute(async (trx) => {
+      let created = 0;
+      if (faceRows.length > 0) {
+        const inserted = await trx
+          .insertInto('face_repair_decline')
+          .values(faceRows)
+          .onConflict((oc) =>
+            oc
+              .columns(['assetFaceId', 'suspectedOwnerId'])
+              .where(sql<boolean>`"assetFaceId" IS NOT NULL`)
+              .doNothing(),
+          )
+          .returning('id')
+          .execute();
+        created += inserted.length;
+      }
+      if (personRows.length > 0) {
+        const personIds = (input.persons ?? []).map((p) => p.personId);
+        // last-write-wins: a re-dismiss replaces the person's stored suspected-owner fingerprint
+        await trx
+          .deleteFrom('face_repair_decline')
+          .where('type', '=', 'person')
+          .where('personId', 'in', personIds)
+          .execute();
+        const inserted = await trx.insertInto('face_repair_decline').values(personRows).returning('id').execute();
+        created += inserted.length;
+      }
+      return created;
+    });
   }
 
   // Load every decline into the two lookup maps the planner consults. The decline set is admin-curated and
