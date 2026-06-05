@@ -1,5 +1,4 @@
 import { Kysely } from 'kysely';
-import { JobName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
@@ -497,14 +496,20 @@ describe('FaceRepairService.executeRepair', () => {
     repairDatabase = await getKyselyDB();
   });
 
-  it('unassigns leaked faces, clears their identity links, and queues FacialRecognition for them', async () => {
+  it('re-attributes leaked faces directly to their suspected owner with manual identity links, no recognition re-queue', async () => {
     const { sut, ctx } = setupRepair();
     const faceIdentityRepo = ctx.get(FaceIdentityRepository);
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     const { user } = await ctx.newUser();
 
-    // Karina-main: 10 first-axis faces
-    const { faceIds: karinaFaceIds } = await buildLinkedCluster(ctx, user.id, axisEmbedding('first'), 10);
+    // Karina-main: 10 first-axis faces — the suspected owner of the leaked embedding.
+    const { person: karina, faceIds: karinaFaceIds } = await buildLinkedCluster(
+      ctx,
+      user.id,
+      axisEmbedding('first'),
+      10,
+    );
+    const karinaIdentity = await faceIdentityRepo.ensurePersonIdentity(karina.id);
 
     // Alexia: 8 genuine second-axis + 3 leaked first-axis faces
     const faceIdentityRepoReal = ctx.get(FaceIdentityRepository);
@@ -550,23 +555,28 @@ describe('FaceRepairService.executeRepair', () => {
     const plan = await sut.buildRepairPlan({ ownerId: user.id, ...execPlanParams });
     await sut.executeRepair(plan);
 
-    // Leaked faces are now unassigned
+    // Leaked faces now belong to their suspected owner Karina (durable, not unassigned).
     const leakedRows = await ctx.database
       .selectFrom('asset_face')
       .select(['id', 'personId'])
       .where('id', 'in', leakedFaceIds)
       .execute();
     for (const row of leakedRows) {
-      expect(row.personId).toBeNull();
+      expect(row.personId).toBe(karina.id);
     }
 
-    // face_identity_face rows for leaked faces are deleted
+    // face_identity_face rows for leaked faces now point to Karina's identity, sourced 'manual'
+    // (so a later recognition pass cannot re-cluster them away).
     const leakedLinks = await ctx.database
       .selectFrom('face_identity_face')
-      .select('assetFaceId')
+      .select(['assetFaceId', 'identityId', 'source'])
       .where('assetFaceId', 'in', leakedFaceIds)
       .execute();
-    expect(leakedLinks).toHaveLength(0);
+    expect(leakedLinks).toHaveLength(leakedFaceIds.length);
+    for (const link of leakedLinks) {
+      expect(link.identityId).toBe(karinaIdentity.id);
+      expect(link.source).toBe('manual');
+    }
 
     // Genuine Alexia faces are untouched
     const alexiaRows = await ctx.database
@@ -578,32 +588,22 @@ describe('FaceRepairService.executeRepair', () => {
       expect(row.personId).toBe(alexia.id);
     }
 
-    // Karina faces are untouched
+    // Karina's original faces are untouched
     const karinaRows = await ctx.database
       .selectFrom('asset_face')
       .select(['id', 'personId'])
       .where('id', 'in', karinaFaceIds)
       .execute();
     for (const row of karinaRows) {
-      expect(row.personId).not.toBeNull();
+      expect(row.personId).toBe(karina.id);
     }
 
     // No-loop invariant: getBackfillWork().hasPersonalIdentityWork is false after repair
     const afterWork = await faceIdentityRepo.getBackfillWork();
     expect(afterWork.hasPersonalIdentityWork).toBe(false);
 
-    // JobRepository.queueAll was called with FacialRecognition jobs for exactly the unassigned ids
-    expect(jobMock.queueAll).toHaveBeenCalledTimes(1);
-    const queueAllArg = jobMock.queueAll.mock.calls[0][0] as Array<{
-      name: JobName;
-      data: { id: string; deferred: boolean };
-    }>;
-    const queuedIds = queueAllArg.map((j) => j.data.id).toSorted();
-    expect(queuedIds).toEqual(leakedFaceIds.toSorted());
-    for (const job of queueAllArg) {
-      expect(job.name).toBe(JobName.FacialRecognition);
-      expect(job.data.deferred).toBe(false);
-    }
+    // The move is direct — FacialRecognition is never re-queued (that re-queue was the boomerang vector).
+    expect(jobMock.queueAll).not.toHaveBeenCalled();
   });
 
   it('review-only: does not touch faces of an over-cap person', async () => {
@@ -664,7 +664,7 @@ describe('FaceRepairService.executeRepair', () => {
     }
   });
 
-  it('rep-face reconcile: faceAssetId is updated when the rep was among the unassigned faces', async () => {
+  it('rep-face reconcile: faceAssetId is updated when the rep was among the re-attributed faces', async () => {
     const { sut, ctx } = setupRepair();
     const faceIdentityRepo = ctx.get(FaceIdentityRepository);
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -720,19 +720,19 @@ describe('FaceRepairService.executeRepair', () => {
       .select('faceAssetId')
       .where('id', '=', alexia.id)
       .executeTakeFirstOrThrow();
-    // faceAssetId must not be any of the leaked (now-unassigned) faces
+    // faceAssetId must not be any of the leaked (now-re-attributed) faces
     expect(leakedFaceIds).not.toContain(updated.faceAssetId);
     expect(updated.faceAssetId).not.toBeNull();
   });
 
-  it('eligibility re-check: face moved to third person before executeRepair is skipped and not queued', async () => {
+  it('eligibility re-check: a face moved to a third person before executeRepair is skipped, not re-attributed', async () => {
     const { sut, ctx } = setupRepair();
     const faceIdentityRepo = ctx.get(FaceIdentityRepository);
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     const { user } = await ctx.newUser();
 
-    // Karina-main: 10 first-axis faces
-    await buildLinkedCluster(ctx, user.id, axisEmbedding('first'), 10);
+    // Karina-main: 10 first-axis faces — the suspected owner.
+    const { person: karina } = await buildLinkedCluster(ctx, user.id, axisEmbedding('first'), 10);
 
     // Alexia: 8 genuine + 3 leaked — only 2 will remain in plan after one is moved
     const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
@@ -780,7 +780,7 @@ describe('FaceRepairService.executeRepair', () => {
 
     await sut.executeRepair(plan);
 
-    // The moved face is still on person Z (not unassigned)
+    // The face that moved to Z since planning is left on Z — the write-time re-check (still-on-source) skips it.
     const movedRow = await ctx.database
       .selectFrom('asset_face')
       .select('personId')
@@ -788,12 +788,18 @@ describe('FaceRepairService.executeRepair', () => {
       .executeTakeFirstOrThrow();
     expect(movedRow.personId).toBe(personZ.id);
 
-    // queueAll was not called with the moved face id
-    const queueAllArg = jobMock.queueAll.mock.calls[0]?.[0] as
-      | Array<{ name: JobName; data: { id: string } }>
-      | undefined;
-    const queuedIds = queueAllArg?.map((j) => j.data.id) ?? [];
-    expect(queuedIds).not.toContain(movedFaceId);
+    // The two remaining leaked faces were re-attributed to the suspected owner Karina.
+    const remainingRows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds.slice(1))
+      .execute();
+    for (const row of remainingRows) {
+      expect(row.personId).toBe(karina.id);
+    }
+
+    // The apply never re-queues FacialRecognition.
+    expect(jobMock.queueAll).not.toHaveBeenCalled();
   });
 });
 
@@ -895,7 +901,7 @@ describe('FaceRepairService.runRepair', () => {
     expect(jobMock.queueAll).not.toHaveBeenCalled();
   });
 
-  it('execute: dryRun=false with isActive=false → mutated=true, leaked faces nulled, queueAll called', async () => {
+  it('execute: dryRun=false with isActive=false → mutated=true, leaked faces re-attributed, no recognition re-queue', async () => {
     const { sut, ctx } = setupRunRepair();
     const faceIdentityRepo = ctx.get(FaceIdentityRepository);
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -903,7 +909,7 @@ describe('FaceRepairService.runRepair', () => {
     jobMock.queueAll.mockResolvedValue();
     const { user } = await ctx.newUser();
 
-    await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
+    const { person: karina } = await buildLinkedCluster(ctx as any, user.id, axisEmbedding('first'), 10);
 
     const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
     const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexia.id);
@@ -947,10 +953,10 @@ describe('FaceRepairService.runRepair', () => {
       .where('id', 'in', leakedFaceIds)
       .execute();
     for (const row of rows) {
-      expect(row.personId).toBeNull();
+      expect(row.personId).toBe(karina.id);
     }
 
-    expect(jobMock.queueAll).toHaveBeenCalledTimes(1);
+    expect(jobMock.queueAll).not.toHaveBeenCalled();
   });
 
   it('concurrency guard: isActive=true + dryRun=false → throws, nothing mutated; dryRun=true with isActive=true → succeeds', async () => {
@@ -1024,7 +1030,7 @@ describe('FaceRepairService.runRepair', () => {
     const { user: ownerB } = await ctx.newUser();
 
     // Owner A: karina-main + alexia with leaked faces
-    await buildLinkedCluster(ctx as any, ownerA.id, axisEmbedding('first'), 10);
+    const { person: karinaA } = await buildLinkedCluster(ctx as any, ownerA.id, axisEmbedding('first'), 10);
     const { person: alexiaA } = await ctx.newPerson({ ownerId: ownerA.id });
     const alexiaAIdentity = await faceIdentityRepoA.ensurePersonIdentity(alexiaA.id);
     const leakedA: string[] = [];
@@ -1091,14 +1097,14 @@ describe('FaceRepairService.runRepair', () => {
 
     await sut.runRepair({ ownerId: ownerA.id, dryRun: false, ...runRepairPlanDefaults });
 
-    // OwnerA leaked faces are unassigned
+    // OwnerA leaked faces are re-attributed to OwnerA's suspected owner
     const rowsA = await ctx.database
       .selectFrom('asset_face')
       .select(['id', 'personId'])
       .where('id', 'in', leakedA)
       .execute();
     for (const row of rowsA) {
-      expect(row.personId).toBeNull();
+      expect(row.personId).toBe(karinaA.id);
     }
 
     // OwnerB leaked faces remain assigned
@@ -1154,7 +1160,7 @@ describe('FaceRepairService.runRepair', () => {
     // First run: real execution
     await sut.runRepair({ ownerId: user.id, dryRun: false, ...runRepairPlanDefaults });
 
-    // Second run: dry-run should report 0 flagged (unassigned faces are no longer eligible)
+    // Second run: dry-run should report 0 flagged (re-attributed faces now match their owner's cluster)
     const result = await sut.runRepair({ ownerId: user.id, ...runRepairPlanDefaults });
     expect(result.report.totals.flaggedFaces).toBe(0);
   });

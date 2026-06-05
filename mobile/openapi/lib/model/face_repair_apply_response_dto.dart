@@ -13,32 +13,32 @@ part of openapi.api;
 class FaceRepairApplyResponseDto {
   /// Returns a new [FaceRepairApplyResponseDto] instance.
   FaceRepairApplyResponseDto({
-    required this.requeued,
-    required this.unassigned,
+    required this.moved,
+    required this.skipped,
   });
 
-  num requeued;
+  num moved;
 
-  num unassigned;
+  num skipped;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairApplyResponseDto &&
-    other.requeued == requeued &&
-    other.unassigned == unassigned;
+    other.moved == moved &&
+    other.skipped == skipped;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (requeued.hashCode) +
-    (unassigned.hashCode);
+    (moved.hashCode) +
+    (skipped.hashCode);
 
   @override
-  String toString() => 'FaceRepairApplyResponseDto[requeued=$requeued, unassigned=$unassigned]';
+  String toString() => 'FaceRepairApplyResponseDto[moved=$moved, skipped=$skipped]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'requeued'] = this.requeued;
-      json[r'unassigned'] = this.unassigned;
+      json[r'moved'] = this.moved;
+      json[r'skipped'] = this.skipped;
     return json;
   }
 
@@ -51,8 +51,8 @@ class FaceRepairApplyResponseDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairApplyResponseDto(
-        requeued: num.parse('${json[r'requeued']}'),
-        unassigned: num.parse('${json[r'unassigned']}'),
+        moved: num.parse('${json[r'moved']}'),
+        skipped: num.parse('${json[r'skipped']}'),
       );
     }
     return null;
@@ -100,8 +100,8 @@ class FaceRepairApplyResponseDto {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'requeued',
-    'unassigned',
+    'moved',
+    'skipped',
   };
 }
 

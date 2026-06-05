@@ -142,7 +142,7 @@ describe('+page.svelte (face cleanup)', () => {
     vi.useFakeTimers();
     vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
     vi.mocked(triggerScan).mockResolvedValue({ scanId: 'new-scan' });
-    vi.mocked(applyFaceRepair).mockResolvedValue({ unassigned: 5, requeued: 5 });
+    vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 5, skipped: 0 });
   });
 
   afterEach(() => {

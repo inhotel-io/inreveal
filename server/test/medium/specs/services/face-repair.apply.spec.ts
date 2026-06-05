@@ -118,13 +118,17 @@ afterEach(() => db.deleteFrom('face_repair_scan').execute());
 // ── Case 1: approve subset re-homes only approved; unapproved untouched ─────────────────────────
 
 describe('FaceRepairService.applyRepair: approve subset', () => {
-  it('approving P1 only re-homes P1 flagged faces; P2 faces are untouched', async () => {
+  it('approving P1 only re-homes P1 flagged faces to their suspected owner; P2 faces are untouched', async () => {
     const { sut, ctx, jobMock } = setup();
     const { user } = await ctx.newUser();
 
     // P1 and P2 are both over-cap (6 leaked / 10 total = 60% > maxFlaggedFraction 50%).
     // P1 uses first-axis leaks, P2 uses third-axis leaks (each with their own owner reference cluster).
-    const { person: p1, leakedFaceIds: p1Leaked } = await seedOverCapPerson(ctx, user.id, {
+    const {
+      person: p1,
+      leakedFaceIds: p1Leaked,
+      ownerQ: ownerQ1,
+    } = await seedOverCapPerson(ctx, user.id, {
       leakedCount: 6,
       genuineCount: 4,
       embedding: axisEmbedding('first'),
@@ -137,13 +141,13 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
 
     const result = await sut.applyRepair({ approvedPersonIds: [p1.id] });
 
-    // P1's flagged faces should have been unassigned.
-    expect(result.unassigned).toBe(p1Leaked.length);
+    // P1's flagged faces should have been moved to their suspected owner.
+    expect(result.moved).toBe(p1Leaked.length);
 
-    // P1's faces are now null.
+    // P1's flagged faces now belong to the suspected owner Q1 — durably (not unassigned, not boomeranged).
     const p1Rows = await db.selectFrom('asset_face').select(['id', 'personId']).where('id', 'in', p1Leaked).execute();
     for (const row of p1Rows) {
-      expect(row.personId).toBeNull();
+      expect(row.personId).toBe(ownerQ1.id);
     }
 
     // P2's faces are unchanged — still assigned to P2.
@@ -152,11 +156,8 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
       expect(row.personId).toBe(p2.id);
     }
 
-    // FacialRecognition jobs queued for every P1 face that was unassigned.
-    const queuedIds = jobMock.queueAll.mock.calls
-      .flatMap(([items]) => items)
-      .map((item) => (item.data as { id: string }).id);
-    expect(queuedIds.toSorted()).toEqual(p1Leaked.toSorted());
+    // The apply never re-queues facial recognition (that is what previously re-clustered faces back).
+    expect(jobMock.queueAll).not.toHaveBeenCalled();
   });
 });
 
@@ -168,7 +169,11 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
     const { user } = await ctx.newUser();
 
     // P1 over-cap: 6 leaked faces.
-    const { person: p1, leakedFaceIds: p1Leaked } = await seedOverCapPerson(ctx, user.id, {
+    const {
+      person: p1,
+      leakedFaceIds: p1Leaked,
+      ownerQ,
+    } = await seedOverCapPerson(ctx, user.id, {
       leakedCount: 6,
       genuineCount: 4,
     });
@@ -179,8 +184,8 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
       excludeFaceIds: [excludedFaceId],
     });
 
-    // One face was excluded → unassigned = flaggedCount - 1.
-    expect(result.unassigned).toBe(p1Leaked.length - 1);
+    // One face was excluded → moved = flaggedCount - 1.
+    expect(result.moved).toBe(p1Leaked.length - 1);
 
     // The excluded face still belongs to P1.
     const excludedRow = await db
@@ -190,7 +195,7 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
       .executeTakeFirstOrThrow();
     expect(excludedRow.personId).toBe(p1.id);
 
-    // All other leaked faces are now null.
+    // All other leaked faces now belong to the suspected owner Q.
     const otherFaceIds = p1Leaked.slice(1);
     const otherRows = await db
       .selectFrom('asset_face')
@@ -198,7 +203,7 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
       .where('id', 'in', otherFaceIds)
       .execute();
     for (const row of otherRows) {
-      expect(row.personId).toBeNull();
+      expect(row.personId).toBe(ownerQ.id);
     }
   });
 });
@@ -206,7 +211,7 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
 // ── Case 3: idempotent re-apply ──────────────────────────────────────────────────────────────────
 
 describe('FaceRepairService.applyRepair: idempotent re-apply', () => {
-  it('second applyRepair with same approvedPersonIds returns unassigned: 0 (faces already moved)', async () => {
+  it('second applyRepair with same approvedPersonIds returns moved: 0 (faces already re-homed)', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
 
@@ -215,13 +220,13 @@ describe('FaceRepairService.applyRepair: idempotent re-apply', () => {
       genuineCount: 4,
     });
 
-    // First apply: should unassign the over-cap faces.
+    // First apply: should move the over-cap faces to their suspected owner.
     const first = await sut.applyRepair({ approvedPersonIds: [p1.id] });
-    expect(first.unassigned).toBeGreaterThan(0);
+    expect(first.moved).toBeGreaterThan(0);
 
-    // Second apply: scoped to the same personIds, but faces are already null → nothing to re-home.
+    // Second apply: scoped to the same personIds, but the faces no longer belong to P1 → nothing to re-home.
     const second = await sut.applyRepair({ approvedPersonIds: [p1.id] });
-    expect(second.unassigned).toBe(0);
-    expect(second.requeued).toBe(0);
+    expect(second.moved).toBe(0);
+    expect(second.skipped).toBe(0);
   });
 });

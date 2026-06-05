@@ -118,6 +118,36 @@ export class FaceRepairScanRepository {
       .execute();
   }
 
+  // Drop the given persons from the latest scan's persisted report after they have been applied, and keep the
+  // headline `flaggedFaces`/`affectedPersons` totals coherent with the trimmed list. The report is a
+  // point-in-time snapshot; without this an applied row reappears the next time the console refetches it.
+  async removePersonsFromLatestScan(personIds: string[]): Promise<void> {
+    if (personIds.length === 0) {
+      return;
+    }
+    const latest = await this.getLatestScan();
+    if (!latest?.persons) {
+      return;
+    }
+    const remove = new Set(personIds);
+    const persons = (latest.persons as unknown as RepairScanPerson[]).filter((p) => !remove.has(p.personId));
+    const totals = latest.totals
+      ? {
+          ...(latest.totals as unknown as RepairScanTotals),
+          flaggedFaces: persons.reduce((sum, p) => sum + p.flagged, 0),
+          affectedPersons: persons.length,
+        }
+      : latest.totals;
+    await this.db
+      .updateTable('face_repair_scan')
+      .set({
+        persons: persons as unknown as RepairScanRow['persons'],
+        totals: totals as unknown as RepairScanRow['totals'],
+      })
+      .where('id', '=', latest.id)
+      .execute();
+  }
+
   async pruneSupersededScans(): Promise<void> {
     const latest = await this.db
       .selectFrom('face_repair_scan')

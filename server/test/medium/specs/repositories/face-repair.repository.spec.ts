@@ -196,11 +196,12 @@ describe('FaceRepairRepository.streamEligibleFaces', () => {
   });
 });
 
-describe('FaceRepairRepository.unassignFacesFromPerson', () => {
-  it('sets personId to NULL for requested faces still on that person and returns their ids', async () => {
+describe('FaceRepairRepository.reattributeFaces', () => {
+  it('moves requested faces still on the source person to the destination and returns their ids', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
     const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
@@ -211,9 +212,9 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
     const { asset: assetC } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceC } = await ctx.newAssetFace({ assetId: assetC.id, personId: person.id });
 
-    const unassigned = await sut.unassignFacesFromPerson(person.id, [faceA.id, faceB.id]);
+    const moved = await sut.reattributeFaces(person.id, owner.id, [faceA.id, faceB.id]);
 
-    expect(unassigned.toSorted()).toEqual([faceA.id, faceB.id].toSorted());
+    expect(moved.toSorted()).toEqual([faceA.id, faceB.id].toSorted());
 
     const rows = await ctx.database
       .selectFrom('asset_face')
@@ -221,24 +222,25 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
       .where('id', 'in', [faceA.id, faceB.id, faceC.id])
       .execute();
     const byId = Object.fromEntries(rows.map((r) => [r.id, r.personId]));
-    expect(byId[faceA.id]).toBeNull();
-    expect(byId[faceB.id]).toBeNull();
+    expect(byId[faceA.id]).toBe(owner.id);
+    expect(byId[faceB.id]).toBe(owner.id);
     expect(byId[faceC.id]).toBe(person.id);
   });
 
-  it('eligibility re-check: skips faces already moved to another person', async () => {
+  it('eligibility re-check: skips faces already moved off the source person', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person: personP } = await ctx.newPerson({ ownerId: user.id });
     const { person: personQ } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
-    // face x is on person Q at unassign time (simulates concurrent move)
+    // face x is on person Q at apply time (simulates concurrent move)
     const { asset: assetX } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceX } = await ctx.newAssetFace({ assetId: assetX.id, personId: personQ.id });
 
-    const unassigned = await sut.unassignFacesFromPerson(personP.id, [faceX.id]);
+    const moved = await sut.reattributeFaces(personP.id, owner.id, [faceX.id]);
 
-    expect(unassigned).toHaveLength(0);
+    expect(moved).toHaveLength(0);
     const row = await ctx.database
       .selectFrom('asset_face')
       .select('personId')
@@ -247,10 +249,11 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
     expect(row.personId).toBe(personQ.id);
   });
 
-  it('eligibility re-check: does not unassign manual-sourced faces', async () => {
+  it('eligibility re-check: does not move manual-sourced faces', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
     const { asset } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
@@ -260,9 +263,9 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
       .where('id', '=', manualFace.id)
       .execute();
 
-    const unassigned = await sut.unassignFacesFromPerson(person.id, [manualFace.id]);
+    const moved = await sut.reattributeFaces(person.id, owner.id, [manualFace.id]);
 
-    expect(unassigned).toHaveLength(0);
+    expect(moved).toHaveLength(0);
     const row = await ctx.database
       .selectFrom('asset_face')
       .select('personId')

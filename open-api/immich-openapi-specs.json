@@ -23276,16 +23276,16 @@
       },
       "FaceRepairApplyResponseDto": {
         "properties": {
-          "requeued": {
+          "moved": {
             "type": "number"
           },
-          "unassigned": {
+          "skipped": {
             "type": "number"
           }
         },
         "required": [
-          "requeued",
-          "unassigned"
+          "moved",
+          "skipped"
         ],
         "type": "object"
       },
@@ -23375,16 +23375,16 @@
           },
           "executed": {
             "properties": {
-              "requeued": {
+              "moved": {
                 "type": "number"
               },
-              "unassigned": {
+              "skipped": {
                 "type": "number"
               }
             },
             "required": [
-              "unassigned",
-              "requeued"
+              "moved",
+              "skipped"
             ],
             "type": "object"
           },

@@ -101,6 +101,40 @@ describe(FaceRepairScanRepository.name, () => {
     expect(latestAfterPrune?.id).toBe(second.id);
   });
 
+  it('removePersonsFromLatestScan drops the given persons and recomputes flaggedFaces/affectedPersons', async () => {
+    const person = (id: string, flagged: number): RepairScanPerson => ({
+      personId: id,
+      ownerId: '00000000-0000-4000-8000-0000000000ff',
+      personName: null,
+      faceCount: flagged + 2,
+      thumbnailFaceId: null,
+      eligible: flagged + 2,
+      flagged,
+      flaggedFraction: flagged / (flagged + 2),
+      suspectedOwners: [],
+      recommendation: 'confident',
+      reviewReasons: [],
+    });
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.completeScan(scan.id, {
+      totals: { ...zeroTotals(), flaggedFaces: 15, affectedPersons: 3 },
+      persons: [person('p1', 6), person('p2', 4), person('p3', 5)],
+    });
+
+    await sut.removePersonsFromLatestScan(['p1', 'p3']);
+
+    const row = await sut.getScanById(scan.id);
+    expect((row?.persons as unknown as RepairScanPerson[]).map((p) => p.personId)).toEqual(['p2']);
+    expect((row?.totals as unknown as { flaggedFaces: number }).flaggedFaces).toBe(4);
+    expect((row?.totals as unknown as { affectedPersons: number }).affectedPersons).toBe(1);
+  });
+
+  it('removePersonsFromLatestScan is a no-op for an empty id list', async () => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.completeScan(scan.id, { totals: zeroTotals(), persons: [] });
+    await expect(sut.removePersonsFromLatestScan([])).resolves.toBeUndefined();
+  });
+
   describe('enrichReportPersons', () => {
     let ownerId: string;
     let p: { id: string; faceAssetId: string | null; name: string };

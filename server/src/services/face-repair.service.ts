@@ -53,11 +53,16 @@ export interface RunRepairOptions {
   maxFlaggedFraction?: number;
 }
 
+export interface RepairExecution {
+  moved: number;
+  skipped: number;
+}
+
 export interface RunRepairResult {
   dryRun: boolean;
   mutated: boolean;
   report: RepairReport;
-  executed?: { unassigned: number; requeued: number };
+  executed?: RepairExecution;
 }
 
 export { RepairReport } from 'src/services/face-repair.summary';
@@ -146,31 +151,62 @@ export class FaceRepairService extends BaseService {
     return { toRepair, reviewOnlyFaces, reviewOnlyPersonIds: [...reviewOnlyPersonIds], unAttributableFaces, perPerson };
   }
 
-  async executeRepair(plan: RepairPlan): Promise<{ unassigned: number; requeued: number }> {
-    const byPerson = new Map<string, string[]>();
+  // Directly re-attribute each flagged face to its detector-determined suspected owner, with a `manual`
+  // identity link. This is the durable, intent-faithful move: it writes the destination the admin approved
+  // (recognition never overrides a manual face, so it cannot boomerang back), and never re-queues
+  // FacialRecognition (whose nearest-neighbour re-clustering routed unassigned faces straight back to the
+  // original wrong person on contaminated clusters). A suspected owner deleted/merged since the scan is
+  // skipped (never written), so a stale destination can never corrupt the apply.
+  async executeRepair(plan: RepairPlan): Promise<RepairExecution> {
+    // Group by (source person → destination owner) so the write-time re-check (still-on-source) holds per route.
+    const routes = new Map<string, { from: string; to: string; faceIds: string[] }>();
     for (const face of plan.toRepair) {
-      const list = byPerson.get(face.currentPersonId) ?? [];
-      list.push(face.assetFaceId);
-      byPerson.set(face.currentPersonId, list);
+      const key = `${face.currentPersonId}|${face.suspectedOwnerId}`;
+      const route = routes.get(key) ?? { from: face.currentPersonId, to: face.suspectedOwnerId, faceIds: [] };
+      route.faceIds.push(face.assetFaceId);
+      routes.set(key, route);
     }
 
-    const unassignedIds: string[] = [];
-    for (const [personId, assetFaceIds] of byPerson) {
-      const ids = await this.faceRepairRepository.unassignFacesFromPerson(personId, assetFaceIds);
-      unassignedIds.push(...ids);
+    let moved = 0;
+    let skipped = 0;
+    const affectedPersonIds = new Set<string>();
+    const ownerExists = new Map<string, boolean>();
+
+    for (const { from, to, faceIds } of routes.values()) {
+      let exists = ownerExists.get(to);
+      if (exists === undefined) {
+        exists = !!(await this.personRepository.getById(to));
+        ownerExists.set(to, exists);
+      }
+      if (!exists) {
+        skipped += faceIds.length;
+        continue;
+      }
+
+      const movedIds = await this.faceRepairRepository.reattributeFaces(from, to, faceIds);
+      skipped += faceIds.length - movedIds.length;
+      if (movedIds.length === 0) {
+        continue;
+      }
+
+      const identity = await this.faceIdentityRepository.ensurePersonIdentity(to);
+      for (const assetFaceId of movedIds) {
+        await this.faceIdentityRepository.replaceFaceIdentity({
+          assetFaceId,
+          identityId: identity.id,
+          source: 'manual',
+        });
+      }
+      moved += movedIds.length;
+      affectedPersonIds.add(from);
+      affectedPersonIds.add(to);
     }
 
-    if (unassignedIds.length === 0) {
-      return { unassigned: 0, requeued: 0 };
+    if (affectedPersonIds.size > 0) {
+      await this.faceRepairRepository.reconcileRepresentativeFaces([...affectedPersonIds]);
     }
 
-    await this.faceIdentityRepository.unlinkFaces(unassignedIds);
-    await this.faceRepairRepository.reconcileRepresentativeFaces([...byPerson.keys()]);
-    await this.jobRepository.queueAll(
-      unassignedIds.map((id) => ({ name: JobName.FacialRecognition, data: { id, deferred: false } })),
-    );
-
-    return { unassigned: unassignedIds.length, requeued: unassignedIds.length };
+    return { moved, skipped };
   }
 
   async runRepair(options: RunRepairOptions = {}): Promise<RunRepairResult> {
@@ -191,7 +227,7 @@ export class FaceRepairService extends BaseService {
 
     const plan = await this.buildRepairPlan(planOptions);
 
-    let executed: { unassigned: number; requeued: number } | undefined;
+    let executed: RepairExecution | undefined;
     if (!dryRun) {
       if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
         throw new Error('Refusing to run face re-attribution repair while facial recognition is active');
@@ -399,12 +435,9 @@ export class FaceRepairService extends BaseService {
     return { personId, flaggedFaces };
   }
 
-  async applyRepair(input: {
-    approvedPersonIds: string[];
-    excludeFaceIds?: string[];
-  }): Promise<{ unassigned: number; requeued: number }> {
+  async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<RepairExecution> {
     if (input.approvedPersonIds.length === 0) {
-      return { unassigned: 0, requeued: 0 };
+      return { moved: 0, skipped: 0 };
     }
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to apply while facial recognition is active');
@@ -427,6 +460,14 @@ export class FaceRepairService extends BaseService {
     });
     const exclude = new Set(input.excludeFaceIds);
     const scopedPlan = { ...plan, toRepair: plan.toRepair.filter((face) => !exclude.has(face.assetFaceId)) };
-    return this.executeRepair(scopedPlan);
+    const result = await this.executeRepair(scopedPlan);
+
+    // Drop the resolved persons from the latest scan snapshot so the console reflects the change immediately
+    // (the persisted report is a point-in-time snapshot; without this the applied rows reappear on refetch).
+    if (result.moved > 0) {
+      await this.faceRepairScanRepository.removePersonsFromLatestScan(input.approvedPersonIds);
+    }
+
+    return result;
   }
 }

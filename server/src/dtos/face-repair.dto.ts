@@ -31,7 +31,7 @@ export const FaceRepairResponseSchema = z
   .object({
     dryRun: z.boolean(),
     mutated: z.boolean(),
-    executed: z.object({ unassigned: z.number(), requeued: z.number() }).optional(),
+    executed: z.object({ moved: z.number(), skipped: z.number() }).optional(),
     report: z.object({
       totals: z.object({
         eligibleFaces: z.number(),
@@ -104,7 +104,7 @@ export const FaceRepairApplyRequestSchema = z
 export class FaceRepairApplyRequestDto extends createZodDto(FaceRepairApplyRequestSchema) {}
 
 export const FaceRepairApplyResponseSchema = z
-  .object({ unassigned: z.number(), requeued: z.number() })
+  .object({ moved: z.number(), skipped: z.number() })
   .meta({ id: 'FaceRepairApplyResponseDto' });
 export class FaceRepairApplyResponseDto extends createZodDto(FaceRepairApplyResponseSchema) {}
 

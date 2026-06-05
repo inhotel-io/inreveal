@@ -88,8 +88,8 @@ export type FaceRepairRequestDto = {
 export type FaceRepairResponseDto = {
     dryRun: boolean;
     executed?: {
-        requeued: number;
-        unassigned: number;
+        moved: number;
+        skipped: number;
     };
     mutated: boolean;
     report: {
@@ -124,8 +124,8 @@ export type FaceRepairApplyRequestDto = {
     excludeFaceIds?: string[];
 };
 export type FaceRepairApplyResponseDto = {
-    requeued: number;
-    unassigned: number;
+    moved: number;
+    skipped: number;
 };
 export type FaceRepairScanTriggerResponseDto = {
     scanId: string;

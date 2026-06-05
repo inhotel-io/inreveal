@@ -147,7 +147,7 @@ describe('+page.svelte (face-cleanup review)', () => {
       personId: PERSON_ID,
       flaggedFaces: makeFlaggedFaces(3),
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(applyFaceRepair).mockResolvedValue({ unassigned: 0, requeued: 0 });
+    vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 0, skipped: 0 });
   });
 
   afterEach(() => {

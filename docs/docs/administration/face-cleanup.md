@@ -48,6 +48,8 @@ totals, but they are not presented for action.
 
 - The scan and the apply step both **refuse to run while facial recognition is active**. If you see a 409 conflict
   message, wait for the recognition queue to drain and try again.
-- Applying a repair automatically re-queues facial recognition for the moved faces, which routes them onto their
-  true owner's existing cluster.
-- All moves are reversible: run a new scan and use the same console to move faces back if needed.
+- Applying a repair **assigns the impostor faces directly to their suspected owner** (an admin-confirmed manual
+  assignment). The move is immediate and durable — facial recognition will not re-cluster a manually assigned face,
+  so the faces cannot drift back to the wrong person. Once an apply succeeds the affected rows leave the list.
+- All moves are reversible: open the affected people on the People page (or run a new scan and use the console) to
+  move faces back if needed.

@@ -57,18 +57,20 @@ export class FaceRepairRepository {
     return Number(count);
   }
 
-  // Unassign the given faces ONLY if still assigned to `personId` and machine-learning-sourced (eligibility
-  // re-check at write — a face moved by a concurrent job since planning is skipped). Returns the ids actually
-  // unassigned (so the caller unlinks/queues exactly those).
-  async unassignFacesFromPerson(personId: string, assetFaceIds: string[]): Promise<string[]> {
+  // Re-attribute the given faces from `fromPersonId` to `toPersonId` ONLY if they are still assigned to
+  // `fromPersonId` and machine-learning-sourced (eligibility re-check at write — a face moved by a concurrent
+  // job since planning is skipped). Returns the ids actually moved (so the caller links identities for exactly
+  // those). Writing the destination directly is what makes the move durable: recognition re-clusters an
+  // unassigned face to its nearest neighbour, which for a contaminated cluster is the original wrong person.
+  async reattributeFaces(fromPersonId: string, toPersonId: string, assetFaceIds: string[]): Promise<string[]> {
     if (assetFaceIds.length === 0) {
       return [];
     }
     const rows = await this.db
       .updateTable('asset_face')
-      .set({ personId: null })
+      .set({ personId: toPersonId })
       .where('id', 'in', assetFaceIds)
-      .where('personId', '=', personId)
+      .where('personId', '=', fromPersonId)
       .where('sourceType', '=', sql.lit(SourceType.MachineLearning))
       .where('deletedAt', 'is', null)
       .where('isVisible', '=', true)

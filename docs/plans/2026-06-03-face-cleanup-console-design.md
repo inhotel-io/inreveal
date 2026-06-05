@@ -5,7 +5,19 @@
 [face re-attribution repair](2026-05-31-face-reattribution-repair-design.md) (`FaceRepairService`).
 **Prereq:** the re-attribution repair engine (`FaceRepairService.buildRepairPlan` / `executeRepair`) and the
 #652 prevention guards are already on this branch and must be **deployed** — the console is a UI layer on top
-of that engine; it adds no new face-moving logic.
+of that engine.
+
+> **Correction (2026-06-04) — the engine's move primitive was rewritten.** The original `executeRepair`
+> _unassigned_ the impostor faces and re-queued `FacialRecognition`, on the assumption (below) that recognition
+> would route each face to its true owner's cluster. Live testing on a real library disproved this: Immich
+> recognition assigns an unassigned face to its **single nearest assigned neighbour's** person
+> (`person.service.ts` `handleRecognizeFaces`), which on a contaminated cluster is the _original wrong person_ —
+> so every face boomeranged back within seconds and the apply was a no-op. `executeRepair` now **assigns each
+> flagged face directly to its detector-determined suspected owner with a `manual` identity link** (the same
+> primitive the People page uses), which is durable (recognition never overrides a manual face) and requires no
+> recognition re-queue. The apply also prunes the applied persons from the persisted scan snapshot so the list
+> reflects the change on refetch (the "Stale reports" open question, below). Sections that still describe the old
+> unassign-and-re-queue behaviour are kept for history and flagged inline.
 
 ## Motivation
 
@@ -29,10 +41,10 @@ cluster does not poison the decision: Armin's faces flag → Armin; Jula's real 
 
 Two facts make a human-confirmed override the correct primitive (verified in code, not assumed):
 
-1. **The repair never empties a cluster.** `executeRepair` unassigns only the _flagged_ faces, calls
-   `faceIdentityRepository.unlinkFaces`, `reconcileRepresentativeFaces`, and re-queues `FacialRecognition`;
-   recognition (k-NN over assigned faces, `searchFaces`) routes each flagged face to its true owner's intact
-   cluster. The person keeps its unflagged faces, name, and thumbnail.
+1. **The repair never empties a cluster.** `executeRepair` moves only the _flagged_ faces; the person keeps its
+   unflagged faces, name, and thumbnail. _(Original design re-queued `FacialRecognition` to re-home them — see the
+   2026-06-04 correction above; the engine now assigns each flagged face directly to its suspected owner with a
+   `manual` identity link, which keeps this property and is durable.)_
 2. **"Dissolve" (un-assign all faces) would be strictly worse.** Recognition is k-NN over assigned faces, so a
    person with zero faces can never receive faces again, and `handlePersonCleanup` deletes faceless people —
    the name is _lost_, not merely ghosted. Re-attributing only the impostor faces sidesteps this entirely.
@@ -162,27 +174,30 @@ Extend the repair path with `approvedPersonIds: string[]` and optional `excludeF
   faces flow to `toRepair` instead of `reviewOnly`. Everyone else stays `reviewOnly` (unapproved corruption is
   provably untouched — safer and more legible than a blanket `maxFlaggedFraction=1`).
 - **`bad-target` is also lifted for an approved person.** Today a flagged face is held as `reviewOnly` when its
-  _suspected owner_ is itself over-cap. For an approved person we move its flagged faces anyway, because (a)
-  the detector says those faces genuinely belong to that owner, and (b) we never write into the owner directly
-  — we unassign + re-queue `FacialRecognition`, which k-NN-matches them onto the owner's _real_ faces (the
-  owner's own contamination is a separate, later cleanup). The admin saw the `bad-target` warning on the
-  review page and chose to proceed. (Suggested operating order is still owners-first; see Open questions.)
+  _suspected owner_ is itself over-cap. For an approved person we move its flagged faces anyway, because the
+  detector says those faces genuinely belong to that owner (the owner's own contamination is a separate, later
+  cleanup). The admin saw the `bad-target` warning on the review page and chose to proceed. (Suggested operating
+  order is still owners-first; see Open questions.) _Per the 2026-06-04 correction, the move now writes the
+  suspected owner directly (manual identity link); a suspected owner that was deleted/merged since the scan is
+  skipped, not written._
 - **Apply is scoped to `approvedPersonIds`, never a full re-scan.** `executeRepair` re-votes only the approved
   persons' faces — extend `streamEligibleFaces` to accept a person-id _set_ (or loop per person). This keeps an
   apply cheap (thousands of faces, not the ~450k instance), and re-checks each face at write so a face moved by
   a concurrent job since the scan is skipped.
 - `excludeFaceIds` (the per-face deselects from the review page) are dropped from `toRepair` before
   `executeRepair`.
-- `executeRepair` is reused verbatim (unassign flagged → `unlinkFaces` → `reconcileRepresentativeFaces` →
-  re-queue `FacialRecognition`). The existing "refuse while `FacialRecognition` active" guard stays, **plus a
-  new refusal while a scan is `running`** (apply mutates the faces the scan is snapshotting).
+- `executeRepair` (per the 2026-06-04 correction) re-attributes each flagged face **directly to its suspected
+  owner** (`reattributeFaces` write-time re-check → `ensurePersonIdentity` → `replaceFaceIdentity(source:'manual')`
+  → `reconcileRepresentativeFaces` for source + destination). No `FacialRecognition` re-queue. The existing
+  "refuse while `FacialRecognition` active" guard stays, **plus a refusal while a scan is `running`** (apply
+  mutates the faces the scan is snapshotting). Because the apply no longer enqueues onto the recognition queue, it
+  no longer trips its _own_ guard on the next call.
 - **Best-effort + idempotent + resumable.** `executeRepair` is not one transaction, so a mid-apply failure can
-  leave some faces unassigned and others not. That is safe: the write-time re-check makes a re-apply skip
-  already-moved faces and converge, and a per-person failure is logged without aborting the rest. The endpoint
-  returns the real `{ unassigned, requeued }` so the UI reports what actually happened.
-- **Suspected owner is never written directly**, so a suspected owner that was deleted/merged between scan and
-  apply cannot break the apply — it only unassigns the approved person's own faces and lets recognition decide
-  where they land.
+  leave some faces moved and others not. That is safe: the write-time re-check (a face is moved only if still on
+  its source person) makes a re-apply skip already-moved faces and converge, and a per-route failure is logged
+  without aborting the rest. The endpoint returns the real `{ moved, skipped }` so the UI reports what happened.
+- **A suspected owner deleted/merged between scan and apply is skipped, never written** (existence is checked
+  before the move), so a stale destination cannot corrupt the apply.
 
 ### S-D. API endpoints (admin-guarded)
 
@@ -190,7 +205,7 @@ Extend the repair path with `approvedPersonIds: string[]` and optional `excludeF
   already `running` or if `FacialRecognition` is active.
 - `GET /admin/face-repair/scan/latest` → the latest `face_repair_scan` (status + progress + report).
 - `POST /admin/face-repair/apply` → `{ approvedPersonIds, excludeFaceIds? }`; runs the override apply, returns
-  the existing `{ unassigned, requeued }` result. Refuses (409) if `FacialRecognition` is active **or a scan is
+  the `{ moved, skipped }` result. Refuses (409) if `FacialRecognition` is active **or a scan is
   `running`**.
 
 All three are `@Authenticated({ admin: true })`; a non-admin gets 403 on each.
@@ -326,7 +341,7 @@ new method.
   done faces). One person failing does not abort the others.
 - **stale suspected owner:** the suspected owner referenced by the report was deleted/merged since the scan →
   apply still unassigns + re-queues the approved person's faces without error (apply never writes to the owner).
-- empty `approvedPersonIds` → no-op `{ unassigned: 0, requeued: 0 }`.
+- empty `approvedPersonIds` → no-op `{ moved: 0, skipped: 0 }`.
 - **refusal** when `FacialRecognition` active **or a scan is `running`** → 409, nothing mutated.
 - admin guard: non-admin → 403.
 

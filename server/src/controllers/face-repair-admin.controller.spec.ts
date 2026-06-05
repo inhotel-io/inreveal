@@ -88,7 +88,7 @@ describe(FaceRepairAdminController.name, () => {
       const result = {
         dryRun: false,
         mutated: true,
-        executed: { unassigned: 3, requeued: 3 },
+        executed: { moved: 3, skipped: 0 },
         report: {
           totals: {
             eligibleFaces: 50,
