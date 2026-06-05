@@ -1129,6 +1129,19 @@ export type AgentProposeAlbumOperationsDto = {
             showMetadata?: boolean;
             allowDownload?: boolean;
         };
+    } | {
+        "type": AgentShareLinkCreateAlbumOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            password?: string;
+            expiresAt?: string;
+            showMetadata?: boolean;
+            allowDownload?: boolean;
+        };
     })[];
     summary: string;
 };
@@ -1513,6 +1526,19 @@ export type AgentReviseAlbumOperationsDto = {
         assetSource?: AgentOperationPlanningAssetSourceInput;
         assetIds?: string[];
         assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            password?: string;
+            expiresAt?: string;
+            showMetadata?: boolean;
+            allowDownload?: boolean;
+        };
+    } | {
+        "type": AgentShareLinkCreateAlbumOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
         payload: {
@@ -10707,7 +10733,8 @@ export enum AgentOperationType {
     AssetRemoveTag = "asset.removeTag",
     AssetTrash = "asset.trash",
     AssetRestore = "asset.restore",
-    ShareLinkCreate = "shareLink.create"
+    ShareLinkCreate = "shareLink.create",
+    ShareLinkCreateAlbum = "shareLink.createAlbum"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10843,6 +10870,9 @@ export enum AgentAssetUnstackOperationType {
 }
 export enum AgentShareLinkCreateOperationType {
     ShareLinkCreate = "shareLink.create"
+}
+export enum AgentShareLinkCreateAlbumOperationType {
+    ShareLinkCreateAlbum = "shareLink.createAlbum"
 }
 export enum Status {
     Success = "success"
