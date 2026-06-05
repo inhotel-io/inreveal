@@ -1301,7 +1301,7 @@ describe('FaceRepairService decline filter', () => {
     expect(karinaFaces.length).toBe(10);
   });
 
-  it('dismissed person is absent from getPersonFlaggedFaces; re-surfaces with new owner', async () => {
+  it('dismissed person is absent from getPersonFlaggedFaces when its suspected set matches the fingerprint', async () => {
     const { sut, ctx } = setupDecline();
     const declineRepo = ctx.get(FaceRepairDeclineRepository);
     const { user } = await ctx.newUser();
