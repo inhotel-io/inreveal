@@ -647,6 +647,28 @@ const restoreOperationSchema = z
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetRestore);
   });
 
+const stackOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetStack).meta({ id: 'AgentAssetStackOperationType' }),
+    ...assetBatchBase,
+    // Stack is Low risk — reversible by unstacking
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetStack);
+  });
+
+const unstackOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetUnstack).meta({ id: 'AgentAssetUnstackOperationType' }),
+    ...assetBatchBase,
+    // Unstack is Low risk — dissolves stack but does not delete assets
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetUnstack);
+  });
+
 const shareLinkCreateOperationSchema = z
   .strictObject({
     type: z.literal(AgentOperationType.ShareLinkCreate).meta({ id: 'AgentShareLinkCreateOperationType' }),
@@ -695,6 +717,8 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   removeTagOperationSchema,
   trashOperationSchema,
   restoreOperationSchema,
+  stackOperationSchema,
+  unstackOperationSchema,
   shareLinkCreateOperationSchema,
 ]);
 
@@ -802,6 +826,8 @@ const AgentAssetBatchWorkflowActionSchema = z
     assetCropPayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetCrop),
     }),
+    z.strictObject({ type: z.literal(AgentOperationType.AssetStack) }),
+    z.strictObject({ type: z.literal(AgentOperationType.AssetUnstack) }),
     z
       .strictObject({
         type: z.literal(AgentOperationType.AssetUpdateMetadata),

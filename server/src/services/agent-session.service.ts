@@ -32,6 +32,7 @@ export class AgentSessionService {
     updateAssetMetadata: false,
     trashAssets: false,
     createSharedLinks: false,
+    manageStacks: false,
   };
 
   static readonly permissionPresets: AgentPermissionPresetMap = {
@@ -64,6 +65,7 @@ export class AgentSessionService {
         updateAssetMetadata: false,
         trashAssets: false,
         createSharedLinks: false,
+        manageStacks: false,
       },
       limits: {
         maxAssetsPerToolCall: 1000,
@@ -104,6 +106,7 @@ export class AgentSessionService {
         updateAssetMetadata: true,
         trashAssets: true,
         createSharedLinks: false,
+        manageStacks: true,
       },
       limits: {
         maxAssetsPerToolCall: 2000,
@@ -144,6 +147,7 @@ export class AgentSessionService {
         updateAssetMetadata: true,
         trashAssets: true,
         createSharedLinks: true,
+        manageStacks: true,
       },
       limits: {
         maxAssetsPerToolCall: 5000,

@@ -22666,9 +22666,21 @@
           }
         ]
       },
+      "AgentAssetStackOperationType": {
+        "enum": [
+          "asset.stack"
+        ],
+        "type": "string"
+      },
       "AgentAssetTrashOperationType": {
         "enum": [
           "asset.trash"
+        ],
+        "type": "string"
+      },
+      "AgentAssetUnstackOperationType": {
+        "enum": [
+          "asset.unstack"
         ],
         "type": "string"
       },
@@ -24342,6 +24354,8 @@
           "space.updateMemberRole",
           "asset.rotate",
           "asset.crop",
+          "asset.stack",
+          "asset.unstack",
           "asset.setFavorite",
           "asset.setArchive",
           "asset.updateMetadata",
@@ -24493,6 +24507,9 @@
               "favoriteAssets": {
                 "type": "boolean"
               },
+              "manageStacks": {
+                "type": "boolean"
+              },
               "removeAssets": {
                 "type": "boolean"
               },
@@ -24543,7 +24560,8 @@
               "tagAssets",
               "updateAssetMetadata",
               "trashAssets",
-              "createSharedLinks"
+              "createSharedLinks",
+              "manageStacks"
             ],
             "type": "object"
           }
@@ -25963,6 +25981,124 @@
                   "properties": {
                     "type": {
                       "$ref": "#/components/schemas/AgentAssetRestoreOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetStackOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetUnstackOperationType"
                     },
                     "summary": {
                       "type": "string",
@@ -28181,6 +28317,124 @@
                   "properties": {
                     "type": {
                       "$ref": "#/components/schemas/AgentAssetRestoreOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetStackOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "assetSource": {
+                      "$ref": "#/components/schemas/AgentOperationPlanningAssetSourceInput"
+                    },
+                    "assetIds": {
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                      }
+                    },
+                    "assetSelectionHandleId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAssetUnstackOperationType"
                     },
                     "summary": {
                       "type": "string",

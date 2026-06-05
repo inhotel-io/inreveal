@@ -138,6 +138,15 @@ const CASES = [
   // share_assets must NOT steal trash/archive/rotate
   ['trash my newest 20 photos', 'trash_assets'],
   ['archive my newest 50 photos', 'archive_assets'],
+  // stack_assets (stack/group-into-a-stack verb; subjective source declines)
+  ['stack my newest 10 photos', 'stack_assets'],
+  ['group my newest 5 photos into a stack', 'stack_assets'],
+  // unstack_assets (unstack/un-stack/ungroup verb; disjoint from stack_assets)
+  ['unstack my newest 10 photos', 'unstack_assets'],
+  ['un-stack my photos from 2024', 'unstack_assets'],
+  ['ungroup my newest 5 photos', 'unstack_assets'],
+  // stack_assets must NOT steal unstack
+  ['unstack my newest 10 photos', 'unstack_assets'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {

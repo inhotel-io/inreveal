@@ -21,6 +21,8 @@ import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
 import { cropAssetsWorkflow } from './workflows/crop-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { shareAssetsWorkflow } from './workflows/share-assets.mjs';
+import { stackAssetsWorkflow } from './workflows/stack-assets.mjs';
+import { unstackAssetsWorkflow } from './workflows/unstack-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -73,6 +75,16 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     ordering relative to rotate does not matter for the regex fast-path, but
 //     adjacency groups the two image-edit workflows together for readability.
 //     `crop_assets` requires EXPLICIT geometry — no geometry → needs_input.
+//   - `unstack_assets` is placed BEFORE `stack_assets` because the hyphenated
+//     form "un-stack" creates a word boundary before "stack" (the hyphen is a
+//     non-word character), so `\bstack` would otherwise match "un-stack" before
+//     the unstack workflow gets a turn. `unstack_assets` wins first and the
+//     stack workflow never sees an unstack prompt.
+//   - `stack_assets` and `unstack_assets` are placed adjacent to `crop_assets`
+//     and `rotate_assets` (all four are asset-level transform workflows). Their
+//     verbs (`stack`/`group…into a stack`, `unstack`/`un-stack`/`ungroup`) are
+//     fully disjoint from rotate/flip/crop, but adjacency groups them together.
+//     `stack_assets` gates on assetCount >= 2 at run time (not at match).
 //   - `share_assets` is placed after `trash_assets`/`restore_assets` (all three
 //     operate on a resolved asset source and route via proposeAlbumOperations).
 //     The share verbs ("share … as a link", "create a share link for …") are
@@ -99,6 +111,8 @@ const WORKFLOW_FACTORIES = Object.freeze([
   updateAssetMetadataWorkflow,
   rotateAssetsWorkflow,
   cropAssetsWorkflow,
+  unstackAssetsWorkflow,
+  stackAssetsWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   movePhotosBetweenAlbumsWorkflow,
