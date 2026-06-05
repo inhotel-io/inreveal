@@ -35,6 +35,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -240,6 +241,7 @@ export type ServiceOverrides = {
   faceIdentity: FaceIdentityRepository;
   faceRepair: FaceRepairRepository;
   faceRepairScan: FaceRepairScanRepository;
+  faceRepairDecline: FaceRepairDeclineRepository;
   job: JobRepository;
   library: LibraryRepository;
   logger: LoggingRepository;
@@ -329,6 +331,7 @@ export const getMocks = () => {
     faceIdentity: automock(FaceIdentityRepository, { strict: false }),
     faceRepair: automock(FaceRepairRepository, { strict: false }),
     faceRepairScan: automock(FaceRepairScanRepository, { strict: false }),
+    faceRepairDecline: automock(FaceRepairDeclineRepository, { strict: false }),
     job: newJobRepositoryMock(),
     apiKey: automock(ApiKeyRepository),
     library: automock(LibraryRepository, { strict: false }),
@@ -404,6 +407,7 @@ export const newTestService = <T extends BaseService>(
     overrides.faceIdentity || (mocks.faceIdentity as As<FaceIdentityRepository>),
     overrides.faceRepair || (mocks.faceRepair as As<FaceRepairRepository>),
     overrides.faceRepairScan || (mocks.faceRepairScan as As<FaceRepairScanRepository>),
+    overrides.faceRepairDecline || (mocks.faceRepairDecline as As<FaceRepairDeclineRepository>),
     overrides.job || (mocks.job as As<JobRepository>),
     overrides.library || (mocks.library as As<LibraryRepository>),
     overrides.machineLearning || (mocks.machineLearning as As<MachineLearningRepository>),

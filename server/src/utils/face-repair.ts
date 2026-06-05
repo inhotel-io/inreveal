@@ -1,3 +1,8 @@
+export interface DeclineMaps {
+  declinedFaceOwners: Map<string, Set<string>>; // assetFaceId -> Set<suspectedOwnerId>
+  dismissedPersons: Map<string, Set<string>>; // personId -> Set<suspectedOwnerId>
+}
+
 export interface ReattributionNeighbor {
   assetFaceId: string;
   personId: string | null;

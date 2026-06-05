@@ -1,0 +1,112 @@
+import { Insertable, Kysely } from 'kysely';
+import { InjectKysely } from 'nestjs-kysely';
+import { DB } from 'src/schema';
+import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
+import { DeclineMaps } from 'src/utils/face-repair';
+
+export interface FaceDeclineInput {
+  assetFaceId: string;
+  suspectedOwnerId: string;
+}
+export interface PersonDeclineInput {
+  personId: string;
+  suspectedOwnerIds: string[];
+}
+
+export interface DeclineListRow {
+  id: string;
+  type: 'face' | 'person';
+  assetFaceId: string | null;
+  suspectedOwnerId: string | null;
+  personId: string | null;
+  suspectedOwnerIds: string[] | null;
+  declinedBy: string | null;
+  createdAt: Date;
+}
+
+export class FaceRepairDeclineRepository {
+  constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  // Insert face and/or person declines. Face rows are idempotent on the (assetFaceId, suspectedOwnerId) partial
+  // unique index — re-declining the same face/owner is a no-op. Returns the number of rows actually inserted.
+  async createDeclines(input: {
+    faces?: FaceDeclineInput[];
+    persons?: PersonDeclineInput[];
+    declinedBy: string | null;
+  }): Promise<number> {
+    const rows: Insertable<FaceRepairDeclineTable>[] = [
+      ...(input.faces ?? []).map((f) => ({
+        type: 'face' as const,
+        assetFaceId: f.assetFaceId,
+        suspectedOwnerId: f.suspectedOwnerId,
+        personId: null,
+        suspectedOwnerIds: null,
+        declinedBy: input.declinedBy,
+      })),
+      ...(input.persons ?? []).map((p) => ({
+        type: 'person' as const,
+        assetFaceId: null,
+        suspectedOwnerId: null,
+        personId: p.personId,
+        suspectedOwnerIds: p.suspectedOwnerIds as unknown as Insertable<FaceRepairDeclineTable>['suspectedOwnerIds'],
+        declinedBy: input.declinedBy,
+      })),
+    ];
+    if (rows.length === 0) {
+      return 0;
+    }
+    const inserted = await this.db
+      .insertInto('face_repair_decline')
+      .values(rows)
+      .onConflict((oc) => oc.constraint('face_repair_decline_face_owner_uq').doNothing())
+      .returning('id')
+      .execute();
+    return inserted.length;
+  }
+
+  // Load every decline into the two lookup maps the planner consults. The decline set is admin-curated and
+  // bounded, so loading all rows is cheap relative to the face scan.
+  async getDeclineMaps(): Promise<DeclineMaps> {
+    const rows = await this.db
+      .selectFrom('face_repair_decline')
+      .select(['type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'suspectedOwnerIds'])
+      .execute();
+    const declinedFaceOwners = new Map<string, Set<string>>();
+    const dismissedPersons = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (row.type === 'face' && row.assetFaceId && row.suspectedOwnerId) {
+        const set = declinedFaceOwners.get(row.assetFaceId) ?? new Set<string>();
+        set.add(row.suspectedOwnerId);
+        declinedFaceOwners.set(row.assetFaceId, set);
+      } else if (row.type === 'person' && row.personId) {
+        dismissedPersons.set(row.personId, new Set((row.suspectedOwnerIds as unknown as string[]) ?? []));
+      }
+    }
+    return { declinedFaceOwners, dismissedPersons };
+  }
+
+  listDeclines(): Promise<DeclineListRow[]> {
+    return this.db
+      .selectFrom('face_repair_decline')
+      .select([
+        'id',
+        'type',
+        'assetFaceId',
+        'suspectedOwnerId',
+        'personId',
+        'suspectedOwnerIds',
+        'declinedBy',
+        'createdAt',
+      ])
+      .orderBy('createdAt', 'desc')
+      .execute() as unknown as Promise<DeclineListRow[]>;
+  }
+
+  async removeDeclines(ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const rows = await this.db.deleteFrom('face_repair_decline').where('id', 'in', ids).returning('id').execute();
+    return rows.length;
+  }
+}
