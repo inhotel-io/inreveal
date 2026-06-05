@@ -199,6 +199,7 @@ const session: AgentSessionResponseDto = {
       updateSpaceMemberRoles: true,
       trashAssets: true,
       createSharedLinks: false,
+      manageStacks: false,
     },
   },
   permissionPreset: AgentPermissionPreset.VisualOrganizer,

@@ -100,8 +100,14 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetSetFavoriteOperationType) {
     return AgentAssetSetFavoriteOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetStackOperationType) {
+    return AgentAssetStackOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssetTrashOperationType) {
     return AgentAssetTrashOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetUnstackOperationType) {
+    return AgentAssetUnstackOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentAssetUpdateMetadataOperationType) {
     return AgentAssetUpdateMetadataOperationTypeTypeTransformer().encode(value).toString();

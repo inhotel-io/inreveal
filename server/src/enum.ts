@@ -179,6 +179,8 @@ export enum AgentOperationType {
   SpaceUpdateMemberRole = 'space.updateMemberRole',
   AssetRotate = 'asset.rotate',
   AssetCrop = 'asset.crop',
+  AssetStack = 'asset.stack',
+  AssetUnstack = 'asset.unstack',
   AssetSetFavorite = 'asset.setFavorite',
   AssetSetArchive = 'asset.setArchive',
   AssetUpdateMetadata = 'asset.updateMetadata',
