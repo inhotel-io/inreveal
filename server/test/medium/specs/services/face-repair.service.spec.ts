@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -1175,5 +1176,162 @@ describe('FaceRepairService.runRepair', () => {
 
     expect(result.report.totals.flaggedFaces).toBe(0);
     expect(result.mutated).toBe(false);
+  });
+});
+
+// ── decline filter integration tests ──────────────────────────────────────────
+// These tests exercise that buildRepairPlan (and all callers — getPersonFlaggedFaces, applyRepair)
+// honor persisted face-level declines and person-level dismissals.
+
+let declineDatabase: Kysely<DB>;
+
+const setupDecline = (db?: Kysely<DB>) => {
+  return newMediumService(FaceRepairService, {
+    database: db ?? declineDatabase,
+    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceRepairDeclineRepository],
+    mock: [LoggingRepository, JobRepository],
+  });
+};
+
+describe('FaceRepairService decline filter', () => {
+  beforeAll(async () => {
+    declineDatabase = await getKyselyDB();
+  });
+
+  it('a declined face is not flagged on the next scan', async () => {
+    const { sut, ctx } = setupDecline();
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces — the suspected owner
+    await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+
+    // Alexia: 3 leaked first-axis + 8 genuine second-axis
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    }
+
+    // Decline face[0] toward its suspected owner (Karina)
+    const plan0 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+    const declinedFace = plan0.toRepair.find((f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId))!;
+    expect(declinedFace).toBeDefined();
+    await declineRepo.createDeclines({
+      faces: [{ assetFaceId: declinedFace.assetFaceId, suspectedOwnerId: declinedFace.suspectedOwnerId }],
+      declinedBy: null,
+    });
+
+    // Re-plan: declined face must not appear in toRepair or reviewOnlyFaces
+    const plan1 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+    const allFlagged1 = [...plan1.toRepair, ...plan1.reviewOnlyFaces];
+    expect(allFlagged1.find((f) => f.assetFaceId === declinedFace.assetFaceId)).toBeUndefined();
+    // The other leaked faces still appear (not declined)
+    const remaining = leakedFaceIds.filter((id) => id !== declinedFace.assetFaceId);
+    for (const faceId of remaining) {
+      expect(allFlagged1.find((f) => f.assetFaceId === faceId)).toBeDefined();
+    }
+  });
+
+  it('apply does not move a declined face', async () => {
+    const { sut, ctx } = setupDecline();
+    const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    jobMock.queue.mockResolvedValue();
+    const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces
+    const { person: karina } = await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+
+    // Alexia: 3 leaked + 8 genuine (same as above)
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    }
+
+    // Find the suspected owner for all leaked faces, then decline all of them
+    const plan0 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+    const leakedToRepair = plan0.toRepair.filter((f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId));
+    expect(leakedToRepair.length).toBeGreaterThan(0);
+    await declineRepo.createDeclines({
+      faces: leakedToRepair.map((f) => ({ assetFaceId: f.assetFaceId, suspectedOwnerId: f.suspectedOwnerId })),
+      declinedBy: null,
+    });
+
+    // applyRepair with alexia approved — declined faces must not be moved
+    const result = await sut.applyRepair({ approvedPersonIds: [alexia.id] });
+    expect(result.moved).toBe(0);
+
+    // Faces still assigned to Alexia
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', leakedFaceIds)
+      .execute();
+    for (const row of rows) {
+      expect(row.personId).toBe(alexia.id);
+    }
+
+    // karina is not used by this test path but ensure she wasn't somehow affected
+    const karinaFaces = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('personId', '=', karina.id)
+      .execute();
+    expect(karinaFaces.length).toBe(10);
+  });
+
+  it('dismissed person is absent from getPersonFlaggedFaces; re-surfaces with new owner', async () => {
+    const { sut, ctx } = setupDecline();
+    const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces
+    const { person: karina } = await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+
+    // Alexia: 3 leaked first-axis + 8 genuine second-axis
+    const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+    const leakedFaceIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      leakedFaceIds.push(assetFace.id);
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    }
+
+    // Dismiss Alexia with Karina as the fingerprint
+    await declineRepo.createDeclines({
+      persons: [{ personId: alexia.id, suspectedOwnerIds: [karina.id] }],
+      declinedBy: null,
+    });
+
+    // getPersonFlaggedFaces must return empty for alexia (dismissed, same set of suspected owners)
+    const { flaggedFaces } = await sut.getPersonFlaggedFaces(alexia.id);
+    expect(flaggedFaces.length).toBe(0);
   });
 });

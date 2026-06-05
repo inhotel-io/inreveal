@@ -7,6 +7,7 @@ import { JobOf } from 'src/types';
 import {
   FlagParams,
   ReattributionTally,
+  applyDeclineFilters,
   classifyFlaggedPerson,
   decideReattribution,
   tallyReattribution,
@@ -109,6 +110,9 @@ export class FaceRepairService extends BaseService {
       scanned++;
       await options.onProgress?.(scanned);
     }
+
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps();
+    applyDeclineFilters(flaggedByPerson, declineMaps);
 
     const reviewOnlyPersonIds = new Set<string>();
     for (const [personId, eligible] of eligibleByPerson) {
