@@ -18,9 +18,11 @@ export interface DeclineListRow {
   type: 'face' | 'person';
   assetFaceId: string | null;
   suspectedOwnerId: string | null;
+  suspectedOwnerName: string | null;
+  suspectedOwnerThumbnailFaceId: string | null;
   personId: string | null;
-  suspectedOwnerIds: string[] | null;
-  declinedBy: string | null;
+  personName: string | null;
+  personThumbnailFaceId: string | null;
   createdAt: Date;
 }
 
@@ -107,21 +109,37 @@ export class FaceRepairDeclineRepository {
     return { declinedFaceOwners, dismissedPersons };
   }
 
-  listDeclines(): Promise<DeclineListRow[]> {
-    return this.db
+  async listDeclines(): Promise<DeclineListRow[]> {
+    const rows = await this.db
       .selectFrom('face_repair_decline')
-      .select([
-        'id',
-        'type',
-        'assetFaceId',
-        'suspectedOwnerId',
-        'personId',
-        'suspectedOwnerIds',
-        'declinedBy',
-        'createdAt',
-      ])
+      .select(['id', 'type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'createdAt'])
       .orderBy('createdAt', 'desc')
-      .execute() as unknown as Promise<DeclineListRow[]>;
+      .execute();
+    if (rows.length === 0) {
+      return [];
+    }
+    const ids = [
+      ...new Set(rows.flatMap((r) => [r.personId, r.suspectedOwnerId].filter((x): x is string => x !== null))),
+    ];
+    const people =
+      ids.length > 0
+        ? await this.db.selectFrom('person').select(['id', 'name', 'faceAssetId']).where('id', 'in', ids).execute()
+        : [];
+    const byId = new Map(people.map((p) => [p.id, p]));
+    const nameOf = (id: string | null) => (id && byId.get(id)?.name ? byId.get(id)!.name! : null);
+    const thumbOf = (id: string | null) => (id ? (byId.get(id)?.faceAssetId ?? null) : null);
+    return rows.map((r) => ({
+      id: r.id,
+      type: r.type as 'face' | 'person',
+      assetFaceId: r.assetFaceId,
+      suspectedOwnerId: r.suspectedOwnerId,
+      suspectedOwnerName: nameOf(r.suspectedOwnerId),
+      suspectedOwnerThumbnailFaceId: thumbOf(r.suspectedOwnerId),
+      personId: r.personId,
+      personName: nameOf(r.personId),
+      personThumbnailFaceId: thumbOf(r.personId),
+      createdAt: r.createdAt as unknown as Date,
+    }));
   }
 
   async removeDeclines(ids: string[]): Promise<number> {

@@ -445,6 +445,25 @@ export class FaceRepairService extends BaseService {
     return { personId, flaggedFaces };
   }
 
+  async createDeclines(input: {
+    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
+    persons?: { personId: string; suspectedOwnerIds: string[] }[];
+    declinedBy: string;
+  }): Promise<{ created: number }> {
+    const created = await this.faceRepairDeclineRepository.createDeclines(input);
+    return { created };
+  }
+
+  async listDeclines() {
+    const rows = await this.faceRepairDeclineRepository.listDeclines();
+    return { declines: rows };
+  }
+
+  async removeDeclines(ids: string[]): Promise<{ removed: number }> {
+    const removed = await this.faceRepairDeclineRepository.removeDeclines(ids);
+    return { removed };
+  }
+
   async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<RepairExecution> {
     if (input.approvedPersonIds.length === 0) {
       return { moved: 0, skipped: 0 };
