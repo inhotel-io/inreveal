@@ -55,6 +55,7 @@ export type AgentPermissionPlanSnapshot = {
     updateAssetMetadata?: boolean;
     trashAssets?: boolean;
     createSharedLinks?: boolean;
+    manageStacks?: boolean;
   };
   limits: {
     maxAssetsPerToolCall: number;
@@ -88,6 +89,7 @@ export type AgentNormalizedPermissionPlanSnapshot = Omit<AgentPermissionPlanSnap
     updateAssetMetadata: boolean;
     trashAssets: boolean;
     createSharedLinks: boolean;
+    manageStacks: boolean;
   };
 };
 

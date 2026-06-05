@@ -69,6 +69,7 @@ import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
+import { StackService } from 'src/services/stack.service';
 import { TagService } from 'src/services/tag.service';
 import { TrashService } from 'src/services/trash.service';
 import type {
@@ -224,6 +225,7 @@ export class AgentOperationPlanService {
     archiveAssets: false,
     tagAssets: false,
     updateAssetMetadata: false,
+    manageStacks: false,
   };
 
   private static readonly activeStatuses = [
@@ -252,6 +254,7 @@ export class AgentOperationPlanService {
     private readonly websocketRepository: WebsocketRepository,
     private readonly sharedSpaceService: SharedSpaceService,
     private readonly assetService: AssetService,
+    private readonly stackService: StackService,
     private readonly tagService: TagService,
     private readonly trashService: TrashService,
     private readonly sharedLinkService: SharedLinkService,
@@ -523,6 +526,12 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetCrop: {
         return `Crop matching photos to ${dto.width}×${dto.height} at (${dto.x}, ${dto.y})`;
       }
+      case AgentOperationType.AssetStack: {
+        return 'Stack matching photos';
+      }
+      case AgentOperationType.AssetUnstack: {
+        return 'Unstack matching photos';
+      }
       case AgentOperationType.AssetUpdateMetadata: {
         return 'Update matching photo metadata';
       }
@@ -556,6 +565,10 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetCrop: {
         return { x: dto.x, y: dto.y, width: dto.width, height: dto.height };
       }
+      case AgentOperationType.AssetStack:
+      case AgentOperationType.AssetUnstack: {
+        return {};
+      }
       case AgentOperationType.AssetUpdateMetadata: {
         return this.getAssetUpdateMetadataWorkflowPayload(dto);
       }
@@ -582,7 +595,9 @@ export class AgentOperationPlanService {
   ): AgentOperationRiskLevel {
     switch (dto.type) {
       case AgentOperationType.AssetSetFavorite:
-      case AgentOperationType.AssetCrop: {
+      case AgentOperationType.AssetCrop:
+      case AgentOperationType.AssetStack:
+      case AgentOperationType.AssetUnstack: {
         return AgentOperationRiskLevel.Low;
       }
       case AgentOperationType.AssetSetArchive: {
@@ -1098,6 +1113,8 @@ export class AgentOperationPlanService {
     return [
       AgentOperationType.AssetRotate,
       AgentOperationType.AssetCrop,
+      AgentOperationType.AssetStack,
+      AgentOperationType.AssetUnstack,
       AgentOperationType.AssetSetFavorite,
       AgentOperationType.AssetSetArchive,
       AgentOperationType.AssetUpdateMetadata,
@@ -1430,6 +1447,8 @@ export class AgentOperationPlanService {
       type === AgentOperationType.SpaceRemoveAssets ||
       type === AgentOperationType.AssetRotate ||
       type === AgentOperationType.AssetCrop ||
+      type === AgentOperationType.AssetStack ||
+      type === AgentOperationType.AssetUnstack ||
       type === AgentOperationType.AssetSetFavorite ||
       type === AgentOperationType.AssetSetArchive ||
       type === AgentOperationType.AssetUpdateMetadata ||
@@ -1972,6 +1991,13 @@ export class AgentOperationPlanService {
 
     if (type === AgentOperationType.ShareLinkCreate && !writeScope.createSharedLinks) {
       throw new BadRequestException('Agent permission policy does not allow creating shared links');
+    }
+
+    if (
+      (type === AgentOperationType.AssetStack || type === AgentOperationType.AssetUnstack) &&
+      !writeScope.manageStacks
+    ) {
+      throw new BadRequestException('Agent permission policy does not allow stacking assets');
     }
   }
 
@@ -2808,6 +2834,14 @@ export class AgentOperationPlanService {
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 
+      case AgentOperationType.AssetStack: {
+        return this.applyStackOperation(auth, operation);
+      }
+
+      case AgentOperationType.AssetUnstack: {
+        return this.applyUnstackOperation(auth, operation);
+      }
+
       case AgentOperationType.ShareLinkCreate: {
         return this.applyShareLinkCreateOperation(auth, operation);
       }
@@ -3214,6 +3248,87 @@ export class AgentOperationPlanService {
     });
 
     return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+  }
+
+  private async applyStackOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    // Primary = favorite > rating(desc, nulls last) > newest(fileCreatedAt desc) > id
+    const assets = await this.assetRepository.getAgentMetadataByIds(operation.assetIds);
+
+    const sorted = assets.toSorted((a, b) => {
+      // favorite first
+      if (a.isFavorite !== b.isFavorite) {
+        return a.isFavorite ? -1 : 1;
+      }
+      // rating desc, nulls last
+      const ra = a.exifInfo?.rating ?? null;
+      const rb = b.exifInfo?.rating ?? null;
+      if (ra !== rb) {
+        if (ra === null) {
+          return 1;
+        }
+        if (rb === null) {
+          return -1;
+        }
+        return rb - ra;
+      }
+      // newest first (fileCreatedAt desc)
+      const ta = a.fileCreatedAt ? new Date(a.fileCreatedAt).getTime() : 0;
+      const tb = b.fileCreatedAt ? new Date(b.fileCreatedAt).getTime() : 0;
+      if (ta !== tb) {
+        return tb - ta;
+      }
+      // tie-break by id
+      return a.id < b.id ? -1 : 1;
+    });
+
+    if (sorted.length === 0) {
+      return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+    }
+
+    const orderedIds = sorted.map((a) => a.id);
+
+    try {
+      await this.stackService.create(auth, { assetIds: orderedIds });
+      return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+    } catch (error) {
+      return {
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: { assetIds: operation.assetIds },
+        error: error instanceof Error ? error.message : 'Failed to create stack',
+      };
+    }
+  }
+
+  private async applyUnstackOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    // Resolve distinct non-null stackIds from the assets
+    const assets = await this.assetRepository.getByIds(operation.assetIds);
+    const stackIds = [
+      ...new Set(assets.map((a) => a.stackId).filter((id): id is string => id !== null && id !== undefined)),
+    ];
+
+    if (stackIds.length === 0) {
+      // No stacks to dissolve — no-op, disclosed
+      return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+    }
+
+    try {
+      await this.stackService.deleteAll(auth, { ids: stackIds });
+      return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+    } catch (error) {
+      return {
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: { assetIds: operation.assetIds },
+        error: error instanceof Error ? error.message : 'Failed to delete stacks',
+      };
+    }
   }
 
   private requireCropPayload(payload: unknown): CropParameters {

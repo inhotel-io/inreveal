@@ -588,6 +588,7 @@ export type AgentPermissionPlan = {
         createSpace: boolean;
         editAssets: boolean;
         favoriteAssets: boolean;
+        manageStacks: boolean;
         removeAssets: boolean;
         removeAssetsFromSpaces: boolean;
         removeMembersFromSpaces: boolean;
@@ -1090,6 +1091,28 @@ export type AgentProposeAlbumOperationsDto = {
         riskLevel?: AgentOperationRiskLevel;
         enabled?: boolean;
     } | {
+        "type": AgentAssetStackOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+    } | {
+        "type": AgentAssetUnstackOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+    } | {
         "type": AgentShareLinkCreateOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
@@ -1450,6 +1473,28 @@ export type AgentReviseAlbumOperationsDto = {
         enabled?: boolean;
     } | {
         "type": AgentAssetRestoreOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+    } | {
+        "type": AgentAssetStackOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+    } | {
+        "type": AgentAssetUnstackOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
         targetId?: string;
@@ -10653,6 +10698,8 @@ export enum AgentOperationType {
     SpaceUpdateMemberRole = "space.updateMemberRole",
     AssetRotate = "asset.rotate",
     AssetCrop = "asset.crop",
+    AssetStack = "asset.stack",
+    AssetUnstack = "asset.unstack",
     AssetSetFavorite = "asset.setFavorite",
     AssetSetArchive = "asset.setArchive",
     AssetUpdateMetadata = "asset.updateMetadata",
@@ -10787,6 +10834,12 @@ export enum AgentAssetTrashOperationType {
 }
 export enum AgentAssetRestoreOperationType {
     AssetRestore = "asset.restore"
+}
+export enum AgentAssetStackOperationType {
+    AssetStack = "asset.stack"
+}
+export enum AgentAssetUnstackOperationType {
+    AssetUnstack = "asset.unstack"
 }
 export enum AgentShareLinkCreateOperationType {
     ShareLinkCreate = "shareLink.create"

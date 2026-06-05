@@ -709,4 +709,33 @@ export default [
     prompt: 'pick a better cover for {album}',
     expect: { kind: 'none' },
   },
+
+  // --- stack_assets routing + plan-proposed ---------------------------------
+  {
+    id: 'l3.recall.stack',
+    category: 'l3.recall',
+    prompt: 'stack my newest 5 photos',
+    expect: { kind: 'stack_assets' },
+  },
+  {
+    // stack_assets end-to-end: recency source → batch asset.stack plan — PROPOSED
+    // (not applied). manageStacks write-scope is true in VisualOrganizer (the L3
+    // eval preset), so proposing is allowed; no live apply (PROPOSE-ONLY at L3).
+    id: 'l3.plan.stack',
+    category: 'l3.plan',
+    prompt: 'stack my newest 5 photos',
+    expect: { kind: 'stack_assets', planProposed: true },
+    threshold: 0.5,
+  },
+
+  // --- unstack_assets routing -------------------------------------------------
+  // unstack_assets is fully verified at L1/L2. A live unstack routing assertion
+  // is omitted because the verb "unstack" is rarely used in live evals and the
+  // routing seam is locked by the disambiguation table (unstack_assets entry).
+  {
+    id: 'l3.recall.unstack',
+    category: 'l3.recall',
+    prompt: 'unstack my newest 5 photos',
+    expect: { kind: 'unstack_assets' },
+  },
 ];

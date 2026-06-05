@@ -186,4 +186,29 @@ export default [
     prompt: 'change the cover photo on my Italy album',
     expect: { kind: 'none' },
   },
+
+  // stack_assets boundaries ---------------------------------------------------
+  {
+    // Subjective source — stack must not route subjective sources.
+    id: 'neg.stack.subjective',
+    category: 'negatives',
+    prompt: 'stack the best ones',
+    expect: { kind: 'none' },
+  },
+  {
+    // Group without "into a stack" — must not steal "group by date" etc.
+    id: 'neg.stack.group-no-into',
+    category: 'negatives',
+    prompt: 'group my photos by date',
+    expect: { kind: 'none' },
+  },
+
+  // unstack_assets boundaries -------------------------------------------------
+  {
+    // Subjective source — unstack must not route subjective sources.
+    id: 'neg.unstack.subjective',
+    category: 'negatives',
+    prompt: 'unstack the best ones',
+    expect: { kind: 'none' },
+  },
 ];

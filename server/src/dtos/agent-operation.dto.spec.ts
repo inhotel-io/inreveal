@@ -111,6 +111,22 @@ const makeValidShareLinkCreateOp = (overrides: Record<string, unknown> = {}) => 
   ...overrides,
 });
 
+const makeValidStackOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetStack,
+  summary: 'Stack matching photos.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  ...overrides,
+});
+
+const makeValidUnstackOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetUnstack,
+  summary: 'Unstack matching photos.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -2770,6 +2786,99 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidShareLinkCreateOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('asset.stack operation schema', () => {
+    it('accepts a valid asset.stack operation with default Low riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidStackOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetStack);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.Low);
+      }
+    });
+
+    it('accepts a valid asset.stack operation with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidStackOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects asset.stack with a payload field', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidStackOp({ payload: { foo: 'bar' } })),
+        ['operations', 0],
+        'Unrecognized key',
+      );
+    });
+
+    it('rejects asset.stack with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidStackOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.stack requires an asset_batch target',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidStackOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('asset.unstack operation schema', () => {
+    it('accepts a valid asset.unstack operation with default Low riskLevel', () => {
+      const result = parseSingleOperationProposal(makeValidUnstackOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetUnstack);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.Low);
+      }
+    });
+
+    it('rejects asset.unstack with a payload field', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidUnstackOp({ payload: { foo: 'bar' } })),
+        ['operations', 0],
+        'Unrecognized key',
+      );
+    });
+
+    it('rejects asset.unstack with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidUnstackOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.unstack requires an asset_batch target',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidUnstackOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('proposeAssetBatchFromSelection: asset.stack and asset.unstack actions', () => {
+    it('accepts proposeAssetBatchFromSelection stack action', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection].safeParse({
+        summary: 'Stack matching photos.',
+        action: { type: AgentOperationType.AssetStack },
+        selectionHandleId: factory.uuid(),
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts proposeAssetBatchFromSelection unstack action', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSelection].safeParse({
+        summary: 'Unstack matching photos.',
+        action: { type: AgentOperationType.AssetUnstack },
+        selectionHandleId: factory.uuid(),
+      });
       expect(result.success).toBe(true);
     });
   });

@@ -238,8 +238,12 @@ class ApiClient {
           return AgentAssetSetFavoriteOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetSourceInput':
           return AgentAssetSourceInput.fromJson(value);
+        case 'AgentAssetStackOperationType':
+          return AgentAssetStackOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetTrashOperationType':
           return AgentAssetTrashOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetUnstackOperationType':
+          return AgentAssetUnstackOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetUpdateMetadataOperationType':
           return AgentAssetUpdateMetadataOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetUpdateMetadataTargetKind':
@@ -462,8 +466,12 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf21':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf21.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf22':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf22.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':

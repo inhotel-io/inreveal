@@ -219,6 +219,7 @@ const createdSession: AgentSessionResponseDto = {
       updateSpaceMemberRoles: true,
       trashAssets: true,
       createSharedLinks: false,
+      manageStacks: false,
     },
   },
   permissionPreset: AgentPermissionPreset.Careful,
