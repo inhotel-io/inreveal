@@ -35,6 +35,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.stack',
   'asset.unstack',
   'shareLink.create',
+  'shareLink.createAlbum',
 ]);
 
 // Action types accepted by proposeAssetBatchFromSelection's discriminated union.
@@ -304,6 +305,37 @@ const validateAssetRestore = (op) => {
   }
 };
 
+// Mirror shareLink.createAlbum: album-targeted (existing_album + targetId required).
+// No asset source/ids. Optional payload with same known keys.
+export const validateShareLinkCreateAlbum = (op) => {
+  if (op.targetKind !== 'existing_album') fail('shareLink.createAlbum requires targetKind "existing_album"');
+  if (!op.targetId || typeof op.targetId !== 'string') fail('shareLink.createAlbum requires targetId (album id)');
+  if (op.assetSource !== undefined) fail('shareLink.createAlbum must not set assetSource');
+  if (op.assetIds !== undefined) fail('shareLink.createAlbum must not set assetIds');
+  if (op.assetSelectionHandleId !== undefined) fail('shareLink.createAlbum must not set assetSelectionHandleId');
+  if (op.payload !== undefined) {
+    const p = op.payload;
+    if (typeof p !== 'object' || p === null) fail('shareLink.createAlbum payload must be an object');
+    const KNOWN_PAYLOAD_KEYS = new Set(['password', 'expiresAt', 'showMetadata', 'allowDownload']);
+    for (const key of Object.keys(p)) {
+      if (!KNOWN_PAYLOAD_KEYS.has(key)) fail(`shareLink.createAlbum: unknown payload key "${key}"`);
+    }
+    if (p.password !== undefined && (typeof p.password !== 'string' || !p.password)) {
+      fail('shareLink.createAlbum payload.password must be a non-empty string');
+    }
+    if (p.expiresAt !== undefined) {
+      if (typeof p.expiresAt !== 'string') fail('shareLink.createAlbum payload.expiresAt must be an ISO string');
+      if (isNaN(new Date(p.expiresAt).getTime())) fail('shareLink.createAlbum payload.expiresAt must be a valid date');
+    }
+    if (p.showMetadata !== undefined && typeof p.showMetadata !== 'boolean') {
+      fail('shareLink.createAlbum payload.showMetadata must be a boolean');
+    }
+    if (p.allowDownload !== undefined && typeof p.allowDownload !== 'boolean') {
+      fail('shareLink.createAlbum payload.allowDownload must be a boolean');
+    }
+  }
+};
+
 // Mirror shareLinkCreatePayloadSchema: optional password, expiresAt (future ISO),
 // showMetadata bool, allowDownload bool. targetKind must be asset_batch.
 // assetSource selectionHandle required.
@@ -376,6 +408,7 @@ const ALBUM_OP_VALIDATORS = {
   'asset.trash': validateAssetTrash,
   'asset.restore': validateAssetRestore,
   'shareLink.create': validateShareLinkCreate,
+  'shareLink.createAlbum': validateShareLinkCreateAlbum,
 };
 
 const validateOperations = (operations) => {
