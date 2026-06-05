@@ -54,6 +54,13 @@ const CASES = [
   ['set the description on the Family album to Summer 2026', 'rename_or_describe_album'],
   // place-name-only location edit → none (not a supported asset-metadata edit)
   ['set these photos to Paris', 'none'],
+  // move_photos_between_albums (compound move: requires both `from` and `to`)
+  ['move my newest 20 photos from Drafts to Keepers', 'move_photos_between_albums'],
+  ['move my photos from 2024 from the Trips album to the Italy album', 'move_photos_between_albums'],
+  // move_photos_between_albums must NOT steal archive's "move out of archive" (archive first)
+  ['move my 2024 photos out of the archive', 'archive_assets'],
+  // move without `from` → none (regex gate: both from and to required)
+  ['move my newest 20 to Keepers', 'none'],
   // remove_photos_from_album
   ['remove my newest 20 photos from Family', 'remove_photos_from_album'],
   ['take my newest 20 photos out of the Family album', 'remove_photos_from_album'],

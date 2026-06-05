@@ -8,6 +8,7 @@ import { createSpaceFromSourceWorkflow } from './workflows/create-space-from-sou
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { manageSpaceAssetsWorkflow } from './workflows/manage-space-assets.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
+import { movePhotosBetweenAlbumsWorkflow } from './workflows/move-photos-between-albums.mjs';
 import { removePhotosFromAlbumWorkflow } from './workflows/remove-photos-from-album.mjs';
 import { renameOrDescribeAlbumWorkflow } from './workflows/rename-or-describe-album.mjs';
 import { renameOrDescribeSpaceWorkflow } from './workflows/rename-or-describe-space.mjs';
@@ -38,6 +39,9 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 //     favorite_assets, "remove Bob from the Family space" → manage_space_members,
 //     "remove the Travel tag …" → untag_assets (requires the literal `tag` token;
 //     never steals favorite/space/member removals which have no `tag` token).
+//   - `move_photos_between_albums` BEFORE `remove_photos_from_album` and
+//     `add_photos_to_album` (distinct `move … from … to …` shape; requires
+//     both `from` and `to`; never stolen by the add/remove patterns).
 //   - `remove_photos_from_album` AFTER `favorite_assets`/`tag_assets`/
 //     `untag_assets`/`manage_space_members`, BEFORE `manage_space_assets`/
 //     `add_photos_to_album`.
@@ -97,6 +101,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   cropAssetsWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
+  movePhotosBetweenAlbumsWorkflow,
   removePhotosFromAlbumWorkflow,
   manageSpaceAssetsWorkflow,
   addPhotosToAlbumWorkflow,
