@@ -580,6 +580,36 @@ export default [
     threshold: 0.5,
   },
 
+  // --- move_photos_between_albums routing + plan-proposed -------------------
+  {
+    // move_photos_between_albums routing: the "move … from … to …" shape reaches
+    // the new workflow live (regex fast-path; distinct move verb + mandatory from/to).
+    // Uses {album} for the source (from) album and a literal destination.
+    // {album2} substitution is NOT supported by the driver (only {album}/{space}/{user}
+    // exist) — option (c) from the spec: use {album} + literal "Eval Keepers".
+    // Routing is classification-only (pre-lookup), so this holds against any instance
+    // even if "Eval Keepers" does not exist.
+    id: 'l3.recall.move',
+    category: 'l3.recall',
+    prompt: 'move my newest 20 photos from {album} to Eval Keepers',
+    expect: { kind: 'move_photos_between_albums' },
+  },
+  {
+    // move end-to-end: recency → album.removeAssets + album.addAssets — proposed,
+    // never applied. Strongly data-dependent: the destination "Eval Keepers" is a
+    // literal that is almost certainly absent on any real instance, so the workflow
+    // returns needs_input rather than a plan — planProposed is undefined (not
+    // asserted). This scenario validates routing only in practice; planProposed
+    // is gated on SEEDED but will remain unset unless "Eval Keepers" exists on the
+    // seeded stack. See option (c) in the spec: no {album2} driver substitution
+    // available, so end-to-end plan assertion is deferred.
+    id: 'l3.plan.move.recency',
+    category: 'l3.plan',
+    prompt: 'move my newest 20 photos from {album} to Eval Keepers',
+    expect: { kind: 'move_photos_between_albums', planProposed: undefined },
+    threshold: 0.5,
+  },
+
   // --- remove_photos_from_album routing + plan-proposed ---------------------
   {
     id: 'l3.recall.remove',

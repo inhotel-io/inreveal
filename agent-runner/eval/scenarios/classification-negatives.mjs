@@ -73,6 +73,15 @@ export default [
     expect: { kind: 'manage_space_members' },
   },
 
+  // move_photos_between_albums boundaries ------------------------------------
+  {
+    // No `from` album → not a move (bare "move … to …" must not match).
+    id: 'neg.move.no-from',
+    category: 'negatives',
+    prompt: 'move my newest 20 photos to Keepers',
+    expect: { kind: 'none' },
+  },
+
   // remove_photos_from_album boundaries --------------------------------------
   {
     // Tag removal now owned by untag_assets — must NOT route to remove_photos_from_album.
