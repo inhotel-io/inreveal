@@ -127,6 +127,39 @@ export type FaceRepairApplyResponseDto = {
     moved: number;
     skipped: number;
 };
+export type FaceRepairDeclineRemoveRequestDto = {
+    ids: string[];
+};
+export type FaceRepairDeclineRemovedDto = {
+    removed: number;
+};
+export type FaceRepairDeclineListDto = {
+    declines: {
+        assetFaceId: string | null;
+        createdAt: string;
+        id: string;
+        personId: string | null;
+        personName: string | null;
+        personThumbnailFaceId: string | null;
+        suspectedOwnerId: string | null;
+        suspectedOwnerName: string | null;
+        suspectedOwnerThumbnailFaceId: string | null;
+        "type": Type;
+    }[];
+};
+export type FaceRepairDeclineRequestDto = {
+    faces?: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    persons?: {
+        personId: string;
+        suspectedOwnerIds: string[];
+    }[];
+};
+export type FaceRepairDeclineCreatedDto = {
+    created: number;
+};
 export type FaceRepairScanTriggerResponseDto = {
     scanId: string;
 };
@@ -926,7 +959,7 @@ export type AssetFaceWithoutPersonResponseDto = {
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type;
+    "type": Type2;
 };
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
@@ -1655,7 +1688,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type2;
+    "type": Type3;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -4213,6 +4246,47 @@ export function applyFaceRepair({ faceRepairApplyRequestDto }: {
         ...opts,
         method: "POST",
         body: faceRepairApplyRequestDto
+    })));
+}
+/**
+ * Remove face-repair declines
+ */
+export function removeFaceRepairDeclines({ faceRepairDeclineRemoveRequestDto }: {
+    faceRepairDeclineRemoveRequestDto: FaceRepairDeclineRemoveRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairDeclineRemovedDto;
+    }>("/admin/face-repair/decline", oazapfts.json({
+        ...opts,
+        method: "DELETE",
+        body: faceRepairDeclineRemoveRequestDto
+    })));
+}
+/**
+ * List face-repair declines
+ */
+export function getFaceRepairDeclines(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairDeclineListDto;
+    }>("/admin/face-repair/decline", {
+        ...opts
+    }));
+}
+/**
+ * Decline flagged faces / dismiss flagged persons
+ */
+export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
+    faceRepairDeclineRequestDto: FaceRepairDeclineRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairDeclineCreatedDto;
+    }>("/admin/face-repair/decline", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairDeclineRequestDto
     })));
 }
 /**
@@ -8730,6 +8804,10 @@ export enum UserAvatarColor {
     Gray = "gray",
     Amber = "amber"
 }
+export enum Type {
+    Face = "face",
+    Person = "person"
+}
 export enum MaintenanceAction {
     Start = "start",
     End = "end",
@@ -8990,7 +9068,7 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
-export enum Type {
+export enum Type2 {
     UserPerson = "user-person",
     SpacePerson = "space-person"
 }
@@ -9068,7 +9146,7 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type2 {
+export enum Type3 {
     Person = "person",
     SpacePerson = "space-person"
 }

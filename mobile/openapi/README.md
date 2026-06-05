@@ -154,11 +154,14 @@ Class | Method | HTTP request | Description
 *DuplicatesApi* | [**resolveDuplicates**](doc//DuplicatesApi.md#resolveduplicates) | **POST** /duplicates/resolve | Resolve duplicate groups
 *FacesApi* | [**applyFaceRepair**](doc//FacesApi.md#applyfacerepair) | **POST** /admin/face-repair/apply | Apply face re-attribution for approved persons
 *FacesApi* | [**createFace**](doc//FacesApi.md#createface) | **POST** /faces | Create a face
+*FacesApi* | [**declineFaceRepair**](doc//FacesApi.md#declinefacerepair) | **POST** /admin/face-repair/decline | Decline flagged faces / dismiss flagged persons
 *FacesApi* | [**deleteFace**](doc//FacesApi.md#deleteface) | **DELETE** /faces/{id} | Delete a face
+*FacesApi* | [**getFaceRepairDeclines**](doc//FacesApi.md#getfacerepairdeclines) | **GET** /admin/face-repair/decline | List face-repair declines
 *FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
 *FacesApi* | [**getFaces**](doc//FacesApi.md#getfaces) | **GET** /faces | Retrieve faces for asset
 *FacesApi* | [**getLatestScan**](doc//FacesApi.md#getlatestscan) | **GET** /admin/face-repair/scan/latest | Get the latest face-repair scan
 *FacesApi* | [**reassignFacesById**](doc//FacesApi.md#reassignfacesbyid) | **PUT** /faces/{id} | Re-assign a face to another person
+*FacesApi* | [**removeFaceRepairDeclines**](doc//FacesApi.md#removefacerepairdeclines) | **DELETE** /admin/face-repair/decline | Remove face-repair declines
 *FacesApi* | [**runFaceRepair**](doc//FacesApi.md#runfacerepair) | **POST** /admin/face-repair | Run face re-attribution repair
 *FacesApi* | [**triggerScan**](doc//FacesApi.md#triggerscan) | **POST** /admin/face-repair/scan | Trigger a face-repair scan
 *GalleryMapApi* | [**getFilteredMapMarkers**](doc//GalleryMapApi.md#getfilteredmapmarkers) | **GET** /gallery/map/markers | Get filtered map markers
@@ -490,6 +493,14 @@ Class | Method | HTTP request | Description
  - [FaceDto](doc//FaceDto.md)
  - [FaceRepairApplyRequestDto](doc//FaceRepairApplyRequestDto.md)
  - [FaceRepairApplyResponseDto](doc//FaceRepairApplyResponseDto.md)
+ - [FaceRepairDeclineCreatedDto](doc//FaceRepairDeclineCreatedDto.md)
+ - [FaceRepairDeclineListDto](doc//FaceRepairDeclineListDto.md)
+ - [FaceRepairDeclineListDtoDeclinesInner](doc//FaceRepairDeclineListDtoDeclinesInner.md)
+ - [FaceRepairDeclineRemoveRequestDto](doc//FaceRepairDeclineRemoveRequestDto.md)
+ - [FaceRepairDeclineRemovedDto](doc//FaceRepairDeclineRemovedDto.md)
+ - [FaceRepairDeclineRequestDto](doc//FaceRepairDeclineRequestDto.md)
+ - [FaceRepairDeclineRequestDtoFacesInner](doc//FaceRepairDeclineRequestDtoFacesInner.md)
+ - [FaceRepairDeclineRequestDtoPersonsInner](doc//FaceRepairDeclineRequestDtoPersonsInner.md)
  - [FaceRepairPersonFacesDto](doc//FaceRepairPersonFacesDto.md)
  - [FaceRepairPersonFacesDtoFlaggedFacesInner](doc//FaceRepairPersonFacesDtoFlaggedFacesInner.md)
  - [FaceRepairRequestDto](doc//FaceRepairRequestDto.md)

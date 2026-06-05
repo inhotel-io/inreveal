@@ -388,6 +388,22 @@ class ApiClient {
           return FaceRepairApplyRequestDto.fromJson(value);
         case 'FaceRepairApplyResponseDto':
           return FaceRepairApplyResponseDto.fromJson(value);
+        case 'FaceRepairDeclineCreatedDto':
+          return FaceRepairDeclineCreatedDto.fromJson(value);
+        case 'FaceRepairDeclineListDto':
+          return FaceRepairDeclineListDto.fromJson(value);
+        case 'FaceRepairDeclineListDtoDeclinesInner':
+          return FaceRepairDeclineListDtoDeclinesInner.fromJson(value);
+        case 'FaceRepairDeclineRemoveRequestDto':
+          return FaceRepairDeclineRemoveRequestDto.fromJson(value);
+        case 'FaceRepairDeclineRemovedDto':
+          return FaceRepairDeclineRemovedDto.fromJson(value);
+        case 'FaceRepairDeclineRequestDto':
+          return FaceRepairDeclineRequestDto.fromJson(value);
+        case 'FaceRepairDeclineRequestDtoFacesInner':
+          return FaceRepairDeclineRequestDtoFacesInner.fromJson(value);
+        case 'FaceRepairDeclineRequestDtoPersonsInner':
+          return FaceRepairDeclineRequestDtoPersonsInner.fromJson(value);
         case 'FaceRepairPersonFacesDto':
           return FaceRepairPersonFacesDto.fromJson(value);
         case 'FaceRepairPersonFacesDtoFlaggedFacesInner':
