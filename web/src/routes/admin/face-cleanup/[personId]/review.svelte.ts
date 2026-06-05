@@ -7,21 +7,27 @@ export interface FlaggedFace {
 
 export interface ReviewModel {
   readonly excluded: Set<string>;
+  readonly declined: Set<string>;
   readonly movingCount: number;
   readonly excludedCount: number;
   toggle(assetFaceId: string): void;
   isExcluded(assetFaceId: string): boolean;
   excludeFaceIds(): string[];
+  markDeclined(assetFaceId: string): void;
+  isDeclined(assetFaceId: string): boolean;
+  declinedFaceIds(): string[];
 }
 
 export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
   const excluded: SvelteSet<string> = new SvelteSet();
+  const declined: SvelteSet<string> = new SvelteSet();
 
   return {
     excluded,
+    declined,
 
     get movingCount() {
-      return flaggedFaces.length - excluded.size;
+      return flaggedFaces.filter((f) => !excluded.has(f.assetFaceId) && !declined.has(f.assetFaceId)).length;
     },
 
     get excludedCount() {
@@ -42,6 +48,18 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
 
     excludeFaceIds(): string[] {
       return [...excluded];
+    },
+
+    markDeclined(assetFaceId: string): void {
+      declined.add(assetFaceId);
+    },
+
+    isDeclined(assetFaceId: string): boolean {
+      return declined.has(assetFaceId);
+    },
+
+    declinedFaceIds(): string[] {
+      return [...declined];
     },
   };
 }

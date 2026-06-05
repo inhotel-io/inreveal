@@ -2,9 +2,15 @@
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
   import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
-  import { applyFaceRepair, getFaceRepairPersonFaces, getLatestScan, getPeopleThumbnailPath } from '@immich/sdk';
+  import {
+    applyFaceRepair,
+    declineFaceRepair,
+    getFaceRepairPersonFaces,
+    getLatestScan,
+    getPeopleThumbnailPath,
+  } from '@immich/sdk';
   import { Button, Icon } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiClose } from '@mdi/js';
+  import { mdiArrowLeft, mdiArrowRight, mdiCancel, mdiClose } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -102,6 +108,20 @@
 
   const handleLoadMore = () => {
     visibleCount = Math.min(visibleCount + CHUNK_SIZE, flaggedFaces.length);
+  };
+
+  const handleDecline = async (face: FlaggedFace) => {
+    vm.markDeclined(face.assetFaceId);
+    flaggedFaces = flaggedFaces.filter((x) => x.assetFaceId !== face.assetFaceId);
+    try {
+      await declineFaceRepair({
+        faceRepairDeclineRequestDto: {
+          faces: [{ assetFaceId: face.assetFaceId, suspectedOwnerId: face.suspectedOwnerId }],
+        },
+      });
+    } catch {
+      // non-fatal: the face will re-appear on the next scan if the write failed
+    }
   };
 
   const handleCancel = () => {
@@ -290,43 +310,55 @@
         <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 dark:bg-gray-800/50 sm:grid-cols-6 lg:grid-cols-8">
           {#each visibleFaces as face (face.assetFaceId)}
             {@const excluded = vm.isExcluded(face.assetFaceId)}
-            <button
-              type="button"
-              class={[
-                'relative aspect-square overflow-hidden rounded-xl border-2 transition-all',
-                excluded ? 'border-transparent opacity-55 grayscale-[0.5]' : 'border-primary hover:border-primary/80',
-              ].join(' ')}
-              onclick={() => vm.toggle(face.assetFaceId)}
-              data-testid="face-tile"
-              data-faceid={face.assetFaceId}
-              data-excluded={excluded}
-            >
-              <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
-              <!-- Checkmark or stays overlay -->
-              {#if excluded}
-                <div
-                  class="absolute inset-x-0 bottom-0 bg-green-600 py-0.5 text-center text-[9px] font-bold text-white"
-                  data-testid="stays-badge"
-                >
-                  {$t('admin.face_cleanup_review_tile_stays', { values: { name: personName } })}
-                </div>
-              {:else}
-                <!-- Checkmark -->
-                <div
-                  class="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                </div>
-                <!-- Destination tag -->
-                <div
-                  class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[10px] font-semibold text-white"
-                >
-                  {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
-                </div>
-              {/if}
-            </button>
+            <div class="relative aspect-square">
+              <button
+                type="button"
+                class={[
+                  'absolute inset-0 overflow-hidden rounded-xl border-2 transition-all',
+                  excluded ? 'border-transparent opacity-55 grayscale-[0.5]' : 'border-primary hover:border-primary/80',
+                ].join(' ')}
+                onclick={() => vm.toggle(face.assetFaceId)}
+                data-testid="face-tile"
+                data-faceid={face.assetFaceId}
+                data-excluded={excluded}
+              >
+                <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
+                <!-- Checkmark or stays overlay -->
+                {#if excluded}
+                  <div
+                    class="absolute inset-x-0 bottom-0 bg-green-600 py-0.5 text-center text-[9px] font-bold text-white"
+                    data-testid="stays-badge"
+                  >
+                    {$t('admin.face_cleanup_review_tile_stays', { values: { name: personName } })}
+                  </div>
+                {:else}
+                  <!-- Checkmark -->
+                  <div
+                    class="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </div>
+                  <!-- Destination tag -->
+                  <div
+                    class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[10px] font-semibold text-white"
+                  >
+                    {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
+                  </div>
+                {/if}
+              </button>
+              <!-- Decline button: persistent "stop flagging" — visually distinct from the tile-click exclude -->
+              <button
+                type="button"
+                class="absolute right-1 top-1 flex size-5 items-center justify-center rounded-md bg-black/50 text-white transition-colors hover:bg-red-600"
+                onclick={() => handleDecline(face)}
+                data-testid="decline-btn"
+                title={$t('admin.face_cleanup_decline_hint')}
+              >
+                <Icon icon={mdiCancel} size="12" />
+              </button>
+            </div>
           {/each}
         </div>
 

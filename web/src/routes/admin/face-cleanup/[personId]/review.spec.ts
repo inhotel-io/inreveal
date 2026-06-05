@@ -17,4 +17,14 @@ describe('createReviewModel', () => {
     vm.toggle('a');
     expect(vm.movingCount).toBe(2);
   });
+
+  it('tracks declined faces separately from excluded', () => {
+    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
+    vm.toggle('a'); // exclude a (transient)
+    vm.markDeclined('b'); // decline b (persistent intent)
+    expect(vm.isExcluded('a')).toBe(true);
+    expect(vm.isDeclined('b')).toBe(true);
+    expect(vm.isExcluded('b')).toBe(false);
+    expect(vm.declinedFaceIds()).toEqual(['b']);
+  });
 });
