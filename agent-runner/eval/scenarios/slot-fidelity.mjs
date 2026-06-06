@@ -186,4 +186,12 @@ export default [
     prompt: "set Alex's birthday to 1990-05-01",
     expect: { kind: 'set_person_birthdate', slots: { personRef: 'Alex', dateStr: '1990-05-01' } },
   },
+
+  // merge_people ---------------------------------------------------------------
+  {
+    id: 'slots.person.merge',
+    category: 'slots',
+    prompt: 'merge Alejandra into Karina',
+    expect: { kind: 'merge_people', slots: { sourceRef: 'Alejandra', keepRef: 'Karina' } },
+  },
 ];

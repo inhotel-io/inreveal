@@ -1155,6 +1155,16 @@ export type AgentProposeAlbumOperationsDto = {
             birthDate?: string | null;
             isHidden?: boolean;
         };
+    } | {
+        "type": AgentPersonMergeOperationType;
+        summary: string;
+        targetKind: AgentOperationPersonTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            sourcePersonIds: string[];
+        };
     })[];
     summary: string;
 };
@@ -1571,6 +1581,16 @@ export type AgentReviseAlbumOperationsDto = {
             name?: string;
             birthDate?: string | null;
             isHidden?: boolean;
+        };
+    } | {
+        "type": AgentPersonMergeOperationType;
+        summary: string;
+        targetKind: AgentOperationPersonTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            sourcePersonIds: string[];
         };
     })[];
     summary: string;
@@ -10818,7 +10838,8 @@ export enum AgentOperationType {
     AssetRestore = "asset.restore",
     ShareLinkCreate = "shareLink.create",
     ShareLinkCreateAlbum = "shareLink.createAlbum",
-    PersonUpdate = "person.update"
+    PersonUpdate = "person.update",
+    PersonMerge = "person.merge"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10963,6 +10984,9 @@ export enum AgentPersonUpdateOperationType {
 }
 export enum AgentOperationPersonTargetKind {
     Person = "person"
+}
+export enum AgentPersonMergeOperationType {
+    PersonMerge = "person.merge"
 }
 export enum Status {
     Success = "success"

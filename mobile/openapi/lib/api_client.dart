@@ -414,6 +414,8 @@ class ApiClient {
           return AgentPermissionPlanWriteScope.fromJson(value);
         case 'AgentPermissionPreset':
           return AgentPermissionPresetTypeTransformer().decode(value);
+        case 'AgentPersonMergeOperationType':
+          return AgentPersonMergeOperationTypeTypeTransformer().decode(value);
         case 'AgentPersonUpdateOperationType':
           return AgentPersonUpdateOperationTypeTypeTransformer().decode(value);
         case 'AgentPreviousSearchAssetSourceInput':
@@ -482,6 +484,10 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf26':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf26.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':
