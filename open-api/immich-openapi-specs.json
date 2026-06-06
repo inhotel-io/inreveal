@@ -24439,7 +24439,8 @@
           "asset.restore",
           "shareLink.create",
           "shareLink.createAlbum",
-          "person.update"
+          "person.update",
+          "person.merge"
         ],
         "type": "string"
       },
@@ -24661,6 +24662,12 @@
           "visual-organizer",
           "local-power-user",
           "custom"
+        ],
+        "type": "string"
+      },
+      "AgentPersonMergeOperationType": {
+        "enum": [
+          "person.merge"
         ],
         "type": "string"
       },
@@ -26416,6 +26423,61 @@
                           "type": "boolean"
                         }
                       },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentPersonMergeOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationPersonTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "sourcePersonIds": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "sourcePersonIds"
+                      ],
                       "additionalProperties": false
                     }
                   },
@@ -28862,6 +28924,61 @@
                           "type": "boolean"
                         }
                       },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentPersonMergeOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationPersonTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "high",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "sourcePersonIds": {
+                          "minItems": 1,
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                          }
+                        }
+                      },
+                      "required": [
+                        "sourcePersonIds"
+                      ],
                       "additionalProperties": false
                     }
                   },

@@ -49,6 +49,7 @@ class AgentOperationType {
   static const shareLinkPeriodCreate = AgentOperationType._(r'shareLink.create');
   static const shareLinkPeriodCreateAlbum = AgentOperationType._(r'shareLink.createAlbum');
   static const personPeriodUpdate = AgentOperationType._(r'person.update');
+  static const personPeriodMerge = AgentOperationType._(r'person.merge');
 
   /// List of all possible values in this [enum][AgentOperationType].
   static const values = <AgentOperationType>[
@@ -78,6 +79,7 @@ class AgentOperationType {
     shareLinkPeriodCreate,
     shareLinkPeriodCreateAlbum,
     personPeriodUpdate,
+    personPeriodMerge,
   ];
 
   static AgentOperationType? fromJson(dynamic value) => AgentOperationTypeTypeTransformer().decode(value);
@@ -142,6 +144,7 @@ class AgentOperationTypeTypeTransformer {
         case r'shareLink.create': return AgentOperationType.shareLinkPeriodCreate;
         case r'shareLink.createAlbum': return AgentOperationType.shareLinkPeriodCreateAlbum;
         case r'person.update': return AgentOperationType.personPeriodUpdate;
+        case r'person.merge': return AgentOperationType.personPeriodMerge;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');

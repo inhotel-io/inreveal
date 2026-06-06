@@ -890,6 +890,35 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'merge_people',
+    flow: 'hybrid',
+    title: 'Merge two people',
+    classifierDescription:
+      'User wants to merge two people in their People view — reassigning the source person\'s faces to the kept person, then deleting the source. HIGH RISK: irreversible. Accepts "merge A into B" (keep=B) or "merge A and B" (keep=last-named, B).',
+    positiveExamples: Object.freeze([
+      'Merge Alejandra into Karina',
+      'Merge Alex into Alexander',
+      'Merge Alex and Karina',
+    ]),
+    negativeExamples: Object.freeze([
+      'Merge duplicate photos',
+      'Merge the Summer and Spring albums',
+    ]),
+    slots: Object.freeze({
+      sourceRef: Object.freeze({ type: 'string', required: true, description: 'Person to merge FROM (will be deleted).' }),
+      keepRef: Object.freeze({ type: 'string', required: true, description: 'Person to merge INTO (will be kept).' }),
+    }),
+    requiredReadTools: Object.freeze(['searchPeople']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Merge people',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves both people via searchPeople (two-stage durable disambiguation: source then keep); Gallery owns the person.merge plan (High risk, irreversible — faces reassigned, source deleted). Same-person guard declines self-merge. managePeople write-scope required.',
+    }),
+  }),
+  Object.freeze({
     kind: 'manage_space_members',
     flow: 'strict',
     title: 'Add or remove space members',

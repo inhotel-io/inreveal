@@ -28,6 +28,7 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 import { renamePersonWorkflow } from './workflows/rename-person.mjs';
 import { setPersonBirthdateWorkflow } from './workflows/set-person-birthdate.mjs';
 import { hidePersonWorkflow } from './workflows/hide-person.mjs';
+import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
 // runtime edit. Registering here makes a workflow both regex-routable (each
@@ -105,6 +106,11 @@ const WORKFLOW_FACTORIES = Object.freeze([
   renameOrDescribeAlbumWorkflow,
   setPersonBirthdateWorkflow,
   hidePersonWorkflow,
+  //   - `merge_people` is placed after hide_person (all people workflows grouped).
+  //     Its distinct `merge … into …` / `merge … and …` verb+preposition shape is
+  //     fully disjoint from rename/set-birthdate/hide, so ordering within the
+  //     people group does not matter for the regex fast-path.
+  mergePeopleWorkflow,
   setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
   cleanupDuplicatesWorkflow,

@@ -181,6 +181,9 @@ String parameterToString(dynamic value) {
   if (value is AgentPermissionPreset) {
     return AgentPermissionPresetTypeTransformer().encode(value).toString();
   }
+  if (value is AgentPersonMergeOperationType) {
+    return AgentPersonMergeOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentPersonUpdateOperationType) {
     return AgentPersonUpdateOperationTypeTypeTransformer().encode(value).toString();
   }
