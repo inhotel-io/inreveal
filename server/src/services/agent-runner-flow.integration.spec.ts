@@ -878,6 +878,7 @@ const setup = () => {
     mcpToolContractService,
     toolService,
     operationPlanService,
+    {} as never,
   );
 
   return {

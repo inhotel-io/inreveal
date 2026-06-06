@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import type {
@@ -21,6 +21,7 @@ import type {
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentToolName } from 'src/enum';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { isAgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
@@ -98,6 +99,7 @@ export class AgentMcpService {
     private readonly toolContractService: AgentMcpToolContractService,
     private readonly toolService: AgentToolService,
     private readonly operationPlanService: AgentOperationPlanService,
+    private readonly sessionRepository: AgentSessionRepository,
   ) {}
 
   async handle(auth: AuthDto, sessionId: string, request: unknown): Promise<AgentMcpHandleResponse> {
@@ -118,8 +120,12 @@ export class AgentMcpService {
     }
 
     if (request.method === 'tools/list') {
+      const session = await this.sessionRepository.getById(auth.user.id, sessionId);
+      if (!session) {
+        throw new BadRequestException('Agent session not found');
+      }
       return this.success(request.id, {
-        tools: this.toolRegistry.listTools(),
+        tools: this.toolRegistry.listTools(session.permissionPlanSnapshot),
       });
     }
 
