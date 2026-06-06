@@ -50,6 +50,8 @@ export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.updateMetadata',
   'asset.stack',
   'asset.unstack',
+  'asset.adjust',
+  'asset.flip',
 ]);
 
 const KNOWN_SPACE_FROM_SEARCH_KEYS = new Set(['summary', 'spaceName', 'description', 'color', 'assetSource']);
@@ -166,6 +168,23 @@ const validateBatchAction = (action) => {
   }
   if (type === 'asset.crop') {
     validateAssetCropAction(action);
+  }
+  if (type === 'asset.adjust') {
+    const ADJUST_LEVELS = new Set([
+      'strong_decrease', 'moderate_decrease', 'slight_decrease',
+      'slight_increase', 'moderate_increase', 'strong_increase',
+    ]);
+    const fields = ['brightness', 'contrast', 'saturation'];
+    const hasManual = fields.some((f) => action[f] !== undefined);
+    const hasAuto = action.autoEnhance !== undefined;
+    if (!hasManual && !hasAuto) fail('asset.adjust requires at least one adjustment field');
+    for (const f of fields) {
+      if (action[f] !== undefined && !ADJUST_LEVELS.has(action[f])) fail(`asset.adjust ${f} level "${action[f]}" is invalid`);
+    }
+    if (hasAuto && typeof action.autoEnhance !== 'boolean') fail('asset.adjust autoEnhance must be boolean');
+  }
+  if (type === 'asset.flip') {
+    if (action.axis !== 'horizontal' && action.axis !== 'vertical') fail('asset.flip axis must be horizontal or vertical');
   }
 };
 
