@@ -19,8 +19,13 @@ import {
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import type { AssetBulkUpdateDto } from 'src/dtos/asset.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AdjustParameters, AssetEditAction, AssetEditActionItem, CropParameters, MirrorAxis } from 'src/dtos/editing.dto';
-import { mergeEdits } from 'src/utils/asset-edit';
+import {
+  AdjustParameters,
+  AssetEditAction,
+  AssetEditActionItem,
+  CropParameters,
+  MirrorAxis,
+} from 'src/dtos/editing.dto';
 import {
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
@@ -101,6 +106,7 @@ import type {
   AgentToolOperationPlanResponseMetadata,
   AgentWrongIdDomainRecoveryMetadata,
 } from 'src/types/agent-tool.types';
+import { mergeEdits } from 'src/utils/asset-edit';
 import z from 'zod';
 
 const selectionHandleRecoveryLimit = 5;
@@ -535,9 +541,15 @@ export class AgentOperationPlanService {
           return 'Auto-enhance matching photos';
         }
         const parts: string[] = [];
-        if (dto.brightness) parts.push(`brightness: ${dto.brightness}`);
-        if (dto.contrast) parts.push(`contrast: ${dto.contrast}`);
-        if (dto.saturation) parts.push(`saturation: ${dto.saturation}`);
+        if (dto.brightness) {
+          parts.push(`brightness: ${dto.brightness}`);
+        }
+        if (dto.contrast) {
+          parts.push(`contrast: ${dto.contrast}`);
+        }
+        if (dto.saturation) {
+          parts.push(`saturation: ${dto.saturation}`);
+        }
         return `Adjust matching photos (${parts.join(', ')})`;
       }
       case AgentOperationType.AssetFlip: {
@@ -587,10 +599,18 @@ export class AgentOperationPlanService {
       }
       case AgentOperationType.AssetAdjust: {
         const payload: Record<string, unknown> = {};
-        if (dto.brightness !== undefined) payload.brightness = dto.brightness;
-        if (dto.contrast !== undefined) payload.contrast = dto.contrast;
-        if (dto.saturation !== undefined) payload.saturation = dto.saturation;
-        if (dto.autoEnhance !== undefined) payload.autoEnhance = dto.autoEnhance;
+        if (dto.brightness !== undefined) {
+          payload.brightness = dto.brightness;
+        }
+        if (dto.contrast !== undefined) {
+          payload.contrast = dto.contrast;
+        }
+        if (dto.saturation !== undefined) {
+          payload.saturation = dto.saturation;
+        }
+        if (dto.autoEnhance !== undefined) {
+          payload.autoEnhance = dto.autoEnhance;
+        }
         return payload;
       }
       case AgentOperationType.AssetFlip: {
@@ -3371,7 +3391,12 @@ export class AgentOperationPlanService {
     operation: AgentOperationPlanWithOperations['operations'][number],
   ): Promise<AgentOperationApplyUpdate> {
     const params = this.requireAdjustPayload(operation.payload);
-    return this.applyImageEditOperation(auth, operation, { action: AssetEditAction.Adjust, parameters: params }, 'adjust');
+    return this.applyImageEditOperation(
+      auth,
+      operation,
+      { action: AssetEditAction.Adjust, parameters: params },
+      'adjust',
+    );
   }
 
   private async applyFlipOperation(

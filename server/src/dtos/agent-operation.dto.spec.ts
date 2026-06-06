@@ -2746,7 +2746,10 @@ describe('Agent operation DTOs', () => {
     });
   });
 
-  const adjustOperation = (payload: Record<string, unknown>, targetKind: string = AgentOperationTargetKind.ImageEditBatch) => ({
+  const adjustOperation = (
+    payload: Record<string, unknown>,
+    targetKind: string = AgentOperationTargetKind.ImageEditBatch,
+  ) => ({
     type: AgentOperationType.AssetAdjust,
     summary: 'Adjust matching photos.',
     targetKind,
@@ -2766,7 +2769,9 @@ describe('Agent operation DTOs', () => {
     // ── adjust payload validation (via proposeAssetBatchFromSearch action) ────
 
     it('accepts asset.adjust with one manual field', () => {
-      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, brightness: 'moderate_increase' }).success).toBe(true);
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, brightness: 'moderate_increase' }).success).toBe(
+        true,
+      );
     });
 
     it('accepts asset.adjust autoEnhance alone', () => {
@@ -2778,11 +2783,16 @@ describe('Agent operation DTOs', () => {
     });
 
     it('rejects asset.adjust autoEnhance + manual field', () => {
-      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, autoEnhance: true, brightness: 'slight_increase' }).success).toBe(false);
+      expect(
+        parseBatchAction({ type: AgentOperationType.AssetAdjust, autoEnhance: true, brightness: 'slight_increase' })
+          .success,
+      ).toBe(false);
     });
 
     it('rejects asset.adjust unknown key (strict)', () => {
-      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, sharpen: 'slight_increase' }).success).toBe(false);
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, sharpen: 'slight_increase' }).success).toBe(
+        false,
+      );
     });
 
     it('accepts asset.flip with a valid axis', () => {
@@ -2800,7 +2810,11 @@ describe('Agent operation DTOs', () => {
     });
 
     it('rejects an asset.adjust operation with an AssetBatch target', () => {
-      expect(parseSingleOperationProposal(adjustOperation({ brightness: 'moderate_increase' }, AgentOperationTargetKind.AssetBatch)).success).toBe(false);
+      expect(
+        parseSingleOperationProposal(
+          adjustOperation({ brightness: 'moderate_increase' }, AgentOperationTargetKind.AssetBatch),
+        ).success,
+      ).toBe(false);
     });
 
     it('accepts an asset.flip standalone operation with an ImageEditBatch target', () => {
@@ -2809,7 +2823,10 @@ describe('Agent operation DTOs', () => {
 
     it('rejects an asset.flip operation with an AssetBatch target', () => {
       expect(
-        parseSingleOperationProposal({ ...flipOperation({ axis: 'horizontal' }), targetKind: AgentOperationTargetKind.AssetBatch }).success,
+        parseSingleOperationProposal({
+          ...flipOperation({ axis: 'horizontal' }),
+          targetKind: AgentOperationTargetKind.AssetBatch,
+        }).success,
       ).toBe(false);
     });
 
