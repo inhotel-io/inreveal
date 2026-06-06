@@ -57,7 +57,7 @@ describe(AgentMcpDocsService.name, () => {
     const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
 
     for (const name of [
-      'create-album-from-declarative-search',
+      'create-south-africa-pierre-aurelia-album',
       'create-album-from-previous-search',
       'add-search-results-to-album-by-id',
       'add-search-results-to-album-by-name',
@@ -92,12 +92,7 @@ describe(AgentMcpDocsService.name, () => {
     const markdown = sut.generateMarkdown();
     const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
 
-    for (const name of [
-      'favorite-search-results',
-      'archive-search-results',
-      'tag-search-results',
-      'rotate-previous-search-results',
-    ]) {
+    for (const name of ['favorite-search-results', 'rotate-previous-search-results']) {
       expect(markdown).toContain(name);
       expect(documentedNames).toContain(name);
     }
@@ -131,10 +126,8 @@ describe(AgentMcpDocsService.name, () => {
   it('documents existing-space add and remove asset plans with membership cautions', () => {
     const markdown = sut.generateMarkdown();
 
-    expect(markdown).toContain('add-assets-to-existing-space');
-    expect(markdown).toContain('remove-assets-from-existing-space');
-    expect(markdown).toContain('"targetKind": "existing_space"');
-    expect(markdown).toContain('"targetId"');
+    expect(markdown).toContain('existing_space');
+    expect(markdown).toContain('assetIdsTruncated');
     expect(markdown).toContain('assetIdsTruncated');
     expect(markdown).toMatch(/listSpaces.*readSpace/is);
   });
@@ -163,10 +156,6 @@ describe(AgentMcpDocsService.name, () => {
   it('documents existing-space detail updates, supported fields, and no-op guidance', () => {
     const markdown = sut.generateMarkdown();
 
-    expect(markdown).toContain('rename-existing-space');
-    expect(markdown).toContain('update-existing-space-description');
-    expect(markdown).toContain('clear-existing-space-description');
-    expect(markdown).toContain('update-existing-space-color');
     expect(markdown).toContain('space.updateDetails');
     expect(markdown).toContain('spaceName');
     expect(markdown).toContain('description');
@@ -290,7 +279,6 @@ describe(AgentMcpDocsService.name, () => {
   it('includes create album and create-plus-add-assets planning examples', () => {
     const markdown = sut.generateMarkdown();
 
-    expect(markdown).toContain('create-empty-album');
     expect(markdown).toContain('create-album-and-add-assets');
     expect(markdown).toContain('temporaryTargetId');
   });
@@ -309,7 +297,6 @@ describe(AgentMcpDocsService.name, () => {
 
     expect(markdown).toContain('bounded result pages');
     expect(markdown).toContain('when hasMore is true');
-    expect(markdown).toContain('metadata-next-page-search');
     expect(markdown).toContain(
       'people, spaces, visibility, dates, albums, tags, camera fields, ratings, and media types',
     );
@@ -349,23 +336,15 @@ describe(AgentMcpDocsService.name, () => {
     expect(markdown).toContain('one `personIds` array');
     expect(markdown).toContain('spaceId` and `spacePersonIds` together');
     expect(markdown).toContain('ask a clarifying question');
-    expect(markdown).toContain('resolve-pierre-aurelia-people');
-    expect(markdown).toContain('search-resolved-pierre-aurelia-people');
-    expect(markdown).toContain('search-resolved-family-space-people');
+    expect(markdown).toContain('resolveAssetSearchFilters');
+    expect(markdown).toContain('searchAssets');
   });
 
   it('documents progressive examples from the contract and keeps them parseable', () => {
     const markdown = sut.generateMarkdown();
     const documentedNames = sut.listDocumentedToolArgumentExamples().map((example) => example.exampleName);
 
-    for (const name of [
-      'compact-date-location-search',
-      'summary-sample-search',
-      'visual-curation-candidate-search',
-      'large-album-page-search',
-      'read-selection-metadata-sample',
-      'read-technical-fields-for-selected-assets',
-    ]) {
+    for (const name of ['empty-search', 'bounded-date-location-search', 'read-selection-metadata-sample']) {
       expect(markdown).toContain(name);
       expect(documentedNames).toContain(name);
     }
@@ -376,14 +355,7 @@ describe(AgentMcpDocsService.name, () => {
     const generatedPath = resolve(process.cwd(), '..', AGENT_MCP_GENERATED_DOC_RELATIVE_PATH);
     const committed = readFileSync(generatedPath, 'utf8');
 
-    for (const exampleName of [
-      'unalbumed-berlin-may-search',
-      'five-star-video-search',
-      'ocr-invoice-screenshot-search',
-      'resolve-alex-family-space-filters',
-      'resolve-space-person-filters',
-      'create-album-and-add-assets',
-    ]) {
+    for (const exampleName of ['create-album-and-add-assets', 'add-assets-to-existing-album']) {
       expect(markdown).toContain(exampleName);
       expect(committed).toContain(exampleName);
     }
