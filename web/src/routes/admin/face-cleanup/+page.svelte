@@ -6,7 +6,7 @@
   import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
-  import AdvancedScanModal from './AdvancedScanModal.svelte';
+  import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -133,9 +133,7 @@
 
   onDestroy(() => stopPolling());
 
-  type ScanParams = { maxDistance: number; minFaces: number; maxFlaggedFraction: number };
-
-  const runScan = async (params?: ScanParams) => {
+  const runScan = async (params?: AdvancedScanParams) => {
     scanning = true;
     applyError = null;
     try {
@@ -158,7 +156,7 @@
 
   const handleAdvanced = () => {
     void modalManager.show(AdvancedScanModal, {
-      onRun: (params: ScanParams) => {
+      onRun: (params: AdvancedScanParams) => {
         void runScan(params);
       },
     });

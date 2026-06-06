@@ -55,19 +55,9 @@ describe('AdvancedScanModal', () => {
   });
 
   it('falls back to safe defaults when the defaults endpoint fails', async () => {
-    // The component swallows the rejection internally (then(onFulfilled, onRejected)).
-    // However, Svelte's flushSync processes onMount synchronously and Node.js emits
-    // 'unhandledRejection' before the microtask checkpoint at which our handler would
-    // be recognised.  Vitest's catchError skips the failure when there is more than
-    // one 'unhandledRejection' listener — adding a no-op is the documented escape hatch.
-    const suppressUnhandled = () => {};
-    process.on('unhandledRejection', suppressUnhandled);
-
     vi.mocked(getFaceRepairScanDefaults).mockRejectedValue(new Error('boom'));
     render(AdvancedScanModal, { props: { onClose: vi.fn(), onRun: vi.fn() } });
     await waitFor(() => expect(screen.getByDisplayValue('3')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Run scan' })).toBeInTheDocument();
-
-    process.off('unhandledRejection', suppressUnhandled);
   });
 });

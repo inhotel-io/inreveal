@@ -5,8 +5,8 @@
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
 
-  type Params = { maxDistance: number; minFaces: number; maxFlaggedFraction: number };
-  type Props = { onClose: () => void; onRun: (params: Params) => void };
+  export type AdvancedScanParams = { maxDistance: number; minFaces: number; maxFlaggedFraction: number };
+  type Props = { onClose: () => void; onRun: (params: AdvancedScanParams) => void };
   const { onClose, onRun }: Props = $props();
 
   // Sensible fallbacks until the defaults endpoint resolves.
@@ -14,20 +14,16 @@
   let minFaces = $state(3);
   let maxFlaggedFraction = $state(0.5);
 
-  const loadDefaults = () => {
-    // Use then(onFulfilled, onRejected) so the rejection handler is attached to
-    // the same Promise object — satisfies vitest's unhandled-rejection detection
-    // (a chained .catch() counts as a handler on the *new* promise, not the original).
-    getFaceRepairScanDefaults().then(
-      (d) => {
-        maxDistance = d.maxDistance;
-        minFaces = d.minFaces;
-        maxFlaggedFraction = d.maxFlaggedFraction;
-      },
-      () => {
-        // keep fallbacks; the server re-applies defaults for any omitted field anyway
-      },
-    );
+  const loadDefaults = async () => {
+    // .catch() is attached synchronously so the rejection is observed before any
+    // microtask checkpoint — avoids spurious unhandledRejection in test environments.
+    const d = await getFaceRepairScanDefaults().catch(() => null);
+    if (d) {
+      maxDistance = d.maxDistance;
+      minFaces = d.minFaces;
+      maxFlaggedFraction = d.maxFlaggedFraction;
+    }
+    // if null, keep fallbacks; the server re-applies defaults for any omitted field anyway
   };
 
   onMount(loadDefaults);
