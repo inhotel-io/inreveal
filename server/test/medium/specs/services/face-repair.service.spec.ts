@@ -30,7 +30,7 @@ const axisEmbedding = (axis: 'first' | 'second') => {
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(FaceRepairService, {
     database: db || defaultDatabase,
-    real: [FaceRepairRepository, SearchRepository, PersonRepository],
+    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceRepairDeclineRepository],
     mock: [LoggingRepository],
   });
 };
@@ -455,7 +455,7 @@ let repairDatabase: Kysely<DB>;
 const setupRepair = (db?: Kysely<DB>) => {
   return newMediumService(FaceRepairService, {
     database: db ?? repairDatabase,
-    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceIdentityRepository],
+    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceIdentityRepository, FaceRepairDeclineRepository],
     mock: [LoggingRepository, JobRepository],
   });
 };
@@ -820,6 +820,7 @@ const setupRunRepair = (db?: Kysely<DB>) => {
       FaceIdentityRepository,
       ConfigRepository,
       SystemMetadataRepository,
+      FaceRepairDeclineRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
