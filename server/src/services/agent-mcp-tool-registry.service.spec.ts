@@ -1094,13 +1094,17 @@ describe(AgentMcpToolRegistryService.name, () => {
       }
       return found;
     }
-    if (!value || typeof value !== 'object') {return found;}
+    if (!value || typeof value !== 'object') {
+      return found;
+    }
     const record = value as Record<string, unknown>;
     if ('description' in record) {
       found.push(path || '(root)');
     }
     for (const [key, nested] of Object.entries(record)) {
-      if (key === 'description') {continue;}
+      if (key === 'description') {
+        continue;
+      }
       found.push(...collectDescriptionKeys(nested, path ? `${path}.${key}` : key));
     }
     return found;
@@ -1130,16 +1134,12 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(proposalProperties?.operations?.description).toEqual(
       expect.stringContaining('reviewable Gallery operations'),
     );
-    expect(proposalProperties?.summary?.description).toEqual(
-      expect.stringContaining('human-readable plan summary'),
-    );
+    expect(proposalProperties?.summary?.description).toEqual(expect.stringContaining('human-readable plan summary'));
 
     // Read tool: filters description comes from propertyDescriptions.filters (re-added by enrich)
     const search = toolsByName.get(AgentToolName.SearchAssets);
     const searchProperties = search?.inputSchema.properties as Record<string, { description?: string }> | undefined;
-    expect(searchProperties?.filters?.description).toEqual(
-      expect.stringContaining('Currently executable filters'),
-    );
+    expect(searchProperties?.filters?.description).toEqual(expect.stringContaining('Currently executable filters'));
   });
 
   it('schema structure (enum/type/required) is preserved after stripping descriptions (token-opt Slice 4)', () => {

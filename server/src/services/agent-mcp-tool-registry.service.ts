@@ -31,10 +31,14 @@ const isJsonObject = (value: unknown): value is Record<string, unknown> =>
 
 const stripSchemaDescriptions = (value: unknown): void => {
   if (Array.isArray(value)) {
-    for (const item of value) {stripSchemaDescriptions(item);}
+    for (const item of value) {
+      stripSchemaDescriptions(item);
+    }
     return;
   }
-  if (!isJsonObject(value)) {return;}
+  if (!isJsonObject(value)) {
+    return;
+  }
   const record = value as Record<string, unknown>;
   // Only delete description annotations (strings). Property schemas that happen
   // to have a key named "description" (e.g. asset updateMetadata payload) are objects
@@ -42,7 +46,9 @@ const stripSchemaDescriptions = (value: unknown): void => {
   if (typeof record.description === 'string') {
     delete record.description;
   }
-  for (const nested of Object.values(record)) {stripSchemaDescriptions(nested);}
+  for (const nested of Object.values(record)) {
+    stripSchemaDescriptions(nested);
+  }
 };
 
 const toInputSchema = (schema: ZodType): Record<string, unknown> => {
