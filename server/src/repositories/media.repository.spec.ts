@@ -61,6 +61,10 @@ const buildTestQuadImage = async () => {
   return image.png().toBuffer();
 };
 
+// Use 4 channels (RGBA) so getPixelColor's *4 indexing is correct
+const solid = (r: number, g: number, b: number, size = 100) =>
+  sharp({ create: { width: size, height: size, channels: 4, background: { r, g, b, alpha: 1 } } }).png();
+
 describe(MediaRepository.name, () => {
   let sut: MediaRepository;
 
@@ -666,10 +670,6 @@ describe(MediaRepository.name, () => {
   });
 
   describe('applyEdits (tonal adjustments)', () => {
-    // Use 4 channels (RGBA) so getPixelColor's *4 indexing is correct
-    const solid = (r: number, g: number, b: number, size = 100) =>
-      sharp({ create: { width: size, height: size, channels: 4, background: { r, g, b, alpha: 1 } } }).png();
-
     it('brightness increase lightens pixels', async () => {
       const out = await sut['applyEdits'](solid(128, 128, 128), [
         { action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } },
@@ -697,10 +697,14 @@ describe(MediaRepository.name, () => {
 
     it('contrast increase widens the spread around mid', async () => {
       // left half = 64 (below mid), right half = 192 (above mid)
-      const img = sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 64, g: 64, b: 64, alpha: 1 } } })
+      const img = sharp({
+        create: { width: 100, height: 100, channels: 4, background: { r: 64, g: 64, b: 64, alpha: 1 } },
+      })
         .composite([
           {
-            input: { create: { width: 50, height: 100, channels: 4, background: { r: 192, g: 192, b: 192, alpha: 1 } } },
+            input: {
+              create: { width: 50, height: 100, channels: 4, background: { r: 192, g: 192, b: 192, alpha: 1 } },
+            },
             left: 50,
             top: 0,
           },
@@ -717,18 +721,20 @@ describe(MediaRepository.name, () => {
     });
 
     it('autoEnhance stretches a narrow band toward full range', async () => {
-      const img = sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 60, g: 60, b: 60, alpha: 1 } } })
+      const img = sharp({
+        create: { width: 100, height: 100, channels: 4, background: { r: 60, g: 60, b: 60, alpha: 1 } },
+      })
         .composite([
           {
-            input: { create: { width: 50, height: 100, channels: 4, background: { r: 180, g: 180, b: 180, alpha: 1 } } },
+            input: {
+              create: { width: 50, height: 100, channels: 4, background: { r: 180, g: 180, b: 180, alpha: 1 } },
+            },
             left: 50,
             top: 0,
           },
         ])
         .png();
-      const out = await sut['applyEdits'](img, [
-        { action: AssetEditAction.Adjust, parameters: { autoEnhance: true } },
-      ]);
+      const out = await sut['applyEdits'](img, [{ action: AssetEditAction.Adjust, parameters: { autoEnhance: true } }]);
       const buf = await out.toBuffer();
       const lo = await getPixelColor(buf, 10, 50);
       const hi = await getPixelColor(buf, 90, 50);
