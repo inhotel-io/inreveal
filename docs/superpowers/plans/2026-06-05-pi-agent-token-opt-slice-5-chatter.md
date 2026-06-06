@@ -25,7 +25,7 @@ const CHATTER_PATTERN =
 
 const isChatter = (text) => {
   const t = String(text ?? '').trim();
-  if (!t || t.length > 60) return false;       // hard length guard
+  if (!t || t.length > 60) return false; // hard length guard
   if (/\?/.test(t.replace(/[\s!.]*$/u, ''))) return false; // questions are not chatter
   return CHATTER_PATTERN.test(t);
 };
@@ -64,7 +64,7 @@ fall through (return nothing here → normal classify path).
 
 - **Chatter handled, no classify, no open fallthrough:** for each of
   `['thanks', 'thanks, that looks great!', 'ok cool', "that's perfect, thank you",
-  'awesome', 'got it', 'hello', 'hey there', 'good morning']`:
+'awesome', 'got it', 'hello', 'hey there', 'good morning']`:
   - `routeTurn` returns `{ handled: true }`;
   - a `completedEvent` with a non-empty `text` was emitted;
   - `registry.classify` was NOT called (spy/stub the classifier and assert 0 calls);
@@ -72,8 +72,8 @@ fall through (return nothing here → normal classify path).
     observed.
 - **Real requests / questions still fall through (NOT swallowed):** for
   `['how many photos do I have?', 'find my Sony photos from May', 'archive my newest 20',
-  'trash my screenshots', 'show me the good ones', 'thanks for nothing, now delete everything',
-  'can you make an album?']`:
+'trash my screenshots', 'show me the good ones', 'thanks for nothing, now delete everything',
+'can you make an album?']`:
   - `isChatter` is false → `classify` IS called → behaves exactly as before (handled or
     `{ handled: false }` per the classifier). Assert classify was called.
   - (Note the adversarial "thanks … now delete everything" and "thanks for the album, add 5
@@ -96,6 +96,7 @@ the open agent unchanged. No L3 file edits required; the final checkpoint confir
 cd agent-runner && node --test src/strict-workflows/dispatcher.test.mjs
 node --test 'src/**/*.test.mjs'   # full agent-runner suite green, count up
 ```
+
 No server / OpenAPI change.
 
 ## Commit
