@@ -76,7 +76,7 @@ describe('agent MCP prompt placeholders', () => {
 });
 
 describe(AgentMcpPromptService.name, () => {
-  const maxPromptLength = 4800;
+  const maxPromptLength = 4850;
   let contractService: AgentMcpToolContractService;
   let sut: AgentMcpPromptService;
 

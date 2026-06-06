@@ -14,6 +14,7 @@ const toolNameLabelKeys: Record<AgentToolName, Translations> = {
   [AgentToolName.ReadSelectionMetadata]: 'assistant_agent_tool_name_readSelectionMetadata',
   [AgentToolName.CurateSelection]: 'assistant_agent_tool_name_curateSelection',
   [AgentToolName.ResolveLocation]: 'assistant_agent_tool_name_resolveLocation',
+  [AgentToolName.SearchPeople]: 'assistant_agent_tool_name_searchPeople',
   [AgentToolName.ResolveAssetSearchFilters]: 'assistant_agent_tool_name_resolveAssetSearchFilters',
   [AgentToolName.ReadAssetMetadata]: 'assistant_agent_tool_name_readAssetMetadata',
   [AgentToolName.ReadAssetPreviews]: 'assistant_agent_tool_name_readAssetPreviews',

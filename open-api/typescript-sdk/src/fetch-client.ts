@@ -1996,6 +1996,45 @@ export type AgentSearchAssetsToolSuccessResponse = {
     totalCount?: number;
 };
 export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
+export type AgentSearchPeopleToolRequestDto = {
+    name?: string;
+    toolCallId?: string;
+};
+export type AgentSearchPeopleToolApprovalRequiredResponse = {
+    status: Status32;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchPeopleToolDeniedResponse = {
+    reason: string;
+    status: Status33;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchPeopleNotFoundResult = {
+    status: Status34;
+};
+export type AgentSearchPeopleMatchedResult = {
+    name: string;
+    personId: string;
+    status: Status35;
+    thumbnailAssetId: string | null;
+};
+export type AgentSearchPeopleChoice = {
+    name: string;
+    personId: string;
+    thumbnailAssetId: string | null;
+};
+export type AgentSearchPeopleAmbiguousResult = {
+    choices: AgentSearchPeopleChoice[];
+    status: Status36;
+};
+export type AgentSearchPeopleResult = AgentSearchPeopleNotFoundResult | AgentSearchPeopleMatchedResult | AgentSearchPeopleAmbiguousResult;
+export type AgentSearchPeopleToolSuccessResponse = {
+    people: AgentSearchPeopleResult;
+    resultSize: AgentToolResultSize;
+    status: Status37;
+    toolCall: AgentToolCallResponseDto;
+};
+export type AgentSearchPeopleToolResponseDto = AgentSearchPeopleToolApprovalRequiredResponse | AgentSearchPeopleToolDeniedResponse | AgentSearchPeopleToolSuccessResponse;
 export type AgentSearchUsersToolRequestDto = {
     limit?: number;
     query?: string;
@@ -2003,12 +2042,12 @@ export type AgentSearchUsersToolRequestDto = {
     toolCallId?: string;
 };
 export type AgentSearchUsersToolApprovalRequiredResponse = {
-    status: Status32;
+    status: Status38;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentSearchUsersToolDeniedResponse = {
     reason: string;
-    status: Status33;
+    status: Status39;
     toolCall: AgentToolCallResponseDto;
 };
 export type AgentUserLookupResult = {
@@ -2020,7 +2059,7 @@ export type AgentUserLookupResult = {
 };
 export type AgentSearchUsersToolSuccessResponse = {
     resultSize: AgentToolResultSize;
-    status: Status34;
+    status: Status40;
     toolCall: AgentToolCallResponseDto;
     users: AgentUserLookupResult[];
 };
@@ -6409,6 +6448,22 @@ export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }
         ...opts,
         method: "POST",
         body: agentSearchAssetsToolRequestDto
+    })));
+}
+/**
+ * Execute the internal searchPeople agent tool
+ */
+export function searchAgentPeople({ id, agentSearchPeopleToolRequestDto }: {
+    id: string;
+    agentSearchPeopleToolRequestDto: AgentSearchPeopleToolRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: AgentSearchPeopleToolResponseDto;
+    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/search-people`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: agentSearchPeopleToolRequestDto
     })));
 }
 /**
@@ -10902,6 +10957,7 @@ export enum AgentToolName {
     CurateSelection = "curateSelection",
     ResolveAssetSearchFilters = "resolveAssetSearchFilters",
     ResolveLocation = "resolveLocation",
+    SearchPeople = "searchPeople",
     ReadAssetMetadata = "readAssetMetadata",
     ReadAssetPreviews = "readAssetPreviews",
     ReadAssetOriginals = "readAssetOriginals",
@@ -11113,6 +11169,24 @@ export enum Status33 {
     Denied = "denied"
 }
 export enum Status34 {
+    NotFound = "not_found"
+}
+export enum Status35 {
+    Matched = "matched"
+}
+export enum Status36 {
+    Ambiguous = "ambiguous"
+}
+export enum Status37 {
+    Success = "success"
+}
+export enum Status38 {
+    ApprovalRequired = "approval-required"
+}
+export enum Status39 {
+    Denied = "denied"
+}
+export enum Status40 {
     Success = "success"
 }
 export enum AlbumUserRole {

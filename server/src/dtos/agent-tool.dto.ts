@@ -710,6 +710,27 @@ const AgentResolveLocationToolRequestSchema = z
   })
   .meta({ id: 'AgentResolveLocationToolRequestDto' });
 
+const AgentSearchPeopleToolRequestSchema = z
+  .strictObject({
+    name: z.string().trim().min(1).max(200).optional(),
+    toolCallId: uuid.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.toolCallId && value.name !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either name or toolCallId, not both',
+      });
+    }
+    if (!value.toolCallId && !value.name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide a name string to search for a person',
+      });
+    }
+  })
+  .meta({ id: 'AgentSearchPeopleToolRequestDto' });
+
 export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchAssets]: AgentSearchAssetsToolRequestSchema,
   [AgentToolName.FindTripCandidates]: AgentFindTripCandidatesToolRequestSchema,
@@ -726,6 +747,7 @@ export const AgentReadToolRequestSchemas = {
   [AgentToolName.SearchUsers]: AgentSearchUsersToolRequestSchema,
   [AgentToolName.ListDuplicateGroups]: AgentListDuplicateGroupsToolRequestSchema,
   [AgentToolName.ResolveLocation]: AgentResolveLocationToolRequestSchema,
+  [AgentToolName.SearchPeople]: AgentSearchPeopleToolRequestSchema,
 } as const;
 
 const AgentToolApprovalSchema = z
@@ -1344,6 +1366,49 @@ const AgentResolveLocationToolResponseSchema = z
   ])
   .meta({ id: 'AgentResolveLocationToolResponseDto' });
 
+const AgentSearchPeopleChoiceSchema = z
+  .object({
+    personId: z.string().uuid(),
+    name: z.string(),
+    thumbnailAssetId: z.string().uuid().nullable(),
+  })
+  .meta({ id: 'AgentSearchPeopleChoice' });
+
+const AgentSearchPeopleResultSchema = z
+  .discriminatedUnion('status', [
+    z.object({ status: z.literal('not_found') }).meta({ id: 'AgentSearchPeopleNotFoundResult' }),
+    z
+      .object({
+        status: z.literal('matched'),
+        personId: z.string().uuid(),
+        name: z.string(),
+        thumbnailAssetId: z.string().uuid().nullable(),
+      })
+      .meta({ id: 'AgentSearchPeopleMatchedResult' }),
+    z
+      .object({
+        status: z.literal('ambiguous'),
+        choices: z.array(AgentSearchPeopleChoiceSchema).max(5),
+      })
+      .meta({ id: 'AgentSearchPeopleAmbiguousResult' }),
+  ])
+  .meta({ id: 'AgentSearchPeopleResult' });
+
+const AgentSearchPeopleToolResponseSchema = z
+  .discriminatedUnion('status', [
+    approvalRequiredResponse('AgentSearchPeopleToolApprovalRequiredResponse'),
+    deniedResponse('AgentSearchPeopleToolDeniedResponse'),
+    z
+      .object({
+        status: z.literal('success'),
+        toolCall: AgentToolCallResponseSchema,
+        resultSize: AgentToolResultSizeSchema,
+        people: AgentSearchPeopleResultSchema,
+      })
+      .meta({ id: 'AgentSearchPeopleToolSuccessResponse' }),
+  ])
+  .meta({ id: 'AgentSearchPeopleToolResponseDto' });
+
 const AgentToolCallParamsSchema = z
   .object({
     id: uuid,
@@ -1376,6 +1441,7 @@ export class AgentReadSpaceToolRequestDto extends createZodDto(AgentReadSpaceToo
 export class AgentSearchUsersToolRequestDto extends createZodDto(AgentSearchUsersToolRequestSchema) {}
 export class AgentListDuplicateGroupsToolRequestDto extends createZodDto(AgentListDuplicateGroupsToolRequestSchema) {}
 export class AgentResolveLocationToolRequestDto extends createZodDto(AgentResolveLocationToolRequestSchema) {}
+export class AgentSearchPeopleToolRequestDto extends createZodDto(AgentSearchPeopleToolRequestSchema) {}
 export class AgentToolApprovalDto extends createZodDto(AgentToolApprovalSchema) {}
 export class AgentToolCallResponseDto extends createZodDto(AgentToolCallResponseSchema) {}
 export class AgentToolCallParamsDto extends createZodDto(AgentToolCallParamsSchema) {}
@@ -1456,3 +1522,8 @@ export const AgentResolveLocationToolResponseDto = namedZodDto(
   AgentResolveLocationToolResponseSchema,
 );
 export type AgentResolveLocationToolResponseDto = z.output<typeof AgentResolveLocationToolResponseSchema>;
+export const AgentSearchPeopleToolResponseDto = namedZodDto(
+  'AgentSearchPeopleToolResponseDto',
+  AgentSearchPeopleToolResponseSchema,
+);
+export type AgentSearchPeopleToolResponseDto = z.output<typeof AgentSearchPeopleToolResponseSchema>;

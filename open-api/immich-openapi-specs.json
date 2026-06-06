@@ -3841,6 +3841,73 @@
         "x-immich-state": "Internal"
       }
     },
+    "/agent/sessions/{id}/tools/search-people": {
+      "post": {
+        "description": "Internal route for requesting or resuming a strict-approved person name resolution tool call for an AI agent session.",
+        "operationId": "searchAgentPeople",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSearchPeopleToolRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSearchPeopleToolResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Execute the internal searchPeople agent tool",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Internal"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Internal"
+      }
+    },
     "/agent/sessions/{id}/tools/search-users": {
       "post": {
         "description": "Internal route for requesting or resuming a strict-approved visible user lookup tool call for an AI agent session.",
@@ -29387,6 +29454,205 @@
         ],
         "type": "object"
       },
+      "AgentSearchPeopleAmbiguousResult": {
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSearchPeopleChoice"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ambiguous"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "choices",
+          "status"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleChoice": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "personId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "thumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "personId",
+          "thumbnailAssetId"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleMatchedResult": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "personId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "matched"
+            ],
+            "type": "string"
+          },
+          "thumbnailAssetId": {
+            "format": "uuid",
+            "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "personId",
+          "status",
+          "thumbnailAssetId"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleNotFoundResult": {
+        "properties": {
+          "status": {
+            "enum": [
+              "not_found"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleNotFoundResult"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleMatchedResult"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleAmbiguousResult"
+          }
+        ]
+      },
+      "AgentSearchPeopleToolApprovalRequiredResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "approval-required"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleToolDeniedResponse": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "denied"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
+      "AgentSearchPeopleToolRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "toolCallId": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentSearchPeopleToolResponseDto": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleToolApprovalRequiredResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleToolDeniedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/AgentSearchPeopleToolSuccessResponse"
+          }
+        ]
+      },
+      "AgentSearchPeopleToolSuccessResponse": {
+        "properties": {
+          "people": {
+            "$ref": "#/components/schemas/AgentSearchPeopleResult"
+          },
+          "resultSize": {
+            "$ref": "#/components/schemas/AgentToolResultSize"
+          },
+          "status": {
+            "enum": [
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/AgentToolCallResponseDto"
+          }
+        },
+        "required": [
+          "people",
+          "resultSize",
+          "status",
+          "toolCall"
+        ],
+        "type": "object"
+      },
       "AgentSearchSourceRef": {
         "maxLength": 200,
         "minLength": 1,
@@ -30138,6 +30404,7 @@
           "curateSelection",
           "resolveAssetSearchFilters",
           "resolveLocation",
+          "searchPeople",
           "readAssetMetadata",
           "readAssetPreviews",
           "readAssetOriginals",

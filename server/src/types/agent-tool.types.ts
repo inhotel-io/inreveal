@@ -429,6 +429,12 @@ export type AgentResolveLocationResult =
   | { status: 'matched'; latitude: number; longitude: number; label: string }
   | { status: 'ambiguous'; choices: AgentResolveLocationChoice[] };
 
+export type AgentSearchPeopleChoice = { personId: string; name: string; thumbnailAssetId: string | null };
+export type AgentSearchPeopleResult =
+  | { status: 'not_found' }
+  | { status: 'matched'; personId: string; name: string; thumbnailAssetId: string | null }
+  | { status: 'ambiguous'; choices: AgentSearchPeopleChoice[] };
+
 export type AgentToolRequestMetadata =
   | AgentToolSearchAssetsRequestMetadata
   | AgentToolFindTripCandidatesRequestMetadata

@@ -29,6 +29,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { MapRepository } from 'src/repositories/map.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -362,6 +363,7 @@ describe(AgentToolService.name, () => {
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
   let assetSearchFilterResolverService: AgentAssetSearchFilterResolverService;
   let mapRepository: ReturnType<typeof automock<MapRepository>>;
+  let personRepository: ReturnType<typeof automock<PersonRepository>>;
   let userService: { search: ReturnType<typeof vi.fn> };
   let tripCandidateService: {
     findRecentTripCandidates: ReturnType<typeof vi.fn>;
@@ -385,6 +387,7 @@ describe(AgentToolService.name, () => {
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
     mapRepository = automock(MapRepository, { args: [undefined, undefined, { setContext: () => {} }, undefined] });
+    personRepository = automock(PersonRepository, { args: [{} as never], strict: false });
     assetSearchFilterResolverService = new AgentAssetSearchFilterResolverService(
       searchRepository,
       albumRepository,
@@ -413,6 +416,7 @@ describe(AgentToolService.name, () => {
       userService as unknown as UserService,
       assetSearchFilterResolverService,
       mapRepository,
+      personRepository,
     );
     (sut as unknown as { tripCandidateService: typeof tripCandidateService }).tripCandidateService =
       tripCandidateService;
@@ -8684,6 +8688,211 @@ describe(AgentToolService.name, () => {
       expect.objectContaining({
         toolName: AgentToolName.ResolveLocation,
         requestSummary: 'Resolve location: Paris',
+      }),
+    );
+  });
+
+  it('searchPeople returns matched when a single exact-name row is returned', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const personId = newUuid();
+    const assetId = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: personId, name: 'Alice', faceAssetId: assetId, ownerId: auth.user.id } as never,
+    ]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Alice' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people).toEqual({
+      status: 'matched',
+      personId,
+      name: 'Alice',
+      thumbnailAssetId: assetId,
+    });
+  });
+
+  it('searchPeople returns ambiguous when two rows share the same exact name', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const id1 = newUuid();
+    const id2 = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: id1, name: 'John', faceAssetId: null, ownerId: auth.user.id } as never,
+      { id: id2, name: 'John', faceAssetId: null, ownerId: auth.user.id } as never,
+    ]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'John' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people.status).toBe('ambiguous');
+    if (result.people.status !== 'ambiguous') {
+      return;
+    }
+    expect(result.people.choices).toHaveLength(2);
+    expect(result.people.choices[0]).toMatchObject({ personId: id1, name: 'John', thumbnailAssetId: null });
+    expect(result.people.choices[1]).toMatchObject({ personId: id2, name: 'John', thumbnailAssetId: null });
+  });
+
+  it('searchPeople returns ambiguous when rows are only fuzzy matches (no exact)', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const id1 = newUuid();
+    const id2 = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: id1, name: 'Alexandra', faceAssetId: null, ownerId: auth.user.id } as never,
+      { id: id2, name: 'Alex', faceAssetId: null, ownerId: auth.user.id } as never,
+    ]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Alexia' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people.status).toBe('ambiguous');
+    if (result.people.status !== 'ambiguous') {
+      return;
+    }
+    expect(result.people.choices).toHaveLength(2);
+  });
+
+  it('searchPeople returns not_found when getByName returns empty array', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Zzzqqq' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people).toEqual({ status: 'not_found' });
+  });
+
+  it('searchPeople uses case-insensitive comparison for exact-match detection', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const personId = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: personId, name: 'alice', faceAssetId: null, ownerId: auth.user.id } as never,
+    ]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Alice' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people).toEqual({ status: 'matched', personId, name: 'alice', thumbnailAssetId: null });
+  });
+
+  it('searchPeople result contains only personId, name, and thumbnailAssetId (no thumbnailPath or embedding)', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const personId = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      {
+        id: personId,
+        name: 'Bob',
+        faceAssetId: null,
+        thumbnailPath: '/thumbs/secret.jpg',
+        embedding: new Float32Array(512),
+        ownerId: auth.user.id,
+      } as never,
+    ]);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Bob' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people).toEqual({ status: 'matched', personId, name: 'Bob', thumbnailAssetId: null });
+    expect(JSON.stringify(result.people)).not.toContain('thumbnailPath');
+    expect(JSON.stringify(result.people)).not.toContain('embedding');
+  });
+
+  it('searchPeople limits ambiguous choices to 5', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => ({
+        id: newUuid(),
+        name: `Alex${i}`,
+        faceAssetId: null,
+        ownerId: auth.user.id,
+      })) as never,
+    );
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Alexxx' });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      return;
+    }
+    expect(result.people.status).toBe('ambiguous');
+    if (result.people.status !== 'ambiguous') {
+      return;
+    }
+    expect(result.people.choices!.length).toBeLessThanOrEqual(5);
+  });
+
+  it('searchPeople creates pending approval in strict mode', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id });
+
+    sessionRepository.getById.mockResolvedValue(session);
+
+    const result = await sut.searchPeople(auth, session.id, { name: 'Alice' });
+
+    expect(result.status).toBe('approval-required');
+    expect(toolCallRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: AgentToolName.SearchPeople,
+        requestSummary: 'Search people: Alice',
       }),
     );
   });

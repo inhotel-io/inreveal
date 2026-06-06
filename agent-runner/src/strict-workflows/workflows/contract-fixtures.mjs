@@ -483,6 +483,8 @@ const validateListDuplicateGroupsRequest = (args) => {
  * @param config.albums            albums returned by listAlbums
  * @param config.spaces            spaces (each may carry `members`) for listSpaces/readSpace
  * @param config.users            users returned by searchUsers
+ * @param config.people            people returned by searchPeople (array of {id, name, faceAssetId?})
+ * @param config.peopleResult      explicit override for the searchPeople tool result (bypasses name matching)
  * @param config.handleAssetCount  assetCount on the searchAssets selection handle
  * @param config.handleAssetCounts assetCounts for successive derived handles
  * @param config.planResult        override for the propose* tool results
@@ -493,6 +495,8 @@ export const makeContractClient = (config = {}) => {
     albums = [{ id: 'alb-1', albumName: 'Family' }],
     spaces = [{ id: 'spc-1', name: 'Family', members: [] }],
     users = [{ userId: 'usr-1', name: 'Alex', email: 'alex@example.com' }],
+    people = [],
+    peopleResult,
     handleAssetCount = 20,
     handleAssetCounts,
     resolvedFilters,
@@ -581,6 +585,15 @@ export const makeContractClient = (config = {}) => {
         fail('selectionHandle assetSource requires selectionHandleId');
       }
       return ok(config);
+    },
+    searchPeople: (args) => {
+      const name = String(args?.name ?? '').trim();
+      if (peopleResult !== undefined) return { people: peopleResult };
+      if (!name) return { people: { status: 'not_found' } };
+      const matches = people.filter((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (matches.length === 1) return { people: { status: 'matched', personId: matches[0].id, name: matches[0].name, thumbnailAssetId: matches[0].faceAssetId ?? null } };
+      if (matches.length > 1) return { people: { status: 'ambiguous', choices: matches.map((p) => ({ personId: p.id, name: p.name, thumbnailAssetId: p.faceAssetId ?? null })) } };
+      return { people: { status: 'not_found' } };
     },
     listDuplicateGroups: (args) => {
       validateListDuplicateGroupsRequest(args);

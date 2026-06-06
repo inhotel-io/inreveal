@@ -220,6 +220,13 @@ const buildTools = (contractsByName: ReadonlyMap<AgentToolName, AgentMcpToolCont
       annotations: readToolAnnotations,
     }),
     defineTool({
+      name: AgentToolName.SearchPeople,
+      title: 'Search people',
+      description: `Resolve a person by name to an id; returns matched / ambiguous (candidate list) / not_found. Scrubbed: id, name, thumbnail asset id — no face data.${approvedRequestInstruction}`,
+      schema: AgentReadToolRequestSchemas[AgentToolName.SearchPeople],
+      annotations: readToolAnnotations,
+    }),
+    defineTool({
       name: AgentToolName.ResolveAssetSearchFilters,
       title: 'Resolve asset search filters',
       description: `Resolve user-facing names into searchAssets-compatible filter ids and values.${approvedRequestInstruction}`,
