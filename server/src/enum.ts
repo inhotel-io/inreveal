@@ -191,6 +191,7 @@ export enum AgentOperationType {
   AssetRestore = 'asset.restore',
   ShareLinkCreate = 'shareLink.create',
   ShareLinkCreateAlbum = 'shareLink.createAlbum',
+  PersonUpdate = 'person.update',
 }
 
 export enum AgentOperationTargetKind {
@@ -200,6 +201,7 @@ export enum AgentOperationTargetKind {
   ExistingSpace = 'existing_space',
   AssetBatch = 'asset_batch',
   ImageEditBatch = 'image_edit_batch',
+  Person = 'person',
 }
 
 export enum AgentOperationRiskLevel {

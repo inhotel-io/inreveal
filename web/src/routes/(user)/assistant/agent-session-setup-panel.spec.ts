@@ -220,6 +220,7 @@ const createdSession: AgentSessionResponseDto = {
       trashAssets: true,
       createSharedLinks: false,
       manageStacks: false,
+      managePeople: false,
     },
   },
   permissionPreset: AgentPermissionPreset.Careful,

@@ -136,6 +136,15 @@ const makeValidUnstackOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeValidPersonUpdateOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.PersonUpdate,
+  summary: 'Rename person Alex to Alexander.',
+  targetKind: AgentOperationTargetKind.Person,
+  targetId: factory.uuid(),
+  payload: { name: 'Alexander' },
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -2949,6 +2958,66 @@ describe('Agent operation DTOs', () => {
         action: { type: AgentOperationType.AssetUnstack },
         selectionHandleId: factory.uuid(),
       });
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('person.update operation schema', () => {
+    it('accepts a valid person.update op with name field and defaults to Low risk', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.PersonUpdate);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.Low);
+      }
+    });
+
+    it('accepts payload with birthDate (past date)', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ payload: { birthDate: '1990-05-01' } }));
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts payload with isHidden', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ payload: { isHidden: true } }));
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts payload with birthDate as null (clearing it)', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ payload: { birthDate: null } }));
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects empty payload (no fields provided)', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ payload: {} }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects payload with future birthDate', () => {
+      const futureDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ payload: { birthDate: futureDate } }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.update with wrong targetKind (asset_batch)', () => {
+      const result = parseSingleOperationProposal(
+        makeValidPersonUpdateOp({ targetKind: AgentOperationTargetKind.AssetBatch }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.update missing targetId', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ targetId: undefined }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.update with assetIds (strict object)', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp({ assetIds: [factory.uuid()] }));
+      expect(result.success).toBe(false);
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidPersonUpdateOp());
       expect(result.success).toBe(true);
     });
   });

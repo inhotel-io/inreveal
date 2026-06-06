@@ -157,6 +157,9 @@ String parameterToString(dynamic value) {
   if (value is AgentOperationNewSpaceTargetKind) {
     return AgentOperationNewSpaceTargetKindTypeTransformer().encode(value).toString();
   }
+  if (value is AgentOperationPersonTargetKind) {
+    return AgentOperationPersonTargetKindTypeTransformer().encode(value).toString();
+  }
   if (value is AgentOperationPlanStatus) {
     return AgentOperationPlanStatusTypeTransformer().encode(value).toString();
   }
@@ -177,6 +180,9 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentPermissionPreset) {
     return AgentPermissionPresetTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentPersonUpdateOperationType) {
+    return AgentPersonUpdateOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentProviderType) {
     return AgentProviderTypeTypeTransformer().encode(value).toString();
