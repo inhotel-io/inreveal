@@ -854,8 +854,8 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(planningSchemaJson).toContain(AgentOperationType.AssetAddTag);
     expect(planningSchemaJson).toContain(AgentOperationType.AssetRemoveTag);
     expect(planningSchemaJson).toContain('dateTimeRelative');
-    expect(planningSchemaJson).toContain('integer minute offset');
-    expect(planningSchemaJson).toContain('place names are not accepted');
+    // NOTE: 'integer minute offset' and 'place names are not accepted' were Zod .describe() annotations
+    // on nested $defs fields; these are stripped by stripSchemaDescriptions (token-opt Slice 4).
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.NewSpace);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.ExistingSpace);
     expect(planningSchemaJson).toContain(AgentOperationTargetKind.AssetBatch);
@@ -966,7 +966,8 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(schemaJson).toContain('timeZone');
     expect(schemaJson).toContain('latitude');
     expect(schemaJson).toContain('longitude');
-    expect(schemaJson).toContain('place names are not accepted');
+    // NOTE: 'place names are not accepted' was a Zod .describe() annotation on nested $defs fields;
+    // stripped by stripSchemaDescriptions (token-opt Slice 4).
   });
 
   it('does not leak secrets, routes, stack traces, or direct apply guidance through enriched metadata', () => {
@@ -1081,5 +1082,115 @@ describe(AgentMcpToolRegistryService.name, () => {
       // Name must not appear as a tool-name field in the serialized catalog.
       expect(payload).not.toContain(`"name":"${gatedName}"`);
     }
+  });
+
+  // ── Token-opt Slice 4: strip nested Zod descriptions from MCP input schema ──
+
+  const collectDescriptionKeys = (value: unknown, path = ''): string[] => {
+    const found: string[] = [];
+    if (Array.isArray(value)) {
+      for (const [index, item] of value.entries()) {
+        found.push(...collectDescriptionKeys(item, `${path}[${index}]`));
+      }
+      return found;
+    }
+    if (!value || typeof value !== 'object') {return found;}
+    const record = value as Record<string, unknown>;
+    if ('description' in record) {
+      found.push(path || '(root)');
+    }
+    for (const [key, nested] of Object.entries(record)) {
+      if (key === 'description') {continue;}
+      found.push(...collectDescriptionKeys(nested, path ? `${path}.${key}` : key));
+    }
+    return found;
+  };
+
+  it('planning tool $defs have no description keys on any nested field (token-opt Slice 4)', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations);
+
+    expect(proposal).toBeDefined();
+    const defs = proposal?.inputSchema.$defs;
+    expect(defs).toBeDefined();
+
+    // Walk every def and assert no description anywhere inside the $defs block.
+    const pathsWithDescriptions = collectDescriptionKeys(defs);
+    expect(pathsWithDescriptions, `unexpected description keys in $defs: ${pathsWithDescriptions.join(', ')}`).toEqual(
+      [],
+    );
+  });
+
+  it('top-level curated property descriptions are preserved after strip + enrich (token-opt Slice 4)', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+
+    // Planning tool: operations description comes from propertyDescriptions.operations (re-added by enrich)
+    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations);
+    const proposalProperties = proposal?.inputSchema.properties as Record<string, { description?: string }> | undefined;
+    expect(proposalProperties?.operations?.description).toEqual(
+      expect.stringContaining('reviewable Gallery operations'),
+    );
+    expect(proposalProperties?.summary?.description).toEqual(
+      expect.stringContaining('human-readable plan summary'),
+    );
+
+    // Read tool: filters description comes from propertyDescriptions.filters (re-added by enrich)
+    const search = toolsByName.get(AgentToolName.SearchAssets);
+    const searchProperties = search?.inputSchema.properties as Record<string, { description?: string }> | undefined;
+    expect(searchProperties?.filters?.description).toEqual(
+      expect.stringContaining('Currently executable filters'),
+    );
+  });
+
+  it('schema structure (enum/type/required) is preserved after stripping descriptions (token-opt Slice 4)', () => {
+    const toolsByName = new Map(sut.listTools().map((tool) => [tool.name, tool]));
+    const proposal = toolsByName.get(AgentToolName.ProposeAlbumOperations);
+    const schemaJson = JSON.stringify(proposal?.inputSchema);
+
+    // Operation type enum values must still be present (pure structure, no descriptions needed)
+    expect(schemaJson).toContain(AgentOperationType.AlbumCreate);
+    expect(schemaJson).toContain(AgentOperationType.AssetRotate);
+    expect(schemaJson).toContain(AgentOperationType.AssetUpdateMetadata);
+    expect(schemaJson).toContain(AgentOperationTargetKind.AssetBatch);
+    expect(schemaJson).toContain(AgentOperationTargetKind.NewSpace);
+
+    // dateTimeRelative field name still present (field key, not description)
+    expect(schemaJson).toContain('dateTimeRelative');
+    // latitude/longitude still present as field names
+    expect(schemaJson).toContain('latitude');
+    expect(schemaJson).toContain('longitude');
+
+    // required arrays still present
+    const required = proposal?.inputSchema.required;
+    expect(Array.isArray(required)).toBe(true);
+  });
+
+  it('catalog token estimate is measurably below pre-Slice-4 baseline (token-opt Slice 4)', () => {
+    const tools = sut.listTools();
+    const { tokens, bytes } = estimateCatalogTokens(tools);
+
+    const perTool = tools
+      .map((tool) => ({ name: tool.name, tokens: Math.ceil(JSON.stringify(tool).length / 4) }))
+      .toSorted((a, b) => b.tokens - a.tokens);
+
+    console.info(
+      '[token-opt Slice 4] new catalog estimate:',
+      tokens,
+      'tokens /',
+      bytes,
+      'bytes\n',
+      perTool.map((entry) => `  ${entry.name}: ${entry.tokens} tokens`).join('\n'),
+    );
+
+    // CATALOG_TOKENS_ORIGINAL = 52_350; Slice 3 baseline = 47_065.
+    // Slice 4 strips Zod .describe() string annotations from the MCP-facing schema $defs.
+    // The planning tool $defs are mostly structural (op-union, enums, required arrays) with
+    // only a handful of .describe() annotations (~7 each in the operation and tool DTOs).
+    // Actual measured savings: ~810 tokens (47_065 → 46_255).
+    expect(tokens).toBeLessThan(47_065);
+    // Must be a measurable reduction — at least 500 tokens below the Slice 3 baseline.
+    expect(tokens).toBeLessThan(47_065 - 500);
+    // The exact pin lives in CATALOG_TOKENS_BASELINE (Slice 1 test); we just verify the direction.
+    expect(tokens).toBeLessThanOrEqual(CATALOG_TOKENS_BASELINE);
   });
 });
