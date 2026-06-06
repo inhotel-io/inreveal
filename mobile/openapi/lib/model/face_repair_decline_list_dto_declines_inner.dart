@@ -43,7 +43,7 @@ class FaceRepairDeclineListDtoDeclinesInner {
 
   String? suspectedOwnerThumbnailFaceId;
 
-  FaceRepairDeclineListDtoDeclinesInnerTypeEnum type;
+  String type;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairDeclineListDtoDeclinesInner &&
@@ -136,7 +136,7 @@ class FaceRepairDeclineListDtoDeclinesInner {
         suspectedOwnerId: mapValueOfType<String>(json, r'suspectedOwnerId'),
         suspectedOwnerName: mapValueOfType<String>(json, r'suspectedOwnerName'),
         suspectedOwnerThumbnailFaceId: mapValueOfType<String>(json, r'suspectedOwnerThumbnailFaceId'),
-        type: FaceRepairDeclineListDtoDeclinesInnerTypeEnum.fromJson(json[r'type'])!,
+        type: mapValueOfType<String>(json, r'type')!,
       );
     }
     return null;
@@ -196,78 +196,4 @@ class FaceRepairDeclineListDtoDeclinesInner {
     'type',
   };
 }
-
-
-class FaceRepairDeclineListDtoDeclinesInnerTypeEnum {
-  /// Instantiate a new enum with the provided [value].
-  const FaceRepairDeclineListDtoDeclinesInnerTypeEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const face = FaceRepairDeclineListDtoDeclinesInnerTypeEnum._(r'face');
-  static const person = FaceRepairDeclineListDtoDeclinesInnerTypeEnum._(r'person');
-
-  /// List of all possible values in this [enum][FaceRepairDeclineListDtoDeclinesInnerTypeEnum].
-  static const values = <FaceRepairDeclineListDtoDeclinesInnerTypeEnum>[
-    face,
-    person,
-  ];
-
-  static FaceRepairDeclineListDtoDeclinesInnerTypeEnum? fromJson(dynamic value) => FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer().decode(value);
-
-  static List<FaceRepairDeclineListDtoDeclinesInnerTypeEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <FaceRepairDeclineListDtoDeclinesInnerTypeEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = FaceRepairDeclineListDtoDeclinesInnerTypeEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [FaceRepairDeclineListDtoDeclinesInnerTypeEnum] to String,
-/// and [decode] dynamic data back to [FaceRepairDeclineListDtoDeclinesInnerTypeEnum].
-class FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer {
-  factory FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer() => _instance ??= const FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer._();
-
-  const FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer._();
-
-  String encode(FaceRepairDeclineListDtoDeclinesInnerTypeEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a FaceRepairDeclineListDtoDeclinesInnerTypeEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  FaceRepairDeclineListDtoDeclinesInnerTypeEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'face': return FaceRepairDeclineListDtoDeclinesInnerTypeEnum.face;
-        case r'person': return FaceRepairDeclineListDtoDeclinesInnerTypeEnum.person;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer] instance.
-  static FaceRepairDeclineListDtoDeclinesInnerTypeEnumTypeTransformer? _instance;
-}
-
 

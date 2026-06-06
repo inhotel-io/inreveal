@@ -23477,10 +23477,6 @@
                   "type": "string"
                 },
                 "type": {
-                  "enum": [
-                    "face",
-                    "person"
-                  ],
                   "type": "string"
                 }
               },

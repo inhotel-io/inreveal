@@ -144,7 +144,7 @@ export type FaceRepairDeclineListDto = {
         suspectedOwnerId: string | null;
         suspectedOwnerName: string | null;
         suspectedOwnerThumbnailFaceId: string | null;
-        "type": Type;
+        "type": string;
     }[];
 };
 export type FaceRepairDeclineRequestDto = {
@@ -959,7 +959,7 @@ export type AssetFaceWithoutPersonResponseDto = {
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type2;
+    "type": Type;
 };
 export type PersonWithFacesResponseDto = {
     /** Person date of birth */
@@ -1688,7 +1688,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type3;
+    "type": Type2;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -8804,10 +8804,6 @@ export enum UserAvatarColor {
     Gray = "gray",
     Amber = "amber"
 }
-export enum Type {
-    Face = "face",
-    Person = "person"
-}
 export enum MaintenanceAction {
     Start = "start",
     End = "end",
@@ -9068,7 +9064,7 @@ export enum SourceType {
     Exif = "exif",
     Manual = "manual"
 }
-export enum Type2 {
+export enum Type {
     UserPerson = "user-person",
     SpacePerson = "space-person"
 }
@@ -9146,7 +9142,7 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type3 {
+export enum Type2 {
     Person = "person",
     SpacePerson = "space-person"
 }

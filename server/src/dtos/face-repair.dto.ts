@@ -132,7 +132,11 @@ export class FaceRepairDeclineCreatedDto extends createZodDto(FaceRepairDeclineC
 
 const DeclineItemSchema = z.object({
   id: z.string(),
-  type: z.enum(['face', 'person']),
+  // Plain string, NOT z.enum: an inline `z.enum(['face','person'])` here generates an anonymous `Type` enum in
+  // the SDK, which joins oazapfts's numbered `Type`/`Type2`/... pool and RENUMBERS existing anonymous enums —
+  // silently repointing unrelated consumers (e.g. web's `Type2 as ScopedPersonProfileType`) to the wrong enum.
+  // The value is always 'face' | 'person'; the web reads it via a local cast.
+  type: z.string(),
   assetFaceId: z.string().nullable(),
   suspectedOwnerId: z.string().nullable(),
   suspectedOwnerName: z.string().nullable(),
