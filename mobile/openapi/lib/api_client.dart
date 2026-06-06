@@ -424,6 +424,12 @@ class ApiClient {
           return FaceRepairResponseDtoReportTotals.fromJson(value);
         case 'FaceRepairResponseDtoReportTotalsReviewOnlyByReason':
           return FaceRepairResponseDtoReportTotalsReviewOnlyByReason.fromJson(value);
+        case 'FaceRepairScanDefaultsDto':
+          return FaceRepairScanDefaultsDto.fromJson(value);
+        case 'FaceRepairScanTriggerRequestDto':
+          return FaceRepairScanTriggerRequestDto.fromJson(value);
+        case 'FaceRepairScanTriggerRequestDtoParams':
+          return FaceRepairScanTriggerRequestDtoParams.fromJson(value);
         case 'FaceRepairScanTriggerResponseDto':
           return FaceRepairScanTriggerResponseDto.fromJson(value);
         case 'FacialRecognitionConfig':

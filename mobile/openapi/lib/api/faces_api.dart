@@ -318,6 +318,50 @@ class FacesApi {
     return null;
   }
 
+  /// Get effective face-repair scan defaults
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getFaceRepairScanDefaultsWithHttpInfo() async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan/defaults';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+    );
+  }
+
+  /// Get effective face-repair scan defaults
+  Future<FaceRepairScanDefaultsDto?> getFaceRepairScanDefaults() async {
+    final response = await getFaceRepairScanDefaultsWithHttpInfo();
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairScanDefaultsDto',) as FaceRepairScanDefaultsDto;
+    
+    }
+    return null;
+  }
+
   /// Retrieve faces for asset
   ///
   /// Retrieve all faces belonging to an asset.
@@ -593,18 +637,22 @@ class FacesApi {
   /// Trigger a face-repair scan
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> triggerScanWithHttpInfo() async {
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairScanTriggerRequestDto] faceRepairScanTriggerRequestDto (required):
+  Future<Response> triggerScanWithHttpInfo(FaceRepairScanTriggerRequestDto faceRepairScanTriggerRequestDto,) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/face-repair/scan';
 
     // ignore: prefer_final_locals
-    Object? postBody;
+    Object? postBody = faceRepairScanTriggerRequestDto;
 
     final queryParams = <QueryParam>[];
     final headerParams = <String, String>{};
     final formParams = <String, String>{};
 
-    const contentTypes = <String>[];
+    const contentTypes = <String>['application/json'];
 
 
     return apiClient.invokeAPI(
@@ -619,8 +667,12 @@ class FacesApi {
   }
 
   /// Trigger a face-repair scan
-  Future<FaceRepairScanTriggerResponseDto?> triggerScan() async {
-    final response = await triggerScanWithHttpInfo();
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairScanTriggerRequestDto] faceRepairScanTriggerRequestDto (required):
+  Future<FaceRepairScanTriggerResponseDto?> triggerScan(FaceRepairScanTriggerRequestDto faceRepairScanTriggerRequestDto,) async {
+    final response = await triggerScanWithHttpInfo(faceRepairScanTriggerRequestDto,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

@@ -164,8 +164,24 @@ export type FaceRepairDeclineRequestDto = {
 export type FaceRepairDeclineCreatedDto = {
     created: number;
 };
+export type FaceRepairScanTriggerRequestDto = {
+    params?: {
+        largeClusterThreshold?: number;
+        maxAttributionDistance?: number;
+        maxDistance?: number;
+        maxFlaggedFraction?: number;
+        minFaces?: number;
+        voteMargin?: number;
+        voteWindow?: number;
+    };
+};
 export type FaceRepairScanTriggerResponseDto = {
     scanId: string;
+};
+export type FaceRepairScanDefaultsDto = {
+    maxDistance: number;
+    maxFlaggedFraction: number;
+    minFaces: number;
 };
 export type FaceRepairPersonFacesDto = {
     flaggedFaces: {
@@ -4296,13 +4312,27 @@ export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
 /**
  * Trigger a face-repair scan
  */
-export function triggerScan(opts?: Oazapfts.RequestOpts) {
+export function triggerScan({ faceRepairScanTriggerRequestDto }: {
+    faceRepairScanTriggerRequestDto: FaceRepairScanTriggerRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 201;
         data: FaceRepairScanTriggerResponseDto;
-    }>("/admin/face-repair/scan", {
+    }>("/admin/face-repair/scan", oazapfts.json({
         ...opts,
-        method: "POST"
+        method: "POST",
+        body: faceRepairScanTriggerRequestDto
+    })));
+}
+/**
+ * Get effective face-repair scan defaults
+ */
+export function getFaceRepairScanDefaults(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairScanDefaultsDto;
+    }>("/admin/face-repair/scan/defaults", {
+        ...opts
     }));
 }
 /**

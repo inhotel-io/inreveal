@@ -158,6 +158,7 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**deleteFace**](doc//FacesApi.md#deleteface) | **DELETE** /faces/{id} | Delete a face
 *FacesApi* | [**getFaceRepairDeclines**](doc//FacesApi.md#getfacerepairdeclines) | **GET** /admin/face-repair/decline | List face-repair declines
 *FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
+*FacesApi* | [**getFaceRepairScanDefaults**](doc//FacesApi.md#getfacerepairscandefaults) | **GET** /admin/face-repair/scan/defaults | Get effective face-repair scan defaults
 *FacesApi* | [**getFaces**](doc//FacesApi.md#getfaces) | **GET** /faces | Retrieve faces for asset
 *FacesApi* | [**getLatestScan**](doc//FacesApi.md#getlatestscan) | **GET** /admin/face-repair/scan/latest | Get the latest face-repair scan
 *FacesApi* | [**reassignFacesById**](doc//FacesApi.md#reassignfacesbyid) | **PUT** /faces/{id} | Re-assign a face to another person
@@ -511,6 +512,9 @@ Class | Method | HTTP request | Description
  - [FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner](doc//FaceRepairResponseDtoReportPersonsInnerSuspectedOwnersInner.md)
  - [FaceRepairResponseDtoReportTotals](doc//FaceRepairResponseDtoReportTotals.md)
  - [FaceRepairResponseDtoReportTotalsReviewOnlyByReason](doc//FaceRepairResponseDtoReportTotalsReviewOnlyByReason.md)
+ - [FaceRepairScanDefaultsDto](doc//FaceRepairScanDefaultsDto.md)
+ - [FaceRepairScanTriggerRequestDto](doc//FaceRepairScanTriggerRequestDto.md)
+ - [FaceRepairScanTriggerRequestDtoParams](doc//FaceRepairScanTriggerRequestDtoParams.md)
  - [FaceRepairScanTriggerResponseDto](doc//FaceRepairScanTriggerResponseDto.md)
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FilterSuggestionsPersonDto](doc//FilterSuggestionsPersonDto.md)
