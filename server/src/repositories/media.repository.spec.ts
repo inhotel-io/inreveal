@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { AssetFace } from 'src/database';
-import { AssetEditAction, MirrorAxis } from 'src/dtos/editing.dto';
+import { AssetEditAction, MirrorAxis, TonalLevel } from 'src/dtos/editing.dto';
 import { AssetOcrResponseDto } from 'src/dtos/ocr.dto';
 import { SourceType } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -662,6 +662,102 @@ describe(MediaRepository.name, () => {
         expect(result.visible).toEqual([ocrInsideCrop]);
         expect(result.hidden).toEqual([ocrOutsideCrop]);
       });
+    });
+  });
+
+  describe('applyEdits (tonal adjustments)', () => {
+    // Use 4 channels (RGBA) so getPixelColor's *4 indexing is correct
+    const solid = (r: number, g: number, b: number, size = 100) =>
+      sharp({ create: { width: size, height: size, channels: 4, background: { r, g, b, alpha: 1 } } }).png();
+
+    it('brightness increase lightens pixels', async () => {
+      const out = await sut['applyEdits'](solid(128, 128, 128), [
+        { action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } },
+      ]);
+      const px = await getPixelColor(await out.toBuffer(), 10, 10);
+      expect(px.r).toBeGreaterThan(140); // 128 * 1.18 ≈ 151
+    });
+
+    it('brightness decrease darkens pixels', async () => {
+      const out = await sut['applyEdits'](solid(128, 128, 128), [
+        { action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateDecrease } },
+      ]);
+      const px = await getPixelColor(await out.toBuffer(), 10, 10);
+      expect(px.r).toBeLessThan(120); // 128 * 0.82 ≈ 105
+    });
+
+    it('saturation decrease reduces channel spread', async () => {
+      const out = await sut['applyEdits'](solid(200, 50, 50), [
+        { action: AssetEditAction.Adjust, parameters: { saturation: TonalLevel.StrongDecrease } },
+      ]);
+      const px = await getPixelColor(await out.toBuffer(), 10, 10);
+      const spread = Math.max(px.r, px.g, px.b) - Math.min(px.r, px.g, px.b);
+      expect(spread).toBeLessThan(150); // original spread = 150
+    });
+
+    it('contrast increase widens the spread around mid', async () => {
+      // left half = 64 (below mid), right half = 192 (above mid)
+      const img = sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 64, g: 64, b: 64, alpha: 1 } } })
+        .composite([
+          {
+            input: { create: { width: 50, height: 100, channels: 4, background: { r: 192, g: 192, b: 192, alpha: 1 } } },
+            left: 50,
+            top: 0,
+          },
+        ])
+        .png();
+      const out = await sut['applyEdits'](img, [
+        { action: AssetEditAction.Adjust, parameters: { contrast: TonalLevel.ModerateIncrease } },
+      ]);
+      const buf = await out.toBuffer();
+      const dark = await getPixelColor(buf, 10, 50);
+      const light = await getPixelColor(buf, 90, 50);
+      expect(dark.r).toBeLessThan(64);
+      expect(light.r).toBeGreaterThan(192);
+    });
+
+    it('autoEnhance stretches a narrow band toward full range', async () => {
+      const img = sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 60, g: 60, b: 60, alpha: 1 } } })
+        .composite([
+          {
+            input: { create: { width: 50, height: 100, channels: 4, background: { r: 180, g: 180, b: 180, alpha: 1 } } },
+            left: 50,
+            top: 0,
+          },
+        ])
+        .png();
+      const out = await sut['applyEdits'](img, [
+        { action: AssetEditAction.Adjust, parameters: { autoEnhance: true } },
+      ]);
+      const buf = await out.toBuffer();
+      const lo = await getPixelColor(buf, 10, 50);
+      const hi = await getPixelColor(buf, 90, 50);
+      expect(lo.r).toBeLessThan(60);
+      expect(hi.r).toBeGreaterThan(180);
+    });
+
+    it('all three manual fields apply (modulate + linear) without error', async () => {
+      const out = await sut['applyEdits'](solid(120, 90, 90), [
+        {
+          action: AssetEditAction.Adjust,
+          parameters: {
+            brightness: TonalLevel.SlightIncrease,
+            saturation: TonalLevel.SlightDecrease,
+            contrast: TonalLevel.SlightIncrease,
+          },
+        },
+      ]);
+      const px = await getPixelColor(await out.toBuffer(), 10, 10);
+      expect(px.r).toBeGreaterThanOrEqual(0); // renders to a valid buffer
+    });
+
+    it('no adjust edit leaves pixels unchanged (rotate-only)', async () => {
+      const baseline = await solid(128, 64, 32).toBuffer();
+      const out = await sut['applyEdits'](sharp(baseline), [
+        { action: AssetEditAction.Rotate, parameters: { angle: 0 } },
+      ]);
+      const px = await getPixelColor(await out.toBuffer(), 10, 10);
+      expect(px).toEqual({ r: 128, g: 64, b: 32 });
     });
   });
 });
