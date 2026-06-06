@@ -2739,6 +2739,92 @@ describe('Agent operation DTOs', () => {
     });
   });
 
+  describe('asset.adjust operation schema', () => {
+    const parseBatchAction = (action: unknown) =>
+      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+        summary: 'Adjust matching photos.',
+        action,
+        assetSource: { kind: 'search', filters: { type: 'IMAGE' } },
+      });
+
+    const adjustOperation = (payload: Record<string, unknown>, targetKind: string = AgentOperationTargetKind.ImageEditBatch) => ({
+      type: AgentOperationType.AssetAdjust,
+      summary: 'Adjust matching photos.',
+      targetKind,
+      assetIds: [factory.uuid()],
+      payload,
+    });
+
+    const flipOperation = (payload: Record<string, unknown>) => ({
+      type: AgentOperationType.AssetFlip,
+      summary: 'Flip matching photos.',
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      assetIds: [factory.uuid()],
+      payload,
+    });
+
+    // ── adjust payload validation (via proposeAssetBatchFromSearch action) ────
+
+    it('accepts asset.adjust with one manual field', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, brightness: 'moderate_increase' }).success).toBe(true);
+    });
+
+    it('accepts asset.adjust autoEnhance alone', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, autoEnhance: true }).success).toBe(true);
+    });
+
+    it('rejects asset.adjust with no fields', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust }).success).toBe(false);
+    });
+
+    it('rejects asset.adjust autoEnhance + manual field', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, autoEnhance: true, brightness: 'slight_increase' }).success).toBe(false);
+    });
+
+    it('rejects asset.adjust unknown key (strict)', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetAdjust, sharpen: 'slight_increase' }).success).toBe(false);
+    });
+
+    it('accepts asset.flip with a valid axis', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetFlip, axis: 'horizontal' }).success).toBe(true);
+    });
+
+    it('rejects asset.flip with no axis', () => {
+      expect(parseBatchAction({ type: AgentOperationType.AssetFlip }).success).toBe(false);
+    });
+
+    // ── standalone operation membership + target validation ──────────────────
+
+    it('accepts an asset.adjust standalone operation with an ImageEditBatch target', () => {
+      expect(parseSingleOperationProposal(adjustOperation({ brightness: 'moderate_increase' })).success).toBe(true);
+    });
+
+    it('rejects an asset.adjust operation with an AssetBatch target', () => {
+      expect(parseSingleOperationProposal(adjustOperation({ brightness: 'moderate_increase' }, AgentOperationTargetKind.AssetBatch)).success).toBe(false);
+    });
+
+    it('accepts an asset.flip standalone operation with an ImageEditBatch target', () => {
+      expect(parseSingleOperationProposal(flipOperation({ axis: 'horizontal' })).success).toBe(true);
+    });
+
+    it('rejects an asset.flip operation with an AssetBatch target', () => {
+      expect(
+        parseSingleOperationProposal({ ...flipOperation({ axis: 'horizontal' }), targetKind: AgentOperationTargetKind.AssetBatch }).success,
+      ).toBe(false);
+    });
+
+    // ── iterate contract: reviseProposedOperations accepts an asset.adjust replacement op ──
+
+    it('reviseProposedOperations accepts an asset.adjust replacement op', () => {
+      const result = AgentOperationPlanToolRequestSchemas[AgentToolName.ReviseProposedOperations].safeParse({
+        planId: factory.uuid(),
+        summary: 'More contrast.',
+        operations: [adjustOperation({ contrast: 'strong_increase' })],
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('shareLink.create operation schema', () => {
     it('accepts a valid shareLink.create operation with default High riskLevel', () => {
       const result = parseSingleOperationProposal(makeValidShareLinkCreateOp());
