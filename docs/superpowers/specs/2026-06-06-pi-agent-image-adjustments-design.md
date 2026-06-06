@@ -442,7 +442,7 @@ make format-web
 - "brighten my last 10 photos" → adjust, brightness=moderate_increase, recency source resolved.
 - "make my Berlin photos pop" → saturation=moderate_increase, Berlin source.
 - "increase contrast a lot on these" → contrast=strong_increase from a selection.
-- "brighten and add a bit of contrast" → brightness=moderate_increase + contrast=slight_increase (single op).
+- "brighten and add a bit of contrast" → brightness=moderate_increase + contrast=moderate_increase (single op; combined-adjustment fields default to moderate — per-field intensity is out of scope).
 - "auto-enhance my newest 5" / "fix the lighting on these" → `{ autoEnhance: true }`.
 - "desaturate these" → saturation=moderate_decrease.
 - negatives: "rotate these" → NOT adjust; "crop to 0,0,800,600" → NOT adjust; "make these look amazing" → handoff; "brighten" (no source) → needsInput; "brighten and darken these" → needsInput.
