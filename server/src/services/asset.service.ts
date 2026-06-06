@@ -7,6 +7,7 @@ import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
 import { AssetFile } from 'src/database';
 import { OnJob } from 'src/decorators';
+import { AssetMediaSize } from 'src/dtos/asset-media.dto';
 import { AssetResponseDto, SanitizedAssetResponseDto, mapAsset } from 'src/dtos/asset-response.dto';
 import {
   AssetBulkDeleteDto,
@@ -23,7 +24,6 @@ import {
   UpdateAssetDto,
   mapStats,
 } from 'src/dtos/asset.dto';
-import { AssetMediaSize } from 'src/dtos/asset-media.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AssetEditAction,
@@ -49,7 +49,6 @@ import { BaseService } from 'src/services/base.service';
 import { StorageService } from 'src/services/storage.service';
 import { JobItem, JobOf } from 'src/types';
 import { requireElevatedPermission } from 'src/utils/access';
-import { ImmichStreamResponse } from 'src/utils/file';
 import {
   getAssetFiles,
   getDimensions,
@@ -61,6 +60,7 @@ import {
 import { updateLockedColumns } from 'src/utils/database';
 import { asDateString, extractTimeZone } from 'src/utils/date';
 import { formatSecondsToDuration, parseDurationToSeconds } from 'src/utils/duration';
+import { ImmichStreamResponse } from 'src/utils/file';
 import { transformOcrBoundingBox } from 'src/utils/transform';
 
 @Injectable()
