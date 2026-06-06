@@ -1,9 +1,7 @@
 import { AssetEditAction, AssetEditActionItem, MirrorParameters } from 'src/dtos/editing.dto';
 
 const editKey = (edit: AssetEditActionItem): string =>
-  edit.action === AssetEditAction.Mirror
-    ? `mirror:${(edit.parameters as MirrorParameters).axis}`
-    : edit.action;
+  edit.action === AssetEditAction.Mirror ? `mirror:${(edit.parameters as MirrorParameters).axis}` : edit.action;
 
 /** Merge incoming edits into existing: replace any edit with the same key (mirror keyed by axis); crop stays first. */
 export const mergeEdits = (existing: AssetEditActionItem[], incoming: AssetEditActionItem[]): AssetEditActionItem[] => {

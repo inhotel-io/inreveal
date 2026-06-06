@@ -10927,9 +10927,7 @@ describe(AgentOperationPlanService.name, () => {
     // Asset already has an adjust edit; the new one should replace it
     assetService.getAssetEdits.mockResolvedValue({
       assetId,
-      edits: [
-        { id: newUuid(), action: AssetEditAction.Adjust, parameters: { brightness: 'slight_increase' } },
-      ],
+      edits: [{ id: newUuid(), action: AssetEditAction.Adjust, parameters: { brightness: 'slight_increase' } }],
     } as never);
     assetService.editAsset.mockResolvedValue({ assetId, edits: [] } as never);
 
