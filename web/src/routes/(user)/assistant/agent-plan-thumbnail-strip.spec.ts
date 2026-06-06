@@ -98,7 +98,8 @@ const group = (count: number) =>
   ).groups[0];
 
 /** Group whose single operation is asset.adjust — used to test before/after preview rendering. */
-const adjustGroup = (ids: string[], payload: Record<string, unknown> = { brightness: 'moderate_increase' }) =>
+const DEFAULT_ADJUST_PAYLOAD: Record<string, unknown> = { brightness: 'moderate_increase' };
+const adjustGroup = (ids: string[], payload: Record<string, unknown> = DEFAULT_ADJUST_PAYLOAD) =>
   buildOperationReviewModel(
     plan([
       operation({
