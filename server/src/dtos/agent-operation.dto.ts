@@ -416,6 +416,39 @@ const assetCropPayloadSchema = z.strictObject({
   height: z.number().min(1),
 });
 
+const tonalLevelValues = [
+  'strong_decrease',
+  'moderate_decrease',
+  'slight_decrease',
+  'slight_increase',
+  'moderate_increase',
+  'strong_increase',
+] as const;
+
+const assetAdjustPayloadShape = {
+  brightness: z.enum(tonalLevelValues).optional(),
+  contrast: z.enum(tonalLevelValues).optional(),
+  saturation: z.enum(tonalLevelValues).optional(),
+  autoEnhance: z.boolean().optional(),
+};
+
+const validateAdjustPayload = (
+  payload: { brightness?: string; contrast?: string; saturation?: string; autoEnhance?: boolean },
+  ctx: z.RefinementCtx,
+) => {
+  const manual = [payload.brightness, payload.contrast, payload.saturation].filter((v) => v !== undefined);
+  if (payload.autoEnhance === undefined && manual.length === 0) {
+    ctx.addIssue({ code: 'custom', message: 'At least one adjustment is required' });
+  }
+  if (payload.autoEnhance && manual.length > 0) {
+    ctx.addIssue({ code: 'custom', message: 'autoEnhance cannot be combined with manual adjustments' });
+  }
+};
+
+const assetAdjustPayloadSchema = z.strictObject(assetAdjustPayloadShape).superRefine(validateAdjustPayload);
+
+const assetFlipPayloadSchema = z.strictObject({ axis: z.enum(['horizontal', 'vertical']) });
+
 const shareLinkCreatePayloadSchema = z.strictObject({
   password: z.string().optional(),
   expiresAt: z
@@ -557,6 +590,28 @@ const cropOperationSchema = z
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetCrop);
+  });
+
+const adjustOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetAdjust).meta({ id: 'AgentAssetAdjustOperationType' }),
+    ...assetBatchBase,
+    payload: assetAdjustPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetAdjust);
+  });
+
+const flipOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetFlip).meta({ id: 'AgentAssetFlipOperationType' }),
+    ...assetBatchBase,
+    payload: assetFlipPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ImageEditBatch, AgentOperationType.AssetFlip);
   });
 
 const setFavoriteOperationSchema = z
@@ -784,6 +839,8 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   spaceUpdateMemberRoleOperationSchema,
   rotateOperationSchema,
   cropOperationSchema,
+  adjustOperationSchema,
+  flipOperationSchema,
   setFavoriteOperationSchema,
   setArchiveOperationSchema,
   updateMetadataOperationSchema,
@@ -903,6 +960,8 @@ const AgentAssetBatchWorkflowActionSchema = z
     assetCropPayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetCrop),
     }),
+    z.strictObject({ type: z.literal(AgentOperationType.AssetAdjust), ...assetAdjustPayloadShape }).superRefine(validateAdjustPayload),
+    assetFlipPayloadSchema.extend({ type: z.literal(AgentOperationType.AssetFlip) }),
     z.strictObject({ type: z.literal(AgentOperationType.AssetStack) }),
     z.strictObject({ type: z.literal(AgentOperationType.AssetUnstack) }),
     z
