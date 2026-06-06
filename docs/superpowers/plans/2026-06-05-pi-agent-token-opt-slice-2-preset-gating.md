@@ -46,10 +46,12 @@ original relative order (subset of the fixed array) → cache-stable per preset.
 ### 2. Thread the snapshot in `AgentMcpService.handle()` (tools/list path)
 
 For `request.method === 'tools/list'`: resolve the session's snapshot and pass it:
+
 ```ts
-const snapshot = (await <ownedSessionGetter>(auth, sessionId))?.permissionPlanSnapshot;
+const snapshot = (await (<ownedSessionGetter>(auth, sessionId)))?.permissionPlanSnapshot;
 return { tools: this.toolRegistry.listTools(snapshot) };
 ```
+
 Use the SAME owned-session resolution the call path already uses (find it — likely
 `this.sessionService.getOwnedSession` / a repository getter). If resolution throws for an
 invalid session, let it surface as it does for tool calls (don't silently fall back to the
@@ -58,6 +60,7 @@ full list — an unknown session shouldn't get tools).
 ## Tests (RED first)
 
 `agent-mcp-tool-registry.service.spec.ts`:
+
 - `listTools()` (no arg) still returns all 26 in order (baseline unchanged — Slice 1 test
   still green).
 - `listTools(snapshot)` with a **Careful-like** snapshot (`read.originals:false`,
@@ -70,6 +73,7 @@ full list — an unknown session shouldn't get tools).
   serialized payload.
 
 `agent-mcp.service.spec.ts`:
+
 - a `tools/list` request for a session with a restricted snapshot returns the filtered set
   (mock the session getter to return a snapshot); a full-access session returns all 26.
 - regression: tool-CALL denial for `readAssetOriginals`/previews/space tools is unchanged
@@ -85,6 +89,7 @@ flags — either is fine; assert against the actual flags.
 pnpm -C server test -- --run src/services/agent-mcp-tool-registry.service.spec.ts src/services/agent-mcp.service.spec.ts
 make check-server && make lint-server
 ```
+
 No OpenAPI change (no API DTO touched). No agent-runner change. Run server prettier on edited
 server `.ts`.
 

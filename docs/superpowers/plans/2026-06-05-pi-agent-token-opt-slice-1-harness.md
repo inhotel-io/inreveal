@@ -36,7 +36,7 @@ In `agent-mcp-tool-registry.service.spec.ts`:
   - Assert the live estimate `=== CATALOG_TOKENS_BASELINE` (so the baseline is pinned and any
     drift is visible). Print the number + per-tool breakdown (`console.info`) so the biggest
     contributors are recorded in CI output. Per-tool: `listTools().map(t => ({ name: t.name,
-    tokens: Math.ceil(JSON.stringify(t).length/4) }))` sorted desc.
+tokens: Math.ceil(JSON.stringify(t).length/4) }))` sorted desc.
   - **Run once to discover the real number, then bake it into `CATALOG_TOKENS_BASELINE`** and
     re-run green. Report the discovered baseline number in your summary.
 
@@ -59,6 +59,7 @@ In `agent-mcp-tool-registry.service.spec.ts`:
 ```bash
 pnpm -C server test -- --run src/services/agent-mcp-tool-registry.service.spec.ts
 ```
+
 → GREEN. Also run the contract spec to confirm nothing regressed:
 `pnpm -C server test -- --run src/services/agent-mcp-tool-contract.service.spec.ts`.
 `make check-server` + `make lint-server` green (run server prettier on the edited spec).
