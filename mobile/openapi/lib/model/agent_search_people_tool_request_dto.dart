@@ -13,9 +13,19 @@ part of openapi.api;
 class AgentSearchPeopleToolRequestDto {
   /// Returns a new [AgentSearchPeopleToolRequestDto] instance.
   AgentSearchPeopleToolRequestDto({
+    this.includeHidden,
     this.name,
     this.toolCallId,
   });
+
+  /// Set to true to include hidden people in results (for unhide flows)
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? includeHidden;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -35,20 +45,27 @@ class AgentSearchPeopleToolRequestDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchPeopleToolRequestDto &&
+    other.includeHidden == includeHidden &&
     other.name == name &&
     other.toolCallId == toolCallId;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (includeHidden == null ? 0 : includeHidden!.hashCode) +
     (name == null ? 0 : name!.hashCode) +
     (toolCallId == null ? 0 : toolCallId!.hashCode);
 
   @override
-  String toString() => 'AgentSearchPeopleToolRequestDto[name=$name, toolCallId=$toolCallId]';
+  String toString() => 'AgentSearchPeopleToolRequestDto[includeHidden=$includeHidden, name=$name, toolCallId=$toolCallId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.includeHidden != null) {
+      json[r'includeHidden'] = this.includeHidden;
+    } else {
+    //  json[r'includeHidden'] = null;
+    }
     if (this.name != null) {
       json[r'name'] = this.name;
     } else {
@@ -71,6 +88,7 @@ class AgentSearchPeopleToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchPeopleToolRequestDto(
+        includeHidden: mapValueOfType<bool>(json, r'includeHidden'),
         name: mapValueOfType<String>(json, r'name'),
         toolCallId: mapValueOfType<String>(json, r'toolCallId'),
       );

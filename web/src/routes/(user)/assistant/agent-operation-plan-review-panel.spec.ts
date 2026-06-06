@@ -200,6 +200,7 @@ const session: AgentSessionResponseDto = {
       trashAssets: true,
       createSharedLinks: false,
       manageStacks: false,
+      managePeople: false,
     },
   },
   permissionPreset: AgentPermissionPreset.VisualOrganizer,

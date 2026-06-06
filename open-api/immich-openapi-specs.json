@@ -23962,6 +23962,12 @@
         ],
         "type": "string"
       },
+      "AgentOperationPersonTargetKind": {
+        "enum": [
+          "person"
+        ],
+        "type": "string"
+      },
       "AgentOperationPlanApplyRequestDto": {
         "additionalProperties": false,
         "properties": {
@@ -24401,7 +24407,8 @@
           "new_space",
           "existing_space",
           "asset_batch",
-          "image_edit_batch"
+          "image_edit_batch",
+          "person"
         ],
         "type": "string"
       },
@@ -24431,7 +24438,8 @@
           "asset.trash",
           "asset.restore",
           "shareLink.create",
-          "shareLink.createAlbum"
+          "shareLink.createAlbum",
+          "person.update"
         ],
         "type": "string"
       },
@@ -24575,6 +24583,9 @@
               "favoriteAssets": {
                 "type": "boolean"
               },
+              "managePeople": {
+                "type": "boolean"
+              },
               "manageStacks": {
                 "type": "boolean"
               },
@@ -24629,7 +24640,8 @@
               "updateAssetMetadata",
               "trashAssets",
               "createSharedLinks",
-              "manageStacks"
+              "manageStacks",
+              "managePeople"
             ],
             "type": "object"
           }
@@ -24649,6 +24661,12 @@
           "visual-organizer",
           "local-power-user",
           "custom"
+        ],
+        "type": "string"
+      },
+      "AgentPersonUpdateOperationType": {
+        "enum": [
+          "person.update"
         ],
         "type": "string"
       },
@@ -26339,6 +26357,62 @@
                           "type": "boolean"
                         },
                         "allowDownload": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentPersonUpdateOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationPersonTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 852
+                        },
+                        "birthDate": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "nullable": true
+                        },
+                        "isHidden": {
                           "type": "boolean"
                         }
                       },
@@ -28742,6 +28816,62 @@
                     "payload"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentPersonUpdateOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationPersonTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 852
+                        },
+                        "birthDate": {
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+                          "nullable": true
+                        },
+                        "isHidden": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind",
+                    "payload"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },
@@ -29601,6 +29731,10 @@
       "AgentSearchPeopleToolRequestDto": {
         "additionalProperties": false,
         "properties": {
+          "includeHidden": {
+            "description": "Set to true to include hidden people in results (for unhide flows)",
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,

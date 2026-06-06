@@ -637,6 +637,38 @@ export default [
     expect: { kind: 'set_album_cover', slotsSurvive: true, slots: { albumRef: 'Family' } },
   },
 
+  // rename_person ---------------------------------------------------------------
+  {
+    id: 'recall.person.rename',
+    category: 'recall',
+    prompt: 'Rename Alejandra to Karina',
+    expect: { kind: 'rename_person', slotsSurvive: true, slots: { personRef: 'Alejandra', newName: 'Karina' } },
+  },
+
+  // set_person_birthdate --------------------------------------------------------
+  {
+    id: 'recall.person.birthdate',
+    category: 'recall',
+    prompt: "set Alex's birthday to 1990-05-01",
+    expect: { kind: 'set_person_birthdate', slotsSurvive: true, slots: { personRef: 'Alex', dateStr: '1990-05-01' } },
+  },
+
+  // hide_person (hide) ----------------------------------------------------------
+  {
+    id: 'recall.person.hide',
+    category: 'recall',
+    prompt: 'hide Alex',
+    expect: { kind: 'hide_person', slotsSurvive: true, slots: { personRef: 'Alex', verb: 'hide' } },
+  },
+
+  // hide_person (unhide) --------------------------------------------------------
+  {
+    id: 'recall.person.unhide',
+    category: 'recall',
+    prompt: 'unhide Alex',
+    expect: { kind: 'hide_person', slotsSurvive: true, slots: { personRef: 'Alex', verb: 'unhide' } },
+  },
+
   // stack_assets ---------------------------------------------------------------
   {
     id: 'recall.stack.basic',

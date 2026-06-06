@@ -588,6 +588,7 @@ export type AgentPermissionPlan = {
         createSpace: boolean;
         editAssets: boolean;
         favoriteAssets: boolean;
+        managePeople: boolean;
         manageStacks: boolean;
         removeAssets: boolean;
         removeAssetsFromSpaces: boolean;
@@ -1142,6 +1143,18 @@ export type AgentProposeAlbumOperationsDto = {
             showMetadata?: boolean;
             allowDownload?: boolean;
         };
+    } | {
+        "type": AgentPersonUpdateOperationType;
+        summary: string;
+        targetKind: AgentOperationPersonTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            name?: string;
+            birthDate?: string | null;
+            isHidden?: boolean;
+        };
     })[];
     summary: string;
 };
@@ -1546,6 +1559,18 @@ export type AgentReviseAlbumOperationsDto = {
             expiresAt?: string;
             showMetadata?: boolean;
             allowDownload?: boolean;
+        };
+    } | {
+        "type": AgentPersonUpdateOperationType;
+        summary: string;
+        targetKind: AgentOperationPersonTargetKind;
+        targetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            name?: string;
+            birthDate?: string | null;
+            isHidden?: boolean;
         };
     })[];
     summary: string;
@@ -1997,6 +2022,8 @@ export type AgentSearchAssetsToolSuccessResponse = {
 };
 export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
 export type AgentSearchPeopleToolRequestDto = {
+    /** Set to true to include hidden people in results (for unhide flows) */
+    includeHidden?: boolean;
     name?: string;
     toolCallId?: string;
 };
@@ -10762,7 +10789,8 @@ export enum AgentOperationTargetKind {
     NewSpace = "new_space",
     ExistingSpace = "existing_space",
     AssetBatch = "asset_batch",
-    ImageEditBatch = "image_edit_batch"
+    ImageEditBatch = "image_edit_batch",
+    Person = "person"
 }
 export enum AgentOperationType {
     AlbumCreate = "album.create",
@@ -10789,7 +10817,8 @@ export enum AgentOperationType {
     AssetTrash = "asset.trash",
     AssetRestore = "asset.restore",
     ShareLinkCreate = "shareLink.create",
-    ShareLinkCreateAlbum = "shareLink.createAlbum"
+    ShareLinkCreateAlbum = "shareLink.createAlbum",
+    PersonUpdate = "person.update"
 }
 export enum AgentOperationPlanStatus {
     Proposed = "proposed",
@@ -10928,6 +10957,12 @@ export enum AgentShareLinkCreateOperationType {
 }
 export enum AgentShareLinkCreateAlbumOperationType {
     ShareLinkCreateAlbum = "shareLink.createAlbum"
+}
+export enum AgentPersonUpdateOperationType {
+    PersonUpdate = "person.update"
+}
+export enum AgentOperationPersonTargetKind {
+    Person = "person"
 }
 export enum Status {
     Success = "success"

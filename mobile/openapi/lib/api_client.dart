@@ -364,6 +364,8 @@ class ApiClient {
           return AgentOperationNewAlbumTargetKindTypeTransformer().decode(value);
         case 'AgentOperationNewSpaceTargetKind':
           return AgentOperationNewSpaceTargetKindTypeTransformer().decode(value);
+        case 'AgentOperationPersonTargetKind':
+          return AgentOperationPersonTargetKindTypeTransformer().decode(value);
         case 'AgentOperationPlanApplyRequestDto':
           return AgentOperationPlanApplyRequestDto.fromJson(value);
         case 'AgentOperationPlanApplyResponseDto':
@@ -412,6 +414,8 @@ class ApiClient {
           return AgentPermissionPlanWriteScope.fromJson(value);
         case 'AgentPermissionPreset':
           return AgentPermissionPresetTypeTransformer().decode(value);
+        case 'AgentPersonUpdateOperationType':
+          return AgentPersonUpdateOperationTypeTypeTransformer().decode(value);
         case 'AgentPreviousSearchAssetSourceInput':
           return AgentPreviousSearchAssetSourceInput.fromJson(value);
         case 'AgentProposeAlbumOperationsDto':
@@ -474,6 +478,10 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf24':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf24.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf25':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':

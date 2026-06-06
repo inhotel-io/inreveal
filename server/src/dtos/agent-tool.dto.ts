@@ -714,6 +714,10 @@ const AgentSearchPeopleToolRequestSchema = z
   .strictObject({
     name: z.string().trim().min(1).max(200).optional(),
     toolCallId: uuid.optional(),
+    includeHidden: z
+      .boolean()
+      .optional()
+      .describe('Set to true to include hidden people in results (for unhide flows)'),
   })
   .superRefine((value, ctx) => {
     if (value.toolCallId && value.name !== undefined) {

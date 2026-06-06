@@ -798,6 +798,98 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'rename_person',
+    flow: 'hybrid',
+    title: 'Rename a person',
+    classifierDescription:
+      'User wants to rename a person in their People view (change the displayed name). Requires both the current name/reference and a new name. Declines when the ref contains a container noun (album/space).',
+    positiveExamples: Object.freeze([
+      'Rename Alejandra to Karina',
+      'rename alex to alexander',
+      'Change this person\'s name to Bob',
+    ]),
+    negativeExamples: Object.freeze([
+      'Rename the Family album to Family 2026',
+      'Rename the Trips space to Adventures',
+      'Hide Alex',
+    ]),
+    slots: Object.freeze({
+      personRef: Object.freeze({ type: 'string', required: true, description: 'Current person name or reference.' }),
+      newName: Object.freeze({ type: 'string', required: true, description: 'New name to assign to the person.' }),
+    }),
+    requiredReadTools: Object.freeze(['searchPeople']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Rename person',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the person via searchPeople (durable disambiguation); Gallery owns the person.update plan with { name } payload.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'set_person_birthdate',
+    flow: 'hybrid',
+    title: "Set a person's birthday",
+    classifierDescription:
+      "User wants to record a person's date of birth / birthday / birthdate. Accepts ISO dates (1990-05-01) and natural English dates (\"May 1 1990\", \"1st May 1990\"). Future dates are rejected.",
+    positiveExamples: Object.freeze([
+      "set Alex's birthday to 1990-05-01",
+      "set Alex's birthdate to May 1 1990",
+      "set Alex's date of birth to 1st May 1990",
+    ]),
+    negativeExamples: Object.freeze([
+      'Rename Alex to Alexander',
+      'Hide Alex',
+      "set Alex's birthday",
+    ]),
+    slots: Object.freeze({
+      personRef: Object.freeze({ type: 'string', required: true, description: 'Person name or reference.' }),
+      dateStr: Object.freeze({ type: 'string', required: true, description: 'Birth date string (ISO or natural English).' }),
+    }),
+    requiredReadTools: Object.freeze(['searchPeople']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Set person birthday',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the person via searchPeople (durable disambiguation) and parses the date; Gallery owns the person.update plan with { birthDate } payload. Future dates and unparseable strings are rejected with needsInput.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'hide_person',
+    flow: 'hybrid',
+    title: 'Hide or unhide a person',
+    classifierDescription:
+      'User wants to hide a person from the People view (isHidden:true) or unhide/show a previously hidden person (isHidden:false). "hide <name>" hides; "unhide/show/un-hide <name>" unhides. For unhide, hidden people are included in the search. Declines when the ref contains a container noun (album/space).',
+    positiveExamples: Object.freeze([
+      'hide Alex',
+      'hide Alex from my People list',
+      'unhide Alex',
+      'show Alex',
+      'un-hide Alex',
+    ]),
+    negativeExamples: Object.freeze([
+      'hide the Family album',
+      'rename Alex to Bob',
+      'archive my newest 20 photos',
+    ]),
+    slots: Object.freeze({
+      personRef: Object.freeze({ type: 'string', required: true, description: 'Person name or reference.' }),
+      verb: Object.freeze({ type: 'string', required: true, description: '"hide" or "unhide".' }),
+    }),
+    requiredReadTools: Object.freeze(['searchPeople']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Hide/unhide person',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the person via searchPeople (includeHidden:true for unhide); Gallery owns the person.update plan with { isHidden } payload. Durable disambiguation: ambiguous person gets a storable candidate list.',
+    }),
+  }),
+  Object.freeze({
     kind: 'manage_space_members',
     flow: 'strict',
     title: 'Add or remove space members',

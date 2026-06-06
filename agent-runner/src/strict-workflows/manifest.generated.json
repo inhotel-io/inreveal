@@ -957,6 +957,122 @@
     }
   },
   {
+    "kind": "rename_person",
+    "flow": "hybrid",
+    "title": "Rename a person",
+    "classifierDescription": "User wants to rename a person in their People view (change the displayed name). Requires both the current name/reference and a new name. Declines when the ref contains a container noun (album/space).",
+    "positiveExamples": [
+      "Rename Alejandra to Karina",
+      "rename alex to alexander",
+      "Change this person's name to Bob"
+    ],
+    "negativeExamples": [
+      "Rename the Family album to Family 2026",
+      "Rename the Trips space to Adventures",
+      "Hide Alex"
+    ],
+    "slots": {
+      "personRef": {
+        "type": "string",
+        "required": true,
+        "description": "Current person name or reference."
+      },
+      "newName": {
+        "type": "string",
+        "required": true,
+        "description": "New name to assign to the person."
+      }
+    },
+    "requiredReadTools": [
+      "searchPeople"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": true,
+    "matrixRow": {
+      "capability": "Rename person",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the person via searchPeople (durable disambiguation); Gallery owns the person.update plan with { name } payload."
+    }
+  },
+  {
+    "kind": "set_person_birthdate",
+    "flow": "hybrid",
+    "title": "Set a person's birthday",
+    "classifierDescription": "User wants to record a person's date of birth / birthday / birthdate. Accepts ISO dates (1990-05-01) and natural English dates (\"May 1 1990\", \"1st May 1990\"). Future dates are rejected.",
+    "positiveExamples": [
+      "set Alex's birthday to 1990-05-01",
+      "set Alex's birthdate to May 1 1990",
+      "set Alex's date of birth to 1st May 1990"
+    ],
+    "negativeExamples": [
+      "Rename Alex to Alexander",
+      "Hide Alex",
+      "set Alex's birthday"
+    ],
+    "slots": {
+      "personRef": {
+        "type": "string",
+        "required": true,
+        "description": "Person name or reference."
+      },
+      "dateStr": {
+        "type": "string",
+        "required": true,
+        "description": "Birth date string (ISO or natural English)."
+      }
+    },
+    "requiredReadTools": [
+      "searchPeople"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": true,
+    "matrixRow": {
+      "capability": "Set person birthday",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the person via searchPeople (durable disambiguation) and parses the date; Gallery owns the person.update plan with { birthDate } payload. Future dates and unparseable strings are rejected with needsInput."
+    }
+  },
+  {
+    "kind": "hide_person",
+    "flow": "hybrid",
+    "title": "Hide or unhide a person",
+    "classifierDescription": "User wants to hide a person from the People view (isHidden:true) or unhide/show a previously hidden person (isHidden:false). \"hide <name>\" hides; \"unhide/show/un-hide <name>\" unhides. For unhide, hidden people are included in the search. Declines when the ref contains a container noun (album/space).",
+    "positiveExamples": [
+      "hide Alex",
+      "hide Alex from my People list",
+      "unhide Alex",
+      "show Alex",
+      "un-hide Alex"
+    ],
+    "negativeExamples": [
+      "hide the Family album",
+      "rename Alex to Bob",
+      "archive my newest 20 photos"
+    ],
+    "slots": {
+      "personRef": {
+        "type": "string",
+        "required": true,
+        "description": "Person name or reference."
+      },
+      "verb": {
+        "type": "string",
+        "required": true,
+        "description": "\"hide\" or \"unhide\"."
+      }
+    },
+    "requiredReadTools": [
+      "searchPeople"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": true,
+    "matrixRow": {
+      "capability": "Hide/unhide person",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the person via searchPeople (includeHidden:true for unhide); Gallery owns the person.update plan with { isHidden } payload. Durable disambiguation: ambiguous person gets a storable candidate list."
+    }
+  },
+  {
     "kind": "manage_space_members",
     "flow": "strict",
     "title": "Add or remove space members",
