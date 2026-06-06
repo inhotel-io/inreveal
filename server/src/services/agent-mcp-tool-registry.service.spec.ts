@@ -1187,9 +1187,13 @@ describe(AgentMcpToolRegistryService.name, () => {
     // The planning tool $defs are mostly structural (op-union, enums, required arrays) with
     // only a handful of .describe() annotations (~7 each in the operation and tool DTOs).
     // Actual measured savings: ~810 tokens (47_065 → 46_255).
-    expect(tokens).toBeLessThan(47_065);
-    // Must be a measurable reduction — at least 500 tokens below the Slice 3 baseline.
-    expect(tokens).toBeLessThan(47_065 - 500);
+    // image-adj Slice 3 (2026-06-06): adding asset.adjust + asset.flip raised count by ~1_742
+    // tokens (46_255 → 47_997), so the pre-Slice-4 equivalent is now ~48_807.
+    // Pre-Slice-4 equivalent with new ops:
+    const preSlice4Equivalent = 48_807;
+    expect(tokens).toBeLessThan(preSlice4Equivalent);
+    // Must be a measurable reduction — at least 500 tokens below the pre-opt equivalent.
+    expect(tokens).toBeLessThan(preSlice4Equivalent - 500);
     // The exact pin lives in CATALOG_TOKENS_BASELINE (Slice 1 test); we just verify the direction.
     expect(tokens).toBeLessThanOrEqual(CATALOG_TOKENS_BASELINE);
   });
