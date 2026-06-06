@@ -10716,4 +10716,446 @@ describe(AgentOperationPlanService.name, () => {
       ids: [sourcePersonId],
     });
   });
+
+  // ── asset.adjust ─────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for asset.adjust when editAssets is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, editAssets: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Adjust photos.',
+        operations: [
+          {
+            type: AgentOperationType.AssetAdjust,
+            summary: 'Adjust photos brighter.',
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds: [newUuid()],
+            payload: { brightness: 'moderate_increase' },
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow editing assets');
+  });
+
+  it('asset.adjust riskLevel is Low and target is ImageEditBatch', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetAdjust,
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Adjust photos.',
+      operations: [
+        {
+          type: AgentOperationType.AssetAdjust,
+          summary: 'Adjust photos brighter.',
+          targetKind: AgentOperationTargetKind.ImageEditBatch,
+          assetIds,
+          payload: { brightness: 'moderate_increase' },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.AssetAdjust,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('applies adjust edit merging with existing edits and reports per-asset failures', async () => {
+    const auth = AuthFactory.create();
+    const editableAssetId = newUuid();
+    const videoAssetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const adjustPayload = { brightness: 'moderate_increase' };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetAdjust,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [editableAssetId, videoAssetId],
+      payload: adjustPayload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getForEdit.mockImplementation((id: string) =>
+      Promise.resolve({
+        type: id === videoAssetId ? AssetType.Video : AssetType.Image,
+        livePhotoVideoId: null,
+        originalPath: '/photos/image.jpg',
+        originalFileName: 'image.jpg',
+        duration: null,
+        exifImageWidth: 800,
+        exifImageHeight: 600,
+        orientation: null,
+        projectionType: null,
+      }),
+    );
+    // editableAssetId already has a crop edit; the new adjust should be appended
+    assetService.getAssetEdits.mockImplementation((_: typeof auth, id: string) =>
+      Promise.resolve({
+        assetId: id,
+        edits:
+          id === editableAssetId
+            ? [{ id: newUuid(), action: AssetEditAction.Crop, parameters: { x: 0, y: 0, width: 200, height: 200 } }]
+            : [],
+      } as never),
+    );
+    assetService.editAsset.mockResolvedValue({ assetId: editableAssetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, editableAssetId, {
+      edits: [
+        // Crop stays first; adjust appended
+        { action: AssetEditAction.Crop, parameters: { x: 0, y: 0, width: 200, height: 200 } },
+        { action: AssetEditAction.Adjust, parameters: { brightness: 'moderate_increase' } },
+      ],
+    });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: expect.objectContaining({
+          assetIds: [editableAssetId],
+          assetResults: expect.arrayContaining([
+            expect.objectContaining({ id: editableAssetId, success: true }),
+            expect.objectContaining({ id: videoAssetId, success: false, errorMessage: 'Only images can be edited' }),
+          ]),
+        }),
+        error: 'Failed to adjust 1 asset(s)',
+      }),
+    ]);
+  });
+
+  it('adjust on asset with existing adjust replaces the adjust edit', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const newAdjustPayload = { contrast: 'strong_increase' };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetAdjust,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [assetId],
+      payload: newAdjustPayload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getForEdit.mockResolvedValue({
+      type: AssetType.Image,
+      livePhotoVideoId: null,
+      originalPath: '/photos/image.jpg',
+      originalFileName: 'image.jpg',
+      duration: null,
+      exifImageWidth: 800,
+      exifImageHeight: 600,
+      orientation: null,
+      projectionType: null,
+    });
+    // Asset already has an adjust edit; the new one should replace it
+    assetService.getAssetEdits.mockResolvedValue({
+      assetId,
+      edits: [
+        { id: newUuid(), action: AssetEditAction.Adjust, parameters: { brightness: 'slight_increase' } },
+      ],
+    } as never);
+    assetService.editAsset.mockResolvedValue({ assetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, assetId, {
+      edits: [
+        // Old adjust replaced by new
+        { action: AssetEditAction.Adjust, parameters: { contrast: 'strong_increase' } },
+      ],
+    });
+  });
+
+  // ── asset.flip ────────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for asset.flip when editAssets is false', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, editAssets: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Flip photos.',
+        operations: [
+          {
+            type: AgentOperationType.AssetFlip,
+            summary: 'Flip photos horizontally.',
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds: [newUuid()],
+            payload: { axis: 'horizontal' },
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+          },
+        ],
+      }),
+    ).rejects.toThrow('Agent permission policy does not allow editing assets');
+  });
+
+  it('asset.flip riskLevel is Low and target is ImageEditBatch', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid()];
+    const session = makeSession({ userId: auth.user.id, permissionPlanSnapshot: expandedPermissionPlanSnapshot });
+    sessionRepository.getById.mockResolvedValue(session);
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.AssetFlip,
+            targetKind: AgentOperationTargetKind.ImageEditBatch,
+            assetIds,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ],
+      }),
+    );
+
+    await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Flip photos.',
+      operations: [
+        {
+          type: AgentOperationType.AssetFlip,
+          summary: 'Flip photos horizontally.',
+          targetKind: AgentOperationTargetKind.ImageEditBatch,
+          assetIds,
+          payload: { axis: 'horizontal' },
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.AssetFlip,
+            riskLevel: AgentOperationRiskLevel.Low,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('applies flip (mirror) edit and skips non-image assets', async () => {
+    const auth = AuthFactory.create();
+    const editableAssetId = newUuid();
+    const videoAssetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const flipPayload = { axis: 'horizontal' };
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetFlip,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [editableAssetId, videoAssetId],
+      payload: flipPayload,
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([editableAssetId, videoAssetId]));
+    assetRepository.getForEdit.mockImplementation((id: string) =>
+      Promise.resolve({
+        type: id === videoAssetId ? AssetType.Video : AssetType.Image,
+        livePhotoVideoId: null,
+        originalPath: '/photos/image.jpg',
+        originalFileName: 'image.jpg',
+        duration: null,
+        exifImageWidth: 800,
+        exifImageHeight: 600,
+        orientation: null,
+        projectionType: null,
+      }),
+    );
+    assetService.getAssetEdits.mockResolvedValue({
+      assetId: editableAssetId,
+      edits: [],
+    } as never);
+    assetService.editAsset.mockResolvedValue({ assetId: editableAssetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, editableAssetId, {
+      edits: [{ action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } }],
+    });
+    expect(planRepository.completeApply).toHaveBeenCalledWith(plan.id, [
+      expect.objectContaining({
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result: expect.objectContaining({
+          assetIds: [editableAssetId],
+          assetResults: expect.arrayContaining([
+            expect.objectContaining({ id: editableAssetId, success: true }),
+            expect.objectContaining({ id: videoAssetId, success: false, errorMessage: 'Only images can be edited' }),
+          ]),
+        }),
+        error: 'Failed to flip 1 asset(s)',
+      }),
+    ]);
+  });
+
+  it('flip idempotent on same axis (one mirror per axis)', async () => {
+    const auth = AuthFactory.create();
+    const assetId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AssetFlip,
+      targetKind: AgentOperationTargetKind.ImageEditBatch,
+      targetId: null,
+      assetIds: [assetId],
+      payload: { axis: 'horizontal' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set([assetId]));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set([assetId]));
+    assetRepository.getForEdit.mockResolvedValue({
+      type: AssetType.Image,
+      livePhotoVideoId: null,
+      originalPath: '/photos/image.jpg',
+      originalFileName: 'image.jpg',
+      duration: null,
+      exifImageWidth: 800,
+      exifImageHeight: 600,
+      orientation: null,
+      projectionType: null,
+    });
+    // Already has a horizontal mirror; applying again should keep only one
+    assetService.getAssetEdits.mockResolvedValue({
+      assetId,
+      edits: [{ id: newUuid(), action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } }],
+    } as never);
+    assetService.editAsset.mockResolvedValue({ assetId, edits: [] } as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(assetService.editAsset).toHaveBeenCalledWith(auth, assetId, {
+      edits: [{ action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } }],
+    });
+  });
 });
