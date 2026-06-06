@@ -444,7 +444,14 @@
         </div>
 
         <!-- Table -->
-        <FaceCleanupTable {vm} {filter} {searchQuery} users={data.users} onOpen={handleOpen} onDismiss={handleDismiss} />
+        <FaceCleanupTable
+          {vm}
+          {filter}
+          {searchQuery}
+          users={data.users}
+          onOpen={handleOpen}
+          onDismiss={handleDismiss}
+        />
 
         <!-- Footnote -->
         <p class="mt-4 max-w-3xl text-xs text-gray-400 dark:text-gray-500">

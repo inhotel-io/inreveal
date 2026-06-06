@@ -254,7 +254,11 @@
       <button
         type="button"
         onclick={() => {
-          if (confirm($t('admin.face_cleanup_dismiss_confirm', { values: { name: person.personName ?? person.personId } }))) {
+          if (
+            confirm(
+              $t('admin.face_cleanup_dismiss_confirm', { values: { name: person.personName ?? person.personId } }),
+            )
+          ) {
             onDismiss(person.personId);
           }
         }}
