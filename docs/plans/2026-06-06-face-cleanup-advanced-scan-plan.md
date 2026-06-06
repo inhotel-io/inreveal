@@ -68,6 +68,13 @@ describe('FaceRepairScanTriggerRequestSchema', () => {
     expect(r.success).toBe(true);
   });
 
+  it('accepts the non-curated params too (full optional set; future raw panel)', () => {
+    const r = FaceRepairScanTriggerRequestSchema.safeParse({
+      params: { voteWindow: 100, voteMargin: 0, maxAttributionDistance: 0.4, largeClusterThreshold: 80 },
+    });
+    expect(r.success).toBe(true);
+  });
+
   it('rejects maxDistance above 2', () => {
     expect(
       FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxDistance: 2.5 } }).success,
@@ -173,7 +180,7 @@ Expected: PASS (all decline + scan-trigger cases).
   }
 ```
 
-Add `Body` to the `@nestjs/common` import and `FaceRepairScanTriggerRequestDto` to the dtos import block.
+`Body` is **already imported** from `@nestjs/common` (used by the decline routes) — do not re-add it. Only add `FaceRepairScanTriggerRequestDto` to the existing dtos import block.
 
 - [ ] **Step 7: Update controller spec** — in `server/src/controllers/face-repair-admin.controller.spec.ts`, find the `POST /admin/face-repair/scan` describe block and replace its delegation assertions with:
 
@@ -209,7 +216,7 @@ Add `Body` to the `@nestjs/common` import and `FaceRepairScanTriggerRequestDto` 
     });
 ```
 
-If the existing block already has a "should be an authenticated route" test, keep it. (POST returns 201 in this codebase's Nest setup; if the existing scan test asserts 200/201, match whatever the existing passing assertion uses.)
+Keep the existing "should be an authenticated route" test in this block. POST returns **201** here (verified: the existing scan/apply POST tests assert `201`; GET/DELETE assert `200`).
 
 - [ ] **Step 8: Run server unit tests**
 
@@ -342,19 +349,19 @@ git commit -m "feat(face-repair): add scan defaults read endpoint"
 **Files:**
 - Modify: `server/test/medium/specs/services/face-repair.scan.spec.ts`
 
-This proves the wiring end-to-end on a real DB: a low `maxFlaggedFraction` makes a contaminated cluster go review-only (over-cap) instead of repairable, vs the default run.
+This proves the wiring end-to-end on a real DB via a **two-scan contrast**: the SAME contaminated cluster is repairable at the default cap but goes review-only (over-cap) at a tuned low cap. The over-cap rule is `flagged / eligible > maxFlaggedFraction` (`face-repair.service.ts:120`), so the contamination must sit **between** the two caps: ~27% (3 leaked of 11 eligible) is **under** the 0.5 default (→ `toRepair`) but **over** the 0.1 tuned cap (→ `reviewOnly`). A 60% fixture would be over-cap at *both* caps and the test would pass even if params never flowed — so the level is load-bearing.
 
-- [ ] **Step 1: Add the medium test** — append inside the existing `describe('FaceRepairService.handleFaceRepairScan', ...)` block in `server/test/medium/specs/services/face-repair.scan.spec.ts`. It reuses the file's `axisEmbedding`, `setup`, and `ctx` helpers:
+- [ ] **Step 1: Add the medium test** — append inside the existing `describe('FaceRepairService.handleFaceRepairScan', ...)` block in `server/test/medium/specs/services/face-repair.scan.spec.ts`. It reuses the file's `axisEmbedding`, `setup`, `db`, and `ctx` helpers (mirrors the existing "flagged person" fixture: 3 leaked + 8 genuine):
 
 ```ts
-  it('triggerScan overrides flow to the engine: a low maxFlaggedFraction sends a contaminated cluster review-only', async () => {
+  it('triggerScan overrides flow to the engine: maxFlaggedFraction flips a cluster repairable→review-only', async () => {
     const { sut, ctx } = setup();
     const jobMock = ctx.getMock(JobRepository);
     jobMock.isActive.mockResolvedValue(false);
     jobMock.queue.mockResolvedValue(undefined);
     const { user } = await ctx.newUser();
 
-    // Reference owner Karina: 10 first-axis faces.
+    // Reference owner Karina: 10 first-axis faces, so the leaked faces have a clean cluster to vote toward.
     const karina = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
     await db.insertInto('person').values(karina).execute();
     for (let i = 0; i < 10; i++) {
@@ -363,32 +370,42 @@ This proves the wiring end-to-end on a real DB: a low `maxFlaggedFraction` makes
       await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
     }
 
-    // Unnamed cluster: 6 leaked first-axis + 4 genuine second-axis = 60% flagged.
+    // Unnamed cluster: 3 leaked first-axis + 8 genuine second-axis → 3/11 ≈ 27% flagged.
     const cluster = mediumFactory.personInsert({ ownerId: user.id, name: '' });
     await db.insertInto('person').values(cluster).execute();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
       await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 8; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
       await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
     }
 
-    // maxFlaggedFraction 0.1 < 0.6 actual → over-cap → reviewOnly (not toRepair).
-    const { scanId } = await sut.triggerScan(user.id, { maxFlaggedFraction: 0.1 });
-    await sut.handleFaceRepairScan({ scanId });
+    // Default run (no overrides): 27% < 0.5 cap → the leaked faces are repairable, none over-cap.
+    const a = await sut.triggerScan(user.id);
+    await sut.handleFaceRepairScan({ scanId: a.scanId });
+    const defaultRun = await sut.getLatestScanStatus();
+    expect(defaultRun!.status).toBe('completed');
+    expect(defaultRun!.totals!.toRepair).toBeGreaterThan(0);
+    expect(defaultRun!.totals!.reviewOnlyByReason.overCap).toBe(0);
 
-    const latest = await sut.getLatestScanStatus();
-    expect(latest!.status).toBe('completed');
-    expect(latest!.totals!.reviewOnlyFaces).toBeGreaterThan(0);
-    expect(latest!.totals!.toRepair).toBe(0);
+    // Clear the scan row so the tuned run is unambiguously the latest (and avoids any active-scan guard).
+    await db.deleteFrom('face_repair_scan').execute();
+
+    // Tuned run: 27% > 0.1 cap → the SAME faces go review-only (over-cap), none repaired.
+    const b = await sut.triggerScan(user.id, { maxFlaggedFraction: 0.1 });
+    await sut.handleFaceRepairScan({ scanId: b.scanId });
+    const tunedRun = await sut.getLatestScanStatus();
+    expect(tunedRun!.status).toBe('completed');
+    expect(tunedRun!.totals!.toRepair).toBe(0);
+    expect(tunedRun!.totals!.reviewOnlyByReason.overCap).toBeGreaterThan(0);
   });
 ```
 
-Ensure `JobRepository` and `mediumFactory` are imported at the top of the file (the file already imports `JobRepository` in its `mock:` list and `mediumFactory` from `test/medium.factory`; add to the import if missing).
+The file already imports `JobRepository` (in its `mock:` list) and `mediumFactory` (from `test/medium.factory`); no new imports needed. `db` is the module-level `Kysely` handle already used by the other tests.
 
 - [ ] **Step 2: Note on running** — medium tests need Docker (not available locally). They run in CI. Mark this step done after the code is written; CI's `Medium Tests` job is the gate.
 
@@ -465,25 +482,64 @@ git commit -m "chore(open-api): regenerate for scan params + defaults endpoint"
 
 (Place each key so the block stays sorted — e.g. `face_cleanup_advanced*` come right before `face_cleanup_apply_*`.)
 
-- [ ] **Step 2: Write the failing modal component test** — create `web/src/routes/admin/face-cleanup/AdvancedScanModal.spec.ts`:
+- [ ] **Step 2: Write the failing modal component test** — create `web/src/routes/admin/face-cleanup/AdvancedScanModal.spec.ts`. Covers pre-fill, submit (numeric coercion), and the defaults-failure fallback:
 
 ```ts
-import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom';
+import { render, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getFaceRepairScanDefaults } from '@immich/sdk';
 import AdvancedScanModal from './AdvancedScanModal.svelte';
 
-vi.mock('@immich/sdk', () => ({
-  getFaceRepairScanDefaults: vi.fn().mockResolvedValue({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 }),
-}));
+vi.mock('@immich/sdk', () => ({ getFaceRepairScanDefaults: vi.fn() }));
+
+const mockDefaults = (v: { maxDistance: number; minFaces: number; maxFlaggedFraction: number }) =>
+  vi.mocked(getFaceRepairScanDefaults).mockResolvedValue(v);
+
+// Mirror the existing modal specs: let the modal's open/close transition timers flush between tests.
+afterEach(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+});
 
 describe('AdvancedScanModal', () => {
-  it('pre-fills the three controls from the defaults endpoint', async () => {
+  beforeEach(() => vi.mocked(getFaceRepairScanDefaults).mockReset());
+
+  it('pre-fills the controls from the defaults endpoint', async () => {
+    mockDefaults({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
     render(AdvancedScanModal, { props: { onClose: vi.fn(), onRun: vi.fn() } });
-    // minFaces stepper renders the default value once defaults resolve.
     expect(await screen.findByDisplayValue('3')).toBeInTheDocument();
+  });
+
+  it('submits numeric params (not strings) and closes', async () => {
+    mockDefaults({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+    const onRun = vi.fn();
+    const onClose = vi.fn();
+    render(AdvancedScanModal, { props: { onClose, onRun } });
+    await screen.findByDisplayValue('3');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Run scan' }));
+
+    expect(onRun).toHaveBeenCalledTimes(1);
+    const arg = onRun.mock.calls[0][0];
+    expect(typeof arg.maxDistance).toBe('number');
+    expect(typeof arg.minFaces).toBe('number');
+    expect(typeof arg.maxFlaggedFraction).toBe('number');
+    expect(arg).toEqual({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('falls back to safe defaults when the defaults endpoint fails', async () => {
+    vi.mocked(getFaceRepairScanDefaults).mockRejectedValue(new Error('boom'));
+    render(AdvancedScanModal, { props: { onClose: vi.fn(), onRun: vi.fn() } });
+    // Component-level fallback minFaces is 3; the modal still renders and is runnable.
+    await waitFor(() => expect(screen.getByDisplayValue('3')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Run scan' })).toBeInTheDocument();
   });
 });
 ```
+
+(If `FormModal` cannot render standalone in happy-dom — needs the modal-manager portal — render via a thin wrapper or assert on the inner form controls; keep all three behaviors covered.)
 
 - [ ] **Step 3: Run to verify failure**
 
@@ -495,7 +551,7 @@ Expected: FAIL — module `./AdvancedScanModal.svelte` does not exist.
 ```svelte
 <script lang="ts">
   import { getFaceRepairScanDefaults } from '@immich/sdk';
-  import { Field, FormModal, Input } from '@immich/ui';
+  import { Field, FormModal } from '@immich/ui';
   import { mdiTune } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -523,7 +579,13 @@ Expected: FAIL — module `./AdvancedScanModal.svelte` does not exist.
   onMount(loadDefaults);
 
   const onSubmit = () => {
-    onRun({ maxDistance, minFaces, maxFlaggedFraction });
+    // Coerce to numbers — the API rejects string params (z.number()). Native numeric inputs already bind as
+    // numbers; Number() is a no-op safety net.
+    onRun({
+      maxDistance: Number(maxDistance),
+      minFaces: Number(minFaces),
+      maxFlaggedFraction: Number(maxFlaggedFraction),
+    });
     onClose();
   };
 </script>
@@ -548,7 +610,14 @@ Expected: FAIL — module `./AdvancedScanModal.svelte` does not exist.
     </Field>
 
     <Field label={$t('admin.face_cleanup_advanced_min_faces')}>
-      <Input type="number" min="1" step="1" bind:value={minFaces} />
+      <input
+        type="number"
+        min="1"
+        step="1"
+        bind:value={minFaces}
+        class="w-24 rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+        data-testid="min-faces-input"
+      />
       <p class="mt-1 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_min_faces_help')}</p>
     </Field>
 
@@ -566,6 +635,12 @@ Expected: FAIL — module `./AdvancedScanModal.svelte` does not exist.
   </div>
 </FormModal>
 ```
+
+> **Slider ranges are deliberate:** `maxDistance` validates 0–2 server-side but the slider exposes the
+> practical **0.1–1** range (FR cosine distances above ~0.7 are already very loose; >1 is nonsensical).
+> `maxFlaggedFraction` uses the full 0–1. Caveat: a range input with `max="1"` two-way-binds, so a
+> pre-filled `maxDistance` > 1 (only reachable via a hand-edited FR config) is **clamped to 1** on load.
+> That's acceptable for nonsensical values; if exact >1 fidelity is ever needed, widen the slider `max` to 2.
 
 - [ ] **Step 5: Run the component test to verify pass**
 
@@ -684,10 +759,17 @@ git push
 - Per-scan transient, no new storage → Task 1 (`createScan` only; no metadata writes). ✓
 - Pre-filled defaults via dedicated endpoint → Task 2 + Task 5 `loadDefaults`. ✓
 - Quick Re-scan preserved → Task 5 `runScan()` no-arg path. ✓
-- Engine unchanged; params flow proven → Task 3 medium test. ✓
-- Tests: DTO ranges (T1), defaults value (T2), params-reach-engine (T3), modal pre-fill/submit (T5). ✓
+- Engine unchanged; params flow proven → Task 3 medium test (two-scan contrast). ✓
 - OpenAPI/SDK regen → Task 4. ✓
 
-**Placeholder scan:** No TBD/TODO; every code step has full code. The one conditional ("if FormModal context breaks render, assert inner controls") is a concrete fallback, not a placeholder.
+**Test & edge-case coverage:**
+- **Validation (T1):** curated params accepted; non-curated/full set accepted; `maxDistance>2`, `maxFlaggedFraction>1`, `minFaces<1` rejected; empty body (quick path) accepted.
+- **Defaults (T2):** `getScanDefaults` returns config maxDistance/minFaces + constant cap; route authenticated + delegates.
+- **Controller (T1):** no-body delegates `undefined` params (quick path unchanged); tuned params delegated; out-of-range → 400.
+- **Engine flow (T3):** the *load-bearing* edge — same 27% cluster is `toRepair` at the 0.5 default but `over-cap`/`reviewOnly` at the 0.1 tuned cap. A 60% fixture would falsely pass, so the contamination level is justified in the task.
+- **Modal (T5):** pre-fill from endpoint; submit sends **numeric** (not string) params + closes; defaults-endpoint-failure falls back to safe values and stays runnable.
+- **Known untested branches (acceptable, pre-existing):** the web 409 "scan in progress" toast branch is unchanged existing behavior copied into `runScan`; not separately tested.
+
+**Placeholder scan:** No TBD/TODO; every code step has full code. The two conditionals ("if FormModal can't render standalone, assert inner controls") are concrete fallbacks, not placeholders.
 
 **Type consistency:** `triggerScan(requestedBy, overrides?)` signature matches controller call `dto.params` and medium-test call `{ maxFlaggedFraction }`; `getScanDefaults()` return shape `{ maxDistance, minFaces, maxFlaggedFraction }` matches `FaceRepairScanDefaultsSchema` and the modal's `loadDefaults`; modal `onRun(params)` shape matches dashboard `runScan(params)` and the SDK body `{ faceRepairScanTriggerRequestDto: { params } }`. ✓
