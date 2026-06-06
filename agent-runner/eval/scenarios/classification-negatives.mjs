@@ -116,6 +116,29 @@ export default [
     expect: { kind: 'none' },
   },
 
+  // adjust_assets / flip_assets boundaries -----------------------------------
+  {
+    // rotate phrasing must NOT route to adjust_assets.
+    id: 'neg.adjust.rotate',
+    category: 'negatives',
+    prompt: 'rotate these 90 clockwise',
+    expect: { kind: 'rotate_assets' },
+  },
+  {
+    // "upside down" must route to rotate_assets (180°), NOT flip_assets.
+    id: 'neg.flip.upside-down',
+    category: 'negatives',
+    prompt: 'flip my photos upside down',
+    expect: { kind: 'rotate_assets' },
+  },
+  {
+    // Subjective source for adjust → none.
+    id: 'neg.adjust.subjective',
+    category: 'negatives',
+    prompt: 'make these look amazing',
+    expect: { kind: 'none' },
+  },
+
   // rotate_assets boundaries -------------------------------------------------
   {
     // Subjective source declines — no metadata-describable set.
