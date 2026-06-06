@@ -1,9 +1,10 @@
 import { AgentOperationPlanToolRequestSchemas } from 'src/dtos/agent-operation.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
-import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import { AgentOperationTargetKind, AgentOperationType, AgentPermissionPreset, AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { CATALOG_TOKENS_BASELINE, estimateCatalogTokens } from 'src/services/agent-mcp-tool-registry.test-helpers';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import z from 'zod';
 
 const expectedToolNames = [
@@ -1026,5 +1027,56 @@ describe(AgentMcpToolRegistryService.name, () => {
     const callB = JSON.stringify(sut.listTools());
 
     expect(callA).toBe(callB);
+  });
+
+  // ── Token-opt Slice 2: preset-gated tool listing ─────────────────────────────
+
+  const carefulSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.Careful];
+  const localPowerUserSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser];
+
+  const gatedUnderCareful = [
+    AgentToolName.ReadAssetOriginals,
+    AgentToolName.ReadAssetPreviews,
+    AgentToolName.ListSpaces,
+    AgentToolName.ReadSpace,
+    AgentToolName.SearchUsers,
+  ] as const;
+
+  it('listTools() with no arg still returns all 26 tools (Slice 1 baseline unchanged)', () => {
+    expect(sut.listTools()).toHaveLength(26);
+    expect(sut.listTools().map((t) => t.name)).toEqual(expectedToolNames);
+  });
+
+  it('listTools(carefulSnapshot) excludes the 5 gated tools and returns 21 tools', () => {
+    const tools = sut.listTools(carefulSnapshot);
+    const toolNames = tools.map((t) => t.name);
+
+    expect(tools).toHaveLength(26 - gatedUnderCareful.length);
+    for (const gatedName of gatedUnderCareful) {
+      expect(toolNames).not.toContain(gatedName);
+    }
+    // All other tools are present and in their original relative order.
+    const remaining = expectedToolNames.filter((name) => !(gatedUnderCareful as readonly string[]).includes(name));
+    expect(toolNames).toEqual(remaining);
+  });
+
+  it('listTools(localPowerUserSnapshot) returns all 26 tools (full access — nothing gated)', () => {
+    const tools = sut.listTools(localPowerUserSnapshot);
+
+    expect(tools).toHaveLength(26);
+    expect(tools.map((t) => t.name)).toEqual(expectedToolNames);
+  });
+
+  it('listTools(carefulSnapshot) token estimate is measurably below baseline; gated names absent from payload', () => {
+    const tools = sut.listTools(carefulSnapshot);
+    const { tokens } = estimateCatalogTokens(tools);
+    const payload = JSON.stringify(tools);
+
+    expect(tokens).toBeLessThan(CATALOG_TOKENS_BASELINE);
+
+    for (const gatedName of gatedUnderCareful) {
+      // Name must not appear as a tool-name field in the serialized catalog.
+      expect(payload).not.toContain(`"name":"${gatedName}"`);
+    }
   });
 });
