@@ -4,8 +4,9 @@
   import { createFaceCleanupModel } from './face-cleanup.svelte';
   import FaceCleanupTable from './FaceCleanupTable.svelte';
   import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
-  import { Button, Icon, toastManager } from '@immich/ui';
-  import { mdiRefresh, mdiClose } from '@mdi/js';
+  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
+  import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
+  import AdvancedScanModal from './AdvancedScanModal.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -132,11 +133,13 @@
 
   onDestroy(() => stopPolling());
 
-  const handleRescan = async () => {
+  type ScanParams = { maxDistance: number; minFaces: number; maxFlaggedFraction: number };
+
+  const runScan = async (params?: ScanParams) => {
     scanning = true;
     applyError = null;
     try {
-      await triggerScan();
+      await triggerScan({ faceRepairScanTriggerRequestDto: params ? { params } : {} });
       await fetchLatestScan();
       startPolling();
     } catch (error: unknown) {
@@ -149,6 +152,16 @@
     } finally {
       scanning = false;
     }
+  };
+
+  const handleRescan = () => runScan();
+
+  const handleAdvanced = () => {
+    void modalManager.show(AdvancedScanModal, {
+      onRun: (params: ScanParams) => {
+        void runScan(params);
+      },
+    });
   };
 
   const handleApply = async () => {
@@ -237,6 +250,15 @@
         >
           {$t('admin.face_cleanup_view_declined')}
         </a>
+        <Button
+          color="secondary"
+          disabled={scanning || (!!scan && isActive(scan.status))}
+          onclick={handleAdvanced}
+          class="gap-2"
+        >
+          <Icon icon={mdiTune} size="16" />
+          {$t('admin.face_cleanup_advanced')}
+        </Button>
         <Button
           color="primary"
           disabled={scanning || (!!scan && isActive(scan.status))}
