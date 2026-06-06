@@ -4,8 +4,7 @@ Spec: `docs/superpowers/specs/2026-06-05-pi-agent-reorg-sharing-people-design.md
 
 A new scrubbed read tool that resolves a person NAME → id, returning
 `matched / ambiguous / not_found`. **Mirror `resolveLocation` at every wiring site.** Backed by
-the EXISTING `PersonRepository.getByName(userId, name, { withHidden })` (trigram search, line
-549) — **no new repository query, no new medium test** (getByName is already covered). This
+the EXISTING `PersonRepository.getByName(userId, name, { withHidden })` (trigram search, line 549) — **no new repository query, no new medium test** (getByName is already covered). This
 slice is server + contract-fixtures only; the workflows that consume it ship in I2/I3.
 
 ## Reference: `resolveLocation` wiring sites (mirror each for `searchPeople`)
