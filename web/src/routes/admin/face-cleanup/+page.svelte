@@ -190,7 +190,7 @@
       }
       toastManager.success($t('admin.face_cleanup_dismiss'));
     } catch {
-      toastManager.danger($t('admin.face_cleanup_scan_error'));
+      toastManager.danger($t('admin.face_cleanup_dismiss_error'));
     }
   };
 

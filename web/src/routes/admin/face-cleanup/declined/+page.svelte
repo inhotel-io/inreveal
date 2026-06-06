@@ -6,8 +6,6 @@
   import { Button, toastManager } from '@immich/ui';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
-  import type { PageData } from './$types';
-
   type DeclineItem = {
     id: string;
     type: 'face' | 'person';
@@ -21,8 +19,7 @@
     createdAt: string;
   };
 
-  type Props = { data: PageData };
-  const { data }: Props = $props();
+  $props();
 
   let declines = $state<DeclineItem[]>([]);
   let loading = $state(true);
@@ -51,7 +48,7 @@
       declines = declines.filter((d) => d.id !== id);
       toastManager.success($t('admin.face_cleanup_declined_undo'));
     } catch {
-      toastManager.danger($t('admin.face_cleanup_scan_error'));
+      toastManager.danger($t('admin.face_cleanup_undo_error'));
     }
   };
 </script>
@@ -66,9 +63,6 @@
     <!-- Header -->
     <div class="mb-6">
       <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup_declined_title')}</h1>
-      <p class="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
-        {data.meta.title}
-      </p>
     </div>
 
     {#if loading}
@@ -127,7 +121,7 @@
                 {/if}
 
                 <!-- Undo button -->
-                <Button color="secondary" size="sm" onclick={() => handleUndo(decline.id)}>
+                <Button color="secondary" size="small" onclick={() => handleUndo(decline.id)}>
                   {$t('admin.face_cleanup_declined_undo')}
                 </Button>
               </div>
@@ -167,7 +161,7 @@
                 </div>
 
                 <!-- Undo button -->
-                <Button color="secondary" size="sm" onclick={() => handleUndo(decline.id)}>
+                <Button color="secondary" size="small" onclick={() => handleUndo(decline.id)}>
                   {$t('admin.face_cleanup_declined_undo')}
                 </Button>
               </div>

@@ -112,7 +112,6 @@
 
   const handleDecline = async (face: FlaggedFace) => {
     vm.markDeclined(face.assetFaceId);
-    flaggedFaces = flaggedFaces.filter((x) => x.assetFaceId !== face.assetFaceId);
     try {
       await declineFaceRepair({
         faceRepairDeclineRequestDto: {
@@ -138,7 +137,7 @@
       await applyFaceRepair({
         faceRepairApplyRequestDto: {
           approvedPersonIds: [personId],
-          excludeFaceIds: vm.excludeFaceIds(),
+          excludeFaceIds: [...vm.excludeFaceIds(), ...vm.declinedFaceIds()],
         },
       });
       void goto(Route.faceCleanup());
@@ -310,12 +309,15 @@
         <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 dark:bg-gray-800/50 sm:grid-cols-6 lg:grid-cols-8">
           {#each visibleFaces as face (face.assetFaceId)}
             {@const excluded = vm.isExcluded(face.assetFaceId)}
+            {@const declined = vm.isDeclined(face.assetFaceId)}
             <div class="relative aspect-square">
               <button
                 type="button"
                 class={[
                   'absolute inset-0 overflow-hidden rounded-xl border-2 transition-all',
-                  excluded ? 'border-transparent opacity-55 grayscale-[0.5]' : 'border-primary hover:border-primary/80',
+                  excluded || declined
+                    ? 'border-transparent opacity-55 grayscale-[0.5]'
+                    : 'border-primary hover:border-primary/80',
                 ].join(' ')}
                 onclick={() => vm.toggle(face.assetFaceId)}
                 data-testid="face-tile"
@@ -323,8 +325,15 @@
                 data-excluded={excluded}
               >
                 <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
-                <!-- Checkmark or stays overlay -->
-                {#if excluded}
+                <!-- Declined / excluded / moving overlay -->
+                {#if declined}
+                  <div
+                    class="absolute inset-x-0 bottom-0 bg-red-600 py-0.5 text-center text-[9px] font-bold text-white"
+                    data-testid="declined-badge"
+                  >
+                    {$t('admin.face_cleanup_decline')}
+                  </div>
+                {:else if excluded}
                   <div
                     class="absolute inset-x-0 bottom-0 bg-green-600 py-0.5 text-center text-[9px] font-bold text-white"
                     data-testid="stays-badge"
@@ -348,16 +357,18 @@
                   </div>
                 {/if}
               </button>
-              <!-- Decline button: persistent "stop flagging" — visually distinct from the tile-click exclude -->
-              <button
-                type="button"
-                class="absolute right-1 top-1 flex size-5 items-center justify-center rounded-md bg-black/50 text-white transition-colors hover:bg-red-600"
-                onclick={() => handleDecline(face)}
-                data-testid="decline-btn"
-                title={$t('admin.face_cleanup_decline_hint')}
-              >
-                <Icon icon={mdiCancel} size="12" />
-              </button>
+              <!-- Decline button: hidden once declined (persistent state) -->
+              {#if !declined}
+                <button
+                  type="button"
+                  class="absolute right-1 top-1 flex size-5 items-center justify-center rounded-md bg-black/50 text-white transition-colors hover:bg-red-600"
+                  onclick={() => handleDecline(face)}
+                  data-testid="decline-btn"
+                  title={$t('admin.face_cleanup_decline_hint')}
+                >
+                  <Icon icon={mdiCancel} size="12" />
+                </button>
+              {/if}
             </div>
           {/each}
         </div>
