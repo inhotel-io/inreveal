@@ -397,6 +397,9 @@ String parameterToString(dynamic value) {
   if (value is SyncRequestType) {
     return SyncRequestTypeTypeTransformer().encode(value).toString();
   }
+  if (value is TonalLevel) {
+    return TonalLevelTypeTransformer().encode(value).toString();
+  }
   if (value is ToneMapping) {
     return ToneMappingTypeTransformer().encode(value).toString();
   }
