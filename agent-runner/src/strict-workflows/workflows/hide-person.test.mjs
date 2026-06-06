@@ -51,6 +51,19 @@ describe('hide_person match', () => {
     assert.equal(wf.match('rename Alex to Bob'), undefined);
   });
 
+  // "show" overloads with photo-display intents — must not be stolen by unhide.
+  it('does NOT match "show me the good ones" (subjective display intent)', () => {
+    assert.equal(wf.match('show me the good ones'), undefined);
+  });
+
+  it('does NOT match "show me my photos" (display-pronoun prefix)', () => {
+    assert.equal(wf.match('show me my photos'), undefined);
+  });
+
+  it('does NOT match "show all my favorites" (display-quantifier prefix)', () => {
+    assert.equal(wf.match('show all my favorites'), undefined);
+  });
+
   it('does NOT match empty string', () => {
     assert.equal(wf.match(''), undefined);
   });
