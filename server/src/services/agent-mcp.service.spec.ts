@@ -452,10 +452,6 @@ describe(AgentMcpService.name, () => {
     expect(proposal?.inputSchema.examples).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          summary: 'Create today test album.',
-          operations: expect.any(Array),
-        }),
-        expect.objectContaining({
           summary: 'Create today test and add selected photos.',
           operations: expect.any(Array),
         }),
@@ -510,7 +506,7 @@ describe(AgentMcpService.name, () => {
         auth,
         sessionId,
         expect.objectContaining({
-          summary: 'Create today test album.',
+          summary: 'Create today test and add selected photos.',
           operations: expect.any(Array),
         }),
       );
@@ -841,10 +837,12 @@ describe(AgentMcpService.name, () => {
       hintIncludes: 'Use resolveAssetSearchFilters',
       exampleArguments: {
         filters: {
-          tagIds: ['00000000-0000-4000-8000-000000000030'],
-          albumIds: ['00000000-0000-4000-8000-000000000010'],
+          takenAfter: '2026-05-01T00:00:00.000Z',
+          takenBefore: '2026-05-18T23:59:59.999Z',
+          city: 'Berlin',
+          country: 'Germany',
         },
-        limit: 25,
+        limit: 50,
       },
     });
   });
@@ -1628,7 +1626,6 @@ describe(AgentMcpService.name, () => {
         id: 'search-filters-outside-filters',
         hintIncludes: 'inside the filters object',
         exampleArguments: {
-          mode: 'metadata',
           filters: {
             takenAfter: '2026-05-01T00:00:00.000Z',
             takenBefore: '2026-05-18T23:59:59.999Z',
@@ -1636,20 +1633,12 @@ describe(AgentMcpService.name, () => {
             country: 'Germany',
           },
           limit: 50,
-          page: 1,
-          order: 'desc',
         },
       },
       {
         id: 'search-limit-out-of-range',
         hintIncludes: 'no greater than 10000',
-        exampleArguments: {
-          filters: {
-            isFavorite: true,
-            rating: 5,
-          },
-          limit: 25,
-        },
+        exampleArguments: {},
       },
     ])('returns an actionable correction for $id', async (expectation) => {
       const failureCase = contractService
@@ -2122,7 +2111,7 @@ describe(AgentMcpService.name, () => {
         expected: expect.stringContaining('reviewable Gallery operation plan'),
         hint: expect.stringContaining('params.arguments'),
         exampleArguments: expect.objectContaining({
-          summary: 'Create today test album.',
+          summary: 'Create today test and add selected photos.',
           operations: expect.any(Array),
         }),
       });

@@ -20,11 +20,12 @@ export const estimateCatalogTokens = (tools: unknown[]): { tokens: number; bytes
 };
 
 /**
- * Frozen baseline measured on 2026-06-05 (token-opt Slice 1 — before any pruning).
+ * Frozen baseline measured on 2026-06-06 (token-opt Slice 3 — after capping examples to ≤2).
+ * CATALOG_TOKENS_ORIGINAL = 52_350 (pre-prune Slice 1 measurement, 2026-06-05).
  * Later slices must assert their catalog token count is strictly < CATALOG_TOKENS_BASELINE.
  * Update this const only when intentionally re-baselining (e.g. after a content addition).
  */
-export const CATALOG_TOKENS_BASELINE = 52_350;
+export const CATALOG_TOKENS_BASELINE = 47_065;
 
 /**
  * Build a real (not mocked) registry for token and order tests.
