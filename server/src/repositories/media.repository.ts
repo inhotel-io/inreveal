@@ -9,7 +9,6 @@ import sharp from 'sharp';
 import { ORIENTATION_TO_SHARP_ROTATION } from 'src/constants';
 import { Exif } from 'src/database';
 import { AdjustParameters, AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
-import { BRIGHTNESS_FACTOR, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import { Colorspace, LogLevel, RawExtractedFormat } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import {
@@ -21,6 +20,7 @@ import {
   TranscodeCommand,
   VideoInfo,
 } from 'src/types';
+import { BRIGHTNESS_FACTOR, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import { handlePromiseError } from 'src/utils/misc';
 import { createAffineMatrix } from 'src/utils/transform';
 
@@ -187,7 +187,7 @@ export class MediaRepository {
           pipeline = pipeline.modulate({ brightness, saturation });
         }
         if (adjust.contrast) {
-          const mid = colorspace === Colorspace.Srgb ? 128 : 32768;
+          const mid = colorspace === Colorspace.Srgb ? 128 : 32_768;
           const { a: ca, b: cb } = contrastLinear(adjust.contrast, mid);
           pipeline = pipeline.linear(ca, cb);
         }
@@ -195,6 +195,11 @@ export class MediaRepository {
     }
 
     return pipeline;
+  }
+
+  async renderEditedImage(input: Buffer, edits: AssetEditActionItem[]): Promise<Buffer> {
+    const pipeline = await this.applyEdits(sharp(input, { failOn: 'none', limitInputPixels: false, unlimited: true }), edits);
+    return pipeline.jpeg().toBuffer();
   }
 
   async generateThumbnail(input: string | Buffer, options: GenerateThumbnailOptions, output: string): Promise<void> {
