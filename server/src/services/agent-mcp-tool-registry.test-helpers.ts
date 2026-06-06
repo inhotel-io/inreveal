@@ -26,11 +26,12 @@ export const estimateCatalogTokens = (tools: unknown[]): { tokens: number; bytes
  *   CATALOG_TOKENS_ORIGINAL = 52_350 (Slice 1, 2026-06-05 — pre-prune baseline)
  *   47_065 (Slice 3, 2026-06-06 — after capping examples to ≤2)
  *   46_255 (Slice 4, 2026-06-06 — after stripping nested Zod descriptions)
- *   47_997 (image-adj Slice 3, 2026-06-06 — added asset.adjust + asset.flip op schemas)
+ *   47_997 (image-adj Slice 3a, 2026-06-06 — added asset.adjust + asset.flip op schemas)
+ *   48_241 (image-adj Slice 3b, 2026-06-06 — updated contract descriptions for adjust/flip)
  * Later slices must assert their catalog token count is strictly < CATALOG_TOKENS_BASELINE.
  * Update this const only when intentionally re-baselining (e.g. after a content addition).
  */
-export const CATALOG_TOKENS_BASELINE = 47_997;
+export const CATALOG_TOKENS_BASELINE = 48_241;
 
 /**
  * Build a real (not mocked) registry for token and order tests.
