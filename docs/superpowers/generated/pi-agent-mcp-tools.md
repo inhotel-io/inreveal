@@ -1134,13 +1134,13 @@ Add matching photos to a uniquely named visible shared space.
 
 MCP tool name: `proposeAssetBatchFromSearch`
 
-preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a declarative or previous search source.
+preferred tool for proposing favorite, archive, tag, metadata, rotate, adjust, or flip actions from a declarative or previous search source.
 
-Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.
+Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, rotate, adjust (brightness/contrast/saturation/auto-enhance), or flip matching photos. Gallery materializes the source and creates a reviewable plan only. Examples: asset.adjust { brightness: "moderate_increase", contrast: "slight_increase" }, asset.adjust { autoEnhance: true }, asset.flip { axis: "horizontal" }, asset.flip { axis: "vertical" }.
 
 Argument modes:
 
-- `asset-batch-from-search`: Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.
+- `asset-batch-from-search`: Use for favorite, archive, unarchive, add tag, metadata update, rotate, adjust, or flip requests over search results.
   Required fields: `action`, `assetSource`.
   Forbidden fields: `operations`, `assetIds`, `assetSelectionHandleId`, `targetKind`.
 
@@ -1222,13 +1222,13 @@ Create a new album from an existing curated selection handle.
 
 MCP tool name: `proposeAssetBatchFromSelection`
 
-preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from an existing selection handle.
+preferred tool for proposing favorite, archive, tag, metadata, rotate, adjust, or flip actions from an existing selection handle.
 
-Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.
+Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only. Examples: asset.adjust { brightness: "moderate_increase" }, asset.adjust { autoEnhance: true }, asset.flip { axis: "horizontal" }, asset.flip { axis: "vertical" }.
 
 Argument modes:
 
-- `asset-batch-from-selection`: Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests after searchAssets or curateSelection returned the exact selectionHandle.id.
+- `asset-batch-from-selection`: Use for favorite, archive, unarchive, add tag, metadata update, rotate, adjust, or flip requests after searchAssets or curateSelection returned the exact selectionHandle.id.
   Required fields: `action`, `selectionHandleId`.
   Forbidden fields: `operations`, `assetIds`, `assetSource`, `assetSelectionHandleId`, `targetKind`.
 
@@ -1586,7 +1586,7 @@ Summarize plan risks and selected changes.
 ### Propose asset batch from search
 
 - `asset-batch-workflow-raw-asset-ids`: Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.
-- `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.
+- `asset-batch-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, asset.rotate, asset.adjust, or asset.flip with this workflow tool.
 
 ### Propose album from selection
 
@@ -1595,7 +1595,7 @@ Summarize plan risks and selected changes.
 ### Propose asset batch from selection
 
 - `asset-batch-selection-workflow-raw-asset-ids`: Pass selectionHandleId from searchAssets or curateSelection selectionHandle.id; provider planning rejects raw assetIds.
-- `asset-batch-selection-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.
+- `asset-batch-selection-workflow-unsupported-action`: Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, asset.rotate, asset.adjust, or asset.flip with this workflow tool.
 
 ### Propose album operations
 
