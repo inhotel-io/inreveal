@@ -207,7 +207,10 @@ export class MediaRepository {
   }
 
   async renderEditedImage(input: Buffer, edits: AssetEditActionItem[]): Promise<Buffer> {
-    const pipeline = await this.applyEdits(sharp(input, { failOn: 'none', limitInputPixels: false, unlimited: true }), edits);
+    const pipeline = await this.applyEdits(
+      sharp(input, { failOn: 'none', limitInputPixels: false, unlimited: true }),
+      edits,
+    );
     return pipeline.jpeg().toBuffer();
   }
 
