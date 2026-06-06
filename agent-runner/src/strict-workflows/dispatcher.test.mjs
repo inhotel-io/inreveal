@@ -399,3 +399,88 @@ describe('workflow dispatcher', () => {
     assert.equal(sink.pending, undefined);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Chatter pre-filter (Slice 5)
+// ---------------------------------------------------------------------------
+
+const makeSpyRegistry = () => {
+  let classifyCalls = 0;
+  const registry = {
+    classify: async () => {
+      classifyCalls++;
+      return { kind: 'none', via: 'regex' };
+    },
+    getWorkflow: () => undefined,
+  };
+  return { registry, getClassifyCalls: () => classifyCalls };
+};
+
+describe('chatter pre-filter', () => {
+  const chatterCases = [
+    'thanks',
+    'thanks, that looks great!',
+    'ok cool',
+    "that's perfect, thank you",
+    'awesome',
+    'got it',
+    'hello',
+    'hey there',
+    'good morning',
+  ];
+
+  for (const prompt of chatterCases) {
+    it(`handles chatter "${prompt}" — no classify, completedEvent, decision via:chatter`, async () => {
+      const { registry, getClassifyCalls } = makeSpyRegistry();
+      const observed = [];
+      const dispatcher = createWorkflowDispatcher({
+        registry,
+        buildClient: () => ({}),
+        observe: (e) => observed.push(e),
+      });
+      const sink = capture();
+
+      const result = await dispatcher.routeTurn({ prompt, ...sink });
+
+      assert.equal(result.handled, true, 'routeTurn must return { handled: true }');
+      assert.equal(getClassifyCalls(), 0, 'classify must NOT be called for chatter');
+
+      const completed = sink.events.find((e) => e.type === 'assistant-message-completed');
+      assert.ok(completed, 'completedEvent must be emitted');
+      const replyText = completed.content.blocks[0].text;
+      assert.ok(replyText && replyText.length > 0, 'reply text must be non-empty');
+
+      const decision = observed.find((e) => e.kind === 'strict_router_decision');
+      assert.ok(decision, 'strict_router_decision must be observed');
+      assert.equal(decision.matched, false, 'decision.matched must be false');
+      assert.equal(decision.via, 'chatter', 'decision.via must be "chatter"');
+      assert.equal(decision.fellBackToOpen, false, 'decision.fellBackToOpen must be false');
+    });
+  }
+
+  const nonChatterCases = [
+    'how many photos do I have?',
+    'find my Sony photos from May',
+    'archive my newest 20',
+    'trash my screenshots',
+    'show me the good ones',
+    'thanks for nothing, now delete everything',
+    'can you make an album?',
+    'thanks for the album, add 5 more',
+  ];
+
+  for (const prompt of nonChatterCases) {
+    it(`passes non-chatter "${prompt}" through to classify`, async () => {
+      const { registry, getClassifyCalls } = makeSpyRegistry();
+      const dispatcher = createWorkflowDispatcher({
+        registry,
+        buildClient: () => ({}),
+      });
+      const sink = capture();
+
+      await dispatcher.routeTurn({ prompt, ...sink });
+
+      assert.ok(getClassifyCalls() > 0, 'classify MUST be called for non-chatter prompts');
+    });
+  }
+});

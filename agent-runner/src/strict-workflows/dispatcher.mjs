@@ -12,6 +12,45 @@
 
 import { renderCopy } from './copy.mjs';
 
+// Conservative chatter short-circuit: pure acknowledgements / greetings get a
+// no-tool reply, skipping BOTH the classifier and the 30k-catalog open agent.
+// High precision (anchored whole-string allowlist) so a real request/question
+// is never swallowed.
+const _ACK_CORE =
+  'thanks?|thank\\s*you|ty|cheers|much\\s+appreciated|appreciate\\s+it' +
+  '|ok(?:ay)?|cool|great|perfect|awesome|amazing|nice|sweet|excellent|wonderful|fantastic' +
+  '|got\\s+it|sounds\\s+good|will\\s+do|that\\s+works' +
+  '|that(?:\'s|\\s+is|\\s+was)?\\s+(?:great|perfect|helpful|awesome|nice|amazing|wonderful|fantastic|cool)' +
+  '|looks?\\s+good|that\\s+looks?\\s+great|nice\\s+work|good\\s+job|well\\s+done';
+
+const _GREET_CORE = 'hi|hello|hey|yo|gm|good\\s+morning|good\\s+afternoon|good\\s+evening';
+
+const _CONT_EXTRA = 'so\\s+much|a\\s+lot|there|everyone|team|mate';
+
+// Anchored whole-string pattern: one main ack/greeting, then zero or more
+// additional ack/greeting/suffix phrases separated by punctuation/whitespace.
+const CHATTER_PATTERN = new RegExp(
+  '^(?:' + _ACK_CORE + '|' + _GREET_CORE + ')' +
+  '(?:[\\s,!.]+(?:' + _ACK_CORE + '|' + _GREET_CORE + '|' + _CONT_EXTRA + '))*' +
+  '[\\s!.]*$',
+  'i',
+);
+
+const isChatter = (text) => {
+  const t = String(text ?? '').trim();
+  if (!t || t.length > 60) return false;
+  // questions are never chatter — strip only trailing whitespace/!/. before checking
+  if (/\?/.test(t.replace(/[\s!.]*$/u, ''))) return false;
+  return CHATTER_PATTERN.test(t);
+};
+
+const chatterReply = (prompt) => {
+  if (/^(?:hi|hello|hey|yo|gm|good\s)/i.test(String(prompt ?? '').trim())) {
+    return 'Hi! How can I help with your photos?';
+  }
+  return "You're welcome! Let me know if there's anything else you'd like to do with your photos.";
+};
+
 const genericApprovalDeniedText =
   'The approval was denied, so no plan was created. Rerun the request to try again.';
 
@@ -179,6 +218,25 @@ export const createWorkflowDispatcher = ({
         missing: resolved.status === 'missing',
       });
       emit(completedEvent({ text: resolved.text }));
+      return { handled: true };
+    }
+
+    // Chatter short-circuit: pure acknowledgements/greetings skip BOTH the
+    // classifier and the 30k-catalog open agent. Emits matched:false so L3
+    // still reads kind=none (fellBackToOpen:false signals no open-agent spin-up).
+    if (isChatter(prompt)) {
+      observe({
+        kind: 'strict_router_decision',
+        matched: false,
+        workflowKind: null,
+        via: 'chatter',
+        confidence: null,
+        latencyMs: Math.max(0, now() - nowMs),
+        fellBackToOpen: false,
+      });
+      const reply = chatterReply(prompt);
+      appendTranscript?.(prompt, reply);
+      emit(completedEvent({ text: reply }));
       return { handled: true };
     }
 
