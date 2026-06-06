@@ -192,6 +192,7 @@ part 'model/agent_permission_plan_provider_exposure.dart';
 part 'model/agent_permission_plan_read.dart';
 part 'model/agent_permission_plan_write_scope.dart';
 part 'model/agent_permission_preset.dart';
+part 'model/agent_person_merge_operation_type.dart';
 part 'model/agent_person_update_operation_type.dart';
 part 'model/agent_previous_search_asset_source_input.dart';
 part 'model/agent_propose_album_operations_dto.dart';
@@ -226,6 +227,8 @@ part 'model/agent_propose_album_operations_dto_operations_inner_one_of23_payload
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of24.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of25.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of25_payload.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of26.dart';
+part 'model/agent_propose_album_operations_dto_operations_inner_one_of26_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of3_payload.dart';
 part 'model/agent_propose_album_operations_dto_operations_inner_one_of4.dart';

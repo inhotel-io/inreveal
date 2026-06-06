@@ -145,6 +145,19 @@ const makeValidPersonUpdateOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const KEEP_PERSON_ID = factory.uuid();
+const SOURCE_PERSON_ID = factory.uuid();
+
+const makeValidPersonMergeOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.PersonMerge,
+  summary: 'Merge Alejandra into Karina (irreversible).',
+  targetKind: AgentOperationTargetKind.Person,
+  targetId: KEEP_PERSON_ID,
+  riskLevel: AgentOperationRiskLevel.High,
+  payload: { sourcePersonIds: [SOURCE_PERSON_ID] },
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -3018,6 +3031,63 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidPersonUpdateOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('person.merge operation schema', () => {
+    it('accepts a valid person.merge op and defaults to High risk', () => {
+      const result = parseSingleOperationProposal(makeValidPersonMergeOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.PersonMerge);
+        expect(op.riskLevel).toBe(AgentOperationRiskLevel.High);
+      }
+    });
+
+    it('accepts multiple sourcePersonIds', () => {
+      const result = parseSingleOperationProposal(
+        makeValidPersonMergeOp({ payload: { sourcePersonIds: [SOURCE_PERSON_ID, factory.uuid()] } }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects empty sourcePersonIds', () => {
+      const result = parseSingleOperationProposal(makeValidPersonMergeOp({ payload: { sourcePersonIds: [] } }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects self-merge (targetId in sourcePersonIds)', () => {
+      const result = parseSingleOperationProposal(
+        makeValidPersonMergeOp({ payload: { sourcePersonIds: [KEEP_PERSON_ID] } }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.merge with wrong targetKind (asset_batch)', () => {
+      const result = parseSingleOperationProposal(
+        makeValidPersonMergeOp({ targetKind: AgentOperationTargetKind.AssetBatch }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.merge missing targetId', () => {
+      const result = parseSingleOperationProposal(makeValidPersonMergeOp({ targetId: undefined }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects person.merge with assetSource (strict object)', () => {
+      const result = parseSingleOperationProposal(
+        makeValidPersonMergeOp({
+          assetSource: { kind: 'selectionHandle', selectionHandleId: factory.uuid() },
+        }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidPersonMergeOp());
       expect(result.success).toBe(true);
     });
   });

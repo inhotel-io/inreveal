@@ -669,6 +669,14 @@ export default [
     expect: { kind: 'hide_person', slotsSurvive: true, slots: { personRef: 'Alex', verb: 'unhide' } },
   },
 
+  // merge_people ---------------------------------------------------------------
+  {
+    id: 'recall.person.merge',
+    category: 'recall',
+    prompt: 'merge Alejandra into Karina',
+    expect: { kind: 'merge_people', slotsSurvive: true, slots: { sourceRef: 'Alejandra', keepRef: 'Karina' } },
+  },
+
   // stack_assets ---------------------------------------------------------------
   {
     id: 'recall.stack.basic',
