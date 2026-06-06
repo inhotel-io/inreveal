@@ -21,9 +21,7 @@
   // Derive the first operation's raw DTO so we can inspect its type + payload.
   const firstOp = $derived(group.operations[0]?.operation);
   const editActions = $derived(
-    firstOp
-      ? editActionsForOperation(firstOp.type, firstOp.payload as Record<string, unknown>)
-      : null,
+    firstOp ? editActionsForOperation(firstOp.type, firstOp.payload as Record<string, unknown>) : null,
   );
 
   const wrapperClass = $derived(
@@ -137,7 +135,9 @@
                   loading="lazy"
                   draggable="false"
                 />
-                <span class="absolute bottom-0 left-0 right-0 bg-black/40 px-1 py-0.5 text-center text-[9px] text-white">
+                <span
+                  class="absolute bottom-0 left-0 right-0 bg-black/40 px-1 py-0.5 text-center text-[9px] text-white"
+                >
                   {$t('assistant_operation_preview_before')}
                 </span>
               </figure>
@@ -164,13 +164,18 @@
                     loading="lazy"
                     draggable="false"
                   />
-                  <span class="absolute bottom-0 left-0 right-0 bg-black/40 px-1 py-0.5 text-center text-[9px] text-white">
+                  <span
+                    class="absolute bottom-0 left-0 right-0 bg-black/40 px-1 py-0.5 text-center text-[9px] text-white"
+                  >
                     {$t('assistant_operation_preview_after')}
                   </span>
                 </figure>
               {:else}
                 <!-- Loading state -->
-                <figure class="{tileClass(index)} flex items-center justify-center" aria-label={$t('assistant_operation_preview_loading')}>
+                <figure
+                  class="{tileClass(index)} flex items-center justify-center"
+                  aria-label={$t('assistant_operation_preview_loading')}
+                >
                   <span class="absolute inset-0 animate-pulse bg-gray-200 dark:bg-gray-700"></span>
                 </figure>
               {/if}
