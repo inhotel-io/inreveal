@@ -140,7 +140,7 @@ if (adjust) {
 | moderate_increase | 1.18                  | 1.30                  | 1.22                        |
 | strong_increase   | 1.32                  | 1.55                  | 1.40                        |
 
-- **Contrast** uses `.linear(a, b)` pivoting around mid-gray: `b = mid * (1 - a)`, where `mid` is the mid-point of the **current pipeline value range** (8-bit srgb → 128; 16-bit `rgb16` → 32768). Read the working range from the decode options/colorspace already in scope in `getImageDecodingPipeline`; do not hard-code 128 for the rgb16 path. A test asserts the computed `(a, b)` for both colorspaces at a known level.
+- **Contrast** uses `.linear(a, b)` pivoting around mid-gray, via a **pure helper** `contrastLinear(level, mid): { a, b }` where `a` = the table slope and `b = mid * (1 - a)`. `mid` is the mid-point of the pipeline working colorspace (8-bit `srgb` → 128; 16-bit `rgb16` → 32768), read from the decode options/colorspace already in scope in `getImageDecodingPipeline` — **never hard-code 128 for the rgb16 path**. The helper is unit-tested in isolation (so the test is decoupled from sharp's internal value space); the `applyEdits` test asserts `.linear` is called with **whatever the helper returns**, not a hard-coded literal.
 - **auto-enhance** = `.normalise()` only in v1 (per-image contrast stretch). No saturation bump.
 - **Order:** geometry (crop/affine) first, tonal last — document inline; tonal is visually order-independent of geometry but this order is fixed and tested.
 
@@ -170,8 +170,10 @@ if (adjust) {
 - `autoEnhance` → `.normalise()` called, no `.modulate`/`.linear`.
 - `brightness: moderate_increase` → `.modulate({ brightness: 1.18, saturation: 1 })`.
 - `saturation: strong_decrease` → `.modulate({ brightness: 1, saturation: 0.40 })`.
-- `contrast: slight_increase`, srgb → `.linear(1.10, 128*(1-1.10))`; rgb16 → `.linear(1.10, 32768*(1-1.10))`.
+- `contrast: slight_increase` → `.linear` called with `contrastLinear('slight_increase', mid)` for the active colorspace (assert against the helper's output, not a literal).
+- **`contrastLinear` pure-helper unit test:** `contrastLinear('slight_increase', 128)` → `{ a: 1.10, b: -12.8 }`; `contrastLinear('slight_increase', 32768)` → `{ a: 1.10, b: -3276.8 }`; a decrease level (`a < 1`) yields `b > 0`.
 - brightness + contrast together → both `.modulate` and `.linear` called; modulate before linear.
+- **all three manual fields** (brightness + saturation + contrast) → one `.modulate({ brightness, saturation })` then one `.linear(...)`.
 - no `adjust` edit → none of `.normalise/.modulate/.linear` called (existing crop/rotate path unaffected).
 
 ### Edge cases
@@ -209,21 +211,24 @@ A non-persisting render so the plan card's "after" exactly matches what apply wi
 ### Behavior
 
 ```
-POST /assets/:id/edits/preview
+POST /assets/:id/edits/preview?size=thumbnail|preview   // size optional, default preview
 body: AssetEditsCreateDto   // the proposed edit actions (reuses the existing DTO + validation)
-200: image/* stream         // preview-size render, persists nothing
+200: image/* stream         // bounded render, persists nothing
 ```
 
-**Preview size** = the system-config preview dimension (the same size the preview-thumbnail job
-uses), never full-res. Pass it as the `size` option to the existing decode pipeline.
+**`size`** is the existing `AssetMediaSize` enum (`thumbnail` | `preview`), default `preview`,
+never full-res. The plan-card strip requests `thumbnail` so the after-tile matches the before
+thumbnail's resolution (cheap, no oversized renders per revise); a larger view (e.g. the photo-
+review modal) may request `preview`. The caller is the **browser user** (cookie session), not the
+runner.
 
-`previewAssetEdits(auth, id, dto)`:
+`previewAssetEdits(auth, id, dto, size)`:
 
 1. **Access-check** the asset (`Permission.AssetView`; reuse the same access predicate the thumbnail/original endpoints use). Inaccessible → 400/403 as the existing media endpoints do.
 2. **Image-only** — non-image asset → `BadRequestException` (preview is for image edits).
-3. Load existing persisted edits (`getAssetEdits`) and **merge** the incoming edits via the shared `mergeEdits` (same rules as apply: replace crop, replace adjust, replace rotate, ensure mirror-by-axis). This keeps before (current rendered thumbnail, which already reflects persisted edits) and after (current + proposed) **consistent**.
-4. Render the **original** through the existing decode pipeline with `{ edits: merged, size: previewSize }` to a buffer; stream it. **No `asset_edit` write.**
-5. `Cache-Control: no-store`; bounded to the preview size (never full-res).
+3. Load existing persisted edits (`getAssetEdits`) and **merge** the incoming edits via the shared `mergeEdits` (same rules as apply: replace crop, replace adjust, replace rotate, ensure mirror-by-axis). This keeps before (current rendered thumbnail, which already reflects persisted edits) and after (current + proposed) **consistent** — same `size`, same merged-edit render path.
+4. Render the **original** through the existing decode pipeline with `{ edits: merged, size }` to a buffer; stream it. **No `asset_edit` write.**
+5. `Cache-Control: no-store`; bounded to the requested size (never full-res).
 
 ### Tests (write first)
 
@@ -239,7 +244,8 @@ uses), never full-res. Pass it as the `size` option to the existing decode pipel
 - non-image asset → `BadRequestException`.
 - merges incoming with existing edits via `mergeEdits` before rendering (spy the merge util + the media call).
 - **persists nothing** — `editAsset`/repository write is never called.
-- passes the preview-size `size` option (not full-res) to the media pipeline.
+- passes the requested `size` (thumbnail vs preview) through to the media pipeline; default = preview when omitted; an out-of-enum `size` → 400.
+- missing/unreadable original → surfaces as a clean error (not an unhandled 500).
 
 `asset-edit.ts` (merge util) unit tests:
 
@@ -257,7 +263,8 @@ Medium test:
 - Asset with prior persisted edits → preview reflects merged result (before/after consistent).
 - `autoEnhance` preview → rendered via `.normalise()` (same path as apply).
 - Concurrent previews (the card fires ~3) → stateless, independent.
-- Large source image → preview-size cap bounds work; no full-res render.
+- Large source image → size cap (thumbnail/preview) bounds work; no full-res render.
+- Missing/unreadable original file → clean error, no 500.
 
 ### Verification
 
@@ -290,7 +297,7 @@ Two reviewable ops, same lifecycle as `asset.crop` (ImageEditBatch target, `edit
 
 ### Payloads (`agent-operation.dto.ts`)
 
-- `assetAdjustPayloadSchema` = the `AdjustParameters` shape (reuse / mirror Slice 1's schema, including the XOR refinement).
+- `assetAdjustPayloadSchema` = a **`z.strictObject`** mirroring Slice 1's `AdjustParameters` fields (brightness/contrast/saturation/autoEnhance) **plus the same XOR `superRefine`**. Do **not** import the editing.dto schema directly — agent-operation.dto uses `z.strictObject` (reject unknown keys) and its own `.meta({ id })` conventions, unlike editing.dto's loose `z.object`. Reuse the `TonalLevel` enum, not a copy.
 - `assetFlipPayloadSchema = z.strictObject({ axis: z.enum(['horizontal', 'vertical']) })`.
 
 Register **both** new ops in **both** places (the crop-bug lesson — a missing entry in the second union lets the workflow classify but not propose):
@@ -301,7 +308,7 @@ Register **both** new ops in **both** places (the crop-bug lesson — a missing 
 ### Plan service (`agent-operation-plan.service.ts`)
 
 - `applyAdjustOperation` / `applyFlipOperation` mirroring `applyCropOperation`: per asset → `getAssetEdits` → `mergeEdits` (shared util) → `editAsset`. Adjust replaces any existing adjust; flip ensures one mirror of the axis. Non-image assets in the selection are **skipped** (same tolerance as crop).
-- `summarizeOperation`: adjust → human string from the set fields (e.g. "Adjust matching photos: brighter, more contrast" / "Auto-enhance matching photos"); flip → "Flip matching photos horizontally/vertically".
+- Summary mapping (the `AssetCrop` summary switch ~line 529): adjust → human string from the set fields (e.g. "Adjust matching photos: brighter, more contrast" / "Auto-enhance matching photos"); flip → "Flip matching photos horizontally/vertically".
 - `targetKind` map: both → `ImageEditBatch`.
 - `writeScope` map / `validateWriteScope`: both → `editAssets` (the existing `AssetCrop`/`AssetRotate` branch — extend the condition at ~line 1965).
 - `risk` map: both → **Low** (reversible).
@@ -319,6 +326,8 @@ Add `asset.adjust` and `asset.flip` to the `proposeAssetBatchFromSearch`/`FromSe
 - flip payload: valid axis parses; missing axis → rejected; bad axis → rejected.
 - adjust/flip with `AssetBatch` target (not `ImageEditBatch`) → rejected by `validateStandaloneTarget`.
 - **both ops are members of the `proposeAssetBatch` action union** (parse a proposeAssetBatch request whose operation is `asset.adjust` and one that is `asset.flip`) — the explicit crop-bug regression.
+- **iterate contract:** a `reviseProposedOperations` request whose replacement operation is an `asset.adjust` (different level) parses and validates — proves the headline preview-iterate loop round-trips through revise.
+- `z.strictObject` rejects an unknown key in the adjust payload (e.g. `{ brightness, sharpen }` → rejected).
 
 `agent-operation-plan.service.spec.ts`:
 
@@ -359,15 +368,15 @@ make format-server
 ### Files
 
 - `web/src/routes/(user)/assistant/agent-plan-thumbnail-strip.svelte` — before/after variant for image-edit ops.
-- A preview-fetch helper (e.g. `web/src/routes/(user)/assistant/agent-plan-edit-preview.ts`): `POST /assets/:id/edits/preview` → blob → object URL, with abort + URL revocation on teardown/payload-change.
+- A preview-fetch helper (e.g. `web/src/routes/(user)/assistant/agent-plan-edit-preview.ts`): `POST /assets/:id/edits/preview?size=thumbnail` via a **direct authenticated `fetch`** (the generated SDK doesn't model a binary POST response) → `blob()` → object URL, with abort + URL revocation on teardown/payload-change.
 - `web/src/lib/i18n/en.json` — Before/After preview strings.
 - Specs: `agent-plan-thumbnail-strip.spec.ts` (extend), a helper spec.
 
 ### Behavior
 
 - When the operation is an **ImageEditBatch** op (adjust/flip/crop/rotate — crop/rotate get previews for free), the strip renders representative assets (cap ~3) as **before → after** pairs:
-  - **before** = `getAssetMediaUrl({ id, size: Thumbnail })` (already reflects persisted edits).
-  - **after** = object URL from the preview helper, posting the op's edit actions for that asset id.
+  - **before** = `getAssetMediaUrl({ id, size: AssetMediaSize.Thumbnail })` (already reflects persisted edits).
+  - **after** = object URL from the preview helper, requesting **`size=thumbnail`** so before/after match resolution, posting the op's edit actions for that asset id.
 - Label "Preview · Before → After" + "Same adjustment applied to all N photos."
 - Reuse the existing loading + failed-tile states; an after-tile fetch failure shows the failed state and keeps before visible.
 - **Iterate (no new machinery):** the preview is **keyed on a hash of the operation's edit actions**. When the user says "more contrast" and the agent calls `reviseProposedOperations`, the new operation payload changes the hash → after-tiles re-fetch (old object URLs revoked). This is the existing revise loop; the card only needs to react to payload changes.
@@ -444,6 +453,8 @@ make format-web
 - "flip this horizontally" → axis=horizontal; "mirror these" → horizontal; "flip upside down" / "flip vertically" → vertical.
 - negatives: "rotate this" → NOT flip; "crop this" → NOT flip; "flip" no source → needsInput.
 
+**Mixed tonal + geometry prompt** ("brighten and flip these"): the dispatcher routes to a single workflow (registry-order winner) which proposes its one op; the other verb is **not** auto-applied. Documented limitation — the user applies/continues for the second. Test: "brighten and flip these" routes to exactly one of `adjust_assets`/`flip_assets` and proposes a single op (assert it does not silently drop the source or emit two plans).
+
 Dispatcher: both kinds registered; chatter/negatives unaffected; classify still reached for non-matching prompts.
 
 ### Verification
@@ -472,7 +483,7 @@ Routing + slot fidelity already covered in Slice 5. Add an L1 eval scenario file
 
 Per `reference_pi_agent_clone_l3_setup`: build the branch RC, `clone-personal`, hand-wire agent-runner + gemma4 egress, run `eval:l3`.
 
-Scenarios (preset = VisualOrganizer, which **grants** `editAssets` → these route and propose live, unlike crop's OQ-F1):
+Scenarios (preset = VisualOrganizer, which **grants** `editAssets` → these can propose live). Because the intents are **verb-driven** (not coordinate-driven like crop), they are expected to route reliably where crop's coordinate intent did not (OQ-F1). The L3 run confirms this live; **if any specific verb/level proves unreliable with the live model, document it as a known limitation** (the way crop's OQ-F1 was) rather than forcing a brittle assertion:
 
 - `l3.plan.adjust.brightness` — "brighten my last 10 photos" → routes `adjust_assets`, proposes `asset.adjust`.
 - `l3.plan.adjust.saturation` — "make these more vivid" → adjust, saturation increase.
@@ -509,15 +520,18 @@ Scenarios (preset = VisualOrganizer, which **grants** `editAssets` → these rou
 
 ## Risk register
 
-| Risk                                                                      | Mitigation                                                                               |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| New op missing from the second `proposeAssetBatch` union (crop-bug class) | Explicit dto test that adjust + flip parse inside a proposeAssetBatch request (Slice 3). |
-| OpenAPI Dart left stale                                                   | Every server slice regen + asserts `mobile/openapi/` diff (G2 lesson).                   |
-| Contrast wrong on rgb16 pipeline                                          | `mid` derived from working range; both-colorspace test (Slice 1).                        |
-| Preview ≠ apply (existing edits)                                          | Preview merges with persisted edits via the shared `mergeEdits` util (Slice 2).          |
-| Small model guesses numbers                                               | Named levels only; preview + revise loop lets the user correct by eye.                   |
-| Runner not in CI                                                          | L1 100% + live L3 propose-only are the gates; full runner suite run locally each slice.  |
-| Server prettier churns the matrix                                         | Docs prettier only for markdown; `sync:agent-capabilities` owns the generated block.     |
+| Risk                                                                      | Mitigation                                                                                                                                         |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New op missing from the second `proposeAssetBatch` union (crop-bug class) | Explicit dto test that adjust + flip parse inside a proposeAssetBatch request (Slice 3).                                                           |
+| OpenAPI Dart left stale                                                   | Every server slice regen + asserts `mobile/openapi/` diff (G2 lesson).                                                                             |
+| Contrast wrong on rgb16 pipeline                                          | `mid` from working colorspace via a pure `contrastLinear` helper, unit-tested both colorspaces; render test asserts the helper's output (Slice 1). |
+| Preview ≠ apply (existing edits)                                          | Preview merges with persisted edits via the shared `mergeEdits` util (Slice 2).                                                                    |
+| Before/after look mismatched (resolution)                                 | Preview endpoint takes a bounded `size`; the strip requests `thumbnail` for both tiles (Slices 2/4).                                               |
+| Iterate (preview→revise) loop silently regresses                          | dto test: `reviseProposedOperations` accepts an `asset.adjust`; web test: after-tiles re-fetch on edit-payload hash change (Slices 3/4).           |
+| Small model guesses numbers                                               | Named levels only; preview + revise loop lets the user correct by eye.                                                                             |
+| Mixed tonal+geometry prompt drops a verb                                  | Documented single-op routing; explicit "brighten and flip" routing test (Slice 5).                                                                 |
+| Runner not in CI                                                          | L1 100% + live L3 propose-only are the gates; full runner suite run locally each slice.                                                            |
+| Server prettier churns the matrix                                         | Docs prettier only for markdown; `sync:agent-capabilities` owns the generated block.                                                               |
 
 ```
 
