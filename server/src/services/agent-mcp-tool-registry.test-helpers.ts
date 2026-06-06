@@ -20,12 +20,16 @@ export const estimateCatalogTokens = (tools: unknown[]): { tokens: number; bytes
 };
 
 /**
- * Frozen baseline measured on 2026-06-06 (token-opt Slice 3 — after capping examples to ≤2).
- * CATALOG_TOKENS_ORIGINAL = 52_350 (pre-prune Slice 1 measurement, 2026-06-05).
+ * Frozen baseline measured on 2026-06-06 (token-opt Slice 4 — after stripping Zod .describe()
+ * annotations from the model-facing MCP input schema via stripSchemaDescriptions).
+ * History:
+ *   CATALOG_TOKENS_ORIGINAL = 52_350 (Slice 1, 2026-06-05 — pre-prune baseline)
+ *   47_065 (Slice 3, 2026-06-06 — after capping examples to ≤2)
+ *   46_255 (Slice 4, 2026-06-06 — after stripping nested Zod descriptions)
  * Later slices must assert their catalog token count is strictly < CATALOG_TOKENS_BASELINE.
  * Update this const only when intentionally re-baselining (e.g. after a content addition).
  */
-export const CATALOG_TOKENS_BASELINE = 47_065;
+export const CATALOG_TOKENS_BASELINE = 46_255;
 
 /**
  * Build a real (not mocked) registry for token and order tests.
