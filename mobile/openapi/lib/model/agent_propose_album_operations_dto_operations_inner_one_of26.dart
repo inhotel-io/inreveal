@@ -22,11 +22,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf26 {
     required this.payload,
   });
 
-  AgentPersonMergeOperationType type;
+  AgentShareLinkCreateAlbumOperationType type;
 
   String summary;
 
-  AgentOperationPersonTargetKind targetKind;
+  AgentOperationExistingAlbumTargetKind targetKind;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -46,7 +46,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf26 {
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload payload;
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload payload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf26 &&
@@ -101,13 +101,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf26 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf26(
-        type: AgentPersonMergeOperationType.fromJson(json[r'type'])!,
+        type: AgentShareLinkCreateAlbumOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
-        targetKind: AgentOperationPersonTargetKind.fromJson(json[r'targetKind'])!,
+        targetKind: AgentOperationExistingAlbumTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload.fromJson(json[r'payload'])!,
+        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(json[r'payload'])!,
       );
     }
     return null;

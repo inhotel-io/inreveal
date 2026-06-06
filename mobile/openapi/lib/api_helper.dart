@@ -76,8 +76,14 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetAddTagOperationType) {
     return AgentAssetAddTagOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetAdjustOperationType) {
+    return AgentAssetAdjustOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssetCropOperationType) {
     return AgentAssetCropOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssetFlipOperationType) {
+    return AgentAssetFlipOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentAssetMetadataDetail) {
     return AgentAssetMetadataDetailTypeTransformer().encode(value).toString();

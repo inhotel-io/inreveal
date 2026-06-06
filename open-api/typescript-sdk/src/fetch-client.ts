@@ -986,6 +986,37 @@ export type AgentProposeAlbumOperationsDto = {
             height: number;
         };
     } | {
+        "type": AgentAssetAdjustOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            brightness?: Brightness;
+            contrast?: Contrast;
+            saturation?: Saturation;
+            autoEnhance?: boolean;
+        };
+    } | {
+        "type": AgentAssetFlipOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            axis: Axis;
+        };
+    } | {
         "type": AgentAssetSetFavoriteOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
@@ -1411,6 +1442,37 @@ export type AgentReviseAlbumOperationsDto = {
             y: number;
             width: number;
             height: number;
+        };
+    } | {
+        "type": AgentAssetAdjustOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            brightness?: Brightness;
+            contrast?: Contrast;
+            saturation?: Saturation;
+            autoEnhance?: boolean;
+        };
+    } | {
+        "type": AgentAssetFlipOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            axis: Axis;
         };
     } | {
         "type": AgentAssetSetFavoriteOperationType;
@@ -10859,6 +10921,8 @@ export enum AgentOperationType {
     SpaceUpdateMemberRole = "space.updateMemberRole",
     AssetRotate = "asset.rotate",
     AssetCrop = "asset.crop",
+    AssetAdjust = "asset.adjust",
+    AssetFlip = "asset.flip",
     AssetStack = "asset.stack",
     AssetUnstack = "asset.unstack",
     AssetSetFavorite = "asset.setFavorite",
@@ -10974,6 +11038,40 @@ export enum AgentAssetRotateOperationType {
 }
 export enum AgentAssetCropOperationType {
     AssetCrop = "asset.crop"
+}
+export enum AgentAssetAdjustOperationType {
+    AssetAdjust = "asset.adjust"
+}
+export enum Brightness {
+    StrongDecrease = "strong_decrease",
+    ModerateDecrease = "moderate_decrease",
+    SlightDecrease = "slight_decrease",
+    SlightIncrease = "slight_increase",
+    ModerateIncrease = "moderate_increase",
+    StrongIncrease = "strong_increase"
+}
+export enum Contrast {
+    StrongDecrease = "strong_decrease",
+    ModerateDecrease = "moderate_decrease",
+    SlightDecrease = "slight_decrease",
+    SlightIncrease = "slight_increase",
+    ModerateIncrease = "moderate_increase",
+    StrongIncrease = "strong_increase"
+}
+export enum Saturation {
+    StrongDecrease = "strong_decrease",
+    ModerateDecrease = "moderate_decrease",
+    SlightDecrease = "slight_decrease",
+    SlightIncrease = "slight_increase",
+    ModerateIncrease = "moderate_increase",
+    StrongIncrease = "strong_increase"
+}
+export enum AgentAssetFlipOperationType {
+    AssetFlip = "asset.flip"
+}
+export enum Axis {
+    Horizontal = "horizontal",
+    Vertical = "vertical"
 }
 export enum AgentAssetSetFavoriteOperationType {
     AssetSetFavorite = "asset.setFavorite"
