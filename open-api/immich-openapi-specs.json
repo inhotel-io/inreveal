@@ -22275,6 +22275,27 @@
         ],
         "type": "object"
       },
+      "AdjustParameters": {
+        "properties": {
+          "autoEnhance": {
+            "description": "Auto-enhance (contrast stretch)",
+            "type": "boolean"
+          },
+          "brightness": {
+            "$ref": "#/components/schemas/TonalLevel",
+            "description": "Brightness adjustment level"
+          },
+          "contrast": {
+            "$ref": "#/components/schemas/TonalLevel",
+            "description": "Contrast adjustment level"
+          },
+          "saturation": {
+            "$ref": "#/components/schemas/TonalLevel",
+            "description": "Saturation adjustment level"
+          }
+        },
+        "type": "object"
+      },
       "AdminOnboardingUpdateDto": {
         "properties": {
           "isOnboarded": {
@@ -31569,7 +31590,8 @@
           "crop",
           "rotate",
           "mirror",
-          "trim"
+          "trim",
+          "adjust"
         ],
         "type": "string"
       },
@@ -31591,9 +31613,12 @@
               },
               {
                 "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, mirror, or trim)"
+            "description": "List of edit actions to apply (crop, rotate, mirror, trim, or adjust)"
           }
         },
         "required": [
@@ -31626,9 +31651,12 @@
               },
               {
                 "$ref": "#/components/schemas/TrimParameters"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustParameters"
               }
             ],
-            "description": "List of edit actions to apply (crop, rotate, mirror, or trim)"
+            "description": "List of edit actions to apply (crop, rotate, mirror, trim, or adjust)"
           }
         },
         "required": [
@@ -43101,6 +43129,18 @@
           "timeBucket"
         ],
         "type": "object"
+      },
+      "TonalLevel": {
+        "description": "Signed adjustment level",
+        "enum": [
+          "strong_decrease",
+          "moderate_decrease",
+          "slight_decrease",
+          "slight_increase",
+          "moderate_increase",
+          "strong_increase"
+        ],
+        "type": "string"
       },
       "ToneMapping": {
         "description": "Tone mapping",

@@ -190,6 +190,8 @@ class ApiClient {
           return ActivityStatisticsResponseDto.fromJson(value);
         case 'AddUsersDto':
           return AddUsersDto.fromJson(value);
+        case 'AdjustParameters':
+          return AdjustParameters.fromJson(value);
         case 'AdminOnboardingUpdateDto':
           return AdminOnboardingUpdateDto.fromJson(value);
         case 'AgentAlbumAddAssetsOperationType':
@@ -1476,6 +1478,8 @@ class ApiClient {
           return TimeBucketAssetResponseDto.fromJson(value);
         case 'TimeBucketsResponseDto':
           return TimeBucketsResponseDto.fromJson(value);
+        case 'TonalLevel':
+          return TonalLevelTypeTransformer().decode(value);
         case 'ToneMapping':
           return ToneMappingTypeTransformer().decode(value);
         case 'TranscodeHWAccel':
