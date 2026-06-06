@@ -42,7 +42,10 @@ disclosure** (faces reassigned, source person deleted; not cleanly undoable). Re
   ```ts
   const payload = this.requireObjectPayload(operation.payload) as { sourcePersonIds: string[] };
   await this.personService.mergePerson(auth, operation.targetId as string, { ids: payload.sourcePersonIds });
-  return this.appliedOperation(operation.id, { personId: operation.targetId, mergedPersonIds: payload.sourcePersonIds });
+  return this.appliedOperation(operation.id, {
+    personId: operation.targetId,
+    mergedPersonIds: payload.sourcePersonIds,
+  });
   ```
 
 ### A4. Server unit tests (RED first)
@@ -72,7 +75,7 @@ disclosure** (faces reassigned, source person deleted; not cleanly undoable). Re
   `[{ type: 'person.merge', summary: 'Merge … (irreversible)', targetKind: 'person', targetId: keepPersonId, riskLevel: 'high', payload: { sourcePersonIds: [sourcePersonId] } }]`.
 - `gatePlanResult` success text DISCLOSES irreversibility ("This permanently merges … and cannot
   be undone — review before applying."); `successSummary { workflowKind: 'merge_people',
-  keepName, mergeName }`.
+keepName, mergeName }`.
 
 ### B2. tests `merge-people.test.mjs`
 
@@ -94,9 +97,9 @@ irreversibility + summary.
   - `classification-recall.mjs`: `recall.person.merge` ("merge Alejandra into Karina" →
     `merge_people`, slots survive).
   - `slot-fidelity.mjs`: `slots.person.merge` (keep + merge slots).
-  - `classification-negatives.mjs`: `neg.person.merge-nonames` is a run-time needs_input not a
+  - `classification-negatives.mjs`: `neg.person.merge-nonames` is a run-time needs*input not a
     routing negative; instead add a negative that "merge duplicate photos" / "merge the albums"
-    does NOT route to `merge_people` (it has no person object) — assert `none`/`cleanup_*`.
+    does NOT route to `merge_people` (it has no person object) — assert `none`/`cleanup*\*`.
   - `l3-readonly.mjs`: `l3.recall.person.merge` (routing). Plan-proposed: VisualOrganizer grants
     `managePeople`, so add `l3.plan.person.merge` with `planProposed: SEEDED ? true : undefined`
     (data-dependent: needs two resolvable people). The read-only audit is LOAD-BEARING here —
@@ -107,7 +110,7 @@ irreversibility + summary.
 1. `pnpm -C server build`.
 2. `pnpm -C server sync:open-api && make open-api` (TS + Dart). VERIFY `person.merge` lands in
    BOTH SDKs (grep `person.merge` / `personPeriodMerge` under mobile/openapi). `make
-   open-api-dart` if needed (Java 21).
+open-api-dart` if needed (Java 21).
 3. `pnpm -C server test -- --run src/services/agent-operation-plan.service.spec.ts src/dtos/agent-operation.dto.spec.ts` → GREEN.
 4. `cd agent-runner && node --test 'src/**/*.test.mjs'` → GREEN, count up.
 5. `make check-server`, `make lint-server`, `make check-web` → green.
