@@ -766,4 +766,39 @@ describe(MediaRepository.name, () => {
       expect(px).toEqual({ r: 128, g: 64, b: 32 });
     });
   });
+
+  describe('renderEditedImage', () => {
+    it('applies a tonal edit and returns an encoded image buffer', async () => {
+      const src = await solid(128, 128, 128).jpeg().toBuffer();
+      const out = await sut.renderEditedImage(src, [
+        { action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } },
+      ]);
+      expect(Buffer.isBuffer(out)).toBe(true);
+      const px = await getPixelColor(out, 5, 5);
+      expect(px.r).toBeGreaterThan(140);
+    });
+
+    it('applies a flip (mirror) edit', async () => {
+      // left red, right green; horizontal mirror swaps them
+      const img = await sharp({
+        create: { width: 20, height: 10, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } },
+      })
+        .composite([
+          {
+            input: {
+              create: { width: 10, height: 10, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } },
+            },
+            left: 10,
+            top: 0,
+          },
+        ])
+        .jpeg()
+        .toBuffer();
+      const out = await sut.renderEditedImage(img, [{ action: AssetEditAction.Mirror, parameters: { axis: MirrorAxis.Horizontal } }]);
+      // renderEditedImage outputs JPEG (3-channel); add alpha so getPixelColor's *4 indexing is correct
+      const outRgba = await sharp(out).ensureAlpha().png().toBuffer();
+      const left = await getPixelColor(outRgba, 2, 5);
+      expect(left.g).toBeGreaterThan(left.r); // left is now green after horizontal mirror
+    });
+  });
 });
