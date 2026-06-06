@@ -212,8 +212,12 @@ class ApiClient {
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentAssetAddTagOperationType':
           return AgentAssetAddTagOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetAdjustOperationType':
+          return AgentAssetAdjustOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetCropOperationType':
           return AgentAssetCropOperationTypeTypeTransformer().decode(value);
+        case 'AgentAssetFlipOperationType':
+          return AgentAssetFlipOperationTypeTypeTransformer().decode(value);
         case 'AgentAssetMediaReference':
           return AgentAssetMediaReference.fromJson(value);
         case 'AgentAssetMetadataDetail':
@@ -468,18 +472,20 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf19':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf19.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf2':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf2.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf20':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf20Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf21':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf21.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf22':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf22.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf24':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf24.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf25':
@@ -488,8 +494,14 @@ class ApiClient {
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf26':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf26.fromJson(value);
-        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload':
-          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf27':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf27.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf27Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf27Payload.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf28':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf28.fromJson(value);
+        case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload':
+          return AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3':
           return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3.fromJson(value);
         case 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload':
