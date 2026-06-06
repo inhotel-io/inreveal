@@ -13,6 +13,7 @@ import {
   FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
   FaceRepairResponseDto,
+  FaceRepairScanDefaultsDto,
   FaceRepairScanStatusDto,
   FaceRepairScanTriggerRequestDto,
   FaceRepairScanTriggerResponseDto,
@@ -51,6 +52,13 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Get the latest face-repair scan', history: new HistoryBuilder().added('v1') })
   getLatestScan(): Promise<FaceRepairScanStatusDto | null> {
     return this.service.getLatestScanStatus() as Promise<FaceRepairScanStatusDto | null>;
+  }
+
+  @Get('scan/defaults')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Get effective face-repair scan defaults', history: new HistoryBuilder().added('v1') })
+  getFaceRepairScanDefaults(): Promise<FaceRepairScanDefaultsDto> {
+    return this.service.getScanDefaults() as Promise<FaceRepairScanDefaultsDto>;
   }
 
   @Get('scan/person/:personId')

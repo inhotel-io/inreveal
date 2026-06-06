@@ -415,6 +415,16 @@ export class FaceRepairService extends BaseService {
     return { scanId: scan.id };
   }
 
+  async getScanDefaults(): Promise<{ maxDistance: number; minFaces: number; maxFlaggedFraction: number }> {
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    return {
+      maxDistance: recognition.maxDistance,
+      minFaces: recognition.minFaces,
+      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+    };
+  }
+
   async getLatestScanStatus() {
     const scan = await this.faceRepairScanRepository.getLatestScan();
     if (!scan) {

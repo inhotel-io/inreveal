@@ -70,6 +70,15 @@ export const FaceRepairScanTriggerRequestSchema = z
   .meta({ id: 'FaceRepairScanTriggerRequestDto' });
 export class FaceRepairScanTriggerRequestDto extends createZodDto(FaceRepairScanTriggerRequestSchema) {}
 
+export const FaceRepairScanDefaultsSchema = z
+  .object({
+    maxDistance: z.number(),
+    minFaces: z.number().int(),
+    maxFlaggedFraction: z.number(),
+  })
+  .meta({ id: 'FaceRepairScanDefaultsDto' });
+export class FaceRepairScanDefaultsDto extends createZodDto(FaceRepairScanDefaultsSchema) {}
+
 const ScanSuspectedOwnerSchema = z.object({
   ownerPersonId: z.string(),
   ownerName: z.string().nullable(),

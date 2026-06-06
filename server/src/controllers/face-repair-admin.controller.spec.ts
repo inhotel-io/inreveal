@@ -155,6 +155,22 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  describe('GET /admin/face-repair/scan/defaults', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/admin/face-repair/scan/defaults');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.getScanDefaults', async () => {
+      service.getScanDefaults.mockResolvedValue({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/scan/defaults')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(body).toMatchObject({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+    });
+  });
+
   describe('POST /admin/face-repair/decline', () => {
     const uuid1 = '00000000-0000-4000-a000-000000000001';
     const uuid2 = '00000000-0000-4000-a000-000000000002';
