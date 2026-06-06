@@ -164,7 +164,7 @@ failed, plan error → failed, success copy + successSummary).
   readability). Add an ordering comment.
 - `manifest.mjs`: two entries (`flow: 'hybrid'`, `planTool: 'proposeAssetBatchFromSelection'`,
   `requiredReadTools: ['resolveAssetSearchFilters', 'searchAssets']`, `supportsContinuation:
-  false`, matrixRow capability "Stack photos" / "Unstack photos", tier "Solid now").
+false`, matrixRow capability "Stack photos" / "Unstack photos", tier "Solid now").
 - Regenerate `manifest.generated.json`:
   `node -e "import('./src/strict-workflows/manifest.mjs').then(m=>require('fs').writeFileSync('./src/strict-workflows/manifest.generated.json', JSON.stringify(m.WORKFLOW_MANIFEST,null,2)+'\n'))"`
   (run from `agent-runner/`).
