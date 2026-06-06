@@ -26,6 +26,7 @@ Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (
 ## Task 1: pure helper — `editActionsForOperation` + `fetchEditPreview`
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-plan-edit-preview.ts`
 - Test: `web/src/routes/(user)/assistant/agent-plan-edit-preview.spec.ts`
 
@@ -37,15 +38,19 @@ import { editActionsForOperation, fetchEditPreview } from './agent-plan-edit-pre
 
 describe('editActionsForOperation', () => {
   it('maps asset.adjust to an adjust edit action', () => {
-    expect(editActionsForOperation('asset.adjust', { brightness: 'moderate_increase', contrast: 'slight_increase' })).toEqual([
-      { action: 'adjust', parameters: { brightness: 'moderate_increase', contrast: 'slight_increase' } },
-    ]);
+    expect(
+      editActionsForOperation('asset.adjust', { brightness: 'moderate_increase', contrast: 'slight_increase' }),
+    ).toEqual([{ action: 'adjust', parameters: { brightness: 'moderate_increase', contrast: 'slight_increase' } }]);
   });
   it('maps asset.adjust autoEnhance', () => {
-    expect(editActionsForOperation('asset.adjust', { autoEnhance: true })).toEqual([{ action: 'adjust', parameters: { autoEnhance: true } }]);
+    expect(editActionsForOperation('asset.adjust', { autoEnhance: true })).toEqual([
+      { action: 'adjust', parameters: { autoEnhance: true } },
+    ]);
   });
   it('maps asset.flip to a mirror edit action', () => {
-    expect(editActionsForOperation('asset.flip', { axis: 'horizontal' })).toEqual([{ action: 'mirror', parameters: { axis: 'horizontal' } }]);
+    expect(editActionsForOperation('asset.flip', { axis: 'horizontal' })).toEqual([
+      { action: 'mirror', parameters: { axis: 'horizontal' } },
+    ]);
   });
   it('returns null for a non-edit operation', () => {
     expect(editActionsForOperation('album.addAssets', {})).toBeNull();
@@ -58,7 +63,9 @@ describe('fetchEditPreview', () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) });
     vi.stubGlobal('fetch', fetchSpy);
     vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:abc') });
-    const url = await fetchEditPreview('asset-1', [{ action: 'adjust', parameters: { brightness: 'moderate_increase' } }]);
+    const url = await fetchEditPreview('asset-1', [
+      { action: 'adjust', parameters: { brightness: 'moderate_increase' } },
+    ]);
     expect(url).toBe('blob:abc');
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/assets/asset-1/edits/preview?size=thumbnail'),
@@ -69,7 +76,9 @@ describe('fetchEditPreview', () => {
 
   it('throws when the response is not ok', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400 }));
-    await expect(fetchEditPreview('asset-1', [{ action: 'adjust', parameters: { autoEnhance: true } }])).rejects.toThrow();
+    await expect(
+      fetchEditPreview('asset-1', [{ action: 'adjust', parameters: { autoEnhance: true } }]),
+    ).rejects.toThrow();
     vi.unstubAllGlobals();
   });
 });
@@ -87,7 +96,10 @@ import { getBaseUrl } from '@immich/sdk';
 export type EditActionItem = { action: 'adjust' | 'mirror'; parameters: Record<string, unknown> };
 
 /** Map an agent operation (type + payload) to editor edit actions, or null if it's not a previewable image-edit op. */
-export const editActionsForOperation = (operationType: string, payload: Record<string, unknown> | undefined): EditActionItem[] | null => {
+export const editActionsForOperation = (
+  operationType: string,
+  payload: Record<string, unknown> | undefined,
+): EditActionItem[] | null => {
   if (!payload) return null;
   if (operationType === 'asset.adjust') {
     return [{ action: 'adjust', parameters: { ...payload } }];
@@ -99,7 +111,11 @@ export const editActionsForOperation = (operationType: string, payload: Record<s
 };
 
 /** POST the proposed edits to the ephemeral preview endpoint and return an object URL for the rendered image. */
-export const fetchEditPreview = async (assetId: string, edits: EditActionItem[], signal?: AbortSignal): Promise<string> => {
+export const fetchEditPreview = async (
+  assetId: string,
+  edits: EditActionItem[],
+  signal?: AbortSignal,
+): Promise<string> => {
   const response = await fetch(`${getBaseUrl()}/assets/${assetId}/edits/preview?size=thumbnail`, {
     method: 'POST',
     credentials: 'include',
@@ -131,11 +147,13 @@ git commit -m "feat(web): agent edit-preview helper (op→edit-actions, preview 
 ## Task 2: before/after in the thumbnail strip
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-plan-thumbnail-strip.svelte`
 - Modify: `web/src/lib/i18n/en.json`
 - Test: `web/src/routes/(user)/assistant/agent-plan-thumbnail-strip.spec.ts` (extend)
 
 **Behavior:**
+
 - Derive the group's edit actions: read the group's first operation's raw DTO (`group.operations[0]?.operation` — verify the exact accessor by reading `OperationReviewItem` in `agent-operation-plan-ui.ts`; it exposes `.operation` with `.type` + `.payload`). `const editActions = $derived(op ? editActionsForOperation(op.type, op.payload as Record<string, unknown>) : null);`
 - If `editActions` is non-null: render each `strip.assetIds` tile as a **before → after** pair (before = existing thumbnail `getAssetMediaUrl({ id, size: AssetMediaSize.Thumbnail })`; after = object URL from `fetchEditPreview`). Else render the existing strip unchanged.
 - Manage after-URLs in `$state`. An `$effect` keyed on `(editActions, strip.assetIds)` aborts in-flight fetches, revokes prior object URLs, and fetches anew (the iterate loop: when the user revises, `op.payload` changes → `editActions` changes → re-fetch). Cleanup on unmount revokes all + aborts.
@@ -164,7 +182,9 @@ it('revokes prior object URLs when the edit payload changes', async () => {
   const revoke = vi.fn();
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(['x'])) }));
   vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:after'), revokeObjectURL: revoke });
-  const { rerender } = render(AgentPlanThumbnailStrip, { group: adjustGroup(['a1'], { brightness: 'slight_increase' }) });
+  const { rerender } = render(AgentPlanThumbnailStrip, {
+    group: adjustGroup(['a1'], { brightness: 'slight_increase' }),
+  });
   await waitFor(() => expect(screen.getByTestId('agent-plan-after-image')).toBeInTheDocument());
   await rerender({ group: adjustGroup(['a1'], { brightness: 'strong_increase' }) });
   await waitFor(() => expect(revoke).toHaveBeenCalled());
@@ -207,10 +227,13 @@ git commit -m "feat(web): before/after edit preview on the agent plan thumbnail 
 - [ ] **Step 1:** `make check-web` (svelte-check + tsc) green.
 - [ ] **Step 2:** `make format-web` (prettier) — clean.
 - [ ] **Step 3:** re-run both Slice-4 specs:
+
 ```bash
 pnpm -C web test -- --run "src/routes/(user)/assistant/agent-plan-edit-preview.spec.ts" "src/routes/(user)/assistant/agent-plan-thumbnail-strip.spec.ts"
 ```
+
 Expected: green.
+
 - [ ] **Step 4: Commit** any formatting fixes.
 
 > No server change, no OpenAPI change in this slice. `pnpm run check:svelte` is a known local no-op — rely on `make check-web` + CI Test Web.
@@ -232,4 +255,7 @@ Expected: green.
 - Auto-detect by op type; no crop/rotate preview; `typeLabelKeys` op label unchanged; new i18n only for Before/After. ✅
 - Object-URL lifecycle (create/abort/revoke) specified. ✅
 - No server/OpenAPI/runner work. ✅
+
+```
+
 ```
