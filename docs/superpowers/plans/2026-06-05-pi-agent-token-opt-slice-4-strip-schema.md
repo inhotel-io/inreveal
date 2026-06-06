@@ -44,6 +44,7 @@ keep `type`, `enum`, `const`, `required`, `properties`, `$ref`, `$defs`, `format
 
 `enrichToolFromContract` is unchanged: it re-adds the tool-level `inputSchema.description`
 (contract) + the curated TOP-LEVEL `propertyDescriptions`. So after strip + enrich:
+
 - tool-level description: present (contract).
 - top-level args: curated terse descriptions (re-added by enrich).
 - nested `$defs` / nested object fields: **no description** (just structure + enums) — the win.
@@ -51,6 +52,7 @@ keep `type`, `enum`, `const`, `required`, `properties`, `$ref`, `$defs`, `format
 ## Tests (RED first)
 
 `agent-mcp-tool-registry.service.spec.ts`:
+
 - **New:** for a planning tool (`proposeAlbumOperations`), assert its built `inputSchema`
   `$defs` (the op union) have **no `description`** on nested op fields (walk `$defs`, assert no
   `description` key) — i.e. the strip took effect on the nested schema.
@@ -77,6 +79,7 @@ make check-server && make lint-server
 pnpm -C server build && pnpm -C server sync:open-api && make open-api
 git status --porcelain open-api/ mobile/openapi/   # MUST be empty (no diff)
 ```
+
 If `open-api/` or `mobile/openapi/` shows a diff, a Zod DTO was changed by mistake — revert and
 keep the change strictly inside `toInputSchema`. Run server prettier on edited server `.ts`.
 No agent-runner change.
