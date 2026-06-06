@@ -89,6 +89,7 @@ const sessions: AgentSessionResponseDto[] = [
         trashAssets: true,
         createSharedLinks: false,
         manageStacks: false,
+        managePeople: false,
       },
     },
     initialContextSnapshot: {},

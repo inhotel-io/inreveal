@@ -67,6 +67,7 @@ import { buildAgentSearch } from 'src/services/agent-search-filter-mapper';
 import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
+import { PersonService } from 'src/services/person.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { StackService } from 'src/services/stack.service';
@@ -226,6 +227,7 @@ export class AgentOperationPlanService {
     tagAssets: false,
     updateAssetMetadata: false,
     manageStacks: false,
+    managePeople: false,
   };
 
   private static readonly activeStatuses = [
@@ -258,6 +260,7 @@ export class AgentOperationPlanService {
     private readonly tagService: TagService,
     private readonly trashService: TrashService,
     private readonly sharedLinkService: SharedLinkService,
+    private readonly personService: PersonService,
     @Optional()
     @Inject(AgentSessionActivityEventService)
     private readonly activityEventService?: Pick<AgentSessionActivityEventService, 'createSystemEvent'>,
@@ -2002,6 +2005,10 @@ export class AgentOperationPlanService {
     ) {
       throw new BadRequestException('Agent permission policy does not allow stacking assets');
     }
+
+    if (type === AgentOperationType.PersonUpdate && !writeScope.managePeople) {
+      throw new BadRequestException('Agent permission policy does not allow managing people');
+    }
   }
 
   private async markWaitingForPlanReview(auth: AuthDto, session: AgentSession, plan: AgentOperationPlanWithOperations) {
@@ -2853,6 +2860,10 @@ export class AgentOperationPlanService {
         return this.applyShareLinkCreateAlbumOperation(auth, operation);
       }
 
+      case AgentOperationType.PersonUpdate: {
+        return this.applyPersonUpdateOperation(auth, operation);
+      }
+
       default: {
         throw new BadRequestException(`${operation.type} is not supported for apply yet`);
       }
@@ -3278,6 +3289,30 @@ export class AgentOperationPlanService {
     });
 
     return this.appliedOperation(operation.id, { albumId: operation.targetId ?? undefined });
+  }
+
+  private async applyPersonUpdateOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const payload = this.requireObjectPayload(operation.payload) as {
+      name?: string;
+      birthDate?: string | null;
+      isHidden?: boolean;
+    };
+
+    const personId = operation.targetId;
+    if (!personId) {
+      throw new BadRequestException('person.update requires a targetId (person id)');
+    }
+
+    await this.personService.update(auth, personId, {
+      name: payload.name,
+      birthDate: payload.birthDate,
+      isHidden: payload.isHidden,
+    });
+
+    return this.appliedOperation(operation.id, { personId });
   }
 
   private async applyStackOperation(

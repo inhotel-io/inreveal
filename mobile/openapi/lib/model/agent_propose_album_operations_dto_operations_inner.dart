@@ -26,11 +26,11 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetSelectionHandleId,
   });
 
-  AgentShareLinkCreateAlbumOperationType type;
+  AgentPersonUpdateOperationType type;
 
   String summary;
 
-  AgentOperationExistingAlbumTargetKind targetKind;
+  AgentOperationPersonTargetKind targetKind;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -50,7 +50,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload payload;
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload payload;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -155,13 +155,13 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentShareLinkCreateAlbumOperationType.fromJson(json[r'type'])!,
+        type: AgentPersonUpdateOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
-        targetKind: AgentOperationExistingAlbumTargetKind.fromJson(json[r'targetKind'])!,
+        targetKind: AgentOperationPersonTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload.fromJson(json[r'payload'])!,
+        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(json[r'payload'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
         assetIds: json[r'assetIds'] is Iterable

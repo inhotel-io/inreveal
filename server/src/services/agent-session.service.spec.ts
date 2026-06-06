@@ -37,6 +37,7 @@ const carefulWriteScope = {
   trashAssets: false,
   createSharedLinks: false,
   manageStacks: false,
+  managePeople: false,
 };
 const expandedWriteScope = {
   createAlbum: true,
@@ -59,6 +60,7 @@ const expandedWriteScope = {
   trashAssets: true,
   createSharedLinks: false,
   manageStacks: true,
+  managePeople: true,
 };
 
 const carefulPermissionPlan: AgentNormalizedPermissionPlanSnapshot = {
@@ -479,6 +481,7 @@ describe(AgentSessionService.name, () => {
         trashAssets: false,
         createSharedLinks: false,
         manageStacks: false,
+        managePeople: false,
       },
     };
     const dto = makeCreateDto({
@@ -1057,6 +1060,7 @@ describe(AgentSessionService.name, () => {
       trashAssets: false,
       createSharedLinks: false,
       manageStacks: false,
+      managePeople: false,
     });
   });
 
