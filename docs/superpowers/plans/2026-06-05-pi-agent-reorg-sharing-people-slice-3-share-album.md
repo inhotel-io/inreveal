@@ -45,7 +45,12 @@ const shareLinkCreateAlbumOperationSchema = z
     payload: shareLinkCreatePayloadSchema, // password / expiresAt(future) / showMetadata / allowDownload
   })
   .superRefine((operation, ctx) => {
-    validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.ExistingAlbum, AgentOperationType.ShareLinkCreateAlbum);
+    validateStandaloneTarget(
+      operation,
+      ctx,
+      AgentOperationTargetKind.ExistingAlbum,
+      AgentOperationType.ShareLinkCreateAlbum,
+    );
   });
 ```
 
@@ -58,13 +63,17 @@ discriminatedUnion (~698, next to `shareLinkCreateOperationSchema`).
 
 - **`validateWriteScope` (~1973)**: extend the existing shareLink gate:
   ```ts
-  if ((type === AgentOperationType.ShareLinkCreate || type === AgentOperationType.ShareLinkCreateAlbum) && !writeScope.createSharedLinks) {
+  if (
+    (type === AgentOperationType.ShareLinkCreate || type === AgentOperationType.ShareLinkCreateAlbum) &&
+    !writeScope.createSharedLinks
+  ) {
     throw new BadRequestException('Agent permission policy does not allow creating shared links');
   }
   ```
 - **Apply switch (~2811)**: add
   `case AgentOperationType.ShareLinkCreateAlbum: { return this.applyShareLinkCreateAlbumOperation(auth, operation); }`.
 - **New apply method** (mirror `applyShareLinkCreateOperation` ~3196):
+
   ```ts
   private async applyShareLinkCreateAlbumOperation(auth, operation): Promise<AgentOperationApplyUpdate> {
     const payload = this.requireObjectPayload(operation.payload) as {
@@ -81,6 +90,7 @@ discriminatedUnion (~698, next to `shareLinkCreateOperationSchema`).
     return this.appliedOperation(operation.id, { albumId: operation.targetId });
   }
   ```
+
   Verify `SharedLinkCreateDto` accepts `{ type: SharedLinkType.Album, albumId, ... }` (read
   `src/dtos/shared-link.dto.ts`; recon confirms `SharedLinkType.Album` + `albumId`). Confirm
   `operation.targetId` is the album id on a persisted op (album-targeted ops store it there).

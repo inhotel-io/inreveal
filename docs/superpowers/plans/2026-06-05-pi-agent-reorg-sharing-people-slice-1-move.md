@@ -59,11 +59,19 @@ Mirror `remove-photos-from-album.test.mjs` structure. Use `makeContractClient` f
   deep-equals (order matters):
   ```js
   [
-    { type: 'album.removeAssets', targetKind: 'existing_album', targetId: 'alb-A',
-      assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' } },
-    { type: 'album.addAssets', targetKind: 'existing_album', targetId: 'alb-B',
-      assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' } },
-  ]
+    {
+      type: 'album.removeAssets',
+      targetKind: 'existing_album',
+      targetId: 'alb-A',
+      assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+    },
+    {
+      type: 'album.addAssets',
+      targetKind: 'existing_album',
+      targetId: 'alb-B',
+      assetSource: { kind: 'selectionHandle', selectionHandleId: 'handle-1' },
+    },
+  ];
   ```
   Assert no raw `assetIds` in `JSON.stringify(client.calls)`. Assert `searchAssets` ran
   (metadata mode, `limit:20`, no `query`). Assert `resolveAssetSearchFilters` NOT called
@@ -100,7 +108,10 @@ import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 const KIND = 'move_photos_between_albums';
 
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
-const cleanSource = (v) => clean(v).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (v) =>
+  clean(v)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 const normalizeAlbumRef = (value) =>
   clean(value)
@@ -114,7 +125,8 @@ const sourceIsOwnedElsewhere = (s) => SUBJECTIVE_PATTERN.test(s) || tripSourcePa
 // "move <source> from <fromAlbum> to <toAlbum>". Greedy source binds the FINAL
 // "from … to …" so a date source containing "from" (e.g. "my photos from 2024")
 // is preserved. Both from and to are REQUIRED (bare "move … to …" never matches).
-const MOVE_PATTERN = /\bmove\s+(?<source>.+)\s+from\s+(?<fromAlbum>.+?)\s+to\s+(?<toAlbum>[^.?!]+?)(?:\s+album)?[.?!]*$/i;
+const MOVE_PATTERN =
+  /\bmove\s+(?<source>.+)\s+from\s+(?<fromAlbum>.+?)\s+to\s+(?<toAlbum>[^.?!]+?)(?:\s+album)?[.?!]*$/i;
 
 const tryMatch = (prompt) => {
   const m = MOVE_PATTERN.exec(prompt);
@@ -169,7 +181,9 @@ export const movePhotosBetweenAlbumsWorkflow = () => ({
     // Resolve both albums (none/ambiguous → ask).
     const from = await resolveAlbum({ client, albumRef: fromRef, signal });
     if (from.matches.length === 0) {
-      return needsInput({ text: `I could not find an album called "${from.ref}". Which album should I move them out of?` });
+      return needsInput({
+        text: `I could not find an album called "${from.ref}". Which album should I move them out of?`,
+      });
     }
     if (from.matches.length > 1) {
       return needsInput({ text: `Multiple albums are called "${from.ref}". Which one should I move them out of?` });
