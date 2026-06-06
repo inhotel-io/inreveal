@@ -2508,7 +2508,7 @@ describe(AssetService.name, () => {
 
     it('throws NotFound when asset does not exist', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
-      mocks.asset.getById.mockResolvedValue(undefined);
+      mocks.asset.getById.mockResolvedValue(void 0);
       await expect(
         sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL),
       ).rejects.toBeInstanceOf(NotFoundException);
