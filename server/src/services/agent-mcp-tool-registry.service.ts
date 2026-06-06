@@ -5,6 +5,7 @@ import { AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import type { AgentMcpArgumentMode, AgentMcpToolContract } from 'src/types/agent-mcp-contract.types';
 import type { AgentMcpToolAnnotations, AgentMcpToolDefinition } from 'src/types/agent-mcp.types';
+import type { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import z, { type ZodType } from 'zod';
 
 const readToolAnnotations = {
@@ -416,7 +417,23 @@ export class AgentMcpToolRegistryService {
     this.tools = buildTools(contractsByName);
   }
 
-  listTools(): AgentMcpToolDefinition[] {
-    return this.tools.map((tool) => cloneTool(tool));
+  listTools(snapshot?: AgentPermissionPlanSnapshot): AgentMcpToolDefinition[] {
+    const cloned = this.tools.map((tool) => cloneTool(tool));
+    if (!snapshot) {
+      return cloned;
+    }
+    const drop = new Set<AgentToolName>();
+    if (!snapshot.read.originals) {
+      drop.add(AgentToolName.ReadAssetOriginals);
+    }
+    if (!snapshot.read.previews) {
+      drop.add(AgentToolName.ReadAssetPreviews);
+    }
+    if (!snapshot.assetScope.sharedSpaces) {
+      drop.add(AgentToolName.ListSpaces);
+      drop.add(AgentToolName.ReadSpace);
+      drop.add(AgentToolName.SearchUsers);
+    }
+    return cloned.filter((tool) => !drop.has(tool.name));
   }
 }
