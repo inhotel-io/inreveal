@@ -23,9 +23,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     this.assetSelectionHandleId,
     this.riskLevel,
     this.enabled = true,
+    required this.payload,
   });
 
-  AgentAssetRestoreOperationType type;
+  AgentAssetRemoveTagOperationType type;
 
   String summary;
 
@@ -75,6 +76,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
 
   bool enabled;
 
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf20Payload payload;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 &&
     other.type == type &&
@@ -86,7 +89,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     _deepEquality.equals(other.assetIds, assetIds) &&
     other.assetSelectionHandleId == assetSelectionHandleId &&
     other.riskLevel == riskLevel &&
-    other.enabled == enabled;
+    other.enabled == enabled &&
+    other.payload == payload;
 
   @override
   int get hashCode =>
@@ -100,10 +104,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     (assetIds.hashCode) +
     (assetSelectionHandleId == null ? 0 : assetSelectionHandleId!.hashCode) +
     (riskLevel == null ? 0 : riskLevel!.hashCode) +
-    (enabled.hashCode);
+    (enabled.hashCode) +
+    (payload.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf20[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetSource=$assetSource, assetIds=$assetIds, assetSelectionHandleId=$assetSelectionHandleId, riskLevel=$riskLevel, enabled=$enabled]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf20[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetSource=$assetSource, assetIds=$assetIds, assetSelectionHandleId=$assetSelectionHandleId, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -137,6 +142,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     //  json[r'riskLevel'] = null;
     }
       json[r'enabled'] = this.enabled;
+      json[r'payload'] = this.payload;
     return json;
   }
 
@@ -149,7 +155,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20(
-        type: AgentAssetRestoreOperationType.fromJson(json[r'type'])!,
+        type: AgentAssetRemoveTagOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
@@ -161,6 +167,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
         assetSelectionHandleId: mapValueOfType<String>(json, r'assetSelectionHandleId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
+        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf20Payload.fromJson(json[r'payload'])!,
       );
     }
     return null;
@@ -211,6 +218,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     'type',
     'summary',
     'targetKind',
+    'payload',
   };
 }
 

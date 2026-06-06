@@ -37,6 +37,8 @@ class AgentOperationType {
   static const spacePeriodUpdateMemberRole = AgentOperationType._(r'space.updateMemberRole');
   static const assetPeriodRotate = AgentOperationType._(r'asset.rotate');
   static const assetPeriodCrop = AgentOperationType._(r'asset.crop');
+  static const assetPeriodAdjust = AgentOperationType._(r'asset.adjust');
+  static const assetPeriodFlip = AgentOperationType._(r'asset.flip');
   static const assetPeriodStack = AgentOperationType._(r'asset.stack');
   static const assetPeriodUnstack = AgentOperationType._(r'asset.unstack');
   static const assetPeriodSetFavorite = AgentOperationType._(r'asset.setFavorite');
@@ -67,6 +69,8 @@ class AgentOperationType {
     spacePeriodUpdateMemberRole,
     assetPeriodRotate,
     assetPeriodCrop,
+    assetPeriodAdjust,
+    assetPeriodFlip,
     assetPeriodStack,
     assetPeriodUnstack,
     assetPeriodSetFavorite,
@@ -132,6 +136,8 @@ class AgentOperationTypeTypeTransformer {
         case r'space.updateMemberRole': return AgentOperationType.spacePeriodUpdateMemberRole;
         case r'asset.rotate': return AgentOperationType.assetPeriodRotate;
         case r'asset.crop': return AgentOperationType.assetPeriodCrop;
+        case r'asset.adjust': return AgentOperationType.assetPeriodAdjust;
+        case r'asset.flip': return AgentOperationType.assetPeriodFlip;
         case r'asset.stack': return AgentOperationType.assetPeriodStack;
         case r'asset.unstack': return AgentOperationType.assetPeriodUnstack;
         case r'asset.setFavorite': return AgentOperationType.assetPeriodSetFavorite;
