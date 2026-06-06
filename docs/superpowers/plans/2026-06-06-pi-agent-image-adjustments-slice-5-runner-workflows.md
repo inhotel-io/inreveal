@@ -26,6 +26,7 @@ Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (
 ## Task 1: `adjust_assets` workflow
 
 **Files:**
+
 - Create: `agent-runner/src/strict-workflows/workflows/adjust-assets.mjs`
 - Test: `agent-runner/src/strict-workflows/workflows/adjust-assets.test.mjs`
 
@@ -111,7 +112,10 @@ test('run proposes asset.adjust via proposeAssetBatchFromSelection', async () =>
   const client = {
     call: async (tool, args) => {
       calls.push({ tool, args });
-      if (tool === 'resolveAssetSearchFilters') return { /* shape resolveAssetSource expects */ };
+      if (tool === 'resolveAssetSearchFilters')
+        return {
+          /* shape resolveAssetSource expects */
+        };
       return { planId: 'p1', operations: [{ type: 'asset.adjust' }] };
     },
   };
@@ -135,16 +139,26 @@ import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'adjust_assets';
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
-const cleanSource = (v) => clean(v).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (v) =>
+  clean(v)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 const INTENSITY_SLIGHT = /\b(?:a\s+touch|slightly|a\s+little|a\s+bit|subtle|subtly|gently|a\s+tad)\b/i;
 const INTENSITY_STRONG = /\b(?:a\s+lot|much|way|really|significantly|a\s+ton|heavily|strongly|super)\b/i;
-const intensityOf = (text) => (INTENSITY_SLIGHT.test(text) ? 'slight' : INTENSITY_STRONG.test(text) ? 'strong' : 'moderate');
+const intensityOf = (text) =>
+  INTENSITY_SLIGHT.test(text) ? 'slight' : INTENSITY_STRONG.test(text) ? 'strong' : 'moderate';
 
 // FILLER = intensity qualifiers + politeness only (NOT adjustment nouns — those never appear in the source).
 const FILLER =
   /\b(?:a\s+touch|slightly|a\s+little|a\s+bit|subtle|subtly|gently|a\s+tad|a\s+lot|much|way|really|significantly|a\s+ton|heavily|strongly|super|please)\b/gi;
-const stripFiller = (s) => clean(s).replace(FILLER, ' ').replace(/\s+/g, ' ').replace(/^(?:and|on|to|of|for|in)\b\s*/i, '').replace(/\s+/g, ' ').trim();
+const stripFiller = (s) =>
+  clean(s)
+    .replace(FILLER, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^(?:and|on|to|of|for|in)\b\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
 const LEAD = '(?:can you |could you |would you |please |hey |)';
 // primary patterns: [regex (with <source>), field, direction|null(=autoEnhance)]
@@ -152,17 +166,50 @@ const PRIMARY = [
   [new RegExp(`^${LEAD}(?:brighten|lighten)\\s+(?<source>.+)$`, 'i'), 'brightness', 'increase'],
   [new RegExp(`^${LEAD}darken\\s+(?<source>.+)$`, 'i'), 'brightness', 'decrease'],
   [new RegExp(`^${LEAD}(?:auto-?enhance|enhance)\\s+(?<source>.+)$`, 'i'), 'autoEnhance', null],
-  [new RegExp(`^${LEAD}(?:fix|improve|clean\\s+up)\\s+(?:the\\s+)?(?:lighting|exposure)\\s+(?:on|of|for|in)?\\s*(?<source>.+)$`, 'i'), 'autoEnhance', null],
-  [new RegExp(`^${LEAD}(?:add|increase|boost|raise|more)\\s+(?:the\\s+)?contrast\\s+(?:on|of|to|for|in)?\\s*(?<source>.+)$`, 'i'), 'contrast', 'increase'],
-  [new RegExp(`^${LEAD}(?:reduce|lower|soften|less)\\s+(?:the\\s+)?contrast\\s+(?:on|of|to|for|in)?\\s*(?<source>.+)$`, 'i'), 'contrast', 'decrease'],
+  [
+    new RegExp(
+      `^${LEAD}(?:fix|improve|clean\\s+up)\\s+(?:the\\s+)?(?:lighting|exposure)\\s+(?:on|of|for|in)?\\s*(?<source>.+)$`,
+      'i',
+    ),
+    'autoEnhance',
+    null,
+  ],
+  [
+    new RegExp(
+      `^${LEAD}(?:add|increase|boost|raise|more)\\s+(?:the\\s+)?contrast\\s+(?:on|of|to|for|in)?\\s*(?<source>.+)$`,
+      'i',
+    ),
+    'contrast',
+    'increase',
+  ],
+  [
+    new RegExp(
+      `^${LEAD}(?:reduce|lower|soften|less)\\s+(?:the\\s+)?contrast\\s+(?:on|of|to|for|in)?\\s*(?<source>.+)$`,
+      'i',
+    ),
+    'contrast',
+    'decrease',
+  ],
   [new RegExp(`^${LEAD}(?:saturate)\\s+(?<source>.+)$`, 'i'), 'saturation', 'increase'],
-  [new RegExp(`^${LEAD}(?:desaturate|mute)\\s+(?:the\\s+colou?rs?\\s+(?:on|of|in)\\s+)?(?<source>.+)$`, 'i'), 'saturation', 'decrease'],
+  [
+    new RegExp(`^${LEAD}(?:desaturate|mute)\\s+(?:the\\s+colou?rs?\\s+(?:on|of|in)\\s+)?(?<source>.+)$`, 'i'),
+    'saturation',
+    'decrease',
+  ],
 ];
 // "make <source> <adjective>"
 const MAKE = [
-  [new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+(?:more\\s+)?(?:vivid|saturated|colou?rful)\\s*$`, 'i'), 'saturation', 'increase'],
+  [
+    new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+(?:more\\s+)?(?:vivid|saturated|colou?rful)\\s*$`, 'i'),
+    'saturation',
+    'increase',
+  ],
   [new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+pop\\s*$`, 'i'), 'saturation', 'increase'],
-  [new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+(?:less\\s+saturated|muted|washed\\s+out)\\s*$`, 'i'), 'saturation', 'decrease'],
+  [
+    new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+(?:less\\s+saturated|muted|washed\\s+out)\\s*$`, 'i'),
+    'saturation',
+    'decrease',
+  ],
   [new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+brighter\\s*$`, 'i'), 'brightness', 'increase'],
   [new RegExp(`^${LEAD}make\\s+(?<source>.+?)\\s+darker\\s*$`, 'i'), 'brightness', 'decrease'],
 ];
@@ -213,7 +260,10 @@ const tryMatch = (prompt) => {
   for (const [re, field, dir] of MAKE) {
     const m = re.exec(prompt);
     if (!m?.groups?.source) continue;
-    return { params: { [field]: `${intensityOf(prompt)}_${dir}` }, sourceDescription: cleanSource(stripFiller(m.groups.source)) };
+    return {
+      params: { [field]: `${intensityOf(prompt)}_${dir}` },
+      sourceDescription: cleanSource(stripFiller(m.groups.source)),
+    };
   }
   return undefined;
 };
@@ -249,7 +299,9 @@ export const adjustAssetsWorkflow = () => ({
     const params = slots?.params;
     const sourceDescription = cleanSource(slots?.sourceDescription);
     if (!params || !sourceDescription) {
-      return needsInput({ text: 'Tell me which photos to adjust and how (brighten, more contrast, more vivid, or auto-enhance).' });
+      return needsInput({
+        text: 'Tell me which photos to adjust and how (brighten, more contrast, more vivid, or auto-enhance).',
+      });
     }
     let resolution;
     try {
@@ -260,7 +312,9 @@ export const adjustAssetsWorkflow = () => ({
     if (resolution.status === 'handoff') return handoffOpen({ reason: resolution.reason });
     if (resolution.status === 'needs_input') return needsInput({ text: resolution.text });
     if (resolution.status === 'empty') {
-      return needsInput({ text: `I could not find any photos matching "${sourceDescription}" to adjust. Can you describe them differently?` });
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}" to adjust. Can you describe them differently?`,
+      });
     }
     const { selectionHandleId, assetCount } = resolution;
     let planResult;
@@ -299,6 +353,7 @@ git commit -m "feat(agent): adjust_assets hybrid workflow (tonal + auto-enhance)
 ## Task 2: `flip_assets` workflow
 
 **Files:**
+
 - Create: `agent-runner/src/strict-workflows/workflows/flip-assets.mjs` (+ test)
 
 - [ ] **Step 1: Write the failing tests**
@@ -310,16 +365,28 @@ import { flipAssetsWorkflow } from './flip-assets.mjs';
 const wf = flipAssetsWorkflow();
 const slotsFor = (p) => wf.match(p)?.slots;
 
-test('flip horizontally → axis horizontal', () => { assert.equal(slotsFor('flip this horizontally').axis, 'horizontal'); });
-test('mirror → axis horizontal (default)', () => { assert.equal(slotsFor('mirror these').axis, 'horizontal'); });
-test('flip vertically → axis vertical', () => { assert.equal(slotsFor('flip these vertically').axis, 'vertical'); });
-test('flip (no axis) → horizontal default', () => { assert.equal(slotsFor('flip my newest 5 photos').axis, 'horizontal'); });
-test('does NOT steal "upside down" (rotate owns it)', () => { assert.equal(wf.match('flip my photos upside down'), undefined); });
+test('flip horizontally → axis horizontal', () => {
+  assert.equal(slotsFor('flip this horizontally').axis, 'horizontal');
+});
+test('mirror → axis horizontal (default)', () => {
+  assert.equal(slotsFor('mirror these').axis, 'horizontal');
+});
+test('flip vertically → axis vertical', () => {
+  assert.equal(slotsFor('flip these vertically').axis, 'vertical');
+});
+test('flip (no axis) → horizontal default', () => {
+  assert.equal(slotsFor('flip my newest 5 photos').axis, 'horizontal');
+});
+test('does NOT steal "upside down" (rotate owns it)', () => {
+  assert.equal(wf.match('flip my photos upside down'), undefined);
+});
 test('does NOT match rotate/crop', () => {
   assert.equal(wf.match('rotate this 90'), undefined);
   assert.equal(wf.match('crop this to 0,0,10,10'), undefined);
 });
-test('subjective source → no match', () => { assert.equal(wf.match('flip the good ones'), undefined); });
+test('subjective source → no match', () => {
+  assert.equal(wf.match('flip the good ones'), undefined);
+});
 ```
 
 - [ ] **Step 2: Run → fail.**
@@ -333,7 +400,10 @@ import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
 
 const KIND = 'flip_assets';
 const clean = (v) => (typeof v === 'string' ? v.trim() : '');
-const cleanSource = (v) => clean(v).replace(/[.?!]+$/u, '').trim();
+const cleanSource = (v) =>
+  clean(v)
+    .replace(/[.?!]+$/u, '')
+    .trim();
 
 const FLIP_PATTERN =
   /^(?:can you |could you |please |)?(?:flip|mirror)\s+(?<source>.+?)(?:\s+(?<dir>horizontally|vertically|left[- ]?to[- ]?right|top[- ]?to[- ]?bottom))?\s*$/i;
@@ -380,14 +450,20 @@ export const flipAssetsWorkflow = () => ({
     if (resolution.status === 'handoff') return handoffOpen({ reason: resolution.reason });
     if (resolution.status === 'needs_input') return needsInput({ text: resolution.text });
     if (resolution.status === 'empty') {
-      return needsInput({ text: `I could not find any photos matching "${sourceDescription}" to flip. Can you describe them differently?` });
+      return needsInput({
+        text: `I could not find any photos matching "${sourceDescription}" to flip. Can you describe them differently?`,
+      });
     }
     const { selectionHandleId, assetCount } = resolution;
     let planResult;
     try {
       planResult = await client.call(
         'proposeAssetBatchFromSelection',
-        { summary: `Flip matching photos ${axis === 'horizontal' ? 'horizontally' : 'vertically'}.`, action: { type: 'asset.flip', axis }, selectionHandleId },
+        {
+          summary: `Flip matching photos ${axis === 'horizontal' ? 'horizontally' : 'vertically'}.`,
+          action: { type: 'asset.flip', axis },
+          selectionHandleId,
+        },
         { signal },
       );
     } catch (error) {
@@ -435,7 +511,9 @@ git commit -m "feat(agent): flip_assets hybrid workflow (mirror H/V)"
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 pnpm --dir server sync:agent-capabilities
 ```
+
 Then update the prose rows in `docs/superpowers/specs/2026-05-19-pi-agent-capability-matrix.md` (NOT the generated block): add Flow-Ownership rows for adjust/flip; add Core-Capability rows; in **Needs New MCP Tool**, move "Edits beyond rotation" to shipped (note straighten remains the open geometry follow-up). Then docs-prettier:
+
 ```bash
 pnpm -C docs exec prettier --write superpowers/specs/2026-05-19-pi-agent-capability-matrix.md
 ```
@@ -467,4 +545,7 @@ git commit -m "feat(agent): register adjust_assets + flip_assets; manifest, L1 e
 - `flip_assets` excludes "upside down" (no rotate regression). ✅
 - Manifest + registry + L1 + matrix updated; full runner suite re-run for count assertions. ✅
 - No server/web work. ✅
+
+```
+
 ```

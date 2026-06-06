@@ -1,5 +1,5 @@
 import { TonalLevel } from 'src/dtos/editing.dto';
-import { BRIGHTNESS_FACTOR, contrastLinear, CONTRAST_SLOPE, SATURATION_FACTOR } from 'src/utils/editor-adjust';
+import { BRIGHTNESS_FACTOR, CONTRAST_SLOPE, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import { describe, expect, it } from 'vitest';
 
 describe('editor-adjust factor tables', () => {
@@ -24,7 +24,7 @@ describe('editor-adjust factor tables', () => {
       expect(contrastLinear(TonalLevel.SlightIncrease, 128)).toEqual({ a: 1.1, b: 128 * (1 - 1.1) });
     });
     it('16-bit rgb16 mid=32768', () => {
-      expect(contrastLinear(TonalLevel.SlightIncrease, 32768)).toEqual({ a: 1.1, b: 32768 * (1 - 1.1) });
+      expect(contrastLinear(TonalLevel.SlightIncrease, 32_768)).toEqual({ a: 1.1, b: 32_768 * (1 - 1.1) });
     });
     it('a decrease level (a<1) yields b>0', () => {
       const { a, b } = contrastLinear(TonalLevel.ModerateDecrease, 128);
