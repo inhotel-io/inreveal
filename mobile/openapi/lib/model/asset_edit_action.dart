@@ -27,6 +27,7 @@ class AssetEditAction {
   static const rotate = AssetEditAction._(r'rotate');
   static const mirror = AssetEditAction._(r'mirror');
   static const trim = AssetEditAction._(r'trim');
+  static const adjust = AssetEditAction._(r'adjust');
 
   /// List of all possible values in this [enum][AssetEditAction].
   static const values = <AssetEditAction>[
@@ -34,6 +35,7 @@ class AssetEditAction {
     rotate,
     mirror,
     trim,
+    adjust,
   ];
 
   static AssetEditAction? fromJson(dynamic value) => AssetEditActionTypeTransformer().decode(value);
@@ -76,6 +78,7 @@ class AssetEditActionTypeTransformer {
         case r'rotate': return AssetEditAction.rotate;
         case r'mirror': return AssetEditAction.mirror;
         case r'trim': return AssetEditAction.trim;
+        case r'adjust': return AssetEditAction.adjust;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
