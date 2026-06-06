@@ -128,7 +128,11 @@ export type FaceRepairApplyResponseDto = {
     skipped: number;
 };
 export type FaceRepairDeclineRemoveRequestDto = {
-    ids: string[];
+    faces?: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    ids?: string[];
 };
 export type FaceRepairDeclineRemovedDto = {
     removed: number;

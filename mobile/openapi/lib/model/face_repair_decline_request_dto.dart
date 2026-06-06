@@ -17,7 +17,7 @@ class FaceRepairDeclineRequestDto {
     this.persons = const [],
   });
 
-  List<FaceRepairDeclineRequestDtoFacesInner> faces;
+  List<FaceRepairDeclineRemoveRequestDtoFacesInner> faces;
 
   List<FaceRepairDeclineRequestDtoPersonsInner> persons;
 
@@ -51,7 +51,7 @@ class FaceRepairDeclineRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairDeclineRequestDto(
-        faces: FaceRepairDeclineRequestDtoFacesInner.listFromJson(json[r'faces']),
+        faces: FaceRepairDeclineRemoveRequestDtoFacesInner.listFromJson(json[r'faces']),
         persons: FaceRepairDeclineRequestDtoPersonsInner.listFromJson(json[r'persons']),
       );
     }

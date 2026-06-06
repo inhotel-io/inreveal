@@ -8,9 +8,10 @@
     getFaceRepairPersonFaces,
     getLatestScan,
     getPeopleThumbnailPath,
+    removeFaceRepairDeclines,
   } from '@immich/sdk';
   import { Button, Icon } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiCancel, mdiClose } from '@mdi/js';
+  import { mdiArrowLeft, mdiArrowRight, mdiCancel, mdiClose, mdiUndoVariant } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -110,7 +111,22 @@
     visibleCount = Math.min(visibleCount + CHUNK_SIZE, flaggedFaces.length);
   };
 
-  const handleDecline = async (face: FlaggedFace) => {
+  // Toggle a per-face decline. Declines persist immediately (a durable "leave it" judgment), so the undo here
+  // deletes the persisted row by its natural key — the review page never holds the server-generated row id.
+  const handleToggleDecline = async (face: FlaggedFace) => {
+    if (vm.isDeclined(face.assetFaceId)) {
+      vm.unmarkDeclined(face.assetFaceId);
+      try {
+        await removeFaceRepairDeclines({
+          faceRepairDeclineRemoveRequestDto: {
+            faces: [{ assetFaceId: face.assetFaceId, suspectedOwnerId: face.suspectedOwnerId }],
+          },
+        });
+      } catch {
+        // non-fatal: re-declining stays muted; the row can still be undone from the declined page
+      }
+      return;
+    }
     vm.markDeclined(face.assetFaceId);
     try {
       await declineFaceRepair({
@@ -319,10 +335,11 @@
                     ? 'border-transparent opacity-55 grayscale-[0.5]'
                     : 'border-primary hover:border-primary/80',
                 ].join(' ')}
-                onclick={() => vm.toggle(face.assetFaceId)}
+                onclick={() => (declined ? handleToggleDecline(face) : vm.toggle(face.assetFaceId))}
                 data-testid="face-tile"
                 data-faceid={face.assetFaceId}
                 data-excluded={excluded}
+                data-declined={declined}
               >
                 <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
                 <!-- Declined / excluded / moving overlay -->
@@ -357,18 +374,19 @@
                   </div>
                 {/if}
               </button>
-              <!-- Decline button: hidden once declined (persistent state) -->
-              {#if !declined}
-                <button
-                  type="button"
-                  class="absolute right-1 top-1 flex size-5 items-center justify-center rounded-md bg-black/50 text-white transition-colors hover:bg-red-600"
-                  onclick={() => handleDecline(face)}
-                  data-testid="decline-btn"
-                  title={$t('admin.face_cleanup_decline_hint')}
-                >
-                  <Icon icon={mdiCancel} size="12" />
-                </button>
-              {/if}
+              <!-- Decline / undo toggle: persists immediately. When declined it becomes a restore (undo) button. -->
+              <button
+                type="button"
+                class={[
+                  'absolute right-1 top-1 flex size-5 items-center justify-center rounded-md text-white transition-colors',
+                  declined ? 'bg-red-600 hover:bg-red-700' : 'bg-black/50 hover:bg-red-600',
+                ].join(' ')}
+                onclick={() => handleToggleDecline(face)}
+                data-testid={declined ? 'undecline-btn' : 'decline-btn'}
+                title={declined ? $t('admin.face_cleanup_undecline_hint') : $t('admin.face_cleanup_decline_hint')}
+              >
+                <Icon icon={declined ? mdiUndoVariant : mdiCancel} size="12" />
+              </button>
             </div>
           {/each}
         </div>

@@ -27,4 +27,15 @@ describe('createReviewModel', () => {
     expect(vm.isExcluded('b')).toBe(false);
     expect(vm.declinedFaceIds()).toEqual(['b']);
   });
+
+  it('unmarkDeclined reverses a decline and restores the face to moving', () => {
+    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
+    vm.markDeclined('a');
+    expect(vm.isDeclined('a')).toBe(true);
+    expect(vm.movingCount).toBe(1); // a is declined → not moving
+    vm.unmarkDeclined('a');
+    expect(vm.isDeclined('a')).toBe(false);
+    expect(vm.declinedFaceIds()).toEqual([]);
+    expect(vm.movingCount).toBe(2); // restored
+  });
 });

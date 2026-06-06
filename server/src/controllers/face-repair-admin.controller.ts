@@ -86,6 +86,6 @@ export class FaceRepairAdminController {
   @Authenticated({ admin: true })
   @Endpoint({ summary: 'Remove face-repair declines', history: new HistoryBuilder().added('v1') })
   removeFaceRepairDeclines(@Body() dto: FaceRepairDeclineRemoveRequestDto): Promise<FaceRepairDeclineRemovedDto> {
-    return this.service.removeDeclines(dto.ids) as Promise<FaceRepairDeclineRemovedDto>;
+    return this.service.removeDeclines(dto) as Promise<FaceRepairDeclineRemovedDto>;
   }
 }

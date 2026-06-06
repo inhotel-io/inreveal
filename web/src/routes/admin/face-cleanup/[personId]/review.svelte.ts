@@ -14,6 +14,7 @@ export interface ReviewModel {
   isExcluded(assetFaceId: string): boolean;
   excludeFaceIds(): string[];
   markDeclined(assetFaceId: string): void;
+  unmarkDeclined(assetFaceId: string): void;
   isDeclined(assetFaceId: string): boolean;
   declinedFaceIds(): string[];
 }
@@ -52,6 +53,10 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
 
     markDeclined(assetFaceId: string): void {
       declined.add(assetFaceId);
+    },
+
+    unmarkDeclined(assetFaceId: string): void {
+      declined.delete(assetFaceId);
     },
 
     isDeclined(assetFaceId: string): boolean {

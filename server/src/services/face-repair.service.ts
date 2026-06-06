@@ -459,8 +459,11 @@ export class FaceRepairService extends BaseService {
     return { declines: rows };
   }
 
-  async removeDeclines(ids: string[]): Promise<{ removed: number }> {
-    const removed = await this.faceRepairDeclineRepository.removeDeclines(ids);
+  async removeDeclines(input: {
+    ids?: string[];
+    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
+  }): Promise<{ removed: number }> {
+    const removed = await this.faceRepairDeclineRepository.removeDeclines(input);
     return { removed };
   }
 

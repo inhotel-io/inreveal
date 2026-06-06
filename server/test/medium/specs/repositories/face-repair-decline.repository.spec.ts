@@ -85,8 +85,25 @@ describe(FaceRepairDeclineRepository.name, () => {
     const list = await sut.listDeclines();
     const target = list.find((d) => d.personId === personP)!;
     expect(target.type).toBe('person');
-    const removed = await sut.removeDeclines([target.id]);
+    const removed = await sut.removeDeclines({ ids: [target.id] });
     expect(removed).toBe(1);
+  });
+
+  it('removes a face decline by its natural key (assetFaceId, suspectedOwnerId)', async () => {
+    const { faceId, personQ, declinedBy } = await seedFaceAndPersons(db);
+    await sut.createDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }], declinedBy });
+
+    // Undo path used by the review screen: it knows the face/owner pair, not the row id.
+    const removed = await sut.removeDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }] });
+    expect(removed).toBe(1);
+
+    const maps = await sut.getDeclineMaps();
+    expect(maps.declinedFaceOwners.has(faceId)).toBe(false);
+  });
+
+  it('removeDeclines with neither ids nor faces is a no-op', async () => {
+    const removed = await sut.removeDeclines({});
+    expect(removed).toBe(0);
   });
 
   it('person re-dismiss replaces the stored fingerprint (one row per person, last-write-wins)', async () => {

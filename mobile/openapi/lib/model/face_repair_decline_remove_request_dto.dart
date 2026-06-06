@@ -13,25 +13,31 @@ part of openapi.api;
 class FaceRepairDeclineRemoveRequestDto {
   /// Returns a new [FaceRepairDeclineRemoveRequestDto] instance.
   FaceRepairDeclineRemoveRequestDto({
+    this.faces = const [],
     this.ids = const [],
   });
+
+  List<FaceRepairDeclineRemoveRequestDtoFacesInner> faces;
 
   List<String> ids;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairDeclineRemoveRequestDto &&
+    _deepEquality.equals(other.faces, faces) &&
     _deepEquality.equals(other.ids, ids);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (faces.hashCode) +
     (ids.hashCode);
 
   @override
-  String toString() => 'FaceRepairDeclineRemoveRequestDto[ids=$ids]';
+  String toString() => 'FaceRepairDeclineRemoveRequestDto[faces=$faces, ids=$ids]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'faces'] = this.faces;
       json[r'ids'] = this.ids;
     return json;
   }
@@ -45,6 +51,7 @@ class FaceRepairDeclineRemoveRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairDeclineRemoveRequestDto(
+        faces: FaceRepairDeclineRemoveRequestDtoFacesInner.listFromJson(json[r'faces']),
         ids: json[r'ids'] is Iterable
             ? (json[r'ids'] as Iterable).cast<String>().toList(growable: false)
             : const [],
@@ -95,7 +102,6 @@ class FaceRepairDeclineRemoveRequestDto {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'ids',
   };
 }
 

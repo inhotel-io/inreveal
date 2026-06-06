@@ -137,11 +137,32 @@ export class FaceRepairDeclineRepository {
     }));
   }
 
-  async removeDeclines(ids: string[]): Promise<number> {
-    if (ids.length === 0) {
+  // Remove declines by row id and/or by face natural key. The declined-page "Undo" sends ids; the review
+  // screen's in-place undecline sends faces (it knows the (assetFaceId, suspectedOwnerId) pair but not the
+  // server-generated row id). Returns the total number of rows removed.
+  async removeDeclines(input: { ids?: string[]; faces?: FaceDeclineInput[] }): Promise<number> {
+    const ids = input.ids ?? [];
+    const faces = input.faces ?? [];
+    if (ids.length === 0 && faces.length === 0) {
       return 0;
     }
-    const rows = await this.db.deleteFrom('face_repair_decline').where('id', 'in', ids).returning('id').execute();
-    return rows.length;
+    return this.db.transaction().execute(async (trx) => {
+      let removed = 0;
+      if (ids.length > 0) {
+        const rows = await trx.deleteFrom('face_repair_decline').where('id', 'in', ids).returning('id').execute();
+        removed += rows.length;
+      }
+      for (const face of faces) {
+        const rows = await trx
+          .deleteFrom('face_repair_decline')
+          .where('type', '=', 'face')
+          .where('assetFaceId', '=', face.assetFaceId)
+          .where('suspectedOwnerId', '=', face.suspectedOwnerId)
+          .returning('id')
+          .execute();
+        removed += rows.length;
+      }
+      return removed;
+    });
   }
 }

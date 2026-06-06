@@ -152,7 +152,15 @@ export const FaceRepairDeclineListSchema = z
 export class FaceRepairDeclineListDto extends createZodDto(FaceRepairDeclineListSchema) {}
 
 export const FaceRepairDeclineRemoveRequestSchema = z
-  .object({ ids: z.array(z.uuidv4()).min(1) })
+  .object({
+    // z.uuid() (version-agnostic), NOT z.uuidv4(): face_repair_decline.id is a UUID **v7**
+    // (@PrimaryGeneratedUuidV7Column). z.uuidv4() enforces the version nibble == 4 and rejects v7 ids
+    // with a 400 — which broke "Undo" on the declined page. z.uuid() accepts any RFC 9562 version.
+    ids: z.array(z.uuid()).min(1).optional(),
+    // Remove face declines by their natural key. Lets the review screen undo a just-made per-face decline
+    // without first re-fetching the (server-generated) row id. assetFaceId/suspectedOwnerId are v4 entity ids.
+    faces: z.array(FaceDeclineSchema).min(1).optional(),
+  })
   .meta({ id: 'FaceRepairDeclineRemoveRequestDto' });
 export class FaceRepairDeclineRemoveRequestDto extends createZodDto(FaceRepairDeclineRemoveRequestSchema) {}
 

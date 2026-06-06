@@ -174,14 +174,37 @@ describe(FaceRepairAdminController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
-    it('should delegate to service.removeDeclines', async () => {
+    it('should delegate to service.removeDeclines (by id)', async () => {
       service.removeDeclines.mockResolvedValue({ removed: 1 });
       const { status } = await request(ctx.getHttpServer())
         .delete('/admin/face-repair/decline')
         .set('Authorization', 'Bearer token')
         .send({ ids: [uuid1] });
       expect(status).toBe(200);
-      expect(service.removeDeclines).toHaveBeenCalledWith([uuid1]);
+      expect(service.removeDeclines).toHaveBeenCalledWith({ ids: [uuid1] });
+    });
+
+    it('should accept a v7 row id (face_repair_decline.id is uuid v7)', async () => {
+      // Regression: z.uuidv4() rejected v7 ids → the declined-page Undo 400'd. z.uuid() must accept them.
+      const uuidV7 = '01890000-0000-7000-8000-000000000001';
+      service.removeDeclines.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .delete('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ ids: [uuidV7] });
+      expect(status).toBe(200);
+      expect(service.removeDeclines).toHaveBeenCalledWith({ ids: [uuidV7] });
+    });
+
+    it('should delegate to service.removeDeclines (by face natural key)', async () => {
+      const uuid2 = '00000000-0000-4000-a000-000000000002';
+      service.removeDeclines.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .delete('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
+      expect(status).toBe(200);
+      expect(service.removeDeclines).toHaveBeenCalledWith({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
     });
 
     it('should reject empty ids array with 400', async () => {
