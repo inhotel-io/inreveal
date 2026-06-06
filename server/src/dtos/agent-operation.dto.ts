@@ -730,6 +730,32 @@ const personUpdateOperationSchema = z
   })
   .superRefine((operation, ctx) => validatePersonTarget(operation, ctx));
 
+const personMergePayloadSchema = z.strictObject({
+  sourcePersonIds: z.array(uuid).min(1).max(50),
+});
+
+const personMergeOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.PersonMerge).meta({ id: 'AgentPersonMergeOperationType' }),
+    summary,
+    targetKind: PersonTargetKindSchema,
+    targetId: uuid.optional(),
+    // Always High risk — irreversible: faces reassigned, source person deleted
+    riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.High),
+    enabled: operationDefaults.enabled,
+    payload: personMergePayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validatePersonTarget(operation, ctx);
+    if (operation.targetId && operation.payload?.sourcePersonIds?.includes(operation.targetId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['payload', 'sourcePersonIds'],
+        message: 'cannot merge a person into itself',
+      });
+    }
+  });
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -770,6 +796,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   shareLinkCreateOperationSchema,
   shareLinkCreateAlbumOperationSchema,
   personUpdateOperationSchema,
+  personMergeOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>

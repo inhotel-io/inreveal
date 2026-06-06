@@ -26,7 +26,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetSelectionHandleId,
   });
 
-  AgentPersonUpdateOperationType type;
+  AgentPersonMergeOperationType type;
 
   String summary;
 
@@ -50,7 +50,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload payload;
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload payload;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -155,13 +155,13 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentPersonUpdateOperationType.fromJson(json[r'type'])!,
+        type: AgentPersonMergeOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationPersonTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload.fromJson(json[r'payload'])!,
+        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf26Payload.fromJson(json[r'payload'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
         assetIds: json[r'assetIds'] is Iterable

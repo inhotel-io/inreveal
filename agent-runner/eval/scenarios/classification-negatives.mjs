@@ -236,4 +236,11 @@ export default [
     prompt: 'hide the Family album',
     expect: { kind: 'none' },
   },
+  {
+    // merge_people must NOT match prompts about merging photos or albums (no person object).
+    id: 'neg.person.merge-nopeople',
+    category: 'negatives',
+    prompt: 'merge duplicate photos',
+    expect: { kind: 'cleanup_duplicates' },
+  },
 ];

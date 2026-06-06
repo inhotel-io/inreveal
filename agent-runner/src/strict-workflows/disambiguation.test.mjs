@@ -168,6 +168,9 @@ const CASES = [
   ['show Alex', 'hide_person'],
   // hide_person must NOT steal album hide prompts (container noun guard)
   ['hide the Family album', 'none'],
+  // merge_people (merge verb + into/and + two person names)
+  ['merge Alejandra into Karina', 'merge_people'],
+  ['merge Alex and Karina', 'merge_people'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {

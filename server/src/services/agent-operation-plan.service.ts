@@ -2006,7 +2006,10 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow stacking assets');
     }
 
-    if (type === AgentOperationType.PersonUpdate && !writeScope.managePeople) {
+    if (
+      (type === AgentOperationType.PersonUpdate || type === AgentOperationType.PersonMerge) &&
+      !writeScope.managePeople
+    ) {
       throw new BadRequestException('Agent permission policy does not allow managing people');
     }
   }
@@ -2864,6 +2867,10 @@ export class AgentOperationPlanService {
         return this.applyPersonUpdateOperation(auth, operation);
       }
 
+      case AgentOperationType.PersonMerge: {
+        return this.applyPersonMergeOperation(auth, operation);
+      }
+
       default: {
         throw new BadRequestException(`${operation.type} is not supported for apply yet`);
       }
@@ -3311,6 +3318,22 @@ export class AgentOperationPlanService {
       birthDate: payload.birthDate,
       isHidden: payload.isHidden,
     });
+
+    return this.appliedOperation(operation.id, { personId });
+  }
+
+  private async applyPersonMergeOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const payload = this.requireObjectPayload(operation.payload) as { sourcePersonIds: string[] };
+
+    const personId = operation.targetId;
+    if (!personId) {
+      throw new BadRequestException('person.merge requires a targetId (keep person id)');
+    }
+
+    await this.personService.mergePerson(auth, personId, { ids: payload.sourcePersonIds });
 
     return this.appliedOperation(operation.id, { personId });
   }
