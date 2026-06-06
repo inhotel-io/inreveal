@@ -1019,12 +1019,22 @@ export type TrimParameters = {
     /** Start time in seconds */
     startTime: number;
 };
+export type AdjustParameters = {
+    /** Auto-enhance (contrast stretch) */
+    autoEnhance?: boolean;
+    /** Brightness adjustment level */
+    brightness?: TonalLevel;
+    /** Contrast adjustment level */
+    contrast?: TonalLevel;
+    /** Saturation adjustment level */
+    saturation?: TonalLevel;
+};
 export type AssetEditActionItemResponseDto = {
     action: AssetEditAction;
     /** Asset edit ID */
     id: string;
-    /** List of edit actions to apply (crop, rotate, mirror, or trim) */
-    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters;
+    /** List of edit actions to apply (crop, rotate, mirror, trim, or adjust) */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | AdjustParameters;
 };
 export type AssetEditsResponseDto = {
     /** Asset ID these edits belong to */
@@ -1034,8 +1044,8 @@ export type AssetEditsResponseDto = {
 };
 export type AssetEditActionItemDto = {
     action: AssetEditAction;
-    /** List of edit actions to apply (crop, rotate, mirror, or trim) */
-    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters;
+    /** List of edit actions to apply (crop, rotate, mirror, trim, or adjust) */
+    parameters: CropParameters | RotateParameters | MirrorParameters | TrimParameters | AdjustParameters;
 };
 export type AssetEditsCreateDto = {
     /** List of edit actions to apply (crop, rotate, mirror, or trim) */
@@ -9114,11 +9124,20 @@ export enum AssetEditAction {
     Crop = "crop",
     Rotate = "rotate",
     Mirror = "mirror",
-    Trim = "trim"
+    Trim = "trim",
+    Adjust = "adjust"
 }
 export enum MirrorAxis {
     Horizontal = "horizontal",
     Vertical = "vertical"
+}
+export enum TonalLevel {
+    StrongDecrease = "strong_decrease",
+    ModerateDecrease = "moderate_decrease",
+    SlightDecrease = "slight_decrease",
+    SlightIncrease = "slight_increase",
+    ModerateIncrease = "moderate_increase",
+    StrongIncrease = "strong_increase"
 }
 export enum AssetMediaSize {
     Original = "original",
