@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ShallowDehydrateObject } from 'kysely';
 import _ from 'lodash';
 import { DateTime, Duration } from 'luxon';
 import { isAbsolute } from 'node:path';
+import { Readable } from 'node:stream';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
 import { AssetFace, AssetFile } from 'src/database';
@@ -23,6 +24,7 @@ import {
   UpdateAssetDto,
   mapStats,
 } from 'src/dtos/asset.dto';
+import { AssetMediaSize } from 'src/dtos/asset-media.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AssetEditAction,
@@ -38,6 +40,7 @@ import {
   AssetStatus,
   AssetType,
   AssetVisibility,
+  CacheControl,
   JobName,
   JobStatus,
   Permission,
@@ -48,6 +51,7 @@ import { BaseService } from 'src/services/base.service';
 import { StorageService } from 'src/services/storage.service';
 import { JobItem, JobOf } from 'src/types';
 import { requireElevatedPermission } from 'src/utils/access';
+import { ImmichStreamResponse } from 'src/utils/file';
 import {
   getAssetFiles,
   getDimensions,
@@ -694,6 +698,38 @@ export class AssetService extends BaseService {
       assetId: id,
       edits,
     };
+  }
+
+  async previewAssetEdits(
+    auth: AuthDto,
+    id: string,
+    dto: AssetEditsCreateDto,
+    size: AssetMediaSize,
+  ): Promise<ImmichStreamResponse> {
+    await this.requireAccess({ auth, permission: Permission.AssetRead, ids: [id] });
+
+    const asset = await this.assetRepository.getById(id);
+    if (!asset) {
+      throw new NotFoundException('Asset not found');
+    }
+    if (asset.type !== AssetType.Image) {
+      throw new BadRequestException('Preview is only available for images');
+    }
+
+    const fileType = size === AssetMediaSize.THUMBNAIL ? AssetFileType.Thumbnail : AssetFileType.Preview;
+    const { path } = await this.assetRepository.getForThumbnail(id, fileType, false);
+    if (!path) {
+      throw new NotFoundException('Asset media not available');
+    }
+
+    const source = await this.storageRepository.readFile(path);
+    const rendered = await this.mediaRepository.renderEditedImage(source, dto.edits as AssetEditActionItem[]);
+
+    return new ImmichStreamResponse({
+      stream: Readable.from(rendered),
+      contentType: 'image/jpeg',
+      cacheControl: CacheControl.None,
+    });
   }
 
   async editAsset(auth: AuthDto, id: string, dto: AssetEditsCreateDto): Promise<AssetEditsResponseDto> {
