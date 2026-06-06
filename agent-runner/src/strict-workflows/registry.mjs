@@ -25,6 +25,9 @@ import { shareAssetsWorkflow } from './workflows/share-assets.mjs';
 import { stackAssetsWorkflow } from './workflows/stack-assets.mjs';
 import { unstackAssetsWorkflow } from './workflows/unstack-assets.mjs';
 import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.mjs';
+import { renamePersonWorkflow } from './workflows/rename-person.mjs';
+import { setPersonBirthdateWorkflow } from './workflows/set-person-birthdate.mjs';
+import { hidePersonWorkflow } from './workflows/hide-person.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
 // runtime edit. Registering here makes a workflow both regex-routable (each
@@ -98,7 +101,10 @@ const WORKFLOW_FACTORIES = Object.freeze([
   createAlbumFromSourceWorkflow,
   createSpaceFromSourceWorkflow,
   renameOrDescribeSpaceWorkflow,
+  renamePersonWorkflow,
   renameOrDescribeAlbumWorkflow,
+  setPersonBirthdateWorkflow,
+  hidePersonWorkflow,
   setAlbumCoverWorkflow,
   archiveAssetsWorkflow,
   cleanupDuplicatesWorkflow,

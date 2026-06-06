@@ -8896,4 +8896,40 @@ describe(AgentToolService.name, () => {
       }),
     );
   });
+
+  it('searchPeople passes includeHidden:true to getByName when set', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const personId = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: personId, name: 'Alex', faceAssetId: null, ownerId: auth.user.id } as never,
+    ]);
+
+    await sut.searchPeople(auth, session.id, { name: 'Alex', includeHidden: true });
+
+    expect(personRepository.getByName).toHaveBeenCalledWith(auth.user.id, 'Alex', { withHidden: true });
+  });
+
+  it('searchPeople defaults withHidden to false when includeHidden is omitted', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+    const personId = newUuid();
+
+    sessionRepository.getById.mockResolvedValue(session);
+    personRepository.getByName.mockResolvedValue([
+      { id: personId, name: 'Alex', faceAssetId: null, ownerId: auth.user.id } as never,
+    ]);
+
+    await sut.searchPeople(auth, session.id, { name: 'Alex' });
+
+    expect(personRepository.getByName).toHaveBeenCalledWith(auth.user.id, 'Alex', { withHidden: false });
+  });
 });

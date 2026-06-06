@@ -871,6 +871,7 @@ const setup = () => {
     {} as never,
     {} as never,
     activityService as never,
+    {} as never,
   );
   const mcpService = new AgentMcpService(
     new AgentMcpToolRegistryService(mcpToolContractService),

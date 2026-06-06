@@ -220,4 +220,20 @@ export default [
     prompt: 'unstack the best ones',
     expect: { kind: 'none' },
   },
+
+  // person workflow boundaries -------------------------------------------------
+  {
+    // rename_person must NOT steal album renames — these route to rename_or_describe_album.
+    id: 'neg.person.rename-album',
+    category: 'negatives',
+    prompt: 'rename the Family album to Family 2026',
+    expect: { kind: 'rename_or_describe_album' },
+  },
+  {
+    // hide_person must NOT steal album hide prompts (container noun guard).
+    id: 'neg.person.hide-album',
+    category: 'negatives',
+    prompt: 'hide the Family album',
+    expect: { kind: 'none' },
+  },
 ];

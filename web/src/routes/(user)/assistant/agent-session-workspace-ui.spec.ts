@@ -79,6 +79,7 @@ const session = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSession
         trashAssets: true,
         createSharedLinks: false,
         manageStacks: false,
+        managePeople: false,
       },
     },
     initialContextSnapshot: {},
