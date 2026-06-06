@@ -733,7 +733,7 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     planTool: 'proposeAssetBatchFromSelection',
     supportsContinuation: false,
     matrixRow: Object.freeze({
-      capability: 'Adjust assets (brightness/contrast/saturation/auto-enhance)',
+      capability: 'Adjust assets (tonal)',
       tier: 'Solid now',
       workflowOrBoundary:
         'Pi resolves the source + tonal adjustment params; Gallery owns the batch asset.adjust plan from the handle.',
