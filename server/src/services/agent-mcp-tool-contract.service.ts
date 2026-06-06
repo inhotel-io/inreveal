@@ -22,8 +22,6 @@ const exampleAlbumId = '00000000-0000-4000-8000-000000000010';
 const exampleSpaceId = '00000000-0000-4000-8000-000000000020';
 const exampleSpacePersonId = '00000000-0000-4000-8000-000000000021';
 const exampleTagId = '00000000-0000-4000-8000-000000000030';
-const examplePersonId = '00000000-0000-4000-8000-000000000040';
-const exampleSecondPersonId = '00000000-0000-4000-8000-000000000041';
 const exampleToolCallId = '00000000-0000-4000-8000-000000000111';
 const examplePlanId = '00000000-0000-4000-8000-000000000222';
 const exampleSelectionHandleId = '00000000-0000-4000-8000-000000000333';
@@ -112,24 +110,6 @@ const metadataFieldsMode: AgentMcpArgumentMode = {
     'Use when the task only needs specific field groups such as filename, rating, tags, location, camera, favorite, visibility, type, or dates.',
 };
 
-const readBasicMetadataExample: AgentMcpToolExample = {
-  name: 'read-basic-metadata',
-  description: 'Read basic type and date metadata for selected assets.',
-  arguments: { assetIds: [exampleAssetId], detail: 'basic' },
-};
-
-const readSelectedMetadataFieldsExample: AgentMcpToolExample = {
-  name: 'read-selected-metadata-fields',
-  description: 'Read selected metadata field groups for selected assets.',
-  arguments: { assetIds: [exampleAssetId], fields: ['filename', 'rating', 'tags'] },
-};
-
-const readTechnicalFieldsForSelectedAssetsExample: AgentMcpToolExample = {
-  name: 'read-technical-fields-for-selected-assets',
-  description: 'Read exact camera, date, and filename fields for selected assets.',
-  arguments: { assetIds: [exampleAssetId], fields: ['camera', 'dates', 'filename'] },
-};
-
 const toolCallArgumentsMissingMistake: AgentMcpCommonMistake = {
   id: 'tool-call-arguments-missing',
   match: { missingField: 'arguments', requestShape: 'json-rpc' },
@@ -209,13 +189,7 @@ const readAssetMetadataContract: AgentMcpToolContract<AgentToolName.ReadAssetMet
   usage:
     'Legacy exact non-search ID usage only. For search results, use readSelectionMetadata with selectionHandle.id instead. Use assetIds with detail for a metadata preset: basic, descriptive, technical, or allSafe. Use assetIds with fields for exact metadata field groups: type, dates, location, camera, tags, rating, filename, favorite, visibility, quality. Use only toolCallId when retrying a Gallery-approved request.',
   argumentModes: [metadataDetailMode, metadataFieldsMode, approvedRetryMode],
-  examples: [
-    assetIdsExample,
-    readBasicMetadataExample,
-    readSelectedMetadataFieldsExample,
-    readTechnicalFieldsForSelectedAssetsExample,
-    approvedRetryExample,
-  ],
+  examples: [assetIdsExample, approvedRetryExample],
   commonMistakes: assetIdMistakes,
   approvalRetry,
   safety,
@@ -306,17 +280,6 @@ const curateSelectionContract: AgentMcpToolContract<AgentToolName.CurateSelectio
         sampleSize: 5,
       },
     },
-    {
-      name: 'curate-cover-candidate',
-      description: 'Select one image cover candidate from a search handle.',
-      arguments: {
-        selectionHandleId: exampleSelectionHandleId,
-        targetCount: 1,
-        strategy: 'cover-candidate',
-        constraints: { types: ['IMAGE'], excludeVideos: true },
-        sampleSize: 1,
-      },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -396,259 +359,6 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         limit: 50,
       },
     },
-    {
-      name: 'compact-date-location-search',
-      description: 'Search handle-first results for a known date and place.',
-      arguments: {
-        detail: 'handle',
-        filters: {
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-18T23:59:59.999Z',
-          city: 'Berlin',
-          country: 'Germany',
-        },
-        limit: 50,
-      },
-    },
-    {
-      name: 'summary-sample-search',
-      description: 'Request a small representative sample with only needed fields.',
-      arguments: {
-        detail: 'summary',
-        fields: ['dates', 'location'],
-        sampleSize: 3,
-        filters: { city: 'Berlin', country: 'Germany' },
-        limit: 50,
-      },
-    },
-    {
-      name: 'visual-curation-candidate-search',
-      description: 'Find visual curation candidates with a bounded handle before narrowing to preview reads.',
-      arguments: {
-        mode: 'smart',
-        query: 'best beach sunset photos',
-        detail: 'handle',
-        limit: 25,
-      },
-    },
-    {
-      name: 'large-album-page-search',
-      description: 'Page a broad album-building search without requesting full metadata.',
-      arguments: {
-        detail: 'handle',
-        filters: { isNotInAlbum: true },
-        limit: 50,
-        page: 1,
-        order: 'desc',
-      },
-    },
-    {
-      name: 'large-selection-handle-search',
-      description: 'Create a compact server-side selection handle for a bounded large result.',
-      arguments: {
-        detail: 'handle',
-        sampleSize: 5,
-        filters: { isNotInAlbum: true },
-        limit: 500,
-        page: 1,
-      },
-    },
-    {
-      name: 'metadata-page-search',
-      description: 'Search a bounded metadata result page.',
-      arguments: {
-        mode: 'metadata',
-        filters: {
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-18T23:59:59.999Z',
-          city: 'Berlin',
-          country: 'Germany',
-        },
-        limit: 50,
-        page: 1,
-        order: 'desc',
-      },
-    },
-    {
-      name: 'metadata-next-page-search',
-      description: 'Continue a previous metadata search using the returned nextPage value.',
-      arguments: {
-        mode: 'metadata',
-        filters: {
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-18T23:59:59.999Z',
-          city: 'Berlin',
-          country: 'Germany',
-        },
-        limit: 50,
-        page: 2,
-        order: 'desc',
-      },
-    },
-    {
-      name: 'unalbumed-berlin-may-search',
-      description: 'Find unalbumed Berlin photos from May.',
-      arguments: {
-        mode: 'metadata',
-        filters: {
-          takenAfter: '2026-05-01T00:00:00.000Z',
-          takenBefore: '2026-05-31T23:59:59.999Z',
-          city: 'Berlin',
-          country: 'Germany',
-          isNotInAlbum: true,
-        },
-        limit: 50,
-        page: 1,
-        order: 'desc',
-      },
-    },
-    {
-      name: 'five-star-video-search',
-      description: 'Find five-star videos.',
-      arguments: {
-        filters: {
-          rating: 5,
-          type: 'VIDEO',
-        },
-        limit: 50,
-      },
-    },
-    {
-      name: 'ocr-invoice-screenshot-search',
-      description: 'Start invoice screenshot discovery using supported OCR text, image type, and date filters.',
-      arguments: {
-        mode: 'ocr',
-        query: 'invoice',
-        filters: {
-          takenAfter: '2024-01-01T00:00:00.000Z',
-          takenBefore: '2024-12-31T23:59:59.999Z',
-          type: 'IMAGE',
-        },
-        limit: 50,
-      },
-    },
-    {
-      name: 'favorite-rating-search',
-      description: 'Search favorite five-star assets.',
-      arguments: {
-        filters: {
-          isFavorite: true,
-          rating: 5,
-        },
-        limit: 25,
-      },
-    },
-    {
-      name: 'space-filter-search',
-      description: 'Search assets in a known shared space for known space people.',
-      arguments: {
-        filters: {
-          spaceId: exampleSpaceId,
-          spacePersonIds: [exampleSpacePersonId],
-        },
-        limit: 25,
-      },
-    },
-    {
-      name: 'person-filter-search',
-      description: 'Search assets for known people resolved by id.',
-      arguments: {
-        filters: {
-          personIds: [examplePersonId],
-        },
-        limit: 25,
-      },
-    },
-    {
-      name: 'search-resolved-pierre-aurelia-people',
-      description:
-        'Search January 2026 South Africa photos after resolving "Pierre OR Aurelia"; keep both IDs in the same personIds array.',
-      arguments: {
-        detail: 'handle',
-        filters: {
-          country: 'South Africa',
-          takenAfter: '2026-01-01T00:00:00.000Z',
-          takenBefore: '2026-01-31T23:59:59.999Z',
-          personIds: [examplePersonId, exampleSecondPersonId],
-        },
-        limit: 50,
-      },
-    },
-    {
-      name: 'search-resolved-family-space-people',
-      description:
-        'Search after resolving a named person inside a shared space; spaceId must be sent with the resolved spacePersonIds.',
-      arguments: {
-        detail: 'handle',
-        filters: {
-          spaceId: exampleSpaceId,
-          spacePersonIds: [exampleSpacePersonId],
-        },
-        limit: 50,
-      },
-    },
-    {
-      name: 'space-id-filter-search',
-      description: 'Search assets in a known shared space resolved by id.',
-      arguments: {
-        filters: {
-          spaceId: exampleSpaceId,
-        },
-        limit: 25,
-      },
-    },
-    {
-      name: 'resolved-id-filter-search',
-      description: 'Search with ids returned by resolveAssetSearchFilters.',
-      arguments: {
-        filters: {
-          tagIds: [exampleTagId],
-          albumIds: [exampleAlbumId],
-        },
-        limit: 25,
-      },
-    },
-    {
-      name: 'smart-text-search',
-      description: 'Search semantically across visible assets.',
-      arguments: {
-        mode: 'smart',
-        query: 'beach sunset',
-        filters: { withSharedSpaces: true },
-        limit: 25,
-      },
-    },
-    {
-      name: 'ocr-text-search',
-      description: 'Search OCR text within visible assets.',
-      arguments: {
-        mode: 'ocr',
-        query: 'invoice',
-        filters: { takenAfter: '2024-01-01T00:00:00.000Z' },
-        limit: 25,
-      },
-    },
-    {
-      name: 'description-text-search',
-      description: 'Search visible asset descriptions.',
-      arguments: {
-        mode: 'description',
-        query: 'birthday',
-        filters: {},
-        limit: 25,
-      },
-    },
-    {
-      name: 'filename-text-search',
-      description: 'Search visible asset filenames.',
-      arguments: {
-        mode: 'filename',
-        query: 'IMG_2026',
-        filters: {},
-        limit: 25,
-      },
-    },
-    approvedRetryExample,
   ],
   commonMistakes: [
     {
@@ -682,97 +392,97 @@ const searchAssetsContract: AgentMcpToolContract<AgentToolName.SearchAssets> = {
         ],
       },
       hint: 'Place supported metadata filters for date, location, favorite, rating, album, tag, camera, media, people, space, shared-space, and visibility inside the filters object.',
-      exampleName: 'metadata-page-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-query-with-metadata-mode',
       match: { issuePath: 'query', messageIncludes: 'query is only supported' },
       hint: 'Use mode smart, description, ocr, or filename with query for text search, or omit query for metadata-only search.',
-      exampleName: 'smart-text-search',
+      exampleName: 'empty-search',
     },
     {
       id: 'search-space-person-without-space',
       match: { issuePath: 'filters.spacePersonIds', messageIncludes: 'spacePersonIds requires spaceId' },
       hint: 'spacePersonIds requires filters.spaceId. Resolve or choose the space first, then call searchAssets with both fields under filters.',
-      exampleName: 'space-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-filter-name-in-tag-ids',
       match: { issuePath: 'filters.tagIds.0' },
       hint: 'Use resolveAssetSearchFilters for user-facing tag names, then call searchAssets with the returned tagIds under filters.',
-      exampleName: 'resolved-id-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-filter-name-in-album-ids',
       match: { issuePath: 'filters.albumIds.0' },
       hint: 'Use resolveAssetSearchFilters for user-facing album names, then call searchAssets with the returned albumIds under filters.',
-      exampleName: 'resolved-id-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-filter-name-in-person-ids',
       match: { issuePath: 'filters.personIds.0' },
       hint: 'Use resolveAssetSearchFilters for user-facing person names, then call searchAssets with the returned personIds under filters.',
-      exampleName: 'person-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-filter-name-in-space-id',
       match: { issuePath: 'filters.spaceId' },
       hint: 'Use resolveAssetSearchFilters for user-facing space names, then call searchAssets with the returned spaceId under filters.',
-      exampleName: 'space-id-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-filter-name-in-space-person-ids',
       match: { issuePath: 'filters.spacePersonIds.0' },
       hint: 'Use resolveAssetSearchFilters for user-facing shared-space person names, then call searchAssets with the returned spacePersonIds under filters.',
-      exampleName: 'space-filter-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-combined-filters-and-tool-call-id',
       match: { messageIncludes: 'Provide either search fields or toolCallId, not both' },
       hint: 'Use either mode, query, filters, limit, page, or order for a new search, or only toolCallId for an approved retry.',
-      exampleName: 'approved-retry',
+      exampleName: 'empty-search',
     },
     {
       id: 'search-limit-out-of-range',
       match: { issuePath: 'limit' },
       hint: 'Use a positive integer limit no greater than 10000.',
-      exampleName: 'favorite-rating-search',
+      exampleName: 'empty-search',
     },
     {
       id: 'search-large-limit',
       match: { issuePath: 'limit', messageIncludes: 'limit 1000 ' },
       hint: 'Use limit up to 1000 only for bounded handle-first searches where the user supplied a clear album, space, date, person, tag, rating, or media-type scope; otherwise page with nextPage or ask a narrowing question.',
-      exampleName: 'large-album-page-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-broad-full-metadata',
       match: { messageIncludes: 'metadata detail is too broad' },
       hint: 'Search for a handle/sourceRef first, then inspect summary samples or exact fields only for a small inspected set. Do not request full metadata for broad searches.',
-      exampleName: 'compact-date-location-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-preview-before-shortlist',
       match: { messageIncludes: 'preview reads require selected asset ids' },
       hint: 'For visual curation, start with a bounded handle/sourceRef and summary samples; use preview reads only for exact small non-search assetIds after narrowing.',
-      exampleName: 'visual-curation-candidate-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-truncated-needs-more-detail',
       match: { messageIncludes: 'resultSize.truncated' },
       hint: 'When resultSize.truncated is true, request fewer assets, page with nextPage, or ask one narrowing question before requesting more fields.',
-      exampleName: 'summary-sample-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-page-continuation',
       match: { issuePath: 'page' },
       hint: 'Use the returned nextPage value as page, and keep the same mode, query, filters, order, and limit from the previous bounded search.',
-      exampleName: 'metadata-next-page-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'search-order-unavailable',
       match: { issuePath: 'order' },
       hint: 'Only order desc is executable in the current slice. Non-desc order is a contract field for a later slice.',
-      exampleName: 'metadata-page-search',
+      exampleName: 'bounded-date-location-search',
     },
     {
       id: 'tool-call-arguments-missing',
@@ -804,11 +514,6 @@ const findTripCandidatesContract: AgentMcpToolContract<AgentToolName.FindTripCan
       description: 'Find a recent USA trip candidate.',
       arguments: { placeHint: 'USA' },
     },
-    {
-      name: 'recent-trip-without-place',
-      description: 'Find recent trip candidates without a place hint.',
-      arguments: { lookbackDays: 180, maxCandidates: 3 },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -822,13 +527,13 @@ const findTripCandidatesContract: AgentMcpToolContract<AgentToolName.FindTripCan
       id: 'trip-candidates-invalid-lookback-days',
       match: { issuePath: 'lookbackDays' },
       hint: 'Use lookbackDays between 1 and 365.',
-      exampleName: 'recent-trip-without-place',
+      exampleName: 'recent-trip-to-place',
     },
     {
       id: 'trip-candidates-invalid-max-candidates',
       match: { issuePath: 'maxCandidates' },
       hint: 'Use maxCandidates between 1 and 10.',
-      exampleName: 'recent-trip-without-place',
+      exampleName: 'recent-trip-to-place',
     },
   ],
   approvalRetry,
@@ -871,11 +576,6 @@ const resolveLocationContract: AgentMcpToolContract<AgentToolName.ResolveLocatio
       name: 'resolve-paris-matched',
       description: 'Forward-geocode "Paris" — likely returns matched with Île-de-France coordinates.',
       arguments: { query: 'Paris, France' },
-    },
-    {
-      name: 'resolve-paris-ambiguous',
-      description: 'Forward-geocode "Paris" without a country — may return ambiguous with FR and US choices.',
-      arguments: { query: 'Paris' },
     },
     approvedRetryExample,
   ],
@@ -920,11 +620,6 @@ const searchPeopleContract: AgentMcpToolContract<AgentToolName.SearchPeople> = {
       description: 'Search for a person named "Alice" — likely returns matched with person id.',
       arguments: { name: 'Alice' },
     },
-    {
-      name: 'search-john-ambiguous',
-      description: 'Search for "John" — may return ambiguous if multiple people named John exist.',
-      arguments: { name: 'John' },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -961,24 +656,6 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
       description: 'Resolve album and tag names before searching.',
       arguments: { tags: ['Travel'], albums: ['Berlin'] },
     },
-    {
-      name: 'resolve-alex-family-space-filters',
-      description: 'Resolve a user-facing person name inside a shared space before searching.',
-      arguments: {
-        people: ['Alex'],
-        spaces: ['Family'],
-      },
-    },
-    {
-      name: 'resolve-space-person-filters',
-      description: 'Resolve shared space and person names before searching shared-space assets.',
-      arguments: { people: ['Pierre'], spaces: ['Family'] },
-    },
-    {
-      name: 'resolve-pierre-aurelia-people',
-      description: 'Resolve people from "Pierre OR Aurelia" before searching.',
-      arguments: { people: ['Pierre', 'Aurelia'] },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -998,7 +675,7 @@ const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.Reso
       id: 'resolver-scope-conflict',
       match: { issuePath: 'scope.withSharedSpaces', messageIncludes: 'Cannot use both scope.spaceId' },
       hint: 'Use either scope.spaceId for one shared space or scope.withSharedSpaces for all visible shared spaces.',
-      exampleName: 'resolve-space-person-filters',
+      exampleName: 'resolve-named-filters',
     },
     {
       id: 'tool-call-arguments-missing',
@@ -1193,11 +870,6 @@ const listDuplicateGroupsContract: AgentMcpToolContract<AgentToolName.ListDuplic
       description: 'List duplicate groups (up to the default 50).',
       arguments: {},
     },
-    {
-      name: 'list-duplicate-groups-capped',
-      description: 'List at most 10 duplicate groups.',
-      arguments: { maxGroups: 10 },
-    },
     approvedRetryExample,
   ],
   commonMistakes: [
@@ -1382,26 +1054,6 @@ const planIdMode: AgentMcpArgumentMode = {
   whenToUse: 'Use when revising or summarizing a plan Gallery already created.',
 };
 
-const createEmptyAlbumExample: AgentMcpToolExample = {
-  name: 'create-empty-album',
-  description: 'Create a new empty album for later review.',
-  arguments: {
-    summary: 'Create today test album.',
-    operations: [
-      {
-        type: AgentOperationType.AlbumCreate,
-        summary: 'Create today test album.',
-        targetKind: AgentOperationTargetKind.NewAlbum,
-        temporaryTargetId: 'tmp-today-test',
-        payload: {
-          albumName: "today's test",
-          description: 'Test album for recently uploaded photos.',
-        },
-      },
-    ],
-  },
-};
-
 const createAlbumAndAddAssetsExample: AgentMcpToolExample = {
   name: 'create-album-and-add-assets',
   description: 'Create a new album and add selected assets to it.',
@@ -1426,39 +1078,8 @@ const createAlbumAndAddAssetsExample: AgentMcpToolExample = {
   },
 };
 
-const createAlbumFromSelectionHandleExample: AgentMcpToolExample = {
-  name: 'create-album-from-selection-handle',
-  description: 'Create an album and add a server-side selection handle.',
-  arguments: {
-    summary: 'Create an album from the selected search result.',
-    operations: [
-      {
-        type: AgentOperationType.AlbumCreate,
-        summary: 'Create album.',
-        targetKind: AgentOperationTargetKind.NewAlbum,
-        temporaryTargetId: 'selection-album',
-        payload: { albumName: 'Selected photos', description: '' },
-        riskLevel: 'low',
-        enabled: true,
-      },
-      {
-        type: AgentOperationType.AlbumAddAssets,
-        summary: 'Add selected photos.',
-        targetKind: AgentOperationTargetKind.NewAlbum,
-        temporaryTargetId: 'selection-album',
-        assetSelectionHandleId: '00000000-0000-4000-8000-000000000333',
-        payload: {},
-        riskLevel: 'medium',
-        enabled: true,
-      },
-    ],
-  },
-};
-
 const planningProposalExamples: AgentMcpToolExample[] = [
-  createEmptyAlbumExample,
   createAlbumAndAddAssetsExample,
-  createAlbumFromSelectionHandleExample,
   {
     name: 'add-assets-to-existing-album',
     description: 'Add selected assets to an existing album.',
@@ -1475,368 +1096,6 @@ const planningProposalExamples: AgentMcpToolExample[] = [
       ],
     },
   },
-  {
-    name: 'remove-assets-from-existing-album',
-    description: 'Remove selected assets from an existing album.',
-    arguments: {
-      summary: 'Remove selected photos from an album.',
-      operations: [
-        {
-          type: AgentOperationType.AlbumRemoveAssets,
-          summary: 'Remove selected photos.',
-          targetKind: AgentOperationTargetKind.ExistingAlbum,
-          targetId: exampleAlbumId,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: {},
-        },
-      ],
-    },
-  },
-  {
-    name: 'update-album-details',
-    description: 'Rename or describe an existing album.',
-    arguments: {
-      summary: 'Update album details.',
-      operations: [
-        {
-          type: AgentOperationType.AlbumUpdateDetails,
-          summary: 'Rename album.',
-          targetKind: AgentOperationTargetKind.ExistingAlbum,
-          targetId: exampleAlbumId,
-          payload: { albumName: 'Today highlights', description: 'Curated recent photos.' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'set-album-cover',
-    description: 'Set an existing album cover from a selected asset.',
-    arguments: {
-      summary: 'Set album cover.',
-      operations: [
-        {
-          type: AgentOperationType.AlbumSetCover,
-          summary: 'Set cover photo.',
-          targetKind: AgentOperationTargetKind.ExistingAlbum,
-          targetId: exampleAlbumId,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: {},
-        },
-      ],
-    },
-  },
-  {
-    name: 'create-space',
-    description: 'Create a new shared space.',
-    arguments: {
-      summary: 'Create a family space.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceCreate,
-          summary: 'Create Family space.',
-          targetKind: AgentOperationTargetKind.NewSpace,
-          temporaryTargetId: 'tmp-family-space',
-          payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'create-space-and-add-assets',
-    description: 'Create a new shared space and add selected assets.',
-    arguments: {
-      summary: 'Create a family space and add selected photos.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceCreate,
-          summary: 'Create Family space.',
-          targetKind: AgentOperationTargetKind.NewSpace,
-          temporaryTargetId: 'tmp-family-space',
-          payload: { spaceName: 'Family', description: 'Shared family photos.', color: 'blue' },
-        },
-        {
-          type: AgentOperationType.SpaceAddAssets,
-          summary: 'Add selected photos to Family space.',
-          targetKind: AgentOperationTargetKind.NewSpace,
-          temporaryTargetId: 'tmp-family-space',
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: {},
-        },
-      ],
-    },
-  },
-  {
-    name: 'add-assets-to-existing-space',
-    description: 'Add selected assets to an existing shared space.',
-    arguments: {
-      summary: 'Add selected photos to an existing space.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceAddAssets,
-          summary: 'Add selected photos to Family space.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: {},
-        },
-      ],
-    },
-  },
-  {
-    name: 'remove-assets-from-existing-space',
-    description: 'Remove selected assets from an existing shared space.',
-    arguments: {
-      summary: 'Remove selected photos from a space.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceRemoveAssets,
-          summary: 'Remove selected photos from Family space.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: {},
-        },
-      ],
-    },
-  },
-  {
-    name: 'update-space-details',
-    description: 'Update an existing shared space.',
-    arguments: {
-      summary: 'Update Family space details.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceUpdateDetails,
-          summary: 'Rename Family space.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          payload: { spaceName: 'Family 2026', description: 'Updated family highlights.', color: 'amber' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'rename-existing-space',
-    description: 'Rename an existing shared space.',
-    arguments: {
-      summary: 'Rename Family space.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceUpdateDetails,
-          summary: 'Rename Family space.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          payload: { spaceName: 'Family 2026' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'update-existing-space-description',
-    description: 'Update an existing shared space description.',
-    arguments: {
-      summary: 'Update Family space description.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceUpdateDetails,
-          summary: 'Update Family space description.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          payload: { description: 'Photos for everyone.' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'clear-existing-space-description',
-    description: 'Clear an existing shared space description.',
-    arguments: {
-      summary: 'Clear Family space description.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceUpdateDetails,
-          summary: 'Clear Family space description.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          payload: { description: '' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'update-existing-space-color',
-    description: 'Update an existing shared space color.',
-    arguments: {
-      summary: 'Update Family space color.',
-      operations: [
-        {
-          type: AgentOperationType.SpaceUpdateDetails,
-          summary: 'Update Family space color.',
-          targetKind: AgentOperationTargetKind.ExistingSpace,
-          targetId: exampleSpaceId,
-          payload: { color: 'blue' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'rotate-assets',
-    description: 'Rotate selected image assets.',
-    arguments: {
-      summary: 'Rotate selected images.',
-      operations: [
-        {
-          type: AgentOperationType.AssetRotate,
-          summary: 'Rotate selected images clockwise.',
-          targetKind: AgentOperationTargetKind.ImageEditBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { angle: 90 },
-        },
-      ],
-    },
-  },
-  {
-    name: 'favorite-assets',
-    description: 'Mark selected assets as favorites.',
-    arguments: {
-      summary: 'Favorite selected photos.',
-      operations: [
-        {
-          type: AgentOperationType.AssetSetFavorite,
-          summary: 'Favorite selected photos.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { favorite: true },
-        },
-      ],
-    },
-  },
-  {
-    name: 'archive-assets',
-    description: 'Archive selected assets.',
-    arguments: {
-      summary: 'Archive selected photos.',
-      operations: [
-        {
-          type: AgentOperationType.AssetSetArchive,
-          summary: 'Archive selected photos.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { archived: true },
-        },
-      ],
-    },
-  },
-  {
-    name: 'update-asset-description',
-    description: 'Update selected asset descriptions.',
-    arguments: {
-      summary: 'Update selected photo descriptions.',
-      operations: [
-        {
-          type: AgentOperationType.AssetUpdateMetadata,
-          summary: 'Update selected photo descriptions.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { description: 'Berlin weekend' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'set-asset-rating',
-    description: 'Set selected asset ratings.',
-    arguments: {
-      summary: 'Set selected photo ratings.',
-      operations: [
-        {
-          type: AgentOperationType.AssetUpdateMetadata,
-          summary: 'Set selected photo ratings.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { rating: 5 },
-        },
-      ],
-    },
-  },
-  {
-    name: 'set-asset-coordinates',
-    description: 'Set selected asset coordinates with explicit latitude and longitude.',
-    arguments: {
-      summary: 'Set selected photo coordinates.',
-      operations: [
-        {
-          type: AgentOperationType.AssetUpdateMetadata,
-          summary: 'Set selected photo coordinates.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { latitude: 52.52, longitude: 13.405 },
-        },
-      ],
-    },
-  },
-  {
-    name: 'add-tag-to-assets',
-    description: 'Add a tag to selected assets.',
-    arguments: {
-      summary: 'Tag selected photos.',
-      operations: [
-        {
-          type: AgentOperationType.AssetAddTag,
-          summary: 'Add Travel tag.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { tagName: 'Travel' },
-        },
-      ],
-    },
-  },
-  {
-    name: 'remove-tag-from-assets',
-    description: 'Remove a tag from selected assets.',
-    arguments: {
-      summary: 'Remove tag from selected photos.',
-      operations: [
-        {
-          type: AgentOperationType.AssetRemoveTag,
-          summary: 'Remove tag from selected photos.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-          payload: { tagId: exampleTagId },
-        },
-      ],
-    },
-  },
-  {
-    name: 'trash-assets',
-    description: 'Move selected assets to Trash (recoverable).',
-    arguments: {
-      summary: 'Move selected photos to Trash (recoverable).',
-      operations: [
-        {
-          type: AgentOperationType.AssetTrash,
-          summary: 'Move selected photos to Trash (recoverable).',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-        },
-      ],
-    },
-  },
-  {
-    name: 'restore-assets',
-    description: 'Restore selected assets from Trash (non-destructive, Low risk).',
-    arguments: {
-      summary: 'Restore selected photos from Trash.',
-      operations: [
-        {
-          type: AgentOperationType.AssetRestore,
-          summary: 'Restore selected photos from Trash.',
-          targetKind: AgentOperationTargetKind.AssetBatch,
-          assetSource: { kind: 'selectionHandle', selectionHandleId: exampleSelectionHandleId },
-        },
-      ],
-    },
-  },
 ];
 
 const planningCommonMistakes: AgentMcpCommonMistake[] = [
@@ -1844,19 +1103,19 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
     id: 'planning-tool-arguments-missing',
     match: { missingField: 'arguments', requestShape: 'json-rpc' },
     hint: 'Put the planning tool arguments object at params.arguments in the MCP tools/call request.',
-    exampleName: 'create-empty-album',
+    exampleName: 'create-album-and-add-assets',
   },
   {
     id: 'planning-tool-arguments-not-object',
     match: { issuePath: 'arguments', requestShape: 'json-rpc' },
     hint: 'The params.arguments value must be a JSON object with summary and operations.',
-    exampleName: 'create-empty-album',
+    exampleName: 'create-album-and-add-assets',
   },
   {
     id: 'planning-missing-create-temporary-target-id',
     match: { issuePath: 'operations.0.temporaryTargetId', messageIncludes: 'Required' },
     hint: 'New album and space create operations need a temporaryTargetId so later operations can reference them.',
-    exampleName: 'create-empty-album',
+    exampleName: 'create-album-and-add-assets',
   },
   {
     id: 'planning-missing-temporary-target-dependency',
@@ -1883,7 +1142,7 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
     id: 'planning-wrong-space-target-kind',
     match: { messageIncludes: 'space operations require a space target' },
     hint: 'Space operations must use targetKind "existing_space" with targetId from listSpaces/readSpace, or targetKind "new_space" with temporaryTargetId from a prior space.create operation.',
-    exampleName: 'create-space-and-add-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-existing-space-missing-target-id',
@@ -1893,7 +1152,7 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
       requestShape: 'tool-arguments',
     },
     hint: 'Existing-space asset operations require targetKind "existing_space" and targetId from listSpaces/readSpace.',
-    exampleName: 'add-assets-to-existing-space',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-existing-space-with-temporary-target',
@@ -1903,49 +1162,49 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
       requestShape: 'tool-arguments',
     },
     hint: 'Use targetId for existing spaces. Use temporaryTargetId only for new spaces created earlier in the same plan. Read readSpace.assetIdsTruncated before deciding membership: when false, exclude add candidates already in the space and only remove photos already in the space; when true, narrow or ask before claiming membership is complete.',
-    exampleName: 'remove-assets-from-existing-space',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-space-update-empty-payload',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'Provide spaceName, description, or color' },
     hint: 'space.updateDetails payload must include at least one of spaceName, description, or color.',
-    exampleName: 'rename-existing-space',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-asset-metadata-unsupported-placename',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'placeName' },
     hint: 'asset.updateMetadata does not accept placeName. Use explicit latitude and longitude together, or omit location metadata.',
-    exampleName: 'set-asset-coordinates',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-asset-metadata-unsupported-city',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'city' },
     hint: 'asset.updateMetadata does not accept city. Use explicit latitude and longitude together, or omit location metadata.',
-    exampleName: 'set-asset-coordinates',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-asset-metadata-unsupported-country',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'country' },
     hint: 'asset.updateMetadata does not accept country. Use explicit latitude and longitude together, or omit location metadata.',
-    exampleName: 'set-asset-coordinates',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-asset-metadata-unsupported-title',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'title' },
     hint: 'asset.updateMetadata does not accept title. Use description for asset descriptive text.',
-    exampleName: 'update-asset-description',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-asset-metadata-missing-coordinate',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'Provide both latitude and longitude' },
     hint: 'Location metadata must include both latitude and longitude as explicit coordinates.',
-    exampleName: 'set-asset-coordinates',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-space-update-unsupported-fields',
     match: { issuePath: 'operations.0.payload', messageIncludes: 'Unrecognized key' },
     hint: 'space.updateDetails only supports spaceName, description, and color. Do not include thumbnail, pets, face recognition, linked libraries, or deletion fields.',
-    exampleName: 'update-existing-space-description',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-space-update-missing-target-id',
@@ -1955,49 +1214,49 @@ const planningCommonMistakes: AgentMcpCommonMistake[] = [
       requestShape: 'tool-arguments',
     },
     hint: 'Existing-space detail updates require targetKind "existing_space" and targetId from listSpaces/readSpace.',
-    exampleName: 'rename-existing-space',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-direct-space-mutation',
     match: { messageIncludes: 'Unknown tool', requestShape: 'json-rpc' },
     hint: 'Do not call direct space mutation tools. Propose a reviewable space.updateDetails plan instead.',
-    exampleName: 'update-existing-space-color',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-wrong-asset-batch-target-kind',
     match: { messageIncludes: 'requires an asset_batch target' },
     hint: 'Favorite, archive, metadata update, add-tag, and remove-tag operations must use targetKind asset_batch without targetId or temporaryTargetId.',
-    exampleName: 'favorite-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-wrong-image-edit-target-kind',
     match: { messageIncludes: 'requires an image_edit_batch target' },
     hint: 'Rotate operations must use targetKind image_edit_batch without targetId or temporaryTargetId.',
-    exampleName: 'rotate-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-duplicate-asset-ids',
     match: { messageIncludes: 'assetIds must be unique' },
     hint: 'Provider planning rejects raw assetIds. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side.',
-    exampleName: 'favorite-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-pasted-large-asset-ids',
     match: { issuePath: 'operations.0.assetIds', messageIncludes: 'expected array to have <=' },
     hint: 'Provider planning rejects raw assetIds. Use assetSelectionHandleId, assetSource.selectionHandle, assetSource.previousSearch, or assetSource.search so Gallery materializes IDs server-side.',
-    exampleName: 'create-album-from-selection-handle',
+    exampleName: 'create-album-and-add-assets',
   },
   {
     id: 'planning-invalid-rotate-angle',
     match: { messageIncludes: 'angle must be 90, 180, or 270' },
     hint: 'Rotate payload angle must be exactly 90, 180, or 270.',
-    exampleName: 'rotate-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
   {
     id: 'planning-invalid-tag-payload',
     match: { messageIncludes: 'Provide exactly one of tagId or tagName' },
     hint: 'Asset add-tag payload must provide exactly one of tagId or tagName.',
-    exampleName: 'add-tag-to-assets',
+    exampleName: 'add-assets-to-existing-album',
   },
 ];
 
@@ -2024,25 +1283,6 @@ const proposeAlbumFromSearchExamples: AgentMcpToolExample[] = [
       'Regression: create an album for South Africa in January 2026 with Pierre OR Aurelia using declarative people names.',
     arguments: {
       summary: 'Create South Africa January 2026 album for Pierre or Aurelia.',
-      albumName: 'South Africa with Pierre & Aurelia',
-      description: 'January 2026 South Africa photos featuring Pierre or Aurelia.',
-      assetSource: {
-        kind: 'search',
-        filters: {
-          country: 'South Africa',
-          takenAfter: '2026-01-01T00:00:00.000Z',
-          takenBefore: '2026-02-01T00:00:00.000Z',
-          people: { match: 'any', names: ['Pierre', 'Aurelia'] },
-        },
-        materialization: 'all-matches-with-limit',
-      },
-    },
-  },
-  {
-    name: 'create-album-from-declarative-search',
-    description: 'Create a new album directly from user-facing search filters.',
-    arguments: {
-      summary: 'Create South Africa with Pierre & Aurelia album.',
       albumName: 'South Africa with Pierre & Aurelia',
       description: 'January 2026 South Africa photos featuring Pierre or Aurelia.',
       assetSource: {
@@ -2126,7 +1366,7 @@ const proposeAlbumFromSearchContract: AgentMcpPlanningToolContract = {
       id: 'album-workflow-raw-asset-ids',
       match: { unexpectedField: 'assetIds', requestShape: 'tool-arguments' },
       hint: 'Use assetSource.selectionHandle, assetSource.search, or assetSource.previousSearch with this workflow tool; provider planning rejects raw assetIds.',
-      exampleName: 'create-album-from-declarative-search',
+      exampleName: 'create-south-africa-pierre-aurelia-album',
     },
   ],
   safety,
@@ -2307,50 +1547,6 @@ const proposeAssetBatchFromSearchExamples: AgentMcpToolExample[] = [
         mode: 'ocr',
         query: 'receipt',
         filters: { city: 'Berlin' },
-        materialization: 'all-matches-with-limit',
-      },
-    },
-  },
-  {
-    name: 'archive-search-results',
-    description: 'Archive all photos matching a declarative search.',
-    arguments: {
-      summary: 'Archive matching low-rated photos.',
-      action: { type: AgentOperationType.AssetSetArchive, archived: true },
-      assetSource: {
-        kind: 'search',
-        filters: { rating: 1 },
-        materialization: 'all-matches-with-limit',
-      },
-    },
-  },
-  {
-    name: 'tag-search-results',
-    description: 'Tag all photos matching a declarative search.',
-    arguments: {
-      summary: 'Tag matching receipt photos.',
-      action: { type: AgentOperationType.AssetAddTag, tagName: 'Receipts' },
-      assetSource: {
-        kind: 'search',
-        mode: 'ocr',
-        query: 'receipt',
-        materialization: 'all-matches-with-limit',
-      },
-    },
-  },
-  {
-    name: 'metadata-search-results',
-    description: 'Update metadata for all photos matching a declarative search.',
-    arguments: {
-      summary: 'Update matching Berlin photo metadata.',
-      action: {
-        type: AgentOperationType.AssetUpdateMetadata,
-        description: 'Berlin weekend',
-        timeZone: 'Europe/Berlin',
-      },
-      assetSource: {
-        kind: 'search',
-        filters: { city: 'Berlin', country: 'Germany' },
         materialization: 'all-matches-with-limit',
       },
     },
@@ -3283,7 +2479,7 @@ const slice7RuntimeFailureMatrixCases: AgentMcpFailureMatrixCase[] = [
     description: 'Model sends the Pi-visible prefixed planning name as the MCP tool name.',
     request: toolCallRequest('pi-prefixed-planning-tool-name', 'mcp_gallery_proposeAlbumOperations', {
       summary: 'Create today test album.',
-      operations: createEmptyAlbumExample.arguments.operations,
+      operations: createAlbumAndAddAssetsExample.arguments.operations,
     }),
     expectedResult: { kind: 'protocol-error', expectedErrorMessage: 'Unknown tool' },
   },

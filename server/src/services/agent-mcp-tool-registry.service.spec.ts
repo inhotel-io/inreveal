@@ -1012,8 +1012,11 @@ describe(AgentMcpToolRegistryService.name, () => {
     );
 
     // Pin is exact: any drift (content addition or removal) shows up immediately.
-    // Slices 2–4 must assert their own estimate is < CATALOG_TOKENS_BASELINE.
+    // Slices 4+ must assert their own estimate is < CATALOG_TOKENS_BASELINE.
+    // CATALOG_TOKENS_ORIGINAL = 52_350; this baseline was updated by Slice 3 to 47_065 (10% reduction).
     expect(tokens).toBe(CATALOG_TOKENS_BASELINE);
+    // Guard: must be measurably below the pre-prune original (Slice 3 target: 10%+ reduction).
+    expect(tokens).toBeLessThan(52_350 * 0.92);
   });
 
   // order is the KV-cache key; do not reorder (see spec "Prompt caching" appendix)
