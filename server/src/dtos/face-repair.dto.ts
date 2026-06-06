@@ -54,6 +54,22 @@ export const FaceRepairScanTriggerResponseSchema = z
   .meta({ id: 'FaceRepairScanTriggerResponseDto' });
 export class FaceRepairScanTriggerResponseDto extends createZodDto(FaceRepairScanTriggerResponseSchema) {}
 
+export const FaceRepairScanParamsSchema = z.object({
+  maxDistance: z.number().gt(0).max(2).optional(),
+  minFaces: z.number().int().min(1).optional(),
+  voteWindow: z.number().int().min(1).optional(),
+  voteMargin: z.number().int().min(0).optional(),
+  maxAttributionDistance: z.number().gt(0).max(2).optional(),
+  maxFlaggedFraction: z.number().min(0).max(1).optional(),
+  largeClusterThreshold: z.number().int().min(1).optional(),
+});
+export type FaceRepairScanParams = z.infer<typeof FaceRepairScanParamsSchema>;
+
+export const FaceRepairScanTriggerRequestSchema = z
+  .object({ params: FaceRepairScanParamsSchema.optional() })
+  .meta({ id: 'FaceRepairScanTriggerRequestDto' });
+export class FaceRepairScanTriggerRequestDto extends createZodDto(FaceRepairScanTriggerRequestSchema) {}
+
 const ScanSuspectedOwnerSchema = z.object({
   ownerPersonId: z.string(),
   ownerName: z.string().nullable(),

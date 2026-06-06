@@ -1,4 +1,4 @@
-import { FaceRepairDeclineRemoveRequestSchema } from 'src/dtos/face-repair.dto';
+import { FaceRepairDeclineRemoveRequestSchema, FaceRepairScanTriggerRequestSchema } from 'src/dtos/face-repair.dto';
 import { describe, expect, it } from 'vitest';
 
 // face_repair_decline.id is a UUID v7 (@PrimaryGeneratedUuidV7Column). The remove DTO must accept it —
@@ -29,5 +29,45 @@ describe('FaceRepairDeclineRemoveRequestSchema', () => {
 
   it('rejects a non-uuid id', () => {
     expect(FaceRepairDeclineRemoveRequestSchema.safeParse({ ids: ['not-a-uuid'] }).success).toBe(false);
+  });
+});
+
+describe('FaceRepairScanTriggerRequestSchema', () => {
+  it('accepts an empty body (quick-path Re-scan)', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts the curated params', () => {
+    const r = FaceRepairScanTriggerRequestSchema.safeParse({
+      params: { maxDistance: 0.45, minFaces: 4, maxFlaggedFraction: 0.3 },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts the non-curated params too (full optional set; future raw panel)', () => {
+    const r = FaceRepairScanTriggerRequestSchema.safeParse({
+      params: { voteWindow: 100, voteMargin: 0, maxAttributionDistance: 0.4, largeClusterThreshold: 80 },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects maxDistance above 2', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxDistance: 2.5 } }).success).toBe(false);
+  });
+
+  it('rejects maxFlaggedFraction above 1', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxFlaggedFraction: 1.5 } }).success).toBe(false);
+  });
+
+  it('rejects minFaces below 1', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { minFaces: 0 } }).success).toBe(false);
+  });
+
+  it('rejects maxDistance at or below 0', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxDistance: 0 } }).success).toBe(false);
+  });
+
+  it('rejects maxAttributionDistance at or below 0', () => {
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxAttributionDistance: 0 } }).success).toBe(false);
   });
 });

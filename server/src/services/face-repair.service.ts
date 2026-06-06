@@ -1,5 +1,6 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
+import { FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
@@ -389,20 +390,20 @@ export class FaceRepairService extends BaseService {
     return JobStatus.Success;
   }
 
-  async triggerScan(requestedBy: string): Promise<{ scanId: string }> {
+  async triggerScan(requestedBy: string, overrides?: FaceRepairScanParams): Promise<{ scanId: string }> {
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to scan while facial recognition is active');
     }
     const { machineLearning } = await this.getConfig({ withCache: true });
     const recognition = machineLearning.facialRecognition;
     const params = {
-      maxDistance: recognition.maxDistance,
-      minFaces: recognition.minFaces,
-      voteWindow: DEFAULT_VOTE_WINDOW,
-      voteMargin: DEFAULT_VOTE_MARGIN,
-      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
-      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
-      largeClusterThreshold: DEFAULT_LARGE_CLUSTER_THRESHOLD,
+      maxDistance: overrides?.maxDistance ?? recognition.maxDistance,
+      minFaces: overrides?.minFaces ?? recognition.minFaces,
+      voteWindow: overrides?.voteWindow ?? DEFAULT_VOTE_WINDOW,
+      voteMargin: overrides?.voteMargin ?? DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: overrides?.maxAttributionDistance ?? DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: overrides?.maxFlaggedFraction ?? DEFAULT_MAX_FLAGGED_FRACTION,
+      largeClusterThreshold: overrides?.largeClusterThreshold ?? DEFAULT_LARGE_CLUSTER_THRESHOLD,
     };
     let scan;
     try {

@@ -116,6 +116,45 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  describe('POST /admin/face-repair/scan', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/scan');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates a no-body scan (quick path) with undefined params', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: '00000000-0000-4000-a000-000000000001' } });
+      service.triggerScan.mockResolvedValue({ scanId: 's1' });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/scan')
+        .set('Authorization', 'Bearer token')
+        .send({});
+      expect(status).toBe(201);
+      expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), undefined);
+    });
+
+    it('delegates tuned params to the service', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: '00000000-0000-4000-a000-000000000001' } });
+      service.triggerScan.mockResolvedValue({ scanId: 's2' });
+      const params = { maxDistance: 0.4, minFaces: 5, maxFlaggedFraction: 0.3 };
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/scan')
+        .set('Authorization', 'Bearer token')
+        .send({ params });
+      expect(status).toBe(201);
+      expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), params);
+    });
+
+    it('rejects out-of-range params with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/scan')
+        .set('Authorization', 'Bearer token')
+        .send({ params: { maxDistance: 9 } });
+      expect(status).toBe(400);
+      expect(service.triggerScan).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /admin/face-repair/decline', () => {
     const uuid1 = '00000000-0000-4000-a000-000000000001';
     const uuid2 = '00000000-0000-4000-a000-000000000002';

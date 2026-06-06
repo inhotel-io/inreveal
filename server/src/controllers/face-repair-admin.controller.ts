@@ -14,6 +14,7 @@ import {
   FaceRepairRequestDto,
   FaceRepairResponseDto,
   FaceRepairScanStatusDto,
+  FaceRepairScanTriggerRequestDto,
   FaceRepairScanTriggerResponseDto,
 } from 'src/dtos/face-repair.dto';
 import { ApiTag } from 'src/enum';
@@ -38,8 +39,11 @@ export class FaceRepairAdminController {
   @Post('scan')
   @Authenticated({ admin: true })
   @Endpoint({ summary: 'Trigger a face-repair scan', history: new HistoryBuilder().added('v1') })
-  triggerScan(@Auth() auth: AuthDto): Promise<FaceRepairScanTriggerResponseDto> {
-    return this.service.triggerScan(auth.user.id) as Promise<FaceRepairScanTriggerResponseDto>;
+  triggerScan(
+    @Auth() auth: AuthDto,
+    @Body() dto: FaceRepairScanTriggerRequestDto,
+  ): Promise<FaceRepairScanTriggerResponseDto> {
+    return this.service.triggerScan(auth.user.id, dto.params) as Promise<FaceRepairScanTriggerResponseDto>;
   }
 
   @Get('scan/latest')
