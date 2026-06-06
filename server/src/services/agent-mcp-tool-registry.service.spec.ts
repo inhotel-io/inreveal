@@ -3,6 +3,7 @@ import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
 import { AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { CATALOG_TOKENS_BASELINE, estimateCatalogTokens } from 'src/services/agent-mcp-tool-registry.test-helpers';
 import z from 'zod';
 
 const expectedToolNames = [
@@ -986,5 +987,44 @@ describe(AgentMcpToolRegistryService.name, () => {
     expect(secondList[0].description).not.toBe('mutated description');
     expect(secondList[0].inputSchema.properties).not.toEqual({ mutated: true });
     expect(secondList[0].annotations.readOnlyHint).toBe(true);
+  });
+
+  // ── Token-opt Slice 1: catalog token-size harness ────────────────────────────
+
+  it('catalog token estimate matches the recorded baseline (token-opt Slice 1 pin)', () => {
+    const tools = sut.listTools();
+    const { tokens, bytes } = estimateCatalogTokens(tools);
+
+    const perTool = tools
+      .map((tool) => ({ name: tool.name, tokens: Math.ceil(JSON.stringify(tool).length / 4) }))
+      .toSorted((a, b) => b.tokens - a.tokens);
+
+    console.info(
+      '[token-opt] catalog baseline:',
+      tokens,
+      'tokens /',
+      bytes,
+      'bytes across',
+      tools.length,
+      'tools\n',
+      perTool.map((entry) => `  ${entry.name}: ${entry.tokens} tokens`).join('\n'),
+    );
+
+    // Pin is exact: any drift (content addition or removal) shows up immediately.
+    // Slices 2–4 must assert their own estimate is < CATALOG_TOKENS_BASELINE.
+    expect(tokens).toBe(CATALOG_TOKENS_BASELINE);
+  });
+
+  // order is the KV-cache key; do not reorder (see spec "Prompt caching" appendix)
+  it('listTools() returns tools in a fixed deterministic order and produces byte-identical output on repeated calls', () => {
+    const expectedOrderedToolNames = [...expectedReadToolNames, ...expectedPlanningToolNames];
+
+    expect(sut.listTools().map((tool) => tool.name)).toEqual(expectedOrderedToolNames);
+
+    // Two successive calls must be byte-identical so llama.cpp cache_prompt / slot reuse works.
+    const callA = JSON.stringify(sut.listTools());
+    const callB = JSON.stringify(sut.listTools());
+
+    expect(callA).toBe(callB);
   });
 });
