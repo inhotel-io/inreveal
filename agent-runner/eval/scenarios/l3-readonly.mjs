@@ -117,6 +117,39 @@ export default [
     expect: { kind: 'untag_assets' },
   },
   {
+    // adjust_assets routing: tonal verbs reach the new workflow live (verb-driven,
+    // unlike crop's coordinate intent — propose-only, editAssets granted in visual-organizer).
+    id: 'l3.recall.adjust.brighten',
+    category: 'l3.recall',
+    prompt: 'brighten my last 10 photos',
+    expect: { kind: 'adjust_assets' },
+  },
+  {
+    id: 'l3.recall.adjust.vivid',
+    category: 'l3.recall',
+    prompt: 'make my newest 10 photos more vivid',
+    expect: { kind: 'adjust_assets' },
+  },
+  {
+    id: 'l3.recall.adjust.autoenhance',
+    category: 'l3.recall',
+    prompt: 'auto-enhance my newest 5 photos',
+    expect: { kind: 'adjust_assets' },
+  },
+  {
+    // flip_assets routing: mirror reaches the new workflow live; "upside down" stays rotate.
+    id: 'l3.recall.flip.horizontal',
+    category: 'l3.recall',
+    prompt: 'flip my newest 5 photos horizontally',
+    expect: { kind: 'flip_assets' },
+  },
+  {
+    id: 'l3.recall.flip.mirror',
+    category: 'l3.recall',
+    prompt: 'mirror my newest 5 photos',
+    expect: { kind: 'flip_assets' },
+  },
+  {
     // recent-upload source: an upload-dated source still verb-routes to archive
     // (the resolver bounds it by createdAfter at run time, not at routing).
     id: 'l3.recall.upload',
