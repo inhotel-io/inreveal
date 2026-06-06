@@ -19,7 +19,8 @@ import {
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import type { AssetBulkUpdateDto } from 'src/dtos/asset.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetEditAction, AssetEditActionItem, CropParameters } from 'src/dtos/editing.dto';
+import { AdjustParameters, AssetEditAction, AssetEditActionItem, CropParameters, MirrorAxis } from 'src/dtos/editing.dto';
+import { mergeEdits } from 'src/utils/asset-edit';
 import {
   AgentOperationApplyStatus,
   AgentOperationPlanStatus,
@@ -529,6 +530,19 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetCrop: {
         return `Crop matching photos to ${dto.width}×${dto.height} at (${dto.x}, ${dto.y})`;
       }
+      case AgentOperationType.AssetAdjust: {
+        if (dto.autoEnhance) {
+          return 'Auto-enhance matching photos';
+        }
+        const parts: string[] = [];
+        if (dto.brightness) parts.push(`brightness: ${dto.brightness}`);
+        if (dto.contrast) parts.push(`contrast: ${dto.contrast}`);
+        if (dto.saturation) parts.push(`saturation: ${dto.saturation}`);
+        return `Adjust matching photos (${parts.join(', ')})`;
+      }
+      case AgentOperationType.AssetFlip: {
+        return `Flip matching photos ${dto.axis === 'horizontal' ? 'horizontally' : 'vertically'}`;
+      }
       case AgentOperationType.AssetStack: {
         return 'Stack matching photos';
       }
@@ -544,7 +558,10 @@ export class AgentOperationPlanService {
   private getAssetBatchWorkflowTargetKind(
     dto: AgentProposeAssetBatchFromSearchToolRequestDto['action'],
   ): AgentOperationTargetKind {
-    return dto.type === AgentOperationType.AssetRotate || dto.type === AgentOperationType.AssetCrop
+    return dto.type === AgentOperationType.AssetRotate ||
+      dto.type === AgentOperationType.AssetCrop ||
+      dto.type === AgentOperationType.AssetAdjust ||
+      dto.type === AgentOperationType.AssetFlip
       ? AgentOperationTargetKind.ImageEditBatch
       : AgentOperationTargetKind.AssetBatch;
   }
@@ -567,6 +584,17 @@ export class AgentOperationPlanService {
       }
       case AgentOperationType.AssetCrop: {
         return { x: dto.x, y: dto.y, width: dto.width, height: dto.height };
+      }
+      case AgentOperationType.AssetAdjust: {
+        const payload: Record<string, unknown> = {};
+        if (dto.brightness !== undefined) payload.brightness = dto.brightness;
+        if (dto.contrast !== undefined) payload.contrast = dto.contrast;
+        if (dto.saturation !== undefined) payload.saturation = dto.saturation;
+        if (dto.autoEnhance !== undefined) payload.autoEnhance = dto.autoEnhance;
+        return payload;
+      }
+      case AgentOperationType.AssetFlip: {
+        return { axis: dto.axis };
       }
       case AgentOperationType.AssetStack:
       case AgentOperationType.AssetUnstack: {
@@ -599,6 +627,8 @@ export class AgentOperationPlanService {
     switch (dto.type) {
       case AgentOperationType.AssetSetFavorite:
       case AgentOperationType.AssetCrop:
+      case AgentOperationType.AssetAdjust:
+      case AgentOperationType.AssetFlip:
       case AgentOperationType.AssetStack:
       case AgentOperationType.AssetUnstack: {
         return AgentOperationRiskLevel.Low;
@@ -1116,6 +1146,8 @@ export class AgentOperationPlanService {
     return [
       AgentOperationType.AssetRotate,
       AgentOperationType.AssetCrop,
+      AgentOperationType.AssetAdjust,
+      AgentOperationType.AssetFlip,
       AgentOperationType.AssetStack,
       AgentOperationType.AssetUnstack,
       AgentOperationType.AssetSetFavorite,
@@ -1450,6 +1482,8 @@ export class AgentOperationPlanService {
       type === AgentOperationType.SpaceRemoveAssets ||
       type === AgentOperationType.AssetRotate ||
       type === AgentOperationType.AssetCrop ||
+      type === AgentOperationType.AssetAdjust ||
+      type === AgentOperationType.AssetFlip ||
       type === AgentOperationType.AssetStack ||
       type === AgentOperationType.AssetUnstack ||
       type === AgentOperationType.AssetSetFavorite ||
@@ -1962,7 +1996,13 @@ export class AgentOperationPlanService {
       throw new BadRequestException('Agent permission policy does not allow updating space member roles');
     }
 
-    if ((type === AgentOperationType.AssetRotate || type === AgentOperationType.AssetCrop) && !writeScope.editAssets) {
+    if (
+      (type === AgentOperationType.AssetRotate ||
+        type === AgentOperationType.AssetCrop ||
+        type === AgentOperationType.AssetAdjust ||
+        type === AgentOperationType.AssetFlip) &&
+      !writeScope.editAssets
+    ) {
       throw new BadRequestException('Agent permission policy does not allow editing assets');
     }
 
@@ -2228,6 +2268,12 @@ export class AgentOperationPlanService {
         }
 
         return { payload: { angle: rotationAngle } };
+      }
+
+      case AgentOperationType.AssetAdjust:
+      case AgentOperationType.AssetFlip: {
+        // v1 uses full revise (reviseProposedOperations), not inline field overrides
+        throw new BadRequestException('Unsupported field override for operation type');
       }
 
       case AgentOperationType.AlbumSetCover: {
@@ -2837,6 +2883,14 @@ export class AgentOperationPlanService {
         return this.applyCropOperation(auth, operation);
       }
 
+      case AgentOperationType.AssetAdjust: {
+        return this.applyAdjustOperation(auth, operation);
+      }
+
+      case AgentOperationType.AssetFlip: {
+        return this.applyFlipOperation(auth, operation);
+      }
+
       case AgentOperationType.AssetTrash: {
         await this.assetService.deleteAll(auth, { ids: operation.assetIds, force: false });
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
@@ -3250,6 +3304,87 @@ export class AgentOperationPlanService {
     }
 
     return this.appliedOperation(operation.id, result);
+  }
+
+  private requireAdjustPayload(payload: unknown): AdjustParameters {
+    const p = this.requireObjectPayload(payload) as AdjustParameters;
+    return p;
+  }
+
+  private async applyImageEditOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+    edit: AssetEditActionItem,
+    verb: string,
+  ): Promise<AgentOperationApplyUpdate> {
+    const assetResults: BulkIdResponseDto[] = [];
+    const successfulAssetIds: string[] = [];
+
+    for (const assetId of operation.assetIds) {
+      try {
+        const editableAsset = await this.assetRepository.getForEdit(assetId);
+        if (!editableAsset) {
+          throw new BadRequestException('Asset not found');
+        }
+        if (editableAsset.type !== AssetType.Image) {
+          throw new BadRequestException('Only images can be edited');
+        }
+
+        const { edits } = await this.assetService.getAssetEdits(auth, assetId);
+        const mergedEdits = mergeEdits(
+          edits.map(({ action, parameters }) => ({ action, parameters }) as AssetEditActionItem),
+          [edit],
+        );
+        await this.assetService.editAsset(auth, assetId, { edits: mergedEdits });
+
+        successfulAssetIds.push(assetId);
+        assetResults.push({ id: assetId, success: true });
+      } catch (error) {
+        assetResults.push({
+          id: assetId,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : `Failed to ${verb} asset`,
+        });
+      }
+    }
+
+    const failedAssetCount = assetResults.length - successfulAssetIds.length;
+    const result = {
+      assetIds: successfulAssetIds,
+      assetResults: assetResults.map(({ id, success, error, errorMessage }) => ({ id, success, error, errorMessage })),
+    };
+
+    if (failedAssetCount > 0) {
+      return {
+        id: operation.id,
+        status: AgentOperationStatus.Failed,
+        result,
+        error: `Failed to ${verb} ${failedAssetCount} asset(s)`,
+      };
+    }
+
+    return this.appliedOperation(operation.id, result);
+  }
+
+  private async applyAdjustOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const params = this.requireAdjustPayload(operation.payload);
+    return this.applyImageEditOperation(auth, operation, { action: AssetEditAction.Adjust, parameters: params }, 'adjust');
+  }
+
+  private async applyFlipOperation(
+    auth: AuthDto,
+    operation: AgentOperationPlanWithOperations['operations'][number],
+  ): Promise<AgentOperationApplyUpdate> {
+    const payload = this.requireObjectPayload(operation.payload) as { axis: MirrorAxis };
+    return this.applyImageEditOperation(
+      auth,
+      operation,
+      { action: AssetEditAction.Mirror, parameters: { axis: payload.axis } },
+      'flip',
+    );
   }
 
   private async applyShareLinkCreateOperation(
