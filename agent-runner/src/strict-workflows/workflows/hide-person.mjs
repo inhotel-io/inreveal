@@ -1,3 +1,4 @@
+import { SUBJECTIVE_PATTERN } from '../asset-source-resolver.mjs';
 import { resolvePerson, resumePersonFromCandidates } from '../person-resolver.mjs';
 import { failed, needsInput } from '../protocol.mjs';
 import { gatePlanResult, safeFailureText } from './plan-gate.mjs';
@@ -44,6 +45,12 @@ const extractPersonRef = (text) => {
 // Decline if the ref contains a container noun (album/space).
 const mentionsContainer = (ref) => /\b(?:album|space)\b/i.test(clean(ref));
 
+// "show" is an unhide verb but overloads with photo-display intents ("show me the
+// good ones", "show me my photos"). Keep the regex fast-path conservative: decline
+// subjective refs and display-pronoun prefixes — a real unhide names a person.
+const DISPLAY_PREFIX = /^(?:me|us|them|all|everything|my)\b/i;
+const isNotAPerson = (ref) => SUBJECTIVE_PATTERN.test(clean(ref)) || DISPLAY_PREFIX.test(clean(ref));
+
 export const hidePersonWorkflow = () => ({
   kind: KIND,
   flow: 'hybrid',
@@ -60,7 +67,7 @@ export const hidePersonWorkflow = () => ({
     }
 
     const personRef = extractPersonRef(text);
-    if (!personRef || mentionsContainer(personRef)) {
+    if (!personRef || mentionsContainer(personRef) || isNotAPerson(personRef)) {
       return undefined;
     }
 
