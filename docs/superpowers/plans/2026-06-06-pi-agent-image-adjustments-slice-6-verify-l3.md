@@ -6,15 +6,15 @@ Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (
 
 ## Integrated verify — DONE (all green)
 
-| Gate | Result |
-| --- | --- |
-| Full server suite (`pnpm -C server test`) | **6541 passed**, 9 skipped, 0 failed |
-| `make check-server` (tsc) | clean |
-| `make lint-server` (eslint, max-warnings 0) | clean (fixed `unicorn/consistent-function-scoping` on 3 dto-spec helpers + `no-array-callback-reference` on `editKey`) |
-| `make check-web` | clean |
-| Full runner suite (`node --test 'src/**/*.test.mjs'`) | **1574 passed**, 0 failed |
-| OpenAPI clean (`git status open-api/ mobile/openapi/`) | empty — no drift |
-| Capability matrix consistency (`agent-capability-matrix.spec.ts`) | passes (aligned manifest `Adjust assets (tonal)` ↔ Flow-Ownership row; updated Needs-New-Tool intro test phrase) |
+| Gate                                                              | Result                                                                                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Full server suite (`pnpm -C server test`)                         | **6541 passed**, 9 skipped, 0 failed                                                                                   |
+| `make check-server` (tsc)                                         | clean                                                                                                                  |
+| `make lint-server` (eslint, max-warnings 0)                       | clean (fixed `unicorn/consistent-function-scoping` on 3 dto-spec helpers + `no-array-callback-reference` on `editKey`) |
+| `make check-web`                                                  | clean                                                                                                                  |
+| Full runner suite (`node --test 'src/**/*.test.mjs'`)             | **1574 passed**, 0 failed                                                                                              |
+| OpenAPI clean (`git status open-api/ mobile/openapi/`)            | empty — no drift                                                                                                       |
+| Capability matrix consistency (`agent-capability-matrix.spec.ts`) | passes (aligned manifest `Adjust assets (tonal)` ↔ Flow-Ownership row; updated Needs-New-Tool intro test phrase)       |
 
 **L1 (component, in-suite):** `adjust_assets` 26/26, `flip_assets` 22/22; classification-recall / negatives / slot-fidelity scenarios for adjust + flip; disambiguation guard exercises both kinds. Routing + slots verified offline at 100%.
 

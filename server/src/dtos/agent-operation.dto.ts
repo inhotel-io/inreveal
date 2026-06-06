@@ -960,7 +960,9 @@ const AgentAssetBatchWorkflowActionSchema = z
     assetCropPayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetCrop),
     }),
-    z.strictObject({ type: z.literal(AgentOperationType.AssetAdjust), ...assetAdjustPayloadShape }).superRefine(validateAdjustPayload),
+    z
+      .strictObject({ type: z.literal(AgentOperationType.AssetAdjust), ...assetAdjustPayloadShape })
+      .superRefine(validateAdjustPayload),
     assetFlipPayloadSchema.extend({ type: z.literal(AgentOperationType.AssetFlip) }),
     z.strictObject({ type: z.literal(AgentOperationType.AssetStack) }),
     z.strictObject({ type: z.literal(AgentOperationType.AssetUnstack) }),
