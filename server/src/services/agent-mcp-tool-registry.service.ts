@@ -26,11 +26,31 @@ type AgentMcpToolDefinitionInput = Omit<AgentMcpToolDefinition, 'inputSchema'> &
   schema: ZodType;
 };
 
+const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const stripSchemaDescriptions = (value: unknown): void => {
+  if (Array.isArray(value)) {
+    for (const item of value) {stripSchemaDescriptions(item);}
+    return;
+  }
+  if (!isJsonObject(value)) {return;}
+  const record = value as Record<string, unknown>;
+  // Only delete description annotations (strings). Property schemas that happen
+  // to have a key named "description" (e.g. asset updateMetadata payload) are objects
+  // and must not be removed.
+  if (typeof record.description === 'string') {
+    delete record.description;
+  }
+  for (const nested of Object.values(record)) {stripSchemaDescriptions(nested);}
+};
+
 const toInputSchema = (schema: ZodType): Record<string, unknown> => {
   const inputSchema = {
     ...(z.toJSONSchema(schema, { target: 'draft-2020-12', io: 'input' }) as Record<string, unknown>),
   };
   delete inputSchema['~standard'];
+  stripSchemaDescriptions(inputSchema);
 
   if (inputSchema.type !== 'object') {
     throw new Error('MCP tool inputSchema must be a JSON object schema');
@@ -43,9 +63,6 @@ const defineTool = ({ schema, ...tool }: AgentMcpToolDefinitionInput): AgentMcpT
   ...tool,
   inputSchema: toInputSchema(schema),
 });
-
-const isJsonObject = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const providerForbiddenAssetSourceRefs = new Set(['#/$defs/AgentExplicitAssetsAssetSourceInput']);
 
