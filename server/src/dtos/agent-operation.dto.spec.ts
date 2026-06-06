@@ -24,6 +24,13 @@ import {
 import { factory } from 'test/small.factory';
 import z from 'zod';
 
+const parseBatchAction = (action: unknown) =>
+  AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
+    summary: 'Adjust matching photos.',
+    action,
+    assetSource: { kind: 'search', filters: { type: 'IMAGE' } },
+  });
+
 const expectIssue = (
   result: { success: boolean; error?: z.ZodError },
   path: Array<string | number>,
@@ -2739,30 +2746,23 @@ describe('Agent operation DTOs', () => {
     });
   });
 
+  const adjustOperation = (payload: Record<string, unknown>, targetKind: string = AgentOperationTargetKind.ImageEditBatch) => ({
+    type: AgentOperationType.AssetAdjust,
+    summary: 'Adjust matching photos.',
+    targetKind,
+    assetIds: [factory.uuid()],
+    payload,
+  });
+
+  const flipOperation = (payload: Record<string, unknown>) => ({
+    type: AgentOperationType.AssetFlip,
+    summary: 'Flip matching photos.',
+    targetKind: AgentOperationTargetKind.ImageEditBatch,
+    assetIds: [factory.uuid()],
+    payload,
+  });
+
   describe('asset.adjust operation schema', () => {
-    const parseBatchAction = (action: unknown) =>
-      AgentOperationPlanToolRequestSchemas[AgentToolName.ProposeAssetBatchFromSearch].safeParse({
-        summary: 'Adjust matching photos.',
-        action,
-        assetSource: { kind: 'search', filters: { type: 'IMAGE' } },
-      });
-
-    const adjustOperation = (payload: Record<string, unknown>, targetKind: string = AgentOperationTargetKind.ImageEditBatch) => ({
-      type: AgentOperationType.AssetAdjust,
-      summary: 'Adjust matching photos.',
-      targetKind,
-      assetIds: [factory.uuid()],
-      payload,
-    });
-
-    const flipOperation = (payload: Record<string, unknown>) => ({
-      type: AgentOperationType.AssetFlip,
-      summary: 'Flip matching photos.',
-      targetKind: AgentOperationTargetKind.ImageEditBatch,
-      assetIds: [factory.uuid()],
-      payload,
-    });
-
     // ── adjust payload validation (via proposeAssetBatchFromSearch action) ────
 
     it('accepts asset.adjust with one manual field', () => {
