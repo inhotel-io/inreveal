@@ -139,4 +139,56 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     expect(alexiaPerson!.flagged).toBeGreaterThan(0);
     expect(alexiaPerson!.suspectedOwners.length).toBeGreaterThan(0);
   });
+
+  it('triggerScan overrides flow to the engine: maxFlaggedFraction flips a cluster repairable→review-only', async () => {
+    const { sut, ctx } = setup();
+    const jobMock = ctx.getMock(JobRepository);
+    jobMock.isActive.mockResolvedValue(false);
+    jobMock.queue.mockResolvedValue();
+    const { user } = await ctx.newUser();
+
+    // Reference owner Karina: 10 first-axis faces, so the leaked faces have a clean cluster to vote toward.
+    const karina = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
+    await db.insertInto('person').values(karina).execute();
+    for (let i = 0; i < 10; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karina.id });
+      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+    }
+
+    // Unnamed cluster: 3 leaked first-axis + 8 genuine second-axis → 3/11 ≈ 27% flagged.
+    const cluster = mediumFactory.personInsert({ ownerId: user.id, name: '' });
+    await db.insertInto('person').values(cluster).execute();
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
+      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
+      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    }
+
+    // Default run (no overrides): 27% < DEFAULT_MAX_FLAGGED_FRACTION (0.5) cap → the leaked faces are repairable, none over-cap.
+    const a = await sut.triggerScan(user.id);
+    await sut.handleFaceRepairScan({ scanId: a.scanId });
+    const defaultRun = await sut.getLatestScanStatus();
+    expect(defaultRun!.status).toBe('completed');
+    expect(defaultRun!.totals).not.toBeNull();
+    expect(defaultRun!.totals!.toRepair).toBeGreaterThan(0);
+    expect(defaultRun!.totals!.reviewOnlyByReason.overCap).toBe(0);
+
+    // Clear the scan row so the tuned run is unambiguously the latest (and avoids any active-scan guard).
+    await db.deleteFrom('face_repair_scan').execute();
+
+    // Tuned run: 27% > 0.1 cap → the SAME faces go review-only (over-cap), none repaired.
+    const b = await sut.triggerScan(user.id, { maxFlaggedFraction: 0.1 });
+    await sut.handleFaceRepairScan({ scanId: b.scanId });
+    const tunedRun = await sut.getLatestScanStatus();
+    expect(tunedRun!.status).toBe('completed');
+    expect(tunedRun!.totals).not.toBeNull();
+    expect(tunedRun!.totals!.toRepair).toBe(0);
+    expect(tunedRun!.totals!.reviewOnlyByReason.overCap).toBeGreaterThan(0);
+  });
 });
