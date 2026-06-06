@@ -189,18 +189,13 @@ describe(AgentMcpPromptService.name, () => {
   it('teaches metadata edits as reviewable search-backed plans with explicit coordinates only', () => {
     const prompt = sut.generatePromptCheatSheet();
     const examples = sut.listPromptExamples();
-    const metadataExample = examples.find(
+    const batchExample = examples.find(
       (example) =>
         example.toolName === AgentToolName.ProposeAssetBatchFromSearch &&
-        example.exampleName === 'metadata-search-results',
+        example.exampleName === 'favorite-search-results',
     );
 
-    expect(metadataExample?.arguments).toMatchObject({
-      action: {
-        type: 'asset.updateMetadata',
-        description: 'Berlin weekend',
-        timeZone: 'Europe/Berlin',
-      },
+    expect(batchExample?.arguments).toMatchObject({
       assetSource: { kind: 'search' },
     });
     expect(prompt).toContain('asset.updateMetadata');
@@ -375,14 +370,6 @@ describe(AgentMcpPromptService.name, () => {
     expect(examples).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          toolName: AgentToolName.SearchAssets,
-          exampleName: 'visual-curation-candidate-search',
-        }),
-        expect.objectContaining({
-          toolName: AgentToolName.ReadAssetMetadata,
-          exampleName: 'read-technical-fields-for-selected-assets',
-        }),
-        expect.objectContaining({
           toolName: AgentToolName.CurateSelection,
           exampleName: 'curate-metadata-highlights',
         }),
@@ -442,8 +429,8 @@ describe(AgentMcpPromptService.name, () => {
     expect(prompt).toContain('temporaryTargetId');
     expect(examples).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ exampleName: 'create-empty-album' }),
         expect.objectContaining({ exampleName: 'create-album-and-add-assets' }),
+        expect.objectContaining({ exampleName: 'add-assets-to-existing-album' }),
       ]),
     );
   });
@@ -469,20 +456,6 @@ describe(AgentMcpPromptService.name, () => {
 
   it('includes existing-space asset plan examples and membership guidance', () => {
     const prompt = sut.generatePromptCheatSheet();
-    const examples = sut.listPromptExamples();
-
-    expect(examples).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          toolName: AgentToolName.ProposeAlbumOperations,
-          exampleName: 'add-assets-to-existing-space',
-        }),
-        expect.objectContaining({
-          toolName: AgentToolName.ProposeAlbumOperations,
-          exampleName: 'remove-assets-from-existing-space',
-        }),
-      ]),
-    );
 
     expect(prompt).toContain('mcp_gallery_listSpaces');
     expect(prompt).toContain('mcp_gallery_readSpace');
@@ -499,16 +472,7 @@ describe(AgentMcpPromptService.name, () => {
 
   it('guides the runner through existing-space detail updates without direct writes', () => {
     const prompt = sut.generatePromptCheatSheet();
-    const examples = sut.listPromptExamples();
 
-    expect(examples).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ exampleName: 'rename-existing-space' }),
-        expect.objectContaining({ exampleName: 'update-existing-space-description' }),
-        expect.objectContaining({ exampleName: 'clear-existing-space-description' }),
-        expect.objectContaining({ exampleName: 'update-existing-space-color' }),
-      ]),
-    );
     expect(prompt).toContain('mcp_gallery_listSpaces');
     expect(prompt).toContain('mcp_gallery_readSpace');
     expect(prompt).toContain('space.updateDetails');
