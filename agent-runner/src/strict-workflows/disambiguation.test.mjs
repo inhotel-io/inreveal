@@ -153,6 +153,21 @@ const CASES = [
   ['ungroup my newest 5 photos', 'unstack_assets'],
   // stack_assets must NOT steal unstack
   ['unstack my newest 10 photos', 'unstack_assets'],
+  // rename_person (person target; container noun → space/album rename wins)
+  ['Rename Alejandra to Karina', 'rename_person'],
+  ['rename alex to alexander', 'rename_person'],
+  // rename_person must NOT steal album/space renames (container noun guard wins)
+  ['rename the Family album to Family 2026', 'rename_or_describe_album'],
+  ['rename the Family space to Family 2026', 'rename_or_describe_space'],
+  // set_person_birthdate (birthday/birthdate/date of birth + possessive pattern)
+  ["set Alex's birthday to 1990-05-01", 'set_person_birthdate'],
+  ["set Alex's date of birth to May 1 1990", 'set_person_birthdate'],
+  // hide_person (hide/unhide/show verb; container noun → none)
+  ['hide Alex', 'hide_person'],
+  ['unhide Alex', 'hide_person'],
+  ['show Alex', 'hide_person'],
+  // hide_person must NOT steal album hide prompts (container noun guard)
+  ['hide the Family album', 'none'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {

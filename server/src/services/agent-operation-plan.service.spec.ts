@@ -47,6 +47,7 @@ import { AgentSessionActivityEventService } from 'src/services/agent-session-act
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AlbumService } from 'src/services/album.service';
 import { AssetService } from 'src/services/asset.service';
+import { PersonService } from 'src/services/person.service';
 import { SharedLinkService } from 'src/services/shared-link.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { StackService } from 'src/services/stack.service';
@@ -99,6 +100,7 @@ const expandedWriteScope = {
   trashAssets: true,
   createSharedLinks: true,
   manageStacks: true,
+  managePeople: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -277,6 +279,7 @@ describe(AgentOperationPlanService.name, () => {
   let tagService: ReturnType<typeof automock<TagService>>;
   let trashService: ReturnType<typeof automock<TrashService>>;
   let sharedLinkService: ReturnType<typeof mockBaseService<SharedLinkService>>;
+  let personService: ReturnType<typeof mockBaseService<PersonService>>;
   let sessionRepository: ReturnType<typeof automock<AgentSessionRepository>>;
   let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let planRepository: ReturnType<typeof automock<AgentOperationPlanRepository>>;
@@ -298,6 +301,7 @@ describe(AgentOperationPlanService.name, () => {
     tagService = mockBaseService(TagService);
     trashService = mockBaseService(TrashService);
     sharedLinkService = mockBaseService(SharedLinkService);
+    personService = mockBaseService(PersonService);
     sessionRepository = automock(AgentSessionRepository, { args: [{} as never] });
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     planRepository = automock(AgentOperationPlanRepository, { args: [{} as never] });
@@ -339,6 +343,7 @@ describe(AgentOperationPlanService.name, () => {
       tagService,
       trashService,
       sharedLinkService,
+      personService,
       activityEventService,
     );
   });
@@ -10381,5 +10386,216 @@ describe(AgentOperationPlanService.name, () => {
 
     expect(stackService.deleteAll).not.toHaveBeenCalled();
     expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+  });
+
+  // ── person.update ─────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for person.update when managePeople is false', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, managePeople: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Rename person Alex.',
+        operations: [
+          {
+            type: AgentOperationType.PersonUpdate,
+            summary: 'Rename person Alex to Alexander.',
+            targetKind: AgentOperationTargetKind.Person,
+            targetId: personId,
+            riskLevel: AgentOperationRiskLevel.Low,
+            enabled: true,
+            payload: { name: 'Alexander' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/managing people/);
+  });
+
+  it('validateWriteScope passes for person.update when managePeople is true', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, managePeople: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.PersonUpdate,
+            targetKind: AgentOperationTargetKind.Person,
+            targetId: personId,
+            assetIds: [],
+            payload: { name: 'Alexander' },
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Rename person Alex.',
+      operations: [
+        {
+          type: AgentOperationType.PersonUpdate,
+          summary: 'Rename person Alex to Alexander.',
+          targetKind: AgentOperationTargetKind.Person,
+          targetId: personId,
+          riskLevel: AgentOperationRiskLevel.Low,
+          enabled: true,
+          payload: { name: 'Alexander' },
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+  });
+
+  it('applying person.update (name) calls personService.update with the correct shape', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.PersonUpdate,
+      targetKind: AgentOperationTargetKind.Person,
+      targetId: personId,
+      assetIds: [],
+      payload: { name: 'Alexander' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    personService.update.mockResolvedValue({ id: personId } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(personService.update).toHaveBeenCalledWith(auth, personId, {
+      name: 'Alexander',
+      birthDate: undefined,
+      isHidden: undefined,
+    });
+  });
+
+  it('applying person.update (birthDate) calls personService.update with the correct shape', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.PersonUpdate,
+      targetKind: AgentOperationTargetKind.Person,
+      targetId: personId,
+      assetIds: [],
+      payload: { birthDate: '1990-05-01' },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    personService.update.mockResolvedValue({ id: personId } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(personService.update).toHaveBeenCalledWith(auth, personId, {
+      name: undefined,
+      birthDate: '1990-05-01',
+      isHidden: undefined,
+    });
+  });
+
+  it('applying person.update (isHidden) calls personService.update with the correct shape', async () => {
+    const auth = AuthFactory.create();
+    const personId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.PersonUpdate,
+      targetKind: AgentOperationTargetKind.Person,
+      targetId: personId,
+      assetIds: [],
+      payload: { isHidden: true },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    personService.update.mockResolvedValue({ id: personId } as never);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(personService.update).toHaveBeenCalledWith(auth, personId, {
+      name: undefined,
+      birthDate: undefined,
+      isHidden: true,
+    });
+  });
+
+  it('VisualOrganizer preset grants managePeople', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.managePeople).toBe(
+      true,
+    );
+  });
+
+  it('LocalPowerUser preset grants managePeople', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.managePeople).toBe(
+      true,
+    );
+  });
+
+  it('Careful preset does NOT grant managePeople', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.managePeople).toBe(false);
   });
 });

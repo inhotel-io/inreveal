@@ -40,6 +40,7 @@ export type AgentOperationResult = {
   albumId?: string;
   spaceId?: string;
   tagId?: string;
+  personId?: string;
   assetIds?: string[];
   userIds?: string[];
   skippedUserIds?: string[];

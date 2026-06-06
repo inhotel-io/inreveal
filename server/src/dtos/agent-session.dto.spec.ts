@@ -35,6 +35,7 @@ const fullWriteScope = {
   trashAssets: true,
   createSharedLinks: true,
   manageStacks: true,
+  managePeople: true,
 };
 const expandedWriteScopeKeys = [
   'removeAssets',
@@ -53,6 +54,7 @@ const expandedWriteScopeKeys = [
   'trashAssets',
   'createSharedLinks',
   'manageStacks',
+  'managePeople',
 ];
 
 const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({

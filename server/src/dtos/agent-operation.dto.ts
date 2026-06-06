@@ -695,6 +695,41 @@ const shareLinkCreateAlbumOperationSchema = z
   })
   .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
 
+const PersonTargetKindSchema = z
+  .literal(AgentOperationTargetKind.Person)
+  .meta({ id: 'AgentOperationPersonTargetKind' });
+
+const personUpdatePayloadSchema = z
+  .strictObject({
+    name: z.string().trim().min(1).max(852).optional(),
+    birthDate: z.iso
+      .date()
+      .nullable()
+      .optional()
+      .refine((val) => (val ? new Date(val) <= new Date() : true), { message: 'birthDate cannot be in the future' }),
+    isHidden: z.boolean().optional(),
+  })
+  .superRefine((payload, ctx) => {
+    if (payload.name === undefined && payload.birthDate === undefined && payload.isHidden === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide at least one of name, birthDate, or isHidden',
+      });
+    }
+  });
+
+const personUpdateOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.PersonUpdate).meta({ id: 'AgentPersonUpdateOperationType' }),
+    summary,
+    targetKind: PersonTargetKindSchema,
+    targetId: uuid.optional(),
+    riskLevel: AgentOperationRiskLevelSchema.optional().default(AgentOperationRiskLevel.Low),
+    enabled: operationDefaults.enabled,
+    payload: personUpdatePayloadSchema,
+  })
+  .superRefine((operation, ctx) => validatePersonTarget(operation, ctx));
+
 const validateAssetSelection = (
   operation: { assetSource?: AgentAssetSourceInput; assetIds?: string[]; assetSelectionHandleId?: string },
   ctx: z.RefinementCtx,
@@ -734,6 +769,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   unstackOperationSchema,
   shareLinkCreateOperationSchema,
   shareLinkCreateAlbumOperationSchema,
+  personUpdateOperationSchema,
 ]);
 
 const operationRequest = (schemaId: string) =>
@@ -1116,6 +1152,31 @@ function validateSpaceTarget(
       code: z.ZodIssueCode.custom,
       path: ['targetId'],
       message: 'targetId is only valid for existing space targets',
+    });
+  }
+}
+
+function validatePersonTarget(
+  operation: {
+    targetKind: AgentOperationTargetKind;
+    targetId?: string;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (operation.targetKind !== AgentOperationTargetKind.Person) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetKind'],
+      message: 'person.update requires a person target',
+    });
+    return;
+  }
+
+  if (!operation.targetId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['targetId'],
+      message: 'targetId is required for person targets',
     });
   }
 }
