@@ -53,9 +53,15 @@ Mirror `manageStacks` exactly: add `managePeople: boolean` to the write-scope ty
 - Apply switch (~2811): `case AgentOperationType.PersonUpdate: return this.applyPersonUpdateOperation(auth, operation);`.
 - `applyPersonUpdateOperation`:
   ```ts
-  const payload = this.requireObjectPayload(operation.payload) as { name?: string; birthDate?: string | null; isHidden?: boolean };
+  const payload = this.requireObjectPayload(operation.payload) as {
+    name?: string;
+    birthDate?: string | null;
+    isHidden?: boolean;
+  };
   await this.personService.update(auth, operation.targetId as string, {
-    name: payload.name, birthDate: payload.birthDate, isHidden: payload.isHidden,
+    name: payload.name,
+    birthDate: payload.birthDate,
+    isHidden: payload.isHidden,
   });
   return this.appliedOperation(operation.id, { personId: operation.targetId });
   ```
@@ -68,8 +74,8 @@ Mirror `manageStacks` exactly: add `managePeople: boolean` to the write-scope ty
   payload with one field); rejects empty payload; rejects future `birthDate`; rejects an
   `assetSource`; default risk Low.
 - `agent-operation-plan.service.spec.ts`: apply calls `personService.update(auth, <targetId>,
-  { name | birthDate | isHidden })` (mock asserts shape; one test per field); `managePeople:
-  false` → propose blocked AND apply blocked (`/managing people/`); `true` → allowed.
+{ name | birthDate | isHidden })` (mock asserts shape; one test per field); `managePeople:
+false` → propose blocked AND apply blocked (`/managing people/`); `true` → allowed.
 - `agent-session.service.spec.ts`: preset snapshot `managePeople` true in VO+LPU, false in
   Careful + legacy default.
 
@@ -78,6 +84,7 @@ Mirror `manageStacks` exactly: add `managePeople: boolean` to the write-scope ty
 ### B1. shared person resolver `strict-workflows/person-resolver.mjs`
 
 A helper `resolvePerson({ client, name, signal, nowMs, kind, extra })`:
+
 - Calls `searchPeople({ name })`. Returns one of:
   - `{ status: 'matched', personId, name }`
   - `{ status: 'needs_input', text }` for not_found ("I couldn't find a person named "X".")
@@ -94,6 +101,7 @@ resume-by-ordinal / resume-by-name.
 
 `workflows/rename-person.mjs` (`rename_person`), `workflows/set-person-birthdate.mjs`
 (`set_person_birthdate`), `workflows/hide-person.mjs` (`hide_person`). Each:
+
 - Regex match (see below), resolve the person via the shared resolver (ambiguous → candidate
   continuation; not_found → needs_input), then propose `person.update` via
   `proposeAlbumOperations`:
@@ -101,6 +109,7 @@ resume-by-ordinal / resume-by-name.
 - `gatePlanResult` success + `successSummary { workflowKind, personName, ... }`.
 
 Patterns + payload:
+
 - `rename_person`: `rename <person> to <newName>` → `payload: { name: newName }`. Decline album/
   space rename (require a person object, no `album`/`space` noun → those route to the existing
   rename workflows, which are ordered first).
