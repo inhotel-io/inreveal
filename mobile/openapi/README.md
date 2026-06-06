@@ -148,6 +148,7 @@ Class | Method | HTTP request | Description
 *AssetsApi* | [**getAssetOcr**](doc//AssetsApi.md#getassetocr) | **GET** /assets/{id}/ocr | Retrieve asset OCR data
 *AssetsApi* | [**getAssetStatistics**](doc//AssetsApi.md#getassetstatistics) | **GET** /assets/statistics | Get asset statistics
 *AssetsApi* | [**playAssetVideo**](doc//AssetsApi.md#playassetvideo) | **GET** /assets/{id}/video/playback | Play asset video
+*AssetsApi* | [**previewAssetEdits**](doc//AssetsApi.md#previewassetedits) | **POST** /assets/{id}/edits/preview | Preview edits without saving
 *AssetsApi* | [**removeAssetEdits**](doc//AssetsApi.md#removeassetedits) | **DELETE** /assets/{id}/edits | Remove edits from an existing asset
 *AssetsApi* | [**runAssetJobs**](doc//AssetsApi.md#runassetjobs) | **POST** /assets/jobs | Run an asset job
 *AssetsApi* | [**updateAsset**](doc//AssetsApi.md#updateasset) | **PUT** /assets/{id} | Update an asset

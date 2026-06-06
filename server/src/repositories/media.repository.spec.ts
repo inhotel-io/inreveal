@@ -794,7 +794,9 @@ describe(MediaRepository.name, () => {
         ])
         .jpeg()
         .toBuffer();
-      const out = await sut.renderEditedImage(img, [{ action: AssetEditAction.Mirror, parameters: { axis: MirrorAxis.Horizontal } }]);
+      const out = await sut.renderEditedImage(img, [
+        { action: AssetEditAction.Mirror, parameters: { axis: MirrorAxis.Horizontal } },
+      ]);
       // renderEditedImage outputs JPEG (3-channel); add alpha so getPixelColor's *4 indexing is correct
       const outRgba = await sharp(out).ensureAlpha().png().toBuffer();
       const left = await getPixelColor(outRgba, 2, 5);
