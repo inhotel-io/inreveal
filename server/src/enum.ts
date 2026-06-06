@@ -191,6 +191,7 @@ export enum AgentOperationType {
   ShareLinkCreate = 'shareLink.create',
   ShareLinkCreateAlbum = 'shareLink.createAlbum',
   PersonUpdate = 'person.update',
+  PersonMerge = 'person.merge',
 }
 
 export enum AgentOperationTargetKind {
