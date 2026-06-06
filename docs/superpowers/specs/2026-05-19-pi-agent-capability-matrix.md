@@ -54,8 +54,9 @@ Current planning tools:
 - `reviseProposedOperations`: replaces an existing plan after user feedback.
 - `summarizePlan`: summarizes an existing plan.
 - `proposeAssetBatchFromSearch` / `proposeAssetBatchFromSelection`: propose
-  reviewable favorite, archive, tag, metadata, rotate, or crop operations from a
-  declarative/previous search source or a resolved selection handle.
+  reviewable favorite, archive, tag, metadata, rotate, crop, adjust, flip, stack,
+  or unstack operations from a declarative/previous search source or a resolved
+  selection handle.
 
 Current reviewable operation types:
 
@@ -69,10 +70,25 @@ Current reviewable operation types:
   (reversible move to Trash; High risk; `trashAssets` write-scope),
   `asset.restore` (reversible un-trash; Low risk; `trashAssets` write-scope),
   `asset.crop` (reversible explicit-geometry crop; Low risk; `editAssets`
-  write-scope; ImageEditBatch target).
+  write-scope; ImageEditBatch target), `asset.adjust` (reversible tonal edit —
+  brightness/contrast/saturation named levels or one-click auto-enhance; Low
+  risk; `editAssets`; ImageEditBatch), `asset.flip` (reversible horizontal/
+  vertical mirror; Low risk; `editAssets`; ImageEditBatch), `asset.stack` /
+  `asset.unstack` (stack a bounded set under an auto-selected cover, or dissolve
+  stacks; Low risk; `manageStacks` write-scope).
+- People: `person.update` (rename, birthdate, hide/unhide; Low risk;
+  `managePeople` write-scope), `person.merge` (High risk, irreversible — faces
+  reassigned, source person deleted; `managePeople`).
 - Sharing: `shareLink.create` (creates an individual-asset public share link with
   optional expiry/password/hide-metadata; High risk; OUTWARD-FACING;
-  `createSharedLinks` write-scope, granted only in the LocalPowerUser preset).
+  `createSharedLinks` write-scope, granted only in the LocalPowerUser preset),
+  `shareLink.createAlbum` (album public share link; High risk; OUTWARD-FACING;
+  `createSharedLinks`, default-off in every preset — propose-only).
+
+Image-edit operations (`asset.crop` / `asset.adjust` / `asset.flip`) render a
+non-persisting before/after preview on the plan card via an ephemeral
+`POST /assets/:id/edits/preview` endpoint, so users iterate on the look (via
+`reviseProposedOperations`) before applying.
 
 Safety invariant: MCP tools do not directly mutate the gallery. Writes must be
 represented as operation plans and applied by Gallery after user review.
@@ -319,6 +335,10 @@ Use these prompts as manual and automated acceptance scenarios:
 31. “Trash my screenshots.”
 32. “Crop my newest photo to 100, 100, 800, 600.”
 33. “Share these photos as a link that expires in 7 days.” (LocalPowerUser preset)
+34. “Brighten my last 10 photos.”
+35. “Make my Berlin photos more vivid and add a bit of contrast.”
+36. “Auto-enhance my newest 5 photos.”
+37. “Flip these horizontally.”
 
 ## Next Steps
 
@@ -379,3 +399,32 @@ Use these prompts as manual and automated acceptance scenarios:
    instance also surfaced and fixed a real bug — `asset.crop` was missing from the
    `proposeAssetBatch` tool's action union and its summary/target/payload/risk
    mappings, so the workflow could classify but not propose.
+9. **Library reorg + sharing + people management shipped (31 strict/hybrid
+   workflows total).** `move_photos_between_albums` owns a compound
+   `album.removeAssets` + `album.addAssets` plan; `stack_assets` / `unstack_assets`
+   add `asset.stack` / `asset.unstack` (server auto-selects the stack cover;
+   `manageStacks` write-scope, granted in VisualOrganizer + LocalPowerUser);
+   `share_album` proposes a `shareLink.createAlbum` op (High risk, OUTWARD-FACING;
+   `createSharedLinks` default-off in every preset → propose-only; requires the
+   word "album" to avoid colliding with `share_assets`); and a people-management
+   set — `rename_person`, `set_person_birthdate`, `hide_person` (`person.update`
+   with name / birthDate / isHidden), plus `merge_people` (`person.merge`, High
+   risk, irreversible — faces reassigned, source deleted). People resolve via a
+   new scrubbed `searchPeople` read tool with durable two-stage disambiguation;
+   `managePeople` write-scope. Each carries L1 + propose-only L3 coverage.
+10. **Image adjustments shipped (33 strict/hybrid workflows total).** `adjust_assets`
+    proposes a reversible `asset.adjust` op — brightness / contrast / saturation as
+    named signed levels (slight/moderate/strong) or a one-click auto-enhance — and
+    `flip_assets` proposes a reversible `asset.flip` (horizontal/vertical mirror;
+    "upside down" defers to `rotate_assets` as a 180° rotation). Both are
+    `editAssets`-scoped (granted in VisualOrganizer + LocalPowerUser), Low risk,
+    and ImageEditBatch-targeted, rendered via sharp (`modulate`/`linear`/`normalise`)
+    as non-destructive `asset_edit` rows. Image-edit ops (crop/adjust/flip) now show
+    a **before/after preview on the plan card** via an ephemeral, non-persisting
+    `POST /assets/:id/edits/preview` render, so users iterate on the look through
+    `reviseProposedOperations` before applying. Verified at L1 (100%) + a live
+    propose-only L3 (89/89, read-only audit clean) against the personal-clone with a
+    local gemma4 model; because the intents are verb-driven they route live, unlike
+    crop's coordinate-geometry intent (OQ-F1). This ships the matrix's #1
+    "Edits beyond rotation" new-tool candidate; **straighten** (arbitrary-angle
+    rotate + auto-crop) and export/download remain the open image-edit follow-ups.
