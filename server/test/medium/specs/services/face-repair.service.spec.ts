@@ -456,7 +456,13 @@ let repairDatabase: Kysely<DB>;
 const setupRepair = (db?: Kysely<DB>) => {
   return newMediumService(FaceRepairService, {
     database: db ?? repairDatabase,
-    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceIdentityRepository, FaceRepairDeclineRepository],
+    real: [
+      FaceRepairRepository,
+      SearchRepository,
+      PersonRepository,
+      FaceIdentityRepository,
+      FaceRepairDeclineRepository,
+    ],
     mock: [LoggingRepository, JobRepository],
   });
 };
@@ -1190,7 +1196,13 @@ let declineDatabase: Kysely<DB>;
 const setupDecline = (db?: Kysely<DB>) => {
   return newMediumService(FaceRepairService, {
     database: db ?? declineDatabase,
-    real: [FaceRepairRepository, FaceRepairScanRepository, SearchRepository, PersonRepository, FaceRepairDeclineRepository],
+    real: [
+      FaceRepairRepository,
+      FaceRepairScanRepository,
+      SearchRepository,
+      PersonRepository,
+      FaceRepairDeclineRepository,
+    ],
     mock: [LoggingRepository, JobRepository],
   });
 };
@@ -1216,18 +1228,26 @@ describe('FaceRepairService decline filter', () => {
     for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
       leakedFaceIds.push(assetFace.id);
     }
     for (let i = 0; i < 8; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
     }
 
     // Decline face[0] toward its suspected owner (Karina)
     const plan0 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
-    const declinedFace = plan0.toRepair.find((f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId))!;
+    const declinedFace = plan0.toRepair.find(
+      (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
+    )!;
     expect(declinedFace).toBeDefined();
     await declineRepo.createDeclines({
       faces: [{ assetFaceId: declinedFace.assetFaceId, suspectedOwnerId: declinedFace.suspectedOwnerId }],
@@ -1262,18 +1282,26 @@ describe('FaceRepairService decline filter', () => {
     for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
       leakedFaceIds.push(assetFace.id);
     }
     for (let i = 0; i < 8; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
     }
 
     // Find the suspected owner for all leaked faces, then decline all of them
     const plan0 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
-    const leakedToRepair = plan0.toRepair.filter((f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId));
+    const leakedToRepair = plan0.toRepair.filter(
+      (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
+    );
     expect(leakedToRepair.length).toBeGreaterThan(0);
     await declineRepo.createDeclines({
       faces: leakedToRepair.map((f) => ({ assetFaceId: f.assetFaceId, suspectedOwnerId: f.suspectedOwnerId })),
@@ -1317,13 +1345,19 @@ describe('FaceRepairService decline filter', () => {
     for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
       leakedFaceIds.push(assetFace.id);
     }
     for (let i = 0; i < 8; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
-      await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
     }
 
     // Dismiss Alexia with Karina as the fingerprint
