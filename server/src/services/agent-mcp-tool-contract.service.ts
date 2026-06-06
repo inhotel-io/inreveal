@@ -1569,9 +1569,9 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAssetBatchFromSearch,
   title: 'Propose asset batch from search',
   description:
-    'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from a declarative or previous search source.',
+    'preferred tool for proposing favorite, archive, tag, metadata, rotate, adjust, or flip actions from a declarative or previous search source.',
   usage:
-    'Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, or rotate matching photos. Gallery materializes the source and creates a reviewable plan only.',
+    'Use this before low-level proposeAlbumOperations when the user asks to favorite, archive, unarchive, tag, update metadata, rotate, adjust (brightness/contrast/saturation/auto-enhance), or flip matching photos. Gallery materializes the source and creates a reviewable plan only. Examples: asset.adjust { brightness: "moderate_increase", contrast: "slight_increase" }, asset.adjust { autoEnhance: true }, asset.flip { axis: "horizontal" }, asset.flip { axis: "vertical" }.',
   argumentModes: [
     {
       name: 'asset-batch-from-search',
@@ -1579,7 +1579,7 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
       requiredFields: ['action', 'assetSource'],
       forbiddenFields: ['operations', 'assetIds', 'assetSelectionHandleId', 'targetKind'],
       whenToUse:
-        'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests over search results.',
+        'Use for favorite, archive, unarchive, add tag, metadata update, rotate, adjust, or flip requests over search results.',
     },
   ],
   examples: proposeAssetBatchFromSearchExamples,
@@ -1593,7 +1593,7 @@ const proposeAssetBatchFromSearchContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-workflow-unsupported-action',
       match: { issuePath: 'action.type', requestShape: 'tool-arguments' },
-      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.',
+      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, asset.rotate, asset.adjust, or asset.flip with this workflow tool.',
       exampleName: 'favorite-search-results',
     },
   ],
@@ -1657,9 +1657,9 @@ const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
   name: AgentToolName.ProposeAssetBatchFromSelection,
   title: 'Propose asset batch from selection',
   description:
-    'preferred tool for proposing favorite, archive, tag, metadata, or rotate actions from an existing selection handle.',
+    'preferred tool for proposing favorite, archive, tag, metadata, rotate, adjust, or flip actions from an existing selection handle.',
   usage:
-    'Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only.',
+    'Use this after searchAssets or curateSelection when the selected asset set is represented by selectionHandle.id. Gallery materializes IDs server-side and creates a reviewable plan only. Examples: asset.adjust { brightness: "moderate_increase" }, asset.adjust { autoEnhance: true }, asset.flip { axis: "horizontal" }, asset.flip { axis: "vertical" }.',
   argumentModes: [
     {
       name: 'asset-batch-from-selection',
@@ -1667,7 +1667,7 @@ const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
       requiredFields: ['action', 'selectionHandleId'],
       forbiddenFields: ['operations', 'assetIds', 'assetSource', 'assetSelectionHandleId', 'targetKind'],
       whenToUse:
-        'Use for favorite, archive, unarchive, add tag, metadata update, or rotate requests after searchAssets or curateSelection returned the exact selectionHandle.id.',
+        'Use for favorite, archive, unarchive, add tag, metadata update, rotate, adjust, or flip requests after searchAssets or curateSelection returned the exact selectionHandle.id.',
     },
   ],
   examples: proposeAssetBatchFromSelectionExamples,
@@ -1681,7 +1681,7 @@ const proposeAssetBatchFromSelectionContract: AgentMcpPlanningToolContract = {
     {
       id: 'asset-batch-selection-workflow-unsupported-action',
       match: { issuePath: 'action.type', requestShape: 'tool-arguments' },
-      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, or asset.rotate with this workflow tool.',
+      hint: 'Use only asset.setFavorite, asset.setArchive, asset.addTag, asset.updateMetadata, asset.rotate, asset.adjust, or asset.flip with this workflow tool.',
       exampleName: 'favorite-selection',
     },
   ],

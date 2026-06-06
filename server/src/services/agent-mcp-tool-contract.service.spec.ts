@@ -1652,6 +1652,28 @@ describe(AgentMcpToolContractService.name, () => {
       }
     });
 
+    it('asset.adjust + asset.flip contract examples parse and stay ≤2', () => {
+      const fromSearch = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSearch);
+      const fromSelection = sut.getPlanningToolContract(AgentToolName.ProposeAssetBatchFromSelection);
+
+      // ≤2 examples per tool (token-opt invariant)
+      expect(fromSearch?.examples.length ?? 0).toBeLessThanOrEqual(2);
+      expect(fromSelection?.examples.length ?? 0).toBeLessThanOrEqual(2);
+
+      // adjust + flip are documented in the contract
+      const contractText = JSON.stringify([fromSearch, fromSelection]);
+      expect(contractText).toMatch(/asset\.adjust/);
+      expect(contractText).toMatch(/asset\.flip/);
+
+      // All existing examples still parse
+      for (const contract of [fromSearch, fromSelection]) {
+        for (const example of contract?.examples ?? []) {
+          const result = AgentOperationPlanToolRequestSchemas[contract!.name].safeParse(example.arguments);
+          expect(result.success, `${contract!.name} ${example.name}`).toBe(true);
+        }
+      }
+    });
+
     it('keeps matrix metadata and representative requests compact', () => {
       for (const failureCase of sut.listRuntimeFailureMatrixCases()) {
         expect(failureCase.description.length, `${failureCase.id} description`).toBeLessThanOrEqual(220);
