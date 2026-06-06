@@ -518,6 +518,40 @@ export default [
     expect: { kind: 'rotate_assets', slotsSurvive: true },
   },
 
+  // adjust_assets -------------------------------------------------------------
+  {
+    id: 'recall.adjust.brighten',
+    category: 'recall',
+    prompt: 'brighten my last 10 photos',
+    expect: { kind: 'adjust_assets', slotsSurvive: true, slots: { sourceDescription: /last 10 photos/i } },
+  },
+  {
+    id: 'recall.adjust.vivid',
+    category: 'recall',
+    prompt: 'make these more vivid',
+    expect: { kind: 'adjust_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.adjust.auto-enhance',
+    category: 'recall',
+    prompt: 'auto-enhance my newest 5',
+    expect: { kind: 'adjust_assets', slotsSurvive: true },
+  },
+
+  // flip_assets ---------------------------------------------------------------
+  {
+    id: 'recall.flip.horizontal',
+    category: 'recall',
+    prompt: 'flip this horizontally',
+    expect: { kind: 'flip_assets', slotsSurvive: true },
+  },
+  {
+    id: 'recall.flip.mirror',
+    category: 'recall',
+    prompt: 'mirror these',
+    expect: { kind: 'flip_assets', slotsSurvive: true },
+  },
+
   // cleanup_duplicates ---------------------------------------------------------
   {
     id: 'recall.cleanup_duplicates.canonical',
