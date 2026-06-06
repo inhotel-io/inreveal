@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import {
@@ -6,14 +7,18 @@ import {
   AgentOperationStatus,
   AgentOperationTargetKind,
   AgentOperationType,
+  AgentPermissionPreset,
   AgentToolName,
 } from 'src/enum';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { CATALOG_TOKENS_BASELINE, estimateCatalogTokens } from 'src/services/agent-mcp-tool-registry.test-helpers';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpReadToolName } from 'src/types/agent-mcp-contract.types';
 import type { AgentMcpErrorResponse, AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
@@ -61,6 +66,12 @@ const makePlanningServiceResult = (planId = factory.uuid()) => ({
   },
   toolCall: null,
   summary: 'Plan revision 1 is ready for review.',
+});
+
+const makeToolsListRequest = (id: string) => ({
+  jsonrpc: '2.0',
+  id,
+  method: 'tools/list',
 });
 
 const makeToolCallRequest = (toolName: AgentToolName, args: unknown) => ({
@@ -247,18 +258,25 @@ describe(AgentMcpService.name, () => {
   let contractService: AgentMcpToolContractService;
   let toolService: AutoMocked<AgentToolService>;
   let operationPlanService: AutoMocked<AgentOperationPlanService>;
+  let sessionRepository: AutoMocked<AgentSessionRepository>;
   let sut: AgentMcpService;
 
   const sessionId = factory.uuid();
   const userId = factory.uuid();
   const auth = { user: { id: userId } } as AuthDto;
 
+  // Full-access session returned by default — existing tools/list tests stay green.
+  const fullAccessSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser];
+  const makeSession = (snapshot = fullAccessSnapshot) => ({ permissionPlanSnapshot: snapshot });
+
   beforeEach(() => {
     contractService = new AgentMcpToolContractService();
     registry = new AgentMcpToolRegistryService(contractService);
     toolService = automock(AgentToolService, { strict: false });
     operationPlanService = automock(AgentOperationPlanService, { strict: false });
-    sut = new AgentMcpService(registry, contractService, toolService, operationPlanService);
+    sessionRepository = automock(AgentSessionRepository, { strict: false });
+    sessionRepository.getById.mockResolvedValue(makeSession() as never);
+    sut = new AgentMcpService(registry, contractService, toolService, operationPlanService, sessionRepository);
   });
 
   it('returns the MCP initialize result and advertises tools once tools/list exists', async () => {
@@ -2927,6 +2945,75 @@ describe(AgentMcpService.name, () => {
         message: 'Method not found',
         data: { method },
       },
+    });
+  });
+
+  // ── Token-opt Slice 2: preset-gated tools/list ──────────────────────────────
+
+  describe('preset-gated tools/list (token-opt Slice 2)', () => {
+    const carefulSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.Careful];
+    const localPowerUserSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser];
+
+    const gatedUnderCareful = [
+      AgentToolName.ReadAssetOriginals,
+      AgentToolName.ReadAssetPreviews,
+      AgentToolName.ListSpaces,
+      AgentToolName.ReadSpace,
+      AgentToolName.SearchUsers,
+    ] as const;
+
+    it('returns only non-gated tools for a Careful session (5 tools hidden)', async () => {
+      sessionRepository.getById.mockResolvedValue(makeSession(carefulSnapshot) as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolsListRequest('tools-careful'),
+      )) as AgentMcpSuccessResponse;
+      const result = response.result as { tools: Array<{ name: string }> };
+      const toolNames = result.tools.map((t) => t.name);
+
+      expect(result.tools).toHaveLength(26 - gatedUnderCareful.length);
+      for (const gatedName of gatedUnderCareful) {
+        expect(toolNames).not.toContain(gatedName);
+      }
+      // Serialized payload must not include any gated tool's name field.
+      const payload = JSON.stringify(result.tools);
+      for (const gatedName of gatedUnderCareful) {
+        expect(payload).not.toContain(`"name":"${gatedName}"`);
+      }
+      // Token estimate is measurably below the 26-tool baseline.
+      const { tokens } = estimateCatalogTokens(result.tools);
+      expect(tokens).toBeLessThan(CATALOG_TOKENS_BASELINE);
+    });
+
+    it('returns all 26 tools for a LocalPowerUser session (nothing gated)', async () => {
+      sessionRepository.getById.mockResolvedValue(makeSession(localPowerUserSnapshot) as never);
+
+      const response = (await sut.handle(
+        auth,
+        sessionId,
+        makeToolsListRequest('tools-lpu'),
+      )) as AgentMcpSuccessResponse;
+      const result = response.result as { tools: Array<{ name: string }> };
+
+      expect(result.tools).toHaveLength(26);
+    });
+
+    it('resolves the session using auth.user.id and the route sessionId', async () => {
+      sessionRepository.getById.mockResolvedValue(makeSession() as never);
+
+      await sut.handle(auth, sessionId, makeToolsListRequest('tools-resolve'));
+
+      expect(sessionRepository.getById).toHaveBeenCalledWith(userId, sessionId);
+    });
+
+    it('throws BadRequestException for tools/list when the session is not found', async () => {
+      sessionRepository.getById.mockResolvedValue(undefined as never);
+
+      await expect(sut.handle(auth, sessionId, makeToolsListRequest('tools-invalid'))).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

@@ -1,12 +1,20 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AgentRunnerMcpController } from 'src/controllers/agent-runner-mcp.controller';
 import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
-import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import {
+  AgentOperationRiskLevel,
+  AgentOperationTargetKind,
+  AgentOperationType,
+  AgentPermissionPreset,
+  AgentToolName,
+} from 'src/enum';
+import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
 import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { AgentMcpHandleResponse } from 'src/types/agent-mcp.types';
 import request from 'supertest';
@@ -223,6 +231,11 @@ describe(AgentRunnerMcpController.name, () => {
     let realCtx: ControllerContext;
     const realOperationPlanService = automock(AgentOperationPlanService, { strict: false });
     const realToolService = automock(AgentToolService, { strict: false });
+    const realSessionRepository = automock(AgentSessionRepository, { strict: false });
+
+    // Provide a full-access session so tools/list returns all 26 tools unchanged.
+    const fullAccessSnapshot = AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser];
+    realSessionRepository.getById.mockResolvedValue({ permissionPlanSnapshot: fullAccessSnapshot } as never);
 
     beforeAll(async () => {
       realCtx = await controllerSetup(AgentRunnerMcpController, [
@@ -232,6 +245,7 @@ describe(AgentRunnerMcpController.name, () => {
         AgentMcpToolRegistryService,
         { provide: AgentToolService, useValue: realToolService },
         { provide: AgentOperationPlanService, useValue: realOperationPlanService },
+        { provide: AgentSessionRepository, useValue: realSessionRepository },
         AgentMcpService,
       ]);
       return () => realCtx.close();
