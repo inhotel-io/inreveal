@@ -727,6 +727,41 @@ export default [
     expect: { kind: 'none' },
   },
 
+  // --- rename_person routing + plan-proposed --------------------------------
+  {
+    id: 'l3.recall.person.rename',
+    category: 'l3.recall',
+    prompt: 'Rename Alex to Alexander',
+    expect: { kind: 'rename_person' },
+  },
+  {
+    // rename_person end-to-end: searchPeople resolves, person.update plan proposed
+    // (never applied). managePeople write-scope is true in VisualOrganizer (the L3
+    // eval preset), so proposing is allowed; no live apply (PROPOSE-ONLY at L3).
+    // Data-dependent: SEEDED gates plan-proposed (needs a person named "Alex" in the library).
+    id: 'l3.plan.person.rename',
+    category: 'l3.plan',
+    prompt: 'Rename Alex to Alexander',
+    expect: { kind: 'rename_person', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+
+  // --- set_person_birthdate routing -------------------------------------------
+  {
+    id: 'l3.recall.person.birthdate',
+    category: 'l3.recall',
+    prompt: "set Alex's birthday to 1990-05-01",
+    expect: { kind: 'set_person_birthdate' },
+  },
+
+  // --- hide_person routing ----------------------------------------------------
+  {
+    id: 'l3.recall.person.hide',
+    category: 'l3.recall',
+    prompt: 'hide Alex',
+    expect: { kind: 'hide_person' },
+  },
+
   // --- stack_assets routing + plan-proposed ---------------------------------
   {
     id: 'l3.recall.stack',

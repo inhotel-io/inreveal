@@ -57,6 +57,7 @@ const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
     trashAssets: true,
     createSharedLinks: false,
     manageStacks: false,
+    managePeople: false,
   },
   limits: {
     maxAssetsPerToolCall: 20,

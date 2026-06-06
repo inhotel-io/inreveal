@@ -1658,7 +1658,9 @@ export class AgentToolService {
         if (!name) {
           return { people: { status: 'not_found' } };
         }
-        const rows = await this.personRepository.getByName(auth.user.id, name, { withHidden: false });
+        const rows = await this.personRepository.getByName(auth.user.id, name, {
+          withHidden: request.includeHidden ?? false,
+        });
         return { people: this.decidePeople(rows, name) };
       },
       responseSummary: (result) => {

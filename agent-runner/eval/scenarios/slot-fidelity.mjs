@@ -170,4 +170,20 @@ export default [
     prompt: 'unstack my photos from Berlin',
     expect: { kind: 'unstack_assets', slots: { sourceDescription: /berlin/i } },
   },
+
+  // rename_person ---------------------------------------------------------------
+  {
+    id: 'slots.person.rename',
+    category: 'slots',
+    prompt: 'Rename Alejandra to Karina',
+    expect: { kind: 'rename_person', slots: { personRef: 'Alejandra', newName: 'Karina' } },
+  },
+
+  // set_person_birthdate --------------------------------------------------------
+  {
+    id: 'slots.person.birthdate',
+    category: 'slots',
+    prompt: "set Alex's birthday to 1990-05-01",
+    expect: { kind: 'set_person_birthdate', slots: { personRef: 'Alex', dateStr: '1990-05-01' } },
+  },
 ];
