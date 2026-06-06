@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** A non-persisting `POST /assets/:id/edits/preview` endpoint that renders an asset's image with the *proposed* edit actions applied, so the plan card can show an accurate "after" preview without saving anything.
+**Goal:** A non-persisting `POST /assets/:id/edits/preview` endpoint that renders an asset's image with the _proposed_ edit actions applied, so the plan card can show an accurate "after" preview without saving anything.
 
 **Architecture:** The endpoint renders the proposed edits **over the asset's existing generated image** (thumbnail or preview file, per the requested `size`) — not the original. This is simple, cheap, inherently resolution-matched to the "before" thumbnail, and correct for the v1 tonal/flip ops. A new `MediaRepository.renderEditedImage(buffer, edits)` applies the edits via sharp and returns an encoded buffer; the service streams it back as an `ImmichStreamResponse`; nothing is written to `asset_edit`.
 
@@ -10,7 +10,7 @@
 
 Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (Slice 2).
 
-> **Deviation from spec (intentional, folded in here):** the spec's Slice 2 said "merge incoming with persisted edits and render the original via `mergeEdits`". This plan instead **renders the proposed edits over the asset's existing generated image** at the requested size. Rationale: (1) avoids reading the original from the storage backend (S3) on every preview/revise; (2) the source is already at thumbnail/preview size so before/after match resolution automatically; (3) correct for the v1 scope (tonal + flip — these compose cleanly over a base render). Consequence: the **shared `mergeEdits` util moves to Slice 3** (where the apply path genuinely needs to merge into the persisted edit list). Documented limitations: an asset that *already* has a persisted adjust will show the proposed adjust composed over the baked-in one (rare; the user self-corrects via the live preview); geometry ops (crop/rotate) are not meaningfully previewed by this endpoint and the plan card (Slice 4) only shows previews for adjust/flip ops.
+> **Deviation from spec (intentional, folded in here):** the spec's Slice 2 said "merge incoming with persisted edits and render the original via `mergeEdits`". This plan instead **renders the proposed edits over the asset's existing generated image** at the requested size. Rationale: (1) avoids reading the original from the storage backend (S3) on every preview/revise; (2) the source is already at thumbnail/preview size so before/after match resolution automatically; (3) correct for the v1 scope (tonal + flip — these compose cleanly over a base render). Consequence: the **shared `mergeEdits` util moves to Slice 3** (where the apply path genuinely needs to merge into the persisted edit list). Documented limitations: an asset that _already_ has a persisted adjust will show the proposed adjust composed over the baked-in one (rare; the user self-corrects via the live preview); geometry ops (crop/rotate) are not meaningfully previewed by this endpoint and the plan card (Slice 4) only shows previews for adjust/flip ops.
 
 ---
 
@@ -27,6 +27,7 @@ Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (
 ## Task 1: `MediaRepository.renderEditedImage`
 
 **Files:**
+
 - Modify: `server/src/repositories/media.repository.ts`
 - Test: `server/src/repositories/media.repository.spec.ts`
 
@@ -46,11 +47,21 @@ describe('renderEditedImage', () => {
 
   it('applies a flip (mirror) edit', async () => {
     // left red, right green; horizontal mirror swaps them
-    const img = await sharp({ create: { width: 20, height: 10, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } } })
-      .composite([{ input: { create: { width: 10, height: 10, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } } }, left: 10, top: 0 }])
+    const img = await sharp({
+      create: { width: 20, height: 10, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } },
+    })
+      .composite([
+        {
+          input: { create: { width: 10, height: 10, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } } },
+          left: 10,
+          top: 0,
+        },
+      ])
       .jpeg()
       .toBuffer();
-    const out = await sut.renderEditedImage(img, [{ action: AssetEditAction.Mirror, parameters: { axis: MirrorAxis.Horizontal } }]);
+    const out = await sut.renderEditedImage(img, [
+      { action: AssetEditAction.Mirror, parameters: { axis: MirrorAxis.Horizontal } },
+    ]);
     const left = await getPixelColor(out, 2, 5);
     expect(left.g).toBeGreaterThan(left.r); // left is now green after horizontal mirror
   });
@@ -94,10 +105,12 @@ git commit -m "feat(editing): MediaRepository.renderEditedImage (in-memory edite
 ## Task 2: `AssetService.previewAssetEdits`
 
 **Files:**
+
 - Modify: `server/src/services/asset.service.ts` (near `getAssetEdits` ~line 648)
 - Test: `server/src/services/asset.service.spec.ts`
 
 **Behavior** (`previewAssetEdits(auth, id, dto, size)`):
+
 1. `requireAccess({ auth, permission: Permission.AssetRead, ids: [id] })` (same as `getAssetEdits`).
 2. `const asset = await this.assetRepository.getById(id)`; if `!asset` → `NotFoundException`; if not an image (`asset.type !== AssetType.Image`) → `BadRequestException('Preview is only available for images')`.
 3. Map `size` (`AssetMediaSize.Thumbnail | Preview`, default Preview) → `AssetFileType.Thumbnail | Preview`. `const { path } = await this.assetRepository.getForThumbnail(id, fileType, false)` (unedited base). If `!path` → `NotFoundException('Asset media not available')`.
@@ -114,23 +127,33 @@ In `asset.service.spec.ts` (follow the file's `newTestService(AssetService)` moc
 
 ```ts
 describe('previewAssetEdits', () => {
-  const editsDto = { edits: [{ action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } }] };
+  const editsDto = {
+    edits: [{ action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } }],
+  };
 
   it('requires AssetRead access', async () => {
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set()); // or the helper your suite uses to deny
-    await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail)).rejects.toThrow();
+    await expect(
+      sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail),
+    ).rejects.toThrow();
   });
 
   it('rejects a non-image asset', async () => {
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
     mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Video } as any);
-    await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('renders the proposed edits over the sized base image and persists nothing', async () => {
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
     mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Image } as any);
-    mocks.asset.getForThumbnail.mockResolvedValue({ path: '/thumbs/a.webp', originalPath: '/o.jpg', originalFileName: 'o.jpg' } as any);
+    mocks.asset.getForThumbnail.mockResolvedValue({
+      path: '/thumbs/a.webp',
+      originalPath: '/o.jpg',
+      originalFileName: 'o.jpg',
+    } as any);
     mocks.storage.readFile.mockResolvedValue(Buffer.from('src'));
     mocks.media.renderEditedImage.mockResolvedValue(Buffer.from('rendered'));
 
@@ -157,7 +180,9 @@ describe('previewAssetEdits', () => {
     mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
     mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Image } as any);
     mocks.asset.getForThumbnail.mockResolvedValue({ path: null } as any);
-    await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.Thumbnail),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 ```
@@ -188,6 +213,7 @@ git commit -m "feat(editing): AssetService.previewAssetEdits (ephemeral edited r
 ## Task 3: `POST /assets/:id/edits/preview` controller route
 
 **Files:**
+
 - Modify: `server/src/controllers/asset.controller.ts` (next to the other `:id/edits` routes ~line 212-247)
 - Modify: `server/src/dtos/editing.dto.ts` — a query DTO for `size`
 - Test: `server/src/controllers/asset.controller.spec.ts`
@@ -284,6 +310,7 @@ pnpm -C server build && pnpm -C server sync:open-api && make open-api
 git status --porcelain open-api/ mobile/openapi/
 grep -rl "edits/preview\|previewAssetEdits\|AssetEditPreviewQuery" open-api/typescript-sdk/src >/dev/null && echo "TS ok"
 ```
+
 Expected: the preview route present in the TS SDK; `mobile/openapi/` regenerated (run `make open-api-dart` if Dart didn't update).
 
 - [ ] **Step 4: Re-run the Slice-2 specs together**
@@ -291,6 +318,7 @@ Expected: the preview route present in the TS SDK; `mobile/openapi/` regenerated
 ```bash
 pnpm -C server test -- --run src/repositories/media.repository.spec.ts src/services/asset.service.spec.ts src/controllers/asset.controller.spec.ts
 ```
+
 Expected: all green.
 
 - [ ] **Step 5: Commit generated clients**
@@ -318,4 +346,7 @@ git commit -m "chore(openapi): regenerate clients for edits/preview endpoint (TS
 - Deviation from spec (render-over-base vs merge-original) documented at top; `mergeEdits` deferred to Slice 3. ✅
 - No placeholders; concrete code + exact mirror references (`viewThumbnail`, `asset-media.controller.ts` streaming). ✅
 - No future-slice work (no agent op, no web). ✅
+
+```
+
 ```

@@ -29,6 +29,7 @@ Spec: `docs/superpowers/specs/2026-06-06-pi-agent-image-adjustments-design.md` (
 ## Task 1: `TonalLevel` enum + schema in editing.dto
 
 **Files:**
+
 - Modify: `server/src/dtos/editing.dto.ts`
 - Test: `server/src/dtos/editing.dto.spec.ts` (create)
 
@@ -67,8 +68,9 @@ describe('AdjustParameters schema', () => {
 
   it('rejects autoEnhance combined with a manual field', () => {
     expect(
-      parse([{ action: AssetEditAction.Adjust, parameters: { autoEnhance: true, brightness: TonalLevel.SlightIncrease } }])
-        .success,
+      parse([
+        { action: AssetEditAction.Adjust, parameters: { autoEnhance: true, brightness: TonalLevel.SlightIncrease } },
+      ]).success,
     ).toBe(false);
   });
 
@@ -155,7 +157,8 @@ z.object({ action: AssetEditActionSchema.extract(['Adjust']), parameters: Adjust
 ```ts
 export type AdjustParameters = z.infer<typeof AdjustParametersSchema>;
 ```
-   (add `AdjustParameters` to the existing `export type ... = z.infer<...>` block at the bottom; `TonalLevel` is already exported as an enum.)
+
+(add `AdjustParameters` to the existing `export type ... = z.infer<...>` block at the bottom; `TonalLevel` is already exported as an enum.)
 
 > `uniqueEditActions` already keys non-mirror actions by `action`, so two `adjust` actions are rejected automatically — no change needed there. Confirm by reading the function.
 
@@ -176,6 +179,7 @@ git commit -m "feat(editing): adjust edit action schema (TonalLevel + AdjustPara
 ## Task 2: Pure factor tables + `contrastLinear` helper
 
 **Files:**
+
 - Create: `server/src/utils/editor-adjust.ts`
 - Test: `server/src/utils/editor-adjust.spec.ts`
 
@@ -283,6 +287,7 @@ git commit -m "feat(editing): adjust factor tables + contrastLinear helper"
 ## Task 3: `transform.ts` adjust-is-a-no-op regression
 
 **Files:**
+
 - Test: `server/src/utils/transform.spec.ts` (extend)
 
 `transform.ts` needs **no code change** — `getOutputDimensions` only reads crop/rotate, `createAffineMatrix` maps unknown actions to `identity()`, and `transformPoints` `continue`s on non-affine actions. This task locks that in with tests.
@@ -308,7 +313,14 @@ describe('adjust is geometrically inert', () => {
   });
 
   it('transformFaceBoundingBox is unchanged by an adjust edit', () => {
-    const box = { boundingBoxX1: 10, boundingBoxY1: 20, boundingBoxX2: 110, boundingBoxY2: 220, imageWidth: 800, imageHeight: 600 };
+    const box = {
+      boundingBoxX1: 10,
+      boundingBoxY1: 20,
+      boundingBoxX2: 110,
+      boundingBoxY2: 220,
+      imageWidth: 800,
+      imageHeight: 600,
+    };
     const rotate = { action: AssetEditAction.Rotate, parameters: { angle: 90 } } as const;
     const withAdjust = transformFaceBoundingBox(box, [rotate, adjust], { width: 800, height: 600 });
     const without = transformFaceBoundingBox(box, [rotate], { width: 800, height: 600 });
@@ -345,6 +357,7 @@ git commit -m "test(editing): lock adjust as a geometric no-op in transform"
 ## Task 4: Render tonal ops in `applyEdits` (real-sharp behavioral)
 
 **Files:**
+
 - Modify: `server/src/repositories/media.repository.ts` (`applyEdits` ~line 149; caller `getImageDecodingPipeline` ~line 209)
 - Test: `server/src/repositories/media.repository.spec.ts`
 
@@ -413,9 +426,7 @@ describe('applyEdits (tonal adjustments)', () => {
         },
       ])
       .png();
-    const out = await sut['applyEdits'](img, [
-      { action: AssetEditAction.Adjust, parameters: { autoEnhance: true } },
-    ]);
+    const out = await sut['applyEdits'](img, [{ action: AssetEditAction.Adjust, parameters: { autoEnhance: true } }]);
     const buf = await out.toBuffer();
     const lo = await getPixelColor(buf, 10, 50);
     const hi = await getPixelColor(buf, 90, 50);
@@ -551,6 +562,7 @@ git commit -m "feat(editing): render adjust tonal ops in applyEdits (sharp modul
 make check-server && make lint-server
 pnpm -C server exec prettier --write src/dtos/editing.dto.ts src/utils/editor-adjust.ts src/repositories/media.repository.ts src/dtos/editing.dto.spec.ts src/utils/editor-adjust.spec.ts src/utils/transform.spec.ts src/repositories/media.repository.spec.ts
 ```
+
 Expected: clean (zero warnings).
 
 - [ ] **Step 2: Regenerate OpenAPI (TS + Dart)**
@@ -566,6 +578,7 @@ git status --porcelain open-api/ mobile/openapi/
 grep -rl "TonalLevel" open-api/typescript-sdk/src >/dev/null && echo "TS ok"
 grep -rl "tonal_level\|TonalLevel" mobile/openapi/lib >/dev/null && echo "Dart ok"
 ```
+
 Expected: both `TonalLevel` / `AdjustParameters` present in the TS SDK and the Dart client (`mobile/openapi/`). If Dart is missing, run `make open-api-dart` explicitly (G2 lesson).
 
 - [ ] **Step 4: Run the full Slice-1 test set once more**
@@ -573,6 +586,7 @@ Expected: both `TonalLevel` / `AdjustParameters` present in the TS SDK and the D
 ```bash
 pnpm -C server test -- --run src/dtos/editing.dto.spec.ts src/utils/editor-adjust.spec.ts src/utils/transform.spec.ts src/repositories/media.repository.spec.ts
 ```
+
 Expected: all green.
 
 - [ ] **Step 5: Commit the generated clients**
@@ -602,4 +616,7 @@ git commit -m "chore(openapi): regenerate clients for adjust edit action (TS + D
 - No placeholders; all code shown. ✅
 - Type names consistent: `TonalLevel`, `AdjustParameters`, `BRIGHTNESS_FACTOR`/`SATURATION_FACTOR`/`CONTRAST_SLOPE`, `contrastLinear(level, mid)`. ✅
 - No future-slice work (no agent op, no endpoint, no workflow). ✅
+
+```
+
 ```
