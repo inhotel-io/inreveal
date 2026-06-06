@@ -36,6 +36,8 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'asset.unstack',
   'shareLink.create',
   'shareLink.createAlbum',
+  'person.update',
+  'person.merge',
 ]);
 
 // Action types accepted by proposeAssetBatchFromSelection's discriminated union.

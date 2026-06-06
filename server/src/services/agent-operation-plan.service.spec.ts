@@ -10598,4 +10598,122 @@ describe(AgentOperationPlanService.name, () => {
   it('Careful preset does NOT grant managePeople', () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.managePeople).toBe(false);
   });
+
+  // ── person.merge ──────────────────────────────────────────────────────────────
+
+  it('validateWriteScope throws for person.merge when managePeople is false', async () => {
+    const auth = AuthFactory.create();
+    const keepPersonId = newUuid();
+    const sourcePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, managePeople: false },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+
+    await expect(
+      sut.proposeAlbumOperations(auth, session.id, {
+        summary: 'Merge Alejandra into Karina.',
+        operations: [
+          {
+            type: AgentOperationType.PersonMerge,
+            summary: 'Merge Alejandra into Karina (irreversible).',
+            targetKind: AgentOperationTargetKind.Person,
+            targetId: keepPersonId,
+            riskLevel: AgentOperationRiskLevel.High,
+            enabled: true,
+            payload: { sourcePersonIds: [sourcePersonId] },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/managing people/);
+  });
+
+  it('validateWriteScope passes for person.merge when managePeople is true', async () => {
+    const auth = AuthFactory.create();
+    const keepPersonId = newUuid();
+    const sourcePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.Running,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedPermissionPlanSnapshot.writeScope, managePeople: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.createReplacementRevision.mockResolvedValue(
+      makePlan({
+        id: newUuid(),
+        sessionId: session.id,
+        operations: [
+          makeOperation({
+            type: AgentOperationType.PersonMerge,
+            targetKind: AgentOperationTargetKind.Person,
+            targetId: keepPersonId,
+            assetIds: [],
+            payload: { sourcePersonIds: [sourcePersonId] },
+          }),
+        ],
+      }),
+    );
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Merge Alejandra into Karina.',
+      operations: [
+        {
+          type: AgentOperationType.PersonMerge,
+          summary: 'Merge Alejandra into Karina (irreversible).',
+          targetKind: AgentOperationTargetKind.Person,
+          targetId: keepPersonId,
+          riskLevel: AgentOperationRiskLevel.High,
+          enabled: true,
+          payload: { sourcePersonIds: [sourcePersonId] },
+        },
+      ],
+    });
+
+    expect(result.status).not.toBe('error');
+  });
+
+  it('applying person.merge calls personService.mergePerson with the correct shape', async () => {
+    const auth = AuthFactory.create();
+    const keepPersonId = newUuid();
+    const sourcePersonId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      type: AgentOperationType.PersonMerge,
+      targetKind: AgentOperationTargetKind.Person,
+      targetId: keepPersonId,
+      assetIds: [],
+      payload: { sourcePersonIds: [sourcePersonId] },
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    personService.mergePerson.mockResolvedValue([]);
+
+    await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+      itemSelections: {},
+      fieldOverrides: {},
+    });
+
+    expect(personService.mergePerson).toHaveBeenCalledWith(auth, keepPersonId, {
+      ids: [sourcePersonId],
+    });
+  });
 });
