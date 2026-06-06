@@ -53,7 +53,7 @@ describe('Pi agent capability matrix', () => {
     const needsNewToolSection = markdown.slice(needsNewToolHeadingIndex);
     expect(needsNewToolSection).not.toContain('Natural-language semantic search');
     expect(needsNewToolSection).not.toContain('Large-library pagination');
-    expect(markdown).toContain('Next expansion candidates: richer image-edit operation families');
+    expect(markdown).toContain('Next expansion candidates: image straightening and export/download workflows');
     // Reversible trash + duplicate cleanup shipped — no longer new-tool gaps.
     expect(needsNewToolSection).not.toContain('| Trash/delete ');
     expect(needsNewToolSection).not.toContain('| Duplicate/similar-photo cleanup ');
