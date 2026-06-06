@@ -76,10 +76,7 @@ describe('fetchEditPreview', () => {
     const ac = new AbortController();
     await fetchEditPreview('asset-2', [{ action: 'mirror', parameters: { axis: 'horizontal' } }], ac.signal);
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ signal: ac.signal }),
-    );
+    expect(fetchSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: ac.signal }));
 
     vi.unstubAllGlobals();
   });
