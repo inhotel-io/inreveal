@@ -11,7 +11,8 @@ import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { ORIENTATION_TO_SHARP_ROTATION } from 'src/constants';
 import { Exif } from 'src/database';
-import { AssetEditActionItem } from 'src/dtos/editing.dto';
+import { AdjustParameters, AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
+import { BRIGHTNESS_FACTOR, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import {
   AacProfile,
   Av1Profile,
@@ -153,7 +154,15 @@ export class MediaRepository {
     return this.getImageDecodingPipeline(input, options).raw().toBuffer({ resolveWithObject: true });
   }
 
-  private applyEdits(pipeline: sharp.Sharp, edits: AssetEditActionItem[]): sharp.Sharp {
+  // Geometry (crop/affine) is applied first; tonal ops follow (order is fixed and tested).
+  private async applyEdits(
+    pipeline: sharp.Sharp,
+    edits: AssetEditActionItem[],
+    colorspace: string = Colorspace.Srgb,
+  ): Promise<sharp.Sharp> {
+    const affineEditOperations = edits.filter((edit) => edit.action !== 'crop');
+    const matrix = createAffineMatrix(affineEditOperations);
+
     const crop = edits.find((edit) => edit.action === 'crop');
     if (crop) {
       pipeline = pipeline.extract({
@@ -171,6 +180,26 @@ export class MediaRepository {
         [a, b],
         [c, d],
       ]);
+    }
+
+    const adjust = edits.find((edit) => edit.action === AssetEditAction.Adjust)?.parameters as
+      | AdjustParameters
+      | undefined;
+    if (adjust) {
+      if (adjust.autoEnhance) {
+        pipeline = pipeline.normalise();
+      } else {
+        const brightness = adjust.brightness ? BRIGHTNESS_FACTOR[adjust.brightness] : 1;
+        const saturation = adjust.saturation ? SATURATION_FACTOR[adjust.saturation] : 1;
+        if (brightness !== 1 || saturation !== 1) {
+          pipeline = pipeline.modulate({ brightness, saturation });
+        }
+        if (adjust.contrast) {
+          const mid = colorspace === Colorspace.Srgb ? 128 : 32768;
+          const { a: ca, b: cb } = contrastLinear(adjust.contrast, mid);
+          pipeline = pipeline.linear(ca, cb);
+        }
+      }
     }
 
     return pipeline;
@@ -211,7 +240,7 @@ export class MediaRepository {
     }
 
     if (options.edits && options.edits.length > 0) {
-      pipeline = this.applyEdits(pipeline, options.edits);
+      pipeline = await this.applyEdits(pipeline, options.edits, options.colorspace);
     }
 
     if (options.size !== undefined) {
