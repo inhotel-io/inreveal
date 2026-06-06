@@ -846,6 +846,84 @@
     }
   },
   {
+    "kind": "adjust_assets",
+    "flow": "hybrid",
+    "title": "Adjust photo look (brightness/contrast/saturation/auto-enhance)",
+    "classifierDescription": "User wants to adjust the look of a metadata-describable set of photos — brightness, contrast, saturation (named levels), or a one-click auto-enhance. NOT crop/rotate/flip.",
+    "positiveExamples": [
+      "Brighten my last 10 photos",
+      "Make my Berlin photos pop",
+      "Auto-enhance my newest 5"
+    ],
+    "negativeExamples": [
+      "Rotate the sideways photos",
+      "Make these look amazing",
+      "Crop my newest photo"
+    ],
+    "slots": {
+      "params": {
+        "type": "object",
+        "required": true,
+        "description": "AdjustParameters: brightness/contrast/saturation level or autoEnhance."
+      },
+      "sourceDescription": {
+        "type": "string",
+        "required": true,
+        "description": "Metadata description of the photos to adjust."
+      }
+    },
+    "requiredReadTools": [
+      "resolveAssetSearchFilters",
+      "searchAssets"
+    ],
+    "planTool": "proposeAssetBatchFromSelection",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Adjust assets (brightness/contrast/saturation/auto-enhance)",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the source + tonal adjustment params; Gallery owns the batch asset.adjust plan from the handle."
+    }
+  },
+  {
+    "kind": "flip_assets",
+    "flow": "hybrid",
+    "title": "Flip photos (mirror H/V)",
+    "classifierDescription": "User wants to flip/mirror a metadata-describable set of photos horizontally or vertically. NOT rotate (degrees) or 'upside down' (that is a 180 rotation).",
+    "positiveExamples": [
+      "Flip my newest 5 photos horizontally",
+      "Mirror these",
+      "Flip these vertically"
+    ],
+    "negativeExamples": [
+      "Rotate these 90",
+      "Flip my photos upside down",
+      "Crop this"
+    ],
+    "slots": {
+      "axis": {
+        "type": "string",
+        "required": false,
+        "description": "horizontal (default) or vertical."
+      },
+      "sourceDescription": {
+        "type": "string",
+        "required": true,
+        "description": "Metadata description of the photos to flip."
+      }
+    },
+    "requiredReadTools": [
+      "resolveAssetSearchFilters",
+      "searchAssets"
+    ],
+    "planTool": "proposeAssetBatchFromSelection",
+    "supportsContinuation": false,
+    "matrixRow": {
+      "capability": "Flip assets (mirror H/V)",
+      "tier": "Solid now",
+      "workflowOrBoundary": "Pi resolves the source + flip axis (horizontal default); Gallery owns the batch asset.flip plan from the handle. \"Upside down\" deferred to rotate_assets (180°)."
+    }
+  },
+  {
     "kind": "stack_assets",
     "flow": "hybrid",
     "title": "Stack photos",

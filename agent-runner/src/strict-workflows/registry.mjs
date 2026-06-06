@@ -18,7 +18,9 @@ import { trashAssetsWorkflow } from './workflows/trash-assets.mjs';
 import { restoreAssetsWorkflow } from './workflows/restore-assets.mjs';
 import { untagAssetsWorkflow } from './workflows/untag-assets.mjs';
 import { visualCleanupWorkflow } from './workflows/visual-cleanup.mjs';
+import { adjustAssetsWorkflow } from './workflows/adjust-assets.mjs';
 import { cropAssetsWorkflow } from './workflows/crop-assets.mjs';
+import { flipAssetsWorkflow } from './workflows/flip-assets.mjs';
 import { rotateAssetsWorkflow } from './workflows/rotate-assets.mjs';
 import { shareAlbumWorkflow } from './workflows/share-album.mjs';
 import { shareAssetsWorkflow } from './workflows/share-assets.mjs';
@@ -130,6 +132,8 @@ const WORKFLOW_FACTORIES = Object.freeze([
   updateAssetMetadataWorkflow,
   rotateAssetsWorkflow,
   cropAssetsWorkflow,
+  adjustAssetsWorkflow,
+  flipAssetsWorkflow,
   unstackAssetsWorkflow,
   stackAssetsWorkflow,
   manageSpaceMembersWorkflow,

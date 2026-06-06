@@ -702,6 +702,82 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'adjust_assets',
+    flow: 'hybrid',
+    title: 'Adjust photo look (brightness/contrast/saturation/auto-enhance)',
+    classifierDescription:
+      'User wants to adjust the look of a metadata-describable set of photos — brightness, contrast, saturation (named levels), or a one-click auto-enhance. NOT crop/rotate/flip.',
+    positiveExamples: Object.freeze([
+      'Brighten my last 10 photos',
+      'Make my Berlin photos pop',
+      'Auto-enhance my newest 5',
+    ]),
+    negativeExamples: Object.freeze([
+      'Rotate the sideways photos',
+      'Make these look amazing',
+      'Crop my newest photo',
+    ]),
+    slots: Object.freeze({
+      params: Object.freeze({
+        type: 'object',
+        required: true,
+        description: 'AdjustParameters: brightness/contrast/saturation level or autoEnhance.',
+      }),
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to adjust.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Adjust assets (brightness/contrast/saturation/auto-enhance)',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the source + tonal adjustment params; Gallery owns the batch asset.adjust plan from the handle.',
+    }),
+  }),
+  Object.freeze({
+    kind: 'flip_assets',
+    flow: 'hybrid',
+    title: 'Flip photos (mirror H/V)',
+    classifierDescription:
+      "User wants to flip/mirror a metadata-describable set of photos horizontally or vertically. NOT rotate (degrees) or 'upside down' (that is a 180 rotation).",
+    positiveExamples: Object.freeze([
+      'Flip my newest 5 photos horizontally',
+      'Mirror these',
+      'Flip these vertically',
+    ]),
+    negativeExamples: Object.freeze([
+      'Rotate these 90',
+      'Flip my photos upside down',
+      'Crop this',
+    ]),
+    slots: Object.freeze({
+      axis: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'horizontal (default) or vertical.',
+      }),
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to flip.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Flip assets (mirror H/V)',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Pi resolves the source + flip axis (horizontal default); Gallery owns the batch asset.flip plan from the handle. "Upside down" deferred to rotate_assets (180°).',
+    }),
+  }),
+  Object.freeze({
     kind: 'stack_assets',
     flow: 'hybrid',
     title: 'Stack photos',

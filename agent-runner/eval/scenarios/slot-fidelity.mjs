@@ -171,6 +171,34 @@ export default [
     expect: { kind: 'unstack_assets', slots: { sourceDescription: /berlin/i } },
   },
 
+  // adjust_assets ---------------------------------------------------------------
+  {
+    id: 'slots.adjust.contrast-strong',
+    category: 'slots',
+    prompt: 'increase contrast a lot on these',
+    expect: { kind: 'adjust_assets', slots: { params: { contrast: 'strong_increase' } } },
+  },
+  {
+    id: 'slots.adjust.auto-enhance',
+    category: 'slots',
+    prompt: 'auto-enhance my newest 5',
+    expect: { kind: 'adjust_assets', slots: { params: { autoEnhance: true } } },
+  },
+
+  // flip_assets ----------------------------------------------------------------
+  {
+    id: 'slots.flip.vertical',
+    category: 'slots',
+    prompt: 'flip these vertically',
+    expect: { kind: 'flip_assets', slots: { axis: 'vertical' } },
+  },
+  {
+    id: 'slots.flip.horizontal-default',
+    category: 'slots',
+    prompt: 'mirror my newest 5 photos',
+    expect: { kind: 'flip_assets', slots: { axis: 'horizontal' } },
+  },
+
   // rename_person ---------------------------------------------------------------
   {
     id: 'slots.person.rename',

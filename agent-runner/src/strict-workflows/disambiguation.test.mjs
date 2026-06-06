@@ -171,6 +171,18 @@ const CASES = [
   // merge_people (merge verb + into/and + two person names)
   ['merge Alejandra into Karina', 'merge_people'],
   ['merge Alex and Karina', 'merge_people'],
+  // adjust_assets (tonal/enhance verbs; excludes flip/rotate/crop)
+  ['brighten my last 10 photos', 'adjust_assets'],
+  ['make these more vivid', 'adjust_assets'],
+  ['auto-enhance my newest 5', 'adjust_assets'],
+  // adjust_assets must NOT steal rotate/flip/crop
+  ['rotate these 90 clockwise', 'rotate_assets'],
+  ['flip my photos upside down', 'rotate_assets'],
+  // flip_assets (flip/mirror verb; excludes upside-down, rotate, crop)
+  ['flip my newest 5 photos horizontally', 'flip_assets'],
+  ['mirror these', 'flip_assets'],
+  // flip_assets must NOT steal "upside down" (rotate_assets owns it)
+  ['flip my newest 5 photos upside down', 'rotate_assets'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {
