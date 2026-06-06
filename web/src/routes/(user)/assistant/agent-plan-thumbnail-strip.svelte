@@ -73,7 +73,7 @@
     const ac = new AbortController();
     const createdUrls: string[] = [];
 
-    (async () => {
+    void (async () => {
       const results: Record<string, string | 'failed'> = {};
 
       for (const assetId of currentAssetIds) {
