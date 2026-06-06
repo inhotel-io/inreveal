@@ -20,11 +20,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
   await sql`CREATE INDEX "face_repair_decline_assetFaceId_idx" ON "face_repair_decline" ("assetFaceId")`.execute(db);
   await sql`CREATE INDEX "face_repair_decline_personId_idx" ON "face_repair_decline" ("personId")`.execute(db);
-  await sql`
-    CREATE UNIQUE INDEX "face_repair_decline_face_owner_uq"
-    ON "face_repair_decline" ("assetFaceId", "suspectedOwnerId")
-    WHERE "assetFaceId" IS NOT NULL
-  `.execute(db);
+  await sql`CREATE UNIQUE INDEX "face_repair_decline_face_owner_uq" ON "face_repair_decline" ("assetFaceId", "suspectedOwnerId")`.execute(
+    db,
+  );
 }
 
 export async function down(db: Kysely<any>): Promise<void> {

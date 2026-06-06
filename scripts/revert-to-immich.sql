@@ -351,6 +351,7 @@ DELETE FROM "kysely_migrations"
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
    '1778800000000-TrimSpacePersonNameIndex',
    '1780000000000-AddFaceRepairScan',
+   '1781000000000-AddFaceRepairDecline',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.

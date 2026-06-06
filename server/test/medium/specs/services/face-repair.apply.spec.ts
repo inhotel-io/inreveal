@@ -2,6 +2,7 @@ import { Kysely } from 'kysely';
 import { SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -41,6 +42,7 @@ const setup = () => {
     real: [
       FaceRepairRepository,
       FaceRepairScanRepository,
+      FaceRepairDeclineRepository,
       FaceIdentityRepository,
       SearchRepository,
       PersonRepository,

@@ -1,4 +1,4 @@
-import { Insertable, Kysely, sql } from 'kysely';
+import { Insertable, Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
@@ -63,12 +63,7 @@ export class FaceRepairDeclineRepository {
         const inserted = await trx
           .insertInto('face_repair_decline')
           .values(faceRows)
-          .onConflict((oc) =>
-            oc
-              .columns(['assetFaceId', 'suspectedOwnerId'])
-              .where(sql<boolean>`"assetFaceId" IS NOT NULL`)
-              .doNothing(),
-          )
+          .onConflict((oc) => oc.columns(['assetFaceId', 'suspectedOwnerId']).doNothing())
           .returning('id')
           .execute();
         created += inserted.length;

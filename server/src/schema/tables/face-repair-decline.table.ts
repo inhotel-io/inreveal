@@ -12,7 +12,6 @@ import { UserTable } from 'src/schema/tables/user.table';
   name: 'face_repair_decline_face_owner_uq',
   columns: ['assetFaceId', 'suspectedOwnerId'],
   unique: true,
-  where: '"assetFaceId" IS NOT NULL',
 })
 export class FaceRepairDeclineTable {
   @PrimaryGeneratedUuidV7Column()

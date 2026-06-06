@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -40,6 +41,7 @@ const setup = () =>
     real: [
       FaceRepairRepository,
       FaceRepairScanRepository,
+      FaceRepairDeclineRepository,
       SearchRepository,
       PersonRepository,
       ConfigRepository,

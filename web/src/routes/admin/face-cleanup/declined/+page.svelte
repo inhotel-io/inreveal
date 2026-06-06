@@ -19,8 +19,6 @@
     createdAt: string;
   };
 
-  $props();
-
   let declines = $state<DeclineItem[]>([]);
   let loading = $state(true);
 
