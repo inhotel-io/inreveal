@@ -6,9 +6,9 @@ import { AssetMediaSize } from 'src/dtos/asset-media.dto';
 import { AssetJobName, AssetStatsResponseDto } from 'src/dtos/asset.dto';
 import { AssetEditAction, TonalLevel } from 'src/dtos/editing.dto';
 import { AssetFileType, AssetMetadataKey, AssetStatus, AssetType, AssetVisibility, JobName, JobStatus } from 'src/enum';
-import { ImmichStreamResponse } from 'src/utils/file';
 import { AssetStats } from 'src/repositories/asset.repository';
 import { AssetService } from 'src/services/asset.service';
+import { ImmichStreamResponse } from 'src/utils/file';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { AuthFactory } from 'test/factories/auth.factory';
 import { authStub } from 'test/fixtures/auth.stub';
@@ -2487,36 +2487,50 @@ describe(AssetService.name, () => {
   });
 
   describe('previewAssetEdits', () => {
-    const editsDto = { edits: [{ action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } }] };
+    const editsDto = {
+      edits: [{ action: AssetEditAction.Adjust, parameters: { brightness: TonalLevel.ModerateIncrease } }],
+    };
 
     it('requires AssetRead access', async () => {
       // By default, all access checks return empty sets → BadRequestException
-      await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL)).rejects.toThrow();
+      await expect(
+        sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL),
+      ).rejects.toThrow();
     });
 
     it('rejects a non-image asset', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Video } as any);
-      await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('throws NotFound when asset does not exist', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
-      mocks.asset.getById.mockResolvedValue(undefined);
-      await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL)).rejects.toBeInstanceOf(NotFoundException);
+      mocks.asset.getById.mockResolvedValue();
+      await expect(
+        sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('throws NotFound when no base media file exists', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Image } as any);
       mocks.asset.getForThumbnail.mockResolvedValue({ path: null } as any);
-      await expect(sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(
+        sut.previewAssetEdits(authStub.admin, 'asset-1', editsDto, AssetMediaSize.THUMBNAIL),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('renders the proposed edits over the sized base image and persists nothing', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getById.mockResolvedValue({ id: 'asset-1', type: AssetType.Image } as any);
-      mocks.asset.getForThumbnail.mockResolvedValue({ path: '/thumbs/a.webp', originalPath: '/o.jpg', originalFileName: 'o.jpg' } as any);
+      mocks.asset.getForThumbnail.mockResolvedValue({
+        path: '/thumbs/a.webp',
+        originalPath: '/o.jpg',
+        originalFileName: 'o.jpg',
+      } as any);
       mocks.storage.readFile.mockResolvedValue(Buffer.from('src'));
       mocks.media.renderEditedImage.mockResolvedValue(Buffer.from('rendered'));
 

@@ -4968,6 +4968,28 @@ export function editAsset({ id, assetEditsCreateDto }: {
     })));
 }
 /**
+ * Preview edits without saving
+ */
+export function previewAssetEdits({ id, size, assetEditsCreateDto }: {
+    id: string;
+    size?: "thumbnail" | "preview";
+    assetEditsCreateDto: AssetEditsCreateDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: Blob;
+    } | {
+        status: 201;
+        data: object;
+    }>(`/assets/${encodeURIComponent(id)}/edits/preview${QS.query(QS.explode({
+        size
+    }))}`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: assetEditsCreateDto
+    })));
+}
+/**
  * Get asset metadata
  */
 export function getAssetMetadata({ id }: {
