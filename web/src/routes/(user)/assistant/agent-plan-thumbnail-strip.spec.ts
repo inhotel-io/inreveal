@@ -7,7 +7,7 @@ import {
   type AgentOperationPlanResponseDto,
   type AgentOperationResponseDto,
 } from '@immich/sdk';
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import {
   AGENT_PLAN_THUMBNAIL_STRIP_MAX_LIMIT,
@@ -45,6 +45,7 @@ vi.mock('svelte-i18n', () => {
 
 const planId = '00000000-0000-4000-8000-000000000100';
 const addId = '00000000-0000-4000-8000-000000000101';
+const adjustId = '00000000-0000-4000-8000-000000000102';
 
 const assetIds = (count: number) =>
   Array.from({ length: count }, (_, index) => `asset-${String(index + 1).padStart(3, '0')}`);
@@ -90,6 +91,39 @@ const group = (count: number) =>
         targetKind: AgentOperationTargetKind.NewAlbum,
         temporaryTargetId: 'album-portugal',
         assetIds: assetIds(count),
+        payload: {},
+      }),
+    ]),
+    { [addId]: true },
+  ).groups[0];
+
+/** Group whose single operation is asset.adjust — used to test before/after preview rendering. */
+const adjustGroup = (ids: string[], payload: Record<string, unknown> = { brightness: 'moderate_increase' }) =>
+  buildOperationReviewModel(
+    plan([
+      operation({
+        id: adjustId,
+        type: 'asset.adjust' as AgentOperationType,
+        summary: 'Adjust matching photos',
+        targetKind: AgentOperationTargetKind.ImageEditBatch,
+        assetIds: ids,
+        payload,
+      }),
+    ]),
+    { [adjustId]: true },
+  ).groups[0];
+
+/** Group whose single operation is album.addAssets — used to verify no regression on non-edit groups. */
+const addAssetsGroup = (ids: string[]) =>
+  buildOperationReviewModel(
+    plan([
+      operation({
+        id: addId,
+        type: AgentOperationType.AlbumAddAssets,
+        summary: 'Add assets to album',
+        targetKind: AgentOperationTargetKind.NewAlbum,
+        temporaryTargetId: 'album-test',
+        assetIds: ids,
         payload: {},
       }),
     ]),
@@ -221,5 +255,69 @@ describe('AgentPlanThumbnailStrip', () => {
     expect(screen.queryByText('asset-001')).not.toBeInTheDocument();
     expect(screen.queryByText('asset-002')).not.toBeInTheDocument();
     expect(screen.queryByText('asset-003')).not.toBeInTheDocument();
+  });
+});
+
+describe('AgentPlanThumbnailStrip — before/after edit preview', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('renders before and after images for an asset.adjust group', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(['x'])) }));
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:after'), revokeObjectURL: vi.fn() });
+
+    render(AgentPlanThumbnailStrip, {
+      props: { group: adjustGroup(['a1']) },
+    });
+
+    // before tile (existing thumbnail) is present
+    expect(screen.getAllByTestId('agent-plan-thumbnail-image').length).toBeGreaterThan(0);
+
+    // after tile resolves to the object URL produced by URL.createObjectURL
+    await waitFor(() => expect(screen.getByTestId('agent-plan-after-image')).toHaveAttribute('src', 'blob:after'));
+  });
+
+  it('renders the plain strip (no after) for a non-edit group', () => {
+    render(AgentPlanThumbnailStrip, {
+      props: { group: addAssetsGroup(['a1']) },
+    });
+
+    // existing single-thumbnail strip renders normally
+    expect(screen.getAllByTestId('agent-plan-thumbnail-image').length).toBeGreaterThan(0);
+    // no after tile
+    expect(screen.queryByTestId('agent-plan-after-image')).toBeNull();
+    expect(screen.queryByTestId('agent-plan-after-failed')).toBeNull();
+  });
+
+  it('revokes prior object URLs when the edit payload changes', async () => {
+    const revoke = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(new Blob(['x'])) }));
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:after'), revokeObjectURL: revoke });
+
+    const { rerender } = render(AgentPlanThumbnailStrip, {
+      props: { group: adjustGroup(['a1'], { brightness: 'slight_increase' }) },
+    });
+
+    // wait for first after tile to appear
+    await waitFor(() => expect(screen.getByTestId('agent-plan-after-image')).toBeInTheDocument());
+
+    // rerender with a different payload → effect should revoke old URL and re-fetch
+    await rerender({ group: adjustGroup(['a1'], { brightness: 'strong_increase' }) });
+
+    await waitFor(() => expect(revoke).toHaveBeenCalled());
+  });
+
+  it('shows a failed state when the after fetch errors, keeping the before', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400 }));
+
+    render(AgentPlanThumbnailStrip, {
+      props: { group: adjustGroup(['a1']) },
+    });
+
+    // failed indicator appears
+    await waitFor(() => expect(screen.getByTestId('agent-plan-after-failed')).toBeInTheDocument());
+    // before tile is still shown
+    expect(screen.getAllByTestId('agent-plan-thumbnail-image').length).toBeGreaterThan(0);
   });
 });
