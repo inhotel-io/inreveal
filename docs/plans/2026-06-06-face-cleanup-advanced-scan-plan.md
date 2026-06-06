@@ -665,7 +665,8 @@ Expected: PASS. (If `FormModal` requires a portal/manager context that breaks re
     scanning = true;
     applyError = null;
     try {
-      await triggerScan(params ? { faceRepairScanTriggerRequestDto: { params } } : undefined);
+      // The generated SDK requires the body arg; an empty body is the quick-path (server applies defaults).
+      await triggerScan({ faceRepairScanTriggerRequestDto: params ? { params } : {} });
       await fetchLatestScan();
       startPolling();
     } catch (error: unknown) {
@@ -684,7 +685,7 @@ Expected: PASS. (If `FormModal` requires a portal/manager context that breaks re
     modalManager.show(AdvancedScanModal, { onRun: (params) => void runScan(params) });
 ```
 
-(Replace the existing `handleRescan` body — the `triggerScan()` no-arg call is preserved via `runScan()`.)
+(Replace the existing `handleRescan` body — the quick path now goes through `runScan()` with an empty body.)
 
 (c) Add the Advanced button immediately before the Re-scan `<Button>` (`:240`):
 
