@@ -11,6 +11,7 @@
 **Spec:** [`2026-06-06-face-cleanup-advanced-scan-design.md`](2026-06-06-face-cleanup-advanced-scan-design.md)
 
 **Reference facts (already verified in the codebase):**
+
 - `server/src/services/face-repair.service.ts:392` — `triggerScan(requestedBy)` hardcodes params and queues `JobName.FaceRepairScan`.
 - Defaults: `DEFAULT_VOTE_WINDOW=200`, `DEFAULT_VOTE_MARGIN=2`, `DEFAULT_MAX_ATTRIBUTION_DISTANCE=0.35`, `DEFAULT_MAX_FLAGGED_FRACTION=0.5`, `DEFAULT_LARGE_CLUSTER_THRESHOLD=50` (`face-repair.service.ts:37-41`).
 - `createScan({ requestedBy, params: RepairScanParams })` (`face-repair-scan.repository.ts:60`); `RepairScanParams` has all 7 numeric fields (`:8-17`).
@@ -43,6 +44,7 @@
 ## Task 1: Server — scan trigger accepts an optional `params` body
 
 **Files:**
+
 - Modify: `server/src/dtos/face-repair.dto.ts`
 - Modify: `server/src/services/face-repair.service.ts:392-415`
 - Modify: `server/src/controllers/face-repair-admin.controller.ts:38-43`
@@ -51,10 +53,7 @@
 - [ ] **Step 1: Write failing DTO tests** — append to `server/src/dtos/face-repair.dto.spec.ts`:
 
 ```ts
-import {
-  FaceRepairDeclineRemoveRequestSchema,
-  FaceRepairScanTriggerRequestSchema,
-} from 'src/dtos/face-repair.dto';
+import { FaceRepairDeclineRemoveRequestSchema, FaceRepairScanTriggerRequestSchema } from 'src/dtos/face-repair.dto';
 
 describe('FaceRepairScanTriggerRequestSchema', () => {
   it('accepts an empty body (quick-path Re-scan)', () => {
@@ -76,15 +75,11 @@ describe('FaceRepairScanTriggerRequestSchema', () => {
   });
 
   it('rejects maxDistance above 2', () => {
-    expect(
-      FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxDistance: 2.5 } }).success,
-    ).toBe(false);
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxDistance: 2.5 } }).success).toBe(false);
   });
 
   it('rejects maxFlaggedFraction above 1', () => {
-    expect(
-      FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxFlaggedFraction: 1.5 } }).success,
-    ).toBe(false);
+    expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxFlaggedFraction: 1.5 } }).success).toBe(false);
   });
 
   it('rejects minFaces below 1', () => {
@@ -185,35 +180,35 @@ Expected: PASS (all decline + scan-trigger cases).
 - [ ] **Step 7: Update controller spec** — in `server/src/controllers/face-repair-admin.controller.spec.ts`, find the `POST /admin/face-repair/scan` describe block and replace its delegation assertions with:
 
 ```ts
-    it('delegates a no-body scan (quick path) with undefined params', async () => {
-      service.triggerScan.mockResolvedValue({ scanId: 's1' });
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/scan')
-        .set('Authorization', 'Bearer token')
-        .send({});
-      expect(status).toBe(201);
-      expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), undefined);
-    });
+it('delegates a no-body scan (quick path) with undefined params', async () => {
+  service.triggerScan.mockResolvedValue({ scanId: 's1' });
+  const { status } = await request(ctx.getHttpServer())
+    .post('/admin/face-repair/scan')
+    .set('Authorization', 'Bearer token')
+    .send({});
+  expect(status).toBe(201);
+  expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), undefined);
+});
 
-    it('delegates tuned params to the service', async () => {
-      service.triggerScan.mockResolvedValue({ scanId: 's2' });
-      const params = { maxDistance: 0.4, minFaces: 5, maxFlaggedFraction: 0.3 };
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/scan')
-        .set('Authorization', 'Bearer token')
-        .send({ params });
-      expect(status).toBe(201);
-      expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), params);
-    });
+it('delegates tuned params to the service', async () => {
+  service.triggerScan.mockResolvedValue({ scanId: 's2' });
+  const params = { maxDistance: 0.4, minFaces: 5, maxFlaggedFraction: 0.3 };
+  const { status } = await request(ctx.getHttpServer())
+    .post('/admin/face-repair/scan')
+    .set('Authorization', 'Bearer token')
+    .send({ params });
+  expect(status).toBe(201);
+  expect(service.triggerScan).toHaveBeenCalledWith(expect.any(String), params);
+});
 
-    it('rejects out-of-range params with 400', async () => {
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/scan')
-        .set('Authorization', 'Bearer token')
-        .send({ params: { maxDistance: 9 } });
-      expect(status).toBe(400);
-      expect(service.triggerScan).not.toHaveBeenCalled();
-    });
+it('rejects out-of-range params with 400', async () => {
+  const { status } = await request(ctx.getHttpServer())
+    .post('/admin/face-repair/scan')
+    .set('Authorization', 'Bearer token')
+    .send({ params: { maxDistance: 9 } });
+  expect(status).toBe(400);
+  expect(service.triggerScan).not.toHaveBeenCalled();
+});
 ```
 
 Keep the existing "should be an authenticated route" test in this block. POST returns **201** here (verified: the existing scan/apply POST tests assert `201`; GET/DELETE assert `200`).
@@ -235,6 +230,7 @@ git commit -m "feat(face-repair): accept optional tuning params on the scan trig
 ## Task 2: Server — effective-defaults read endpoint
 
 **Files:**
+
 - Modify: `server/src/dtos/face-repair.dto.ts`
 - Modify: `server/src/services/face-repair.service.ts` (add `getScanDefaults`)
 - Modify: `server/src/controllers/face-repair-admin.controller.ts`
@@ -313,21 +309,21 @@ Add `FaceRepairScanDefaultsDto` to the dtos import block. (Place this route befo
 - [ ] **Step 7: Add controller delegation spec** — in `server/src/controllers/face-repair-admin.controller.spec.ts`, add:
 
 ```ts
-  describe('GET /admin/face-repair/scan/defaults', () => {
-    it('should be an authenticated route', async () => {
-      await request(ctx.getHttpServer()).get('/admin/face-repair/scan/defaults');
-      expect(ctx.authenticate).toHaveBeenCalled();
-    });
-
-    it('delegates to service.getScanDefaults', async () => {
-      service.getScanDefaults.mockResolvedValue({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
-      const { status, body } = await request(ctx.getHttpServer())
-        .get('/admin/face-repair/scan/defaults')
-        .set('Authorization', 'Bearer token');
-      expect(status).toBe(200);
-      expect(body).toMatchObject({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
-    });
+describe('GET /admin/face-repair/scan/defaults', () => {
+  it('should be an authenticated route', async () => {
+    await request(ctx.getHttpServer()).get('/admin/face-repair/scan/defaults');
+    expect(ctx.authenticate).toHaveBeenCalled();
   });
+
+  it('delegates to service.getScanDefaults', async () => {
+    service.getScanDefaults.mockResolvedValue({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+    const { status, body } = await request(ctx.getHttpServer())
+      .get('/admin/face-repair/scan/defaults')
+      .set('Authorization', 'Bearer token');
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+  });
+});
 ```
 
 - [ ] **Step 8: Run unit tests**
@@ -347,62 +343,72 @@ git commit -m "feat(face-repair): add scan defaults read endpoint"
 ## Task 3: Server medium — tuned params actually reach the engine
 
 **Files:**
+
 - Modify: `server/test/medium/specs/services/face-repair.scan.spec.ts`
 
-This proves the wiring end-to-end on a real DB via a **two-scan contrast**: the SAME contaminated cluster is repairable at the default cap but goes review-only (over-cap) at a tuned low cap. The over-cap rule is `flagged / eligible > maxFlaggedFraction` (`face-repair.service.ts:120`), so the contamination must sit **between** the two caps: ~27% (3 leaked of 11 eligible) is **under** the 0.5 default (→ `toRepair`) but **over** the 0.1 tuned cap (→ `reviewOnly`). A 60% fixture would be over-cap at *both* caps and the test would pass even if params never flowed — so the level is load-bearing.
+This proves the wiring end-to-end on a real DB via a **two-scan contrast**: the SAME contaminated cluster is repairable at the default cap but goes review-only (over-cap) at a tuned low cap. The over-cap rule is `flagged / eligible > maxFlaggedFraction` (`face-repair.service.ts:120`), so the contamination must sit **between** the two caps: ~27% (3 leaked of 11 eligible) is **under** the 0.5 default (→ `toRepair`) but **over** the 0.1 tuned cap (→ `reviewOnly`). A 60% fixture would be over-cap at _both_ caps and the test would pass even if params never flowed — so the level is load-bearing.
 
 - [ ] **Step 1: Add the medium test** — append inside the existing `describe('FaceRepairService.handleFaceRepairScan', ...)` block in `server/test/medium/specs/services/face-repair.scan.spec.ts`. It reuses the file's `axisEmbedding`, `setup`, `db`, and `ctx` helpers (mirrors the existing "flagged person" fixture: 3 leaked + 8 genuine):
 
 ```ts
-  it('triggerScan overrides flow to the engine: maxFlaggedFraction flips a cluster repairable→review-only', async () => {
-    const { sut, ctx } = setup();
-    const jobMock = ctx.getMock(JobRepository);
-    jobMock.isActive.mockResolvedValue(false);
-    jobMock.queue.mockResolvedValue(undefined);
-    const { user } = await ctx.newUser();
+it('triggerScan overrides flow to the engine: maxFlaggedFraction flips a cluster repairable→review-only', async () => {
+  const { sut, ctx } = setup();
+  const jobMock = ctx.getMock(JobRepository);
+  jobMock.isActive.mockResolvedValue(false);
+  jobMock.queue.mockResolvedValue(undefined);
+  const { user } = await ctx.newUser();
 
-    // Reference owner Karina: 10 first-axis faces, so the leaked faces have a clean cluster to vote toward.
-    const karina = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
-    await db.insertInto('person').values(karina).execute();
-    for (let i = 0; i < 10; i++) {
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karina.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
-    }
+  // Reference owner Karina: 10 first-axis faces, so the leaked faces have a clean cluster to vote toward.
+  const karina = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
+  await db.insertInto('person').values(karina).execute();
+  for (let i = 0; i < 10; i++) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karina.id });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+      .execute();
+  }
 
-    // Unnamed cluster: 3 leaked first-axis + 8 genuine second-axis → 3/11 ≈ 27% flagged.
-    const cluster = mediumFactory.personInsert({ ownerId: user.id, name: '' });
-    await db.insertInto('person').values(cluster).execute();
-    for (let i = 0; i < 3; i++) {
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
-    }
-    for (let i = 0; i < 8; i++) {
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
-      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
-    }
+  // Unnamed cluster: 3 leaked first-axis + 8 genuine second-axis → 3/11 ≈ 27% flagged.
+  const cluster = mediumFactory.personInsert({ ownerId: user.id, name: '' });
+  await db.insertInto('person').values(cluster).execute();
+  for (let i = 0; i < 3; i++) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+      .execute();
+  }
+  for (let i = 0; i < 8; i++) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+      .execute();
+  }
 
-    // Default run (no overrides): 27% < 0.5 cap → the leaked faces are repairable, none over-cap.
-    const a = await sut.triggerScan(user.id);
-    await sut.handleFaceRepairScan({ scanId: a.scanId });
-    const defaultRun = await sut.getLatestScanStatus();
-    expect(defaultRun!.status).toBe('completed');
-    expect(defaultRun!.totals!.toRepair).toBeGreaterThan(0);
-    expect(defaultRun!.totals!.reviewOnlyByReason.overCap).toBe(0);
+  // Default run (no overrides): 27% < 0.5 cap → the leaked faces are repairable, none over-cap.
+  const a = await sut.triggerScan(user.id);
+  await sut.handleFaceRepairScan({ scanId: a.scanId });
+  const defaultRun = await sut.getLatestScanStatus();
+  expect(defaultRun!.status).toBe('completed');
+  expect(defaultRun!.totals!.toRepair).toBeGreaterThan(0);
+  expect(defaultRun!.totals!.reviewOnlyByReason.overCap).toBe(0);
 
-    // Clear the scan row so the tuned run is unambiguously the latest (and avoids any active-scan guard).
-    await db.deleteFrom('face_repair_scan').execute();
+  // Clear the scan row so the tuned run is unambiguously the latest (and avoids any active-scan guard).
+  await db.deleteFrom('face_repair_scan').execute();
 
-    // Tuned run: 27% > 0.1 cap → the SAME faces go review-only (over-cap), none repaired.
-    const b = await sut.triggerScan(user.id, { maxFlaggedFraction: 0.1 });
-    await sut.handleFaceRepairScan({ scanId: b.scanId });
-    const tunedRun = await sut.getLatestScanStatus();
-    expect(tunedRun!.status).toBe('completed');
-    expect(tunedRun!.totals!.toRepair).toBe(0);
-    expect(tunedRun!.totals!.reviewOnlyByReason.overCap).toBeGreaterThan(0);
-  });
+  // Tuned run: 27% > 0.1 cap → the SAME faces go review-only (over-cap), none repaired.
+  const b = await sut.triggerScan(user.id, { maxFlaggedFraction: 0.1 });
+  await sut.handleFaceRepairScan({ scanId: b.scanId });
+  const tunedRun = await sut.getLatestScanStatus();
+  expect(tunedRun!.status).toBe('completed');
+  expect(tunedRun!.totals!.toRepair).toBe(0);
+  expect(tunedRun!.totals!.reviewOnlyByReason.overCap).toBeGreaterThan(0);
+});
 ```
 
 The file already imports `JobRepository` (in its `mock:` list) and `mediumFactory` (from `test/medium.factory`); no new imports needed. `db` is the module-level `Kysely` handle already used by the other tests.
@@ -459,6 +465,7 @@ git commit -m "chore(open-api): regenerate for scan params + defaults endpoint"
 ## Task 5: Web — Advanced modal + dashboard wiring
 
 **Files:**
+
 - Create: `web/src/routes/admin/face-cleanup/AdvancedScanModal.svelte`
 - Create: `web/src/routes/admin/face-cleanup/AdvancedScanModal.spec.ts`
 - Modify: `web/src/routes/admin/face-cleanup/+page.svelte`
@@ -652,37 +659,34 @@ Expected: PASS. (If `FormModal` requires a portal/manager context that breaks re
 (a) Imports — change the `@immich/ui` import to include `modalManager`, add the SDK body type, and import the modal:
 
 ```ts
-  import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
-  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiRefresh, mdiClose, mdiTune } from '@mdi/js';
-  import AdvancedScanModal from './AdvancedScanModal.svelte';
+import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
+import { Button, Icon, modalManager, toastManager } from '@immich/ui';
+import { mdiRefresh, mdiClose, mdiTune } from '@mdi/js';
+import AdvancedScanModal from './AdvancedScanModal.svelte';
 ```
 
 (b) Add a tuned-scan handler next to `handleRescan` (`:135`):
 
 ```ts
-  const runScan = async (params?: { maxDistance: number; minFaces: number; maxFlaggedFraction: number }) => {
-    scanning = true;
-    applyError = null;
-    try {
-      // The generated SDK requires the body arg; an empty body is the quick-path (server applies defaults).
-      await triggerScan({ faceRepairScanTriggerRequestDto: params ? { params } : {} });
-      await fetchLatestScan();
-      startPolling();
-    } catch (error: unknown) {
-      const status = (error as { status?: number }).status;
-      toastManager.danger(
-        status === 409 ? $t('admin.face_cleanup_scan_conflict') : $t('admin.face_cleanup_scan_error'),
-      );
-    } finally {
-      scanning = false;
-    }
-  };
+const runScan = async (params?: { maxDistance: number; minFaces: number; maxFlaggedFraction: number }) => {
+  scanning = true;
+  applyError = null;
+  try {
+    // The generated SDK requires the body arg; an empty body is the quick-path (server applies defaults).
+    await triggerScan({ faceRepairScanTriggerRequestDto: params ? { params } : {} });
+    await fetchLatestScan();
+    startPolling();
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status;
+    toastManager.danger(status === 409 ? $t('admin.face_cleanup_scan_conflict') : $t('admin.face_cleanup_scan_error'));
+  } finally {
+    scanning = false;
+  }
+};
 
-  const handleRescan = () => runScan();
+const handleRescan = () => runScan();
 
-  const handleAdvanced = () =>
-    modalManager.show(AdvancedScanModal, { onRun: (params) => void runScan(params) });
+const handleAdvanced = () => modalManager.show(AdvancedScanModal, { onRun: (params) => void runScan(params) });
 ```
 
 (Replace the existing `handleRescan` body — the quick path now goes through `runScan()` with an empty body.)
@@ -756,6 +760,7 @@ git push
 ## Self-Review
 
 **Spec coverage:**
+
 - Curated 3 knobs (maxDistance/minFaces/maxFlaggedFraction) → Task 5 modal; DTO accepts all 7 → Task 1. ✓
 - Per-scan transient, no new storage → Task 1 (`createScan` only; no metadata writes). ✓
 - Pre-filled defaults via dedicated endpoint → Task 2 + Task 5 `loadDefaults`. ✓
@@ -764,10 +769,11 @@ git push
 - OpenAPI/SDK regen → Task 4. ✓
 
 **Test & edge-case coverage:**
+
 - **Validation (T1):** curated params accepted; non-curated/full set accepted; `maxDistance>2`, `maxFlaggedFraction>1`, `minFaces<1` rejected; empty body (quick path) accepted.
 - **Defaults (T2):** `getScanDefaults` returns config maxDistance/minFaces + constant cap; route authenticated + delegates.
 - **Controller (T1):** no-body delegates `undefined` params (quick path unchanged); tuned params delegated; out-of-range → 400.
-- **Engine flow (T3):** the *load-bearing* edge — same 27% cluster is `toRepair` at the 0.5 default but `over-cap`/`reviewOnly` at the 0.1 tuned cap. A 60% fixture would falsely pass, so the contamination level is justified in the task.
+- **Engine flow (T3):** the _load-bearing_ edge — same 27% cluster is `toRepair` at the 0.5 default but `over-cap`/`reviewOnly` at the 0.1 tuned cap. A 60% fixture would falsely pass, so the contamination level is justified in the task.
 - **Modal (T5):** pre-fill from endpoint; submit sends **numeric** (not string) params + closes; defaults-endpoint-failure falls back to safe values and stays runnable.
 - **Known untested branches (acceptable, pre-existing):** the web 409 "scan in progress" toast branch is unchanged existing behavior copied into `runScan`; not separately tested.
 
