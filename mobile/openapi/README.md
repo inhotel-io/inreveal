@@ -1084,6 +1084,7 @@ Class | Method | HTTP request | Description
  - [TemplateResponseDto](doc//TemplateResponseDto.md)
  - [TestEmailResponseDto](doc//TestEmailResponseDto.md)
  - [TimeBucketAssetResponseDto](doc//TimeBucketAssetResponseDto.md)
+ - [TimeBucketSize](doc//TimeBucketSize.md)
  - [TimeBucketsResponseDto](doc//TimeBucketsResponseDto.md)
  - [TonalLevel](doc//TonalLevel.md)
  - [ToneMapping](doc//ToneMapping.md)
