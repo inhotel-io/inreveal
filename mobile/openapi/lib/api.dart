@@ -736,6 +736,7 @@ part 'model/template_dto.dart';
 part 'model/template_response_dto.dart';
 part 'model/test_email_response_dto.dart';
 part 'model/time_bucket_asset_response_dto.dart';
+part 'model/time_bucket_size.dart';
 part 'model/time_buckets_response_dto.dart';
 part 'model/tonal_level.dart';
 part 'model/tone_mapping.dart';
