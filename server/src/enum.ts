@@ -278,6 +278,17 @@ export enum AssetOrder {
 
 export const AssetOrderSchema = z.enum(AssetOrder).describe('Asset sort order').meta({ id: 'AssetOrder' });
 
+export enum TimeBucketSize {
+  Year = 'year',
+  Month = 'month',
+  Day = 'day',
+}
+
+export const TimeBucketSizeSchema = z
+  .enum(TimeBucketSize)
+  .describe('Timeline bucket granularity')
+  .meta({ id: 'TimeBucketSize' });
+
 export enum MemoryType {
   /** pictures taken on this day X years ago */
   OnThisDay = 'on_this_day',

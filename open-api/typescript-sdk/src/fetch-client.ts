@@ -3848,6 +3848,12 @@ export type FilterSuggestionsTagDto = {
 export type TimeBucketsResponseDto = {
     /** Number of assets in this time bucket */
     count: number;
+    /** Representative asset ID for this bucket */
+    representativeAssetId?: string | null;
+    /** Representative asset width/height ratio */
+    representativeRatio?: number | null;
+    /** Representative asset thumbhash, base64 encoded */
+    representativeThumbhash?: string | null;
     /** Time bucket identifier in YYYY-MM-DD format representing the start of the time period */
     timeBucket: string;
 };
@@ -10188,9 +10194,10 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
+    bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
     isFavorite?: boolean;
@@ -10226,6 +10233,7 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
     }>(`/timeline/bucket${QS.query(QS.explode({
         albumId,
         bbox,
+        bucketSize,
         city,
         country,
         isFavorite,
@@ -10261,9 +10269,10 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
+    bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
     isFavorite?: boolean;
@@ -10298,6 +10307,7 @@ export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNot
     }>(`/timeline/buckets${QS.query(QS.explode({
         albumId,
         bbox,
+        bucketSize,
         city,
         country,
         isFavorite,
@@ -11999,6 +12009,11 @@ export enum LogLevel {
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
     ClientSecretBasic = "client_secret_basic"
+}
+export enum TimeBucketSize {
+    Year = "year",
+    Month = "month",
+    Day = "day"
 }
 export enum Color {
     Primary = "primary",

@@ -35,7 +35,8 @@
 
   const setSelectedDate = (value: DateTime | undefined) => {
     selectedPresetValue = null; // Clear preset when manually setting date
-    expiresAt = value ? value.toISO() : null;
+    // Serialize as UTC ("Z"); the server's ISO 8601 validator rejects offset forms (e.g. +02:00).
+    expiresAt = value ? value.toUTC().toISO() : null;
   };
 
   const selectPreset = (value: number) => {
@@ -45,7 +46,8 @@
       return;
     }
     const newDate = DateTime.now().plus(value);
-    expiresAt = newDate.toISO();
+    // Serialize as UTC ("Z"); the server's ISO 8601 validator rejects offset forms (e.g. +02:00).
+    expiresAt = newDate.toUTC().toISO();
   };
 
   const isSelected = (value: number) => {

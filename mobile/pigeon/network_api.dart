@@ -44,4 +44,8 @@ abstract class NetworkApi {
   int getClientPointer();
 
   void setRequestHeaders(Map<String, String> headers, List<String> serverUrls, String? token);
+
+  /// Rebuilds the shared native URLSession (iOS). Used on foreground resume to
+  /// recover from the background-worker isolate orphaning the shared session.
+  void recreateSession();
 }

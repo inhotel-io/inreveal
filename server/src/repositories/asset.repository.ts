@@ -18,7 +18,7 @@ import { InjectKysely } from 'nestjs-kysely';
 import { lockableProperties, LockableProperty, Stack } from 'src/database';
 import { Chunked, ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AssetFileType, AssetOrder, AssetStatus, AssetType, AssetVisibility } from 'src/enum';
+import { AssetFileType, AssetOrder, AssetStatus, AssetType, AssetVisibility, TimeBucketSize } from 'src/enum';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetFileTable } from 'src/schema/tables/asset-file.table';
@@ -112,11 +112,15 @@ interface AssetBuilderOptions {
 
 export interface TimeBucketOptions extends AssetBuilderOptions {
   order?: AssetOrder;
+  bucketSize?: TimeBucketSize;
 }
 
 export interface TimeBucketItem {
   timeBucket: string;
   count: number;
+  representativeAssetId?: string | null;
+  representativeThumbhash?: string | null;
+  representativeRatio?: number | null;
 }
 
 export interface YearMonthDay {
@@ -1546,13 +1550,37 @@ export class AssetRepository {
       .executeTakeFirstOrThrow();
   }
 
-  @GenerateSql({ params: [{}] })
+  @GenerateSql(
+    { params: [{}] },
+    { params: [{ bucketSize: TimeBucketSize.Year }] },
+    { params: [{ bucketSize: TimeBucketSize.Day }] },
+  )
   async getTimeBuckets(options: TimeBucketOptions): Promise<TimeBucketItem[]> {
+    const bucketSize = options.bucketSize ?? TimeBucketSize.Month;
+    const order = options.order === AssetOrder.Asc ? AssetOrder.Asc : AssetOrder.Desc;
+
     return this.db
       .with('asset', (qb) =>
         qb
           .selectFrom('asset')
-          .select(truncatedDate<Date>().as('timeBucket'))
+          .select((eb) => [
+            truncatedDate<Date>(bucketSize).as('timeBucket'),
+            'asset.id',
+            'asset.localDateTime',
+            'asset.fileCreatedAt',
+            'asset.thumbhash',
+            eb.fn
+              .coalesce(
+                eb
+                  .case()
+                  .when(sql`asset."height" = 0 or asset."width" = 0 or asset."height" is null or asset."width" is null`)
+                  .then(eb.lit(1))
+                  .else(sql`round(asset."width"::numeric / asset."height"::numeric, 3)::float`)
+                  .end(),
+                eb.lit(1),
+              )
+              .as('ratio'),
+          ])
           .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
           .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
           .where('asset.deletedAt', options.isTrashed ? 'is not' : 'is', null)
@@ -1666,19 +1694,48 @@ export class AssetRepository {
           .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
           .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!))),
       )
-      .selectFrom('asset')
-      .select(sql<string>`("timeBucket" AT TIME ZONE 'UTC')::date::text`.as('timeBucket'))
-      .select((eb) => eb.fn.countAll<number>().as('count'))
-      .groupBy('timeBucket')
-      .orderBy('timeBucket', options.order ?? 'desc')
+      .with('bucket_counts', (qb) =>
+        qb
+          .selectFrom('asset')
+          .select(['timeBucket'])
+          .select((eb) => eb.fn.countAll<number>().as('count'))
+          .groupBy('timeBucket'),
+      )
+      .with('bucket_representatives', (qb) =>
+        qb
+          .selectFrom('asset')
+          .distinctOn('timeBucket')
+          .select([
+            'timeBucket',
+            'id as representativeAssetId',
+            sql<string | null>`encode("thumbhash", 'base64')`.as('representativeThumbhash'),
+            'ratio as representativeRatio',
+          ])
+          .orderBy('timeBucket')
+          .orderBy(sql`("localDateTime" AT TIME ZONE 'UTC')::date`, order)
+          .orderBy('fileCreatedAt', order),
+      )
+      .selectFrom('bucket_counts')
+      .innerJoin('bucket_representatives', 'bucket_representatives.timeBucket', 'bucket_counts.timeBucket')
+      .select(sql<string>`("bucket_counts"."timeBucket" AT TIME ZONE 'UTC')::date::text`.as('timeBucket'))
+      .select('bucket_counts.count')
+      .select([
+        'bucket_representatives.representativeAssetId',
+        'bucket_representatives.representativeThumbhash',
+        'bucket_representatives.representativeRatio',
+      ])
+      .orderBy('bucket_counts.timeBucket', order)
       .execute() as any as Promise<TimeBucketItem[]>;
   }
 
-  @GenerateSql({
-    params: [DummyValue.TIME_BUCKET, { withStacked: true }, { user: { id: DummyValue.UUID } }],
-  })
+  @GenerateSql(
+    { params: [DummyValue.TIME_BUCKET, { withStacked: true }, { user: { id: DummyValue.UUID } }] },
+    { params: ['2000-01-01', { bucketSize: TimeBucketSize.Year }, { user: { id: DummyValue.UUID } }] },
+    { params: ['2000-01-02', { bucketSize: TimeBucketSize.Day }, { user: { id: DummyValue.UUID } }] },
+  )
   getTimeBucket(timeBucket: string, options: TimeBucketOptions, auth: AuthDto) {
-    const order = options.order ?? 'desc';
+    const order = options.order === AssetOrder.Asc ? AssetOrder.Asc : AssetOrder.Desc;
+    const bucketSize = options.bucketSize ?? TimeBucketSize.Month;
     const query = this.db
       .with('cte', (qb) =>
         qb
@@ -1731,7 +1788,7 @@ export class AssetRepository {
 
             return withBoundingBox(withBoundingCircle, bbox);
           })
-          .where(truncatedDate(), '=', timeBucket.replace(/^[+-]/, ''))
+          .where(truncatedDate(bucketSize), '=', timeBucket)
           .$if(!!options.albumId, (qb) =>
             qb.where((eb) =>
               eb.exists(

@@ -61,6 +61,10 @@ class NetworkApiImpl: NetworkApi {
     return Int64(Int(bitPattern: pointer))
   }
   
+  func recreateSession() throws {
+    URLSessionManager.shared.recreateSession()
+  }
+
   func setRequestHeaders(headers: [String : String], serverUrls: [String], token: String?) throws {
     URLSessionManager.setServerUrls(serverUrls)
 

@@ -1,6 +1,6 @@
-enum GroupAssetsBy { day, month, auto, none }
+enum GroupAssetsBy { day, month, auto, none, year }
 
-enum HeaderType { none, month, day, monthAndDay }
+enum HeaderType { none, month, day, monthAndDay, year }
 
 class Bucket {
   final int assetCount;

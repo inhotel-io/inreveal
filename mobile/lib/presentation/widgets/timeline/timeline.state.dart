@@ -5,6 +5,7 @@ import 'package:immich_mobile/domain/models/setting.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/constants.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment_builder.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment_builder.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -97,6 +98,10 @@ final timelineSegmentProvider = StreamProvider.autoDispose<List<Segment>>((ref) 
 
   final timelineService = ref.watch(timelineServiceProvider);
   yield* timelineService.watchBuckets().map((buckets) {
+    if (groupBy == GroupAssetsBy.year || groupBy == GroupAssetsBy.month) {
+      return TimelineOverviewSegmentBuilder(buckets: buckets, groupBy: groupBy).generate();
+    }
+
     return FixedSegmentBuilder(
       buckets: buckets,
       tileHeight: tileExtent,

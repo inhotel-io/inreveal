@@ -2,6 +2,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
@@ -9,6 +10,8 @@ import 'package:immich_mobile/providers/user.provider.dart';
 
 @RoutePage()
 class DriftAssetSelectionTimelinePage extends ConsumerWidget {
+  static const forcedGroupBy = GroupAssetsBy.day;
+
   final Set<BaseAsset> lockedSelectionAssets;
   const DriftAssetSelectionTimelinePage({super.key, this.lockedSelectionAssets = const {}});
 
@@ -27,12 +30,12 @@ class DriftAssetSelectionTimelinePage extends ConsumerWidget {
             throw Exception('User must be logged in to access asset selection timeline');
           }
 
-          final timelineService = ref.watch(timelineFactoryProvider).remoteAssets(user.id);
+          final timelineService = ref.watch(timelineFactoryProvider).remoteAssets(user.id, groupBy: forcedGroupBy);
           ref.onDispose(timelineService.dispose);
           return timelineService;
         }),
       ],
-      child: const Timeline(),
+      child: const Timeline(groupBy: forcedGroupBy),
     );
   }
 }
