@@ -235,37 +235,39 @@
           {$t('admin.face_cleanup_description')}
         </p>
       </div>
-      <div class="flex flex-none items-center gap-4">
+      <div class="flex flex-none flex-col items-end gap-2">
         {#if scan?.finishedAt}
-          <div class="text-right text-xs text-gray-400">
-            <div>{$t('admin.face_cleanup_last_scan')}</div>
-            <div class="font-semibold text-gray-500">{formatDate(scan.finishedAt)}</div>
-          </div>
+          <span class="text-xs text-gray-400">
+            {$t('admin.face_cleanup_last_scan')} · {formatDate(scan.finishedAt)}
+          </span>
         {/if}
-        <a
-          href={Route.faceCleanupDeclined()}
-          class="text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-        >
-          {$t('admin.face_cleanup_view_declined')}
-        </a>
-        <Button
-          color="secondary"
-          disabled={scanning || (!!scan && isActive(scan.status))}
-          onclick={handleAdvanced}
-          class="gap-2"
-        >
-          <Icon icon={mdiTune} size="16" />
-          {$t('admin.face_cleanup_advanced')}
-        </Button>
-        <Button
-          color="primary"
-          disabled={scanning || (!!scan && isActive(scan.status))}
-          onclick={handleRescan}
-          class="gap-2"
-        >
-          <Icon icon={mdiRefresh} size="16" />
-          {$t('admin.face_cleanup_rescan')}
-        </Button>
+        <div class="flex items-center gap-2">
+          <Button color="secondary" variant="ghost" size="small" href={Route.faceCleanupDeclined()}>
+            {$t('admin.face_cleanup_view_declined')}
+          </Button>
+          <div class="mx-0.5 h-5 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
+          <Button
+            color="secondary"
+            variant="outline"
+            size="small"
+            disabled={scanning || (!!scan && isActive(scan.status))}
+            onclick={handleAdvanced}
+            class="gap-2"
+          >
+            <Icon icon={mdiTune} size="16" />
+            {$t('admin.face_cleanup_advanced')}
+          </Button>
+          <Button
+            color="primary"
+            size="small"
+            disabled={scanning || (!!scan && isActive(scan.status))}
+            onclick={handleRescan}
+            class="gap-2"
+          >
+            <Icon icon={mdiRefresh} size="16" />
+            {$t('admin.face_cleanup_rescan')}
+          </Button>
+        </div>
       </div>
     </div>
 
