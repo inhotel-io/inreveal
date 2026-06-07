@@ -153,7 +153,10 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     for (let i = 0; i < 10; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karina.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
     }
 
     // Unnamed cluster: 3 leaked first-axis + 8 genuine second-axis → 3/11 ≈ 27% flagged.
@@ -162,12 +165,18 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     for (let i = 0; i < 3; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
     }
     for (let i = 0; i < 8; i++) {
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: cluster.id });
-      await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
     }
 
     // Default run (no overrides): 27% < DEFAULT_MAX_FLAGGED_FRACTION (0.5) cap → the leaked faces are repairable, none over-cap.
