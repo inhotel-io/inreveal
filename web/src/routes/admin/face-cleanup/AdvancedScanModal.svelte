@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getFaceRepairScanDefaults } from '@immich/sdk';
-  import { Field, FormModal } from '@immich/ui';
+  import { FormModal } from '@immich/ui';
   import { mdiTune } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -50,50 +50,67 @@
 >
   <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">{$t('admin.face_cleanup_advanced_subtitle')}</p>
 
-  <div class="flex flex-col gap-5">
-    <Field label={$t('admin.face_cleanup_advanced_sensitivity')}>
-      <div class="flex items-center gap-3">
-        <input
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.01"
-          bind:value={maxDistance}
-          class="flex-1"
-          data-testid="sensitivity-range"
-        />
-        <span class="w-12 text-right font-mono text-sm">{maxDistance.toFixed(2)}</span>
+  <div class="flex flex-col gap-6">
+    <!-- Match sensitivity -->
+    <div>
+      <div class="flex items-baseline justify-between gap-3">
+        <label for="adv-sensitivity" class="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {$t('admin.face_cleanup_advanced_sensitivity')}
+        </label>
+        <span class="font-mono text-sm tabular-nums text-gray-500 dark:text-gray-300">{maxDistance.toFixed(2)}</span>
       </div>
-      <p class="mt-1 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_sensitivity_help')}</p>
-    </Field>
-
-    <Field label={$t('admin.face_cleanup_advanced_min_faces')}>
       <input
+        id="adv-sensitivity"
+        type="range"
+        min="0.1"
+        max="1"
+        step="0.01"
+        bind:value={maxDistance}
+        class="mt-2 w-full"
+        data-testid="sensitivity-range"
+      />
+      <p class="mt-1.5 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_sensitivity_help')}</p>
+    </div>
+
+    <!-- Minimum faces per person -->
+    <div>
+      <label for="adv-min-faces" class="text-sm font-medium text-gray-900 dark:text-gray-100">
+        {$t('admin.face_cleanup_advanced_min_faces')}
+      </label>
+      <input
+        id="adv-min-faces"
         type="number"
         min="1"
         step="1"
         bind:value={minFaces}
-        class="w-24 rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+        class="mt-2 block w-24 rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
         data-testid="min-faces-input"
       />
-      <p class="mt-1 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_min_faces_help')}</p>
-    </Field>
+      <p class="mt-1.5 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_min_faces_help')}</p>
+    </div>
 
-    <Field label={$t('admin.face_cleanup_advanced_cap')}>
-      <div class="flex items-center gap-3">
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          bind:value={maxFlaggedFraction}
-          class="flex-1"
-          data-testid="cap-range"
-        />
-        <span class="w-12 text-right font-mono text-sm">{maxFlaggedFraction.toFixed(2)}</span>
+    <!-- Contamination cap -->
+    <div>
+      <div class="flex items-baseline justify-between gap-3">
+        <label for="adv-cap" class="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {$t('admin.face_cleanup_advanced_cap')}
+        </label>
+        <span class="font-mono text-sm tabular-nums text-gray-500 dark:text-gray-300">
+          {maxFlaggedFraction.toFixed(2)}
+        </span>
       </div>
-      <p class="mt-1 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_cap_help')}</p>
-    </Field>
+      <input
+        id="adv-cap"
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        bind:value={maxFlaggedFraction}
+        class="mt-2 w-full"
+        data-testid="cap-range"
+      />
+      <p class="mt-1.5 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_cap_help')}</p>
+    </div>
 
     <button type="button" class="self-start text-sm font-semibold text-primary hover:underline" onclick={loadDefaults}>
       {$t('admin.face_cleanup_advanced_reset')}
