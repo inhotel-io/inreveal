@@ -14,6 +14,9 @@ class TimeBucketsResponseDto {
   /// Returns a new [TimeBucketsResponseDto] instance.
   TimeBucketsResponseDto({
     required this.count,
+    this.representativeAssetId,
+    this.representativeRatio,
+    this.representativeThumbhash,
     required this.timeBucket,
   });
 
@@ -23,26 +26,56 @@ class TimeBucketsResponseDto {
   /// Maximum value: 9007199254740991
   int count;
 
+  /// Representative asset ID for this bucket
+  String? representativeAssetId;
+
+  /// Representative asset width/height ratio
+  num? representativeRatio;
+
+  /// Representative asset thumbhash, base64 encoded
+  String? representativeThumbhash;
+
   /// Time bucket identifier in YYYY-MM-DD format representing the start of the time period
   String timeBucket;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is TimeBucketsResponseDto &&
     other.count == count &&
+    other.representativeAssetId == representativeAssetId &&
+    other.representativeRatio == representativeRatio &&
+    other.representativeThumbhash == representativeThumbhash &&
     other.timeBucket == timeBucket;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (count.hashCode) +
+    (representativeAssetId == null ? 0 : representativeAssetId!.hashCode) +
+    (representativeRatio == null ? 0 : representativeRatio!.hashCode) +
+    (representativeThumbhash == null ? 0 : representativeThumbhash!.hashCode) +
     (timeBucket.hashCode);
 
   @override
-  String toString() => 'TimeBucketsResponseDto[count=$count, timeBucket=$timeBucket]';
+  String toString() => 'TimeBucketsResponseDto[count=$count, representativeAssetId=$representativeAssetId, representativeRatio=$representativeRatio, representativeThumbhash=$representativeThumbhash, timeBucket=$timeBucket]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'count'] = this.count;
+    if (this.representativeAssetId != null) {
+      json[r'representativeAssetId'] = this.representativeAssetId;
+    } else {
+    //  json[r'representativeAssetId'] = null;
+    }
+    if (this.representativeRatio != null) {
+      json[r'representativeRatio'] = this.representativeRatio;
+    } else {
+    //  json[r'representativeRatio'] = null;
+    }
+    if (this.representativeThumbhash != null) {
+      json[r'representativeThumbhash'] = this.representativeThumbhash;
+    } else {
+    //  json[r'representativeThumbhash'] = null;
+    }
       json[r'timeBucket'] = this.timeBucket;
     return json;
   }
@@ -57,6 +90,11 @@ class TimeBucketsResponseDto {
 
       return TimeBucketsResponseDto(
         count: mapValueOfType<int>(json, r'count')!,
+        representativeAssetId: mapValueOfType<String>(json, r'representativeAssetId'),
+        representativeRatio: json[r'representativeRatio'] == null
+            ? null
+            : num.parse('${json[r'representativeRatio']}'),
+        representativeThumbhash: mapValueOfType<String>(json, r'representativeThumbhash'),
         timeBucket: mapValueOfType<String>(json, r'timeBucket')!,
       );
     }
