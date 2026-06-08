@@ -36,6 +36,7 @@ const carefulWriteScope = {
   updateAssetMetadata: false,
   trashAssets: false,
   createSharedLinks: false,
+  shareAlbums: false,
   manageStacks: false,
   managePeople: false,
 };
@@ -59,6 +60,7 @@ const expandedWriteScope = {
   updateAssetMetadata: true,
   trashAssets: true,
   createSharedLinks: false,
+  shareAlbums: true,
   manageStacks: true,
   managePeople: true,
 };
@@ -375,6 +377,16 @@ describe(AgentSessionService.name, () => {
     ).toBe(true);
   });
 
+  it('shareAlbums write-scope is false for Careful, true for VisualOrganizer, true for LocalPowerUser', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.shareAlbums).toBe(false);
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.shareAlbums).toBe(
+      true,
+    );
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.shareAlbums).toBe(
+      true,
+    );
+  });
+
   it('dangerously-skip-permissions approval mode is accepted and forwarded to the runner', async () => {
     const auth = AuthFactory.create();
     const credential = makeCredential();
@@ -480,6 +492,7 @@ describe(AgentSessionService.name, () => {
         updateAssetMetadata: false,
         trashAssets: false,
         createSharedLinks: false,
+        shareAlbums: false,
         manageStacks: false,
         managePeople: false,
       },
@@ -1059,6 +1072,7 @@ describe(AgentSessionService.name, () => {
       updateAssetMetadata: false,
       trashAssets: false,
       createSharedLinks: false,
+      shareAlbums: false,
       manageStacks: false,
       managePeople: false,
     });
