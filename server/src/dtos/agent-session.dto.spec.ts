@@ -34,6 +34,7 @@ const fullWriteScope = {
   updateSpaceMemberRoles: true,
   trashAssets: true,
   createSharedLinks: true,
+  shareAlbums: true,
   manageStacks: true,
   managePeople: true,
 };
