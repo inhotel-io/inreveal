@@ -466,6 +466,8 @@ export class TimelineManager extends VirtualScrollManager {
     const requestOptions = toTimeBucketsRequest(this.#options, bucketSize);
     let covers: TimeBucketCoverResponseDto[];
     try {
+      // Requests are not aborted on re-init by design — the stale-sequence guard below prevents stale
+      // application, and cover fetches are light GETs bounded to the currently visible bucket set.
       covers = await getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo });
     } catch {
       for (const tb of todo) {

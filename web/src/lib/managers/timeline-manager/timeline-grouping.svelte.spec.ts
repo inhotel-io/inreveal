@@ -269,9 +269,6 @@ describe('timeline grouping bucket helpers', () => {
       const bucket = new TimelineBucket(manager, 'month', {
         timeBucket: '2011-08-01',
         count: 12,
-        representativeAssetId: 'asset-august',
-        representativeThumbhash: 'thumbhash',
-        representativeRatio: 1.25,
       });
       expect(bucket.date).toEqual({ year: 2011, month: 8 });
       expect(bucket.viewId).toBe('month:2011-08-01');

@@ -806,6 +806,7 @@ describe('TimelineManager', () => {
       const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
       expect(bucket.representativeAssetId).toBe('a-2024');
       expect(bucket.representativeThumbhash).toBe('h');
+      expect(bucket.representativeRatio).toBe(1.5);
     });
 
     it('does nothing for day grouping', async () => {
@@ -816,6 +817,65 @@ describe('TimelineManager', () => {
       await timelineManager.loadCoversForBuckets(['2024-01-01']);
 
       expect(sdkMock.getTimeBucketCovers).not.toHaveBeenCalled();
+    });
+
+    it('allows retry after a failed request by un-marking the bucket keys', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'year' });
+
+      // First call: reject — cover should remain null and keys should be un-marked
+      sdkMock.getTimeBucketCovers.mockRejectedValueOnce(new Error('network error'));
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+
+      const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
+      expect(bucket.representativeAssetId).toBeNull();
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(1);
+
+      // Second call: resolve — key was un-marked so a new request is made and cover is applied
+      sdkMock.getTimeBucketCovers.mockResolvedValueOnce([
+        {
+          timeBucket: '2024-01-01',
+          representativeAssetId: 'retry-asset',
+          representativeThumbhash: null,
+          representativeRatio: null,
+        },
+      ]);
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(2);
+      expect(bucket.representativeAssetId).toBe('retry-asset');
+    });
+
+    it('discards a cover response that arrives after re-initialization (stale-sequence guard)', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'year' });
+
+      // Hold the first cover response so we can resolve it after re-init
+      let resolveCovers!: (v: import('@immich/sdk').TimeBucketCoverResponseDto[]) => void;
+      sdkMock.getTimeBucketCovers.mockReturnValueOnce(new Promise((r) => (resolveCovers = r)));
+
+      const p = timelineManager.loadCoversForBuckets(['2024-01-01']); // starts request at sequence N
+
+      // Re-init bumps #initSequence and rebuilds timelineBuckets
+      sdkMock.getTimeBucketCovers.mockResolvedValue([]);
+      await timelineManager.updateOptions({ grouping: 'year', personIds: ['person-1'] });
+
+      // Resolve the stale response from before re-init
+      resolveCovers([
+        {
+          timeBucket: '2024-01-01',
+          representativeAssetId: 'stale-cover',
+          representativeThumbhash: null,
+          representativeRatio: null,
+        },
+      ]);
+      await p;
+
+      // The stale cover must NOT have been applied to the re-initialized bucket
+      const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
+      expect(bucket.representativeAssetId).toBeNull();
     });
 
     it('clears the dedup set when buckets reinitialize', async () => {
