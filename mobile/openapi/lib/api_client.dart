@@ -214,6 +214,8 @@ class ApiClient {
           return AgentAlbumUpdateDetailsOperationTypeTypeTransformer().decode(value);
         case 'AgentAlbumUpdateUserRoleOperationType':
           return AgentAlbumUpdateUserRoleOperationTypeTypeTransformer().decode(value);
+        case 'AgentAlbumUserSummary':
+          return AgentAlbumUserSummary.fromJson(value);
         case 'AgentApprovalMode':
           return AgentApprovalModeTypeTransformer().decode(value);
         case 'AgentAssetAddTagOperationType':

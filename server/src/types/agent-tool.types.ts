@@ -378,8 +378,14 @@ export type AgentAlbumSummary = {
   albumThumbnailAssetId: string | null;
 };
 
+export type AgentAlbumUserSummary = {
+  userId: string;
+  role: string;
+};
+
 export type AgentAlbumDetail = AgentAlbumSummary & {
   assetIds: string[];
+  albumUsers: AgentAlbumUserSummary[];
 };
 
 export type AgentSpaceMemberSummary = {
