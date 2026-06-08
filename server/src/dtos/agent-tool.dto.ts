@@ -872,8 +872,16 @@ const AgentAlbumSummarySchema = z
   })
   .meta({ id: 'AgentAlbumSummary' });
 
+const AgentAlbumUserSummarySchema = z
+  .object({
+    userId: uuid,
+    role: z.string(),
+  })
+  .meta({ id: 'AgentAlbumUserSummary' });
+
 const AgentAlbumDetailSchema = AgentAlbumSummarySchema.extend({
   assetIds: z.array(uuid),
+  albumUsers: z.array(AgentAlbumUserSummarySchema),
 }).meta({ id: 'AgentAlbumDetail' });
 
 const AgentSpaceMemberSummarySchema = z
