@@ -92,6 +92,7 @@ part 'model/agent_album_set_cover_operation_type.dart';
 part 'model/agent_album_summary.dart';
 part 'model/agent_album_update_details_operation_type.dart';
 part 'model/agent_album_update_user_role_operation_type.dart';
+part 'model/agent_album_user_summary.dart';
 part 'model/agent_approval_mode.dart';
 part 'model/agent_asset_add_tag_operation_type.dart';
 part 'model/agent_asset_adjust_operation_type.dart';

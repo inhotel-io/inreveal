@@ -440,6 +440,7 @@ Class | Method | HTTP request | Description
  - [AgentAlbumSummary](doc//AgentAlbumSummary.md)
  - [AgentAlbumUpdateDetailsOperationType](doc//AgentAlbumUpdateDetailsOperationType.md)
  - [AgentAlbumUpdateUserRoleOperationType](doc//AgentAlbumUpdateUserRoleOperationType.md)
+ - [AgentAlbumUserSummary](doc//AgentAlbumUserSummary.md)
  - [AgentApprovalMode](doc//AgentApprovalMode.md)
  - [AgentAssetAddTagOperationType](doc//AgentAssetAddTagOperationType.md)
  - [AgentAssetAdjustOperationType](doc//AgentAssetAdjustOperationType.md)

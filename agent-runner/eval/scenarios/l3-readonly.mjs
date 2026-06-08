@@ -844,4 +844,32 @@ export default [
     prompt: 'unstack my newest 5 photos',
     expect: { kind: 'unstack_assets' },
   },
+
+  // --- manage_album_access routing + plan-proposed --------------------------
+  {
+    // manage_album_access routing: the "share <album> with <user>" shape reaches
+    // the workflow live (regex fast-path; album keyword + with-users gate).
+    id: 'l3.recall.albumaccess.add',
+    category: 'l3.recall',
+    prompt: 'share the {album} album with {user}',
+    expect: { kind: 'manage_album_access' },
+  },
+  {
+    // manage_album_access remove routing: "remove <user> from <album>" shape.
+    id: 'l3.recall.albumaccess.remove',
+    category: 'l3.recall',
+    prompt: 'remove {user} from the {album} album',
+    expect: { kind: 'manage_album_access' },
+  },
+  {
+    // manage_album_access end-to-end add: shareAlbums is ON in VisualOrganizer
+    // (the eval preset) so the full propose path is exercised — proposed, never
+    // applied. Data-dependent: {user} must not already have access to {album}.
+    // planProposed is gated on SEEDED (needs a {user} not yet in {album}).
+    id: 'l3.plan.albumaccess.add',
+    category: 'l3.plan',
+    prompt: 'share the {album} album with {user} as a viewer',
+    expect: { kind: 'manage_album_access', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
 ];

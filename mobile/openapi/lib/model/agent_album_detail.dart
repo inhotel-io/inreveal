@@ -15,6 +15,7 @@ class AgentAlbumDetail {
   AgentAlbumDetail({
     required this.albumName,
     required this.albumThumbnailAssetId,
+    this.albumUsers = const [],
     required this.assetCount,
     this.assetIds = const [],
     required this.description,
@@ -27,6 +28,8 @@ class AgentAlbumDetail {
   String albumName;
 
   String? albumThumbnailAssetId;
+
+  List<AgentAlbumUserSummary> albumUsers;
 
   /// Minimum value: 0
   /// Maximum value: 9007199254740991
@@ -48,6 +51,7 @@ class AgentAlbumDetail {
   bool operator ==(Object other) => identical(this, other) || other is AgentAlbumDetail &&
     other.albumName == albumName &&
     other.albumThumbnailAssetId == albumThumbnailAssetId &&
+    _deepEquality.equals(other.albumUsers, albumUsers) &&
     other.assetCount == assetCount &&
     _deepEquality.equals(other.assetIds, assetIds) &&
     other.description == description &&
@@ -61,6 +65,7 @@ class AgentAlbumDetail {
     // ignore: unnecessary_parenthesis
     (albumName.hashCode) +
     (albumThumbnailAssetId == null ? 0 : albumThumbnailAssetId!.hashCode) +
+    (albumUsers.hashCode) +
     (assetCount.hashCode) +
     (assetIds.hashCode) +
     (description.hashCode) +
@@ -70,7 +75,7 @@ class AgentAlbumDetail {
     (startDate == null ? 0 : startDate!.hashCode);
 
   @override
-  String toString() => 'AgentAlbumDetail[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, assetCount=$assetCount, assetIds=$assetIds, description=$description, endDate=$endDate, id=$id, ownerId=$ownerId, startDate=$startDate]';
+  String toString() => 'AgentAlbumDetail[albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, albumUsers=$albumUsers, assetCount=$assetCount, assetIds=$assetIds, description=$description, endDate=$endDate, id=$id, ownerId=$ownerId, startDate=$startDate]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -80,6 +85,7 @@ class AgentAlbumDetail {
     } else {
     //  json[r'albumThumbnailAssetId'] = null;
     }
+      json[r'albumUsers'] = this.albumUsers;
       json[r'assetCount'] = this.assetCount;
       json[r'assetIds'] = this.assetIds;
       json[r'description'] = this.description;
@@ -113,6 +119,7 @@ class AgentAlbumDetail {
       return AgentAlbumDetail(
         albumName: mapValueOfType<String>(json, r'albumName')!,
         albumThumbnailAssetId: mapValueOfType<String>(json, r'albumThumbnailAssetId'),
+        albumUsers: AgentAlbumUserSummary.listFromJson(json[r'albumUsers']),
         assetCount: mapValueOfType<int>(json, r'assetCount')!,
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
@@ -171,6 +178,7 @@ class AgentAlbumDetail {
   static const requiredKeys = <String>{
     'albumName',
     'albumThumbnailAssetId',
+    'albumUsers',
     'assetCount',
     'assetIds',
     'description',

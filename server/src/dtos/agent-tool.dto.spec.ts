@@ -2135,13 +2135,18 @@ describe('Agent tool DTOs', () => {
       expect(AgentListAlbumsToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
 
-    it('encodes and parses read album responses with assetIds', () => {
+    it('encodes and parses read album responses with assetIds and albumUsers', () => {
       const assetIds = [factory.uuid(), factory.uuid()];
+      const sharedUserId = factory.uuid();
       const encoded = AgentReadAlbumToolResponseDto.schema.safeEncode({
         status: 'success',
         toolCall: makeToolCall({ albumCount: 1, assetCount: assetIds.length }),
         resultSize: makeResultSize(),
-        album: { ...makeAlbumSummary({ assetCount: assetIds.length }), assetIds },
+        album: {
+          ...makeAlbumSummary({ assetCount: assetIds.length }),
+          assetIds,
+          albumUsers: [{ userId: sharedUserId, role: 'editor' }],
+        },
       });
 
       expect(encoded.success).toBe(true);
@@ -2154,6 +2159,8 @@ describe('Agent tool DTOs', () => {
       }
 
       expect(encoded.data.album.assetIds).toEqual(assetIds);
+      expect(encoded.data.album.albumUsers).toEqual([{ userId: sharedUserId, role: 'editor' }]);
+      expect(encoded.data.album.albumUsers[0]).not.toHaveProperty('email');
       expect(AgentReadAlbumToolResponseDto.schema.safeParse(encoded.data).success).toBe(true);
     });
 

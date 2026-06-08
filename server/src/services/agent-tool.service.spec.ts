@@ -286,6 +286,7 @@ const makeAlbumDetail = (overrides: Partial<AgentAlbumDetail> = {}): AgentAlbumD
   return {
     ...makeAlbumSummary({ assetCount: assetIds.length, ...overrides }),
     assetIds,
+    albumUsers: overrides.albumUsers ?? [],
   };
 };
 
@@ -6215,6 +6216,32 @@ describe(AgentToolService.name, () => {
       toolCall: expect.objectContaining({ status: AgentToolCallStatus.Denied }),
     });
     expect(sharedSpaceRepository.getAllByUserId).not.toHaveBeenCalled();
+  });
+
+  it('readAlbum returns albumUsers with userId and role for a shared album', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const sharedUserId = newUuid();
+    const album = makeAlbumDetail({
+      id: albumId,
+      assetIds: [newUuid()],
+      albumUsers: [{ userId: sharedUserId, role: 'editor' }],
+    });
+    const session = makeSession({
+      userId: auth.user.id,
+      approvalMode: AgentApprovalMode.PlanOnly,
+    });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumRepository.getAgentAlbumById.mockResolvedValue(album);
+
+    const result = await sut.readAlbum(auth, session.id, { albumId });
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.album.albumUsers).toEqual([{ userId: sharedUserId, role: 'editor' }]);
+    }
   });
 
   it('readSpace returns redacted members and bounded asset ids for a visible space', async () => {
