@@ -24772,6 +24772,9 @@
               "createSpace": {
                 "type": "boolean"
               },
+              "deleteContainers": {
+                "type": "boolean"
+              },
               "editAssets": {
                 "type": "boolean"
               },
@@ -24843,6 +24846,7 @@
               "createSharedLinks",
               "shareAlbums",
               "lockAssets",
+              "deleteContainers",
               "manageStacks",
               "managePeople"
             ],
