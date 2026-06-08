@@ -46,6 +46,7 @@ class AgentOperationType {
   static const assetPeriodUnstack = AgentOperationType._(r'asset.unstack');
   static const assetPeriodSetFavorite = AgentOperationType._(r'asset.setFavorite');
   static const assetPeriodSetArchive = AgentOperationType._(r'asset.setArchive');
+  static const assetPeriodSetVisibility = AgentOperationType._(r'asset.setVisibility');
   static const assetPeriodUpdateMetadata = AgentOperationType._(r'asset.updateMetadata');
   static const assetPeriodAddTag = AgentOperationType._(r'asset.addTag');
   static const assetPeriodRemoveTag = AgentOperationType._(r'asset.removeTag');
@@ -81,6 +82,7 @@ class AgentOperationType {
     assetPeriodUnstack,
     assetPeriodSetFavorite,
     assetPeriodSetArchive,
+    assetPeriodSetVisibility,
     assetPeriodUpdateMetadata,
     assetPeriodAddTag,
     assetPeriodRemoveTag,
@@ -151,6 +153,7 @@ class AgentOperationTypeTypeTransformer {
         case r'asset.unstack': return AgentOperationType.assetPeriodUnstack;
         case r'asset.setFavorite': return AgentOperationType.assetPeriodSetFavorite;
         case r'asset.setArchive': return AgentOperationType.assetPeriodSetArchive;
+        case r'asset.setVisibility': return AgentOperationType.assetPeriodSetVisibility;
         case r'asset.updateMetadata': return AgentOperationType.assetPeriodUpdateMetadata;
         case r'asset.addTag': return AgentOperationType.assetPeriodAddTag;
         case r'asset.removeTag': return AgentOperationType.assetPeriodRemoveTag;

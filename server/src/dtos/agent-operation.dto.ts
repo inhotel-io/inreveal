@@ -10,6 +10,7 @@ import {
   AgentOperationType,
   AgentToolName,
   AlbumUserRole,
+  AssetVisibility,
   SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
@@ -528,6 +529,8 @@ const assetSetFavoritePayloadSchema = z.strictObject({ favorite: z.boolean() });
 
 const assetSetArchivePayloadSchema = z.strictObject({ archived: z.boolean() });
 
+const assetSetVisibilityPayloadSchema = z.strictObject({ visibility: z.literal(AssetVisibility.Locked) });
+
 const ianaTimeZoneSchema = z
   .string()
   .trim()
@@ -697,6 +700,22 @@ const setArchiveOperationSchema = z
   .superRefine((operation, ctx) => {
     validateAssetSelection(operation, ctx);
     validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetArchive);
+  });
+
+const setVisibilityOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetSetVisibility).meta({ id: 'AgentAssetSetVisibilityOperationType' }),
+    ...assetBatchBase,
+    payload: assetSetVisibilityPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(
+      operation,
+      ctx,
+      AgentOperationTargetKind.AssetBatch,
+      AgentOperationType.AssetSetVisibility,
+    );
   });
 
 const updateMetadataOperationSchema = z
@@ -909,6 +928,7 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   flipOperationSchema,
   setFavoriteOperationSchema,
   setArchiveOperationSchema,
+  setVisibilityOperationSchema,
   updateMetadataOperationSchema,
   addTagOperationSchema,
   removeTagOperationSchema,
@@ -1016,6 +1036,9 @@ const AgentAssetBatchWorkflowActionSchema = z
     }),
     assetSetArchivePayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetSetArchive),
+    }),
+    assetSetVisibilityPayloadSchema.extend({
+      type: z.literal(AgentOperationType.AssetSetVisibility),
     }),
     assetAddTagPayloadSchema.extend({
       type: z.literal(AgentOperationType.AssetAddTag),

@@ -1084,6 +1084,20 @@ export type AgentProposeAlbumOperationsDto = {
             archived: boolean;
         };
     } | {
+        "type": AgentAssetSetVisibilityOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            visibility: Visibility;
+        };
+    } | {
         "type": AgentAssetUpdateMetadataOperationType;
         summary: string;
         targetKind: AgentAssetUpdateMetadataTargetKind;
@@ -1577,6 +1591,20 @@ export type AgentReviseAlbumOperationsDto = {
         enabled?: boolean;
         payload: {
             archived: boolean;
+        };
+    } | {
+        "type": AgentAssetSetVisibilityOperationType;
+        summary: string;
+        targetKind: AgentOperationTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        assetSource?: AgentOperationPlanningAssetSourceInput;
+        assetIds?: string[];
+        assetSelectionHandleId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            visibility: Visibility;
         };
     } | {
         "type": AgentAssetUpdateMetadataOperationType;
@@ -11021,6 +11049,7 @@ export enum AgentOperationType {
     AssetUnstack = "asset.unstack",
     AssetSetFavorite = "asset.setFavorite",
     AssetSetArchive = "asset.setArchive",
+    AssetSetVisibility = "asset.setVisibility",
     AssetUpdateMetadata = "asset.updateMetadata",
     AssetAddTag = "asset.addTag",
     AssetRemoveTag = "asset.removeTag",
@@ -11185,6 +11214,12 @@ export enum AgentAssetSetFavoriteOperationType {
 }
 export enum AgentAssetSetArchiveOperationType {
     AssetSetArchive = "asset.setArchive"
+}
+export enum AgentAssetSetVisibilityOperationType {
+    AssetSetVisibility = "asset.setVisibility"
+}
+export enum Visibility {
+    Locked = "locked"
 }
 export enum AgentAssetUpdateMetadataOperationType {
     AssetUpdateMetadata = "asset.updateMetadata"

@@ -19,6 +19,7 @@ import {
   AgentToolName,
   AlbumUserRole,
   AssetType,
+  AssetVisibility,
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
@@ -98,6 +99,15 @@ const makeValidRestoreOp = (overrides: Record<string, unknown> = {}) => ({
   summary: 'Restore matching photos from Trash.',
   targetKind: AgentOperationTargetKind.AssetBatch,
   assetIds: [factory.uuid()],
+  ...overrides,
+});
+
+const makeValidSetVisibilityOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AssetSetVisibility,
+  summary: 'Move matching photos to the Locked folder.',
+  targetKind: AgentOperationTargetKind.AssetBatch,
+  assetIds: [factory.uuid()],
+  payload: { visibility: AssetVisibility.Locked },
   ...overrides,
 });
 
@@ -3314,6 +3324,72 @@ describe('Agent operation DTOs', () => {
 
     it('is accepted by the AgentGalleryOperationInputSchema union', () => {
       const result = parseSingleOperationProposal(makeValidPersonMergeOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('asset.setVisibility operation schema', () => {
+    it('accepts a valid asset.setVisibility(locked) operation', () => {
+      const result = parseSingleOperationProposal(makeValidSetVisibilityOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const op = result.data.operations[0];
+        expect(op.type).toBe(AgentOperationType.AssetSetVisibility);
+        expect((op as any).payload).toEqual({ visibility: AssetVisibility.Locked });
+      }
+    });
+
+    it('accepts asset.setVisibility with a selectionHandle', () => {
+      const result = parseSingleOperationProposal(
+        makeValidSetVisibilityOp({ assetIds: undefined, assetSelectionHandleId: factory.uuid() }),
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects asset.setVisibility with visibility=archive', () => {
+      const result = parseSingleOperationProposal(
+        makeValidSetVisibilityOp({ payload: { visibility: AssetVisibility.Archive } }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects asset.setVisibility with visibility=timeline', () => {
+      const result = parseSingleOperationProposal(
+        makeValidSetVisibilityOp({ payload: { visibility: AssetVisibility.Timeline } }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects asset.setVisibility with visibility=hidden', () => {
+      const result = parseSingleOperationProposal(
+        makeValidSetVisibilityOp({ payload: { visibility: AssetVisibility.Hidden } }),
+      );
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects asset.setVisibility with missing payload', () => {
+      const result = parseSingleOperationProposal(makeValidSetVisibilityOp({ payload: undefined }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects asset.setVisibility with wrong targetKind', () => {
+      expectIssue(
+        parseSingleOperationProposal(makeValidSetVisibilityOp({ targetKind: AgentOperationTargetKind.ExistingAlbum })),
+        ['operations', 0, 'targetKind'],
+        'asset.setVisibility requires an asset_batch target',
+      );
+    });
+
+    it('rejects asset.setVisibility with no asset selection mechanism', () => {
+      expectIssue(
+        parseSingleOperationProposal({ ...makeValidSetVisibilityOp(), assetIds: undefined }),
+        ['operations', 0],
+        'Provide exactly one of assetSource, assetIds, or assetSelectionHandleId',
+      );
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidSetVisibilityOp());
       expect(result.success).toBe(true);
     });
   });
