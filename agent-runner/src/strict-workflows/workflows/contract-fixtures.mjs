@@ -47,6 +47,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
 export const KNOWN_BATCH_ACTION_TYPES = new Set([
   'asset.setFavorite',
   'asset.setArchive',
+  'asset.setVisibility',
   'asset.addTag',
   'asset.rotate',
   'asset.crop',
@@ -159,6 +160,7 @@ const validateBatchAction = (action) => {
   if (!KNOWN_BATCH_ACTION_TYPES.has(type)) fail(`unknown batch action type "${type}"`);
   if (type === 'asset.setFavorite' && typeof action.favorite !== 'boolean') fail('setFavorite requires favorite:boolean');
   if (type === 'asset.setArchive' && typeof action.archived !== 'boolean') fail('setArchive requires archived:boolean');
+  if (type === 'asset.setVisibility' && action.visibility !== 'locked') fail('setVisibility requires visibility:"locked"');
   if (type === 'asset.addTag') {
     const provided = Number(action.tagName !== undefined) + Number(action.tagId !== undefined);
     if (provided !== 1) fail('asset.addTag requires exactly one of tagName or tagId');
