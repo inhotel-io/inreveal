@@ -450,10 +450,16 @@ export class TimelineManager extends VirtualScrollManager {
 
   async loadCoversForBuckets(timeBuckets: string[]) {
     const grouping = this.grouping;
-    if (grouping === 'day') return;
+    if (grouping === 'day') {
+      return;
+    }
     const todo = timeBuckets.filter((tb) => !this.#coverRequested.has(tb));
-    if (todo.length === 0) return;
-    for (const tb of todo) this.#coverRequested.add(tb);
+    if (todo.length === 0) {
+      return;
+    }
+    for (const tb of todo) {
+      this.#coverRequested.add(tb);
+    }
 
     const sequence = this.#initSequence;
     const bucketSize = getTimeBucketSizeForGrouping(grouping);
@@ -462,15 +468,21 @@ export class TimelineManager extends VirtualScrollManager {
     try {
       covers = await getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo });
     } catch {
-      for (const tb of todo) this.#coverRequested.delete(tb);
+      for (const tb of todo) {
+        this.#coverRequested.delete(tb);
+      }
       return;
     }
-    if (this.#destroyed || sequence !== this.#initSequence) return;
+    if (this.#destroyed || sequence !== this.#initSequence) {
+      return;
+    }
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
     const byBucket = new Map(covers.map((c) => [c.timeBucket, c]));
     for (const bucket of this.timelineBuckets) {
       const cover = byBucket.get(bucket.timeBucket);
-      if (cover) bucket.setRepresentative(cover);
+      if (cover) {
+        bucket.setRepresentative(cover);
+      }
     }
   }
 
