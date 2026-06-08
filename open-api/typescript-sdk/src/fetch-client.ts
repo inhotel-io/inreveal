@@ -586,6 +586,7 @@ export type AgentPermissionPlan = {
         createAlbum: boolean;
         createSharedLinks: boolean;
         createSpace: boolean;
+        deleteContainers: boolean;
         editAssets: boolean;
         favoriteAssets: boolean;
         lockAssets: boolean;

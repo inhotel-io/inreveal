@@ -235,6 +235,7 @@ export class AgentOperationPlanService {
     updateAssetMetadata: false,
     shareAlbums: false,
     lockAssets: false,
+    deleteContainers: false,
     manageStacks: false,
     managePeople: false,
   };
