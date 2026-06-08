@@ -297,6 +297,29 @@ export default [
     expect: { kind: 'cleanup_duplicates' },
   },
 
+  // lock_assets boundaries ---------------------------------------------------
+  {
+    // "hide Alex" has no folder cue → hide_person, not lock_assets.
+    id: 'neg.lock.hide-person',
+    category: 'negatives',
+    prompt: 'hide Alex',
+    expect: { kind: 'hide_person' },
+  },
+  {
+    // "archive these photos" → archive_assets, not lock_assets (different verb).
+    id: 'neg.lock.archive-stays-archive',
+    category: 'negatives',
+    prompt: 'archive these photos',
+    expect: { kind: 'archive_assets' },
+  },
+  {
+    // Subjective source must decline (declineSourceFastPath).
+    id: 'neg.lock.subjective',
+    category: 'negatives',
+    prompt: 'lock the best ones',
+    expect: { kind: 'none' },
+  },
+
   // change_member_role / change_album_member_role boundaries -----------------
   {
     // Album-role prompts must NOT route to change_member_role (it now declines "album").
