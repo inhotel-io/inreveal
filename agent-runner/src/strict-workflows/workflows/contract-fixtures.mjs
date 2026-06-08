@@ -16,6 +16,9 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'album.removeAssets',
   'album.updateDetails',
   'album.setCover',
+  'album.addUsers',
+  'album.removeUsers',
+  'album.updateUserRole',
   'space.create',
   'space.addAssets',
   'space.removeAssets',
@@ -422,9 +425,43 @@ const validateAlbumSetCover = (op) => {
   if (op.assetIds.length > 500) fail('album.setCover assetIds exceeds 500');
 };
 
+// Only editor/viewer are assignable to an album user (owner is not assignable).
+const ASSIGNABLE_ALBUM_ROLES = new Set(['editor', 'viewer']);
+
+const requireExistingAlbumTarget = (op) => {
+  if (op.targetKind !== 'existing_album') fail(`${op.type} requires targetKind "existing_album"`);
+  if (!op.targetId) fail(`${op.type} requires targetId`);
+};
+
+const validateAlbumAddUsers = (op) => {
+  requireExistingAlbumTarget(op);
+  const albumUsers = op.payload?.albumUsers;
+  if (!Array.isArray(albumUsers) || albumUsers.length === 0)
+    fail('album.addUsers requires a non-empty payload.albumUsers');
+  for (const u of albumUsers) {
+    if (!u?.userId) fail('album.addUsers albumUser requires userId');
+    if (!ASSIGNABLE_ALBUM_ROLES.has(u.role)) fail('album.addUsers albumUser role must be editor or viewer');
+  }
+};
+
+const validateAlbumRemoveUsers = (op) => {
+  requireExistingAlbumTarget(op);
+  const userIds = op.payload?.userIds;
+  if (!Array.isArray(userIds) || userIds.length === 0) fail('album.removeUsers requires a non-empty payload.userIds');
+};
+
+const validateAlbumUpdateUserRole = (op) => {
+  requireExistingAlbumTarget(op);
+  if (!op.payload?.userId) fail('album.updateUserRole requires payload.userId');
+  if (!ASSIGNABLE_ALBUM_ROLES.has(op.payload?.role)) fail('album.updateUserRole role must be editor or viewer');
+};
+
 const ALBUM_OP_VALIDATORS = {
   'album.removeAssets': validateAlbumRemoveAssets,
   'album.setCover': validateAlbumSetCover,
+  'album.addUsers': validateAlbumAddUsers,
+  'album.removeUsers': validateAlbumRemoveUsers,
+  'album.updateUserRole': validateAlbumUpdateUserRole,
   'asset.removeTag': validateAssetRemoveTag,
   'asset.trash': validateAssetTrash,
   'asset.restore': validateAssetRestore,
@@ -542,8 +579,10 @@ export const makeContractClient = (config = {}) => {
         album: {
           id: album.id,
           albumName: album.albumName,
+          ownerId: album.ownerId ?? null,
           assetIds: album.assetIds ?? [],
           albumThumbnailAssetId: album.albumThumbnailAssetId ?? null,
+          albumUsers: album.albumUsers ?? [],
         },
       };
     },
