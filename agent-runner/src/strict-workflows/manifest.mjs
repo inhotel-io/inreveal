@@ -1037,6 +1037,37 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'change_album_member_role',
+    flow: 'strict',
+    title: "Change an album member's role",
+    classifierDescription:
+      "User wants to change an existing album member's role to editor or viewer. The prompt MUST mention the word 'album'. Declines 'space' targets (those belong to change_member_role).",
+    positiveExamples: Object.freeze([
+      'Make Alex an editor on the Family album',
+      "Change Bob's role to viewer in the Family album",
+      'Make Sam a viewer on the Beach album',
+    ]),
+    negativeExamples: Object.freeze([
+      'Make Alex an editor in the Family space',
+      'Add Alex to the Family album',
+      'Share the Family album with Alex',
+    ]),
+    slots: Object.freeze({
+      memberQuery: Object.freeze({ type: 'string', required: true, description: 'The member name or email.' }),
+      role: Object.freeze({ type: 'string', required: true, description: 'editor or viewer.' }),
+      albumRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the album (trailing "album" word stripped).' }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums', 'readAlbum', 'searchUsers']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Change an album member\'s role',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Resolve album + user (durable two-stage disambiguation); guard owner/no-op/non-member; propose album.updateUserRole plan. Requires "album" in the prompt (declines space targets).',
+    }),
+  }),
+  Object.freeze({
     kind: 'manage_space_members',
     flow: 'strict',
     title: 'Add or remove space members',

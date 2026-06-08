@@ -296,4 +296,27 @@ export default [
     prompt: 'merge duplicate photos',
     expect: { kind: 'cleanup_duplicates' },
   },
+
+  // change_member_role / change_album_member_role boundaries -----------------
+  {
+    // Album-role prompts must NOT route to change_member_role (it now declines "album").
+    id: 'neg.role.album-to-albumrole',
+    category: 'negatives',
+    prompt: 'make Alex an editor on the Family album',
+    expect: { kind: 'change_album_member_role' },
+  },
+  {
+    // Space-role prompts must NOT route to change_album_member_role (it requires "album").
+    id: 'neg.albumrole.space-to-role',
+    category: 'negatives',
+    prompt: 'make Alex an editor in the Family space',
+    expect: { kind: 'change_member_role' },
+  },
+  {
+    // Bare prompt (no album/space noun) must NOT route to change_album_member_role.
+    id: 'neg.albumrole.bare-declined',
+    category: 'negatives',
+    prompt: 'make Alex an editor in Family',
+    expect: { kind: 'change_member_role' },
+  },
 ];
