@@ -43,7 +43,7 @@ class TestTimelineManager extends TimelineManager {
 
 describe('timeline grouping bucket helpers', () => {
   describe('mergeTimeBuckets', () => {
-    it('preserves the primary representative metadata when merging duplicate buckets', () => {
+    it('sums counts when merging duplicate buckets (representative fields are stripped)', () => {
       const merged = mergeTimeBuckets(
         [
           {
@@ -70,14 +70,11 @@ describe('timeline grouping bucket helpers', () => {
         {
           timeBucket: '2024-01-01',
           count: 5,
-          representativeAssetId: 'primary-asset',
-          representativeThumbhash: 'primary-thumbhash',
-          representativeRatio: 1.5,
         },
       ]);
     });
 
-    it('uses the album representative metadata when the primary bucket has no representative', () => {
+    it('sums counts when secondary bucket has no corresponding primary (representative fields are stripped)', () => {
       const merged = mergeTimeBuckets(
         [{ timeBucket: '2024-01-01', count: 2 }],
         [
@@ -96,14 +93,11 @@ describe('timeline grouping bucket helpers', () => {
         {
           timeBucket: '2024-01-01',
           count: 5,
-          representativeAssetId: 'album-asset',
-          representativeThumbhash: 'album-thumbhash',
-          representativeRatio: 0.8,
         },
       ]);
     });
 
-    it('preserves representative metadata for buckets that only exist in the album query', () => {
+    it('passes through buckets that only exist in the secondary query (representative fields stripped)', () => {
       const merged = mergeTimeBuckets(
         [],
         [
@@ -122,9 +116,6 @@ describe('timeline grouping bucket helpers', () => {
         {
           timeBucket: '2023-01-01',
           count: 1,
-          representativeAssetId: 'album-only-asset',
-          representativeThumbhash: null,
-          representativeRatio: null,
         },
       ]);
     });

@@ -898,6 +898,37 @@ describe('TimelineManager', () => {
       await timelineManager.loadCoversForBuckets(['2024-01-01']);
       expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(2);
     });
+
+    it('prefers the album cover for overlay buckets when timelineAlbumId is set', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
+      // album-scoped request carries albumId; main request does not
+      sdkMock.getTimeBucketCovers.mockImplementation(({ albumId }: { albumId?: string }) =>
+        Promise.resolve([
+          {
+            timeBucket: '2024-01-01',
+            representativeAssetId: albumId ? 'album-asset' : 'main-asset',
+            representativeThumbhash: null,
+            representativeRatio: null,
+          },
+        ]),
+      );
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'year', timelineAlbumId: 'album-1' });
+
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+
+      // Both main and album cover requests are made
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(2);
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
+        expect.not.objectContaining({ albumId: expect.anything() }),
+      );
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
+        expect.objectContaining({ albumId: 'album-1' }),
+      );
+      // Album cover wins
+      const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
+      expect(bucket.representativeAssetId).toBe('album-asset');
+    });
   });
 
   describe('showAssetOwners', () => {

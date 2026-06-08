@@ -464,11 +464,18 @@ export class TimelineManager extends VirtualScrollManager {
     const sequence = this.#initSequence;
     const bucketSize = getTimeBucketSizeForGrouping(grouping);
     const requestOptions = toTimeBucketsRequest(this.#options, bucketSize);
-    let covers: TimeBucketCoverResponseDto[];
+    const albumOptions = getTimelineAlbumQueryOptions(this.#options, bucketSize);
+    let mainCovers: TimeBucketCoverResponseDto[];
+    let albumCovers: TimeBucketCoverResponseDto[];
     try {
       // Requests are not aborted on re-init by design — the stale-sequence guard below prevents stale
       // application, and cover fetches are light GETs bounded to the currently visible bucket set.
-      covers = await getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo });
+      [mainCovers, albumCovers] = await Promise.all([
+        getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo }),
+        albumOptions
+          ? getTimeBucketCovers({ ...authManager.params, ...albumOptions, timeBuckets: todo })
+          : Promise.resolve([]),
+      ]);
     } catch {
       for (const tb of todo) {
         this.#coverRequested.delete(tb);
@@ -479,7 +486,11 @@ export class TimelineManager extends VirtualScrollManager {
       return;
     }
     // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const byBucket = new Map(covers.map((c) => [c.timeBucket, c]));
+    const byBucket = new Map(mainCovers.map((c) => [c.timeBucket, c]));
+    // Album covers take precedence over main covers when an album overlay is active
+    for (const cover of albumCovers) {
+      byBucket.set(cover.timeBucket, cover);
+    }
     for (const bucket of this.timelineBuckets) {
       const cover = byBucket.get(bucket.timeBucket);
       if (cover) {
