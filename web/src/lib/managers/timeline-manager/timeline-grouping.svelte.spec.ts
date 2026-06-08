@@ -210,7 +210,7 @@ describe('timeline grouping bucket helpers', () => {
         grouping: 'year',
         timeBucket: '2015-01-01',
         count: 438,
-        representativeAssetId: 'asset-2015',
+        representativeAssetId: null,
         representativeThumbhash: null,
         representativeRatio: null,
         year: 2015,
@@ -220,6 +220,22 @@ describe('timeline grouping bucket helpers', () => {
         top: 12,
         isLoaded: true,
       });
+    });
+
+    it('setRepresentative applies cover data to the bucket', () => {
+      const bucket = new TimelineBucket({ topSectionHeight: 0 }, 'year', {
+        timeBucket: '2015-01-01',
+        count: 438,
+      });
+      expect(bucket.representativeAssetId).toBeNull();
+      bucket.setRepresentative({
+        representativeAssetId: 'asset-2015',
+        representativeThumbhash: 'thumbhash-2015',
+        representativeRatio: 1.25,
+      });
+      expect(bucket.representativeAssetId).toBe('asset-2015');
+      expect(bucket.representativeThumbhash).toBe('thumbhash-2015');
+      expect(bucket.representativeRatio).toBe(1.25);
     });
 
     it('normalizes missing representative metadata to null', () => {
@@ -292,7 +308,7 @@ describe('timeline grouping bucket helpers', () => {
       ]);
     });
 
-    it('keeps the first representative metadata when aggregating day buckets into a month', () => {
+    it('aggregates day buckets into a month with only timeBucket and count', () => {
       const months = aggregateDayBucketsByMonth([
         {
           timeBucket: '2024-02-29',
@@ -313,35 +329,10 @@ describe('timeline grouping bucket helpers', () => {
       expect(months[0]).toMatchObject({
         timeBucket: '2024-02-01',
         count: 5,
-        representativeAssetId: 'first-representative',
-        representativeThumbhash: 'first-thumbhash',
-        representativeRatio: 1.5,
       });
-    });
-
-    it('does not mix representative metadata fields from different day buckets', () => {
-      const months = aggregateDayBucketsByMonth([
-        {
-          timeBucket: '2024-02-29',
-          count: 2,
-          representativeAssetId: 'first-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-        {
-          timeBucket: '2024-02-01',
-          count: 3,
-          representativeAssetId: 'second-representative',
-          representativeThumbhash: 'second-thumbhash',
-          representativeRatio: 0.8,
-        },
-      ]);
-
-      expect(months[0]).toMatchObject({
-        representativeAssetId: 'first-representative',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      });
+      expect(months[0]).not.toHaveProperty('representativeAssetId');
+      expect(months[0]).not.toHaveProperty('representativeThumbhash');
+      expect(months[0]).not.toHaveProperty('representativeRatio');
     });
 
     it('lays out thousands of representative buckets with stable cumulative top positions', () => {
@@ -449,9 +440,9 @@ describe('TimelineManager grouping metadata', () => {
     expect(timelineManager.timelineBuckets[0]).toMatchObject({
       grouping: 'year',
       count: 438,
-      representativeAssetId: 'asset-2015',
-      representativeThumbhash: 'thumbhash-2015',
-      representativeRatio: 1.25,
+      representativeAssetId: null,
+      representativeThumbhash: null,
+      representativeRatio: null,
       date: { year: 2015 },
     });
   });
@@ -620,9 +611,9 @@ describe('TimelineManager grouping metadata', () => {
     expect(timelineManager.timelineBuckets).toHaveLength(1);
     expect(timelineManager.timelineBuckets[0]).toMatchObject({
       count: 5,
-      representativeAssetId: 'library-asset',
-      representativeThumbhash: 'library-thumbhash',
-      representativeRatio: 1.2,
+      representativeAssetId: null,
+      representativeThumbhash: null,
+      representativeRatio: null,
     });
   });
 

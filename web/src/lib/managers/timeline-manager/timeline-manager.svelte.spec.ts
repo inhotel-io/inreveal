@@ -779,6 +779,67 @@ describe('TimelineManager', () => {
     });
   });
 
+  describe('loadCoversForBuckets', () => {
+    it('fetches only requested buckets, dedupes, and applies covers', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([
+        { timeBucket: '2024-01-01', count: 3 },
+        { timeBucket: '2023-01-01', count: 5 },
+      ]);
+      sdkMock.getTimeBucketCovers.mockResolvedValue([
+        {
+          timeBucket: '2024-01-01',
+          representativeAssetId: 'a-2024',
+          representativeThumbhash: 'h',
+          representativeRatio: 1.5,
+        },
+      ]);
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'year' });
+
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+      await timelineManager.loadCoversForBuckets(['2024-01-01']); // deduped — no second request
+
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(1);
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
+        expect.objectContaining({ bucketSize: TimeBucketSize.Year, timeBuckets: ['2024-01-01'] }),
+      );
+      const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
+      expect(bucket.representativeAssetId).toBe('a-2024');
+      expect(bucket.representativeThumbhash).toBe('h');
+    });
+
+    it('does nothing for day grouping', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'day' });
+
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+
+      expect(sdkMock.getTimeBucketCovers).not.toHaveBeenCalled();
+    });
+
+    it('clears the dedup set when buckets reinitialize', async () => {
+      sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
+      sdkMock.getTimeBucketCovers.mockResolvedValue([
+        {
+          timeBucket: '2024-01-01',
+          representativeAssetId: 'asset-1',
+          representativeThumbhash: null,
+          representativeRatio: null,
+        },
+      ]);
+      const timelineManager = new TimelineManager();
+      await timelineManager.updateOptions({ grouping: 'year' });
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(1);
+
+      // Re-init triggers clear of #coverRequested
+      await timelineManager.updateOptions({ grouping: 'year', personIds: ['person-1'] });
+      await timelineManager.loadCoversForBuckets(['2024-01-01']);
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('showAssetOwners', () => {
     const LS_KEY = 'album-show-asset-owners';
 

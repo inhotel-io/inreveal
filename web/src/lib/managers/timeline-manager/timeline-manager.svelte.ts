@@ -31,8 +31,10 @@ import {
 import {
   AssetOrder,
   getAssetInfo,
+  getTimeBucketCovers,
   getTimeBuckets,
   type AssetResponseDto,
+  type TimeBucketCoverResponseDto,
   type TimeBucketsResponseDto,
 } from '@immich/sdk';
 import { clamp, isEqual } from 'lodash-es';
@@ -132,6 +134,8 @@ export class TimelineManager extends VirtualScrollManager {
   #unsubscribes: Array<() => void> = [];
   #initSequence = 0;
   #destroyed = false;
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
+  #coverRequested = new Set<string>();
 
   get showAssetOwners() {
     return this.#showAssetOwners.current;
@@ -305,6 +309,7 @@ export class TimelineManager extends VirtualScrollManager {
     const mergedTimebuckets =
       albumTimebuckets.length > 0 ? mergeTimeBuckets(timebuckets, albumTimebuckets, this.#options.order) : timebuckets;
 
+    this.#coverRequested.clear();
     this.timelineBuckets = mergedTimebuckets.map((timeBucket) => new TimelineBucket(this, grouping, timeBucket));
     layoutTimelineBuckets(this.timelineBuckets);
     this.months = grouping === 'day' ? this.#createTimelineMonthsFromDayBuckets(mergedTimebuckets) : [];
@@ -441,6 +446,32 @@ export class TimelineManager extends VirtualScrollManager {
       height: month.height,
     }));
     this.scrubberTimelineHeight = this.totalViewerHeight;
+  }
+
+  async loadCoversForBuckets(timeBuckets: string[]) {
+    const grouping = this.grouping;
+    if (grouping === 'day') return;
+    const todo = timeBuckets.filter((tb) => !this.#coverRequested.has(tb));
+    if (todo.length === 0) return;
+    for (const tb of todo) this.#coverRequested.add(tb);
+
+    const sequence = this.#initSequence;
+    const bucketSize = getTimeBucketSizeForGrouping(grouping);
+    const requestOptions = toTimeBucketsRequest(this.#options, bucketSize);
+    let covers: TimeBucketCoverResponseDto[];
+    try {
+      covers = await getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo });
+    } catch {
+      for (const tb of todo) this.#coverRequested.delete(tb);
+      return;
+    }
+    if (this.#destroyed || sequence !== this.#initSequence) return;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const byBucket = new Map(covers.map((c) => [c.timeBucket, c]));
+    for (const bucket of this.timelineBuckets) {
+      const cover = byBucket.get(bucket.timeBucket);
+      if (cover) bucket.setRepresentative(cover);
+    }
   }
 
   async loadTimelineMonth(yearMonth: TimelineYearMonth, options?: { cancelable: boolean }): Promise<void> {
