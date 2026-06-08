@@ -36,6 +36,7 @@ const fullWriteScope = {
   createSharedLinks: true,
   shareAlbums: true,
   lockAssets: true,
+  deleteContainers: true,
   manageStacks: true,
   managePeople: true,
 };
@@ -57,6 +58,7 @@ const expandedWriteScopeKeys = [
   'createSharedLinks',
   'shareAlbums',
   'lockAssets',
+  'deleteContainers',
   'manageStacks',
   'managePeople',
 ];
