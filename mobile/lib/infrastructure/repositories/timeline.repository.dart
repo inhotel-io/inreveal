@@ -412,17 +412,18 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
         ..limit(1),
     );
 
-    final query = _db.remoteAssetEntity.select().addColumns([localId]).join([
-      innerJoin(
-        _db.remoteAlbumAssetEntity,
-        _db.remoteAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id),
-        useColumns: false,
-      ),
-    ])..where(
-      _db.remoteAssetEntity.deletedAt.isNull() &
-          _db.remoteAlbumAssetEntity.albumId.equals(albumId) &
-          _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope),
-    );
+    final query =
+        _db.remoteAssetEntity.select().addColumns([localId]).join([
+          innerJoin(
+            _db.remoteAlbumAssetEntity,
+            _db.remoteAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id),
+            useColumns: false,
+          ),
+        ])..where(
+          _db.remoteAssetEntity.deletedAt.isNull() &
+              _db.remoteAlbumAssetEntity.albumId.equals(albumId) &
+              _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope),
+        );
 
     if (isAscending) {
       query.orderBy([OrderingTerm.asc(_db.remoteAssetEntity.createdAt)]);
@@ -883,7 +884,6 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             _db.assetFaceEntity.isVisible.equals(true) &
             _db.assetFaceEntity.deletedAt.isNull(),
       );
-
 
     if (groupBy == GroupAssetsBy.none) {
       final query = _db.remoteAssetEntity.selectOnly()
