@@ -175,7 +175,24 @@ export const TimeBucketsResponseSchema = z
   })
   .meta({ id: 'TimeBucketsResponseDto' });
 
+const TimeBucketCoverSchema = TimeBucketQueryBaseSchema.extend({
+  timeBuckets: z
+    .preprocess((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v]), z.array(z.string()))
+    .describe('Time bucket identifiers (YYYY-MM-DD) to resolve covers for'),
+}).meta({ id: 'TimeBucketCoverDto' });
+
+export const TimeBucketCoverResponseSchema = z
+  .object({
+    timeBucket: z.string().meta({ example: '2024-01-01' }),
+    representativeAssetId: z.string().nullable().describe('Representative asset ID for this bucket'),
+    representativeThumbhash: z.string().nullable().describe('Representative asset thumbhash, base64 encoded'),
+    representativeRatio: z.number().nullable().describe('Representative asset width/height ratio'),
+  })
+  .meta({ id: 'TimeBucketCoverResponseDto' });
+
 export class TimeBucketDto extends createZodDto(TimeBucketSchema) {}
 export class TimeBucketAssetDto extends createZodDto(TimeBucketAssetSchema) {}
 export class TimeBucketAssetResponseDto extends createZodDto(TimeBucketAssetResponseSchema) {}
 export class TimeBucketsResponseDto extends createZodDto(TimeBucketsResponseSchema) {}
+export class TimeBucketCoverDto extends createZodDto(TimeBucketCoverSchema) {}
+export class TimeBucketCoverResponseDto extends createZodDto(TimeBucketCoverResponseSchema) {}
