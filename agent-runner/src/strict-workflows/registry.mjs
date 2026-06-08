@@ -1,5 +1,6 @@
 import { addPhotosToAlbumWorkflow } from './workflows/add-photos-to-album.mjs';
 import { archiveAssetsWorkflow } from './workflows/archive-assets.mjs';
+import { changeAlbumMemberRoleWorkflow } from './workflows/change-album-member-role.mjs';
 import { changeMemberRoleWorkflow } from './workflows/change-member-role.mjs';
 import { cleanupDuplicatesWorkflow } from './workflows/cleanup-duplicates.mjs';
 import { createAlbumFromSourceWorkflow } from './workflows/create-album-from-source.mjs';
@@ -43,6 +44,9 @@ import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 //   - `manage_album_access` BEFORE `manage_space_members`: album-user ops are gated
 //     by the "album" keyword; space-member ops are gated by "space". Both are first
 //     placed before the photo-add workflows so member adds never fall to add_photos_*.
+//   - `change_album_member_role` BEFORE `change_member_role`: the album variant
+//     requires "album" in the target and change_member_role now declines album
+//     targets; placing the album variant first gives it priority in the fast-path.
 //   - `manage_space_members` / `change_member_role` BEFORE `manage_space_assets` so
 //     member ops (people) win over asset ops (photos) for space targets.
 //   - `manage_space_assets` BEFORE `add_photos_to_album` so "add <photos> to the X
@@ -142,6 +146,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   stackAssetsWorkflow,
   manageAlbumAccessWorkflow,
   manageSpaceMembersWorkflow,
+  changeAlbumMemberRoleWorkflow,
   changeMemberRoleWorkflow,
   movePhotosBetweenAlbumsWorkflow,
   removePhotosFromAlbumWorkflow,

@@ -99,6 +99,18 @@ export default [
     expect: { kind: 'change_member_role', slots: { role: 'editor', spaceRef: 'Family' } },
   },
   {
+    id: 'slots.albumrole.synonym',
+    category: 'slots',
+    prompt: 'make Alex a contributor on the Family album',
+    expect: { kind: 'change_album_member_role', slots: { role: 'editor', albumRef: 'Family' } },
+  },
+  {
+    id: 'slots.albumrole.viewer',
+    category: 'slots',
+    prompt: 'make Alex a reader on the Beach album',
+    expect: { kind: 'change_album_member_role', slots: { role: 'viewer', albumRef: 'Beach' } },
+  },
+  {
     id: 'slots.createalbum.default-name',
     category: 'slots',
     prompt: 'make an album of my newest 50 photos',
