@@ -349,6 +349,34 @@ export default [
     prompt: "change Bob's role to viewer in Trips",
     expect: { kind: 'change_member_role', slotsSurvive: true, slots: { role: 'viewer', spaceRef: 'Trips' } },
   },
+  {
+    // change_member_role must NOT steal album-role prompts → undefined (declined)
+    id: 'recall.role.album-declined',
+    category: 'recall',
+    prompt: 'make Alex an editor on the Family album',
+    expect: { kind: 'change_album_member_role', slotsSurvive: true, slots: { memberQuery: /alex/i, role: 'editor', albumRef: 'Family' } },
+  },
+
+  // change_album_member_role ------------------------------------------------
+  {
+    id: 'recall.albumrole.make',
+    category: 'recall',
+    prompt: 'make Alex an editor on the Family album',
+    expect: { kind: 'change_album_member_role', slotsSurvive: true, slots: { memberQuery: /alex/i, role: 'editor', albumRef: 'Family' } },
+  },
+  {
+    id: 'recall.albumrole.possessive',
+    category: 'recall',
+    prompt: "change Bob's role to viewer in the Beach album",
+    expect: { kind: 'change_album_member_role', slotsSurvive: true, slots: { role: 'viewer', albumRef: 'Beach' } },
+  },
+  {
+    // change_album_member_role must DECLINE space targets
+    id: 'recall.albumrole.space-declined',
+    category: 'recall',
+    prompt: 'make Alex an editor in the Family space',
+    expect: { kind: 'change_member_role', slotsSurvive: true, slots: { spaceRef: 'Family' } },
+  },
 
   // create_album_from_source ------------------------------------------------
   {
