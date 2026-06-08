@@ -110,6 +110,8 @@ interface AssetBuilderOptions {
 export interface TimeBucketOptions extends AssetBuilderOptions {
   order?: AssetOrder;
   bucketSize?: TimeBucketSize;
+  /** Consumed by getTimeBucketCovers only; ignored by getTimeBuckets. */
+  timeBuckets?: string[];
 }
 
 export interface TimeBucketItem {
@@ -118,6 +120,13 @@ export interface TimeBucketItem {
   representativeAssetId?: string | null;
   representativeThumbhash?: string | null;
   representativeRatio?: number | null;
+}
+
+export interface TimeBucketCoverItem {
+  timeBucket: string;
+  representativeAssetId: string;
+  representativeThumbhash: string | null;
+  representativeRatio: number;
 }
 
 export interface YearMonthDay {
@@ -192,6 +201,28 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
   return withLatitude.where((eb) =>
     eb.or([eb('asset_exif.longitude', '>=', west), eb('asset_exif.longitude', '<=', east)]),
   );
+};
+
+const formatUtcDate = (date: Date) => date.toISOString().slice(0, 10);
+
+// Advance a YYYY-MM-DD bucket-start date by one bucket interval (the exclusive
+// upper bound of the requested range).
+const addBucketInterval = (bucketStart: string, bucketSize: TimeBucketSize): string => {
+  const [year, month, day] = bucketStart.split('-').map(Number);
+  switch (bucketSize) {
+    case TimeBucketSize.Year: {
+      // Anchor to Jan 1 of the next year regardless of input day/month.
+      return formatUtcDate(new Date(Date.UTC(year + 1, 0, 1)));
+    }
+    case TimeBucketSize.Month: {
+      // Anchor to the first of the next month regardless of input day.
+      // month is 1-based, so Date.UTC(year, month, 1) is the 1st of month+1.
+      return formatUtcDate(new Date(Date.UTC(year, month, 1)));
+    }
+    default: {
+      return formatUtcDate(new Date(Date.UTC(year, month - 1, day + 1)));
+    }
+  }
 };
 
 function withTimeBucketAssetFilters<O>(
@@ -1059,6 +1090,71 @@ export class AssetRepository {
       ])
       .orderBy('bucket_counts.timeBucket', order)
       .execute() as any as Promise<TimeBucketItem[]>;
+  }
+
+  async getTimeBucketCovers(options: TimeBucketOptions): Promise<TimeBucketCoverItem[]> {
+    const requestedBuckets = options.timeBuckets ?? [];
+    if (requestedBuckets.length === 0) {
+      return [];
+    }
+
+    const bucketSize = options.bucketSize ?? TimeBucketSize.Month;
+    const order = options.order === AssetOrder.Asc ? AssetOrder.Asc : AssetOrder.Desc;
+
+    // Narrow the scan to the requested bucket range so this is an index-friendly
+    // scan rather than a full-library sort.
+    const sorted = requestedBuckets.toSorted();
+    const minStart = sorted[0];
+    const maxStart = sorted.at(-1)!;
+    const maxEnd = addBucketInterval(maxStart, bucketSize);
+
+    // The CTE `timeBucket` is the truncated timestamptz at UTC midnight; the
+    // requested YYYY-MM-DD strings correspond to those exact values.
+    const requestedBucketDates = requestedBuckets.map((tb) => new Date(`${tb}T00:00:00Z`));
+
+    return this.db
+      .with('asset', (qb) =>
+        withTimeBucketAssetFilters(
+          qb
+            .selectFrom('asset')
+            .select((eb) => [
+              truncatedDate<Date>(bucketSize).as('timeBucket'),
+              'asset.id',
+              'asset.localDateTime', // projected for ORDER BY only
+              'asset.fileCreatedAt', // projected for ORDER BY only
+              sql<string | null>`encode("thumbhash", 'base64')`.as('representativeThumbhash'),
+              eb.fn
+                .coalesce(
+                  eb
+                    .case()
+                    .when(
+                      sql`asset."height" = 0 or asset."width" = 0 or asset."height" is null or asset."width" is null`,
+                    )
+                    .then(eb.lit(1))
+                    .else(sql`round(asset."width"::numeric / asset."height"::numeric, 3)::float`)
+                    .end(),
+                  eb.lit(1),
+                )
+                .as('ratio'),
+            ])
+            .where(sql`("localDateTime" AT TIME ZONE 'UTC')::date`, '>=', minStart)
+            .where(sql`("localDateTime" AT TIME ZONE 'UTC')::date`, '<', maxEnd),
+          options,
+        ),
+      )
+      .selectFrom('asset')
+      .distinctOn('timeBucket')
+      .where('timeBucket', 'in', requestedBucketDates)
+      .select([
+        sql<string>`("timeBucket" AT TIME ZONE 'UTC')::date::text`.as('timeBucket'),
+        'id as representativeAssetId',
+        'representativeThumbhash',
+        'ratio as representativeRatio',
+      ])
+      .orderBy('timeBucket', order)
+      .orderBy(sql`("localDateTime" AT TIME ZONE 'UTC')::date`, order)
+      .orderBy('fileCreatedAt', order)
+      .execute() as any as Promise<TimeBucketCoverItem[]>;
   }
 
   @GenerateSql(
