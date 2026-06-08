@@ -115,6 +115,9 @@ String parameterToString(dynamic value) {
   if (value is AgentAssetSetFavoriteOperationType) {
     return AgentAssetSetFavoriteOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAssetSetVisibilityOperationType) {
+    return AgentAssetSetVisibilityOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAssetStackOperationType) {
     return AgentAssetStackOperationTypeTypeTransformer().encode(value).toString();
   }

@@ -13,26 +13,52 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload({
-    required this.tagId,
+    this.tagId,
+    this.tagName,
   });
 
-  String tagId;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? tagId;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? tagName;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload &&
-    other.tagId == tagId;
+    other.tagId == tagId &&
+    other.tagName == tagName;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (tagId.hashCode);
+    (tagId == null ? 0 : tagId!.hashCode) +
+    (tagName == null ? 0 : tagName!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload[tagId=$tagId]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload[tagId=$tagId, tagName=$tagName]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+    if (this.tagId != null) {
       json[r'tagId'] = this.tagId;
+    } else {
+    //  json[r'tagId'] = null;
+    }
+    if (this.tagName != null) {
+      json[r'tagName'] = this.tagName;
+    } else {
+    //  json[r'tagName'] = null;
+    }
     return json;
   }
 
@@ -45,7 +71,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload(
-        tagId: mapValueOfType<String>(json, r'tagId')!,
+        tagId: mapValueOfType<String>(json, r'tagId'),
+        tagName: mapValueOfType<String>(json, r'tagName'),
       );
     }
     return null;
@@ -93,7 +120,6 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf23Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'tagId',
   };
 }
 

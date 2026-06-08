@@ -22,7 +22,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
     required this.payload,
   });
 
-  AgentPersonMergeOperationType type;
+  AgentPersonUpdateOperationType type;
 
   String summary;
 
@@ -101,7 +101,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf31(
-        type: AgentPersonMergeOperationType.fromJson(json[r'type'])!,
+        type: AgentPersonUpdateOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationPersonTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
