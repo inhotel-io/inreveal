@@ -529,6 +529,9 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetSetArchive: {
         return dto.archived ? 'Archive matching photos' : 'Move matching photos back to timeline';
       }
+      case AgentOperationType.AssetSetVisibility: {
+        return 'Move matching photos to the Locked folder';
+      }
       case AgentOperationType.AssetAddTag: {
         return dto.tagName ? `Add tag "${dto.tagName}" to matching photos` : 'Add selected tag to matching photos';
       }
@@ -589,6 +592,9 @@ export class AgentOperationPlanService {
       }
       case AgentOperationType.AssetSetArchive: {
         return { archived: dto.archived };
+      }
+      case AgentOperationType.AssetSetVisibility: {
+        return { visibility: dto.visibility };
       }
       case AgentOperationType.AssetAddTag: {
         return dto.tagId ? { tagId: dto.tagId } : { tagName: dto.tagName };
@@ -655,7 +661,8 @@ export class AgentOperationPlanService {
       case AgentOperationType.AssetUnstack: {
         return AgentOperationRiskLevel.Low;
       }
-      case AgentOperationType.AssetSetArchive: {
+      case AgentOperationType.AssetSetArchive:
+      case AgentOperationType.AssetSetVisibility: {
         return AgentOperationRiskLevel.High;
       }
       case AgentOperationType.AssetUpdateMetadata:
@@ -1174,6 +1181,7 @@ export class AgentOperationPlanService {
       AgentOperationType.AssetUnstack,
       AgentOperationType.AssetSetFavorite,
       AgentOperationType.AssetSetArchive,
+      AgentOperationType.AssetSetVisibility,
       AgentOperationType.AssetUpdateMetadata,
       AgentOperationType.AssetAddTag,
       AgentOperationType.AssetRemoveTag,
@@ -1510,6 +1518,7 @@ export class AgentOperationPlanService {
       type === AgentOperationType.AssetUnstack ||
       type === AgentOperationType.AssetSetFavorite ||
       type === AgentOperationType.AssetSetArchive ||
+      type === AgentOperationType.AssetSetVisibility ||
       type === AgentOperationType.AssetUpdateMetadata ||
       type === AgentOperationType.AssetAddTag ||
       type === AgentOperationType.AssetRemoveTag ||
@@ -2043,6 +2052,10 @@ export class AgentOperationPlanService {
 
     if (type === AgentOperationType.AssetSetArchive && !writeScope.archiveAssets) {
       throw new BadRequestException('Agent permission policy does not allow archiving assets');
+    }
+
+    if (type === AgentOperationType.AssetSetVisibility && !writeScope.lockAssets) {
+      throw new BadRequestException('Agent permission policy does not allow moving photos to the Locked folder');
     }
 
     if (type === AgentOperationType.AssetUpdateMetadata && !writeScope.updateAssetMetadata) {
@@ -2934,6 +2947,11 @@ export class AgentOperationPlanService {
           ids: operation.assetIds,
           visibility: payload.archived ? AssetVisibility.Archive : AssetVisibility.Timeline,
         });
+        return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
+      }
+
+      case AgentOperationType.AssetSetVisibility: {
+        await this.assetService.updateAll(auth, { ids: operation.assetIds, visibility: AssetVisibility.Locked });
         return this.appliedOperation(operation.id, { assetIds: operation.assetIds });
       }
 

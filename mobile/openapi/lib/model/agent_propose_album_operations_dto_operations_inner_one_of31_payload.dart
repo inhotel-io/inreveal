@@ -13,26 +13,64 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload({
-    this.sourcePersonIds = const [],
+    this.name,
+    this.birthDate,
+    this.isHidden,
   });
 
-  List<String> sourcePersonIds;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? name;
+
+  DateTime? birthDate;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? isHidden;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload &&
-    _deepEquality.equals(other.sourcePersonIds, sourcePersonIds);
+    other.name == name &&
+    other.birthDate == birthDate &&
+    other.isHidden == isHidden;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (sourcePersonIds.hashCode);
+    (name == null ? 0 : name!.hashCode) +
+    (birthDate == null ? 0 : birthDate!.hashCode) +
+    (isHidden == null ? 0 : isHidden!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload[sourcePersonIds=$sourcePersonIds]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload[name=$name, birthDate=$birthDate, isHidden=$isHidden]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'sourcePersonIds'] = this.sourcePersonIds;
+    if (this.name != null) {
+      json[r'name'] = this.name;
+    } else {
+    //  json[r'name'] = null;
+    }
+    if (this.birthDate != null) {
+      json[r'birthDate'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$/')
+        ? this.birthDate!.millisecondsSinceEpoch
+        : _dateFormatter.format(this.birthDate!);
+    } else {
+    //  json[r'birthDate'] = null;
+    }
+    if (this.isHidden != null) {
+      json[r'isHidden'] = this.isHidden;
+    } else {
+    //  json[r'isHidden'] = null;
+    }
     return json;
   }
 
@@ -45,9 +83,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload(
-        sourcePersonIds: json[r'sourcePersonIds'] is Iterable
-            ? (json[r'sourcePersonIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+        name: mapValueOfType<String>(json, r'name'),
+        birthDate: mapDateTime(json, r'birthDate', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$/'),
+        isHidden: mapValueOfType<bool>(json, r'isHidden'),
       );
     }
     return null;
@@ -95,7 +133,6 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'sourcePersonIds',
   };
 }
 
