@@ -13,147 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload({
-    this.description,
-    this.rating,
-    this.dateTimeOriginal,
-    this.dateTimeRelative,
-    this.timeZone,
-    this.latitude,
-    this.longitude,
+    required this.axis,
   });
 
-  /// Asset description. Use an empty string to clear the description.
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  String? description;
-
-  /// Asset star rating from 1 to 5. Use null to clear the rating.
-  ///
-  /// Minimum value: 1
-  /// Maximum value: 5
-  int? rating;
-
-  /// Absolute original capture date/time as an ISO datetime.
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  DateTime? dateTimeOriginal;
-
-  /// Relative capture time shift as an integer minute offset. Cannot be combined with dateTimeOriginal.
-  ///
-  /// Minimum value: -9007199254740991
-  /// Maximum value: 9007199254740991
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  int? dateTimeRelative;
-
-  /// IANA time zone such as Europe/Berlin.
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  String? timeZone;
-
-  /// Explicit latitude coordinate. Provide both latitude and longitude; place names are not accepted.
-  ///
-  /// Minimum value: -90
-  /// Maximum value: 90
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  num? latitude;
-
-  /// Explicit longitude coordinate. Provide both latitude and longitude; place names are not accepted.
-  ///
-  /// Minimum value: -180
-  /// Maximum value: 180
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  num? longitude;
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum axis;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload &&
-    other.description == description &&
-    other.rating == rating &&
-    other.dateTimeOriginal == dateTimeOriginal &&
-    other.dateTimeRelative == dateTimeRelative &&
-    other.timeZone == timeZone &&
-    other.latitude == latitude &&
-    other.longitude == longitude;
+    other.axis == axis;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (description == null ? 0 : description!.hashCode) +
-    (rating == null ? 0 : rating!.hashCode) +
-    (dateTimeOriginal == null ? 0 : dateTimeOriginal!.hashCode) +
-    (dateTimeRelative == null ? 0 : dateTimeRelative!.hashCode) +
-    (timeZone == null ? 0 : timeZone!.hashCode) +
-    (latitude == null ? 0 : latitude!.hashCode) +
-    (longitude == null ? 0 : longitude!.hashCode);
+    (axis.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload[description=$description, rating=$rating, dateTimeOriginal=$dateTimeOriginal, dateTimeRelative=$dateTimeRelative, timeZone=$timeZone, latitude=$latitude, longitude=$longitude]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload[axis=$axis]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.description != null) {
-      json[r'description'] = this.description;
-    } else {
-    //  json[r'description'] = null;
-    }
-    if (this.rating != null) {
-      json[r'rating'] = this.rating;
-    } else {
-    //  json[r'rating'] = null;
-    }
-    if (this.dateTimeOriginal != null) {
-      json[r'dateTimeOriginal'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.dateTimeOriginal!.millisecondsSinceEpoch
-        : this.dateTimeOriginal!.toUtc().toIso8601String();
-    } else {
-    //  json[r'dateTimeOriginal'] = null;
-    }
-    if (this.dateTimeRelative != null) {
-      json[r'dateTimeRelative'] = this.dateTimeRelative;
-    } else {
-    //  json[r'dateTimeRelative'] = null;
-    }
-    if (this.timeZone != null) {
-      json[r'timeZone'] = this.timeZone;
-    } else {
-    //  json[r'timeZone'] = null;
-    }
-    if (this.latitude != null) {
-      json[r'latitude'] = this.latitude;
-    } else {
-    //  json[r'latitude'] = null;
-    }
-    if (this.longitude != null) {
-      json[r'longitude'] = this.longitude;
-    } else {
-    //  json[r'longitude'] = null;
-    }
+      json[r'axis'] = this.axis;
     return json;
   }
 
@@ -166,17 +45,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload(
-        description: mapValueOfType<String>(json, r'description'),
-        rating: mapValueOfType<int>(json, r'rating'),
-        dateTimeOriginal: mapDateTime(json, r'dateTimeOriginal', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        dateTimeRelative: mapValueOfType<int>(json, r'dateTimeRelative'),
-        timeZone: mapValueOfType<String>(json, r'timeZone'),
-        latitude: json[r'latitude'] == null
-            ? null
-            : num.parse('${json[r'latitude']}'),
-        longitude: json[r'longitude'] == null
-            ? null
-            : num.parse('${json[r'longitude']}'),
+        axis: AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.fromJson(json[r'axis'])!,
       );
     }
     return null;
@@ -224,6 +93,81 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'axis',
   };
 }
+
+
+class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum {
+  /// Instantiate a new enum with the provided [value].
+  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(this.value);
+
+  /// The underlying value of this enum member.
+  final String value;
+
+  @override
+  String toString() => value;
+
+  String toJson() => value;
+
+  static const horizontal = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(r'horizontal');
+  static const vertical = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(r'vertical');
+
+  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum].
+  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum>[
+    horizontal,
+    vertical,
+  ];
+
+  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer().decode(value);
+
+  static List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum> listFromJson(dynamic json, {bool growable = false,}) {
+    final result = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum>[];
+    if (json is List && json.isNotEmpty) {
+      for (final row in json) {
+        final value = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.fromJson(row);
+        if (value != null) {
+          result.add(value);
+        }
+      }
+    }
+    return result.toList(growable: growable);
+  }
+}
+
+/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum] to String,
+/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum].
+class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer {
+  factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer._();
+
+  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer._();
+
+  String encode(AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum data) => data.value;
+
+  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.
+  ///
+  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
+  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
+  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
+  ///
+  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
+  /// and users are still using an old app with the old code.
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum? decode(dynamic data, {bool allowNull = true}) {
+    if (data != null) {
+      switch (data) {
+        case r'horizontal': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.horizontal;
+        case r'vertical': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.vertical;
+        default:
+          if (!allowNull) {
+            throw ArgumentError('Unknown enum value to decode: $data');
+          }
+      }
+    }
+    return null;
+  }
+
+  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer] instance.
+  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer? _instance;
+}
+
 

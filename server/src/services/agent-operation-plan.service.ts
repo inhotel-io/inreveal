@@ -2018,6 +2018,15 @@ export class AgentOperationPlanService {
     }
 
     if (
+      (type === AgentOperationType.AlbumAddUsers ||
+        type === AgentOperationType.AlbumRemoveUsers ||
+        type === AgentOperationType.AlbumUpdateUserRole) &&
+      !writeScope.shareAlbums
+    ) {
+      throw new BadRequestException('Agent permission policy does not allow sharing albums');
+    }
+
+    if (
       (type === AgentOperationType.AssetRotate ||
         type === AgentOperationType.AssetCrop ||
         type === AgentOperationType.AssetAdjust ||
@@ -2626,6 +2635,16 @@ export class AgentOperationPlanService {
       return { ...payload, userIds };
     }
 
+    if (type === AgentOperationType.AlbumAddUsers) {
+      const albumUsers = this.getAlbumUserPayloads(payload).filter((u) => selectedUserIdSet.has(u.userId));
+      return { ...payload, albumUsers };
+    }
+
+    if (type === AgentOperationType.AlbumRemoveUsers) {
+      const userIds = this.getUserIdsPayload(payload).filter((userId) => selectedUserIdSet.has(userId));
+      return { ...payload, userIds };
+    }
+
     return payload;
   }
 
@@ -2639,6 +2658,19 @@ export class AgentOperationPlanService {
       operation.type === AgentOperationType.SpaceUpdateMemberRole
     ) {
       return [...new Set(this.getUserIdsPayload(operation.payload))];
+    }
+
+    if (operation.type === AgentOperationType.AlbumAddUsers) {
+      return [...new Set(this.getAlbumUserPayloads(operation.payload).map((u) => u.userId))];
+    }
+
+    if (operation.type === AgentOperationType.AlbumRemoveUsers) {
+      return [...new Set(this.getUserIdsPayload(operation.payload))];
+    }
+
+    if (operation.type === AgentOperationType.AlbumUpdateUserRole) {
+      const objectPayload = this.requireObjectPayload(operation.payload);
+      return typeof objectPayload.userId === 'string' ? [objectPayload.userId] : [];
     }
 
     return [];
@@ -2734,6 +2766,37 @@ export class AgentOperationPlanService {
 
         const album = await this.albumService.update(auth, albumId, { albumThumbnailAssetId });
         return this.appliedOperation(operation.id, { albumId: album.id, assetIds: [albumThumbnailAssetId] });
+      }
+
+      case AgentOperationType.AlbumAddUsers: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const albumUsers = this.getAlbumUserPayloads(operation.payload);
+        await this.albumService.addUsers(auth, albumId, { albumUsers });
+        return this.appliedOperation(operation.id, { albumId, userIds: albumUsers.map((u) => u.userId) });
+      }
+
+      case AgentOperationType.AlbumRemoveUsers: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const userIds = this.getUserIdsPayload(operation.payload);
+        for (const userId of userIds) {
+          await this.albumService.removeUser(auth, albumId, userId);
+        }
+        return this.appliedOperation(operation.id, { albumId, userIds });
+      }
+
+      case AgentOperationType.AlbumUpdateUserRole: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        const objectPayload = this.requireObjectPayload(operation.payload);
+        const userId = objectPayload.userId;
+        const role = objectPayload.role;
+        if (typeof userId !== 'string') {
+          throw new BadRequestException('album.updateUserRole requires userId');
+        }
+        if (typeof role !== 'string') {
+          throw new BadRequestException('album.updateUserRole requires role');
+        }
+        await this.albumService.updateUser(auth, albumId, userId, { role: role as AlbumUserRole });
+        return this.appliedOperation(operation.id, { albumId, userIds: [userId] });
       }
 
       case AgentOperationType.SpaceCreate: {
@@ -3154,6 +3217,28 @@ export class AgentOperationPlanService {
     const objectPayload = this.requireObjectPayload(payload);
     return Array.isArray(objectPayload.userIds)
       ? objectPayload.userIds.filter((userId): userId is string => typeof userId === 'string')
+      : [];
+  }
+
+  private getAlbumUserPayloads(
+    payload: unknown,
+  ): Array<{ userId: string; role: AlbumUserRole.Editor | AlbumUserRole.Viewer }> {
+    const objectPayload = this.requireObjectPayload(payload);
+    return Array.isArray(objectPayload.albumUsers)
+      ? objectPayload.albumUsers
+          .filter(
+            (u): u is { userId: string; role: AlbumUserRole.Editor | AlbumUserRole.Viewer } => {
+              if (!u || typeof u !== 'object' || Array.isArray(u)) {
+                return false;
+              }
+              const candidate = u as Record<string, unknown>;
+              return (
+                typeof candidate.userId === 'string' &&
+                (candidate.role === AlbumUserRole.Editor || candidate.role === AlbumUserRole.Viewer)
+              );
+            },
+          )
+          .map((u) => ({ userId: u.userId, role: u.role }))
       : [];
   }
 
@@ -4389,8 +4474,13 @@ export class AgentOperationPlanService {
   private summarize(plan: AgentOperationPlanWithOperations) {
     const createCount = plan.operations.filter((operation) => operation.type === AgentOperationType.AlbumCreate).length;
     const addCount = plan.operations.filter((operation) => operation.type === AgentOperationType.AlbumAddAssets).length;
-    const updateCount = plan.operations.filter(
-      (operation) => operation.type === AgentOperationType.AlbumUpdateDetails,
+    const updateCount = plan.operations.filter((operation) =>
+      [
+        AgentOperationType.AlbumUpdateDetails,
+        AgentOperationType.AlbumAddUsers,
+        AgentOperationType.AlbumRemoveUsers,
+        AgentOperationType.AlbumUpdateUserRole,
+      ].includes(operation.type),
     ).length;
     const coverCount = plan.operations.filter(
       (operation) => operation.type === AgentOperationType.AlbumSetCover,

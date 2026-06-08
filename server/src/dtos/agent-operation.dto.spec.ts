@@ -17,6 +17,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  AlbumUserRole,
   AssetType,
   SharedSpaceRole,
   UserAvatarColor,
@@ -886,6 +887,128 @@ describe('Agent operation DTOs', () => {
     expectIssue(
       AgentProposeAlbumOperationsDto.schema.safeParse({
         summary: 'Invalid member plan.',
+        operations: [operation],
+      }),
+      path,
+      message,
+    );
+  });
+
+  it('accepts album-user sharing operations for existing albums', () => {
+    const albumId = factory.uuid();
+    const userId = factory.uuid();
+    const otherUserId = factory.uuid();
+
+    const result = AgentProposeAlbumOperationsDto.schema.safeParse({
+      summary: 'Manage Family album members.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumAddUsers,
+          summary: 'Add Alex as viewer.',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          payload: { albumUsers: [{ userId, role: AlbumUserRole.Viewer }] },
+        },
+        {
+          type: AgentOperationType.AlbumRemoveUsers,
+          summary: 'Remove Chris.',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          payload: { userIds: [otherUserId] },
+        },
+        {
+          type: AgentOperationType.AlbumUpdateUserRole,
+          summary: 'Make Sam an editor.',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          payload: { userId, role: AlbumUserRole.Editor },
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.operations).toHaveLength(3);
+    }
+  });
+
+  it.each([
+    {
+      name: 'addUsers without albumUsers',
+      operation: {
+        type: AgentOperationType.AlbumAddUsers,
+        summary: 'Add user.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: factory.uuid(),
+        payload: { albumUsers: [] },
+      },
+      path: ['operations', 0, 'payload', 'albumUsers'],
+      message: 'Too small',
+    },
+    {
+      name: 'addUsers with invalid role',
+      operation: {
+        type: AgentOperationType.AlbumAddUsers,
+        summary: 'Add owner.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: factory.uuid(),
+        payload: { albumUsers: [{ userId: factory.uuid(), role: 'owner' }] },
+      },
+      path: ['operations', 0, 'payload', 'albumUsers', 0, 'role'],
+      message: 'Invalid option',
+    },
+    {
+      name: 'removeUsers without targetId',
+      operation: {
+        type: AgentOperationType.AlbumRemoveUsers,
+        summary: 'Remove user.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        payload: { userIds: [factory.uuid()] },
+      },
+      path: ['operations', 0, 'targetId'],
+      message: 'targetId is required',
+    },
+    {
+      name: 'removeUsers with duplicate userIds',
+      operation: {
+        type: AgentOperationType.AlbumRemoveUsers,
+        summary: 'Remove duplicate.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: factory.uuid(),
+        payload: {
+          userIds: ['00000000-0000-4000-8000-000000000030', '00000000-0000-4000-8000-000000000030'],
+        },
+      },
+      path: ['operations', 0, 'payload', 'userIds'],
+      message: 'userIds must be unique',
+    },
+    {
+      name: 'updateUserRole with invalid role',
+      operation: {
+        type: AgentOperationType.AlbumUpdateUserRole,
+        summary: 'Make owner.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: factory.uuid(),
+        payload: { userId: factory.uuid(), role: 'owner' },
+      },
+      path: ['operations', 0, 'payload', 'role'],
+      message: 'Invalid option',
+    },
+    {
+      name: 'updateUserRole without targetId',
+      operation: {
+        type: AgentOperationType.AlbumUpdateUserRole,
+        summary: 'Update role.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        payload: { userId: factory.uuid(), role: AlbumUserRole.Editor },
+      },
+      path: ['operations', 0, 'targetId'],
+      message: 'targetId is required',
+    },
+  ])('rejects invalid album-user sharing operation: $name', ({ operation, path, message }) => {
+    expectIssue(
+      AgentProposeAlbumOperationsDto.schema.safeParse({
+        summary: 'Invalid album sharing plan.',
         operations: [operation],
       }),
       path,
