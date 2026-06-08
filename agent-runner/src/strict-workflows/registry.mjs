@@ -7,6 +7,7 @@ import { createRecentTripAlbumWorkflow } from './workflows/create-recent-trip-al
 import { createSpaceFromSourceWorkflow } from './workflows/create-space-from-source.mjs';
 import { favoriteAssetsWorkflow } from './workflows/favorite-assets.mjs';
 import { manageSpaceAssetsWorkflow } from './workflows/manage-space-assets.mjs';
+import { manageAlbumAccessWorkflow } from './workflows/manage-album-access.mjs';
 import { manageSpaceMembersWorkflow } from './workflows/manage-space-members.mjs';
 import { movePhotosBetweenAlbumsWorkflow } from './workflows/move-photos-between-albums.mjs';
 import { removePhotosFromAlbumWorkflow } from './workflows/remove-photos-from-album.mjs';
@@ -39,6 +40,9 @@ import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 // Order matters for the regex fast-path (first match wins):
 //   - `rename_or_describe_space` BEFORE `rename_or_describe_album` so the strict
 //     `space`-keyword gate wins "rename the X space …" (album declines those).
+//   - `manage_album_access` BEFORE `manage_space_members`: album-user ops are gated
+//     by the "album" keyword; space-member ops are gated by "space". Both are first
+//     placed before the photo-add workflows so member adds never fall to add_photos_*.
 //   - `manage_space_members` / `change_member_role` BEFORE `manage_space_assets` so
 //     member ops (people) win over asset ops (photos) for space targets.
 //   - `manage_space_assets` BEFORE `add_photos_to_album` so "add <photos> to the X
@@ -136,6 +140,7 @@ const WORKFLOW_FACTORIES = Object.freeze([
   flipAssetsWorkflow,
   unstackAssetsWorkflow,
   stackAssetsWorkflow,
+  manageAlbumAccessWorkflow,
   manageSpaceMembersWorkflow,
   changeMemberRoleWorkflow,
   movePhotosBetweenAlbumsWorkflow,

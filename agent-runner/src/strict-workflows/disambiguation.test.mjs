@@ -38,6 +38,13 @@ const CASES = [
   ['set the description on the Trips space to Our adventures', 'rename_or_describe_space'],
   ['rename the Family album to Family 2026', 'rename_or_describe_album'],
   ['set the description on my Italy album to Summer 2026', 'rename_or_describe_album'],
+  // manage_album_access (album keyword gate; must not steal space/photo ops)
+  ['share the Family album with Alex', 'manage_album_access'],
+  ['give Alex edit access to the Beach album', 'manage_album_access'],
+  ['remove Sam from the Beach album', 'manage_album_access'],
+  // manage_album_access must NOT steal link-share (share_album) or space-member (manage_space_members)
+  ['share the Family album as a link', 'share_album'],
+  ['add Alex to the Family space', 'manage_space_members'],
   // manage_space_members
   ['add Alex to the Family space as editor', 'manage_space_members'],
   ['remove Bob from the Trips space', 'manage_space_members'],

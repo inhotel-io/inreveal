@@ -293,6 +293,26 @@ export default [
     expect: { kind: 'rename_or_describe_space', slotsSurvive: true, slots: { spaceRef: 'Trips', description: /adventures/i } },
   },
 
+  // manage_album_access -----------------------------------------------------
+  {
+    id: 'recall.albumaccess.share',
+    category: 'recall',
+    prompt: 'share the Family album with Alex',
+    expect: { kind: 'manage_album_access', slotsSurvive: true, slots: { action: 'add', albumRef: 'Family' } },
+  },
+  {
+    id: 'recall.albumaccess.grant',
+    category: 'recall',
+    prompt: 'give Alex edit access to the Beach album',
+    expect: { kind: 'manage_album_access', slotsSurvive: true, slots: { action: 'add', albumRef: 'Beach', role: 'editor' } },
+  },
+  {
+    id: 'recall.albumaccess.remove',
+    category: 'recall',
+    prompt: 'remove Sam from the Beach album',
+    expect: { kind: 'manage_album_access', slotsSurvive: true, slots: { action: 'remove', albumRef: 'Beach' } },
+  },
+
   // manage_space_members ----------------------------------------------------
   {
     id: 'recall.members.add',

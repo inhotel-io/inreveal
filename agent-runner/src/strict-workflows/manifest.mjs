@@ -995,6 +995,48 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'manage_album_access',
+    flow: 'strict',
+    title: 'Share an album with users',
+    classifierDescription:
+      'User wants to share an album with one or more Gallery users (add or remove access), optionally with a role (editor/viewer). Distinct from sharing as a public link (share_album) and from managing a space\'s member list (manage_space_members).',
+    positiveExamples: Object.freeze([
+      'Share the Family album with Alex',
+      'Give Alex edit access to the Beach album',
+      'Add Sam to the Trips album as a viewer',
+      'Remove Bob from the Family album',
+    ]),
+    negativeExamples: Object.freeze([
+      'Share the Family album as a link',
+      'Add Alex to the Family space',
+      'Add my newest 20 photos to the Family album',
+      'Share my newest 20 photos as a link',
+    ]),
+    slots: Object.freeze({
+      action: Object.freeze({ type: 'string', required: true, description: 'add or remove.' }),
+      memberQueries: Object.freeze({
+        type: 'array',
+        required: true,
+        description: 'User names or emails to add or remove.',
+      }),
+      albumRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the album.' }),
+      role: Object.freeze({
+        type: 'string',
+        required: false,
+        description: 'editor or viewer (default viewer on add).',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums', 'readAlbum', 'searchUsers']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Share an album with people',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        'Resolve album + users (durable two-stage disambiguation); guard owner/already-member; propose album.addUsers or album.removeUsers plan. shareAlbums write-scope required.',
+    }),
+  }),
+  Object.freeze({
     kind: 'manage_space_members',
     flow: 'strict',
     title: 'Add or remove space members',

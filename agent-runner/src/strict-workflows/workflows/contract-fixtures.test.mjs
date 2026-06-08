@@ -274,14 +274,16 @@ describe('makeContractClient — asset.rotate action', () => {
 });
 
 describe('makeContractClient — readAlbum handler', () => {
-  it('returns album detail for a known id', async () => {
+  it('returns album detail for a known id (includes ownerId and albumUsers)', async () => {
     const client = makeContractClient({
       albums: [
         {
           id: 'alb-1',
           albumName: 'Family',
+          ownerId: 'u-owner',
           assetIds: ['00000000-0000-4000-8000-000000000001'],
           albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+          albumUsers: [{ userId: 'u-bob', role: 'viewer' }],
         },
       ],
     });
@@ -290,8 +292,10 @@ describe('makeContractClient — readAlbum handler', () => {
       album: {
         id: 'alb-1',
         albumName: 'Family',
+        ownerId: 'u-owner',
         assetIds: ['00000000-0000-4000-8000-000000000001'],
         albumThumbnailAssetId: '00000000-0000-4000-8000-000000000001',
+        albumUsers: [{ userId: 'u-bob', role: 'viewer' }],
       },
     });
   });

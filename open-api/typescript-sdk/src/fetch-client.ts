@@ -1909,9 +1909,14 @@ export type AgentReadAlbumToolDeniedResponse = {
     status: Status15;
     toolCall: AgentToolCallResponseDto;
 };
+export type AgentAlbumUserSummary = {
+    role: string;
+    userId: string;
+};
 export type AgentAlbumDetail = {
     albumName: string;
     albumThumbnailAssetId: string | null;
+    albumUsers: AgentAlbumUserSummary[];
     assetCount: number;
     assetIds: string[];
     description: string;
