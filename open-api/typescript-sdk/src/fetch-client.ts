@@ -588,6 +588,7 @@ export type AgentPermissionPlan = {
         createSpace: boolean;
         editAssets: boolean;
         favoriteAssets: boolean;
+        lockAssets: boolean;
         managePeople: boolean;
         manageStacks: boolean;
         removeAssets: boolean;
