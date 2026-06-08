@@ -28,6 +28,9 @@ class AgentOperationType {
   static const albumPeriodRemoveAssets = AgentOperationType._(r'album.removeAssets');
   static const albumPeriodUpdateDetails = AgentOperationType._(r'album.updateDetails');
   static const albumPeriodSetCover = AgentOperationType._(r'album.setCover');
+  static const albumPeriodAddUsers = AgentOperationType._(r'album.addUsers');
+  static const albumPeriodRemoveUsers = AgentOperationType._(r'album.removeUsers');
+  static const albumPeriodUpdateUserRole = AgentOperationType._(r'album.updateUserRole');
   static const spacePeriodCreate = AgentOperationType._(r'space.create');
   static const spacePeriodAddAssets = AgentOperationType._(r'space.addAssets');
   static const spacePeriodRemoveAssets = AgentOperationType._(r'space.removeAssets');
@@ -60,6 +63,9 @@ class AgentOperationType {
     albumPeriodRemoveAssets,
     albumPeriodUpdateDetails,
     albumPeriodSetCover,
+    albumPeriodAddUsers,
+    albumPeriodRemoveUsers,
+    albumPeriodUpdateUserRole,
     spacePeriodCreate,
     spacePeriodAddAssets,
     spacePeriodRemoveAssets,
@@ -127,6 +133,9 @@ class AgentOperationTypeTypeTransformer {
         case r'album.removeAssets': return AgentOperationType.albumPeriodRemoveAssets;
         case r'album.updateDetails': return AgentOperationType.albumPeriodUpdateDetails;
         case r'album.setCover': return AgentOperationType.albumPeriodSetCover;
+        case r'album.addUsers': return AgentOperationType.albumPeriodAddUsers;
+        case r'album.removeUsers': return AgentOperationType.albumPeriodRemoveUsers;
+        case r'album.updateUserRole': return AgentOperationType.albumPeriodUpdateUserRole;
         case r'space.create': return AgentOperationType.spacePeriodCreate;
         case r'space.addAssets': return AgentOperationType.spacePeriodAddAssets;
         case r'space.removeAssets': return AgentOperationType.spacePeriodRemoveAssets;

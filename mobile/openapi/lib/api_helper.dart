@@ -58,17 +58,26 @@ String parameterToString(dynamic value) {
   if (value is AgentAlbumAddAssetsOperationType) {
     return AgentAlbumAddAssetsOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAlbumAddUsersOperationType) {
+    return AgentAlbumAddUsersOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAlbumCreateOperationType) {
     return AgentAlbumCreateOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentAlbumRemoveAssetsOperationType) {
     return AgentAlbumRemoveAssetsOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAlbumRemoveUsersOperationType) {
+    return AgentAlbumRemoveUsersOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAlbumSetCoverOperationType) {
     return AgentAlbumSetCoverOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentAlbumUpdateDetailsOperationType) {
     return AgentAlbumUpdateDetailsOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAlbumUpdateUserRoleOperationType) {
+    return AgentAlbumUpdateUserRoleOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentApprovalMode) {
     return AgentApprovalModeTypeTransformer().encode(value).toString();
@@ -120,6 +129,9 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentAssetUpdateMetadataTargetKind) {
     return AgentAssetUpdateMetadataTargetKindTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentAssignableAlbumUserRole) {
+    return AgentAssignableAlbumUserRoleTypeTransformer().encode(value).toString();
   }
   if (value is AgentAssignableSharedSpaceMemberRole) {
     return AgentAssignableSharedSpaceMemberRoleTypeTransformer().encode(value).toString();
@@ -402,6 +414,9 @@ String parameterToString(dynamic value) {
   }
   if (value is SyncRequestType) {
     return SyncRequestTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is TimeBucketSize) {
+    return TimeBucketSizeTypeTransformer().encode(value).toString();
   }
   if (value is TonalLevel) {
     return TonalLevelTypeTransformer().encode(value).toString();

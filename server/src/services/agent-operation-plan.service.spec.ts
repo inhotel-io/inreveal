@@ -20,6 +20,7 @@ import {
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
+  AlbumUserRole,
   AssetType,
   AssetVisibility,
   SharedLinkType,
@@ -101,6 +102,7 @@ const expandedWriteScope = {
   createSharedLinks: true,
   manageStacks: true,
   managePeople: true,
+  shareAlbums: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -4615,6 +4617,39 @@ describe(AgentOperationPlanService.name, () => {
         payload: { tagName: 'Receipts' },
       },
       error: 'Agent permission policy does not allow tagging assets',
+    },
+    {
+      field: 'shareAlbums',
+      operation: {
+        type: AgentOperationType.AlbumAddUsers,
+        summary: 'Share album.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: newUuid(),
+        payload: { albumUsers: [{ userId: newUuid(), role: AlbumUserRole.Viewer }] },
+      },
+      error: 'Agent permission policy does not allow sharing albums',
+    },
+    {
+      field: 'shareAlbums',
+      operation: {
+        type: AgentOperationType.AlbumRemoveUsers,
+        summary: 'Remove from album.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: newUuid(),
+        payload: { userIds: [newUuid()] },
+      },
+      error: 'Agent permission policy does not allow sharing albums',
+    },
+    {
+      field: 'shareAlbums',
+      operation: {
+        type: AgentOperationType.AlbumUpdateUserRole,
+        summary: 'Update album role.',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: newUuid(),
+        payload: { userId: newUuid(), role: AlbumUserRole.Editor },
+      },
+      error: 'Agent permission policy does not allow sharing albums',
     },
   ])('rejects %s write-scope disabled operation type', async ({ field, operation, error }) => {
     const auth = AuthFactory.create();
@@ -11155,5 +11190,121 @@ describe(AgentOperationPlanService.name, () => {
     expect(assetService.editAsset).toHaveBeenCalledWith(auth, assetId, {
       edits: [{ action: AssetEditAction.Mirror, parameters: { axis: 'horizontal' } }],
     });
+  });
+
+  it('applies album.addUsers operation by calling albumService.addUsers with the resolved albumId and albumUsers payload', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const userId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.AlbumAddUsers,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: { albumUsers: [{ userId, role: AlbumUserRole.Viewer }] },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumService.addUsers.mockResolvedValue({} as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(albumService.addUsers).toHaveBeenCalledWith(auth, albumId, {
+      albumUsers: [{ userId, role: AlbumUserRole.Viewer }],
+    });
+  });
+
+  it('applies album.removeUsers operation by calling albumService.removeUser once per userId', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const userId1 = newUuid();
+    const userId2 = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.AlbumRemoveUsers,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: { userIds: [userId1, userId2] },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumService.removeUser.mockResolvedValue(void 0 as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(albumService.removeUser).toHaveBeenCalledWith(auth, albumId, userId1);
+    expect(albumService.removeUser).toHaveBeenCalledWith(auth, albumId, userId2);
+    expect(albumService.removeUser).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies album.updateUserRole operation by calling albumService.updateUser with the resolved albumId and role payload', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const userId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.AlbumUpdateUserRole,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: { userId, role: AlbumUserRole.Editor },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumService.updateUser.mockResolvedValue(void 0 as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(albumService.updateUser).toHaveBeenCalledWith(auth, albumId, userId, { role: AlbumUserRole.Editor });
   });
 });
