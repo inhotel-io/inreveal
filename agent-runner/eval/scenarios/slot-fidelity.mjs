@@ -75,6 +75,18 @@ export default [
     expect: { kind: 'untag_assets', slots: { tagName: 'Travel', sourceDescription: 'my newest 20' } },
   },
   {
+    id: 'slots.albumaccess.role-default',
+    category: 'slots',
+    prompt: 'share the Family album with Alex',
+    expect: { kind: 'manage_album_access', slots: { action: 'add', role: 'viewer', albumRef: 'Family' } },
+  },
+  {
+    id: 'slots.albumaccess.editor-synonym',
+    category: 'slots',
+    prompt: 'give Alex edit access to the Trip album',
+    expect: { kind: 'manage_album_access', slots: { action: 'add', role: 'editor', albumRef: 'Trip' } },
+  },
+  {
     id: 'slots.members.role-default',
     category: 'slots',
     prompt: 'add Alex to the Family space',
