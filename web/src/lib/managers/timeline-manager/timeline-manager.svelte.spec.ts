@@ -922,9 +922,7 @@ describe('TimelineManager', () => {
       expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
         expect.not.objectContaining({ albumId: expect.anything() }),
       );
-      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
-        expect.objectContaining({ albumId: 'album-1' }),
-      );
+      expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-1' }));
       // Album cover wins
       const bucket = timelineManager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
       expect(bucket.representativeAssetId).toBe('album-asset');

@@ -600,9 +600,7 @@ describe(AssetRepository.name, () => {
           order: AssetOrder.Desc,
           timeBuckets: ['2023-01-01', '2024-01-01', '2025-01-01'],
         }),
-      ).resolves.toEqual([
-        expect.objectContaining({ timeBucket: '2024-01-01', representativeAssetId: only2024.id }),
-      ]);
+      ).resolves.toEqual([expect.objectContaining({ timeBucket: '2024-01-01', representativeAssetId: only2024.id })]);
     });
 
     it('honours owner and visibility filters', async () => {
@@ -642,9 +640,7 @@ describe(AssetRepository.name, () => {
           order: AssetOrder.Desc,
           timeBuckets: ['2023-12-01'],
         }),
-      ).resolves.toEqual([
-        expect.objectContaining({ timeBucket: '2023-12-01', representativeAssetId: decAsset.id }),
-      ]);
+      ).resolves.toEqual([expect.objectContaining({ timeBucket: '2023-12-01', representativeAssetId: decAsset.id })]);
     });
   });
 

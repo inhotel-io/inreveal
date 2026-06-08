@@ -74,11 +74,7 @@ describe('timeline grouping bucket helpers', () => {
     });
 
     it('passes through buckets that only exist in the secondary query', () => {
-      const merged = mergeTimeBuckets(
-        [],
-        [{ timeBucket: '2023-01-01', count: 1 }],
-        AssetOrder.Desc,
-      );
+      const merged = mergeTimeBuckets([], [{ timeBucket: '2023-01-01', count: 1 }], AssetOrder.Desc);
 
       expect(merged).toEqual([
         {
