@@ -22,6 +22,7 @@ class AgentPermissionPlanWriteScope {
     required this.createSpace,
     required this.editAssets,
     required this.favoriteAssets,
+    required this.lockAssets,
     required this.managePeople,
     required this.manageStacks,
     required this.removeAssets,
@@ -54,6 +55,8 @@ class AgentPermissionPlanWriteScope {
   bool editAssets;
 
   bool favoriteAssets;
+
+  bool lockAssets;
 
   bool managePeople;
 
@@ -92,6 +95,7 @@ class AgentPermissionPlanWriteScope {
     other.createSpace == createSpace &&
     other.editAssets == editAssets &&
     other.favoriteAssets == favoriteAssets &&
+    other.lockAssets == lockAssets &&
     other.managePeople == managePeople &&
     other.manageStacks == manageStacks &&
     other.removeAssets == removeAssets &&
@@ -118,6 +122,7 @@ class AgentPermissionPlanWriteScope {
     (createSpace.hashCode) +
     (editAssets.hashCode) +
     (favoriteAssets.hashCode) +
+    (lockAssets.hashCode) +
     (managePeople.hashCode) +
     (manageStacks.hashCode) +
     (removeAssets.hashCode) +
@@ -133,7 +138,7 @@ class AgentPermissionPlanWriteScope {
     (updateSpaceMemberRoles.hashCode);
 
   @override
-  String toString() => 'AgentPermissionPlanWriteScope[addAssets=$addAssets, addAssetsToSpaces=$addAssetsToSpaces, addMembersToSpaces=$addMembersToSpaces, archiveAssets=$archiveAssets, createAlbum=$createAlbum, createSharedLinks=$createSharedLinks, createSpace=$createSpace, editAssets=$editAssets, favoriteAssets=$favoriteAssets, managePeople=$managePeople, manageStacks=$manageStacks, removeAssets=$removeAssets, removeAssetsFromSpaces=$removeAssetsFromSpaces, removeMembersFromSpaces=$removeMembersFromSpaces, setCover=$setCover, shareAlbums=$shareAlbums, tagAssets=$tagAssets, trashAssets=$trashAssets, updateAssetMetadata=$updateAssetMetadata, updateDetails=$updateDetails, updateSpaceDetails=$updateSpaceDetails, updateSpaceMemberRoles=$updateSpaceMemberRoles]';
+  String toString() => 'AgentPermissionPlanWriteScope[addAssets=$addAssets, addAssetsToSpaces=$addAssetsToSpaces, addMembersToSpaces=$addMembersToSpaces, archiveAssets=$archiveAssets, createAlbum=$createAlbum, createSharedLinks=$createSharedLinks, createSpace=$createSpace, editAssets=$editAssets, favoriteAssets=$favoriteAssets, lockAssets=$lockAssets, managePeople=$managePeople, manageStacks=$manageStacks, removeAssets=$removeAssets, removeAssetsFromSpaces=$removeAssetsFromSpaces, removeMembersFromSpaces=$removeMembersFromSpaces, setCover=$setCover, shareAlbums=$shareAlbums, tagAssets=$tagAssets, trashAssets=$trashAssets, updateAssetMetadata=$updateAssetMetadata, updateDetails=$updateDetails, updateSpaceDetails=$updateSpaceDetails, updateSpaceMemberRoles=$updateSpaceMemberRoles]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -146,6 +151,7 @@ class AgentPermissionPlanWriteScope {
       json[r'createSpace'] = this.createSpace;
       json[r'editAssets'] = this.editAssets;
       json[r'favoriteAssets'] = this.favoriteAssets;
+      json[r'lockAssets'] = this.lockAssets;
       json[r'managePeople'] = this.managePeople;
       json[r'manageStacks'] = this.manageStacks;
       json[r'removeAssets'] = this.removeAssets;
@@ -180,6 +186,7 @@ class AgentPermissionPlanWriteScope {
         createSpace: mapValueOfType<bool>(json, r'createSpace')!,
         editAssets: mapValueOfType<bool>(json, r'editAssets')!,
         favoriteAssets: mapValueOfType<bool>(json, r'favoriteAssets')!,
+        lockAssets: mapValueOfType<bool>(json, r'lockAssets')!,
         managePeople: mapValueOfType<bool>(json, r'managePeople')!,
         manageStacks: mapValueOfType<bool>(json, r'manageStacks')!,
         removeAssets: mapValueOfType<bool>(json, r'removeAssets')!,
@@ -249,6 +256,7 @@ class AgentPermissionPlanWriteScope {
     'createSpace',
     'editAssets',
     'favoriteAssets',
+    'lockAssets',
     'managePeople',
     'manageStacks',
     'removeAssets',
