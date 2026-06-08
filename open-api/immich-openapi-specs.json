@@ -24771,6 +24771,9 @@
               "favoriteAssets": {
                 "type": "boolean"
               },
+              "lockAssets": {
+                "type": "boolean"
+              },
               "managePeople": {
                 "type": "boolean"
               },
@@ -24832,6 +24835,7 @@
               "trashAssets",
               "createSharedLinks",
               "shareAlbums",
+              "lockAssets",
               "manageStacks",
               "managePeople"
             ],

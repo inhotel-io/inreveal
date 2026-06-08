@@ -35,6 +35,7 @@ const fullWriteScope = {
   trashAssets: true,
   createSharedLinks: true,
   shareAlbums: true,
+  lockAssets: true,
   manageStacks: true,
   managePeople: true,
 };
@@ -54,6 +55,8 @@ const expandedWriteScopeKeys = [
   'updateSpaceMemberRoles',
   'trashAssets',
   'createSharedLinks',
+  'shareAlbums',
+  'lockAssets',
   'manageStacks',
   'managePeople',
 ];
