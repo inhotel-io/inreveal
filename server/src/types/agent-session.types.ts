@@ -56,6 +56,7 @@ export type AgentPermissionPlanSnapshot = {
     trashAssets?: boolean;
     createSharedLinks?: boolean;
     shareAlbums?: boolean;
+    lockAssets?: boolean;
     manageStacks?: boolean;
     managePeople?: boolean;
   };
@@ -92,6 +93,7 @@ export type AgentNormalizedPermissionPlanSnapshot = Omit<AgentPermissionPlanSnap
     trashAssets: boolean;
     createSharedLinks: boolean;
     shareAlbums: boolean;
+    lockAssets: boolean;
     manageStacks: boolean;
     managePeople: boolean;
   };
