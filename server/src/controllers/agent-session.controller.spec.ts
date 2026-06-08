@@ -58,6 +58,7 @@ const makePermissionPlan = (): AgentNormalizedPermissionPlanSnapshot => ({
     createSharedLinks: false,
     shareAlbums: false,
     lockAssets: false,
+    deleteContainers: false,
     manageStacks: false,
     managePeople: false,
   },

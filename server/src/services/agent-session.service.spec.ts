@@ -38,6 +38,7 @@ const carefulWriteScope = {
   createSharedLinks: false,
   shareAlbums: false,
   lockAssets: false,
+  deleteContainers: false,
   manageStacks: false,
   managePeople: false,
 };
@@ -63,6 +64,7 @@ const expandedWriteScope = {
   createSharedLinks: false,
   shareAlbums: true,
   lockAssets: false,
+  deleteContainers: false,
   manageStacks: true,
   managePeople: true,
 };
@@ -372,6 +374,8 @@ describe(AgentSessionService.name, () => {
       createSharedLinks: true,
       // LocalPowerUser is the only preset that grants the lock-assets scope.
       lockAssets: true,
+      // LocalPowerUser is the only preset that grants the delete-containers scope.
+      deleteContainers: true,
     });
     expect(
       AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata,
@@ -399,6 +403,18 @@ describe(AgentSessionService.name, () => {
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.lockAssets).toBe(
       true,
     );
+  });
+
+  it('deleteContainers write-scope is false for Careful, false for VisualOrganizer, true for LocalPowerUser', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.deleteContainers).toBe(
+      false,
+    );
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.deleteContainers,
+    ).toBe(false);
+    expect(
+      AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.deleteContainers,
+    ).toBe(true);
   });
 
   it('dangerously-skip-permissions approval mode is accepted and forwarded to the runner', async () => {
@@ -508,6 +524,7 @@ describe(AgentSessionService.name, () => {
         createSharedLinks: false,
         shareAlbums: false,
         lockAssets: false,
+        deleteContainers: false,
         manageStacks: false,
         managePeople: false,
       },
@@ -1089,6 +1106,7 @@ describe(AgentSessionService.name, () => {
       createSharedLinks: false,
       shareAlbums: false,
       lockAssets: false,
+      deleteContainers: false,
       manageStacks: false,
       managePeople: false,
     });
