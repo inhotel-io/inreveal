@@ -6,6 +6,7 @@ import {
   getAlbum,
   getAsset,
   getTimeBucket,
+  getTimeBucketCovers,
   getTimeBuckets,
   randomPreview,
   randomThumbnail,
@@ -65,6 +66,14 @@ export const setupTimelineMockApiRoutes = async (
         status: 200,
         contentType: 'application/json',
         json: assets,
+      });
+    } else if (pathname === '/api/timeline/bucket-covers') {
+      const bucketSize = (url.searchParams.get('bucketSize') as TimeBucketSize | null) ?? TimeBucketSize.Month;
+      const requestedBuckets = url.searchParams.getAll('timeBuckets');
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        json: getTimeBucketCovers(timelineRestData, changes, bucketSize, requestedBuckets),
       });
     }
     return route.continue();
