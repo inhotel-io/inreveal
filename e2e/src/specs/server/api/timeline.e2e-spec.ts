@@ -118,7 +118,7 @@ describe('/timeline', () => {
       const buckets = bucketsRes.body as Array<{ timeBucket: string }>;
       const timeBuckets = buckets.map((b) => b.timeBucket).join('&timeBuckets=');
 
-      const { status, body } = await request(app)
+      const { status } = await request(app)
         .get(`/timeline/bucket-covers?bucketSize=month&userId=${ctx.spaceOwner.userId}&timeBuckets=${timeBuckets}`)
         .set(asBearerAuth(ctx.spaceEditor.token!));
 
