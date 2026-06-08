@@ -194,6 +194,125 @@ const withBoundingBox = <T>(qb: SelectQueryBuilder<DB, 'asset' | 'asset_exif', T
   );
 };
 
+function withTimeBucketAssetFilters<O>(
+  qb: SelectQueryBuilder<DB, 'asset', O>,
+  options: TimeBucketOptions,
+): SelectQueryBuilder<DB, 'asset', O> {
+  return qb
+    .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
+    .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
+    .where('asset.deletedAt', options.isTrashed ? 'is not' : 'is', null)
+    .$if(
+      !!options.bbox ||
+        !!options.city ||
+        !!options.country ||
+        !!options.make ||
+        !!options.model ||
+        options.rating !== undefined,
+      (qb) => {
+        let q = qb.innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId');
+
+        if (options.bbox) {
+          const circle = getBoundingCircle(options.bbox);
+          q = q.where(
+            sql`earth_box(ll_to_earth_public(${circle.centerLatitude}, ${circle.centerLongitude}), ${circle.radius})`,
+            '@>',
+            sql`ll_to_earth_public(asset_exif.latitude, asset_exif.longitude)`,
+          ) as any;
+          q = withBoundingBox(q, options.bbox) as any;
+        }
+
+        if (options.city) {
+          q = q.where('asset_exif.city', '=', options.city) as any;
+        }
+        if (options.country) {
+          q = q.where('asset_exif.country', '=', options.country) as any;
+        }
+        if (options.make) {
+          q = q.where('asset_exif.make', '=', options.make) as any;
+        }
+        if (options.model) {
+          q = q.where('asset_exif.model', '=', options.model) as any;
+        }
+        if (options.rating !== undefined) {
+          q = q.where('asset_exif.rating', '>=', options.rating) as any;
+        }
+
+        return q;
+      },
+    )
+    .$if(options.visibility === undefined, withDefaultVisibility)
+    .$if(!!options.visibility, (qb) => qb.where('asset.visibility', '=', options.visibility!))
+    .$if(!!options.albumId, (qb) =>
+      qb
+        .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
+        .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+    )
+    .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
+      qb.where((eb) =>
+        eb.not(eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
+      ),
+    )
+    .$if(!!options.spaceId, (qb) =>
+      qb.where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', asUuid(options.spaceId!)),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
+          ),
+        ]),
+      ),
+    )
+    .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
+    .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+    .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
+    .$if(!!options.withStacked, (qb) =>
+      qb
+        .leftJoin('stack', (join) =>
+          join.onRef('stack.id', '=', 'asset.stackId').onRef('stack.primaryAssetId', '=', 'asset.id'),
+        )
+        .where((eb) => eb.or([eb('asset.stackId', 'is', null), eb(eb.table('stack'), 'is not', null)])),
+    )
+    .$if(!!options.userIds && !options.timelineSpaceIds, (qb) =>
+      qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+    )
+    .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
+      qb.where((eb) =>
+        eb.or([
+          eb('asset.ownerId', '=', anyUuid(options.userIds!)),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
+          ),
+        ]),
+      ),
+    )
+    .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
+    .$if(!!options.assetType, (qb) => qb.where('asset.type', '=', options.assetType!))
+    .$if(options.isDuplicate !== undefined, (qb) =>
+      qb.where('asset.duplicateId', options.isDuplicate ? 'is not' : 'is', null),
+    )
+    .$if(!!options.tagIds?.length, (qb) => withAnyTagId(qb, options.tagIds!))
+    .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
+    .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!)));
+}
+
 @Injectable()
 export class AssetRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -882,138 +1001,31 @@ export class AssetRepository {
 
     return this.db
       .with('asset', (qb) =>
-        qb
-          .selectFrom('asset')
-          .select((eb) => [
-            truncatedDate<Date>(bucketSize).as('timeBucket'),
-            'asset.id',
-            'asset.localDateTime',
-            'asset.fileCreatedAt',
-            'asset.thumbhash',
-            eb.fn
-              .coalesce(
-                eb
-                  .case()
-                  .when(sql`asset."height" = 0 or asset."width" = 0 or asset."height" is null or asset."width" is null`)
-                  .then(eb.lit(1))
-                  .else(sql`round(asset."width"::numeric / asset."height"::numeric, 3)::float`)
-                  .end(),
-                eb.lit(1),
-              )
-              .as('ratio'),
-          ])
-          .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
-          .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
-          .where('asset.deletedAt', options.isTrashed ? 'is not' : 'is', null)
-          .$if(
-            !!options.bbox ||
-              !!options.city ||
-              !!options.country ||
-              !!options.make ||
-              !!options.model ||
-              options.rating !== undefined,
-            (qb) => {
-              let q = qb.innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId');
-
-              if (options.bbox) {
-                const circle = getBoundingCircle(options.bbox);
-                q = q.where(
-                  sql`earth_box(ll_to_earth_public(${circle.centerLatitude}, ${circle.centerLongitude}), ${circle.radius})`,
-                  '@>',
-                  sql`ll_to_earth_public(asset_exif.latitude, asset_exif.longitude)`,
-                ) as any;
-                q = withBoundingBox(q, options.bbox) as any;
-              }
-
-              if (options.city) {
-                q = q.where('asset_exif.city', '=', options.city) as any;
-              }
-              if (options.country) {
-                q = q.where('asset_exif.country', '=', options.country) as any;
-              }
-              if (options.make) {
-                q = q.where('asset_exif.make', '=', options.make) as any;
-              }
-              if (options.model) {
-                q = q.where('asset_exif.model', '=', options.model) as any;
-              }
-              if (options.rating !== undefined) {
-                q = q.where('asset_exif.rating', '>=', options.rating) as any;
-              }
-
-              return q;
-            },
-          )
-          .$if(options.visibility === undefined, withDefaultVisibility)
-          .$if(!!options.visibility, (qb) => qb.where('asset.visibility', '=', options.visibility!))
-          .$if(!!options.albumId, (qb) =>
-            qb
-              .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-              .where('album_asset.albumId', '=', asUuid(options.albumId!)),
-          )
-          .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
-            qb.where((eb) =>
-              eb.not(eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
-            ),
-          )
-          .$if(!!options.spaceId, (qb) =>
-            qb.where((eb) =>
-              eb.or([
-                eb.exists(
+        withTimeBucketAssetFilters(
+          qb
+            .selectFrom('asset')
+            .select((eb) => [
+              truncatedDate<Date>(bucketSize).as('timeBucket'),
+              'asset.id',
+              'asset.localDateTime',
+              'asset.fileCreatedAt',
+              'asset.thumbhash',
+              eb.fn
+                .coalesce(
                   eb
-                    .selectFrom('shared_space_asset')
-                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                    .where('shared_space_asset.spaceId', '=', asUuid(options.spaceId!)),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_library')
-                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                    .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
-                ),
-              ]),
-            ),
-          )
-          .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-          .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
-          .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
-          .$if(!!options.withStacked, (qb) =>
-            qb
-              .leftJoin('stack', (join) =>
-                join.onRef('stack.id', '=', 'asset.stackId').onRef('stack.primaryAssetId', '=', 'asset.id'),
-              )
-              .where((eb) => eb.or([eb('asset.stackId', 'is', null), eb(eb.table('stack'), 'is not', null)])),
-          )
-          .$if(!!options.userIds && !options.timelineSpaceIds, (qb) =>
-            qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
-          )
-          .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
-            qb.where((eb) =>
-              eb.or([
-                eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_asset')
-                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                    .where('shared_space_asset.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_library')
-                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                    .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
-                ),
-              ]),
-            ),
-          )
-          .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
-          .$if(!!options.assetType, (qb) => qb.where('asset.type', '=', options.assetType!))
-          .$if(options.isDuplicate !== undefined, (qb) =>
-            qb.where('asset.duplicateId', options.isDuplicate ? 'is not' : 'is', null),
-          )
-          .$if(!!options.tagIds?.length, (qb) => withAnyTagId(qb, options.tagIds!))
-          .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
-          .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!))),
+                    .case()
+                    .when(
+                      sql`asset."height" = 0 or asset."width" = 0 or asset."height" is null or asset."width" is null`,
+                    )
+                    .then(eb.lit(1))
+                    .else(sql`round(asset."width"::numeric / asset."height"::numeric, 3)::float`)
+                    .end(),
+                  eb.lit(1),
+                )
+                .as('ratio'),
+            ]),
+          options,
+        ),
       )
       .with('bucket_counts', (qb) =>
         qb
