@@ -210,6 +210,23 @@ export default [
     expect: { kind: 'change_member_role' },
   },
   {
+    // change_album_member_role routing: requires "album" in the prompt.
+    // Holds against any instance (routing happens before any library lookup).
+    id: 'l3.recall.albumrole',
+    category: 'l3.recall',
+    prompt: 'make {user} an editor on the {album} album',
+    expect: { kind: 'change_album_member_role' },
+  },
+  {
+    // Plan scenario: role change on an existing album member (propose-only).
+    // shareAlbums write-scope required; gated on SEEDED (known album + non-owner member).
+    id: 'l3.plan.albumrole',
+    category: 'l3.plan',
+    prompt: 'make {user} an editor on the {album} album',
+    expect: { kind: 'change_album_member_role', planProposed: SEEDED ? true : undefined },
+    threshold: 0.5,
+  },
+  {
     id: 'l3.recall.createalbum',
     category: 'l3.recall',
     prompt: 'make an album of my newest 20 photos called eval-l3',

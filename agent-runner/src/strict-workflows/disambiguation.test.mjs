@@ -49,10 +49,17 @@ const CASES = [
   ['add Alex to the Family space as editor', 'manage_space_members'],
   ['remove Bob from the Trips space', 'manage_space_members'],
   ['add Sam and Jo to the Family space', 'manage_space_members'],
+  // change_album_member_role (requires "album" in target; declines "space")
+  ['make Alex an editor on the Family album', 'change_album_member_role'],
+  ["change Bob's role to viewer in the Beach album", 'change_album_member_role'],
+  // change_album_member_role must NOT steal space targets
+  ['make Alex an editor in the Family space', 'change_member_role'],
   // change_member_role
   ['make Alex an editor in Family', 'change_member_role'],
   ["change Bob's role to viewer in Trips", 'change_member_role'],
   ['make Sam a viewer in the Family space', 'change_member_role'],
+  // change_member_role must NOT steal album targets
+  ['make Alex an editor on the Family album', 'change_album_member_role'],
   // update_asset_metadata (loose-asset metadata edits — not album or space)
   ['set the description on my newest 20 photos to Berlin', 'update_asset_metadata'],
   ['rate my newest 12 photos five stars', 'update_asset_metadata'],
