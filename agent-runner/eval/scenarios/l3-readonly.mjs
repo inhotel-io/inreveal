@@ -80,6 +80,16 @@ export default [
     expect: { kind: 'archive_assets' },
   },
   {
+    // Routing-only: lockAssets scope is OFF in the VisualOrganizer eval preset so
+    // the plan is blocked at the server level — no planProposed assertion here.
+    // Classification happens before any library lookup or scope check, so the
+    // routing assertion holds against any stack.
+    id: 'l3.recall.lock',
+    category: 'l3.recall',
+    prompt: 'lock my passport scans',
+    expect: { kind: 'lock_assets' },
+  },
+  {
     // screenshot cleanup routing: the "screenshots" source rides the archive verb
     // (routing is pre-resolution); the source resolves tag-first at run time.
     id: 'l3.recall.screenshots',

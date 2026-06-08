@@ -32,6 +32,7 @@ import { updateAssetMetadataWorkflow } from './workflows/update-asset-metadata.m
 import { renamePersonWorkflow } from './workflows/rename-person.mjs';
 import { setPersonBirthdateWorkflow } from './workflows/set-person-birthdate.mjs';
 import { hidePersonWorkflow } from './workflows/hide-person.mjs';
+import { lockAssetsWorkflow } from './workflows/lock-assets.mjs';
 import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -115,6 +116,13 @@ const WORKFLOW_FACTORIES = Object.freeze([
   renamePersonWorkflow,
   renameOrDescribeAlbumWorkflow,
   setPersonBirthdateWorkflow,
+  //   - `lock_assets` is placed BEFORE `hide_person`. The
+  //     `hide … in (the/my) locked|private folder` pattern requires an explicit
+  //     folder cue, so it must win over `hide_person` (which has no folder-cue
+  //     guard and would otherwise claim "hide these in the locked folder" as a
+  //     personRef). The `lock`, `move/put/add … to/in the locked/private folder`
+  //     patterns are fully disjoint from archive/trash verbs.
+  lockAssetsWorkflow,
   hidePersonWorkflow,
   //   - `merge_people` is placed after hide_person (all people workflows grouped).
   //     Its distinct `merge … into …` / `merge … and …` verb+preposition shape is

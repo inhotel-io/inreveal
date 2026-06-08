@@ -197,6 +197,17 @@ const CASES = [
   ['mirror these', 'flip_assets'],
   // flip_assets must NOT steal "upside down" (rotate_assets owns it)
   ['flip my newest 5 photos upside down', 'rotate_assets'],
+  // lock_assets (lock verb or locked/private folder cue; folder cue gates HIDE_IN_LOCKED)
+  ['lock my passport scans', 'lock_assets'],
+  ['move my 2024 receipts to the locked folder', 'lock_assets'],
+  ['put these in my private folder', 'lock_assets'],
+  ['hide these in the locked folder', 'lock_assets'],
+  // lock_assets must NOT steal hide_person ("hide Alex" has no folder cue)
+  ['hide Alex', 'hide_person'],
+  // lock_assets must NOT steal archive_assets
+  ['archive my newest 50 photos', 'archive_assets'],
+  // lock the best ones (subjective) → none
+  ['lock the best ones', 'none'],
 ];
 
 describe('cross-workflow disambiguation (regex fast-path)', () => {
