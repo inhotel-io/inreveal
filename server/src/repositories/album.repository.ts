@@ -444,7 +444,13 @@ export class AlbumRepository {
       .orderBy('album_asset.createdAt', 'asc')
       .execute();
 
-    return { ...album, assetIds: assets.map(({ assetId }) => assetId) };
+    const albumUsers = await this.db
+      .selectFrom('album_user')
+      .select(['album_user.userId', 'album_user.role'])
+      .where('album_user.albumId', '=', albumId)
+      .execute();
+
+    return { ...album, assetIds: assets.map(({ assetId }) => assetId), albumUsers };
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { isOwned: true, isShared: true }] })

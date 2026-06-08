@@ -64,6 +64,36 @@ export default [
     expect: { kind: 'none' },
   },
 
+  // manage_album_access boundaries -------------------------------------------
+  {
+    // Public-link album share must route to share_album, NOT manage_album_access.
+    id: 'neg.albumaccess.link',
+    category: 'negatives',
+    prompt: 'share the Family album as a link',
+    expect: { kind: 'share_album' },
+  },
+  {
+    // Space target must route to manage_space_members, NOT manage_album_access.
+    id: 'neg.albumaccess.space',
+    category: 'negatives',
+    prompt: 'add Alex to the Family space',
+    expect: { kind: 'manage_space_members' },
+  },
+  {
+    // Photo-source "share as a link" must route to share_assets, NOT manage_album_access.
+    id: 'neg.albumaccess.photos-link',
+    category: 'negatives',
+    prompt: 'share my newest 20 photos as a link',
+    expect: { kind: 'share_assets' },
+  },
+  {
+    // Adding photos to an album must NOT route to manage_album_access (photo source guard).
+    id: 'neg.albumaccess.photo-source',
+    category: 'negatives',
+    prompt: 'add these photos to the Family album',
+    expect: { kind: 'add_photos_to_album' },
+  },
+
   // manage_space_assets boundaries -------------------------------------------
   {
     // Adding a member (Alex) to a space must NOT route to manage_space_assets (photo op).
