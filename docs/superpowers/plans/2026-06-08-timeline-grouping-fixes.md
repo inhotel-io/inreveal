@@ -19,6 +19,7 @@
 ### Task 1: Compact selector ping-pong
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/widgets/timeline/timeline_grouping_selector.widget.dart:105-198` (`_TimelineGroupingCompactSelector`)
 - Test: `mobile/test/presentation/widgets/timeline/timeline_grouping_selector_test.dart:302-330`
 
@@ -144,6 +145,7 @@ class _TimelineGroupingCompactSelectorState extends State<_TimelineGroupingCompa
 ```
 
 Notes:
+
 - `_zoomingIn` is logic-only (does not affect this widget's own render — the label comes from `widget.selected`), so no `setState` is needed when mutating it.
 - The `switch` stays exhaustive over `GroupAssetsBy`; `auto`/`none` (never reached after normalisation) fold into the Day branch.
 
@@ -176,6 +178,7 @@ git commit -m "fix(mobile): timeline grouping compact selector bounces instead o
 A behaviour-preserving refactor so `getTimeBuckets` and the new cover query share one filter definition (DRY, prevents divergence).
 
 **Files:**
+
 - Modify: `server/src/repositories/asset.repository.ts:879-1050` (`getTimeBuckets`)
 
 - [ ] **Step 1: Add a filter helper above `getTimeBuckets`**
@@ -189,10 +192,12 @@ function withTimeBucketAssetFilters<DB, TB extends keyof DB, O>(
   qb: SelectQueryBuilder<DB, TB, O>,
   options: TimeBucketOptions,
 ): SelectQueryBuilder<DB, TB, O> {
-  return qb
-    .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
-    // ... move the exact existing chain here, unchanged ...
-    .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!))) as any;
+  return (
+    qb
+      .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
+      // ... move the exact existing chain here, unchanged ...
+      .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!))) as any
+  );
 }
 ```
 
@@ -233,6 +238,7 @@ git commit -m "refactor(server): extract shared time-bucket asset filter helper"
 ### Task 3: `getTimeBucketCovers` repository method
 
 **Files:**
+
 - Modify: `server/src/repositories/asset.repository.ts` (add `TimeBucketCoverItem`, `getTimeBucketCovers`)
 - Test (medium, real DB): `server/src/repositories/asset.repository.spec.ts` (or the medium suite where `getTimeBuckets` is exercised — match the existing location)
 
@@ -262,13 +268,30 @@ it('getTimeBucketCovers returns the newest asset per requested bucket (DESC)', a
 
 it('getTimeBucketCovers honours ASC order and returns [] for empty input', async () => {
   // ...same fixtures...
-  const asc = await repo.getTimeBucketCovers({ bucketSize: TimeBucketSize.Year, order: AssetOrder.Asc, userIds: [user.id], timeBuckets: ['2023-01-01'] });
+  const asc = await repo.getTimeBucketCovers({
+    bucketSize: TimeBucketSize.Year,
+    order: AssetOrder.Asc,
+    userIds: [user.id],
+    timeBuckets: ['2023-01-01'],
+  });
   expect(asc[0].representativeAssetId).toBe(a2023old.id);
-  expect(await repo.getTimeBucketCovers({ bucketSize: TimeBucketSize.Year, order: AssetOrder.Desc, userIds: [user.id], timeBuckets: [] })).toEqual([]);
+  expect(
+    await repo.getTimeBucketCovers({
+      bucketSize: TimeBucketSize.Year,
+      order: AssetOrder.Desc,
+      userIds: [user.id],
+      timeBuckets: [],
+    }),
+  ).toEqual([]);
 });
 
 it('getTimeBucketCovers omits buckets with no matching assets', async () => {
-  const covers = await repo.getTimeBucketCovers({ bucketSize: TimeBucketSize.Year, order: AssetOrder.Desc, userIds: [user.id], timeBuckets: ['1999-01-01'] });
+  const covers = await repo.getTimeBucketCovers({
+    bucketSize: TimeBucketSize.Year,
+    order: AssetOrder.Desc,
+    userIds: [user.id],
+    timeBuckets: ['1999-01-01'],
+  });
   expect(covers.find((c) => c.timeBucket === '1999-01-01')).toBeUndefined();
 });
 ```
@@ -296,7 +319,7 @@ Add `timeBuckets?: string[]` to `TimeBucketOptions`. Implement the method. Seman
 - Empty `timeBuckets` ⇒ return `[]` without querying.
 - Build the same filtered `asset` CTE as `getTimeBuckets` (via `withTimeBucketAssetFilters`), selecting `timeBucket`, `id`, encoded `thumbhash`, `ratio`, `localDateTime`, `fileCreatedAt`.
 - **Narrow the scan to the requested buckets** so the work is bounded (not a full-library sort): in the CTE add a range predicate on the indexed date cast `(localDateTime AT TIME ZONE 'UTC')::date >= :minStart AND < :maxEnd`, where `minStart = min(requested bucket starts)` and `maxEnd = max(requested bucket starts) + 1 <unit>` (unit from `bucketSize`).
-- Outer query: `.distinctOn('timeBucket').where('timeBucket', 'in', requestedBucketDates).orderBy('timeBucket').orderBy(sql\`("localDateTime" AT TIME ZONE 'UTC')::date\`, order).orderBy('fileCreatedAt', order)` and select `timeBucket::date::text`, `id as representativeAssetId`, encoded thumbhash, `ratio`.
+- Outer query: `.distinctOn('timeBucket').where('timeBucket', 'in', requestedBucketDates).orderBy('timeBucket').orderBy(sql\`("localDateTime" AT TIME ZONE 'UTC')::date\`, order).orderBy('fileCreatedAt', order)`and select`timeBucket::date::text`, `id as representativeAssetId`, encoded thumbhash, `ratio`.
 
 This preserves the exact representative the old `bucket_representatives` CTE picked, but only for requested buckets and over an index-narrowed range. Equivalent SQL:
 
@@ -332,6 +355,7 @@ git commit -m "feat(server): add getTimeBucketCovers repository query (per-bucke
 ### Task 4: Cover DTOs, service method, controller endpoint
 
 **Files:**
+
 - Modify: `server/src/dtos/time-bucket.dto.ts` (add `TimeBucketCoverDto` + `TimeBucketCoverResponseDto`)
 - Modify: `server/src/services/timeline.service.ts` (add `getTimeBucketCovers`)
 - Modify: `server/src/controllers/timeline.controller.ts` (add `@Get('bucket-covers')`)
@@ -344,7 +368,11 @@ it('getTimeBucketCovers runs access checks and forwards resolved options + bucke
   mocks.access.timeline.checkOwnerAccess.mockResolvedValue(new Set(['user-id']));
   mocks.asset.getTimeBucketCovers.mockResolvedValue([]);
 
-  await sut.getTimeBucketCovers(authStub.user1, { userId: 'user-id', bucketSize: TimeBucketSize.Year, timeBuckets: ['2024-01-01'] });
+  await sut.getTimeBucketCovers(authStub.user1, {
+    userId: 'user-id',
+    bucketSize: TimeBucketSize.Year,
+    timeBuckets: ['2024-01-01'],
+  });
 
   expect(mocks.asset.getTimeBucketCovers).toHaveBeenCalledWith(
     expect.objectContaining({ timeBuckets: ['2024-01-01'], bucketSize: TimeBucketSize.Year, userIds: ['user-id'] }),
@@ -419,7 +447,7 @@ getTimeBucketCovers(@Auth() auth: AuthDto, @Query() dto: TimeBucketCoverDto) {
 
 Run: `cd server && pnpm test -- --run src/services/timeline.service.spec.ts`
 Expected: PASS.
-Run: `cd server && npx tsc --noEmit && pnpm lint`  (run `tsc` directly — `make check-server` caches and can mask DTO TS errors).
+Run: `cd server && npx tsc --noEmit && pnpm lint` (run `tsc` directly — `make check-server` caches and can mask DTO TS errors).
 Expected: clean.
 
 - [ ] **Step 7: Commit**
@@ -433,6 +461,7 @@ git commit -m "feat(server): add GET /timeline/bucket-covers endpoint"
 ### Task 5: Regenerate the OpenAPI clients (new endpoint)
 
 **Files:**
+
 - Modify (generated): `open-api/immich-openapi-specs.json`, `open-api/typescript-sdk/src/fetch-client.ts`, `mobile/openapi/**`
 
 - [ ] **Step 1: Build server spec + regenerate both clients**
@@ -459,6 +488,7 @@ git commit -m "chore(api): regenerate clients for getTimeBucketCovers"
 ### Task 6: Cover store + loader on `TimelineManager`; representative fields become reactive
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/timeline-bucket.svelte.ts` (`TimelineBucket` rep fields → `$state`; `aggregateDayBucketsByMonth` drops rep)
 - Modify: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts` (add `loadCoversForBuckets`, reset on (re)init)
 - Test: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.spec.ts`, `web/src/lib/managers/timeline-manager/timeline-grouping.svelte.spec.ts`
@@ -469,9 +499,17 @@ In `timeline-manager.svelte.spec.ts`, mock `getTimeBucketCovers` and assert the 
 
 ```ts
 it('loadCoversForBuckets fetches only requested buckets, dedupes, and applies covers', async () => {
-  sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }, { timeBucket: '2023-01-01', count: 5 }]);
+  sdkMock.getTimeBuckets.mockResolvedValue([
+    { timeBucket: '2024-01-01', count: 3 },
+    { timeBucket: '2023-01-01', count: 5 },
+  ]);
   sdkMock.getTimeBucketCovers.mockResolvedValue([
-    { timeBucket: '2024-01-01', representativeAssetId: 'a-2024', representativeThumbhash: 'h', representativeRatio: 1.5 },
+    {
+      timeBucket: '2024-01-01',
+      representativeAssetId: 'a-2024',
+      representativeThumbhash: 'h',
+      representativeRatio: 1.5,
+    },
   ]);
   const manager = await makeManager({ grouping: 'year' });
 
@@ -479,7 +517,10 @@ it('loadCoversForBuckets fetches only requested buckets, dedupes, and applies co
   await manager.loadCoversForBuckets(['2024-01-01']); // second call deduped — no extra request
 
   expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledTimes(1);
-  expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(expect.objectContaining({ bucketSize: TimeBucketSize.Year, timeBuckets: ['2024-01-01'] }), expect.anything());
+  expect(sdkMock.getTimeBucketCovers).toHaveBeenCalledWith(
+    expect.objectContaining({ bucketSize: TimeBucketSize.Year, timeBuckets: ['2024-01-01'] }),
+    expect.anything(),
+  );
   const bucket = manager.timelineBuckets.find((b) => b.timeBucket === '2024-01-01')!;
   expect(bucket.representativeAssetId).toBe('a-2024');
   expect(bucket.representativeThumbhash).toBe('h');
@@ -516,7 +557,10 @@ setRepresentative(cover: { representativeAssetId: string | null; representativeT
 Update `aggregateDayBucketsByMonth` (lines 45-68) to drop representative handling (those scrubber months never show covers):
 
 ```ts
-export function aggregateDayBucketsByMonth(timeBuckets: TimeBucketsResponseDto[], order: AssetOrder = AssetOrder.Desc): TimeBucketsResponseDto[] {
+export function aggregateDayBucketsByMonth(
+  timeBuckets: TimeBucketsResponseDto[],
+  order: AssetOrder = AssetOrder.Desc,
+): TimeBucketsResponseDto[] {
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const months = new Map<string, TimeBucketsResponseDto>();
   for (const bucket of timeBuckets) {
@@ -583,6 +627,7 @@ git commit -m "feat(web): lazy cover loader on TimelineManager; reactive bucket 
 ### Task 7: Request covers for visible buckets; card renders skeleton → cover
 
 **Files:**
+
 - Modify: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.svelte` (emit visible bucket keys)
 - Modify: `web/src/lib/components/timeline/Timeline.svelte:749-753` (wire the callback to the manager)
 - Test: `web/src/lib/components/timeline/TimelineRepresentativeBuckets.spec.ts`, `web/src/lib/components/timeline/TimelineBucketCard.spec.ts`
@@ -595,7 +640,12 @@ In `TimelineRepresentativeBuckets.spec.ts`, assert the component calls `onReques
 // TimelineRepresentativeBuckets.spec.ts
 it('requests covers for visible buckets only', async () => {
   const onRequestCovers = vi.fn();
-  render(TimelineRepresentativeBuckets, { grouping: 'year', buckets: [visibleBucket, offscreenBucket], visibleWindow: { top: 0, bottom: 500 }, onRequestCovers });
+  render(TimelineRepresentativeBuckets, {
+    grouping: 'year',
+    buckets: [visibleBucket, offscreenBucket],
+    visibleWindow: { top: 0, bottom: 500 },
+    onRequestCovers,
+  });
   await tick();
   expect(onRequestCovers).toHaveBeenCalledWith([visibleBucket.timeBucket]);
 });
@@ -648,7 +698,7 @@ At the `TimelineRepresentativeBuckets` usage (line ~750), add:
 
 Run: `cd web && pnpm test -- --run src/lib/components/timeline/`
 Expected: PASS.
-Run: `cd web && pnpm check && pnpm lint`  (Lint Web is a separate `eslint --max-warnings 0` job — fix any floating-promise/`$effect` async warnings).
+Run: `cd web && pnpm check && pnpm lint` (Lint Web is a separate `eslint --max-warnings 0` job — fix any floating-promise/`$effect` async warnings).
 Expected: clean.
 
 - [ ] **Step 6: Commit**
@@ -666,6 +716,7 @@ git commit -m "feat(web): lazily request year/month covers for visible buckets"
 The overlay timeline merges two `getTimeBuckets` calls and previously preferred the album representative (`album-picker-support.ts`). Counts-only buckets drop that, so covers for the overlay must be resolved with album-preference.
 
 **Files:**
+
 - Modify: `web/src/lib/managers/timeline-manager/internal/album-picker-support.ts` (`mergeTimeBuckets` drops rep; keep counts merge)
 - Modify: `web/src/lib/managers/timeline-manager/timeline-manager.svelte.ts` (`loadCoversForBuckets` also resolves album-scoped covers when an album query is active, album preferred)
 - Test: `web/src/lib/managers/timeline-manager/internal/album-picker-support.spec.ts` (if present) + a manager test
@@ -676,7 +727,14 @@ The overlay timeline merges two `getTimeBuckets` calls and previously preferred 
 it('prefers the album cover for overlay buckets', async () => {
   // manager configured with timelineAlbumId; getTimeBucketCovers resolves different reps for album vs main filters
   sdkMock.getTimeBucketCovers.mockImplementation(({ albumId }) =>
-    Promise.resolve([{ timeBucket: '2024-01-01', representativeAssetId: albumId ? 'album-asset' : 'main-asset', representativeThumbhash: null, representativeRatio: 1 }]),
+    Promise.resolve([
+      {
+        timeBucket: '2024-01-01',
+        representativeAssetId: albumId ? 'album-asset' : 'main-asset',
+        representativeThumbhash: null,
+        representativeRatio: 1,
+      },
+    ]),
   );
   const manager = await makeManager({ grouping: 'year', timelineAlbumId: 'album-1' });
   await manager.loadCoversForBuckets(['2024-01-01']);
@@ -697,7 +755,9 @@ In `album-picker-support.ts`, `mergeTimeBuckets` keeps the count/union behaviour
 const albumOptions = getTimelineAlbumQueryOptions(this.#options, bucketSize);
 const [mainCovers, albumCovers] = await Promise.all([
   getTimeBucketCovers({ ...authManager.params, ...requestOptions, timeBuckets: todo }),
-  albumOptions ? getTimeBucketCovers({ ...authManager.params, ...albumOptions, timeBuckets: todo }) : Promise.resolve([]),
+  albumOptions
+    ? getTimeBucketCovers({ ...authManager.params, ...albumOptions, timeBuckets: todo })
+    : Promise.resolve([]),
 ]);
 const byBucket = new Map(mainCovers.map((c) => [c.timeBucket, c]));
 for (const cover of albumCovers) byBucket.set(cover.timeBucket, cover); // album preferred
@@ -726,6 +786,7 @@ git commit -m "feat(web): resolve album/space overlay covers with album preferen
 Now that nothing reads covers from `getTimeBuckets`, drop the expensive sort and the response fields.
 
 **Files:**
+
 - Modify: `server/src/repositories/asset.repository.ts:879-1050` (`getTimeBuckets` → counts only; drop rep from `TimeBucketItem`)
 - Modify: `server/src/dtos/time-bucket.dto.ts` (drop rep fields from `TimeBucketsResponseSchema`)
 - Test: `server/src/repositories/asset.repository.spec.ts`, `e2e/src/specs/server/api/timeline.e2e-spec.ts`
@@ -774,6 +835,7 @@ git commit -m "perf(server): getTimeBuckets returns counts only; covers moved to
 ### Task 10: Update the Playwright UI mock generator
 
 **Files:**
+
 - Modify: `e2e/src/ui/generators/timeline/rest-response.ts:227-234` and `e2e/src/ui/generators/timeline/rest-response.spec.ts`
 
 - [ ] **Step 1: RED — generator no longer inlines representatives**
@@ -832,5 +894,5 @@ git commit -m "test(e2e): mock bucket-covers endpoint; getTimeBuckets counts-onl
 ## Self-review notes
 
 - **Spec coverage:** Bug 1 bounce (Task 1); counts-only `getTimeBuckets` (Task 9); index-friendly cover endpoint (Tasks 3-4); lazy web loading + dedupe/memoize/cancel (Tasks 6-7); album overlay (Task 8); authorization via shared `timeBucketChecks`/`buildTimeBucketOptions` (Task 4) + e2e access case (Task 9); scope boundary — `gallery-viewer-grouping.ts` untouched (not in any task by design); OpenAPI regen (Tasks 5, 9); e2e blast radius (Tasks 9-10); mobile verify-only (Task 11); EXPLAIN ANALYZE (Task 12).
-- **Ordering:** new endpoint added (Tasks 3-5) and web switched (Tasks 6-8) *before* covers are removed from `getTimeBuckets` (Task 9), so every commit is shippable.
+- **Ordering:** new endpoint added (Tasks 3-5) and web switched (Tasks 6-8) _before_ covers are removed from `getTimeBuckets` (Task 9), so every commit is shippable.
 - **Type consistency:** `getTimeBucketCovers` (repo/service/SDK), `TimeBucketCoverItem` (repo), `TimeBucketCoverDto`/`TimeBucketCoverResponseDto` (server + SDK), `loadCoversForBuckets`/`setRepresentative` (web), `onRequestCovers` (component) used consistently across tasks.
