@@ -37,6 +37,7 @@ const carefulWriteScope = {
   trashAssets: false,
   createSharedLinks: false,
   shareAlbums: false,
+  lockAssets: false,
   manageStacks: false,
   managePeople: false,
 };
@@ -61,6 +62,7 @@ const expandedWriteScope = {
   trashAssets: true,
   createSharedLinks: false,
   shareAlbums: true,
+  lockAssets: false,
   manageStacks: true,
   managePeople: true,
 };
@@ -368,6 +370,8 @@ describe(AgentSessionService.name, () => {
       ...expandedWriteScope,
       // LocalPowerUser is the only preset that grants the outward-facing share scope.
       createSharedLinks: true,
+      // LocalPowerUser is the only preset that grants the lock-assets scope.
+      lockAssets: true,
     });
     expect(
       AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.updateAssetMetadata,
@@ -383,6 +387,16 @@ describe(AgentSessionService.name, () => {
       true,
     );
     expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.shareAlbums).toBe(
+      true,
+    );
+  });
+
+  it('lockAssets write-scope is false for Careful, false for VisualOrganizer, true for LocalPowerUser', () => {
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.Careful].writeScope.lockAssets).toBe(false);
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.VisualOrganizer].writeScope.lockAssets).toBe(
+      false,
+    );
+    expect(AgentSessionService.permissionPresets[AgentPermissionPreset.LocalPowerUser].writeScope.lockAssets).toBe(
       true,
     );
   });
@@ -493,6 +507,7 @@ describe(AgentSessionService.name, () => {
         trashAssets: false,
         createSharedLinks: false,
         shareAlbums: false,
+        lockAssets: false,
         manageStacks: false,
         managePeople: false,
       },
@@ -1073,6 +1088,7 @@ describe(AgentSessionService.name, () => {
       trashAssets: false,
       createSharedLinks: false,
       shareAlbums: false,
+      lockAssets: false,
       manageStacks: false,
       managePeople: false,
     });
