@@ -156,6 +156,48 @@ export default [
     expect: { kind: 'trash_assets' },
   },
 
+  // lock_assets -------------------------------------------------------------
+  {
+    id: 'recall.lock.canonical',
+    category: 'recall',
+    prompt: 'lock my passport scans',
+    expect: {
+      kind: 'lock_assets',
+      slotsSurvive: true,
+      slots: { sourceDescription: /passport scans/i },
+    },
+  },
+  {
+    id: 'recall.lock.move-to-locked-folder',
+    category: 'recall',
+    prompt: 'move my 2024 receipts to the locked folder',
+    expect: {
+      kind: 'lock_assets',
+      slotsSurvive: true,
+      slots: { sourceDescription: /2024 receipts/i },
+    },
+  },
+  {
+    id: 'recall.lock.put-in-private-folder',
+    category: 'recall',
+    prompt: 'put these in my private folder',
+    expect: { kind: 'lock_assets', slotsSurvive: true },
+  },
+  {
+    // negative: "hide Alex" has no folder cue → hide_person, not lock_assets
+    id: 'recall.lock.neg.hide-person',
+    category: 'recall',
+    prompt: 'hide Alex',
+    expect: { kind: 'hide_person', slotsSurvive: true },
+  },
+  {
+    // negative: "archive these photos" → archive_assets, not lock_assets
+    id: 'recall.lock.neg.archive',
+    category: 'recall',
+    prompt: 'archive these photos',
+    expect: { kind: 'archive_assets', slotsSurvive: true },
+  },
+
   // favorite_assets ---------------------------------------------------------
   {
     id: 'recall.favorite.canonical',

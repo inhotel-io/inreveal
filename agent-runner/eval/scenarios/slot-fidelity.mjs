@@ -69,6 +69,18 @@ export default [
     expect: { kind: 'trash_assets', slots: { sourceDescription: 'my newest 20 photos' } },
   },
   {
+    id: 'slots.lock.canonical',
+    category: 'slots',
+    prompt: 'lock my passport scans',
+    expect: { kind: 'lock_assets', slots: { sourceDescription: 'my passport scans' } },
+  },
+  {
+    id: 'slots.lock.move-to-locked-folder',
+    category: 'slots',
+    prompt: 'move my 2024 receipts to the locked folder',
+    expect: { kind: 'lock_assets', slots: { sourceDescription: 'my 2024 receipts' } },
+  },
+  {
     id: 'slots.untag.canonical',
     category: 'slots',
     prompt: 'remove the Travel tag from my newest 20',
