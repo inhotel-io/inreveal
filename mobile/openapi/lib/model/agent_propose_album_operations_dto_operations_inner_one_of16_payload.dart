@@ -13,26 +13,48 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload({
-    required this.favorite,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
   });
 
-  bool favorite;
+  /// Minimum value: 0
+  num x;
+
+  /// Minimum value: 0
+  num y;
+
+  /// Minimum value: 1
+  num width;
+
+  /// Minimum value: 1
+  num height;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload &&
-    other.favorite == favorite;
+    other.x == x &&
+    other.y == y &&
+    other.width == width &&
+    other.height == height;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (favorite.hashCode);
+    (x.hashCode) +
+    (y.hashCode) +
+    (width.hashCode) +
+    (height.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload[favorite=$favorite]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload[x=$x, y=$y, width=$width, height=$height]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'favorite'] = this.favorite;
+      json[r'x'] = this.x;
+      json[r'y'] = this.y;
+      json[r'width'] = this.width;
+      json[r'height'] = this.height;
     return json;
   }
 
@@ -45,7 +67,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload(
-        favorite: mapValueOfType<bool>(json, r'favorite')!,
+        x: num.parse('${json[r'x']}'),
+        y: num.parse('${json[r'y']}'),
+        width: num.parse('${json[r'width']}'),
+        height: num.parse('${json[r'height']}'),
       );
     }
     return null;
@@ -93,7 +118,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'favorite',
+    'x',
+    'y',
+    'width',
+    'height',
   };
 }
 
