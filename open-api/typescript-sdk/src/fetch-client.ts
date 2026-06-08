@@ -590,6 +590,7 @@ export type AgentPermissionPlan = {
         favoriteAssets: boolean;
         managePeople: boolean;
         manageStacks: boolean;
+        shareAlbums: boolean;
         removeAssets: boolean;
         removeAssetsFromSpaces: boolean;
         removeMembersFromSpaces: boolean;
