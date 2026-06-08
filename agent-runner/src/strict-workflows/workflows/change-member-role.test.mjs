@@ -81,6 +81,21 @@ describe('change_member_role router & slots', () => {
     assert.equal(wf.match(''), undefined);
   });
 
+  // ── Album-target hand-off regression (Step B) ──────────────────────────────
+  // change_member_role must DECLINE when the target mentions "album" so that
+  // change_album_member_role can own those prompts.
+  it('DECLINES "make Alex an editor on the Family album" (album target → hand-off)', () => {
+    assert.equal(wf.match('make Alex an editor on the Family album'), undefined);
+  });
+
+  it('DECLINES "change Alex\'s role to viewer in the Family album"', () => {
+    assert.equal(wf.match("change Alex's role to viewer in the Family album"), undefined);
+  });
+
+  it('DECLINES "make Bob a contributor in the Beach album"', () => {
+    assert.equal(wf.match('make Bob a contributor in the Beach album'), undefined);
+  });
+
   it('parseSlots normalizes role + space and requires all three slots', () => {
     assert.deepEqual(wf.parseSlots({ memberQuery: 'Alex', role: 'admin', spaceRef: 'the Family space' }), {
       memberQuery: 'Alex',

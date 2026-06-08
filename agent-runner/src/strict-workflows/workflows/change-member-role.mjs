@@ -25,6 +25,9 @@ const normalizeSpaceRef = (value) =>
     .replace(/\s+(?:shared\s+)?space$/i, '')
     .trim();
 
+// Decline when the target ref mentions "album" — those belong to change_album_member_role.
+const mentionsAlbum = (text) => /\balbum\b/i.test(clean(text));
+
 const ROLE_SYNONYMS = {
   editor: 'editor',
   edit: 'editor',
@@ -73,7 +76,12 @@ export const changeMemberRoleWorkflow = () => ({
       }
       const role = normalizeRole(m.groups.role);
       const memberQuery = clean(m.groups.member);
-      const spaceRef = normalizeSpaceRef(m.groups.space);
+      const rawSpace = clean(m.groups.space);
+      // Decline album targets — change_album_member_role owns those.
+      if (mentionsAlbum(rawSpace)) {
+        return undefined;
+      }
+      const spaceRef = normalizeSpaceRef(rawSpace);
       if (role && memberQuery && spaceRef) {
         return { slots: { memberQuery, role, spaceRef } };
       }
