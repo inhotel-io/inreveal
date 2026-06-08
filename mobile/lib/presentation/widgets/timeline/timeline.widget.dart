@@ -413,8 +413,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
       return;
     }
 
-    final activeGroupBy =
-        ref.read(timelineArgsProvider).groupBy ?? ref.read(appConfigProvider).timeline.groupAssetsBy;
+    final activeGroupBy = ref.read(timelineArgsProvider).groupBy ?? ref.read(appConfigProvider).timeline.groupAssetsBy;
     if (activeGroupBy != groupBy) {
       return;
     }
