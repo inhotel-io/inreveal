@@ -188,6 +188,7 @@ export enum AgentOperationType {
   AssetUnstack = 'asset.unstack',
   AssetSetFavorite = 'asset.setFavorite',
   AssetSetArchive = 'asset.setArchive',
+  AssetSetVisibility = 'asset.setVisibility',
   AssetUpdateMetadata = 'asset.updateMetadata',
   AssetAddTag = 'asset.addTag',
   AssetRemoveTag = 'asset.removeTag',
