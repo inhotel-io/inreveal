@@ -9,6 +9,7 @@ import {
   AgentOperationTargetKind,
   AgentOperationType,
   AgentToolName,
+  AlbumUserRole,
   SharedSpaceRole,
   UserAvatarColorSchema,
 } from 'src/enum';
@@ -389,6 +390,68 @@ const spaceUpdateMemberRoleOperationSchema = z
     }),
   })
   .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
+const AgentAssignableAlbumRoleSchema = z
+  .enum([AlbumUserRole.Editor, AlbumUserRole.Viewer])
+  .meta({ id: 'AgentAssignableAlbumUserRole' });
+
+const albumUserPayloads = z
+  .array(
+    z.strictObject({
+      userId: uuid,
+      role: AgentAssignableAlbumRoleSchema,
+    }),
+  )
+  .min(1)
+  .max(100)
+  .superRefine((albumUsers, ctx) => {
+    const userIds = albumUsers.map((u) => u.userId);
+    if (new Set(userIds).size !== userIds.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'albumUsers must contain unique userIds' });
+    }
+  });
+
+const albumAddUsersOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AlbumAddUsers).meta({ id: 'AgentAlbumAddUsersOperationType' }),
+    summary,
+    targetKind: ExistingAlbumTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({ albumUsers: albumUserPayloads }),
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
+
+const albumRemoveUsersOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AlbumRemoveUsers).meta({ id: 'AgentAlbumRemoveUsersOperationType' }),
+    summary,
+    targetKind: ExistingAlbumTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({ userIds: uniqueUserIds }),
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
+
+const albumUpdateUserRoleOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AlbumUpdateUserRole).meta({ id: 'AgentAlbumUpdateUserRoleOperationType' }),
+    summary,
+    targetKind: ExistingAlbumTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: z.strictObject({
+      userId: uuid,
+      role: AgentAssignableAlbumRoleSchema,
+    }),
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
 
 const assetBatchBase = {
   summary,
@@ -837,6 +900,9 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   spaceAddMembersOperationSchema,
   spaceRemoveMembersOperationSchema,
   spaceUpdateMemberRoleOperationSchema,
+  albumAddUsersOperationSchema,
+  albumRemoveUsersOperationSchema,
+  albumUpdateUserRoleOperationSchema,
   rotateOperationSchema,
   cropOperationSchema,
   adjustOperationSchema,

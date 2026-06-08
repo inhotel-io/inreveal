@@ -13,26 +13,84 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload({
-    this.sourcePersonIds = const [],
+    this.password,
+    this.expiresAt,
+    this.showMetadata,
+    this.allowDownload,
   });
 
-  List<String> sourcePersonIds;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? password;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  String? expiresAt;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? showMetadata;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? allowDownload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload &&
-    _deepEquality.equals(other.sourcePersonIds, sourcePersonIds);
+    other.password == password &&
+    other.expiresAt == expiresAt &&
+    other.showMetadata == showMetadata &&
+    other.allowDownload == allowDownload;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (sourcePersonIds.hashCode);
+    (password == null ? 0 : password!.hashCode) +
+    (expiresAt == null ? 0 : expiresAt!.hashCode) +
+    (showMetadata == null ? 0 : showMetadata!.hashCode) +
+    (allowDownload == null ? 0 : allowDownload!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload[sourcePersonIds=$sourcePersonIds]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload[password=$password, expiresAt=$expiresAt, showMetadata=$showMetadata, allowDownload=$allowDownload]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'sourcePersonIds'] = this.sourcePersonIds;
+    if (this.password != null) {
+      json[r'password'] = this.password;
+    } else {
+    //  json[r'password'] = null;
+    }
+    if (this.expiresAt != null) {
+      json[r'expiresAt'] = this.expiresAt;
+    } else {
+    //  json[r'expiresAt'] = null;
+    }
+    if (this.showMetadata != null) {
+      json[r'showMetadata'] = this.showMetadata;
+    } else {
+    //  json[r'showMetadata'] = null;
+    }
+    if (this.allowDownload != null) {
+      json[r'allowDownload'] = this.allowDownload;
+    } else {
+    //  json[r'allowDownload'] = null;
+    }
     return json;
   }
 
@@ -45,9 +103,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload(
-        sourcePersonIds: json[r'sourcePersonIds'] is Iterable
-            ? (json[r'sourcePersonIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+        password: mapValueOfType<String>(json, r'password'),
+        expiresAt: mapValueOfType<String>(json, r'expiresAt'),
+        showMetadata: mapValueOfType<bool>(json, r'showMetadata'),
+        allowDownload: mapValueOfType<bool>(json, r'allowDownload'),
       );
     }
     return null;
@@ -95,7 +154,6 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'sourcePersonIds',
   };
 }
 

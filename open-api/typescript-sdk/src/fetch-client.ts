@@ -590,11 +590,11 @@ export type AgentPermissionPlan = {
         favoriteAssets: boolean;
         managePeople: boolean;
         manageStacks: boolean;
-        shareAlbums: boolean;
         removeAssets: boolean;
         removeAssetsFromSpaces: boolean;
         removeMembersFromSpaces: boolean;
         setCover: boolean;
+        shareAlbums: boolean;
         tagAssets: boolean;
         trashAssets: boolean;
         updateAssetMetadata: boolean;
@@ -954,6 +954,43 @@ export type AgentProposeAlbumOperationsDto = {
         payload: {
             userIds: string[];
             role: AgentAssignableSharedSpaceMemberRole;
+        };
+    } | {
+        "type": AgentAlbumAddUsersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumUsers: {
+                userId: string;
+                role: AgentAssignableAlbumUserRole;
+            }[];
+        };
+    } | {
+        "type": AgentAlbumRemoveUsersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+        };
+    } | {
+        "type": AgentAlbumUpdateUserRoleOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userId: string;
+            role: AgentAssignableAlbumUserRole;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -1412,6 +1449,43 @@ export type AgentReviseAlbumOperationsDto = {
         payload: {
             userIds: string[];
             role: AgentAssignableSharedSpaceMemberRole;
+        };
+    } | {
+        "type": AgentAlbumAddUsersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            albumUsers: {
+                userId: string;
+                role: AgentAssignableAlbumUserRole;
+            }[];
+        };
+    } | {
+        "type": AgentAlbumRemoveUsersOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userIds: string[];
+        };
+    } | {
+        "type": AgentAlbumUpdateUserRoleOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload: {
+            userId: string;
+            role: AgentAssignableAlbumUserRole;
         };
     } | {
         "type": AgentAssetRotateOperationType;
@@ -10923,6 +10997,9 @@ export enum AgentOperationType {
     AlbumRemoveAssets = "album.removeAssets",
     AlbumUpdateDetails = "album.updateDetails",
     AlbumSetCover = "album.setCover",
+    AlbumAddUsers = "album.addUsers",
+    AlbumRemoveUsers = "album.removeUsers",
+    AlbumUpdateUserRole = "album.updateUserRole",
     SpaceCreate = "space.create",
     SpaceAddAssets = "space.addAssets",
     SpaceRemoveAssets = "space.removeAssets",
@@ -11043,6 +11120,19 @@ export enum AgentSpaceRemoveMembersOperationType {
 }
 export enum AgentSpaceUpdateMemberRoleOperationType {
     SpaceUpdateMemberRole = "space.updateMemberRole"
+}
+export enum AgentAlbumAddUsersOperationType {
+    AlbumAddUsers = "album.addUsers"
+}
+export enum AgentAssignableAlbumUserRole {
+    Editor = "editor",
+    Viewer = "viewer"
+}
+export enum AgentAlbumRemoveUsersOperationType {
+    AlbumRemoveUsers = "album.removeUsers"
+}
+export enum AgentAlbumUpdateUserRoleOperationType {
+    AlbumUpdateUserRole = "album.updateUserRole"
 }
 export enum AgentAssetRotateOperationType {
     AssetRotate = "asset.rotate"

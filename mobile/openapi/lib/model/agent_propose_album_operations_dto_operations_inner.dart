@@ -50,7 +50,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload payload;
+  AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload payload;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -161,7 +161,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf28Payload.fromJson(json[r'payload'])!,
+        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload.fromJson(json[r'payload'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
         assetIds: json[r'assetIds'] is Iterable
