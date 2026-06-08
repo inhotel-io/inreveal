@@ -103,6 +103,7 @@ const expandedWriteScope = {
   manageStacks: true,
   managePeople: true,
   shareAlbums: true,
+  lockAssets: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -1411,6 +1412,15 @@ describe(AgentOperationPlanService.name, () => {
       expectedSummary: 'Move matching photos back to timeline',
     },
     {
+      label: 'lock',
+      action: { type: AgentOperationType.AssetSetVisibility, visibility: AssetVisibility.Locked },
+      expectedType: AgentOperationType.AssetSetVisibility,
+      expectedTargetKind: AgentOperationTargetKind.AssetBatch,
+      expectedPayload: { visibility: AssetVisibility.Locked },
+      expectedRiskLevel: AgentOperationRiskLevel.High,
+      expectedSummary: 'Move matching photos to the Locked folder',
+    },
+    {
       label: 'tag by name',
       action: { type: AgentOperationType.AssetAddTag, tagName: 'Receipts' },
       expectedType: AgentOperationType.AssetAddTag,
@@ -1734,6 +1744,7 @@ describe(AgentOperationPlanService.name, () => {
     ['archiveAssets', AgentOperationType.AssetSetArchive, { archiveAssets: false }],
     ['tagAssets', AgentOperationType.AssetAddTag, { tagAssets: false }],
     ['editAssets', AgentOperationType.AssetRotate, { editAssets: false }],
+    ['lockAssets', AgentOperationType.AssetSetVisibility, { lockAssets: false }],
   ])(
     'proposeAssetBatchFromSearch denies missing %s write scope before materializing',
     async (_field, type, override) => {
@@ -1752,7 +1763,9 @@ describe(AgentOperationPlanService.name, () => {
             ? { type, archived: true }
             : type === AgentOperationType.AssetAddTag
               ? { type, tagName: 'Receipts' }
-              : { type, angle: 90 };
+              : type === AgentOperationType.AssetSetVisibility
+                ? { type, visibility: AssetVisibility.Locked }
+                : { type, angle: 90 };
       sessionRepository.getById.mockResolvedValue(session);
 
       await expect(
@@ -4608,6 +4621,17 @@ describe(AgentOperationPlanService.name, () => {
       error: 'Agent permission policy does not allow archiving assets',
     },
     {
+      field: 'lockAssets',
+      operation: {
+        type: AgentOperationType.AssetSetVisibility,
+        summary: 'Move to Locked folder.',
+        targetKind: AgentOperationTargetKind.AssetBatch,
+        assetIds: [newUuid()],
+        payload: { visibility: AssetVisibility.Locked },
+      },
+      error: 'Agent permission policy does not allow moving photos to the Locked folder',
+    },
+    {
       field: 'tagAssets',
       operation: {
         type: AgentOperationType.AssetAddTag,
@@ -5938,6 +5962,7 @@ describe(AgentOperationPlanService.name, () => {
     AgentOperationType.AssetAddTag,
     AgentOperationType.AssetSetFavorite,
     AgentOperationType.AssetSetArchive,
+    AgentOperationType.AssetSetVisibility,
     AgentOperationType.AssetRotate,
   ])('treats people-search asset ids as normal %s plan assets and keeps the session running', async (type) => {
     const auth = AuthFactory.create();
@@ -5977,9 +6002,11 @@ describe(AgentOperationPlanService.name, () => {
             ? { favorite: true }
             : type === AgentOperationType.AssetSetArchive
               ? { archived: true }
-              : type === AgentOperationType.AssetRotate
-                ? { angle: 90 }
-                : {},
+              : type === AgentOperationType.AssetSetVisibility
+                ? { visibility: AssetVisibility.Locked }
+                : type === AgentOperationType.AssetRotate
+                  ? { angle: 90 }
+                  : {},
     });
     const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
 
@@ -6046,6 +6073,13 @@ describe(AgentOperationPlanService.name, () => {
         expect(assetService.updateAll).toHaveBeenCalledWith(auth, {
           ids: assetIds,
           visibility: AssetVisibility.Archive,
+        });
+        break;
+      }
+      case AgentOperationType.AssetSetVisibility: {
+        expect(assetService.updateAll).toHaveBeenCalledWith(auth, {
+          ids: assetIds,
+          visibility: AssetVisibility.Locked,
         });
         break;
       }
@@ -11306,5 +11340,44 @@ describe(AgentOperationPlanService.name, () => {
 
     expect(result.status).toBe(AgentOperationApplyStatus.Applied);
     expect(albumService.updateUser).toHaveBeenCalledWith(auth, albumId, userId, { role: AlbumUserRole.Editor });
+  });
+
+  it('applies asset.setVisibility operation by calling assetService.updateAll with visibility=locked', async () => {
+    const auth = AuthFactory.create();
+    const assetIds = [newUuid(), newUuid()];
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: expandedPermissionPlanSnapshot,
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      type: AgentOperationType.AssetSetVisibility,
+      targetKind: AgentOperationTargetKind.AssetBatch,
+      targetId: null,
+      temporaryTargetId: null,
+      assetIds,
+      payload: { visibility: AssetVisibility.Locked },
+    });
+    const plan = makePlan({ sessionId: session.id, operations: [operation] });
+
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.asset.checkOwnerAccess.mockResolvedValue(new Set(assetIds));
+    accessRepository.asset.checkSpaceEditAccess.mockResolvedValue(new Set(assetIds));
+    assetRepository.getAgentReadableIds.mockResolvedValue(new Set(assetIds));
+    assetService.updateAll.mockResolvedValue(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(assetService.updateAll).toHaveBeenCalledWith(auth, { ids: assetIds, visibility: AssetVisibility.Locked });
   });
 });
