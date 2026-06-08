@@ -1030,7 +1030,7 @@ export class AssetRepository {
     return this.db
       .with('asset', (qb) =>
         withTimeBucketAssetFilters(
-          qb.selectFrom('asset').select((eb) => [truncatedDate<Date>(bucketSize).as('timeBucket'), 'asset.id']),
+          qb.selectFrom('asset').select([truncatedDate<Date>(bucketSize).as('timeBucket'), 'asset.id']),
           options,
         ),
       )

@@ -255,7 +255,7 @@ describe(AssetRepository.name, () => {
       const directAndLibrary = await createTimelineAsset(ctx, user.id, new Date('2024-04-01T12:00:00.000Z'), {
         libraryId: library.id,
       });
-      const libraryOnly = await createTimelineAsset(ctx, user.id, new Date('2024-04-02T12:00:00.000Z'), {
+      await createTimelineAsset(ctx, user.id, new Date('2024-04-02T12:00:00.000Z'), {
         libraryId: library.id,
       });
       await createTimelineAsset(ctx, user.id, new Date('2024-04-03T12:00:00.000Z'));
@@ -282,13 +282,13 @@ describe(AssetRepository.name, () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
 
-      const archived = await createTimelineAsset(ctx, user.id, new Date('2024-05-01T12:00:00.000Z'), {
+      await createTimelineAsset(ctx, user.id, new Date('2024-05-01T12:00:00.000Z'), {
         visibility: AssetVisibility.Archive,
       });
-      const locked = await createTimelineAsset(ctx, user.id, new Date('2024-06-01T12:00:00.000Z'), {
+      await createTimelineAsset(ctx, user.id, new Date('2024-06-01T12:00:00.000Z'), {
         visibility: AssetVisibility.Locked,
       });
-      const trashed = await createTimelineAsset(ctx, user.id, new Date('2024-07-01T12:00:00.000Z'), {
+      await createTimelineAsset(ctx, user.id, new Date('2024-07-01T12:00:00.000Z'), {
         deletedAt: new Date('2024-07-02T00:00:00.000Z'),
       });
 
@@ -428,7 +428,7 @@ describe(AssetRepository.name, () => {
       const { user: otherUser } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
 
-      const ownAsset = await createTimelineAsset(ctx, user.id, new Date('2024-12-01T12:00:00.000Z'));
+      await createTimelineAsset(ctx, user.id, new Date('2024-12-01T12:00:00.000Z'));
       const sharedAsset = await createTimelineAsset(ctx, otherUser.id, new Date('2024-12-02T12:00:00.000Z'));
       await createTimelineAsset(ctx, otherUser.id, new Date('2024-12-03T12:00:00.000Z'));
       await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: sharedAsset.id, addedById: user.id });
