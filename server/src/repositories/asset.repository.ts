@@ -117,9 +117,6 @@ export interface TimeBucketOptions extends AssetBuilderOptions {
 export interface TimeBucketItem {
   timeBucket: string;
   count: number;
-  representativeAssetId?: string | null;
-  representativeThumbhash?: string | null;
-  representativeRatio?: number | null;
 }
 
 export interface TimeBucketCoverItem {
@@ -1033,28 +1030,7 @@ export class AssetRepository {
     return this.db
       .with('asset', (qb) =>
         withTimeBucketAssetFilters(
-          qb
-            .selectFrom('asset')
-            .select((eb) => [
-              truncatedDate<Date>(bucketSize).as('timeBucket'),
-              'asset.id',
-              'asset.localDateTime',
-              'asset.fileCreatedAt',
-              'asset.thumbhash',
-              eb.fn
-                .coalesce(
-                  eb
-                    .case()
-                    .when(
-                      sql`asset."height" = 0 or asset."width" = 0 or asset."height" is null or asset."width" is null`,
-                    )
-                    .then(eb.lit(1))
-                    .else(sql`round(asset."width"::numeric / asset."height"::numeric, 3)::float`)
-                    .end(),
-                  eb.lit(1),
-                )
-                .as('ratio'),
-            ]),
+          qb.selectFrom('asset').select((eb) => [truncatedDate<Date>(bucketSize).as('timeBucket'), 'asset.id']),
           options,
         ),
       )
@@ -1065,29 +1041,9 @@ export class AssetRepository {
           .select((eb) => eb.fn.countAll<number>().as('count'))
           .groupBy('timeBucket'),
       )
-      .with('bucket_representatives', (qb) =>
-        qb
-          .selectFrom('asset')
-          .distinctOn('timeBucket')
-          .select([
-            'timeBucket',
-            'id as representativeAssetId',
-            sql<string | null>`encode("thumbhash", 'base64')`.as('representativeThumbhash'),
-            'ratio as representativeRatio',
-          ])
-          .orderBy('timeBucket')
-          .orderBy(sql`("localDateTime" AT TIME ZONE 'UTC')::date`, order)
-          .orderBy('fileCreatedAt', order),
-      )
       .selectFrom('bucket_counts')
-      .innerJoin('bucket_representatives', 'bucket_representatives.timeBucket', 'bucket_counts.timeBucket')
       .select(sql<string>`("bucket_counts"."timeBucket" AT TIME ZONE 'UTC')::date::text`.as('timeBucket'))
       .select('bucket_counts.count')
-      .select([
-        'bucket_representatives.representativeAssetId',
-        'bucket_representatives.representativeThumbhash',
-        'bucket_representatives.representativeRatio',
-      ])
       .orderBy('bucket_counts.timeBucket', order)
       .execute() as any as Promise<TimeBucketItem[]>;
   }

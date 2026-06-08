@@ -165,13 +165,6 @@ export const TimeBucketsResponseSchema = z
       .describe('Time bucket identifier in YYYY-MM-DD format representing the start of the time period')
       .meta({ example: '2024-01-01' }),
     count: z.int().describe('Number of assets in this time bucket').meta({ example: 42 }),
-    representativeAssetId: z.string().nullable().optional().describe('Representative asset ID for this bucket'),
-    representativeThumbhash: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Representative asset thumbhash, base64 encoded'),
-    representativeRatio: z.number().nullable().optional().describe('Representative asset width/height ratio'),
   })
   .meta({ id: 'TimeBucketsResponseDto' });
 

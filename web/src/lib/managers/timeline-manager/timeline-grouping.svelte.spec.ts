@@ -43,49 +43,10 @@ class TestTimelineManager extends TimelineManager {
 
 describe('timeline grouping bucket helpers', () => {
   describe('mergeTimeBuckets', () => {
-    it('sums counts when merging duplicate buckets (representative fields are stripped)', () => {
-      const merged = mergeTimeBuckets(
-        [
-          {
-            timeBucket: '2024-01-01',
-            count: 2,
-            representativeAssetId: 'primary-asset',
-            representativeThumbhash: 'primary-thumbhash',
-            representativeRatio: 1.5,
-          },
-        ],
-        [
-          {
-            timeBucket: '2024-01-01',
-            count: 3,
-            representativeAssetId: 'album-asset',
-            representativeThumbhash: 'album-thumbhash',
-            representativeRatio: 0.8,
-          },
-        ],
-        AssetOrder.Desc,
-      );
-
-      expect(merged).toEqual([
-        {
-          timeBucket: '2024-01-01',
-          count: 5,
-        },
-      ]);
-    });
-
-    it('sums counts when secondary bucket has no corresponding primary (representative fields are stripped)', () => {
+    it('sums counts when merging duplicate buckets', () => {
       const merged = mergeTimeBuckets(
         [{ timeBucket: '2024-01-01', count: 2 }],
-        [
-          {
-            timeBucket: '2024-01-01',
-            count: 3,
-            representativeAssetId: 'album-asset',
-            representativeThumbhash: 'album-thumbhash',
-            representativeRatio: 0.8,
-          },
-        ],
+        [{ timeBucket: '2024-01-01', count: 3 }],
         AssetOrder.Desc,
       );
 
@@ -97,18 +58,25 @@ describe('timeline grouping bucket helpers', () => {
       ]);
     });
 
-    it('passes through buckets that only exist in the secondary query (representative fields stripped)', () => {
+    it('sums counts when secondary bucket has no corresponding primary', () => {
+      const merged = mergeTimeBuckets(
+        [{ timeBucket: '2024-01-01', count: 2 }],
+        [{ timeBucket: '2024-01-01', count: 3 }],
+        AssetOrder.Desc,
+      );
+
+      expect(merged).toEqual([
+        {
+          timeBucket: '2024-01-01',
+          count: 5,
+        },
+      ]);
+    });
+
+    it('passes through buckets that only exist in the secondary query', () => {
       const merged = mergeTimeBuckets(
         [],
-        [
-          {
-            timeBucket: '2023-01-01',
-            count: 1,
-            representativeAssetId: 'album-only-asset',
-            representativeThumbhash: null,
-            representativeRatio: null,
-          },
-        ],
+        [{ timeBucket: '2023-01-01', count: 1 }],
         AssetOrder.Desc,
       );
 
@@ -180,10 +148,8 @@ describe('timeline grouping bucket helpers', () => {
       const bucket = new TimelineBucket(manager, 'year', {
         timeBucket: '2015-01-01',
         count: 438,
-        representativeAssetId: 'asset-2015',
-        representativeThumbhash: null,
-        representativeRatio: null,
       });
+      // representative fields are null until setRepresentative is called (from bucket-covers)
       expect({
         grouping: bucket.grouping,
         timeBucket: bucket.timeBucket,
@@ -298,20 +264,8 @@ describe('timeline grouping bucket helpers', () => {
 
     it('aggregates day buckets into a month with only timeBucket and count', () => {
       const months = aggregateDayBucketsByMonth([
-        {
-          timeBucket: '2024-02-29',
-          count: 2,
-          representativeAssetId: 'first-representative',
-          representativeThumbhash: 'first-thumbhash',
-          representativeRatio: 1.5,
-        },
-        {
-          timeBucket: '2024-02-01',
-          count: 3,
-          representativeAssetId: 'second-representative',
-          representativeThumbhash: 'second-thumbhash',
-          representativeRatio: 0.8,
-        },
+        { timeBucket: '2024-02-29', count: 2 },
+        { timeBucket: '2024-02-01', count: 3 },
       ]);
 
       expect(months[0]).toMatchObject({
@@ -327,13 +281,7 @@ describe('timeline grouping bucket helpers', () => {
       const manager = { topSectionHeight: 20 };
       const buckets = Array.from({ length: 1500 }, (_, index) => {
         const year = 3024 - index;
-        return new TimelineBucket(manager, 'year', {
-          timeBucket: `${year}-01-01`,
-          count: 1,
-          representativeAssetId: `asset-${year}`,
-          representativeThumbhash: null,
-          representativeRatio: null,
-        });
+        return new TimelineBucket(manager, 'year', { timeBucket: `${year}-01-01`, count: 1 });
       });
       layoutTimelineBuckets(buckets);
       expect(buckets[0].top).toBe(20);
@@ -390,20 +338,8 @@ describe('TimelineManager grouping metadata', () => {
 
   it('requests year buckets and exposes representative buckets without loading bucket assets', async () => {
     sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2015-01-01',
-        count: 438,
-        representativeAssetId: 'asset-2015',
-        representativeThumbhash: 'thumbhash-2015',
-        representativeRatio: 1.25,
-      },
-      {
-        timeBucket: '2007-01-01',
-        count: 12,
-        representativeAssetId: 'asset-2007',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
+      { timeBucket: '2015-01-01', count: 438 },
+      { timeBucket: '2007-01-01', count: 12 },
     ]);
 
     const timelineManager = new TimelineManager();
@@ -437,20 +373,8 @@ describe('TimelineManager grouping metadata', () => {
 
   it('requests month buckets and exposes representative month buckets', async () => {
     sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2011-08-01',
-        count: 21,
-        representativeAssetId: 'asset-aug-2011',
-        representativeThumbhash: 'thumbhash-aug',
-        representativeRatio: 1.4,
-      },
-      {
-        timeBucket: '2010-01-01',
-        count: 23,
-        representativeAssetId: 'asset-jan-2010',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
+      { timeBucket: '2011-08-01', count: 21 },
+      { timeBucket: '2010-01-01', count: 23 },
     ]);
 
     const timelineManager = new TimelineManager();
@@ -495,24 +419,8 @@ describe('TimelineManager grouping metadata', () => {
 
   it('reloads bucket metadata when non-time filters change', async () => {
     sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 8,
-          representativeAssetId: 'person-1-asset',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2023-01-01',
-          count: 3,
-          representativeAssetId: 'person-2-asset',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ]);
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 8 }])
+      .mockResolvedValueOnce([{ timeBucket: '2023-01-01', count: 3 }]);
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'year', personIds: ['person-1'] });
@@ -562,26 +470,10 @@ describe('TimelineManager grouping metadata', () => {
     expect(secondRequest).not.toHaveProperty('takenBefore');
   });
 
-  it('uses the same grouping bucket size for album-picker merge queries and preserves primary representative metadata', async () => {
+  it('uses the same grouping bucket size for album-picker merge queries', async () => {
     sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 2,
-          representativeAssetId: 'library-asset',
-          representativeThumbhash: 'library-thumbhash',
-          representativeRatio: 1.2,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 3,
-          representativeAssetId: 'album-asset',
-          representativeThumbhash: 'album-thumbhash',
-          representativeRatio: 0.9,
-        },
-      ]);
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 2 }])
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 3 }]);
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'year', timelineAlbumId: 'album-1' });
@@ -597,24 +489,11 @@ describe('TimelineManager grouping metadata', () => {
       expect.anything(),
     );
     expect(timelineManager.timelineBuckets).toHaveLength(1);
-    expect(timelineManager.timelineBuckets[0]).toMatchObject({
-      count: 5,
-      representativeAssetId: null,
-      representativeThumbhash: null,
-      representativeRatio: null,
-    });
+    expect(timelineManager.timelineBuckets[0]).toMatchObject({ count: 5 });
   });
 
   it('does not let representative modes create detailed month segments through asset upserts', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 3,
-        representativeAssetId: 'representative',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'year' });
@@ -696,24 +575,8 @@ describe('TimelineManager grouping metadata', () => {
   it('restores detailed day-mode APIs after visiting representative grouping', async () => {
     const asset = buildTimelineAssetAt('asset-detail', '2024-01-02T12:00:00.000Z');
     sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 1,
-          representativeAssetId: 'year-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 1,
-          representativeAssetId: 'month-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 1 }])
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 1 }])
       .mockResolvedValueOnce([{ timeBucket: '2024-01-02', count: 1 }]);
     sdkMock.getTimeBucket.mockResolvedValue(toResponseDto(asset));
 
@@ -737,24 +600,8 @@ describe('TimelineManager grouping metadata', () => {
     const laterAsset = buildTimelineAssetAt('asset-later', '2024-01-02T12:00:00.000Z');
     const earlierAsset = buildTimelineAssetAt('asset-earlier', '2024-01-01T12:00:00.000Z');
     sdkMock.getTimeBuckets
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 2,
-          representativeAssetId: 'year-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          timeBucket: '2024-01-01',
-          count: 2,
-          representativeAssetId: 'month-representative',
-          representativeThumbhash: null,
-          representativeRatio: null,
-        },
-      ])
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 2 }])
+      .mockResolvedValueOnce([{ timeBucket: '2024-01-01', count: 2 }])
       .mockResolvedValueOnce([
         { timeBucket: '2024-01-02', count: 1 },
         { timeBucket: '2024-01-01', count: 1 },
@@ -773,15 +620,7 @@ describe('TimelineManager grouping metadata', () => {
   });
 
   it('does not let representative modes create detailed month segments through protected segment upserts', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 3,
-        representativeAssetId: 'representative',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
 
     const timelineManager = new TestTimelineManager();
     await timelineManager.updateOptions({ grouping: 'year' });
@@ -794,15 +633,7 @@ describe('TimelineManager grouping metadata', () => {
   });
 
   it('does not let representative update and remove operations mutate detailed month state', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 3,
-        representativeAssetId: 'representative',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 3 }]);
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'year' });
@@ -833,15 +664,7 @@ describe('TimelineManager grouping metadata', () => {
   });
 
   it('does not add a trailing representative gap for a single bucket', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 4,
-        representativeAssetId: 'representative',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 4 }]);
 
     const timelineManager = new TimelineManager();
     await timelineManager.updateOptions({ grouping: 'year' });
@@ -854,9 +677,6 @@ describe('TimelineManager grouping metadata', () => {
       Array.from({ length: 2500 }, (_, index) => ({
         timeBucket: `${4524 - index}-01-01`,
         count: 1,
-        representativeAssetId: `asset-${index}`,
-        representativeThumbhash: null,
-        representativeRatio: null,
       })),
     );
 
@@ -869,15 +689,7 @@ describe('TimelineManager grouping metadata', () => {
   });
 
   it('reinitializes consistently after destroy and remount with the same options', async () => {
-    sdkMock.getTimeBuckets.mockResolvedValue([
-      {
-        timeBucket: '2024-01-01',
-        count: 2,
-        representativeAssetId: 'asset-2024',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    sdkMock.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 2 }]);
 
     const firstManager = new TimelineManager();
     await firstManager.updateOptions({ grouping: 'year' });
@@ -901,26 +713,10 @@ describe('TimelineManager grouping metadata', () => {
     const monthUpdate = timelineManager.updateOptions({ grouping: 'month' });
     await vi.waitFor(() => expect(sdkMock.getTimeBuckets).toHaveBeenCalledTimes(2));
 
-    monthBuckets.resolve([
-      {
-        timeBucket: '2024-05-01',
-        count: 5,
-        representativeAssetId: 'month-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    monthBuckets.resolve([{ timeBucket: '2024-05-01', count: 5 }]);
     await monthUpdate;
 
-    yearBuckets.resolve([
-      {
-        timeBucket: '2023-01-01',
-        count: 99,
-        representativeAssetId: 'stale-year-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    yearBuckets.resolve([{ timeBucket: '2023-01-01', count: 99 }]);
     await yearUpdate;
 
     expect(timelineManager.grouping).toBe('month');
@@ -940,26 +736,10 @@ describe('TimelineManager grouping metadata', () => {
     const currentUpdate = timelineManager.updateOptions({ grouping: 'year', personIds: ['person-2'] });
     await vi.waitFor(() => expect(sdkMock.getTimeBuckets).toHaveBeenCalledTimes(2));
 
-    currentBuckets.resolve([
-      {
-        timeBucket: '2022-01-01',
-        count: 7,
-        representativeAssetId: 'person-2-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    currentBuckets.resolve([{ timeBucket: '2022-01-01', count: 7 }]);
     await currentUpdate;
 
-    staleBuckets.resolve([
-      {
-        timeBucket: '2021-01-01',
-        count: 100,
-        representativeAssetId: 'person-1-stale-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    staleBuckets.resolve([{ timeBucket: '2021-01-01', count: 100 }]);
     await staleUpdate;
 
     expect(timelineManager.timelineBuckets.map((bucket) => [bucket.timeBucket, bucket.count])).toEqual([
@@ -976,15 +756,7 @@ describe('TimelineManager grouping metadata', () => {
     const update = timelineManager.updateOptions({ grouping: 'year' });
     timelineManager.destroy();
 
-    buckets.resolve([
-      {
-        timeBucket: '2024-01-01',
-        count: 8,
-        representativeAssetId: 'late-asset',
-        representativeThumbhash: null,
-        representativeRatio: null,
-      },
-    ]);
+    buckets.resolve([{ timeBucket: '2024-01-01', count: 8 }]);
     await update;
 
     expect(timelineManager.isInitialized).toBe(false);

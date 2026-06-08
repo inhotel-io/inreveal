@@ -32511,21 +32511,6 @@
             "minimum": -9007199254740991,
             "type": "integer"
           },
-          "representativeAssetId": {
-            "description": "Representative asset ID for this bucket",
-            "nullable": true,
-            "type": "string"
-          },
-          "representativeRatio": {
-            "description": "Representative asset width/height ratio",
-            "nullable": true,
-            "type": "number"
-          },
-          "representativeThumbhash": {
-            "description": "Representative asset thumbhash, base64 encoded",
-            "nullable": true,
-            "type": "string"
-          },
           "timeBucket": {
             "description": "Time bucket identifier in YYYY-MM-DD format representing the start of the time period",
             "example": "2024-01-01",

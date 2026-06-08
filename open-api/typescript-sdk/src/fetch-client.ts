@@ -2151,12 +2151,6 @@ export type FilterSuggestionsTagDto = {
 export type TimeBucketsResponseDto = {
     /** Number of assets in this time bucket */
     count: number;
-    /** Representative asset ID for this bucket */
-    representativeAssetId?: string | null;
-    /** Representative asset width/height ratio */
-    representativeRatio?: number | null;
-    /** Representative asset thumbhash, base64 encoded */
-    representativeThumbhash?: string | null;
     /** Time bucket identifier in YYYY-MM-DD format representing the start of the time period */
     timeBucket: string;
 };
