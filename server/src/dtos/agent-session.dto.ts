@@ -46,6 +46,7 @@ const legacyWriteScopeDefaults = {
   updateAssetMetadata: false,
   trashAssets: false,
   createSharedLinks: false,
+  shareAlbums: false,
   manageStacks: false,
   managePeople: false,
 };
@@ -69,6 +70,7 @@ const expandedWriteScopeShape = {
   updateAssetMetadata: z.boolean(),
   trashAssets: z.boolean(),
   createSharedLinks: z.boolean(),
+  shareAlbums: z.boolean(),
   manageStacks: z.boolean(),
   managePeople: z.boolean(),
 };

@@ -24754,6 +24754,9 @@
               },
               "updateSpaceMemberRoles": {
                 "type": "boolean"
+              },
+              "shareAlbums": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -24776,6 +24779,7 @@
               "updateAssetMetadata",
               "trashAssets",
               "createSharedLinks",
+              "shareAlbums",
               "manageStacks",
               "managePeople"
             ],
@@ -43517,7 +43521,7 @@
             "type": "array"
           },
           "projectionType": {
-            "description": "Array of projection types for 360° content (e.g., \"EQUIRECTANGULAR\", \"CUBEFACE\", \"CYLINDRICAL\")",
+            "description": "Array of projection types for 360\u00b0 content (e.g., \"EQUIRECTANGULAR\", \"CUBEFACE\", \"CYLINDRICAL\")",
             "items": {
               "nullable": true,
               "type": "string"

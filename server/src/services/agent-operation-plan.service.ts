@@ -233,6 +233,7 @@ export class AgentOperationPlanService {
     archiveAssets: false,
     tagAssets: false,
     updateAssetMetadata: false,
+    shareAlbums: false,
     manageStacks: false,
     managePeople: false,
   };
