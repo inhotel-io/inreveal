@@ -28,7 +28,7 @@ export type BuildAgentSessionActivityTurnsInput = {
   isAssistantActive?: boolean;
 };
 
-type UserTurnAnchor = {
+export type UserTurnAnchor = {
   message: AgentMessageResponseDto;
   startAt: string;
   nextUserAt: string | null;
@@ -79,7 +79,7 @@ const getAppliedPlanKey = (plan: AgentOperationPlanResponseDto) => `${plan.id}:$
 const getCoveredToolCallIds = (model: AgentActivityModel) =>
   new Set(model.items.flatMap((item) => item.technical?.toolCallIds ?? []));
 
-const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
+export const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
   const validUserMessages = sortedBy(
     messages.filter((message) => message.role === AgentMessageRole.User && isValidActivityDate(message.createdAt)),
     compareByDateThenId((message) => message.createdAt),
@@ -108,7 +108,7 @@ const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
   });
 };
 
-const toolCallBelongsToTurn = (toolCall: AgentToolCallResponseDto, turn: UserTurnAnchor, userTurnCount: number) => {
+export const toolCallBelongsToTurn = (toolCall: AgentToolCallResponseDto, turn: UserTurnAnchor, userTurnCount: number) => {
   const activityAt = getToolCallActivityAt(toolCall);
 
   if (!activityAt) {
@@ -130,7 +130,7 @@ const appliedPlanBelongsToTurn = (plan: AgentOperationPlanResponseDto, turn: Use
   return isAtOrAfter(activityAt, turn.startAt) && isBefore(activityAt, turn.nextUserAt);
 };
 
-const activityEventBelongsToTurn = (event: AgentActivityEvent, turn: UserTurnAnchor) => {
+export const activityEventBelongsToTurn = (event: AgentActivityEvent, turn: UserTurnAnchor) => {
   const activityAt = getEventActivityAt(event);
 
   if (!activityAt) {
