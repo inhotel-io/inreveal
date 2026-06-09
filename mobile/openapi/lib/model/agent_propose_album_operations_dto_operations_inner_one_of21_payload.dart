@@ -13,26 +13,26 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload({
-    required this.visibility,
+    required this.favorite,
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum visibility;
+  bool favorite;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload &&
-    other.visibility == visibility;
+    other.favorite == favorite;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (visibility.hashCode);
+    (favorite.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload[visibility=$visibility]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload[favorite=$favorite]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'visibility'] = this.visibility;
+      json[r'favorite'] = this.favorite;
     return json;
   }
 
@@ -45,7 +45,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload(
-        visibility: AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum.fromJson(json[r'visibility'])!,
+        favorite: mapValueOfType<bool>(json, r'favorite')!,
       );
     }
     return null;
@@ -93,78 +93,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf21Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'visibility',
+    'favorite',
   };
 }
-
-
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const locked = AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum._(r'locked');
-
-  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum].
-  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum>[
-    locked,
-  ];
-
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer().decode(value);
-
-  static List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum] to String,
-/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum].
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer {
-  factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer._();
-
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer._();
-
-  String encode(AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'locked': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnum.locked;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer] instance.
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf21PayloadVisibilityEnumTypeTransformer? _instance;
-}
-
 
