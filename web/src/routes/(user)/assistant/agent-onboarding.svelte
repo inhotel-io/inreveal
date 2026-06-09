@@ -91,7 +91,7 @@
       <!-- Segmented stepper (steps 1–4) -->
       {#if step >= 1 && step <= 4}
         <div class="flex max-w-[220px] flex-1 gap-1.5">
-          {#each [1, 2, 3, 4] as seg}
+          {#each [1, 2, 3, 4] as seg (seg)}
             <div
               class="relative h-[5px] flex-1 overflow-hidden rounded-full
                 {seg <= step ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}"
