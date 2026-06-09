@@ -181,9 +181,9 @@
           </span>
           <span class="text-[14.5px] font-bold tracking-[-0.01em] text-gray-900 dark:text-white">{$t(`assistant_onboarding_provider_${id}`)}</span>
           {#if id === 'openai'}
-            <span class="text-[12px] leading-snug text-gray-500 dark:text-neutral-400">GPT models · cloud</span>
+            <span class="text-[12px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_provider_openai_meta')}</span>
           {:else if id === 'anthropic'}
-            <span class="text-[12px] leading-snug text-gray-500 dark:text-neutral-400">Claude models · cloud</span>
+            <span class="text-[12px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_provider_anthropic_meta')}</span>
           {:else}
             <span class="text-[12px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_provider_other_meta')}</span>
           {/if}
@@ -210,7 +210,7 @@
           placeholder="http://localhost:11434/v1"
           autocomplete="off"
         />
-        <p class="text-xs leading-snug text-gray-400 dark:text-gray-500">The address of your model server (Ollama, LM Studio, llama.cpp, vLLM…).</p>
+        <p class="text-xs leading-snug text-gray-400 dark:text-gray-500">{$t('assistant_onboarding_base_url_help')}</p>
       </div>
     {/if}
 
@@ -249,15 +249,15 @@
           type="button"
           class="absolute right-2 flex items-center justify-center rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
           onclick={() => (revealKey = !revealKey)}
-          aria-label={revealKey ? 'Hide key' : 'Show key'}
+          aria-label={revealKey ? $t('assistant_onboarding_hide_key') : $t('assistant_onboarding_reveal_key')}
         >
           <Icon icon={revealKey ? mdiEyeOff : mdiEye} size="17" />
         </button>
       </div>
       <p class="text-xs leading-snug text-gray-400 dark:text-gray-500">
         {isCloudProvider(provider)
-          ? 'Stored encrypted on your server. We never show it again after saving.'
-          : 'Many local servers need no key. Stored encrypted on your server either way.'}
+          ? $t('assistant_onboarding_api_key_stored_cloud')
+          : $t('assistant_onboarding_api_key_stored_local')}
       </p>
     </div>
 
