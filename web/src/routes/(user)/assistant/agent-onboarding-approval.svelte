@@ -15,11 +15,11 @@
       descKey: 'assistant_onboarding_approval_plan_desc',
       recommended: true,
       flow: [
-        { type: 'node-ai' as const, label: 'Drafts plan' },
+        { type: 'node-ai' as const, labelKey: 'assistant_onboarding_flow_drafts_plan' },
         { type: 'arrow' as const },
-        { type: 'node-you' as const, label: 'You ✓' },
+        { type: 'node-you' as const, labelKey: 'assistant_onboarding_flow_you' },
         { type: 'arrow' as const },
-        { type: 'node-go' as const, label: 'Runs' },
+        { type: 'node-go' as const, labelKey: 'assistant_onboarding_flow_runs' },
       ],
     },
     {
@@ -28,11 +28,11 @@
       descKey: 'assistant_onboarding_approval_strict_desc',
       recommended: false,
       flow: [
-        { type: 'node-ai' as const, label: 'Step' },
+        { type: 'node-ai' as const, labelKey: 'assistant_onboarding_flow_step' },
         { type: 'arrow-loop' as const },
-        { type: 'node-you' as const, label: 'You ✓' },
+        { type: 'node-you' as const, labelKey: 'assistant_onboarding_flow_you' },
         { type: 'arrow-loop' as const },
-        { type: 'node-ai' as const, label: 'Step…' },
+        { type: 'node-ai' as const, labelKey: 'assistant_onboarding_flow_step_loop' },
       ],
     },
   ] as const;
@@ -99,7 +99,7 @@
                     ? 'border-green-400/40 bg-white text-green-600 dark:bg-gray-800 dark:text-green-400'
                     : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'}"
               >
-                {node.label}
+                {$t(node.labelKey)}
               </span>
             {/if}
           {/each}

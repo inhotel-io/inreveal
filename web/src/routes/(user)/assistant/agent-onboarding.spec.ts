@@ -73,7 +73,7 @@ describe('agent-onboarding orchestrator', () => {
     await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
 
     // on Ready, click the Model row's Edit button (first Edit button) → back to step 1
-    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
+    const editButtons = screen.getAllByRole('button', { name: 'assistant_onboarding_edit' });
     await user.click(editButtons[0]);
 
     // re-test in connect (cred-1 was created inside the connect child, but orchestrator held it via onConnected)
