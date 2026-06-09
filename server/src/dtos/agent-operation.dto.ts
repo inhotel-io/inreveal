@@ -454,6 +454,32 @@ const albumUpdateUserRoleOperationSchema = z
   })
   .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
 
+const albumDeleteOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AlbumDelete).meta({ id: 'AgentAlbumDeleteOperationType' }),
+    summary,
+    targetKind: ExistingAlbumTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: emptyPayload,
+  })
+  .superRefine((operation, ctx) => validateAlbumTarget(operation, ctx));
+
+const spaceDeleteOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.SpaceDelete).meta({ id: 'AgentSpaceDeleteOperationType' }),
+    summary,
+    targetKind: ExistingSpaceTargetKindSchema,
+    targetId: uuid.optional(),
+    temporaryTargetId: temporaryTargetId.optional(),
+    riskLevel: operationDefaults.riskLevel,
+    enabled: operationDefaults.enabled,
+    payload: emptyPayload,
+  })
+  .superRefine((operation, ctx) => validateSpaceTarget(operation, ctx));
+
 const assetBatchBase = {
   summary,
   targetKind: AgentOperationTargetKindSchema,
@@ -922,6 +948,8 @@ const AgentGalleryOperationInputSchema = z.discriminatedUnion('type', [
   albumAddUsersOperationSchema,
   albumRemoveUsersOperationSchema,
   albumUpdateUserRoleOperationSchema,
+  albumDeleteOperationSchema,
+  spaceDeleteOperationSchema,
   rotateOperationSchema,
   cropOperationSchema,
   adjustOperationSchema,

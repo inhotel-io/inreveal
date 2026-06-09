@@ -30,10 +30,11 @@ export const estimateCatalogTokens = (tools: unknown[]): { tokens: number; bytes
  *   48_241 (image-adj Slice 3b, 2026-06-06 — updated contract descriptions for adjust/flip)
  *   50_002 (lib-mgmt Slice 1.2, 2026-06-08 — added album.addUsers/removeUsers/updateUserRole op schemas)
  *   50_682 (lib-mgmt Slice 2.2, 2026-06-08 — added asset.setVisibility op schema)
+ *   51_513 (lib-mgmt Slice 3.2, 2026-06-08 — added album.delete + space.delete op schemas)
  * Later slices must assert their catalog token count is strictly < CATALOG_TOKENS_BASELINE.
  * Update this const only when intentionally re-baselining (e.g. after a content addition).
  */
-export const CATALOG_TOKENS_BASELINE = 50_682;
+export const CATALOG_TOKENS_BASELINE = 51_513;
 
 /**
  * Build a real (not mocked) registry for token and order tests.

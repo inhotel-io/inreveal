@@ -18,19 +18,16 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     required this.targetKind,
     this.targetId,
     this.temporaryTargetId,
-    this.assetSource,
-    this.assetIds = const [],
-    this.assetSelectionHandleId,
     this.riskLevel,
     this.enabled = true,
-    required this.payload,
+    this.payload,
   });
 
-  AgentAssetCropOperationType type;
+  AgentSpaceDeleteOperationType type;
 
   String summary;
 
-  AgentOperationTargetKind targetKind;
+  AgentOperationExistingSpaceTargetKind targetKind;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -54,29 +51,17 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationPlanningAssetSourceInput? assetSource;
-
-  List<String> assetIds;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  String? assetSelectionHandleId;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
   AgentOperationRiskLevel? riskLevel;
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload payload;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Object? payload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 &&
@@ -85,9 +70,6 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     other.targetKind == targetKind &&
     other.targetId == targetId &&
     other.temporaryTargetId == temporaryTargetId &&
-    other.assetSource == assetSource &&
-    _deepEquality.equals(other.assetIds, assetIds) &&
-    other.assetSelectionHandleId == assetSelectionHandleId &&
     other.riskLevel == riskLevel &&
     other.enabled == enabled &&
     other.payload == payload;
@@ -100,15 +82,12 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     (targetKind.hashCode) +
     (targetId == null ? 0 : targetId!.hashCode) +
     (temporaryTargetId == null ? 0 : temporaryTargetId!.hashCode) +
-    (assetSource == null ? 0 : assetSource!.hashCode) +
-    (assetIds.hashCode) +
-    (assetSelectionHandleId == null ? 0 : assetSelectionHandleId!.hashCode) +
     (riskLevel == null ? 0 : riskLevel!.hashCode) +
     (enabled.hashCode) +
-    (payload.hashCode);
+    (payload == null ? 0 : payload!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, assetSource=$assetSource, assetIds=$assetIds, assetSelectionHandleId=$assetSelectionHandleId, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf16[type=$type, summary=$summary, targetKind=$targetKind, targetId=$targetId, temporaryTargetId=$temporaryTargetId, riskLevel=$riskLevel, enabled=$enabled, payload=$payload]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -125,24 +104,17 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     } else {
     //  json[r'temporaryTargetId'] = null;
     }
-    if (this.assetSource != null) {
-      json[r'assetSource'] = this.assetSource;
-    } else {
-    //  json[r'assetSource'] = null;
-    }
-      json[r'assetIds'] = this.assetIds;
-    if (this.assetSelectionHandleId != null) {
-      json[r'assetSelectionHandleId'] = this.assetSelectionHandleId;
-    } else {
-    //  json[r'assetSelectionHandleId'] = null;
-    }
     if (this.riskLevel != null) {
       json[r'riskLevel'] = this.riskLevel;
     } else {
     //  json[r'riskLevel'] = null;
     }
       json[r'enabled'] = this.enabled;
+    if (this.payload != null) {
       json[r'payload'] = this.payload;
+    } else {
+    //  json[r'payload'] = null;
+    }
     return json;
   }
 
@@ -155,19 +127,14 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf16(
-        type: AgentAssetCropOperationType.fromJson(json[r'type'])!,
+        type: AgentSpaceDeleteOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
-        targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
+        targetKind: AgentOperationExistingSpaceTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
-        assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
-        assetIds: json[r'assetIds'] is Iterable
-            ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        assetSelectionHandleId: mapValueOfType<String>(json, r'assetSelectionHandleId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf16Payload.fromJson(json[r'payload'])!,
+        payload: mapValueOfType<Object>(json, r'payload'),
       );
     }
     return null;
@@ -218,7 +185,6 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     'type',
     'summary',
     'targetKind',
-    'payload',
   };
 }
 

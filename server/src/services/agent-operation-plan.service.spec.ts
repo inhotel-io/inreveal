@@ -104,6 +104,7 @@ const expandedWriteScope = {
   managePeople: true,
   shareAlbums: true,
   lockAssets: true,
+  deleteContainers: true,
 };
 
 const expandedPermissionPlanSnapshot: AgentPermissionPlanSnapshot = {
@@ -4674,6 +4675,28 @@ describe(AgentOperationPlanService.name, () => {
         payload: { userId: newUuid(), role: AlbumUserRole.Editor },
       },
       error: 'Agent permission policy does not allow sharing albums',
+    },
+    {
+      field: 'deleteContainers',
+      operation: {
+        type: AgentOperationType.AlbumDelete,
+        summary: 'Delete the Test album (photos are kept in your library).',
+        targetKind: AgentOperationTargetKind.ExistingAlbum,
+        targetId: newUuid(),
+        payload: {},
+      },
+      error: 'Agent permission policy does not allow deleting albums',
+    },
+    {
+      field: 'deleteContainers',
+      operation: {
+        type: AgentOperationType.SpaceDelete,
+        summary: 'Delete the Family space (photos stay in members\' libraries).',
+        targetKind: AgentOperationTargetKind.ExistingSpace,
+        targetId: newUuid(),
+        payload: {},
+      },
+      error: 'Agent permission policy does not allow deleting spaces',
     },
   ])('rejects %s write-scope disabled operation type', async ({ field, operation, error }) => {
     const auth = AuthFactory.create();
@@ -11379,5 +11402,259 @@ describe(AgentOperationPlanService.name, () => {
 
     expect(result.status).toBe(AgentOperationApplyStatus.Applied);
     expect(assetService.updateAll).toHaveBeenCalledWith(auth, { ids: assetIds, visibility: AssetVisibility.Locked });
+  });
+
+  // ── album.delete + space.delete (Slice 3.2) ─────────────────────────────────
+
+  it('proposes album.delete with High risk and photos-preserved summary', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    const plan = makePlan({ sessionId: session.id });
+    planRepository.createReplacementRevision.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing }),
+    );
+    planRepository.getCurrentBySessionId.mockResolvedValue(void 0);
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Delete the Test album.',
+      operations: [
+        {
+          type: AgentOperationType.AlbumDelete,
+          summary: 'Delete the "Test" album (photos are kept in your library).',
+          targetKind: AgentOperationTargetKind.ExistingAlbum,
+          targetId: albumId,
+          payload: {},
+          enabled: true,
+          riskLevel: AgentOperationRiskLevel.High,
+        },
+      ],
+    });
+
+    expect(result.status).toBe('success');
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.AlbumDelete,
+            targetKind: AgentOperationTargetKind.ExistingAlbum,
+            targetId: albumId,
+            riskLevel: AgentOperationRiskLevel.High,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('proposes space.delete with High risk and photos-preserved summary', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: true },
+      },
+    });
+    sessionRepository.getById.mockResolvedValue(session);
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    const plan = makePlan({ sessionId: session.id });
+    planRepository.createReplacementRevision.mockResolvedValue(plan);
+    toolCallRepository.create.mockResolvedValue(
+      makeToolCall({ sessionId: session.id, status: AgentToolCallStatus.Executing }),
+    );
+    planRepository.getCurrentBySessionId.mockResolvedValue(void 0);
+
+    const result = await sut.proposeAlbumOperations(auth, session.id, {
+      summary: 'Delete the Family space.',
+      operations: [
+        {
+          type: AgentOperationType.SpaceDelete,
+          summary: 'Delete the "Family" space (photos stay in members\' libraries).',
+          targetKind: AgentOperationTargetKind.ExistingSpace,
+          targetId: spaceId,
+          payload: {},
+          enabled: true,
+          riskLevel: AgentOperationRiskLevel.High,
+        },
+      ],
+    });
+
+    expect(result.status).toBe('success');
+    expect(planRepository.createReplacementRevision).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            type: AgentOperationType.SpaceDelete,
+            targetKind: AgentOperationTargetKind.ExistingSpace,
+            targetId: spaceId,
+            riskLevel: AgentOperationRiskLevel.High,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('applies album.delete by calling albumService.delete with the resolved albumId', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: true },
+      },
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumDelete,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+    albumService.delete.mockResolvedValue(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(albumService.delete).toHaveBeenCalledWith(auth, albumId);
+  });
+
+  it('applies space.delete by calling sharedSpaceService.remove with the resolved spaceId', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: true },
+      },
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.SpaceDelete,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+    sharedSpaceService.remove.mockResolvedValue(undefined as never);
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, {
+      operationIds: [operation.id],
+    });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Applied);
+    expect(sharedSpaceService.remove).toHaveBeenCalledWith(auth, spaceId);
+  });
+
+  it('fails album.delete apply when deleteContainers scope is revoked before apply', async () => {
+    const auth = AuthFactory.create();
+    const albumId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: false },
+      },
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.AlbumDelete,
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: albumId,
+      temporaryTargetId: null,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual([operation.id]);
+    expect(albumService.delete).not.toHaveBeenCalled();
+  });
+
+  it('fails space.delete apply when deleteContainers scope is revoked before apply', async () => {
+    const auth = AuthFactory.create();
+    const spaceId = newUuid();
+    const session = makeSession({
+      userId: auth.user.id,
+      status: AgentSessionStatus.WaitingForPlanReview,
+      permissionPlanSnapshot: {
+        ...expandedPermissionPlanSnapshot,
+        writeScope: { ...expandedWriteScope, deleteContainers: false },
+      },
+    });
+    const operation = makeOperation({
+      id: newUuid(),
+      planId: 'plan-id',
+      type: AgentOperationType.SpaceDelete,
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: spaceId,
+      temporaryTargetId: null,
+      payload: {},
+    });
+    const plan = makePlan({ id: 'plan-id', sessionId: session.id, operations: [operation] });
+    sessionRepository.getById.mockResolvedValue(session);
+    planRepository.getByIdForSession.mockResolvedValue(plan);
+    planRepository.getCurrentBySessionId.mockResolvedValue(plan);
+    planRepository.claimCurrentForApply.mockResolvedValue({ ...plan, status: AgentOperationPlanStatus.Applied });
+    planRepository.completeApply.mockImplementation((planId, updates) =>
+      Promise.resolve(applyUpdatesToPlan({ ...plan, id: planId }, updates)),
+    );
+    accessRepository.sharedSpace.checkRoleAccess.mockResolvedValue(new Set([spaceId]));
+
+    const result = await sut.applyApprovedOperations(auth, session.id, plan.id, { operationIds: [operation.id] });
+
+    expect(result.status).toBe(AgentOperationApplyStatus.Failed);
+    expect(result.failedOperationIds).toEqual([operation.id]);
+    expect(sharedSpaceService.remove).not.toHaveBeenCalled();
   });
 });

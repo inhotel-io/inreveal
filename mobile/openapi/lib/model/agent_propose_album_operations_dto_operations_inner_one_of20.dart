@@ -26,7 +26,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
     required this.payload,
   });
 
-  AgentAssetSetArchiveOperationType type;
+  AgentAssetFlipOperationType type;
 
   String summary;
 
@@ -155,7 +155,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf20 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf20(
-        type: AgentAssetSetArchiveOperationType.fromJson(json[r'type'])!,
+        type: AgentAssetFlipOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),

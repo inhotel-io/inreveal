@@ -22426,6 +22426,12 @@
         ],
         "type": "string"
       },
+      "AgentAlbumDeleteOperationType": {
+        "enum": [
+          "album.delete"
+        ],
+        "type": "string"
+      },
       "AgentAlbumDetail": {
         "properties": {
           "albumName": {
@@ -24610,6 +24616,7 @@
           "album.addUsers",
           "album.removeUsers",
           "album.updateUserRole",
+          "album.delete",
           "space.create",
           "space.addAssets",
           "space.removeAssets",
@@ -24617,6 +24624,7 @@
           "space.addMembers",
           "space.removeMembers",
           "space.updateMemberRole",
+          "space.delete",
           "asset.rotate",
           "asset.crop",
           "asset.adjust",
@@ -25845,6 +25853,98 @@
                     "summary",
                     "targetKind",
                     "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentAlbumDeleteOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingAlbumTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceDeleteOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
                   ],
                   "additionalProperties": false
                 },
@@ -28801,6 +28901,98 @@
                   "type": "object",
                   "properties": {
                     "type": {
+                      "$ref": "#/components/schemas/AgentAlbumDeleteOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingAlbumTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "$ref": "#/components/schemas/AgentSpaceDeleteOperationType"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "targetKind": {
+                      "$ref": "#/components/schemas/AgentOperationExistingSpaceTargetKind"
+                    },
+                    "targetId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+                    },
+                    "temporaryTargetId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[a-zA-Z0-9_-]+$"
+                    },
+                    "riskLevel": {
+                      "default": "low",
+                      "$ref": "#/components/schemas/AgentOperationRiskLevel"
+                    },
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
+                    "payload": {
+                      "type": "object",
+                      "properties": {},
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "summary",
+                    "targetKind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
                       "$ref": "#/components/schemas/AgentAssetRotateOperationType"
                     },
                     "summary": {
@@ -31420,6 +31612,12 @@
       "AgentSpaceCreateOperationType": {
         "enum": [
           "space.create"
+        ],
+        "type": "string"
+      },
+      "AgentSpaceDeleteOperationType": {
+        "enum": [
+          "space.delete"
         ],
         "type": "string"
       },
