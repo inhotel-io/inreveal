@@ -58,7 +58,9 @@
   };
 
   const test = async () => {
-    if (!canTest) return;
+    if (!canTest) {
+      return;
+    }
     status = 'testing';
     errorMessage = null;
     try {
