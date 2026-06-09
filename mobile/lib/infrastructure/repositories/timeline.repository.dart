@@ -1187,7 +1187,13 @@ List<Bucket> _buildBuckets(List<BaseAsset> assets, GroupAssetsBy groupBy, bool d
 
 List<BaseAsset> _orderedForGrouping(List<BaseAsset> assets, GroupAssetsBy groupBy, bool descending) {
   if (groupBy == GroupAssetsBy.none) return assets;
-  final sorted = [...assets]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  // Tie-break on heroTag so assets sharing an identical createdAt keep a stable order,
+  // keeping the overview representative (first asset per bucket) deterministic across rebuilds.
+  final sorted = [...assets]
+    ..sort((a, b) {
+      final byDate = a.createdAt.compareTo(b.createdAt);
+      return byDate != 0 ? byDate : a.heroTag.compareTo(b.heroTag);
+    });
   return descending ? sorted.reversed.toList(growable: false) : sorted.toList(growable: false);
 }
 
