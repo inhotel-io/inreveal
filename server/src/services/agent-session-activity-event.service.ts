@@ -13,12 +13,12 @@ import { AgentSessionRepository } from 'src/repositories/agent-session.repositor
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerActivityStreamEvent } from 'src/types/agent-runner.types';
 
-const LIFECYCLE_EVENT_KINDS: AgentSessionActivityEventKind[] = [
+const LIFECYCLE_EVENT_KINDS = new Set<AgentSessionActivityEventKind>([
   AgentSessionActivityEventKind.StartProcessing,
   AgentSessionActivityEventKind.PlanComposing,
   AgentSessionActivityEventKind.ApplyProgress,
   AgentSessionActivityEventKind.RunnerRecovery,
-];
+]);
 
 @Injectable()
 export class AgentSessionActivityEventService {
@@ -102,7 +102,7 @@ export class AgentSessionActivityEventService {
     const events = await this.repository.getBySessionId(session.id);
     const latestStatusByKind = new Map<AgentSessionActivityEventKind, AgentSessionActivityEventStatus>();
     for (const event of events) {
-      if (LIFECYCLE_EVENT_KINDS.includes(event.kind)) {
+      if (LIFECYCLE_EVENT_KINDS.has(event.kind)) {
         latestStatusByKind.set(event.kind, event.status);
       }
     }

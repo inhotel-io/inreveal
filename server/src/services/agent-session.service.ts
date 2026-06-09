@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { AgentSession } from 'src/database';
 import { AgentSessionCreateDto, AgentSessionResponseDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AgentPermissionPreset, AgentSessionStatus } from 'src/enum';
+import { AgentPermissionPreset, AgentSessionActivityEventStatus, AgentSessionStatus } from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import {
   AgentCredentialSnapshot,
   AgentNormalizedPermissionPlanSnapshot,
@@ -181,6 +182,7 @@ export class AgentSessionService {
     private readonly repository: AgentSessionRepository,
     private readonly credentialService: AgentProviderCredentialService,
     private readonly agentRunnerService: AgentRunnerService,
+    private readonly activityEventService: AgentSessionActivityEventService,
   ) {}
 
   async create(auth: AuthDto, dto: AgentSessionCreateDto): Promise<AgentSessionResponseDto> {
@@ -311,6 +313,12 @@ export class AgentSessionService {
     }
 
     await this.cancelRunnerSession(session);
+
+    try {
+      await this.activityEventService.closeOpenLifecycleEvents(auth.user.id, id, AgentSessionActivityEventStatus.Skipped);
+    } catch {
+      // Closing activity events is best-effort; the database cancellation is authoritative.
+    }
 
     return this.map(updated);
   }
