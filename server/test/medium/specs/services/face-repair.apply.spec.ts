@@ -173,15 +173,16 @@ describe('FaceRepairService.applyRepair: honors stored scan params', () => {
     const { user } = await ctx.newUser();
     const { person, leakedFaceIds } = await seedOverCapPerson(ctx, user.id, { leakedCount: 6, genuineCount: 4 });
 
-    // Tuned scan: minFaces 1 — every face's ownCount (5) >= 1, so NOTHING is flagged under these params.
-    const { scanId } = await sut.triggerScan(user.id, { minFaces: 1 });
+    // Tuned scan: voteMargin 1000 — the leaked faces' owner cluster (10) cannot out-vote ownCount (5) by
+    // 1000, and ownCount (5) >= minFaces (3), so NOTHING is flagged under these params.
+    const { scanId } = await sut.triggerScan(user.id, { voteMargin: 1000 });
     await sut.handleFaceRepairScan({ scanId });
     const tuned = await sut.getLatestScanStatus();
     expect(tuned!.status).toBe('completed');
     expect(tuned!.totals!.flaggedFaces).toBe(0); // sanity: the tuned params flag nothing
 
     // Apply must compute under the SAME stored params -> nothing moves. With config defaults
-    // (minFaces 3) it would move all 6 leaked faces — the pre-fix regression.
+    // (voteMargin 2) it would move all 6 leaked faces — the pre-fix regression.
     const result = await sut.applyRepair({ approvedPersonIds: [person.id] });
     expect(result.moved).toBe(0);
 
