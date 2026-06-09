@@ -1085,7 +1085,9 @@ describe(AgentAssistantWorkspace.name, () => {
     await waitFor(() => expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: credentials[0].id }));
     expect(sdkMock.getAgentProviderCredentials).toHaveBeenCalled();
     expect(await screen.findByText('No API keys have been added yet.')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    // After all credentials are deleted, the onboarding flow replaces the composer.
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'assistant_onboarding_get_started' })).toBeInTheDocument();
   });
 
   it('opens API key management from assistant settings when credentials already exist', async () => {
@@ -1121,8 +1123,6 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
-
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
 
@@ -1131,6 +1131,32 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(within(settingsDialog).getByText('No API keys have been added yet.')).toBeInTheDocument();
     expect(within(settingsDialog).getByLabelText('Provider')).toBeInTheDocument();
     expect(within(settingsDialog).getByLabelText('Name')).toBeInTheDocument();
+  });
+
+  it('shows the onboarding flow when there are no credentials and the runner is healthy', () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials: [],
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+    expect(screen.getByRole('button', { name: 'assistant_onboarding_get_started' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+  });
+
+  it('shows the normal composer when a credential exists, not onboarding', () => {
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+    expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'assistant_onboarding_get_started' })).not.toBeInTheDocument();
   });
 
   it('adds a newly created session from the first message to the sidebar and selects it', async () => {
