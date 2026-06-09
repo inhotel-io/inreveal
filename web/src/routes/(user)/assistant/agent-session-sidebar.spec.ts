@@ -174,13 +174,13 @@ describe(AgentSessionSidebar.name, () => {
 
     const rows = screen.getAllByTestId('agent-session-row');
     expect(rows.map((row) => row.dataset.sessionId)).toEqual([
-      'approval',
-      'plan',
-      'running-z',
-      'running-a',
       'created-newer',
       'completed',
       'failed',
+      'plan',
+      'approval',
+      'running-z',
+      'running-a',
     ]);
 
     expect(screen.getByRole('button', { name: /Review summer trip plan/ })).toHaveAttribute('aria-current', 'true');
