@@ -51,6 +51,7 @@
     {#each MODES as mode (mode.value)}
       {@const isSelected = approval === mode.value}
       <button
+        type="button"
         aria-pressed={isSelected ? 'true' : 'false'}
         aria-label={$t(mode.labelKey)}
         onclick={() => onChange(mode.value)}
@@ -77,7 +78,7 @@
           class="flex items-center gap-1.5 rounded-[11px] p-2.5
             {isSelected ? 'bg-white/70 dark:bg-black/20' : 'bg-gray-50 dark:bg-gray-800'}"
         >
-          {#each mode.flow as node}
+          {#each mode.flow as node, i (i)}
             {#if node.type === 'arrow'}
               <!-- forward arrow -->
               <svg class="h-[13px] w-[13px] flex-none text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
