@@ -40,8 +40,8 @@ grant) at every site, placed immediately after `createSharedLinks` for consisten
   - `Careful` → `writeScope.shareAlbums === false`
   - `VisualOrganizer` → `writeScope.shareAlbums === true`
   - `LocalPowerUser` → `writeScope.shareAlbums === true`
-  Use the same `resolvePermissionPlan`/preset-map path the existing tests use (grep how
-  the spec currently asserts `managePeople`/`manageStacks` and mirror it exactly).
+    Use the same `resolvePermissionPlan`/preset-map path the existing tests use (grep how
+    the spec currently asserts `managePeople`/`manageStacks` and mirror it exactly).
 
 Expected RED before implementation: the constants/assertions reference `shareAlbums`,
 which doesn't exist → type error / assertion failure.

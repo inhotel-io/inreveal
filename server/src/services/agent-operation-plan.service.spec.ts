@@ -4691,7 +4691,7 @@ describe(AgentOperationPlanService.name, () => {
       field: 'deleteContainers',
       operation: {
         type: AgentOperationType.SpaceDelete,
-        summary: 'Delete the Family space (photos stay in members\' libraries).',
+        summary: "Delete the Family space (photos stay in members' libraries).",
         targetKind: AgentOperationTargetKind.ExistingSpace,
         targetId: newUuid(),
         payload: {},
