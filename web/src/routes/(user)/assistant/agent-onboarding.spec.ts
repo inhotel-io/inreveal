@@ -54,6 +54,34 @@ describe('agent-onboarding orchestrator', () => {
     expect(screen.getByRole('button', { name: 'assistant_onboarding_continue' })).toBeDisabled();
   });
 
+  it('clicking an example prompt on the Ready step completes onboarding with that prompt as initialPrompt', async () => {
+    const onComplete = vi.fn();
+    const user = userEvent.setup();
+    render(AgentOnboarding, { props: { onComplete } });
+
+    // welcome → connect → access → approval → ready
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_get_started' }));
+    await user.type(screen.getByLabelText('assistant_onboarding_model'), 'llama3.1');
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_test' }));
+    await screen.findByText('assistant_onboarding_connected');
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+
+    // Click the album example-prompt button
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_prompt_album' }));
+
+    await waitFor(() =>
+      expect(onComplete).toHaveBeenCalledWith({
+        credentialId: 'cred-1',
+        model: 'llama3.1',
+        permissionPreset: AgentPermissionPreset.VisualOrganizer,
+        approvalMode: AgentApprovalMode.PlanOnly,
+        initialPrompt: 'assistant_onboarding_prompt_album',
+      }),
+    );
+  });
+
   it('deletes the previous credential when the user edits from the Ready step and re-tests', async () => {
     sdkMock.createAgentProviderCredential
       .mockResolvedValueOnce({ id: 'cred-1', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto)
