@@ -3291,18 +3291,16 @@ export class AgentOperationPlanService {
     const objectPayload = this.requireObjectPayload(payload);
     return Array.isArray(objectPayload.albumUsers)
       ? objectPayload.albumUsers
-          .filter(
-            (u): u is { userId: string; role: AlbumUserRole.Editor | AlbumUserRole.Viewer } => {
-              if (!u || typeof u !== 'object' || Array.isArray(u)) {
-                return false;
-              }
-              const candidate = u as Record<string, unknown>;
-              return (
-                typeof candidate.userId === 'string' &&
-                (candidate.role === AlbumUserRole.Editor || candidate.role === AlbumUserRole.Viewer)
-              );
-            },
-          )
+          .filter((u): u is { userId: string; role: AlbumUserRole.Editor | AlbumUserRole.Viewer } => {
+            if (!u || typeof u !== 'object' || Array.isArray(u)) {
+              return false;
+            }
+            const candidate = u as Record<string, unknown>;
+            return (
+              typeof candidate.userId === 'string' &&
+              (candidate.role === AlbumUserRole.Editor || candidate.role === AlbumUserRole.Viewer)
+            );
+          })
           .map((u) => ({ userId: u.userId, role: u.role }))
       : [];
   }

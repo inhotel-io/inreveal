@@ -3432,7 +3432,13 @@ describe('Agent operation DTOs', () => {
     });
 
     it('rejects album.delete with wrong targetKind', () => {
-      const result = parseSingleOperationProposal(makeValidAlbumDeleteOp({ targetKind: AgentOperationTargetKind.NewAlbum, targetId: undefined, temporaryTargetId: 'tmp-album' }));
+      const result = parseSingleOperationProposal(
+        makeValidAlbumDeleteOp({
+          targetKind: AgentOperationTargetKind.NewAlbum,
+          targetId: undefined,
+          temporaryTargetId: 'tmp-album',
+        }),
+      );
       expect(result.success).toBe(false);
     });
 
@@ -3458,7 +3464,13 @@ describe('Agent operation DTOs', () => {
     });
 
     it('rejects space.delete with wrong targetKind', () => {
-      const result = parseSingleOperationProposal(makeValidSpaceDeleteOp({ targetKind: AgentOperationTargetKind.NewSpace, targetId: undefined, temporaryTargetId: 'tmp-space' }));
+      const result = parseSingleOperationProposal(
+        makeValidSpaceDeleteOp({
+          targetKind: AgentOperationTargetKind.NewSpace,
+          targetId: undefined,
+          temporaryTargetId: 'tmp-space',
+        }),
+      );
       expect(result.success).toBe(false);
     });
 

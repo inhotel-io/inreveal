@@ -10,6 +10,7 @@ TDD throughout. Grep `AssetSetArchive` to find EVERY site:
 ## Enum
 
 `server/src/enum.ts`, `AgentOperationType` (in the asset group, near `AssetSetArchive`):
+
 ```ts
   AssetSetVisibility = 'asset.setVisibility',
 ```
@@ -19,23 +20,34 @@ TDD throughout. Grep `AssetSetArchive` to find EVERY site:
 `AssetVisibility` is already imported in the service; import it here too (from `src/enum`).
 
 Payload — constrained to `locked` so the op can't silently archive/unlock:
+
 ```ts
 const assetSetVisibilityPayloadSchema = z.strictObject({
   visibility: z.literal(AssetVisibility.Locked),
 });
 ```
+
 Operation schema (mirror the `setArchive` standalone schema — `...assetBatchBase`, payload,
 `validateAssetSelection` + `validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetVisibility)`):
+
 ```ts
-const assetSetVisibilityOperationSchema = z.strictObject({
-  type: z.literal(AgentOperationType.AssetSetVisibility).meta({ id: 'AgentAssetSetVisibilityOperationType' }),
-  ...assetBatchBase,
-  payload: assetSetVisibilityPayloadSchema,
-}).superRefine((operation, ctx) => {
-  validateAssetSelection(operation, ctx);
-  validateStandaloneTarget(operation, ctx, AgentOperationTargetKind.AssetBatch, AgentOperationType.AssetSetVisibility);
-});
+const assetSetVisibilityOperationSchema = z
+  .strictObject({
+    type: z.literal(AgentOperationType.AssetSetVisibility).meta({ id: 'AgentAssetSetVisibilityOperationType' }),
+    ...assetBatchBase,
+    payload: assetSetVisibilityPayloadSchema,
+  })
+  .superRefine((operation, ctx) => {
+    validateAssetSelection(operation, ctx);
+    validateStandaloneTarget(
+      operation,
+      ctx,
+      AgentOperationTargetKind.AssetBatch,
+      AgentOperationType.AssetSetVisibility,
+    );
+  });
 ```
+
 Register in BOTH union sites where `setArchive`'s schema is registered (the standalone
 operation union AND the batch-operations union — grep where the setArchive schema name is
 listed; add `assetSetVisibilityOperationSchema` alongside it in both).
@@ -43,6 +55,7 @@ listed; add `assetSetVisibilityOperationSchema` alongside it in both).
 ## Plan service — `server/src/services/agent-operation-plan.service.ts`
 
 Add an `AssetSetVisibility` arm at every `AssetSetArchive` site:
+
 - **summary** (~529): e.g. `Move matching photos to the Locked folder`.
 - **payload** (~590): `return { visibility: operation.payload.visibility };` (or `{ visibility: AssetVisibility.Locked }`).
 - **risk** (~658): `return AgentOperationRiskLevel.High;`.
@@ -78,6 +91,7 @@ flag in the commit body that the token-optimization headroom is nearly exhausted
 
 In `agent-operation-plan.service.spec.ts` + `agent-operation.dto.spec.ts` (mirror the
 setArchive tests):
+
 - DTO: `{ visibility: 'locked' }` parses; `'archive'`/`'timeline'`/`'hidden'`/missing
   rejected.
 - validateWriteScope throws the lock message when `lockAssets` false; ok when true.

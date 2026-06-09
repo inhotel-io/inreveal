@@ -78,7 +78,10 @@ const inferActionFromPrompt = (prompt) => {
 
 // "share <album> with <users>" — "with" introduces the user list, not the album.
 // e.g. "share Family with Alex" or "share the Family album with Alex and Sam"
-const SHARE_WITH_PATTERN = /\bshare\s+(?<albumPart>.+?)\s+with\s+(?<members>[^,]+(?:,\s*[^,]+|\s+and\s+[^,]+)*)\s*$/i;
+// `members` is captured loosely and parsed by `splitMembers` (comma / "and" / "&"),
+// so a simple linear `.+` avoids the catastrophic backtracking (ReDoS) a nested
+// quantifier alternation would introduce.
+const SHARE_WITH_PATTERN = /\bshare\s+(?<albumPart>.+?)\s+with\s+(?<members>.+)$/i;
 
 // "give <users> [(edit) ]access to <album>"
 const GIVE_ACCESS_PATTERN = /\bgive\s+(?<members>.+?)\s+(?:edit\s+)?access\s+to\s+(?<rest>.+)$/i;

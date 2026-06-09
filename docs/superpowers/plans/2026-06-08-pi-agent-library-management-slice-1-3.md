@@ -48,12 +48,14 @@ Create `agent-runner/src/strict-workflows/workflows/manage-album-access.mjs` by 
 ### Routing gates (LOAD-BEARING — must not collide with 3 existing workflows)
 
 `match(prompt)` accepts these shapes, and ONLY these:
+
 - `share <users> with <album>` (the new verb). Requires a user-ish target after "with".
 - `give <users> (edit )?access to <album>` .
 - `add <users> to <album>` — BUT only when the rest mentions "album" (NOT "space").
 - `remove <users> from <album>` — only when rest mentions "album".
 
 DECLINE (return undefined) when:
+
 - the prompt says "as a link" / "public link" / "share link" → leave for `share_album`.
 - the target noun is "space" → leave for `manage_space_members`.
 - the captured users look like a photo source (reuse the `looksLikePhotoSource` guard) →
@@ -74,6 +76,7 @@ list). Regenerate the manifest: `node agent-runner/src/bin/sync-strict-workflow-
 
 In `agent-runner/src/strict-workflows/workflows/manage-album-access.test.mjs` (mirror
 `manage-space-members.test.mjs`):
+
 - match: "share Family with Alex" → add (viewer); "give Alex edit access to Family album"
   → add (editor); "add Alex to the Family album" → add; "remove Sam from the Beach album"
   → remove.

@@ -60,6 +60,7 @@ proposeAlbumOperations" Flow Ownership row to the matrix .md).
 ## Tests (write first — RED)
 
 `change-album-member-role.test.mjs` (mirror change-member-role.test.mjs):
+
 - match: "make Alex an editor on the Family album" → {member, role:editor, albumRef};
   "change Alex's role to viewer in the Family album" → viewer.
 - match DECLINES: "make Alex an editor in the Family space" → undefined; "make Alex an
@@ -70,7 +71,7 @@ proposeAlbumOperations" Flow Ownership row to the matrix .md).
   no-op same-role → needsInput; non-member → needsInput; ambiguous album/user →
   continuation; resolved → `album.updateUserRole` proposed + gated plan.
 - resumeContinuation: album pick / user pick.
-Plus the change-member-role.test.mjs regression (album target declined).
+  Plus the change-member-role.test.mjs regression (album target declined).
 
 RED: `cd agent-runner && export PATH="$HOME/.local/share/mise/shims:$PATH" && node --test 'src/**/change-album-member-role.test.mjs' 'src/**/change-member-role.test.mjs'` → new cases fail.
 
