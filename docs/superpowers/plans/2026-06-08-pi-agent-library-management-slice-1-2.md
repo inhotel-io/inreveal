@@ -11,9 +11,9 @@ TDD: failing tests first, confirm red, implement, confirm green, no regressions.
 ## Mirror these two existing op families (grep them to find EVERY site)
 
 - **`album.updateDetails` (`AgentOperationType.AlbumUpdateDetails`)** — the template for an
-  *album-targeted* op: `ExistingAlbumTargetKindSchema`, `validateAlbumTarget`, target
+  _album-targeted_ op: `ExistingAlbumTargetKindSchema`, `validateAlbumTarget`, target
   resolution groupings, and the apply case that calls `this.albumService.update(...)`.
-- **`space.addMembers` / `space.updateMemberRole`** — the template for *member/role*
+- **`space.addMembers` / `space.updateMemberRole`** — the template for _member/role_
   payloads (`memberPayloads`, `uniqueUserIds`, the assignable-role enum).
 
 `grep -n "AlbumUpdateDetails\|SpaceAddMembers\|SpaceUpdateMemberRole" server/src/services/agent-operation-plan.service.ts server/src/dtos/agent-operation.dto.ts` and add an album-sharing arm everywhere those appear.
@@ -21,6 +21,7 @@ TDD: failing tests first, confirm red, implement, confirm green, no regressions.
 ## New enum members
 
 `server/src/enum.ts`, `AgentOperationType` (after `AlbumSetCover`, line ~170):
+
 ```ts
   AlbumAddUsers = 'album.addUsers',
   AlbumRemoveUsers = 'album.removeUsers',
@@ -30,15 +31,20 @@ TDD: failing tests first, confirm red, implement, confirm green, no regressions.
 ## DTO union members — `server/src/dtos/agent-operation.dto.ts`
 
 Add an assignable album-role enum + payload (mirror `AgentAssignableSharedSpaceRoleSchema`
-+ `memberPayloads`, but with `AlbumUserRole`):
+
+- `memberPayloads`, but with `AlbumUserRole`):
+
 ```ts
 const AgentAssignableAlbumRoleSchema = z
   .enum([AlbumUserRole.Editor, AlbumUserRole.Viewer])
   .meta({ id: 'AgentAssignableAlbumUserRole' });
-const albumUserPayloads = z.array(z.strictObject({ userId: uuid, role: AgentAssignableAlbumRoleSchema }))
-  .min(1).max(100)
+const albumUserPayloads = z
+  .array(z.strictObject({ userId: uuid, role: AgentAssignableAlbumRoleSchema }))
+  .min(1)
+  .max(100)
   .superRefine(/* unique userIds, mirror memberPayloads */);
 ```
+
 (Import `AlbumUserRole` from `src/enum` — it is already imported elsewhere; add it.)
 
 Three operation schemas, mirroring the space-member schemas at lines ~351-391 but with
@@ -74,7 +80,7 @@ Add an album-sharing arm at every site the sibling ops appear:
    - `AlbumAddUsers` → `await this.albumService.addUsers(auth, albumId, { albumUsers: operation.payload.albumUsers });`
    - `AlbumRemoveUsers` → loop `operation.payload.userIds` → `await this.albumService.removeUser(auth, albumId, userId);`
    - `AlbumUpdateUserRole` → `await this.albumService.updateUser(auth, albumId, operation.payload.userId, { role: operation.payload.role });`
-   `albumId` is resolved from `targetId` the same way the `AlbumUpdateDetails` apply case does (grep ~2720).
+     `albumId` is resolved from `targetId` the same way the `AlbumUpdateDetails` apply case does (grep ~2720).
 6. **`legacyWriteScopeDefaults`** already has `shareAlbums` (1.1) — no change.
 
 Risk level for all three = **Medium** (`AgentOperationRiskLevel.Medium`). If the risk is
@@ -92,6 +98,7 @@ per op; malformed: bad role enum, empty `albumUsers`/`userIds`, missing `targetI
 ```
 cd server && pnpm build && pnpm sync:open-api && cd .. && make open-api
 ```
+
 Commit the regenerated `open-api/immich-openapi-specs.json`, `open-api/typescript-sdk/**`,
 and `mobile/openapi/**`. This supersedes any hand-edited generated files from slice 1.1.
 

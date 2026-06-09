@@ -25,10 +25,10 @@ TEMPLATES: `delete-album.mjs` (just built — the structure to mirror) and
   - `listSpaces` → exact-name match (lower-cased) on `name`. Zero → needsInput. >1 →
     durable continuation (`delete_space_space`). One → propose.
   - Propose `proposeAlbumOperations` with `[{ type: 'space.delete', targetKind:
-    'existing_space', targetId: space.id, summary: 'Delete the "<name>" space.' }]`.
+'existing_space', targetId: space.id, summary: 'Delete the "<name>" space.' }]`.
   - `gatePlanResult` successText: `I prepared a plan to delete the "<name>" space. The
-    shared space and its membership are removed; photos stay in members' libraries. Review
-    the plan before applying it.`
+shared space and its membership are removed; photos stay in members' libraries. Review
+the plan before applying it.`
   - `resumeContinuation` for the space pick.
 
 NOTE: the SERVER enforces owner-level permission (`Permission.SharedSpaceDelete` via
@@ -42,6 +42,7 @@ to the capability matrix + `pnpm --dir server sync:agent-capabilities`.
 ## Tests (write first — RED)
 
 `delete-space.test.mjs` (mirror delete-album.test.mjs):
+
 - match: "delete the Family space" → {spaceRef:'Family'}; "remove the Trip space";
   "get rid of the Beach space".
 - match DECLINES: "delete the photos in the Family space" → undefined; "delete the Family

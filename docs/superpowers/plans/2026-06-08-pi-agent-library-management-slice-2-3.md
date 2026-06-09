@@ -50,6 +50,7 @@ run `pnpm --dir server sync:agent-capabilities` so the generated table + the
 ## Tests (write first — RED)
 
 `lock-assets.test.mjs` (mirror archive-assets.test.mjs):
+
 - match accepts the 3 cue forms; DECLINES "archive these photos", "hide Alex",
   "lock the best ones" (subjective), empty.
 - parseSlots: source present → slots; missing → null.

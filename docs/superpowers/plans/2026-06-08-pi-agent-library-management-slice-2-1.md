@@ -23,6 +23,7 @@ TDD: failing tests first.
 ## Tests (write first — RED)
 
 `server/src/services/agent-session.service.spec.ts`:
+
 - Add `lockAssets: false` to `carefulWriteScope` AND `expandedWriteScope` test constants
   (NOTE: `expandedWriteScope` is shared by the VisualOrganizer + LocalPowerUser
   assertions, but they differ on lockAssets — VO=false, LPU=true. If the existing spec
@@ -41,6 +42,7 @@ RED run: `cd server && pnpm exec vitest run --config test/vitest.config.mjs src/
 ## Implement → GREEN, then regression
 
 Wire the 9 sites. Re-run the spec → green. Then:
+
 - `pnpm exec vitest run --config test/vitest.config.mjs src/dtos/agent-session.dto.spec.ts src/services/agent-operation-plan.service.spec.ts src/controllers/agent-session.controller.spec.ts` → green.
 - OpenAPI regen for the schema change (the writeScope is in the spec):
   `cd server && pnpm build && pnpm sync:open-api && cd .. && make open-api`.

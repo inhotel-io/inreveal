@@ -14,6 +14,7 @@ TDD throughout. Grep the siblings to find every site:
   AlbumDelete = 'album.delete',
   SpaceDelete = 'space.delete',
 ```
+
 (Add near the album/space op groups. Note: there is a SEPARATE `Permission` enum that
 already has `AlbumDelete`/`SharedSpaceDelete` — do not confuse them; this is
 `AgentOperationType`.)
@@ -53,6 +54,7 @@ only ~3.2% below the pre-optimization original (52_350); the guard
 (`agent-mcp-tool-registry.service.spec.ts`) is at `52_350 * 0.97`. Two more ops likely push
 the count to ~51_900–52_100 — which may EXCEED the `* 0.97` bound and could approach/cross
 52_350 itself. Do this:
+
 1. Measure the new count; update `CATALOG_TOKENS_BASELINE`.
 2. If the count is still < 52_350 but above `* 0.97`: relax the guard to the smallest
    margin that passes AND add a comment that the token-optimization headroom is
@@ -69,6 +71,7 @@ the count to ~51_900–52_100 — which may EXCEED the `* 0.97` bound and could 
 ## Tests (write first — RED, mirror updateDetails tests)
 
 `agent-operation-plan.service.spec.ts` + `agent-operation.dto.spec.ts`:
+
 - DTO: each op parses targeting an existing album/space; missing `targetId` rejected.
 - validateWriteScope: throws the delete message when `deleteContainers` false; ok when true.
 - summary/targetKind(`existing_album`/`existing_space`)/risk(`high`); summary contains the
