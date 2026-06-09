@@ -88,7 +88,7 @@
             <path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
           </svg>
         </span>
-        <span class="text-gray-800 dark:text-gray-100">Photo assistant</span>
+        <span class="text-gray-800 dark:text-gray-100">{$t('assistant_onboarding_brand_name')}</span>
       </div>
 
       <!-- Segmented stepper (steps 1–4) -->
@@ -139,8 +139,8 @@
               </svg>
             </span>
             <div>
-              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">Your photos stay on your server</div>
-              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">Nothing is uploaded anywhere except the AI model you pick.</div>
+              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">{$t('assistant_onboarding_promise_privacy_title')}</div>
+              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_promise_privacy_desc')}</div>
             </div>
           </div>
           <div class="flex items-start gap-3">
@@ -151,8 +151,8 @@
               </svg>
             </span>
             <div>
-              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">It always asks first</div>
-              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">The assistant proposes changes — you approve before anything happens.</div>
+              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">{$t('assistant_onboarding_promise_approval_title')}</div>
+              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_promise_approval_desc')}</div>
             </div>
           </div>
           <div class="flex items-start gap-3">
@@ -163,8 +163,8 @@
               </svg>
             </span>
             <div>
-              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">Bring your own model</div>
-              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">Run a model on your own machine for full privacy — or connect OpenAI or Anthropic.</div>
+              <div class="text-[14.5px] font-semibold text-gray-900 dark:text-white">{$t('assistant_onboarding_promise_model_title')}</div>
+              <div class="mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_promise_model_desc')}</div>
             </div>
           </div>
         </div>
@@ -176,7 +176,7 @@
               <rect x="4" y="11" width="16" height="9" rx="2" />
               <path d="M8 11V7a4 4 0 0 1 8 0v4" />
             </svg>
-            You can change any of this later in settings.
+            {$t('assistant_onboarding_footer_settings')}
           </span>
           <div class="inline-flex items-center gap-2">
             <Button onclick={() => (step = 1)}>
@@ -205,7 +205,7 @@
             <rect x="4" y="11" width="16" height="9" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          Your key is encrypted and never leaves your server.
+          {$t('assistant_onboarding_footer_key_encrypted')}
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
@@ -227,7 +227,7 @@
             <circle cx="12" cy="12" r="10" />
             <path d="M12 16v-4M12 8h.01" />
           </svg>
-          Only what you allow is ever sent to the model.
+          {$t('assistant_onboarding_footer_model_only')}
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
@@ -249,7 +249,7 @@
             <path d="M9 11l3 3L22 4" />
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           </svg>
-          Nothing is applied without your approval.
+          {$t('assistant_onboarding_footer_no_approval')}
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
@@ -290,14 +290,15 @@
               </svg>
             </span>
             <div class="min-w-0 flex-1">
-              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">Model</div>
+              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">{$t('assistant_onboarding_model')}</div>
               <div class="mt-0.5 truncate text-[14.5px] font-semibold text-gray-900 dark:text-white">{connectedModel}</div>
             </div>
             <button
               class="rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/10"
+              aria-label={$t('assistant_onboarding_edit')}
               onclick={() => (step = 1)}
               type="button"
-            >Edit</button>
+            >{$t('assistant_onboarding_edit')}</button>
           </div>
 
           <!-- Access row -->
@@ -309,16 +310,17 @@
               </svg>
             </span>
             <div class="min-w-0 flex-1">
-              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">Access</div>
+              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">{$t('assistant_onboarding_ready_row_access')}</div>
               <div class="mt-0.5 text-[14.5px] font-semibold text-gray-900 dark:text-white">
                 {$t(presetLabelKey)}
               </div>
             </div>
             <button
               class="rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/10"
+              aria-label={$t('assistant_onboarding_edit')}
               onclick={() => (step = 2)}
               type="button"
-            >Edit</button>
+            >{$t('assistant_onboarding_edit')}</button>
           </div>
 
           <!-- Approvals row -->
@@ -330,22 +332,23 @@
               </svg>
             </span>
             <div class="min-w-0 flex-1">
-              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">Approvals</div>
+              <div class="text-[11.5px] font-semibold uppercase tracking-[0.05em] text-gray-400 dark:text-gray-500">{$t('assistant_onboarding_ready_row_approvals')}</div>
               <div class="mt-0.5 text-[14.5px] font-semibold text-gray-900 dark:text-white">
                 {approval === AgentApprovalMode.PlanOnly ? $t('assistant_onboarding_approval_plan') : $t('assistant_onboarding_approval_strict')}
               </div>
             </div>
             <button
               class="rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/10"
+              aria-label={$t('assistant_onboarding_edit')}
               onclick={() => (step = 3)}
               type="button"
-            >Edit</button>
+            >{$t('assistant_onboarding_edit')}</button>
           </div>
         </div>
 
         <!-- example prompts -->
         <div>
-          <p class="mb-2 text-[12.5px] font-semibold text-gray-500 dark:text-neutral-400">Try asking it to…</p>
+          <p class="mb-2 text-[12.5px] font-semibold text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_try_asking')}</p>
           <div class="flex flex-col gap-2">
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:-translate-x-0 hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
@@ -354,7 +357,7 @@
               <svg class="h-[15px] w-[15px] flex-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7h18M3 12h18M3 17h12" />
               </svg>
-              "Make an album from my Italy trip last summer"
+              {$t('assistant_onboarding_prompt_album')}
             </button>
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
@@ -363,7 +366,7 @@
               <svg class="h-[15px] w-[15px] flex-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21 21-4.3-4.3M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" />
               </svg>
-              "Find and trash my blurry shots from this week"
+              {$t('assistant_onboarding_prompt_blurry')}
             </button>
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
@@ -373,7 +376,7 @@
                 <rect x="4" y="11" width="16" height="9" rx="2" />
                 <path d="M8 11V7a4 4 0 0 1 8 0v4" />
               </svg>
-              "Move my passport scans to the locked folder"
+              {$t('assistant_onboarding_prompt_passport')}
             </button>
           </div>
         </div>
@@ -384,7 +387,7 @@
           <svg class="h-3.5 w-3.5 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5z" />
           </svg>
-          Change anything later under Assistant settings.
+          {$t('assistant_onboarding_footer_change_later')}
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
