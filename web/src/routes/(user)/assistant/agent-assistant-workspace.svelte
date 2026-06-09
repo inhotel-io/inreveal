@@ -495,6 +495,7 @@
     model: string;
     permissionPreset: AgentPermissionPreset;
     approvalMode: AgentApprovalMode;
+    initialPrompt?: string;
   }) => {
     localCredentials = await getAgentProviderCredentials();
     assistantCredentialId = result.credentialId;
@@ -507,6 +508,9 @@
       permissionPreset: result.permissionPreset,
       approvalMode: result.approvalMode,
     });
+    if (result.initialPrompt) {
+      newChatDraft = result.initialPrompt;
+    }
   };
 </script>
 
