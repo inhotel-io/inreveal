@@ -99,6 +99,36 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'delete_space',
+    flow: 'strict',
+    title: 'Delete a space',
+    classifierDescription:
+      'User wants to delete (remove/get rid of) an existing shared space container. The space and its membership are removed; photos stay in members\' libraries. DECLINES photo-deletion intents ("delete the photos in X space"), "in/from" frames, and album deletion ("delete the X album" → delete_album).',
+    positiveExamples: Object.freeze([
+      'Delete the Family space',
+      'Remove the Trip space',
+      'Get rid of the Beach space',
+    ]),
+    negativeExamples: Object.freeze([
+      'Delete the photos in the Family space',
+      'Delete the Family space photos',
+      'Delete the Family album',
+      'Trash my 2024 screenshots',
+    ]),
+    slots: Object.freeze({
+      spaceRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the space.' }),
+    }),
+    requiredReadTools: Object.freeze(['listSpaces']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Delete a space',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        '`delete_space` resolves the space by name (durable disambiguation for duplicate names) and proposes a `space.delete` plan. The shared space and its membership are removed; photos stay in members\' libraries. Server enforces owner-level permission (`SharedSpaceDelete`); workflow proposes regardless (propose-only; server is the backstop). `deleteContainers` write-scope required.',
+    }),
+  }),
+  Object.freeze({
     kind: 'set_album_cover',
     flow: 'strict',
     title: 'Set album cover',
