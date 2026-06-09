@@ -111,6 +111,54 @@ export default [
     expect: { kind: 'trash_assets' },
   },
 
+  // delete_space -------------------------------------------------------------
+  {
+    id: 'recall.deletespace.family.canonical',
+    category: 'recall',
+    prompt: 'delete the Family space',
+    expect: { kind: 'delete_space', slotsSurvive: true, slots: { spaceRef: 'Family' } },
+  },
+  {
+    id: 'recall.deletespace.remove.trip',
+    category: 'recall',
+    prompt: 'remove the Trip space',
+    expect: { kind: 'delete_space', slotsSurvive: true, slots: { spaceRef: 'Trip' } },
+  },
+  {
+    id: 'recall.deletespace.getridof',
+    category: 'recall',
+    prompt: 'get rid of the Beach space',
+    expect: { kind: 'delete_space', slotsSurvive: true, slots: { spaceRef: 'Beach' } },
+  },
+  // Negatives: photo-deletion intent must NOT route to delete_space
+  {
+    id: 'recall.deletespace.neg.photos-in',
+    category: 'recall',
+    prompt: 'delete the photos in the Family space',
+    expect: { kind: 'none' },
+  },
+  // delete_space must NOT steal manage_space_assets (photos-in-space ops)
+  {
+    id: 'recall.deletespace.neg.manage-space-assets',
+    category: 'recall',
+    prompt: 'remove my screenshots from the Family space',
+    expect: { kind: 'manage_space_assets' },
+  },
+  // delete_space must NOT steal manage_space_members
+  {
+    id: 'recall.deletespace.neg.manage-space-members',
+    category: 'recall',
+    prompt: 'remove Bob from the Family space',
+    expect: { kind: 'manage_space_members' },
+  },
+  // delete_space must NOT steal delete_album
+  {
+    id: 'recall.deletespace.neg.delete-album',
+    category: 'recall',
+    prompt: 'delete the Family album',
+    expect: { kind: 'delete_album' },
+  },
+
   // add_photos_to_album -----------------------------------------------------
   {
     id: 'recall.add.newest20.canonical',

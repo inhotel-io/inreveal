@@ -272,4 +272,18 @@ export default [
     prompt: 'remove the Trip album',
     expect: { kind: 'delete_album', slots: { albumRef: 'Trip' } },
   },
+
+  // delete_space ---------------------------------------------------------------
+  {
+    id: 'slots.deletespace.canonical',
+    category: 'slots',
+    prompt: 'delete the Family space',
+    expect: { kind: 'delete_space', slots: { spaceRef: 'Family' } },
+  },
+  {
+    id: 'slots.deletespace.remove',
+    category: 'slots',
+    prompt: 'remove the Trip space',
+    expect: { kind: 'delete_space', slots: { spaceRef: 'Trip' } },
+  },
 ];
