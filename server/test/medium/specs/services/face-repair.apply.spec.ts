@@ -168,7 +168,8 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
 
 describe('FaceRepairService.applyRepair: honors stored scan params', () => {
   it("re-plans with the latest scan's stored params, not config defaults", async () => {
-    const { sut, ctx } = setup();
+    const { sut, ctx, jobMock } = setup();
+    jobMock.queue.mockResolvedValue(); // triggerScan enqueues the scan job; we run it inline below
     const { user } = await ctx.newUser();
     const { person, leakedFaceIds } = await seedOverCapPerson(ctx, user.id, { leakedCount: 6, genuineCount: 4 });
 
