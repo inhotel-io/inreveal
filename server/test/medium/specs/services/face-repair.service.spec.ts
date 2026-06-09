@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { JobName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
@@ -611,7 +612,8 @@ describe('FaceRepairService.executeRepair', () => {
     expect(afterWork.hasPersonalIdentityWork).toBe(false);
 
     // The move is direct — FacialRecognition is never re-queued (that re-queue was the boomerang vector).
-    expect(jobMock.queueAll).not.toHaveBeenCalled();
+    const queuedJobNames = jobMock.queueAll.mock.calls.flatMap(([items]) => items).map((item) => item.name);
+    expect(queuedJobNames).not.toContain(JobName.FacialRecognition);
   });
 
   it('review-only: does not touch faces of an over-cap person', async () => {
@@ -807,7 +809,8 @@ describe('FaceRepairService.executeRepair', () => {
     }
 
     // The apply never re-queues FacialRecognition.
-    expect(jobMock.queueAll).not.toHaveBeenCalled();
+    const queuedJobNames = jobMock.queueAll.mock.calls.flatMap(([items]) => items).map((item) => item.name);
+    expect(queuedJobNames).not.toContain(JobName.FacialRecognition);
   });
 });
 
@@ -965,7 +968,8 @@ describe('FaceRepairService.runRepair', () => {
       expect(row.personId).toBe(karina.id);
     }
 
-    expect(jobMock.queueAll).not.toHaveBeenCalled();
+    const queuedJobNames = jobMock.queueAll.mock.calls.flatMap(([items]) => items).map((item) => item.name);
+    expect(queuedJobNames).not.toContain(JobName.FacialRecognition);
   });
 
   it('concurrency guard: isActive=true + dryRun=false → throws, nothing mutated; dryRun=true with isActive=true → succeeds', async () => {

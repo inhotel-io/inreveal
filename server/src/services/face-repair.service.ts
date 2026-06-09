@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
 import { FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
+import { RepairScanRow, ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
@@ -42,6 +43,9 @@ const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;
 export const DEFAULT_LARGE_CLUSTER_THRESHOLD = 50;
 
 const SCAN_PROGRESS_INTERVAL = 200;
+// In-flight scans whose last heartbeat is older than this are considered lost (worker crash, Redis failure
+// between row insert and enqueue) and failed, so they can't block new scans and applies forever.
+const STALE_SCAN_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface RunRepairOptions {
   dryRun?: boolean;
@@ -208,7 +212,14 @@ export class FaceRepairService extends BaseService {
     }
 
     if (affectedPersonIds.size > 0) {
-      await this.faceRepairRepository.reconcileRepresentativeFaces([...affectedPersonIds]);
+      const repointedIds = await this.faceRepairRepository.reconcileRepresentativeFaces([...affectedPersonIds]);
+      // Regenerate thumbnails for persons whose representative face changed — without this the source person's
+      // card keeps showing the crop of a face that just moved away (the very artifact this console fixes).
+      if (repointedIds.length > 0) {
+        await this.jobRepository.queueAll(
+          repointedIds.map((id) => ({ name: JobName.PersonGenerateThumbnail, data: { id } })),
+        );
+      }
     }
 
     return { moved, skipped };
@@ -360,6 +371,7 @@ export class FaceRepairService extends BaseService {
       for (const p of enriched) {
         const decision = classifyFlaggedPerson(
           {
+            personId: p.personId,
             personName: p.personName,
             faceCount: p.faceCount,
             suspectedOwnerIds: p.suspectedOwners.map((o) => o.ownerPersonId),
@@ -394,6 +406,7 @@ export class FaceRepairService extends BaseService {
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to scan while facial recognition is active');
     }
+    await this.faceRepairScanRepository.failStaleScans(STALE_SCAN_TIMEOUT_MS);
     const { machineLearning } = await this.getConfig({ withCache: true });
     const recognition = machineLearning.facialRecognition;
     const params = {
@@ -408,8 +421,11 @@ export class FaceRepairService extends BaseService {
     let scan;
     try {
       scan = await this.faceRepairScanRepository.createScan({ requestedBy, params });
-    } catch {
-      throw new ConflictException('A face-repair scan is already in progress');
+    } catch (error) {
+      if (error instanceof ScanInProgressError) {
+        throw new ConflictException(error.message);
+      }
+      throw error; // real DB failures must not masquerade as "scan already in progress"
     }
     await this.jobRepository.queue({ name: JobName.FaceRepairScan, data: { scanId: scan.id } });
     return { scanId: scan.id };
@@ -435,18 +451,29 @@ export class FaceRepairService extends BaseService {
     return this.faceRepairScanRepository.withCurrentNames(scan);
   }
 
+  // The review page and apply must re-plan with the SAME params the dashboard's scan ran with — otherwise a
+  // tuned (Advanced) scan shows one face set while review/apply silently compute another. Scan params are
+  // fully resolved at trigger time, so stored values win; config/defaults only apply when no scan exists.
+  private async resolvePlanParams(latest: RepairScanRow | undefined | null) {
+    const stored = latest?.params ?? undefined;
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    const recognition = machineLearning.facialRecognition;
+    return {
+      maxDistance: stored?.maxDistance ?? recognition.maxDistance,
+      minFaces: stored?.minFaces ?? recognition.minFaces,
+      voteWindow: stored?.voteWindow ?? DEFAULT_VOTE_WINDOW,
+      voteMargin: stored?.voteMargin ?? DEFAULT_VOTE_MARGIN,
+      maxAttributionDistance: stored?.maxAttributionDistance ?? DEFAULT_MAX_ATTRIBUTION_DISTANCE,
+      maxFlaggedFraction: stored?.maxFlaggedFraction ?? DEFAULT_MAX_FLAGGED_FRACTION,
+    };
+  }
+
   async getPersonFlaggedFaces(
     personId: string,
   ): Promise<{ personId: string; flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }> {
-    const { machineLearning } = await this.getConfig({ withCache: true });
-    const recognition = machineLearning.facialRecognition;
+    const latest = await this.faceRepairScanRepository.getLatestScan();
     const plan = await this.buildRepairPlan({
-      maxDistance: recognition.maxDistance,
-      minFaces: recognition.minFaces,
-      voteWindow: DEFAULT_VOTE_WINDOW,
-      voteMargin: DEFAULT_VOTE_MARGIN,
-      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
-      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+      ...(await this.resolvePlanParams(latest)),
       personIds: [personId],
     });
     const flaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => ({
@@ -485,19 +512,13 @@ export class FaceRepairService extends BaseService {
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to apply while facial recognition is active');
     }
+    await this.faceRepairScanRepository.failStaleScans(STALE_SCAN_TIMEOUT_MS);
     const latest = await this.faceRepairScanRepository.getLatestScan();
     if (latest && (latest.status === 'pending' || latest.status === 'running')) {
       throw new ConflictException('Refusing to apply while a scan is in progress');
     }
-    const { machineLearning } = await this.getConfig({ withCache: true });
-    const recognition = machineLearning.facialRecognition;
     const plan = await this.buildRepairPlan({
-      maxDistance: recognition.maxDistance,
-      minFaces: recognition.minFaces,
-      voteWindow: DEFAULT_VOTE_WINDOW,
-      voteMargin: DEFAULT_VOTE_MARGIN,
-      maxAttributionDistance: DEFAULT_MAX_ATTRIBUTION_DISTANCE,
-      maxFlaggedFraction: DEFAULT_MAX_FLAGGED_FRACTION,
+      ...(await this.resolvePlanParams(latest)),
       personIds: input.approvedPersonIds,
       approvedPersonIds: input.approvedPersonIds,
     });

@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SourceType } from 'src/enum';
+import { JobName, SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
@@ -159,7 +159,35 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
     }
 
     // The apply never re-queues facial recognition (that is what previously re-clustered faces back).
-    expect(jobMock.queueAll).not.toHaveBeenCalled();
+    const queuedJobNames = jobMock.queueAll.mock.calls.flatMap(([items]) => items).map((item) => item.name);
+    expect(queuedJobNames).not.toContain(JobName.FacialRecognition);
+  });
+});
+
+// ── Stored scan params govern apply ─────────────────────────────────────────────────────────────
+
+describe('FaceRepairService.applyRepair: honors stored scan params', () => {
+  it("re-plans with the latest scan's stored params, not config defaults", async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person, leakedFaceIds } = await seedOverCapPerson(ctx, user.id, { leakedCount: 6, genuineCount: 4 });
+
+    // Tuned scan: minFaces 1 — every face's ownCount (5) >= 1, so NOTHING is flagged under these params.
+    const { scanId } = await sut.triggerScan(user.id, { minFaces: 1 });
+    await sut.handleFaceRepairScan({ scanId });
+    const tuned = await sut.getLatestScanStatus();
+    expect(tuned!.status).toBe('completed');
+    expect(tuned!.totals!.flaggedFaces).toBe(0); // sanity: the tuned params flag nothing
+
+    // Apply must compute under the SAME stored params -> nothing moves. With config defaults
+    // (minFaces 3) it would move all 6 leaked faces — the pre-fix regression.
+    const result = await sut.applyRepair({ approvedPersonIds: [person.id] });
+    expect(result.moved).toBe(0);
+
+    const rows = await db.selectFrom('asset_face').select(['personId']).where('id', 'in', leakedFaceIds).execute();
+    for (const row of rows) {
+      expect(row.personId).toBe(person.id);
+    }
   });
 });
 

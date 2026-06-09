@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { JobName, QueueName } from 'src/enum';
+import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { EligibleFaceRow } from 'src/repositories/face-repair.repository';
 import { FaceRepairService, RepairPlan } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -128,9 +129,17 @@ describe(FaceRepairService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
+    it('rethrows real DB failures instead of masking them as 409 scan-in-progress', async () => {
+      mocks.job.isActive.mockResolvedValue(false);
+      mocks.faceRepairScan.createScan.mockRejectedValue(new Error('connection refused'));
+
+      await expect(sut.triggerScan('user-1')).rejects.toThrow('connection refused');
+      await expect(sut.triggerScan('user-1')).rejects.not.toThrow(ConflictException);
+    });
+
     it('throws 409 ConflictException when createScan rejects (scan already in progress)', async () => {
       mocks.job.isActive.mockResolvedValue(false);
-      mocks.faceRepairScan.createScan.mockRejectedValue(new Error('scan already in progress'));
+      mocks.faceRepairScan.createScan.mockRejectedValue(new ScanInProgressError());
 
       await expect(sut.triggerScan('user-1')).rejects.toThrow(ConflictException);
 

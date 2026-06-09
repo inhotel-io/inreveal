@@ -157,6 +157,7 @@ const ctx = (over: Partial<ClassifyContext> = {}): ClassifyContext => ({
 });
 
 const person = (over: Partial<ClassifyPersonInput> = {}): ClassifyPersonInput => ({
+  personId: 'person-1',
   personName: null,
   faceCount: 10,
   suspectedOwnerIds: ['owner-1'],
@@ -211,15 +212,32 @@ describe('classifyFlaggedPerson', () => {
     expect(classifyFlaggedPerson(person(), c).reviewReasons).toEqual(['bad-target']);
   });
 
+  it('review-first: the person itself is over-cap (own id in reviewOnlyPersonIds)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1']) });
+    expect(classifyFlaggedPerson(person(), c)).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['over-cap'],
+    });
+  });
+
+  it('over-cap: a fully-contaminated unnamed small cluster is never confident', () => {
+    // 100% flagged toward ONE clean owner used to classify confident (auto-selected) — approving it would
+    // empty the cluster. The person's own over-cap status must force review-first.
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1']) });
+    const result = classifyFlaggedPerson(person({ personName: null, faceCount: 8 }), c);
+    expect(result.recommendation).toBe('review-first');
+    expect(result.reviewReasons).toContain('over-cap');
+  });
+
   it('accumulates reasons in deterministic order (named + large + multi + bad-target)', () => {
-    const c = ctx({ reviewOnlyPersonIds: new Set(['owner-2']) });
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1', 'owner-2']) });
     const result = classifyFlaggedPerson(
       person({ personName: 'Jula', faceCount: 99, suspectedOwnerIds: ['owner-1', 'owner-2'] }),
       c,
     );
     expect(result).toEqual({
       recommendation: 'review-first',
-      reviewReasons: ['named', 'large-cluster', 'multiple-owners', 'bad-target'],
+      reviewReasons: ['over-cap', 'named', 'large-cluster', 'multiple-owners', 'bad-target'],
     });
   });
 });

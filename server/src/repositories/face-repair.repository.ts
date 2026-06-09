@@ -80,12 +80,13 @@ export class FaceRepairRepository {
   }
 
   // Repoint any dangling representative face: if a person's faceAssetId no longer belongs to it (or is null),
-  // reset it to any remaining assigned, visible, non-deleted face (or null if none remain).
-  async reconcileRepresentativeFaces(personIds: string[]): Promise<void> {
+  // reset it to any remaining assigned, visible, non-deleted face (or null if none remain). Returns the ids of
+  // persons whose representative face actually changed so callers can regenerate their thumbnails.
+  async reconcileRepresentativeFaces(personIds: string[]): Promise<string[]> {
     if (personIds.length === 0) {
-      return;
+      return [];
     }
-    await this.db
+    const updated = await this.db
       .updateTable('person')
       .set((eb) => ({
         faceAssetId: eb
@@ -113,6 +114,8 @@ export class FaceRepairRepository {
           ),
         ]),
       )
+      .returning('person.id')
       .execute();
+    return updated.map((row) => row.id);
   }
 }

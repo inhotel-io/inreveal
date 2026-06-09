@@ -1,4 +1,5 @@
 import { ConflictException } from '@nestjs/common';
+import { JobName } from 'src/enum';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
 
@@ -82,6 +83,7 @@ describe(FaceRepairService.name, () => {
     it('direct-assigns each flagged face to its suspected owner with a manual identity link', async () => {
       mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
       mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1', 'f2']);
+      mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
       mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
 
       const r = await sut.executeRepair(
@@ -103,6 +105,7 @@ describe(FaceRepairService.name, () => {
         source: 'manual',
       });
       // Never re-queues facial recognition — that is what re-clustered faces back to the wrong person.
+      // (queueAll is only used for thumbnail regen, and only when a representative face was repointed.)
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
       expect(r).toEqual({ moved: 2, skipped: 0 });
     });
@@ -120,12 +123,25 @@ describe(FaceRepairService.name, () => {
     it('reconciles representative faces for both the source and the destination person', async () => {
       mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
       mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+      mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
       mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
 
       await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' }]));
 
       const reconciled = mocks.faceRepair.reconcileRepresentativeFaces.mock.calls[0][0] as string[];
       expect(reconciled.toSorted()).toEqual(['p1', 'q']);
+    });
+
+    it('queues a thumbnail regen for every person whose representative face was repointed', async () => {
+      mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+      mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue(['p1']);
+      mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
+
+      await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' }]));
+
+      // Without this the source person's card keeps showing the crop of the face that just moved away.
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.PersonGenerateThumbnail, data: { id: 'p1' } }]);
     });
   });
 });

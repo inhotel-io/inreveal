@@ -56,7 +56,8 @@ describe(FaceRepairScanRepository.name, () => {
     await sut.updateScanProgress(scan.id, { status: 'running', progress: { scanned: 10, total: 100 } });
     let row = await sut.getScanById(scan.id);
     expect(row?.status).toBe('running');
-    expect(row?.progress).toEqual({ scanned: 10, total: 100 });
+    expect(row?.progress).toMatchObject({ scanned: 10, total: 100 });
+    expect(row?.progress?.heartbeatAt).toBeDefined(); // heartbeat stamped for stale-scan detection
 
     const totals = {
       eligibleFaces: 5,
@@ -87,6 +88,46 @@ describe(FaceRepairScanRepository.name, () => {
   it('refuses a second scan while one is pending/running', async () => {
     await sut.createScan({ requestedBy: null, params: PARAMS });
     await expect(sut.createScan({ requestedBy: null, params: PARAMS })).rejects.toThrow(/scan .*in progress/i);
+  });
+
+  it('failStaleScans fails lost in-flight scans past the cutoff and unblocks new scans', async () => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+
+    // Fresh in-flight scan: not stale, untouched.
+    expect(await sut.failStaleScans(60_000)).toBe(0);
+    const fresh = await sut.getScanById(scan.id);
+    expect(fresh?.status).toBe('pending');
+
+    // Backdate its only sign of life beyond the cutoff (no heartbeat, no startedAt -> createdAt governs).
+    await db
+      .updateTable('face_repair_scan')
+      .set({ createdAt: new Date(Date.now() - 120_000) })
+      .where('id', '=', scan.id)
+      .execute();
+
+    expect(await sut.failStaleScans(60_000)).toBe(1);
+    const row = await sut.getScanById(scan.id);
+    expect(row?.status).toBe('failed');
+    expect(row?.error).toContain('timed out');
+    expect(row?.finishedAt).not.toBeNull();
+
+    // The console is unblocked: a new scan can be created again.
+    await expect(sut.createScan({ requestedBy: null, params: PARAMS })).resolves.toBeDefined();
+  });
+
+  it('failStaleScans honors a recent progress heartbeat over an old createdAt', async () => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await db
+      .updateTable('face_repair_scan')
+      .set({ createdAt: new Date(Date.now() - 120_000) })
+      .where('id', '=', scan.id)
+      .execute();
+    // A live worker is reporting progress — the scan must NOT be reaped despite the old createdAt.
+    await sut.updateScanProgress(scan.id, { status: 'running', progress: { scanned: 1, total: 10 } });
+
+    expect(await sut.failStaleScans(60_000)).toBe(0);
+    const alive = await sut.getScanById(scan.id);
+    expect(alive?.status).toBe('running');
   });
 
   it('pruneSupersededScans keeps only the latest', async () => {

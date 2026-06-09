@@ -128,9 +128,10 @@ export function applyDeclineFilters<T extends FlaggedLike>(flaggedByPerson: Map<
 }
 
 export type ClassifyRecommendation = 'confident' | 'review-first';
-export type ClassifyReason = 'named' | 'large-cluster' | 'multiple-owners' | 'bad-target';
+export type ClassifyReason = 'over-cap' | 'named' | 'large-cluster' | 'multiple-owners' | 'bad-target';
 
 export interface ClassifyPersonInput {
+  personId: string;
   personName: string | null; // null or '' (whitespace-only) = unnamed
   faceCount: number;
   suspectedOwnerIds: string[]; // owner person ids for this person's flagged faces (may repeat)
@@ -147,10 +148,15 @@ export interface ClassifyDecision {
 }
 
 // A flagged person is "review-first" if ANY reason applies; otherwise "confident". Reason order is fixed
-// (named → large-cluster → multiple-owners → bad-target) so output is deterministic.
+// (over-cap → named → large-cluster → multiple-owners → bad-target) so output is deterministic.
+// `over-cap` covers the person's OWN over-cap status: most/all of its faces are leaving, so approving it can
+// empty the cluster — that must never happen via silent auto-select, only via explicit per-person review.
 export const classifyFlaggedPerson = (person: ClassifyPersonInput, ctx: ClassifyContext): ClassifyDecision => {
   const reviewReasons: ClassifyReason[] = [];
 
+  if (ctx.reviewOnlyPersonIds.has(person.personId)) {
+    reviewReasons.push('over-cap');
+  }
   if (person.personName !== null && person.personName.trim() !== '') {
     reviewReasons.push('named');
   }

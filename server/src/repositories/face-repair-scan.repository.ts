@@ -1,4 +1,4 @@
-import { Insertable, Kysely, Selectable } from 'kysely';
+import { Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 import { FaceRepairScanTable } from 'src/schema/tables/face-repair-scan.table';
@@ -50,9 +50,18 @@ export interface RepairScanTotals {
 export interface RepairScanProgress {
   scanned: number;
   total: number;
+  // Heartbeat: stamped on every progress write so stale (worker-lost) scans can be detected and failed.
+  heartbeatAt?: string;
 }
 
 export type RepairScanRow = Selectable<FaceRepairScanTable>;
+
+// Typed sentinel so callers can distinguish "scan already in progress" from real DB failures.
+export class ScanInProgressError extends Error {
+  constructor() {
+    super('A face-repair scan is already in progress');
+  }
+}
 
 export class FaceRepairScanRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -65,7 +74,7 @@ export class FaceRepairScanRepository {
         .where('status', 'in', ['pending', 'running'])
         .executeTakeFirst();
       if (inFlight) {
-        throw new Error('A face-repair scan is already in progress');
+        throw new ScanInProgressError();
       }
       return trx
         .insertInto('face_repair_scan')
@@ -95,7 +104,7 @@ export class FaceRepairScanRepository {
       .updateTable('face_repair_scan')
       .set({
         ...(input.status ? { status: input.status } : {}),
-        ...(input.progress ? { progress: input.progress } : {}),
+        ...(input.progress ? { progress: { ...input.progress, heartbeatAt: new Date().toISOString() } } : {}),
         ...(input.startedAt ? { startedAt: input.startedAt } : {}),
       })
       .where('id', '=', id)
@@ -108,6 +117,24 @@ export class FaceRepairScanRepository {
       .set({ status: 'completed', totals: input.totals, persons: input.persons, finishedAt: new Date() })
       .where('id', '=', id)
       .execute();
+  }
+
+  // Self-heal: fail in-flight scans whose last sign of life (progress heartbeat, else startedAt, else
+  // createdAt) is older than the cutoff. Covers worker hard-crashes and a Redis failure between the row
+  // insert and the job enqueue — without this, a lost scan blocks new scans AND applies forever.
+  async failStaleScans(staleAfterMs: number): Promise<number> {
+    const cutoff = new Date(Date.now() - staleAfterMs);
+    const result = await this.db
+      .updateTable('face_repair_scan')
+      .set({
+        status: 'failed',
+        error: 'Scan timed out: the worker stopped reporting progress (it may have crashed or been restarted)',
+        finishedAt: new Date(),
+      })
+      .where('status', 'in', ['pending', 'running'])
+      .where(sql<boolean>`coalesce((progress->>'heartbeatAt')::timestamptz, "startedAt", "createdAt") < ${cutoff}`)
+      .execute();
+    return Number(result[0]?.numUpdatedRows ?? 0);
   }
 
   async failScan(id: string, error: string): Promise<void> {
