@@ -25,7 +25,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf27 {
     this.enabled = true,
   });
 
-  AgentAssetStackOperationType type;
+  AgentAssetTrashOperationType type;
 
   String summary;
 
@@ -149,7 +149,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf27 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf27(
-        type: AgentAssetStackOperationType.fromJson(json[r'type'])!,
+        type: AgentAssetTrashOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
