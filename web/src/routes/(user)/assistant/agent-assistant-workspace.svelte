@@ -91,6 +91,8 @@
     selectedSession ? getAgentSessionTitle(selectedSession, titleBySessionId) : $t('assistant_new_chat'),
   );
   const isRunnerAvailable = $derived(runnerStatus.configured && runnerStatus.healthy);
+  // First-run setup: onboarding replaces the chat surface, so hide the chat chrome (sidebar + settings menu).
+  const onboardingActive = $derived(isRunnerAvailable && localCredentials.length === 0);
   const runnerStatusLabel = $derived($t('assistant_unavailable_banner'));
   const canSendNewChat = $derived(
     newChatDraft.trim().length > 0 && !isStartingFromMessage && isRunnerAvailable && localCredentials.length > 0,
@@ -732,38 +734,40 @@
     </div>
   {/if}
 
-  <div class="hidden shrink-0 md:block">
-    {#if sidebarCollapsed}
-      <div
-        class="flex h-full w-14 flex-col items-center border-r border-gray-200 bg-slate-50 py-2 dark:border-neutral-800 dark:bg-neutral-950"
-      >
-        <button
-          type="button"
-          data-testid="agent-session-sidebar-expand"
-          class="rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
-          aria-label={$t('assistant_open_sessions')}
-          onclick={() => (sidebarCollapsed = false)}
+  {#if !onboardingActive}
+    <div class="hidden shrink-0 md:block">
+      {#if sidebarCollapsed}
+        <div
+          class="flex h-full w-14 flex-col items-center border-r border-gray-200 bg-slate-50 py-2 dark:border-neutral-800 dark:bg-neutral-950"
         >
-          {$t('assistant_sessions').slice(0, 1)}
-        </button>
-      </div>
-    {:else}
-      <div class="h-full w-72">
-        <AgentSessionSidebar
-          sessions={localSessions}
-          {selectedSessionId}
-          {titleBySessionId}
-          onSelectSession={selectSession}
-          onNewChat={startNewChat}
-          onRenameSession={handleRenameSession}
-          onDeleteSession={handleDeleteSession}
-          onCollapse={() => (sidebarCollapsed = true)}
-        />
-      </div>
-    {/if}
-  </div>
+          <button
+            type="button"
+            data-testid="agent-session-sidebar-expand"
+            class="rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            aria-label={$t('assistant_open_sessions')}
+            onclick={() => (sidebarCollapsed = false)}
+          >
+            {$t('assistant_sessions').slice(0, 1)}
+          </button>
+        </div>
+      {:else}
+        <div class="h-full w-72">
+          <AgentSessionSidebar
+            sessions={localSessions}
+            {selectedSessionId}
+            {titleBySessionId}
+            onSelectSession={selectSession}
+            onNewChat={startNewChat}
+            onRenameSession={handleRenameSession}
+            onDeleteSession={handleDeleteSession}
+            onCollapse={() => (sidebarCollapsed = true)}
+          />
+        </div>
+      {/if}
+    </div>
+  {/if}
 
-  {#if sidebarOpen}
+  {#if sidebarOpen && !onboardingActive}
     <div
       class="fixed inset-0 z-40 bg-black/40 md:hidden"
       role="presentation"
@@ -789,14 +793,16 @@
         selectedSession ? 'md:hidden' : '',
       ]}
     >
-      <button
-        type="button"
-        class="rounded-lg border border-gray-300 px-3 py-2 text-sm md:hidden dark:border-gray-700"
-        aria-label={$t('assistant_open_sessions')}
-        onclick={() => (sidebarOpen = true)}
-      >
-        {$t('assistant_sessions')}
-      </button>
+      {#if !onboardingActive}
+        <button
+          type="button"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm md:hidden dark:border-gray-700"
+          aria-label={$t('assistant_open_sessions')}
+          onclick={() => (sidebarOpen = true)}
+        >
+          {$t('assistant_sessions')}
+        </button>
+      {/if}
       <div class="min-w-0">
         <h1 class="truncate text-lg font-semibold">{selectedTitle}</h1>
         {#if selectedSession}
@@ -847,15 +853,17 @@
             {/if}
           </div>
         {/if}
-        <button
-          type="button"
-          class="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
-          data-testid="assistant-settings-menu"
-          aria-label={$t('assistant_settings')}
-          onclick={() => (assistantSettingsOpen = true)}
-        >
-          <Icon icon={mdiDotsHorizontal} size="20" />
-        </button>
+        {#if !onboardingActive}
+          <button
+            type="button"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
+            data-testid="assistant-settings-menu"
+            aria-label={$t('assistant_settings')}
+            onclick={() => (assistantSettingsOpen = true)}
+          >
+            <Icon icon={mdiDotsHorizontal} size="20" />
+          </button>
+        {/if}
       </div>
     </header>
 
@@ -888,7 +896,7 @@
             class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col justify-center gap-4 pb-20"
             data-testid="assistant-empty-chat-surface"
           >
-            {#if isRunnerAvailable && localCredentials.length === 0}
+            {#if onboardingActive}
               <AgentOnboarding onComplete={handleOnboardingComplete} />
             {:else}
               <div class="text-center" data-testid="assistant-empty-chat-heading">
