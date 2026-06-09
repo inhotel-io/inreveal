@@ -16,6 +16,7 @@ export interface OnboardingProviderMeta {
   requiresBaseUrl: boolean;
   baseUrlPrefill: string;
   secretRequired: boolean;
+  keyHelpUrl?: string;
 }
 
 export const ONBOARDING_PROVIDERS: Record<OnboardingProviderId, OnboardingProviderMeta> = {
@@ -34,6 +35,7 @@ export const ONBOARDING_PROVIDERS: Record<OnboardingProviderId, OnboardingProvid
     requiresBaseUrl: false,
     baseUrlPrefill: '',
     secretRequired: true,
+    keyHelpUrl: 'https://platform.openai.com/api-keys',
   },
   anthropic: {
     id: 'anthropic',
@@ -42,6 +44,7 @@ export const ONBOARDING_PROVIDERS: Record<OnboardingProviderId, OnboardingProvid
     requiresBaseUrl: false,
     baseUrlPrefill: '',
     secretRequired: true,
+    keyHelpUrl: 'https://console.anthropic.com/settings/keys',
   },
   other: {
     id: 'other',
