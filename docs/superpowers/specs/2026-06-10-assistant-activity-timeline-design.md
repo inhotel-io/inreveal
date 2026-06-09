@@ -54,7 +54,7 @@ Expansion state is per-turn, in-memory only (no persistence). Everything is coll
 
 **A. Close lifecycle events on settle (the bug fix).** New method on the activity-event service, e.g. `closeOpenLifecycleEvents(userId, sessionId, terminalStatus)`: reads the session's events, finds lifecycle kinds (`start-processing`, `plan-composing`, `apply-progress`, `runner-recovery`) whose **latest** event has status `running`, and **inserts** a terminal sibling (same kind; status `completed` on success, `failed` on error, `skipped` on cancel). Idempotent: nothing inserted when nothing is open. Call sites: `agent-runner.service.ts` when the runner stream settles (success — failure already writes a failed event; the helper also covers any other open kinds), and `AgentSessionService.cancel()` with `skipped`. `strict_*` events are never touched (the L3 eval consumes them; they already carry terminal statuses). The web derives a kind's effective status as "latest event of that kind within the turn".
 
-**B. Live tool-call websocket event.** Extend `AgentSessionClientEvent` with `{ type: 'tool-call'; sessionId: string; toolCall: AgentToolCallResponseDto }`. Emit on tool-call creation and on every status change, at the three persistence sites listed above (via a small shared notifier helper following the pattern of `agent-session-activity-event.service.ts:58`). The chat panel handles the event by upserting into its `toolCalls` state (by id) — this powers the live one-liner and live timeline rows. Payload is the already-redacted response DTO; no new data is exposed beyond what the REST endpoint returns.
+**B. Live data path — no new websocket event (revised during implementation).** Deeper exploration found the live-update problem already solved: `agent-session-action-dock.svelte` refetches the session's tool calls on **every** incoming session websocket event and **polls every 3s** while the session is Running/WaitingForToolApproval; results flow dock → pane (`recentToolCalls`) → chat panel, which merges via `mergeAgentTimelineToolCalls` (`agent-session-tool-call-state-ui.ts` — id-based upsert, status-rank aware, session-guarded, already covered by 7 tests including the spec's E13/E14 cases). Slice 1's closers additionally emit `activity` events at settle, triggering an immediate final refetch. Worst-case timeline staleness is ~3s during a turn — acceptable for a debug view. The originally planned `tool-call` client event (15+ scattered emit sites, some inside repository transactions, in a service without `WebsocketRepository`) is dropped as unjustified complexity; it can be layered on later if 3s lag proves annoying.
 
 ### Data flow (web)
 
@@ -76,8 +76,8 @@ A pure builder module, `agent-turn-timeline-ui.ts`: `buildAgentTurnTimeline({ me
 | E10 | Long `requestSummary`/`responseSummary` (≤1000 chars)         | Row summary clamped to one line; full text in detail block                                       |
 | E11 | Router decision absent (open orchestration)                   | No annotation row                                                                                |
 | E12 | Out-of-order timestamps                                       | Rows sorted `startedAt` then id; grouping unchanged (existing window logic)                      |
-| E13 | Live `tool-call` event for an unknown/other session           | Ignored (sessionId guard, same as other handlers)                                                |
-| E14 | Live event arrives for an already-known tool call             | Upsert by id replaces stale row (no duplicates)                                                  |
+| E13 | Tool-call refresh for an unknown/other session                | Ignored — covered by the existing `mergeAgentTimelineToolCalls` session guard + its tests        |
+| E14 | Refresh arrives for an already-known tool call                | Upsert by id, stale states never regress — covered by the existing merge tests                   |
 
 ## Implementation slices (impl-loop format — each slice is independently shippable, strict TDD)
 
@@ -89,25 +89,23 @@ Every slice follows red → green → refactor: write the named failing tests fi
 - Tests (`agent-session-activity-event.service.spec.ts`, `agent-runner.service.spec.ts`, `agent-session.service.spec.ts`): success inserts `completed` closer for open `start-processing`; failure path unchanged (still exactly one `failed` event); cancel inserts `skipped` closers; idempotent when nothing open (E9); `strict_*` kinds never closed; closers are inserts, never updates.
 - Red expectation: new specs fail with "closeOpenLifecycleEvents is not a function" / missing emit assertions.
 
-### Slice 2 — Server + web: live `tool-call` websocket event
+### ~~Slice 2 — live `tool-call` websocket event~~ (dropped)
 
-- Server: extend the `AgentSessionClientEvent` union; shared notifier; emit at the three persistence sites (create + status change). Tests per site assert emit payload; no emit on unrelated updates.
-- Web: `agent-session-chat-panel.svelte` handles `type: 'tool-call'` by upserting into `toolCalls` (E13, E14 tests in the panel spec).
-- Red expectation: server specs fail on missing emit; panel spec fails with unhandled event type falling through to the error branch.
+Dropped during implementation: the existing dock-driven refetch/poll pipeline plus `mergeAgentTimelineToolCalls` already provides live tool-call data with ≤3s staleness and existing tests cover E13/E14 (see Server changes B). The remaining slices are renumbered.
 
-### Slice 3 — Web: pure timeline builder (`agent-turn-timeline-ui.ts`)
+### Slice 2 — Web: pure timeline builder (`agent-turn-timeline-ui.ts`)
 
 - `buildAgentTurnTimeline` + tool-verb map + router-summary parser. Table-driven tests covering E1–E3, E5–E12 and the status→row mapping table above (one test per mapping row), summary-line text variants (steps/duration/failed/cancelled), turn grouping reuse.
 - Red expectation: module not found.
 
-### Slice 4 — Web: timeline components, wired in
+### Slice 3 — Web: timeline components, wired in
 
 - `agent-turn-timeline.svelte` (one-liner / summary line / expanded list) + `agent-turn-timeline-row.svelte` (row + detail toggle), replacing the activity-block rendering in the chat panel. New i18n keys (`assistant_timeline_*`) for one-liner verbs and labels, added + `format:fix`.
 - Component tests: expand/collapse per turn, row detail toggle, failed badge, live update when a `tool-call` event lands mid-turn (drives state 1→3), cancelled rendering (E4).
-- The panel renders the new timeline **instead of** the old activity block in this slice; panel/old-block spec assertions are updated here. Deleting the now-dead files is Slice 5.
+- The panel renders the new timeline **instead of** the old activity block in this slice; panel/old-block spec assertions are updated here. Deleting the now-dead files is Slice 4.
 - Red expectation: components not found.
 
-### Slice 5 — Web: remove the old surface + header revert
+### Slice 4 — Web: remove the old surface + header revert
 
 - Delete `agent-activity-block.svelte`, `agent-activity-visibility-ui.ts`, the visibility-mode portions of `agent-activity-ui.ts` (fold any still-needed helpers into the new builder), the ⋯ menu modes; revert header to a Details icon-pill (update `agent-session-header.spec.ts`, `agent-activity-visibility-menu` removed). Remove dead i18n keys (`assistant_activity_visibility*`, `assistant_session_menu` if unused).
 - Tests: header spec asserts Details pill + Close session only; workspace/pane suites green; full assistant suite + `make check-web` + lint as the slice gate.
