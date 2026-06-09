@@ -39,10 +39,10 @@ workflow). Document this scope decision in the workflow header.
     ("I could not find an album called …"). >1 → durable candidate continuation
     (`delete_album_album`). One → propose.
   - Propose `proposeAlbumOperations` with `[{ type: 'album.delete', targetKind:
-    'existing_album', targetId: album.id, summary: 'Delete the "<name>" album.' }]`.
+'existing_album', targetId: album.id, summary: 'Delete the "<name>" album.' }]`.
   - `gatePlanResult` with successText: `I prepared a plan to delete the "<name>" album.
-    Your photos stay in your library — only the album is removed. Review the plan before
-    applying it.`
+Your photos stay in your library — only the album is removed. Review the plan before
+applying it.`
   - `resumeContinuation` for the album pick (mirror the space-member continuation).
 
 Register in `registry.mjs` + regenerate manifest. Add the "Delete an album" Flow Ownership
@@ -51,6 +51,7 @@ row to the capability matrix + `pnpm --dir server sync:agent-capabilities`.
 ## Tests (write first — RED)
 
 `delete-album.test.mjs`:
+
 - match: "delete the Test album" → {albumRef:'Test'}; "remove the Beach album" →
   {albumRef:'Beach'}; "get rid of the Trip album" → match.
 - match DECLINES: "delete the photos in the Beach album" → undefined (photo source);
@@ -64,8 +65,8 @@ row to the capability matrix + `pnpm --dir server sync:agent-capabilities`.
   album not found → needsInput; ambiguous album → needsInput + continuation; multiple
   albums same name → continuation; listAlbums throws → failed; no plan id → failed.
 - resumeContinuation: album pick → resolvedAlbumId ctx.
-Also a regression in `trash-assets.test.mjs` (if not already present): "delete the Beach
-album" → trash_assets.match() returns undefined (confirms the cede still holds).
+  Also a regression in `trash-assets.test.mjs` (if not already present): "delete the Beach
+  album" → trash_assets.match() returns undefined (confirms the cede still holds).
 
 RED: `cd agent-runner && export PATH="$HOME/.local/share/mise/shims:$PATH" && node --test 'src/**/delete-album.test.mjs'`.
 
