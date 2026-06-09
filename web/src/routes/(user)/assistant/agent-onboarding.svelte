@@ -12,6 +12,7 @@
     model: string;
     permissionPreset: AgentPermissionPreset;
     approvalMode: AgentApprovalMode;
+    initialPrompt?: string;
   }
 
   interface Props {
@@ -52,12 +53,13 @@
     step = Math.max(step - 1, 0);
   };
 
-  const finish = () => {
+  const finish = (initialPrompt?: string) => {
     onComplete({
       credentialId: connectedCredentialId,
       model: connectedModel,
       permissionPreset: preset,
       approvalMode: approval,
+      ...(initialPrompt ? { initialPrompt } : {}),
     });
   };
 
@@ -353,6 +355,7 @@
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:-translate-x-0 hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
               type="button"
+              onclick={() => finish($t('assistant_onboarding_prompt_album'))}
             >
               <svg class="h-[15px] w-[15px] flex-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7h18M3 12h18M3 17h12" />
@@ -362,6 +365,7 @@
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
               type="button"
+              onclick={() => finish($t('assistant_onboarding_prompt_blurry'))}
             >
               <svg class="h-[15px] w-[15px] flex-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21 21-4.3-4.3M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z" />
@@ -371,6 +375,7 @@
             <button
               class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
               type="button"
+              onclick={() => finish($t('assistant_onboarding_prompt_passport'))}
             >
               <svg class="h-[15px] w-[15px] flex-none text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4" y="11" width="16" height="9" rx="2" />
@@ -391,7 +396,7 @@
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
-          <Button onclick={finish}>
+          <Button onclick={() => finish()}>
             {$t('assistant_onboarding_open')}
             <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
