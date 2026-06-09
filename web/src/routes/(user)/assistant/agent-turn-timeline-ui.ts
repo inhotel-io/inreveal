@@ -197,6 +197,16 @@ const buildRouterAnnotation = (events: AgentActivityEvent[]): AgentTurnTimeline[
   return parseRouterAnnotation(last.summary);
 };
 
+// ── formatting ───────────────────────────────────────────────────────────────
+
+export const formatAgentTimelineDuration = (durationMs: number): string => {
+  const clamped = Math.max(0, durationMs);
+  if (clamped < 60_000) {
+    return `${(clamped / 1000).toFixed(1)}s`;
+  }
+  return `${Math.floor(clamped / 60_000)}m ${Math.round((clamped % 60_000) / 1000)}s`;
+};
+
 // ── main export ──────────────────────────────────────────────────────────────
 
 export const buildAgentTurnTimelines = (input: {
