@@ -151,13 +151,11 @@ void main() {
       expect(DriftPersonPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
 
       expect(RemoteAlbumPage.timelineOverviewControlsEnabled, isTrue);
-      expect(RemoteAlbumPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
 
       expect(LocalTimelinePage.timelineOverviewControlsEnabled, isTrue);
       expect(LocalTimelinePage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
 
       expect(DriftFavoritePage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftFavoritePage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
 
       expect(DriftArchivePage.timelineOverviewControlsEnabled, isTrue);
       expect(DriftArchivePage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
@@ -181,14 +179,8 @@ void main() {
       expect(DriftPartnerDetailPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight + 110);
 
       expect(SpaceDetailPage.timelineOverviewControlsEnabled, isTrue);
-      expect(
-        SpaceDetailPage.timelineOverviewTopSliverHeight(isRemoteSyncing: false),
-        kTimelineGroupingHeaderSliverHeight,
-      );
-      expect(
-        SpaceDetailPage.timelineOverviewTopSliverHeight(isRemoteSyncing: true),
-        kTimelineGroupingHeaderSliverHeight + kSyncStatusBannerSliverHeight,
-      );
+      expect(SpaceDetailPage.syncBannerTopSliverHeight(isRemoteSyncing: false), 0.0);
+      expect(SpaceDetailPage.syncBannerTopSliverHeight(isRemoteSyncing: true), kSyncStatusBannerSliverHeight);
     });
 
     for (final route in _adoptedRouteCases) {
