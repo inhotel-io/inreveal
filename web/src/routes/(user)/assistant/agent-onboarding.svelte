@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AgentApprovalMode, AgentPermissionPreset } from '@immich/sdk';
+  import { AgentApprovalMode, AgentPermissionPreset, deleteAgentProviderCredential } from '@immich/sdk';
   import { Button } from '@immich/ui';
   import { t } from 'svelte-i18n';
   import AgentOnboardingAccess from './agent-onboarding-access.svelte';
@@ -34,6 +34,9 @@
   const continueEnabled = $derived(step !== 1 || connectedCredentialId !== '');
 
   const handleConnected = (credentialId: string, model: string, provider: OnboardingProviderId) => {
+    if (credentialId && connectedCredentialId && credentialId !== connectedCredentialId) {
+      void deleteAgentProviderCredential({ id: connectedCredentialId }).catch(() => {});
+    }
     connectedCredentialId = credentialId;
     connectedModel = model;
     connectedProvider = provider;
@@ -59,13 +62,13 @@
   };
 
   // Readable preset label for the ready summary
-  const presetLabelKey = $derived(
-    preset === AgentPermissionPreset.Careful
-      ? 'assistant_permission_preset_careful'
-      : preset === AgentPermissionPreset.LocalPowerUser
-        ? 'assistant_permission_preset_local_power_user'
-        : 'assistant_permission_preset_visual_organizer',
-  );
+  const PRESET_LABEL_KEYS: Record<AgentPermissionPreset, string> = {
+    [AgentPermissionPreset.Careful]: 'assistant_permission_preset_careful',
+    [AgentPermissionPreset.VisualOrganizer]: 'assistant_permission_preset_visual_organizer',
+    [AgentPermissionPreset.LocalPowerUser]: 'assistant_permission_preset_local_power_user',
+    [AgentPermissionPreset.Custom]: 'assistant_permission_preset_visual_organizer',
+  };
+  const presetLabelKey = $derived(PRESET_LABEL_KEYS[preset]);
 </script>
 
 <div class="mx-auto w-full max-w-3xl">
