@@ -44,7 +44,7 @@ vi.mock('svelte-i18n', () => {
       'Pi can inspect without asking. Changes still require plan approval unless auto-apply is enabled. Local testing only.',
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
-    assistant_cancel: 'Cancel',
+    assistant_close_session: 'Close session',
     assistant_change: 'Change',
     assistant_chat: 'Chat',
     assistant_chat_menu: 'Chat options',
@@ -1178,6 +1178,35 @@ describe(AgentAssistantWorkspace.name, () => {
     );
   });
 
+  it('persists the first message as the session title so it survives reloads', async () => {
+    const createdSession = makeSession({
+      id: '00000000-0000-4000-8000-000000000401',
+      status: AgentSessionStatus.Running,
+    });
+    sdkMock.createAgentSession.mockResolvedValue(createdSession);
+    sdkMock.appendAgentSessionMessage.mockResolvedValue(makeUserMessage(createdSession.id, 'Start organizing'));
+    sdkMock.updateAgentSession.mockResolvedValue({ ...createdSession, title: 'Start organizing' });
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [],
+        requestedSessionId: null,
+      },
+    });
+
+    await fireEvent.input(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Start organizing' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() =>
+      expect(sdkMock.updateAgentSession).toHaveBeenCalledWith({
+        id: createdSession.id,
+        agentSessionUpdateDto: { title: 'Start organizing' },
+      }),
+    );
+  });
+
   it('updates the selected header and matching sidebar row from the selected transcript title', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       makeUserMessage(requestedSession.id, 'Create a Porto family highlights album'),
@@ -1281,7 +1310,7 @@ describe(AgentAssistantWorkspace.name, () => {
       },
     });
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Close session' }));
 
     await waitFor(() => expect(sdkMock.cancelAgentSession).toHaveBeenCalledWith({ id: actionableSession.id }));
     await waitFor(() => expect(screen.getAllByText('Cancelled')).not.toHaveLength(0));
