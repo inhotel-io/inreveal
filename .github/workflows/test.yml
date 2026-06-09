@@ -22,10 +22,6 @@ jobs:
         with:
           github-token: ${{ github.token }}
           filters: |
-            root:
-              - 'misc/**'
-              - 'pnpm-lock.yaml'
-              - 'mise.toml'
             i18n:
               - 'i18n/**'
               - 'mise.toml'
