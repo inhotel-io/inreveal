@@ -66,6 +66,7 @@
     {#each PRESETS as p (p.value)}
       {@const isSelected = preset === p.value}
       <button
+        type="button"
         aria-pressed={isSelected ? 'true' : 'false'}
         aria-label={$t(p.labelKey)}
         onclick={() => onChange(p.value)}
@@ -88,7 +89,7 @@
 
           <!-- meter (right column, spans 2 rows) -->
           <div class="row-span-2 flex min-w-[92px] flex-col items-end justify-center gap-1.5 self-center">
-            {#each METER_LABELS as mLabel, i}
+            {#each METER_LABELS as mLabel, i (mLabel)}
               <span
                 class="flex items-center gap-1.5 text-[11px] font-semibold
                   {p.sees[i] ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-600'}"
@@ -111,12 +112,12 @@
 
           <!-- can-do chips (full width, row 3) -->
           <div class="col-span-2 mt-2.5 flex flex-wrap gap-1.5">
-            {#each p.chips as chip}
+            {#each p.chips as chip (chip)}
               <span class="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11.5px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-neutral-400">
                 {chip}
               </span>
             {/each}
-            {#each p.noChips as chip}
+            {#each p.noChips as chip (chip)}
               <span class="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11.5px] font-semibold text-gray-400 line-through decoration-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-600 dark:decoration-gray-600">
                 {chip}
               </span>
