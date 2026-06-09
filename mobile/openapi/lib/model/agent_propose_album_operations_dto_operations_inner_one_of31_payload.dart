@@ -13,9 +13,10 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload({
-    this.name,
-    this.birthDate,
-    this.isHidden,
+    this.password,
+    this.expiresAt,
+    this.showMetadata,
+    this.allowDownload,
   });
 
   ///
@@ -24,9 +25,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? name;
-
-  DateTime? birthDate;
+  String? password;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -34,42 +33,63 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isHidden;
+  String? expiresAt;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? showMetadata;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? allowDownload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload &&
-    other.name == name &&
-    other.birthDate == birthDate &&
-    other.isHidden == isHidden;
+    other.password == password &&
+    other.expiresAt == expiresAt &&
+    other.showMetadata == showMetadata &&
+    other.allowDownload == allowDownload;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (name == null ? 0 : name!.hashCode) +
-    (birthDate == null ? 0 : birthDate!.hashCode) +
-    (isHidden == null ? 0 : isHidden!.hashCode);
+    (password == null ? 0 : password!.hashCode) +
+    (expiresAt == null ? 0 : expiresAt!.hashCode) +
+    (showMetadata == null ? 0 : showMetadata!.hashCode) +
+    (allowDownload == null ? 0 : allowDownload!.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload[name=$name, birthDate=$birthDate, isHidden=$isHidden]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload[password=$password, expiresAt=$expiresAt, showMetadata=$showMetadata, allowDownload=$allowDownload]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.name != null) {
-      json[r'name'] = this.name;
+    if (this.password != null) {
+      json[r'password'] = this.password;
     } else {
-    //  json[r'name'] = null;
+    //  json[r'password'] = null;
     }
-    if (this.birthDate != null) {
-      json[r'birthDate'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$/')
-        ? this.birthDate!.millisecondsSinceEpoch
-        : _dateFormatter.format(this.birthDate!);
+    if (this.expiresAt != null) {
+      json[r'expiresAt'] = this.expiresAt;
     } else {
-    //  json[r'birthDate'] = null;
+    //  json[r'expiresAt'] = null;
     }
-    if (this.isHidden != null) {
-      json[r'isHidden'] = this.isHidden;
+    if (this.showMetadata != null) {
+      json[r'showMetadata'] = this.showMetadata;
     } else {
-    //  json[r'isHidden'] = null;
+    //  json[r'showMetadata'] = null;
+    }
+    if (this.allowDownload != null) {
+      json[r'allowDownload'] = this.allowDownload;
+    } else {
+    //  json[r'allowDownload'] = null;
     }
     return json;
   }
@@ -83,9 +103,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload(
-        name: mapValueOfType<String>(json, r'name'),
-        birthDate: mapDateTime(json, r'birthDate', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$/'),
-        isHidden: mapValueOfType<bool>(json, r'isHidden'),
+        password: mapValueOfType<String>(json, r'password'),
+        expiresAt: mapValueOfType<String>(json, r'expiresAt'),
+        showMetadata: mapValueOfType<bool>(json, r'showMetadata'),
+        allowDownload: mapValueOfType<bool>(json, r'allowDownload'),
       );
     }
     return null;

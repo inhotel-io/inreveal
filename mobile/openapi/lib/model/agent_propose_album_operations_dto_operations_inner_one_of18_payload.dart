@@ -13,26 +13,48 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload({
-    required this.axis,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum axis;
+  /// Minimum value: 0
+  num x;
+
+  /// Minimum value: 0
+  num y;
+
+  /// Minimum value: 1
+  num width;
+
+  /// Minimum value: 1
+  num height;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload &&
-    other.axis == axis;
+    other.x == x &&
+    other.y == y &&
+    other.width == width &&
+    other.height == height;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (axis.hashCode);
+    (x.hashCode) +
+    (y.hashCode) +
+    (width.hashCode) +
+    (height.hashCode);
 
   @override
-  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload[axis=$axis]';
+  String toString() => 'AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload[x=$x, y=$y, width=$width, height=$height]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'axis'] = this.axis;
+      json[r'x'] = this.x;
+      json[r'y'] = this.y;
+      json[r'width'] = this.width;
+      json[r'height'] = this.height;
     return json;
   }
 
@@ -45,7 +67,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload(
-        axis: AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.fromJson(json[r'axis'])!,
+        x: num.parse('${json[r'x']}'),
+        y: num.parse('${json[r'y']}'),
+        width: num.parse('${json[r'width']}'),
+        height: num.parse('${json[r'height']}'),
       );
     }
     return null;
@@ -93,81 +118,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18Payload {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'axis',
+    'x',
+    'y',
+    'width',
+    'height',
   };
 }
-
-
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum {
-  /// Instantiate a new enum with the provided [value].
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(this.value);
-
-  /// The underlying value of this enum member.
-  final String value;
-
-  @override
-  String toString() => value;
-
-  String toJson() => value;
-
-  static const horizontal = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(r'horizontal');
-  static const vertical = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum._(r'vertical');
-
-  /// List of all possible values in this [enum][AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum].
-  static const values = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum>[
-    horizontal,
-    vertical,
-  ];
-
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum? fromJson(dynamic value) => AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer().decode(value);
-
-  static List<AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum>[];
-    if (json is List && json.isNotEmpty) {
-      for (final row in json) {
-        final value = AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.fromJson(row);
-        if (value != null) {
-          result.add(value);
-        }
-      }
-    }
-    return result.toList(growable: growable);
-  }
-}
-
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum] to String,
-/// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum].
-class AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer {
-  factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer._();
-
-  const AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer._();
-
-  String encode(AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum data) => data.value;
-
-  /// Decodes a [dynamic value][data] to a AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.
-  ///
-  /// If [allowNull] is true and the [dynamic value][data] cannot be decoded successfully,
-  /// then null is returned. However, if [allowNull] is false and the [dynamic value][data]
-  /// cannot be decoded successfully, then an [UnimplementedError] is thrown.
-  ///
-  /// The [allowNull] is very handy when an API changes and a new enum value is added or removed,
-  /// and users are still using an old app with the old code.
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum? decode(dynamic data, {bool allowNull = true}) {
-    if (data != null) {
-      switch (data) {
-        case r'horizontal': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.horizontal;
-        case r'vertical': return AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnum.vertical;
-        default:
-          if (!allowNull) {
-            throw ArgumentError('Unknown enum value to decode: $data');
-          }
-      }
-    }
-    return null;
-  }
-
-  /// Singleton [AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer] instance.
-  static AgentProposeAlbumOperationsDtoOperationsInnerOneOf18PayloadAxisEnumTypeTransformer? _instance;
-}
-
 
