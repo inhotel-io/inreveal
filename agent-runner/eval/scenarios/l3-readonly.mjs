@@ -60,6 +60,16 @@ export default [
     expect: { kind: 'delete_album' },
   },
   {
+    // Routing-only: deleteContainers scope is OFF in the VisualOrganizer eval
+    // preset, so the server would reject the apply — but classification is
+    // pre-lookup and data-independent, so the routing assertion holds against
+    // any stack. Server enforces owner-level permission (SharedSpaceDelete).
+    id: 'l3.recall.deletespace',
+    category: 'l3.recall',
+    prompt: 'delete the Test space',
+    expect: { kind: 'delete_space' },
+  },
+  {
     id: 'l3.recall.add.newest20',
     category: 'l3.recall',
     prompt: 'add my newest 20 photos to Family',
