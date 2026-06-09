@@ -994,6 +994,41 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'lock_assets',
+    flow: 'hybrid',
+    title: 'Move photos to the Locked folder',
+    classifierDescription:
+      'User wants to move a metadata-describable set of photos (recency/date/type bound) or a named entity into the Locked (private) folder: "lock my passport scans", "move my 2024 receipts to the locked folder", "put these in my private folder", "hide my newest 20 in the locked folder". One-directional (lock only, never unlock). Plain "hide <person>" with no folder cue (hide_person), archive, and trash are out of scope.',
+    positiveExamples: Object.freeze([
+      'Lock my passport scans',
+      'Move my 2024 receipts to the locked folder',
+      'Put these in my private folder',
+      'Hide my newest 20 in the locked folder',
+    ]),
+    negativeExamples: Object.freeze([
+      'Hide Alex',
+      'Archive my newest 50 photos',
+      'Trash my newest 20 photos',
+      'Lock the best ones',
+    ]),
+    slots: Object.freeze({
+      sourceDescription: Object.freeze({
+        type: 'string',
+        required: true,
+        description: 'Metadata description of the photos to move to the Locked folder.',
+      }),
+    }),
+    requiredReadTools: Object.freeze(['resolveAssetSearchFilters', 'searchAssets']),
+    planTool: 'proposeAssetBatchFromSelection',
+    supportsContinuation: false,
+    matrixRow: Object.freeze({
+      capability: 'Move photos to the Locked folder',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        "Pi resolves a bounded source; Gallery owns the batch asset.setVisibility (visibility: 'locked') plan from the handle. Lock only — no unlock. Subjective sources and bare \"hide <person>\" decline; lockAssets write-scope required.",
+    }),
+  }),
+  Object.freeze({
     kind: 'hide_person',
     flow: 'hybrid',
     title: 'Hide or unhide a person',

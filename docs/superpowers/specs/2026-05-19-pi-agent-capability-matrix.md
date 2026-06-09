@@ -208,6 +208,7 @@ Generated from `agent-runner/src/strict-workflows/manifest.generated.json`. Do n
 | `rename_or_describe_space`   | Strict | `listSpaces`                                                   | `proposeAlbumOperations`            |
 | `rename_person`              | Hybrid | `searchPeople`                                                 | `proposeAlbumOperations`            |
 | `set_person_birthdate`       | Hybrid | `searchPeople`                                                 | `proposeAlbumOperations`            |
+| `lock_assets`                | Hybrid | `resolveAssetSearchFilters`, `searchAssets`                    | `proposeAssetBatchFromSelection`    |
 | `hide_person`                | Hybrid | `searchPeople`                                                 | `proposeAlbumOperations`            |
 | `merge_people`               | Hybrid | `searchPeople`                                                 | `proposeAlbumOperations`            |
 | `manage_album_access`        | Strict | `listAlbums`, `readAlbum`, `searchUsers`                       | `proposeAlbumOperations`            |
