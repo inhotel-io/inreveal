@@ -116,6 +116,40 @@
     }
   },
   {
+    "kind": "delete_space",
+    "flow": "strict",
+    "title": "Delete a space",
+    "classifierDescription": "User wants to delete (remove/get rid of) an existing shared space container. The space and its membership are removed; photos stay in members' libraries. DECLINES photo-deletion intents (\"delete the photos in X space\"), \"in/from\" frames, and album deletion (\"delete the X album\" → delete_album).",
+    "positiveExamples": [
+      "Delete the Family space",
+      "Remove the Trip space",
+      "Get rid of the Beach space"
+    ],
+    "negativeExamples": [
+      "Delete the photos in the Family space",
+      "Delete the Family space photos",
+      "Delete the Family album",
+      "Trash my 2024 screenshots"
+    ],
+    "slots": {
+      "spaceRef": {
+        "type": "string",
+        "required": true,
+        "description": "How the user referred to the space."
+      }
+    },
+    "requiredReadTools": [
+      "listSpaces"
+    ],
+    "planTool": "proposeAlbumOperations",
+    "supportsContinuation": true,
+    "matrixRow": {
+      "capability": "Delete a space",
+      "tier": "Solid now",
+      "workflowOrBoundary": "`delete_space` resolves the space by name (durable disambiguation for duplicate names) and proposes a `space.delete` plan. The shared space and its membership are removed; photos stay in members' libraries. Server enforces owner-level permission (`SharedSpaceDelete`); workflow proposes regardless (propose-only; server is the backstop). `deleteContainers` write-scope required."
+    }
+  },
+  {
     "kind": "set_album_cover",
     "flow": "strict",
     "title": "Set album cover",
