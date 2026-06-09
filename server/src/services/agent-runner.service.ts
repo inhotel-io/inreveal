@@ -638,9 +638,11 @@ export class AgentRunnerService {
         return;
       }
 
-      void Promise.resolve(this.activityService.closeOpenLifecycleEvents(userId, sessionId, terminalStatus)).catch(() => {
-        // Activity events are audit hints and must not block the assistant stream.
-      });
+      void Promise.resolve(this.activityService.closeOpenLifecycleEvents(userId, sessionId, terminalStatus)).catch(
+        () => {
+          // Activity events are audit hints and must not block the assistant stream.
+        },
+      );
     } catch {
       // Activity events are audit hints and must not block the assistant stream.
     }
