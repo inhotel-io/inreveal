@@ -182,7 +182,6 @@
     "face_cleanup_group_review_sub": "named, large, or routing into another flagged cluster — open before approving",
     "face_cleanup_last_scan": "Last scan",
     "face_cleanup_no_results": "No results match this filter.",
-    "face_cleanup_owner_label": "Owner",
     "face_cleanup_rescan": "Re-scan",
     "face_cleanup_retry_scan": "Retry scan",
     "face_cleanup_review": "Review",

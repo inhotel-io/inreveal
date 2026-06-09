@@ -44,6 +44,34 @@ cluster strongly enough to make a safe assignment. These faces are **left as-is 
 arbitrary cluster would create new errors. They appear in the **Unattributable** stat tile and are counted in the
 totals, but they are not presented for action.
 
+## Advanced scan
+
+The **Advanced** button next to Re-scan opens a tuning modal for a single scan run. Three knobs are exposed,
+pre-filled with the instance's effective defaults:
+
+- **Match sensitivity** (0.1–1, default = the facial-recognition _maximum distance_ setting, typically 0.5) — how
+  close two faces must look to be treated as the same person. Lower = stricter (fewer matches), higher = looser.
+- **Minimum faces per person** (≥ 1, default = the facial-recognition _minimum faces_ setting, typically 3) — skip
+  people with fewer faces than this.
+- **Contamination cap** (0–1, default 0.5) — if more than this share of a person's faces look wrong, the whole
+  cluster goes to review-only instead of auto-repairing. Higher = more aggressive auto-repair.
+
+Tuned values apply **to that scan run only** — they are stored with the scan (so the review page and the apply step
+compute with the same values), but they are never saved as new defaults. Re-opening the modal always shows the
+server defaults again.
+
+## Dismissing false positives
+
+If the scan flags something that is actually correct, you can teach it to stop asking:
+
+- **Dismiss** (list page row action) — dismisses the whole suggestion for that person. It will not reappear in
+  future scans unless new evidence shows up (different suspected owners).
+- **Decline** (per-face, on a person's review page) — marks an individual face as belonging to the person it is on.
+  Declined faces are excluded from future scans and from any apply.
+
+Declined faces and dismissed people are listed under **View declined** (`Administration → Face cleanup → View
+declined`), where each entry has an **Undo** action that re-surfaces it in the next scan.
+
 ## Safety
 
 - The scan and the apply step both **refuse to run while facial recognition is active**. If you see a 409 conflict
@@ -53,3 +81,6 @@ totals, but they are not presented for action.
   so the faces cannot drift back to the wrong person. Once an apply succeeds the affected rows leave the list.
 - All moves are reversible: open the affected people on the People page (or run a new scan and use the console) to
   move faces back if needed.
+- A **fully-contaminated cluster** (every face flagged) is always classified _Review these first_ with an
+  `over-cap` badge — it can never be bulk-approved via the pre-selection. Approving it from its review page moves
+  all of its faces, after which the emptied person is removed by the regular cleanup job.

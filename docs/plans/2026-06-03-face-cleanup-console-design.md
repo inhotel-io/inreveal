@@ -109,7 +109,7 @@ no new face-moving logic:
                           └─────────────────────────────────────────┘
 ```
 
-UI reference mockups (this branch, repo root): `face-cleanup-console-mockup.html` (triage list) and
+UI reference mockups (this branch, `docs/plans/`): `face-cleanup-console-mockup.html` (triage list) and
 `face-cleanup-review-page-mockup.html` (per-person review page).
 
 ## Server design
@@ -221,7 +221,7 @@ contract.
 
 ### List / triage page (`/admin/face-cleanup`)
 
-**Visual contract:** [`face-cleanup-console-mockup.html`](../../face-cleanup-console-mockup.html) — the
+**Visual contract:** [`face-cleanup-console-mockup.html`](./face-cleanup-console-mockup.html) — the
 implementation must match its layout, grouping, colour semantics, columns, and component styling (rebuilt with
 `@immich/ui` primitives; the mockup is hand-rolled HTML, so reproduce the _look_, not the markup).
 
@@ -238,7 +238,7 @@ implementation must match its layout, grouping, colour semantics, columns, and c
 
 ### Review page (`/admin/face-cleanup/{personId}`)
 
-**Visual contract:** [`face-cleanup-review-page-mockup.html`](../../face-cleanup-review-page-mockup.html) —
+**Visual contract:** [`face-cleanup-review-page-mockup.html`](./face-cleanup-review-page-mockup.html) —
 match its banner, decision strip, faces-leaving grid, per-face deselect treatment, and sticky action bar.
 
 Opened from a _review-first_ row (confident rows never need it). Answers "what am I deciding and how":

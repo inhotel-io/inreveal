@@ -1,5 +1,6 @@
 <script lang="ts">
   import UserAvatar from '$lib/components/shared-components/user-avatar.svelte';
+  import { Route } from '$lib/route';
   import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiArrowRight, mdiCheckCircle, mdiAlertCircle } from '@mdi/js';
@@ -269,7 +270,7 @@
         {$t('admin.face_cleanup_dismiss')}
       </button>
       <a
-        href="/admin/face-cleanup/{person.personId}"
+        href={Route.viewFaceCleanupPerson({ id: person.personId })}
         onclick={() => onOpen(person.personId)}
         class="inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
