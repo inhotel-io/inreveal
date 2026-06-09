@@ -974,3 +974,101 @@ describe('makeContractClient — searchPeople', () => {
     assert.deepEqual(result, { people: override });
   });
 });
+
+describe('makeContractClient — album.delete validator (Slice 3.2)', () => {
+  it('KNOWN_OPERATION_TYPES includes album.delete', () => {
+    assert.equal(KNOWN_OPERATION_TYPES.has('album.delete'), true);
+  });
+
+  it('accepts a valid album.delete op targeting an existing album', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      summary: 'Delete the Test album.',
+      operations: [
+        {
+          type: 'album.delete',
+          summary: 'Delete the "Test" album (photos are kept in your library).',
+          targetKind: 'existing_album',
+          targetId: newUuid(),
+          riskLevel: 'high',
+        },
+      ],
+    });
+    assert.ok(result.plan);
+  });
+
+  it('rejects album.delete without targetId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          summary: 'Delete without target.',
+          operations: [{ type: 'album.delete', summary: 'Missing target.', targetKind: 'existing_album' }],
+        }),
+      /targetId/i,
+    );
+  });
+
+  it('rejects album.delete with wrong targetKind', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          summary: 'Wrong target kind.',
+          operations: [
+            { type: 'album.delete', summary: 'New album target.', targetKind: 'new_album', temporaryTargetId: 'tmp' },
+          ],
+        }),
+      /targetKind/i,
+    );
+  });
+});
+
+describe('makeContractClient — space.delete validator (Slice 3.2)', () => {
+  it('KNOWN_OPERATION_TYPES includes space.delete', () => {
+    assert.equal(KNOWN_OPERATION_TYPES.has('space.delete'), true);
+  });
+
+  it('accepts a valid space.delete op targeting an existing space', async () => {
+    const client = makeContractClient();
+    const result = await client.call('proposeAlbumOperations', {
+      summary: 'Delete the Family space.',
+      operations: [
+        {
+          type: 'space.delete',
+          summary: "Delete the \"Family\" space (photos stay in members' libraries).",
+          targetKind: 'existing_space',
+          targetId: newUuid(),
+          riskLevel: 'high',
+        },
+      ],
+    });
+    assert.ok(result.plan);
+  });
+
+  it('rejects space.delete without targetId', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          summary: 'Delete without target.',
+          operations: [{ type: 'space.delete', summary: 'Missing target.', targetKind: 'existing_space' }],
+        }),
+      /targetId/i,
+    );
+  });
+
+  it('rejects space.delete with wrong targetKind', async () => {
+    const client = makeContractClient();
+    await assert.rejects(
+      () =>
+        client.call('proposeAlbumOperations', {
+          summary: 'Wrong target kind.',
+          operations: [
+            { type: 'space.delete', summary: 'New space target.', targetKind: 'new_space', temporaryTargetId: 'tmp' },
+          ],
+        }),
+      /targetKind/i,
+    );
+  });
+});

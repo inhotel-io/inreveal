@@ -64,6 +64,9 @@ String parameterToString(dynamic value) {
   if (value is AgentAlbumCreateOperationType) {
     return AgentAlbumCreateOperationTypeTypeTransformer().encode(value).toString();
   }
+  if (value is AgentAlbumDeleteOperationType) {
+    return AgentAlbumDeleteOperationTypeTypeTransformer().encode(value).toString();
+  }
   if (value is AgentAlbumRemoveAssetsOperationType) {
     return AgentAlbumRemoveAssetsOperationTypeTypeTransformer().encode(value).toString();
   }
@@ -249,6 +252,9 @@ String parameterToString(dynamic value) {
   }
   if (value is AgentSpaceCreateOperationType) {
     return AgentSpaceCreateOperationTypeTypeTransformer().encode(value).toString();
+  }
+  if (value is AgentSpaceDeleteOperationType) {
+    return AgentSpaceDeleteOperationTypeTypeTransformer().encode(value).toString();
   }
   if (value is AgentSpaceRemoveMembersOperationType) {
     return AgentSpaceRemoveMembersOperationTypeTypeTransformer().encode(value).toString();

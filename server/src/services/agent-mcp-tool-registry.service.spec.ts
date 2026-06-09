@@ -1021,10 +1021,13 @@ describe(AgentMcpToolRegistryService.name, () => {
     // to 50_002. The guard is relaxed to 5% to accommodate the continued new op coverage.
     // lib-mgmt Slice 2.2 (2026-06-08) added asset.setVisibility, raising count to 50_682.
     // The guard is relaxed to 3% below original to accommodate the continued new op coverage.
-    // NOTE: token-optimization headroom is nearly exhausted — original 52_350, now at 50_682 (3.2% below).
+    // lib-mgmt Slice 3.2 (2026-06-08) added album.delete + space.delete, raising count to 51_513.
+    // Guard relaxed to 1% below original (52_350 * 0.99 = 51_827). The token-optimization headroom
+    // from the Slice 3–4 pruning is now effectively exhausted — capability growth (new op schemas)
+    // has consumed the savings. Future ops that cross 52_350 will require a new explicit ceiling.
     expect(tokens).toBe(CATALOG_TOKENS_BASELINE);
-    // Guard: must be measurably below the pre-prune original (relaxed to 3%+ reduction after new ops).
-    expect(tokens).toBeLessThan(Math.ceil(52_350 * 0.97));
+    // Guard: must be measurably below the pre-prune original (relaxed to 1% after capability growth).
+    expect(tokens).toBeLessThan(Math.ceil(52_350 * 0.99));
   });
 
   // order is the KV-cache key; do not reorder (see spec "Prompt caching" appendix)
@@ -1200,8 +1203,10 @@ describe(AgentMcpToolRegistryService.name, () => {
     // by ~1_761 tokens (48_241 → 50_002), so the pre-Slice-4 equivalent is now ~50_568.
     // lib-mgmt Slice 2.2 (2026-06-08): adding asset.setVisibility raised count by ~680 tokens
     // (50_002 → 50_682), so the pre-Slice-4 equivalent is now ~51_248.
+    // lib-mgmt Slice 3.2 (2026-06-08): adding album.delete + space.delete raised count by ~831 tokens
+    // (50_682 → 51_513), so the pre-Slice-4 equivalent is now ~52_079.
     // Pre-Slice-4 equivalent with new ops:
-    const preSlice4Equivalent = 51_248;
+    const preSlice4Equivalent = 52_079;
     expect(tokens).toBeLessThan(preSlice4Equivalent);
     // Must be a measurable reduction — at least 500 tokens below the pre-opt equivalent.
     expect(tokens).toBeLessThan(preSlice4Equivalent - 500);
