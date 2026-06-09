@@ -108,7 +108,11 @@ export const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
   });
 };
 
-export const toolCallBelongsToTurn = (toolCall: AgentToolCallResponseDto, turn: UserTurnAnchor, userTurnCount: number) => {
+export const toolCallBelongsToTurn = (
+  toolCall: AgentToolCallResponseDto,
+  turn: UserTurnAnchor,
+  userTurnCount: number,
+) => {
   const activityAt = getToolCallActivityAt(toolCall);
 
   if (!activityAt) {
