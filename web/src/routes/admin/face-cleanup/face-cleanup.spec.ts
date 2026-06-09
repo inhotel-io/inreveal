@@ -56,6 +56,32 @@ describe('createFaceCleanupModel', () => {
     expect(vm.selected.has('r1')).toBe(true);
   });
 
+  it('carry-over: a user deselection survives a model rebuild (dismiss/refetch)', () => {
+    const first = createFaceCleanupModel([person({ personId: 'c1' }), person({ personId: 'c2' })]);
+    first.toggle('c2'); // user deselects c2
+
+    const rebuilt = createFaceCleanupModel([person({ personId: 'c1' }), person({ personId: 'c2' })], { prev: first });
+    expect(rebuilt.selected.has('c1')).toBe(true);
+    expect(rebuilt.selected.has('c2')).toBe(false); // must NOT silently re-select
+  });
+
+  it('carry-over: newly appeared confident persons get the default preselect; vanished ids are dropped', () => {
+    const first = createFaceCleanupModel([person({ personId: 'c1' })]);
+    first.toggle('c1');
+
+    const rebuilt = createFaceCleanupModel([person({ personId: 'c2' })], { prev: first });
+    expect(rebuilt.selected.has('c2')).toBe(true); // new -> default preselect
+    expect(rebuilt.selected.has('c1')).toBe(false);
+  });
+
+  it('restoredOpened re-enables the review-first gate after navigation', () => {
+    const vm = createFaceCleanupModel([person({ personId: 'r1', recommendation: 'review-first' })], {
+      restoredOpened: ['r1', 'gone'],
+    });
+    expect(vm.canSelect('r1')).toBe(true);
+    expect(vm.opened.has('gone')).toBe(false); // ids not in the current scan are pruned
+  });
+
   it('toggle + clear update selectedCount', () => {
     const vm = createFaceCleanupModel([person({ personId: 'c1' }), person({ personId: 'c2' })]);
     expect(vm.selectedCount).toBe(2);

@@ -26,12 +26,36 @@ export interface FaceCleanupModel {
   canSelect(id: string): boolean;
 }
 
-export function createFaceCleanupModel(persons: FaceCleanupPerson[]): FaceCleanupModel {
+export interface FaceCleanupModelOptions {
+  // The previous model, when rebuilding after a refetch/dismiss: user selections and opened state are
+  // carried over (intersected with the surviving persons) instead of resetting to the confident preselect.
+  prev?: FaceCleanupModel | null;
+  // Opened person ids restored from persistence (e.g. sessionStorage) so the review-first gate survives
+  // navigating to a person's review page and back.
+  restoredOpened?: Iterable<string>;
+}
+
+export function createFaceCleanupModel(
+  persons: FaceCleanupPerson[],
+  options?: FaceCleanupModelOptions,
+): FaceCleanupModel {
   const reviewFirst = persons.filter((p) => p.recommendation === 'review-first');
   const confident = persons.filter((p) => p.recommendation === 'confident');
 
-  const selected: SvelteSet<string> = new SvelteSet(confident.map((p) => p.personId));
-  const opened: SvelteSet<string> = new SvelteSet();
+  const prev = options?.prev ?? null;
+  const currentIds = new SvelteSet(persons.map((p) => p.personId));
+  // Ids the previous model knew about — for those, the user's selection choice wins; anything newly
+  // appeared falls back to the default (confident -> preselected).
+  const known = prev ? new SvelteSet([...prev.reviewFirst, ...prev.confident].map((p) => p.personId)) : null;
+
+  const selected: SvelteSet<string> = new SvelteSet(
+    persons
+      .filter((p) => (known?.has(p.personId) ? prev!.selected.has(p.personId) : p.recommendation === 'confident'))
+      .map((p) => p.personId),
+  );
+  const opened: SvelteSet<string> = new SvelteSet(
+    [...(prev?.opened ?? []), ...(options?.restoredOpened ?? [])].filter((id) => currentIds.has(id)),
+  );
 
   return {
     reviewFirst,

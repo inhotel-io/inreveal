@@ -24,9 +24,13 @@ describe('AdvancedScanModal', () => {
   beforeEach(() => vi.mocked(getFaceRepairScanDefaults).mockReset());
 
   it('pre-fills the controls from the defaults endpoint', async () => {
-    mockDefaults({ maxDistance: 0.5, minFaces: 3, maxFlaggedFraction: 0.5 });
+    // Values deliberately DIFFER from the component's hardcoded fallbacks (0.5 / 3 / 0.5) — otherwise this
+    // test would pass even if loadDefaults never ran.
+    mockDefaults({ maxDistance: 0.62, minFaces: 7, maxFlaggedFraction: 0.31 });
     render(AdvancedScanModal, { props: { onClose: vi.fn(), onRun: vi.fn() } });
-    expect(await screen.findByDisplayValue('3')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('7')).toBeInTheDocument();
+    expect(screen.getByTestId('sensitivity-range')).toHaveValue('0.62');
+    expect(screen.getByTestId('cap-range')).toHaveValue('0.31');
   });
 
   it('submits numeric params (not strings) and closes', async () => {

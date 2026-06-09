@@ -1,7 +1,7 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
-  import { createFaceCleanupModel } from './face-cleanup.svelte';
+  import { createFaceCleanupModel, type FaceCleanupModel } from './face-cleanup.svelte';
   import FaceCleanupTable from './FaceCleanupTable.svelte';
   import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
@@ -80,20 +80,49 @@
   } as const;
   let searchQuery = $state('');
 
-  // The view-model: rebuilt when scan.persons changes
-  let vm = $derived(
-    scan?.persons && scan.persons.length > 0 ? createFaceCleanupModel(scan.persons as ScanPerson[]) : null,
-  );
+  // The view-model is rebuilt through setScan so user selections and the opened review-first gate are
+  // carried over across refetches/dismissals instead of resetting to the confident preselect.
+  let vm = $state<FaceCleanupModel | null>(null);
+
+  const openedStorageKey = (scanId: string) => `face-cleanup-opened:${scanId}`;
+
+  const readPersistedOpened = (scanId: string): string[] => {
+    try {
+      return JSON.parse(sessionStorage.getItem(openedStorageKey(scanId)) ?? '[]') as string[];
+    } catch {
+      return [];
+    }
+  };
+
+  const persistOpened = (scanId: string, opened: Iterable<string>) => {
+    try {
+      sessionStorage.setItem(openedStorageKey(scanId), JSON.stringify([...opened]));
+    } catch {
+      // sessionStorage unavailable — the gate just won't survive navigation
+    }
+  };
+
+  const setScan = (next: FaceCleanupScan | null) => {
+    scan = next;
+    vm =
+      next?.persons && next.persons.length > 0
+        ? createFaceCleanupModel(next.persons as ScanPerson[], {
+            prev: vm,
+            restoredOpened: readPersistedOpened(next.id),
+          })
+        : null;
+  };
 
   const isActive = (status: string | undefined) => status === 'pending' || status === 'running';
 
   const fetchLatestScan = async () => {
     try {
       const result = await getLatestScan();
-      scan = result as unknown as FaceCleanupScan | null;
+      setScan(result as unknown as FaceCleanupScan | null);
     } catch {
-      // 404 / null means no scan yet — keep scan as null
-      scan = null;
+      // Transient poll/network error: keep the current state. A genuine "no scan yet" arrives as a
+      // successful null result (handled above), so wiping `scan` here would flash the empty state and
+      // re-enable Re-scan mid-scan.
     }
   };
 
@@ -186,6 +215,9 @@
     if (vm) {
       vm.open(personId);
     }
+    if (scan) {
+      persistOpened(scan.id, new Set([...readPersistedOpened(scan.id), personId]));
+    }
   };
 
   const handleDismiss = async (personId: string) => {
@@ -197,7 +229,7 @@
     try {
       await declineFaceRepair({ faceRepairDeclineRequestDto: { persons: [{ personId, suspectedOwnerIds }] } });
       if (scan) {
-        scan = { ...scan, persons: scan.persons.filter((p) => p.personId !== personId) };
+        setScan({ ...scan, persons: scan.persons.filter((p) => p.personId !== personId) });
       }
       toastManager.success($t('admin.face_cleanup_dismiss'));
     } catch {
