@@ -940,23 +940,7 @@ with
   "asset" as (
     select
       date_trunc('MONTH', "localDateTime" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' as "timeBucket",
-      "asset"."id",
-      "asset"."localDateTime",
-      "asset"."fileCreatedAt",
-      "asset"."thumbhash",
-      coalesce(
-        case
-          when asset."height" = 0
-          or asset."width" = 0
-          or asset."height" is null
-          or asset."width" is null then 1
-          else round(
-            asset."width"::numeric / asset."height"::numeric,
-            3
-          )::float
-        end,
-        1
-      ) as "ratio"
+      "asset"."id"
     from
       "asset"
     where
@@ -971,29 +955,12 @@ with
       "asset"
     group by
       "timeBucket"
-  ),
-  "bucket_representatives" as (
-    select distinct
-      on ("timeBucket") "timeBucket",
-      "id" as "representativeAssetId",
-      encode("thumbhash", 'base64') as "representativeThumbhash",
-      "ratio" as "representativeRatio"
-    from
-      "asset"
-    order by
-      "timeBucket",
-      ("localDateTime" AT TIME ZONE 'UTC')::date desc,
-      "fileCreatedAt" desc
   )
 select
   ("bucket_counts"."timeBucket" AT TIME ZONE 'UTC')::date::text as "timeBucket",
-  "bucket_counts"."count",
-  "bucket_representatives"."representativeAssetId",
-  "bucket_representatives"."representativeThumbhash",
-  "bucket_representatives"."representativeRatio"
+  "bucket_counts"."count"
 from
   "bucket_counts"
-  inner join "bucket_representatives" on "bucket_representatives"."timeBucket" = "bucket_counts"."timeBucket"
 order by
   "bucket_counts"."timeBucket" desc
 
@@ -1002,23 +969,7 @@ with
   "asset" as (
     select
       date_trunc('YEAR', "localDateTime" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' as "timeBucket",
-      "asset"."id",
-      "asset"."localDateTime",
-      "asset"."fileCreatedAt",
-      "asset"."thumbhash",
-      coalesce(
-        case
-          when asset."height" = 0
-          or asset."width" = 0
-          or asset."height" is null
-          or asset."width" is null then 1
-          else round(
-            asset."width"::numeric / asset."height"::numeric,
-            3
-          )::float
-        end,
-        1
-      ) as "ratio"
+      "asset"."id"
     from
       "asset"
     where
@@ -1033,29 +984,12 @@ with
       "asset"
     group by
       "timeBucket"
-  ),
-  "bucket_representatives" as (
-    select distinct
-      on ("timeBucket") "timeBucket",
-      "id" as "representativeAssetId",
-      encode("thumbhash", 'base64') as "representativeThumbhash",
-      "ratio" as "representativeRatio"
-    from
-      "asset"
-    order by
-      "timeBucket",
-      ("localDateTime" AT TIME ZONE 'UTC')::date desc,
-      "fileCreatedAt" desc
   )
 select
   ("bucket_counts"."timeBucket" AT TIME ZONE 'UTC')::date::text as "timeBucket",
-  "bucket_counts"."count",
-  "bucket_representatives"."representativeAssetId",
-  "bucket_representatives"."representativeThumbhash",
-  "bucket_representatives"."representativeRatio"
+  "bucket_counts"."count"
 from
   "bucket_counts"
-  inner join "bucket_representatives" on "bucket_representatives"."timeBucket" = "bucket_counts"."timeBucket"
 order by
   "bucket_counts"."timeBucket" desc
 
@@ -1064,23 +998,7 @@ with
   "asset" as (
     select
       date_trunc('DAY', "localDateTime" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' as "timeBucket",
-      "asset"."id",
-      "asset"."localDateTime",
-      "asset"."fileCreatedAt",
-      "asset"."thumbhash",
-      coalesce(
-        case
-          when asset."height" = 0
-          or asset."width" = 0
-          or asset."height" is null
-          or asset."width" is null then 1
-          else round(
-            asset."width"::numeric / asset."height"::numeric,
-            3
-          )::float
-        end,
-        1
-      ) as "ratio"
+      "asset"."id"
     from
       "asset"
     where
@@ -1095,29 +1013,12 @@ with
       "asset"
     group by
       "timeBucket"
-  ),
-  "bucket_representatives" as (
-    select distinct
-      on ("timeBucket") "timeBucket",
-      "id" as "representativeAssetId",
-      encode("thumbhash", 'base64') as "representativeThumbhash",
-      "ratio" as "representativeRatio"
-    from
-      "asset"
-    order by
-      "timeBucket",
-      ("localDateTime" AT TIME ZONE 'UTC')::date desc,
-      "fileCreatedAt" desc
   )
 select
   ("bucket_counts"."timeBucket" AT TIME ZONE 'UTC')::date::text as "timeBucket",
-  "bucket_counts"."count",
-  "bucket_representatives"."representativeAssetId",
-  "bucket_representatives"."representativeThumbhash",
-  "bucket_representatives"."representativeRatio"
+  "bucket_counts"."count"
 from
   "bucket_counts"
-  inner join "bucket_representatives" on "bucket_representatives"."timeBucket" = "bucket_counts"."timeBucket"
 order by
   "bucket_counts"."timeBucket" desc
 
