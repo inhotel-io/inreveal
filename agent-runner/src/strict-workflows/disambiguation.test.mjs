@@ -132,8 +132,17 @@ const CASES = [
   ['trash my newest 20 photos', 'trash_assets'],
   ['delete my 2024 screenshots', 'trash_assets'],
   ['move my newest 50 photos to the trash', 'trash_assets'],
-  // trash_assets must NOT steal these
-  ['delete the Family album', 'none'],
+  // delete_album (album-container deletion; declines photo-deletion, space deletion)
+  ['delete the Beach album', 'delete_album'],
+  ['remove the Trip album', 'delete_album'],
+  ['get rid of the Family album', 'delete_album'],
+  // delete_album must NOT steal photo-deletion or space intents
+  // "delete the photos in the Beach album" → none (trash declines via container-end guard; delete_album declines via photo-source guard)
+  ['delete the photos in the Beach album', 'none'],
+  // "delete the Beach album photos" → trash_assets (source ends with "photos", not "album")
+  ['delete the Beach album photos', 'trash_assets'],
+  ['delete the Family space', 'none'],
+  // trash_assets must NOT steal album-container prompts (container-source guard)
   ['trash the best ones', 'none'],
   ['make an album of the best photos', 'none'],
   ['how many photos do I have?', 'none'],
