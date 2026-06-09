@@ -1,10 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 import { AgentSession } from 'src/database';
 import { AgentSessionCreateDto, AgentSessionUpdateDto } from 'src/dtos/agent-session.dto';
-import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  AgentProviderType,
+  AgentSessionActivityEventStatus,
+  AgentSessionStatus,
+} from 'src/enum';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import {
   AgentInitialContextSnapshot,
@@ -193,13 +200,17 @@ describe(AgentSessionService.name, () => {
   let repository: ReturnType<typeof automock<AgentSessionRepository>>;
   let credentialService: ReturnType<typeof automock<AgentProviderCredentialService>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
+  let activityEventService: ReturnType<typeof automock<AgentSessionActivityEventService>>;
 
   beforeEach(() => {
     repository = automock(AgentSessionRepository, { args: [{} as never] });
     credentialService = automock(AgentProviderCredentialService, { args: [{} as never, {} as never] });
     agentRunnerService = automock(AgentRunnerService);
+    activityEventService = automock(AgentSessionActivityEventService, {
+      args: [{} as never, {} as never, {} as never],
+    });
     credentialService.getSecret.mockResolvedValue('sk-session-secret');
-    sut = new AgentSessionService(repository, credentialService, agentRunnerService);
+    sut = new AgentSessionService(repository, credentialService, agentRunnerService, activityEventService);
   });
 
   const mockSuccessfulRunnerHandoff = (session: AgentSession) => {
@@ -1280,4 +1291,44 @@ describe(AgentSessionService.name, () => {
       expect(repository.update).not.toHaveBeenCalled();
     },
   );
+
+  it('marks open lifecycle events skipped on cancel', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const cancelled = makeSession({ ...session, status: AgentSessionStatus.Cancelled, endedAt: now });
+
+    repository.getById.mockResolvedValue(session);
+    repository.cancel.mockResolvedValue(cancelled);
+
+    await sut.cancel(auth, session.id);
+
+    expect(activityEventService.closeOpenLifecycleEvents).toHaveBeenCalledWith(
+      auth.user.id,
+      session.id,
+      AgentSessionActivityEventStatus.Skipped,
+    );
+  });
+
+  it('cancel succeeds even when closing activity events fails', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Running });
+    const cancelled = makeSession({ ...session, status: AgentSessionStatus.Cancelled, endedAt: now });
+
+    activityEventService.closeOpenLifecycleEvents.mockRejectedValue(new Error('boom'));
+    repository.getById.mockResolvedValue(session);
+    repository.cancel.mockResolvedValue(cancelled);
+
+    await expect(sut.cancel(auth, session.id)).resolves.toBeDefined();
+  });
+
+  it('does not close lifecycle events when the session is already cancelled', async () => {
+    const auth = AuthFactory.create();
+    const session = makeSession({ userId: auth.user.id, status: AgentSessionStatus.Cancelled, endedAt: now });
+
+    repository.getById.mockResolvedValue(session);
+
+    await sut.cancel(auth, session.id);
+
+    expect(activityEventService.closeOpenLifecycleEvents).not.toHaveBeenCalled();
+  });
 });
