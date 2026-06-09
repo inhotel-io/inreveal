@@ -17,8 +17,8 @@
       labelKey: 'assistant_permission_preset_careful',
       descKey: 'assistant_permission_preset_careful_description',
       sees: [true, false, false] as const,
-      chips: ['Albums & spaces', 'Tags', 'Favorites'],
-      noChips: ['Edit', 'Trash', 'Share'],
+      chips: ['assistant_onboarding_chip_albums_spaces', 'assistant_onboarding_chip_tags', 'assistant_onboarding_chip_favorites'],
+      noChips: ['assistant_onboarding_chip_edit', 'assistant_onboarding_chip_trash', 'assistant_onboarding_chip_share'],
       tag: null as string | null,
       tagStyle: '',
     },
@@ -27,8 +27,8 @@
       labelKey: 'assistant_permission_preset_visual_organizer',
       descKey: 'assistant_permission_preset_visual_organizer_description',
       sees: [true, true, false] as const,
-      chips: ['Everything in Careful', 'Edit & archive', 'Curate by content', 'Share with people'],
-      noChips: ['Original files', 'Public links'],
+      chips: ['assistant_onboarding_chip_everything_careful', 'assistant_onboarding_chip_edit_archive', 'assistant_onboarding_chip_curate_content', 'assistant_onboarding_chip_share_people'],
+      noChips: ['assistant_onboarding_chip_original_files', 'assistant_onboarding_chip_public_links'],
       tag: 'assistant_onboarding_recommended' as string | null,
       tagStyle: 'text-primary bg-primary/10',
     },
@@ -37,7 +37,7 @@
       labelKey: 'assistant_permission_preset_local_power_user',
       descKey: 'assistant_permission_preset_local_power_user_description',
       sees: [true, true, true] as const,
-      chips: ['Everything above', 'Original files', 'Public links', 'Locked folder', 'Delete albums'],
+      chips: ['assistant_onboarding_chip_everything_above', 'assistant_onboarding_chip_original_files', 'assistant_onboarding_chip_public_links', 'assistant_onboarding_chip_locked_folder', 'assistant_onboarding_chip_delete_albums'],
       noChips: [] as string[],
       tag: 'assistant_onboarding_local_models' as string | null,
       tagStyle: 'text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950',
@@ -114,12 +114,12 @@
           <div class="col-span-2 mt-2.5 flex flex-wrap gap-1.5">
             {#each p.chips as chip (chip)}
               <span class="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11.5px] font-semibold text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-neutral-400">
-                {chip}
+                {$t(chip)}
               </span>
             {/each}
             {#each p.noChips as chip (chip)}
               <span class="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11.5px] font-semibold text-gray-400 line-through decoration-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-600 dark:decoration-gray-600">
-                {chip}
+                {$t(chip)}
               </span>
             {/each}
           </div>
