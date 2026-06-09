@@ -51,6 +51,15 @@ export default [
     expect: { kind: 'rename_or_describe_album' },
   },
   {
+    // Routing-only: deleteContainers scope is OFF in the VisualOrganizer eval
+    // preset, so no planProposed assertion. Classification is pre-lookup and
+    // data-independent so the routing assertion holds against any stack.
+    id: 'l3.recall.deletealbum',
+    category: 'l3.recall',
+    prompt: 'delete the Test album',
+    expect: { kind: 'delete_album' },
+  },
+  {
     id: 'l3.recall.add.newest20',
     category: 'l3.recall',
     prompt: 'add my newest 20 photos to Family',

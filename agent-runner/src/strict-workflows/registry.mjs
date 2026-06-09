@@ -33,6 +33,7 @@ import { renamePersonWorkflow } from './workflows/rename-person.mjs';
 import { setPersonBirthdateWorkflow } from './workflows/set-person-birthdate.mjs';
 import { hidePersonWorkflow } from './workflows/hide-person.mjs';
 import { lockAssetsWorkflow } from './workflows/lock-assets.mjs';
+import { deleteAlbumWorkflow } from './workflows/delete-album.mjs';
 import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -130,6 +131,12 @@ const WORKFLOW_FACTORIES = Object.freeze([
   //     people group does not matter for the regex fast-path.
   mergePeopleWorkflow,
   setAlbumCoverWorkflow,
+  //   - `delete_album` is placed BEFORE `trash_assets`. trash_assets already
+  //     declines container-ending sources via `containerSourcePattern`, so
+  //     "delete the Beach album" is ceded regardless of order — but placing
+  //     delete_album first makes the intent explicit and ensures the strict
+  //     album-delete path wins without relying on trash_assets' fast-path decline.
+  deleteAlbumWorkflow,
   archiveAssetsWorkflow,
   cleanupDuplicatesWorkflow,
   visualCleanupWorkflow,
