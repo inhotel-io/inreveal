@@ -78,6 +78,39 @@ export default [
     expect: { kind: 'rename_or_describe_album', slotsSurvive: true, slots: { albumRef: /wedding/i, newName: /wedding day/i } },
   },
 
+  // delete_album -------------------------------------------------------------
+  {
+    id: 'recall.deletealbum.beach.canonical',
+    category: 'recall',
+    prompt: 'delete the Beach album',
+    expect: { kind: 'delete_album', slotsSurvive: true, slots: { albumRef: 'Beach' } },
+  },
+  {
+    id: 'recall.deletealbum.remove.trip',
+    category: 'recall',
+    prompt: 'remove the Trip album',
+    expect: { kind: 'delete_album', slotsSurvive: true, slots: { albumRef: 'Trip' } },
+  },
+  {
+    id: 'recall.deletealbum.getridof',
+    category: 'recall',
+    prompt: 'get rid of the Family album',
+    expect: { kind: 'delete_album', slotsSurvive: true, slots: { albumRef: 'Family' } },
+  },
+  // Negatives: photo-deletion intent must NOT route to delete_album
+  {
+    id: 'recall.deletealbum.neg.photos-in',
+    category: 'recall',
+    prompt: 'delete the photos in the Beach album',
+    expect: { kind: 'none' },
+  },
+  {
+    id: 'recall.deletealbum.neg.trash-assets-cede',
+    category: 'recall',
+    prompt: 'trash my 2024 screenshots',
+    expect: { kind: 'trash_assets' },
+  },
+
   // add_photos_to_album -----------------------------------------------------
   {
     id: 'recall.add.newest20.canonical',

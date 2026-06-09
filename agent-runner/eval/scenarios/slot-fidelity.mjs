@@ -258,4 +258,18 @@ export default [
     prompt: 'merge Alejandra into Karina',
     expect: { kind: 'merge_people', slots: { sourceRef: 'Alejandra', keepRef: 'Karina' } },
   },
+
+  // delete_album ---------------------------------------------------------------
+  {
+    id: 'slots.deletealbum.canonical',
+    category: 'slots',
+    prompt: 'delete the Beach album',
+    expect: { kind: 'delete_album', slots: { albumRef: 'Beach' } },
+  },
+  {
+    id: 'slots.deletealbum.remove',
+    category: 'slots',
+    prompt: 'remove the Trip album',
+    expect: { kind: 'delete_album', slots: { albumRef: 'Trip' } },
+  },
 ];
