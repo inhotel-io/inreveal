@@ -1,15 +1,15 @@
 import {
-  AgentMessageRole,
-  AgentProviderType,
-  AgentPermissionPreset,
   AgentApprovalMode,
+  AgentMessageRole,
+  AgentPermissionPreset,
+  AgentProviderType,
+  Kind as AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
   AgentSessionStatus,
   AgentToolCallStatus,
   AgentToolDataClass,
   AgentToolName,
-  AgentSessionActivityEventStatus,
-  AgentSessionActivityEventSource,
-  Kind as AgentSessionActivityEventKind,
   type AgentMessageResponseDto,
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
@@ -109,7 +109,9 @@ const makeAssistantMessage = (id: string, createdAt: string): AgentMessageRespon
   createdAt,
 });
 
-const makeToolCall = (overrides: Partial<AgentToolCallResponseDto> & { id: string; startedAt: string }): AgentToolCallResponseDto => ({
+const makeToolCall = (
+  overrides: Partial<AgentToolCallResponseDto> & { id: string; startedAt: string },
+): AgentToolCallResponseDto => ({
   sessionId,
   toolName: AgentToolName.SearchAssets,
   status: AgentToolCallStatus.Completed,
@@ -146,10 +148,9 @@ const build = (
 
 describe('buildAgentTurnTimelines', () => {
   it('E1 zero tool calls — settled turn has null summary and empty rows', () => {
-    const timelines = build(
-      makeSession(AgentSessionStatus.Completed),
-      [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
-    );
+    const timelines = build(makeSession(AgentSessionStatus.Completed), [
+      makeUserMessage('user-1', '2026-05-18T10:00:00.000Z'),
+    ]);
 
     expect(timelines).toHaveLength(1);
     expect(timelines[0].summary).toBeNull();
@@ -158,10 +159,9 @@ describe('buildAgentTurnTimelines', () => {
   });
 
   it('E2 running, no tool call yet — oneLiner understanding key', () => {
-    const timelines = build(
-      makeSession(AgentSessionStatus.Running),
-      [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
-    );
+    const timelines = build(makeSession(AgentSessionStatus.Running), [
+      makeUserMessage('user-1', '2026-05-18T10:00:00.000Z'),
+    ]);
 
     expect(timelines).toHaveLength(1);
     expect(timelines[0].state).toBe('running');
