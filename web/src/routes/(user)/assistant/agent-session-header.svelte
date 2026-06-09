@@ -11,7 +11,6 @@
     title?: string | null;
     cancelDisabled?: boolean;
     onCancel?: (() => void) | null;
-    onNewChat: () => void;
     onOpenDetails: () => void;
     activityVisibilityMode?: AgentActivityVisibilityMode;
     onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
@@ -22,7 +21,6 @@
     title = null,
     cancelDisabled = false,
     onCancel = null,
-    onNewChat,
     onOpenDetails,
     activityVisibilityMode,
     onActivityVisibilityModeChange,
@@ -99,22 +97,10 @@
         {$t('assistant_cancel')}
       </button>
     {/if}
-    {#if activityVisibilityMode && onActivityVisibilityModeChange}
-      <AgentActivityVisibilityMenu mode={activityVisibilityMode} onModeChange={onActivityVisibilityModeChange} />
-    {/if}
-    <button
-      type="button"
-      class="rounded-full border border-gray-300 px-3 py-2 text-sm font-medium text-black hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
-      onclick={onOpenDetails}
-    >
-      {$t('assistant_details')}
-    </button>
-    <button
-      type="button"
-      class="rounded-full bg-immich-primary px-3 py-2 text-sm font-medium text-white hover:bg-immich-primary/90"
-      onclick={onNewChat}
-    >
-      {$t('assistant_new_chat')}
-    </button>
+    <AgentActivityVisibilityMenu
+      mode={activityVisibilityMode}
+      onModeChange={onActivityVisibilityModeChange}
+      {onOpenDetails}
+    />
   </div>
 </section>

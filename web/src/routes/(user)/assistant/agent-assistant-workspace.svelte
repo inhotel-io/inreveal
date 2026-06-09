@@ -17,7 +17,7 @@
     updateAgentSession,
   } from '@immich/sdk';
   import { Button, Icon } from '@immich/ui';
-  import { mdiAlertCircleOutline, mdiDotsHorizontal, mdiInformationOutline } from '@mdi/js';
+  import { mdiAlertCircleOutline, mdiDockLeft, mdiDotsHorizontal, mdiInformationOutline, mdiPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import AgentConversationPane from './agent-conversation-pane.svelte';
   import AgentOnboarding from './agent-onboarding.svelte';
@@ -738,16 +738,26 @@
     <div class="hidden shrink-0 md:block">
       {#if sidebarCollapsed}
         <div
-          class="flex h-full w-14 flex-col items-center border-r border-gray-200 bg-slate-50 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+          class="flex h-full w-14 flex-col items-center gap-1 border-r border-gray-200 bg-slate-50 py-2 dark:border-neutral-800 dark:bg-neutral-950"
         >
           <button
             type="button"
             data-testid="agent-session-sidebar-expand"
-            class="rounded-md px-2 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
+            class="flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
             aria-label={$t('assistant_open_sessions')}
+            title={$t('assistant_open_sessions')}
             onclick={() => (sidebarCollapsed = false)}
           >
-            {$t('assistant_sessions').slice(0, 1)}
+            <Icon icon={mdiDockLeft} size="18" />
+          </button>
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-full text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
+            aria-label={$t('assistant_new_chat')}
+            title={$t('assistant_new_chat')}
+            onclick={startNewChat}
+          >
+            <Icon icon={mdiPlus} size="18" />
           </button>
         </div>
       {:else}

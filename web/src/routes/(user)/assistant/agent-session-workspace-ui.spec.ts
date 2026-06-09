@@ -209,7 +209,7 @@ describe('agent session workspace UI helpers', () => {
     });
   });
 
-  it('sorts sidebar rows by status priority, recency, and descending id without mutating input', () => {
+  it('sorts sidebar rows strictly newest-first with descending id tiebreak without mutating input', () => {
     const sessions = [
       session({ id: 'completed-new', status: AgentSessionStatus.Completed, createdAt: '2026-05-16T00:00:00.000Z' }),
       session({
@@ -229,15 +229,16 @@ describe('agent session workspace UI helpers', () => {
       session({ id: 'created-a', status: AgentSessionStatus.Created, createdAt: '2026-05-15T00:00:00.000Z' }),
     ];
 
+    // Mixed statuses must NOT reorder: only createdAt desc, then id desc.
     expect(sortAgentSessionsForSidebar(sessions).map(({ id }) => id)).toEqual([
-      'tool-old',
-      'plan-old',
-      'interrupted',
-      'running',
-      'applying-new',
       'completed-new',
+      'applying-new',
       'created-z',
       'created-a',
+      'running',
+      'plan-old',
+      'interrupted',
+      'tool-old',
     ]);
     expect(sessions.map(({ id }) => id)[0]).toBe('completed-new');
   });
@@ -366,6 +367,7 @@ describe('agent session workspace UI helpers', () => {
       session({
         id: 'images',
         status: AgentSessionStatus.WaitingForToolApproval,
+        createdAt: '2026-05-15T00:00:00.000Z',
         credentialSnapshot: {
           id: 'credential-1',
           providerType: AgentProviderType.Openai,
