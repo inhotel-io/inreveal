@@ -20,7 +20,7 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_visibility_expanded: 'Expanded',
     assistant_activity_visibility_menu: 'Activity preview options',
     assistant_activity_visibility_off: 'Off',
-    assistant_cancel: 'Cancel',
+    assistant_close_session: 'Close session',
     assistant_details: 'Details',
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
@@ -194,7 +194,7 @@ describe(AgentSessionHeader.name, () => {
   it('does not render Cancel without a cancel callback', () => {
     renderHeader();
 
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close session' })).not.toBeInTheDocument();
   });
 
   it('fires Cancel from an accessible danger action when a callback is provided', async () => {
@@ -202,7 +202,7 @@ describe(AgentSessionHeader.name, () => {
     const onCancel = vi.fn();
     renderHeader({ onCancel });
 
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Close session' }));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -212,7 +212,7 @@ describe(AgentSessionHeader.name, () => {
     const onCancel = vi.fn();
     const { onOpenDetails } = renderHeader({ cancelDisabled: true, onCancel });
 
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Close session' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Chat options' }));
     await user.click(screen.getByRole('menuitem', { name: 'Details' }));
@@ -256,7 +256,7 @@ describe(AgentSessionHeader.name, () => {
       onCancel: vi.fn(),
     });
 
-    expect(screen.getByRole('button', { name: 'Cancel' }).className).toContain('rounded-full');
+    expect(screen.getByRole('button', { name: 'Close session' }).className).toContain('rounded-full');
     expect(screen.getByRole('button', { name: 'Chat options' }).className).toContain('rounded-full');
   });
 });
