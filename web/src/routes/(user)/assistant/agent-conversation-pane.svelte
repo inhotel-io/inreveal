@@ -166,7 +166,6 @@
   <AgentSessionHeader
     {session}
     {title}
-    {onNewChat}
     onCancel={cancelHandler}
     cancelDisabled={cancelBusy}
     onOpenDetails={() => (detailsOpen = true)}

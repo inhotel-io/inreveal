@@ -1088,6 +1088,7 @@
   "assistant_session_create_error": "Unable to start assistant session",
   "assistant_session_created": "Assistant session started",
   "assistant_session_details": "Session details",
+  "assistant_session_menu": "Chat options",
   "assistant_session_setup": "Session setup",
   "assistant_session_status_applying": "Applying",
   "assistant_session_status_cancelled": "Cancelled",

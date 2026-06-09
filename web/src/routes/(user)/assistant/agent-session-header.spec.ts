@@ -25,6 +25,7 @@ vi.mock('svelte-i18n', () => {
     assistant_model: 'Model',
     assistant_new_chat: 'New chat',
     assistant_provider_credential: 'Provider credential',
+    assistant_session_menu: 'Chat options',
     assistant_session_status_running: 'Running',
     assistant_session_status_waiting_for_plan_review: 'Waiting for plan review',
   };
@@ -96,7 +97,6 @@ const makeSession = (overrides: Partial<AgentSessionResponseDto> = {}): AgentSes
 });
 
 const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> = {}) => {
-  const onNewChat = vi.fn();
   const onOpenDetails = vi.fn();
   const onCancel = vi.fn();
   const onActivityVisibilityModeChange = vi.fn();
@@ -105,13 +105,12 @@ const renderHeader = (props: Partial<ComponentProps<typeof AgentSessionHeader>> 
     props: {
       session: makeSession(),
       title: null,
-      onNewChat,
       onOpenDetails,
       ...props,
     },
   });
 
-  return { onActivityVisibilityModeChange, onCancel, onNewChat, onOpenDetails };
+  return { onActivityVisibilityModeChange, onCancel, onOpenDetails };
 };
 
 describe(AgentSessionHeader.name, () => {
@@ -176,14 +175,19 @@ describe(AgentSessionHeader.name, () => {
     expect(actions.className).not.toContain('shrink-0');
   });
 
-  it('fires New chat and Details callbacks from accessible buttons', async () => {
+  it('does not render a standalone New chat button in the header actions', () => {
+    renderHeader();
+
+    expect(screen.queryByRole('button', { name: 'New chat' })).not.toBeInTheDocument();
+  });
+
+  it('fires the Details callback from the overflow menu', async () => {
     const user = userEvent.setup();
-    const { onNewChat, onOpenDetails } = renderHeader();
+    const { onOpenDetails } = renderHeader();
 
-    await user.click(screen.getByRole('button', { name: 'New chat' }));
-    await user.click(screen.getByRole('button', { name: 'Details' }));
+    await user.click(screen.getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Details' }));
 
-    expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onOpenDetails).toHaveBeenCalledTimes(1);
   });
 
@@ -203,25 +207,28 @@ describe(AgentSessionHeader.name, () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('disables Cancel while cancellation is pending without disabling the other actions', async () => {
+  it('disables Cancel while cancellation is pending without disabling the overflow menu', async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
-    const { onNewChat, onOpenDetails } = renderHeader({ cancelDisabled: true, onCancel });
+    const { onOpenDetails } = renderHeader({ cancelDisabled: true, onCancel });
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
 
-    await user.click(screen.getByRole('button', { name: 'New chat' }));
-    await user.click(screen.getByRole('button', { name: 'Details' }));
+    await user.click(screen.getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Details' }));
 
     expect(onCancel).not.toHaveBeenCalled();
-    expect(onNewChat).toHaveBeenCalledTimes(1);
     expect(onOpenDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('renders activity visibility menu only when a callback is provided', () => {
+  it('renders the overflow menu without mode options when no mode callback is provided', async () => {
+    const user = userEvent.setup();
     renderHeader({ activityVisibilityMode: 'compact' });
 
-    expect(screen.queryByRole('button', { name: /Activity preview/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Chat options' }));
+
+    expect(screen.getByRole('menuitem', { name: 'Details' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio')).not.toBeInTheDocument();
   });
 
   it('forwards activity visibility changes from the header menu', async () => {
@@ -232,11 +239,11 @@ describe(AgentSessionHeader.name, () => {
       onActivityVisibilityModeChange,
     });
 
-    const trigger = screen.getByRole('button', { name: /Activity preview/i });
-    expect(trigger).toHaveTextContent('Compact');
+    const trigger = screen.getByRole('button', { name: 'Chat options' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
 
     await user.click(trigger);
+    expect(screen.getByRole('menuitemradio', { name: 'Compact' })).toHaveAttribute('aria-checked', 'true');
     await user.click(screen.getByRole('menuitemradio', { name: 'Off' }));
 
     expect(onActivityVisibilityModeChange).toHaveBeenCalledWith('off');
@@ -250,8 +257,6 @@ describe(AgentSessionHeader.name, () => {
     });
 
     expect(screen.getByRole('button', { name: 'Cancel' }).className).toContain('rounded-full');
-    expect(screen.getByRole('button', { name: 'Details' }).className).toContain('rounded-full');
-    expect(screen.getByRole('button', { name: 'New chat' }).className).toContain('rounded-full');
-    expect(screen.getByRole('button', { name: /Activity preview/i }).className).toContain('rounded-full');
+    expect(screen.getByRole('button', { name: 'Chat options' }).className).toContain('rounded-full');
   });
 });
