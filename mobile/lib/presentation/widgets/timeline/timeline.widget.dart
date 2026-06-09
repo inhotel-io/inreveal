@@ -23,6 +23,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/scroll_drain.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/scrubber.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_anchor.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_bottom_pill.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_drag_region.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_scroll_target.dart';
@@ -57,6 +58,7 @@ class Timeline extends StatelessWidget {
     this.readOnly = false,
     this.persistentBottomBar = false,
     this.loadingWidget,
+    this.withGroupingPill = false,
   });
 
   final Widget? topSliverWidget;
@@ -73,27 +75,19 @@ class Timeline extends StatelessWidget {
   final bool persistentBottomBar;
   final Widget? loadingWidget;
 
+  /// Overlay the always-visible Years|Months|All bottom pill and reserve bottom
+  /// clearance for it. Detail timelines (album/space/person/...) opt in; the main
+  /// Photos page keeps its app-bar chip and stays off.
+  final bool withGroupingPill;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       floatingActionButton: const DownloadStatusFloatingButton(),
       body: LayoutBuilder(
-        builder: (_, constraints) => ProviderScope(
-          overrides: [
-            timelineArgsProvider.overrideWith(
-              (ref) => TimelineArgs(
-                maxWidth: constraints.maxWidth,
-                maxHeight: constraints.maxHeight,
-                columnCount: ref.watch(settingsProvider.select((s) => s.get(Setting.tilesPerRow))),
-                showStorageIndicator: showStorageIndicator,
-                withStack: withStack,
-                groupBy: groupBy,
-              ),
-            ),
-            if (readOnly) readonlyModeProvider.overrideWith(() => _AlwaysReadOnlyNotifier()),
-          ],
-          child: _SliverTimeline(
+        builder: (_, constraints) {
+          final sliverTimeline = _SliverTimeline(
             topSliverWidget: topSliverWidget,
             topSliverWidgetHeight: topSliverWidgetHeight,
             bottomSliverWidget: bottomSliverWidget,
@@ -104,8 +98,30 @@ class Timeline extends StatelessWidget {
             snapToMonth: snapToMonth,
             maxWidth: constraints.maxWidth,
             loadingWidget: loadingWidget,
-          ),
-        ),
+            withGroupingPill: withGroupingPill,
+          );
+          return ProviderScope(
+            overrides: [
+              timelineArgsProvider.overrideWith(
+                (ref) => TimelineArgs(
+                  maxWidth: constraints.maxWidth,
+                  maxHeight: constraints.maxHeight,
+                  columnCount: ref.watch(settingsProvider.select((s) => s.get(Setting.tilesPerRow))),
+                  showStorageIndicator: showStorageIndicator,
+                  withStack: withStack,
+                  groupBy: groupBy,
+                ),
+              ),
+              if (readOnly) readonlyModeProvider.overrideWith(() => _AlwaysReadOnlyNotifier()),
+            ],
+            // The pill overlays the whole timeline body — including the loading state — by
+            // design: it is the always-visible grouping control, mirroring how the old top
+            // header was present while content loaded.
+            child: withGroupingPill
+                ? Stack(children: [sliverTimeline, const TimelineGroupingBottomPill()])
+                : sliverTimeline,
+          );
+        },
       ),
     );
   }
@@ -134,6 +150,7 @@ class _SliverTimeline extends ConsumerStatefulWidget {
     this.snapToMonth = true,
     this.maxWidth,
     this.loadingWidget,
+    this.withGroupingPill = false,
   });
 
   final Widget? topSliverWidget;
@@ -146,6 +163,7 @@ class _SliverTimeline extends ConsumerStatefulWidget {
   final bool snapToMonth;
   final double? maxWidth;
   final Widget? loadingWidget;
+  final bool withGroupingPill;
 
   @override
   ConsumerState createState() => _SliverTimelineState();
@@ -561,7 +579,11 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
           final topPadding = context.padding.top + (widget.appBar == null ? 0 : kToolbarHeight) + 10;
 
           const bottomSheetOpenModifier = 120.0;
-          final contentBottomPadding = context.padding.bottom + (isMultiSelectEnabled ? bottomSheetOpenModifier : 0);
+          final pillClearance = widget.withGroupingPill
+              ? TimelineGroupingBottomPill.pillHeight + TimelineGroupingBottomPill.bottomFloat
+              : 0.0;
+          final contentBottomPadding =
+              context.padding.bottom + pillClearance + (isMultiSelectEnabled ? bottomSheetOpenModifier : 0);
           final scrubberBottomPadding = contentBottomPadding + kScrubberThumbHeight;
 
           final grid = CustomScrollView(
