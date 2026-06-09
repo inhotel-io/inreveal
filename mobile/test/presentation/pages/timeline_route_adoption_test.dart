@@ -26,7 +26,6 @@ import 'package:immich_mobile/presentation/pages/drift_remote_album.page.dart';
 import 'package:immich_mobile/presentation/pages/drift_trash.page.dart';
 import 'package:immich_mobile/presentation/pages/drift_video.page.dart';
 import 'package:immich_mobile/presentation/pages/local_timeline.page.dart';
-import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_header_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -113,15 +112,14 @@ void main() {
                 origin: TimelineOrigin.person,
               ));
             },
-            child: const CustomScrollView(slivers: [TimelineGroupingHeaderSliver()]),
+            child: const CustomScrollView(slivers: [SliverToBoxAdapter(child: TimelineGroupingSelector())]),
           ),
         ),
       ),
     );
 
-    expect(find.byType(TimelineGroupingHeaderSliver), findsOneWidget);
     expect(find.byType(TimelineGroupingSelector), findsOneWidget);
-    final ref = ProviderScope.containerOf(tester.element(find.byType(TimelineGroupingHeaderSliver)));
+    final ref = ProviderScope.containerOf(tester.element(find.byType(TimelineGroupingSelector)));
     ref.read(timelineServiceProvider);
     expect(seenScopes.last, const TimelineTemporalScope.none());
 
@@ -146,38 +144,26 @@ void main() {
       expect(PhotosTimelineAppBar.actions.first, isA<TimelineGroupingSelector>());
     });
 
-    test('routes expose expected top sliver heights', () {
+    test('all pill-adopting routes expose controls flag; composed pages expose extra-sliver heights', () {
+      // Simple pages: header sliver replaced by withGroupingPill; no extra top sliver.
       expect(DriftPersonPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftPersonPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(RemoteAlbumPage.timelineOverviewControlsEnabled, isTrue);
-
       expect(LocalTimelinePage.timelineOverviewControlsEnabled, isTrue);
-      expect(LocalTimelinePage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(DriftFavoritePage.timelineOverviewControlsEnabled, isTrue);
-
       expect(DriftArchivePage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftArchivePage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(DriftLockedFolderPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftLockedFolderPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(DriftVideoPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftVideoPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(DriftRecentlyTakenPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftRecentlyTakenPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
-
       expect(DriftPlaceDetailPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftPlaceDetailPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight);
 
+      // Composed pages: keep a non-header extra sliver; the const now measures only that sliver.
       expect(DriftTrashPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftTrashPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight + 24);
+      expect(DriftTrashPage.trashInfoBannerTopSliverHeight, 24.0);
 
       expect(DriftPartnerDetailPage.timelineOverviewControlsEnabled, isTrue);
-      expect(DriftPartnerDetailPage.timelineOverviewTopSliverHeight, kTimelineGroupingHeaderSliverHeight + 110);
+      expect(DriftPartnerDetailPage.partnerInfoBoxTopSliverHeight, 110.0);
 
+      // Space detail: sync-banner height is dynamic; its contract is unchanged.
       expect(SpaceDetailPage.timelineOverviewControlsEnabled, isTrue);
       expect(SpaceDetailPage.syncBannerTopSliverHeight(isRemoteSyncing: false), 0.0);
       expect(SpaceDetailPage.syncBannerTopSliverHeight(isRemoteSyncing: true), kSyncStatusBannerSliverHeight);
@@ -196,13 +182,13 @@ void main() {
                   calls.add(_ObservedRouteCall(constraint: route.constraint, scope: scope, groupBy: _storedGroupBy()));
                   return _emptyService(route.origin);
                 },
-                child: const CustomScrollView(slivers: [TimelineGroupingHeaderSliver()]),
+                child: const CustomScrollView(slivers: [SliverToBoxAdapter(child: TimelineGroupingSelector())]),
               ),
             ),
           ),
         );
 
-        final ref = ProviderScope.containerOf(tester.element(find.byType(TimelineGroupingHeaderSliver)));
+        final ref = ProviderScope.containerOf(tester.element(find.byType(TimelineGroupingSelector)));
         ref.read(timelineServiceProvider);
 
         expect(calls.single.constraint, route.constraint);

@@ -5,7 +5,6 @@ import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/generated/translations.g.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/trash_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
-import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_header_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/server_info.provider.dart';
@@ -16,7 +15,9 @@ class DriftTrashPage extends StatelessWidget {
   const DriftTrashPage({super.key});
 
   static const timelineOverviewControlsEnabled = true;
-  static const timelineOverviewTopSliverHeight = kTimelineGroupingHeaderSliverHeight + 24;
+  // Soft scrubber-snapping hint, not a measured height (the rendered banner is ~48 px;
+  // this 24 px delta is the value the old combined constant always encoded).
+  static const trashInfoBannerTopSliverHeight = 24.0;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +31,7 @@ class DriftTrashPage extends StatelessWidget {
         return ref.watch(timelineFactoryProvider).trash(user.id, temporalScope: scope);
       },
       child: Timeline(
+        withGroupingPill: true,
         appBar: SliverAppBar(
           title: Text('trash'.t(context: context)),
           floating: true,
@@ -38,22 +40,17 @@ class DriftTrashPage extends StatelessWidget {
           centerTitle: true,
           elevation: 0,
         ),
-        topSliverWidgetHeight: DriftTrashPage.timelineOverviewTopSliverHeight,
-        topSliverWidget: SliverMainAxisGroup(
-          slivers: [
-            const TimelineGroupingHeaderSliver(),
-            Consumer(
-              builder: (context, ref, child) {
-                final trashDays = ref.watch(serverInfoProvider.select((v) => v.serverConfig.trashDays));
+        topSliverWidget: Consumer(
+          builder: (context, ref, child) {
+            final trashDays = ref.watch(serverInfoProvider.select((v) => v.serverConfig.trashDays));
 
-                return SliverPadding(
-                  padding: const EdgeInsets.all(16.0),
-                  sliver: SliverToBoxAdapter(child: Text(context.t.trash_page_info(days: trashDays))),
-                );
-              },
-            ),
-          ],
+            return SliverPadding(
+              padding: const EdgeInsets.all(16.0),
+              sliver: SliverToBoxAdapter(child: Text(context.t.trash_page_info(days: trashDays))),
+            );
+          },
         ),
+        topSliverWidgetHeight: DriftTrashPage.trashInfoBannerTopSliverHeight,
         bottomSheet: const TrashBottomBar(),
       ),
     );

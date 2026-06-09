@@ -4,7 +4,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/locked_folder_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
-import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_header_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/auth.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -16,7 +15,6 @@ class DriftLockedFolderPage extends ConsumerStatefulWidget {
   const DriftLockedFolderPage({super.key});
 
   static const timelineOverviewControlsEnabled = true;
-  static const timelineOverviewTopSliverHeight = kTimelineGroupingHeaderSliverHeight;
 
   @override
   ConsumerState<DriftLockedFolderPage> createState() => _DriftLockedFolderPageState();
@@ -62,8 +60,7 @@ class _DriftLockedFolderPageState extends ConsumerState<DriftLockedFolderPage> w
           : PopScope(
               onPopInvokedWithResult: (didPop, _) => didPop ? ref.read(authProvider.notifier).lockPinCode() : null,
               child: Timeline(
-                topSliverWidget: const TimelineGroupingHeaderSliver(),
-                topSliverWidgetHeight: DriftLockedFolderPage.timelineOverviewTopSliverHeight,
+                withGroupingPill: true,
                 appBar: MesmerizingSliverAppBar(title: 'locked_folder'.t(context: context)),
                 bottomSheet: const LockedFolderBottomSheet(),
               ),

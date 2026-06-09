@@ -3,7 +3,6 @@ import 'package:flutter/widgets.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
-import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_header_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
@@ -14,7 +13,6 @@ class DriftVideoPage extends StatelessWidget {
   const DriftVideoPage({super.key});
 
   static const timelineOverviewControlsEnabled = true;
-  static const timelineOverviewTopSliverHeight = kTimelineGroupingHeaderSliverHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +26,7 @@ class DriftVideoPage extends StatelessWidget {
 
         return ref.watch(timelineFactoryProvider).video(users, user.id, temporalScope: scope);
       },
-      child: Timeline(
-        topSliverWidget: const TimelineGroupingHeaderSliver(),
-        topSliverWidgetHeight: DriftVideoPage.timelineOverviewTopSliverHeight,
-        appBar: MesmerizingSliverAppBar(title: 'videos'.t()),
-      ),
+      child: Timeline(withGroupingPill: true, appBar: MesmerizingSliverAppBar(title: 'videos'.t())),
     );
   }
 }
