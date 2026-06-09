@@ -284,7 +284,7 @@
 
     <!-- Test connection row -->
     <div class="mt-1.5 flex items-center gap-2.5">
-      <Button disabled={!canTest} onclick={test}>
+      <Button shape="round" disabled={!canTest} onclick={test}>
         {$t('assistant_onboarding_test')}
       </Button>
 
