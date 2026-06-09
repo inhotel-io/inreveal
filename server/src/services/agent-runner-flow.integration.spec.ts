@@ -52,6 +52,7 @@ import { AgentOperationPlanService } from 'src/services/agent-operation-plan.ser
 import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
 import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import type { TripCandidate } from 'src/services/trip-candidate.service';
@@ -735,6 +736,7 @@ const setup = () => {
     sessions as unknown as AgentSessionRepository,
     credentialService as unknown as AgentProviderCredentialService,
     runnerService,
+    { closeOpenLifecycleEvents: vi.fn() } as unknown as AgentSessionActivityEventService,
   );
   const messageService = new AgentMessageService(
     messages as unknown as AgentMessageRepository,
