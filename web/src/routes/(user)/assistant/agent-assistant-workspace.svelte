@@ -379,6 +379,7 @@
       });
       sentMessageBySessionId = { ...sentMessageBySessionId, [session.id]: message };
       titleBySessionId = { ...titleBySessionId, [session.id]: text };
+      void persistSessionTitle(session.id, text);
       newChatDraft = '';
     } catch (error) {
       newChatError = $t('assistant_session_create_error');
@@ -424,6 +425,23 @@
     localSessions = localSessions.map((existingSession) =>
       existingSession.id === session.id ? session : existingSession,
     );
+  };
+
+  // Persist the first message as the session title so it survives reloads (best-effort:
+  // the in-memory cache still covers this tab if the update fails).
+  const persistSessionTitle = async (sessionId: string, text: string) => {
+    const title = text.trim().slice(0, 120).trim();
+    if (!title) {
+      return;
+    }
+    try {
+      const session = await updateAgentSession({ id: sessionId, agentSessionUpdateDto: { title } });
+      localSessions = localSessions.map((existingSession) =>
+        existingSession.id === session.id ? session : existingSession,
+      );
+    } catch {
+      // Title just won't survive a reload; not worth surfacing as an error mid-send.
+    }
   };
 
   const handleRenameSession = async (sessionId: string, title: string) => {
