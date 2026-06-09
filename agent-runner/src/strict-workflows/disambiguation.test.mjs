@@ -141,7 +141,15 @@ const CASES = [
   ['delete the photos in the Beach album', 'none'],
   // "delete the Beach album photos" → trash_assets (source ends with "photos", not "album")
   ['delete the Beach album photos', 'trash_assets'],
-  ['delete the Family space', 'none'],
+  // "delete the Family space" → delete_space (delete_album declines space targets)
+  ['delete the Family space', 'delete_space'],
+  // delete_space (space-container deletion; declines photo-deletion, album deletion)
+  ['delete the Trip space', 'delete_space'],
+  ['remove the Beach space', 'delete_space'],
+  ['get rid of the Vacations space', 'delete_space'],
+  // delete_space must NOT steal photo-deletion, album deletion, or in-frame intents
+  ['delete the photos in the Family space', 'none'],
+  ['delete the Family album', 'delete_album'],
   // trash_assets must NOT steal album-container prompts (container-source guard)
   ['trash the best ones', 'none'],
   ['make an album of the best photos', 'none'],

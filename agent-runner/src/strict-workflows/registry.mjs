@@ -34,6 +34,7 @@ import { setPersonBirthdateWorkflow } from './workflows/set-person-birthdate.mjs
 import { hidePersonWorkflow } from './workflows/hide-person.mjs';
 import { lockAssetsWorkflow } from './workflows/lock-assets.mjs';
 import { deleteAlbumWorkflow } from './workflows/delete-album.mjs';
+import { deleteSpaceWorkflow } from './workflows/delete-space.mjs';
 import { mergePeopleWorkflow } from './workflows/merge-people.mjs';
 
 // Workflow factories keyed by kind. Adding a workflow is a registry entry, not a
@@ -136,7 +137,12 @@ const WORKFLOW_FACTORIES = Object.freeze([
   //     "delete the Beach album" is ceded regardless of order — but placing
   //     delete_album first makes the intent explicit and ensures the strict
   //     album-delete path wins without relying on trash_assets' fast-path decline.
+  //   - `delete_space` is placed immediately after `delete_album` (both are
+  //     container-delete workflows). `delete_album` declines "space" targets and
+  //     `delete_space` declines "album" targets — the two are mutually exclusive.
+  //     Both are placed before `trash_assets` for the same container-cede reason.
   deleteAlbumWorkflow,
+  deleteSpaceWorkflow,
   archiveAssetsWorkflow,
   cleanupDuplicatesWorkflow,
   visualCleanupWorkflow,
