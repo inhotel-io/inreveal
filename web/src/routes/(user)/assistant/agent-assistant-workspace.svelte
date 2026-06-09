@@ -8,6 +8,7 @@
     appendAgentSessionMessage,
     createAgentSession,
     deleteAgentSession,
+    getAgentProviderCredentials,
     validateAgentSession,
     type AgentMessageResponseDto,
     type AgentProviderCredentialResponseDto,
@@ -19,6 +20,7 @@
   import { mdiAlertCircleOutline, mdiDotsHorizontal, mdiInformationOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import AgentConversationPane from './agent-conversation-pane.svelte';
+  import AgentOnboarding from './agent-onboarding.svelte';
   import AgentProviderCredentialsModal from './agent-provider-credentials-modal.svelte';
   import AgentSessionSidebar from './agent-session-sidebar.svelte';
   import {
@@ -487,6 +489,25 @@
       runnerDetailsOpen = false;
     }
   });
+
+  const handleOnboardingComplete = async (result: {
+    credentialId: string;
+    model: string;
+    permissionPreset: AgentPermissionPreset;
+    approvalMode: AgentApprovalMode;
+  }) => {
+    localCredentials = await getAgentProviderCredentials();
+    assistantCredentialId = result.credentialId;
+    assistantModel = result.model;
+    assistantPermissionPreset = result.permissionPreset;
+    assistantApprovalMode = result.approvalMode;
+    persistAssistantDefaults({
+      credentialId: result.credentialId,
+      model: result.model,
+      permissionPreset: result.permissionPreset,
+      approvalMode: result.approvalMode,
+    });
+  };
 </script>
 
 <div class="relative flex h-full min-h-0 overflow-hidden bg-white text-black dark:bg-black dark:text-white">
@@ -863,59 +884,63 @@
             class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col justify-center gap-4 pb-20"
             data-testid="assistant-empty-chat-surface"
           >
-            <div class="text-center" data-testid="assistant-empty-chat-heading">
-              <h2 class="text-2xl font-semibold">{$t('assistant_new_chat_prompt')}</h2>
-            </div>
-
-            {#if newChatError}
-              <div
-                class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-                role="alert"
-              >
-                {newChatError}
+            {#if localCredentials.length === 0}
+              <AgentOnboarding onComplete={handleOnboardingComplete} />
+            {:else}
+              <div class="text-center" data-testid="assistant-empty-chat-heading">
+                <h2 class="text-2xl font-semibold">{$t('assistant_new_chat_prompt')}</h2>
               </div>
-            {/if}
 
-            <form
-              class="mt-4 shrink-0"
-              data-testid="assistant-new-chat-composer"
-              onsubmit={(event) => {
-                event.preventDefault();
-                void startSessionFromMessage();
-              }}
-            >
-              <div
-                class="grid w-full gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
-              >
-                {#if selectedAssistantCredential}
-                  <div class="flex items-center justify-between gap-2 px-2 pt-1">
-                    <button
-                      type="button"
-                      class="max-w-full truncate rounded-md px-2 py-1 text-left text-xs text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
-                      aria-label={$t('assistant_model_selector')}
-                      onclick={() => (assistantSettingsOpen = true)}
-                    >
-                      {selectedAssistantCredential.label} · {selectedAssistantModel}
-                    </button>
-                  </div>
-                {/if}
-                <div class="flex items-end gap-3">
-                  <label for="assistant-new-message" class="sr-only">{$t('assistant_message')}</label>
-                  <textarea
-                    id="assistant-new-message"
-                    aria-label={$t('assistant_message')}
-                    class="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                    bind:value={newChatDraft}
-                    placeholder={$t('assistant_new_chat_placeholder')}
-                    disabled={isStartingFromMessage || !isRunnerAvailable}
-                    onkeydown={handleNewChatComposerKeydown}
-                  ></textarea>
-                  <Button type="submit" disabled={!canSendNewChat} loading={isStartingFromMessage}
-                    >{$t('assistant_send')}</Button
-                  >
+              {#if newChatError}
+                <div
+                  class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+                  role="alert"
+                >
+                  {newChatError}
                 </div>
-              </div>
-            </form>
+              {/if}
+
+              <form
+                class="mt-4 shrink-0"
+                data-testid="assistant-new-chat-composer"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  void startSessionFromMessage();
+                }}
+              >
+                <div
+                  class="grid w-full gap-2 rounded-2xl border border-gray-300 bg-white p-2 shadow-lg dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  {#if selectedAssistantCredential}
+                    <div class="flex items-center justify-between gap-2 px-2 pt-1">
+                      <button
+                        type="button"
+                        class="max-w-full truncate rounded-md px-2 py-1 text-left text-xs text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white"
+                        aria-label={$t('assistant_model_selector')}
+                        onclick={() => (assistantSettingsOpen = true)}
+                      >
+                        {selectedAssistantCredential.label} · {selectedAssistantModel}
+                      </button>
+                    </div>
+                  {/if}
+                  <div class="flex items-end gap-3">
+                    <label for="assistant-new-message" class="sr-only">{$t('assistant_message')}</label>
+                    <textarea
+                      id="assistant-new-message"
+                      aria-label={$t('assistant_message')}
+                      class="min-h-14 flex-1 resize-none bg-transparent px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                      bind:value={newChatDraft}
+                      placeholder={$t('assistant_new_chat_placeholder')}
+                      disabled={isStartingFromMessage || !isRunnerAvailable}
+                      onkeydown={handleNewChatComposerKeydown}
+                    ></textarea>
+                    <Button type="submit" disabled={!canSendNewChat} loading={isStartingFromMessage}
+                      >{$t('assistant_send')}</Button
+                    >
+                  </div>
+                </div>
+              </form>
+            {/if}
           </div>
         </section>
       {/if}
