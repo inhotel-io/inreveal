@@ -315,7 +315,11 @@ export class AgentSessionService {
     await this.cancelRunnerSession(session);
 
     try {
-      await this.activityEventService.closeOpenLifecycleEvents(auth.user.id, id, AgentSessionActivityEventStatus.Skipped);
+      await this.activityEventService.closeOpenLifecycleEvents(
+        auth.user.id,
+        id,
+        AgentSessionActivityEventStatus.Skipped,
+      );
     } catch {
       // Closing activity events is best-effort; the database cancellation is authoritative.
     }
