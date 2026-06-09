@@ -884,7 +884,7 @@
             class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col justify-center gap-4 pb-20"
             data-testid="assistant-empty-chat-surface"
           >
-            {#if localCredentials.length === 0}
+            {#if isRunnerAvailable && localCredentials.length === 0}
               <AgentOnboarding onComplete={handleOnboardingComplete} />
             {:else}
               <div class="text-center" data-testid="assistant-empty-chat-heading">
