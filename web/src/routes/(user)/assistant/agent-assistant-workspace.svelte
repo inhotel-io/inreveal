@@ -787,13 +787,13 @@
   {/if}
 
   <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
-    <header
-      class={[
-        'flex min-h-14 shrink-0 items-center gap-3 border-b border-gray-200 px-4 dark:border-gray-800 md:px-6',
-        selectedSession ? 'md:hidden' : '',
-      ]}
-    >
-      {#if !onboardingActive}
+    {#if !onboardingActive}
+      <header
+        class={[
+          'flex min-h-14 shrink-0 items-center gap-3 border-b border-gray-200 px-4 dark:border-gray-800 md:px-6',
+          selectedSession ? 'md:hidden' : '',
+        ]}
+      >
         <button
           type="button"
           class="rounded-lg border border-gray-300 px-3 py-2 text-sm md:hidden dark:border-gray-700"
@@ -802,58 +802,56 @@
         >
           {$t('assistant_sessions')}
         </button>
-      {/if}
-      <div class="min-w-0">
-        <h1 class="truncate text-lg font-semibold">{selectedTitle}</h1>
-        {#if selectedSession}
-          <p class="truncate text-sm text-gray-500 dark:text-gray-400">
-            {$t(getAgentSessionStatusLabelKey(selectedSession.status))} · {selectedSession.modelSnapshot.model}
-          </p>
-        {/if}
-      </div>
-      <div class="ml-auto flex shrink-0 items-center gap-2">
-        {#if !isRunnerAvailable}
-          <div class="relative">
-            <button
-              type="button"
-              class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-300"
-              aria-label={runnerStatusLabel}
-              aria-expanded={runnerDetailsOpen}
-              title={runnerStatusLabel}
-              onclick={() => (runnerDetailsOpen = !runnerDetailsOpen)}
-            >
-              <Icon icon={mdiAlertCircleOutline} size="18" />
-            </button>
-
-            {#if runnerDetailsOpen}
-              <div
-                class="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-red-200 bg-white p-3 text-sm shadow-lg dark:border-red-900 dark:bg-neutral-950"
-                role="status"
+        <div class="min-w-0">
+          <h1 class="truncate text-lg font-semibold">{selectedTitle}</h1>
+          {#if selectedSession}
+            <p class="truncate text-sm text-gray-500 dark:text-gray-400">
+              {$t(getAgentSessionStatusLabelKey(selectedSession.status))} · {selectedSession.modelSnapshot.model}
+            </p>
+          {/if}
+        </div>
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+          {#if !isRunnerAvailable}
+            <div class="relative">
+              <button
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-600 transition-colors hover:bg-red-500/15 dark:text-red-300"
+                aria-label={runnerStatusLabel}
+                aria-expanded={runnerDetailsOpen}
+                title={runnerStatusLabel}
+                onclick={() => (runnerDetailsOpen = !runnerDetailsOpen)}
               >
-                <p class="font-medium text-red-700 dark:text-red-200">{runnerStatusLabel}</p>
-                <dl class="mt-3 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
-                  <dt>{$t('assistant_configured')}</dt>
-                  <dd>{runnerStatus.configured ? $t('assistant_yes') : $t('assistant_no')}</dd>
-                  <dt>{$t('assistant_healthy')}</dt>
-                  <dd>{runnerStatus.healthy ? $t('assistant_yes') : $t('assistant_no')}</dd>
-                  {#if runnerStatus.version}
-                    <dt>{$t('assistant_runner', { values: { version: runnerStatus.version } })}</dt>
-                    <dd>{runnerStatus.version}</dd>
-                  {/if}
-                  {#if runnerStatus.capabilities?.protocolVersion}
-                    <dt>
-                      {$t('assistant_protocol', {
-                        values: { protocol: runnerStatus.capabilities.protocolVersion },
-                      })}
-                    </dt>
-                    <dd>{runnerStatus.capabilities.protocolVersion}</dd>
-                  {/if}
-                </dl>
-              </div>
-            {/if}
-          </div>
-        {/if}
-        {#if !onboardingActive}
+                <Icon icon={mdiAlertCircleOutline} size="18" />
+              </button>
+
+              {#if runnerDetailsOpen}
+                <div
+                  class="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-red-200 bg-white p-3 text-sm shadow-lg dark:border-red-900 dark:bg-neutral-950"
+                  role="status"
+                >
+                  <p class="font-medium text-red-700 dark:text-red-200">{runnerStatusLabel}</p>
+                  <dl class="mt-3 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                    <dt>{$t('assistant_configured')}</dt>
+                    <dd>{runnerStatus.configured ? $t('assistant_yes') : $t('assistant_no')}</dd>
+                    <dt>{$t('assistant_healthy')}</dt>
+                    <dd>{runnerStatus.healthy ? $t('assistant_yes') : $t('assistant_no')}</dd>
+                    {#if runnerStatus.version}
+                      <dt>{$t('assistant_runner', { values: { version: runnerStatus.version } })}</dt>
+                      <dd>{runnerStatus.version}</dd>
+                    {/if}
+                    {#if runnerStatus.capabilities?.protocolVersion}
+                      <dt>
+                        {$t('assistant_protocol', {
+                          values: { protocol: runnerStatus.capabilities.protocolVersion },
+                        })}
+                      </dt>
+                      <dd>{runnerStatus.capabilities.protocolVersion}</dd>
+                    {/if}
+                  </dl>
+                </div>
+              {/if}
+            </div>
+          {/if}
           <button
             type="button"
             class="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-black dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-white"
@@ -863,9 +861,9 @@
           >
             <Icon icon={mdiDotsHorizontal} size="20" />
           </button>
-        {/if}
-      </div>
-    </header>
+        </div>
+      </header>
+    {/if}
 
     <div class="min-h-0 flex-1 overflow-hidden">
       {#if selectedSession}
