@@ -81,10 +81,7 @@ const TOOL_VERB_KEYS: Record<string, string> = {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-const buildRowState = (
-  toolCall: AgentToolCallResponseDto,
-  turnIsRunning: boolean,
-): AgentTurnTimelineRowState => {
+const buildRowState = (toolCall: AgentToolCallResponseDto, turnIsRunning: boolean): AgentTurnTimelineRowState => {
   switch (toolCall.status) {
     case AgentToolCallStatus.Completed: {
       return 'completed';
@@ -105,9 +102,7 @@ const buildRowState = (
 const buildRow = (toolCall: AgentToolCallResponseDto, turnIsRunning: boolean): AgentTurnTimelineRow => {
   const state = buildRowState(toolCall, turnIsRunning);
   const durationMs =
-    toolCall.completedAt === null
-      ? null
-      : Date.parse(toolCall.completedAt) - Date.parse(toolCall.startedAt);
+    toolCall.completedAt === null ? null : Date.parse(toolCall.completedAt) - Date.parse(toolCall.startedAt);
 
   return {
     id: toolCall.id,
@@ -129,13 +124,9 @@ const buildRow = (toolCall: AgentToolCallResponseDto, turnIsRunning: boolean): A
 };
 
 const sortRows = (rows: AgentTurnTimelineRow[]): AgentTurnTimelineRow[] =>
-  [...rows].sort(
-    (a, b) => a.detail.startedAt.localeCompare(b.detail.startedAt) || a.id.localeCompare(b.id),
-  );
+  [...rows].sort((a, b) => a.detail.startedAt.localeCompare(b.detail.startedAt) || a.id.localeCompare(b.id));
 
-const buildOneLiner = (
-  rows: AgentTurnTimelineRow[],
-): AgentTurnTimeline['oneLiner'] => {
+const buildOneLiner = (rows: AgentTurnTimelineRow[]): AgentTurnTimeline['oneLiner'] => {
   if (rows.length === 0) {
     return { kind: 'key', key: 'assistant_timeline_understanding' };
   }
@@ -167,8 +158,7 @@ const buildSummary = (rows: AgentTurnTimelineRow[]): AgentTurnTimeline['summary'
   // wall-clock: first row startedAt → last non-null completedAt
   const firstStartedAt = rows[0].detail.startedAt;
   const lastCompletedAt = [...rows].reverse().find((r) => r.detail.completedAt !== null)?.detail.completedAt ?? null;
-  const durationMs =
-    lastCompletedAt === null ? null : Date.parse(lastCompletedAt) - Date.parse(firstStartedAt);
+  const durationMs = lastCompletedAt === null ? null : Date.parse(lastCompletedAt) - Date.parse(firstStartedAt);
 
   return { steps, durationMs, failedCount, cancelled };
 };
