@@ -33,6 +33,11 @@ class RunnerReportedError extends Error {}
 type AgentSessionActivityServiceLike = {
   createSystemEvent: (userId: string, sessionId: string, event: Record<string, unknown>) => Promise<unknown>;
   normalizeRunnerEvent: (event: AgentRunnerActivityStreamEvent) => Record<string, unknown> | null | undefined;
+  closeOpenLifecycleEvents: (
+    userId: string,
+    sessionId: string,
+    terminalStatus: AgentSessionActivityEventStatus,
+  ) => Promise<unknown>;
 };
 
 type RunnerActivityContext = {
@@ -482,6 +487,7 @@ export class AgentRunnerService {
       createdAt: this.toIsoNow(),
     });
     await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, cleanupContext);
+    this.closeLifecycleEvents(userId, sessionId, AgentSessionActivityEventStatus.Completed);
   }
 
   private async isWaitingForToolApproval(userId: string, sessionId: string) {
@@ -619,6 +625,20 @@ export class AgentRunnerService {
       }
 
       void Promise.resolve(this.activityService.createSystemEvent(userId, sessionId, event)).catch(() => {
+        // Activity events are audit hints and must not block the assistant stream.
+      });
+    } catch {
+      // Activity events are audit hints and must not block the assistant stream.
+    }
+  }
+
+  private closeLifecycleEvents(userId: string, sessionId: string, terminalStatus: AgentSessionActivityEventStatus) {
+    try {
+      if (typeof this.activityService?.closeOpenLifecycleEvents !== 'function') {
+        return;
+      }
+
+      void Promise.resolve(this.activityService.closeOpenLifecycleEvents(userId, sessionId, terminalStatus)).catch(() => {
         // Activity events are audit hints and must not block the assistant stream.
       });
     } catch {
