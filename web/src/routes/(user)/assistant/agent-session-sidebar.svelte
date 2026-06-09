@@ -53,7 +53,7 @@
       {#if onCollapse}
         <button
           type="button"
-          class="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          class="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
           aria-label={$t('assistant_collapse_sessions')}
           onclick={onCollapse}
         >
@@ -64,7 +64,7 @@
     <button
       type="button"
       data-testid="agent-session-sidebar-new-chat"
-      class="w-full rounded-md px-2.5 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-neutral-200 dark:hover:bg-neutral-900 dark:hover:text-neutral-50"
+      class="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
       onclick={onNewChat}
     >
       {$t('assistant_new_chat')}
@@ -73,7 +73,7 @@
 
   <div class="shrink-0 px-2.5 py-2">
     <input
-      class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-50 dark:placeholder:text-neutral-500 dark:focus:border-neutral-500 dark:focus:ring-neutral-800"
+      class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-50 dark:placeholder:text-neutral-500 dark:focus:border-neutral-500 dark:focus:ring-neutral-800"
       type="search"
       aria-label={$t('assistant_search_chats')}
       placeholder={$t('assistant_search_chats')}
