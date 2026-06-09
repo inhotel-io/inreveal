@@ -15,11 +15,11 @@
       descKey: 'assistant_onboarding_approval_plan_desc',
       recommended: true,
       flow: [
-        { type: 'node-ai', label: 'Drafts plan' },
-        { type: 'arrow' },
-        { type: 'node-you', label: 'You ✓' },
-        { type: 'arrow' },
-        { type: 'node-go', label: 'Runs' },
+        { type: 'node-ai' as const, label: 'Drafts plan' },
+        { type: 'arrow' as const },
+        { type: 'node-you' as const, label: 'You ✓' },
+        { type: 'arrow' as const },
+        { type: 'node-go' as const, label: 'Runs' },
       ],
     },
     {
@@ -28,64 +28,76 @@
       descKey: 'assistant_onboarding_approval_strict_desc',
       recommended: false,
       flow: [
-        { type: 'node-ai', label: 'Step' },
-        { type: 'arrow' },
-        { type: 'node-you', label: 'You ✓' },
-        { type: 'arrow' },
-        { type: 'node-ai', label: 'Step…' },
+        { type: 'node-ai' as const, label: 'Step' },
+        { type: 'arrow-loop' as const },
+        { type: 'node-you' as const, label: 'You ✓' },
+        { type: 'arrow-loop' as const },
+        { type: 'node-ai' as const, label: 'Step…' },
       ],
     },
   ] as const;
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-5">
+  <!-- Eyebrow + title + subtitle -->
   <div>
-    <p class="text-sm font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide mb-1">
-      {$t('assistant_onboarding_approval_eyebrow')}
-    </p>
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{$t('assistant_onboarding_approval_title')}</h2>
-    <p class="mt-2 text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_approval_subtitle')}</p>
+    <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.09em] text-primary">{$t('assistant_onboarding_approval_eyebrow')}</p>
+    <h2 class="text-[30px] font-extrabold leading-[1.08] tracking-[-0.025em] text-gray-900 dark:text-white">{$t('assistant_onboarding_approval_title')}</h2>
+    <p class="mt-2.5 max-w-[46ch] text-[15.5px] leading-relaxed text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_approval_subtitle')}</p>
   </div>
 
-  <div role="group" aria-label={$t('assistant_onboarding_approval_group_label')} class="grid grid-cols-2 gap-3">
+  <!-- 2-column approval card grid -->
+  <div role="group" aria-label={$t('assistant_onboarding_approval_group_label')} class="grid grid-cols-2 gap-2.5">
     {#each MODES as mode (mode.value)}
       {@const isSelected = approval === mode.value}
       <button
-        aria-pressed={isSelected}
+        aria-pressed={isSelected ? 'true' : 'false'}
         aria-label={$t(mode.labelKey)}
         onclick={() => onChange(mode.value)}
-        class="text-left rounded-xl border p-4 flex flex-col gap-3 transition-all
+        class="flex cursor-pointer flex-col gap-3 rounded-2xl border-[1.5px] p-4 text-left transition-all
           {isSelected
-          ? 'border-primary ring-2 ring-primary/30 bg-primary/5'
-          : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-immich-dark-gray hover:border-primary/50'}"
+          ? 'border-primary bg-primary/5 shadow-[0_0_0_3px_rgba(66,80,175,0.28)]'
+          : 'border-gray-300 bg-white hover:-translate-y-0.5 dark:border-gray-700 dark:bg-immich-dark-gray'}"
       >
-        <!-- card top: title + optional recommended badge -->
+        <!-- title row + recommended badge -->
         <div class="flex items-center justify-between gap-2">
-          <span class="font-semibold text-gray-900 dark:text-white">{$t(mode.labelKey)}</span>
+          <span class="text-[14.5px] font-bold tracking-[-0.01em] text-gray-900 dark:text-white">{$t(mode.labelKey)}</span>
           {#if mode.recommended}
-            <span class="text-xs font-medium px-2 py-0.5 rounded-full text-primary bg-primary/10">
+            <span class="rounded-full bg-primary/10 px-[7px] py-[3px] text-[10.5px] font-bold uppercase tracking-[0.04em] text-primary">
               {$t('assistant_onboarding_recommended')}
             </span>
           {/if}
         </div>
 
         <!-- description -->
-        <p class="text-xs text-gray-500 dark:text-neutral-400 leading-relaxed">{$t(mode.descKey)}</p>
+        <p class="text-[12.5px] leading-[1.45] text-gray-500 dark:text-neutral-400">{$t(mode.descKey)}</p>
 
         <!-- mini flow diagram -->
-        <div class="flex items-center gap-1.5 rounded-lg p-2.5 bg-gray-50 dark:bg-gray-900">
+        <div
+          class="flex items-center gap-1.5 rounded-[11px] p-2.5
+            {isSelected ? 'bg-white/70 dark:bg-black/20' : 'bg-gray-50 dark:bg-gray-800'}"
+        >
           {#each mode.flow as node}
             {#if node.type === 'arrow'}
-              <svg class="w-3 h-3 text-gray-400 flex-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 12h14M13 6l6 6-6 6"/>
+              <!-- forward arrow -->
+              <svg class="h-[13px] w-[13px] flex-none text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            {:else if node.type === 'arrow-loop'}
+              <!-- horizontal line (loop / repeating) -->
+              <svg class="h-[13px] w-[13px] flex-none text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 12h12" />
               </svg>
             {:else}
-              <span class="text-xs font-bold px-1.5 py-1 rounded-md border whitespace-nowrap
-                {node.type === 'node-you'
-                ? 'text-primary border-primary/40 bg-white dark:bg-gray-800'
-                : node.type === 'node-go'
-                ? 'text-green-600 dark:text-green-400 border-green-400/40 bg-white dark:bg-gray-800'
-                : 'text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'}">
+              <!-- node pill -->
+              <span
+                class="whitespace-nowrap rounded-[7px] border px-2 py-[5px] text-[10.5px] font-bold
+                  {node.type === 'node-you'
+                  ? 'border-primary/40 bg-white text-primary dark:bg-gray-800'
+                  : node.type === 'node-go'
+                    ? 'border-green-400/40 bg-white text-green-600 dark:bg-gray-800 dark:text-green-400'
+                    : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'}"
+              >
                 {node.label}
               </span>
             {/if}
@@ -95,7 +107,8 @@
     {/each}
   </div>
 
-  <p class="text-xs text-gray-400 dark:text-gray-600">
+  <!-- hint -->
+  <p class="text-[12px] leading-snug text-gray-400 dark:text-gray-600">
     {$t('assistant_onboarding_approval_hint')}
   </p>
 </div>
