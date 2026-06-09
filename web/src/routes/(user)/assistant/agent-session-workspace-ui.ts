@@ -18,17 +18,13 @@ export type AgentSessionStatusBadge = {
 export const ASSISTANT_SESSION_QUERY_PARAM = 'session';
 const AGENT_SESSION_TITLE_MAX_LENGTH = 60;
 
-const actionableStatusPriority = [
+const actionableStatuses = new Set<AgentSessionStatus>([
   AgentSessionStatus.WaitingForToolApproval,
   AgentSessionStatus.WaitingForPlanReview,
   AgentSessionStatus.Interrupted,
   AgentSessionStatus.Running,
   AgentSessionStatus.Applying,
-] as const;
-
-const statusSortPriority = new Map<AgentSessionStatus, number>(
-  actionableStatusPriority.map((status, index) => [status, index]),
-);
+]);
 
 const statusBadgeTones: Partial<Record<AgentSessionStatus, AgentSessionStatusBadgeTone>> = {
   [AgentSessionStatus.WaitingForToolApproval]: 'attention',
@@ -50,10 +46,7 @@ const compareIdDescending = (left: AgentSessionResponseDto, right: AgentSessionR
 const compareSessionsByRecency = (left: AgentSessionResponseDto, right: AgentSessionResponseDto) =>
   compareCreatedAtDescending(left, right) || compareIdDescending(left, right);
 
-const getStatusPriority = (status: AgentSessionStatus) =>
-  statusSortPriority.get(status) ?? actionableStatusPriority.length;
-
-const isActionableStatus = (status: AgentSessionStatus) => statusSortPriority.has(status);
+const isActionableStatus = (status: AgentSessionStatus) => actionableStatuses.has(status);
 
 export const getAgentSessionStatusLabelKey = (status: AgentSessionStatus) =>
   `assistant_session_status_${status}` as Translations;
@@ -112,10 +105,7 @@ export const deriveAgentSessionTitleFromMessages = (messages: AgentMessageRespon
 };
 
 export const sortAgentSessionsForSidebar = (sessions: AgentSessionResponseDto[]) =>
-  [...sessions].sort(
-    (left, right) =>
-      getStatusPriority(left.status) - getStatusPriority(right.status) || compareSessionsByRecency(left, right),
-  );
+  [...sessions].sort(compareSessionsByRecency);
 
 export const selectInitialAgentSessionId = (
   sessions: AgentSessionResponseDto[],
