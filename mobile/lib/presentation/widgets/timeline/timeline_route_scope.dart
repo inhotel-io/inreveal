@@ -6,6 +6,7 @@ import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
+import 'package:immich_mobile/providers/timeline/overview_representative_cache.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
 import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 
@@ -25,6 +26,7 @@ class TimelineRouteScope extends StatelessWidget {
         timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
         timelineZoomAnchorProvider.overrideWith(TimelineZoomAnchorNotifier.new),
         timelineOverviewDrilldownProvider.overrideWith((ref) => ref.watch(sharedTimelineOverviewDrilldownProvider)),
+        timelineOverviewRepresentativeCacheProvider.overrideWith(TimelineOverviewRepresentativeCacheNotifier.new),
         if (timelineServiceBuilder != null)
           timelineServiceProvider.overrideWith((ref) {
             final temporalScope = ref.watch(timelineTemporalScopeProvider);
