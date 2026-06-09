@@ -11,6 +11,7 @@
 ### Task 1: Migrate the 7 simple pages
 
 **Files (each has the identical pattern: const at top, header-only `topSliverWidget`):**
+
 - `mobile/lib/presentation/pages/drift_person.page.dart` (const ~22, Timeline ~90)
 - `mobile/lib/presentation/pages/drift_video.page.dart` (~17, ~32)
 - `mobile/lib/presentation/pages/drift_locked_folder.page.dart` (~19, ~65)
@@ -40,7 +41,7 @@
 ### Task 5: Verify + gates + commit
 
 - [ ] **TDD note (mechanical slice):** the deletion IS the red lever — after Task 3, any missed reference fails to compile. Run the full targeted set:
-  `~/.local/share/mise/installs/flutter/3.41.7/bin/flutter test test/presentation/pages/ test/presentation/widgets/timeline/` → all pass.
+      `~/.local/share/mise/installs/flutter/3.41.7/bin/flutter test test/presentation/pages/ test/presentation/widgets/timeline/` → all pass.
 - [ ] `~/.local/share/mise/installs/flutter/3.41.7/bin/dart analyze --fatal-infos lib test` → `No issues found!` (catches unused imports left by the migrations).
 - [ ] `~/.local/share/mise/installs/flutter/3.41.7/bin/dart format --set-exit-if-changed <touched files>` → 0 changed.
 - [ ] Commit: `git add -A mobile && git commit -m "feat(mobile): grouping bottom pill on all detail timelines; delete scrolls-away header"`

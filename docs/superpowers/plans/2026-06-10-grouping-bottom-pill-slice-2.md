@@ -13,6 +13,7 @@
 ### Task 1: Failing tests (compile-RED)
 
 **Files:**
+
 - Create: `mobile/test/presentation/widgets/timeline/timeline_with_grouping_pill_test.dart`
 
 Harness: model on `mobile/test/presentation/pages/dev/main_timeline_zoom_test.dart` — it shows the working pattern for pumping a real `Timeline` (Store init incl. `StoreKey.tilesPerRow`, `EasyLocalization.ensureInitialized`, a fake `TimelineService` built as `TimelineService((assetSource: ..., bucketSource: () => Stream.value([TimeBucket(...)]), origin: TimelineOrigin.main))`, `timelineServiceProvider.overrideWithValue`). Pump `Timeline` with `appBar: null` (the default `ImmichSliverAppBar` watches sync/cast/user providers — avoid them). Keep `withScrubber` at its default.
@@ -79,6 +80,7 @@ testWidgets('multiselect with the flag on: pill hides, clearance stays constant 
 ```
 
 Notes:
+
 - Use `ProviderScope.containerOf(tester.element(find.byType(Timeline)))` to reach the scoped `multiSelectProvider` notifier for the multiselect test (select a `TestUtils.createRemoteAsset` via `selectAsset`). If the default `GeneralBottomSheet` pulls heavy providers when multiselect renders it, pass `bottomSheet: null` for that test — the assertions are about the pill + padding, not the sheet.
 - If multiple `SliverPadding`s match a predicate, scope the finder with `find.descendant(of: find.byType(CustomScrollView), matching: ...)`.
 
@@ -90,6 +92,7 @@ Expected: **FAILS TO COMPILE** — `Timeline` has no `withGroupingPill` paramete
 ### Task 2: Implement the flag (GREEN)
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/widgets/timeline/timeline.widget.dart`
 
 - [ ] **Step 1: `Timeline` — add the flag**

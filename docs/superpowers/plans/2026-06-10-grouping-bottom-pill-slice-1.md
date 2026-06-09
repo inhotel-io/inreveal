@@ -15,6 +15,7 @@
 ### Task 1: Failing tests for the pill widget (compile-RED)
 
 **Files:**
+
 - Create: `mobile/test/presentation/widgets/timeline/timeline_grouping_bottom_pill_test.dart`
 
 Model the harness on `mobile/test/presentation/widgets/timeline/timeline_grouping_header_sliver_test.dart` (same `setUpAll` with `TestUtils.init()`, `SharedPreferences.setMockInitialValues({})`, `EasyLocalization.ensureInitialized()`, in-memory Drift + `StoreService.init`, `Store.clear()` in `setUp`/`tearDownAll`) — the selector calls `.tr()` and writes `Setting.groupAssetsBy` through the Store. Tap targets come from `timeline_grouping_selector_test.dart` (segments have keys `timeline-grouping-${groupBy.name}`; the full selector container key is `timeline-grouping-selector`).
@@ -244,6 +245,7 @@ Expected: **FAILS TO COMPILE** — `timeline_grouping_bottom_pill.widget.dart` d
 ### Task 2: Implement the pill widget (GREEN)
 
 **Files:**
+
 - Create: `mobile/lib/presentation/widgets/timeline/timeline_grouping_bottom_pill.widget.dart`
 
 - [ ] **Step 1: Write the widget**
@@ -354,6 +356,7 @@ class TimelineGroupingBottomPill extends ConsumerWidget {
 ```
 
 Notes pinned by the spec:
+
 - The selector's own `LayoutBuilder` caps at 218 and shrinks below that on narrow widths — the `ConstrainedBox` + the 14px horizontal outer padding give it `min(218, width − 28)`.
 - The selector renders 48px tall inside the 58px surface (`Center`) — nav-pill height parity.
 - No `Semantics` widget added — the pill must contribute zero button nodes of its own.
@@ -368,6 +371,7 @@ Expected: all 9 tests PASS. If the multiselect-hide test fails on the opacity as
 - [ ] **Step 1: Analyzer + format**
 
 Run from `mobile/`:
+
 - `~/.local/share/mise/installs/flutter/3.41.7/bin/dart analyze --fatal-infos lib test` → expect `No issues found!`
 - `~/.local/share/mise/installs/flutter/3.41.7/bin/dart format --set-exit-if-changed lib/presentation/widgets/timeline/timeline_grouping_bottom_pill.widget.dart test/presentation/widgets/timeline/timeline_grouping_bottom_pill_test.dart` → expect 0 changed.
 

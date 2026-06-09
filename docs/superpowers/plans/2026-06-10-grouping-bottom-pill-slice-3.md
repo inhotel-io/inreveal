@@ -17,6 +17,7 @@
 ### Task 1: RED — album-page scroll-persistence regression test
 
 **Files:**
+
 - Create: `mobile/test/presentation/pages/drift_remote_album_page_test.dart`
 
 This is the bug's guard. Pump the REAL `RemoteAlbumPage` (constructor takes `required RemoteAlbum album`). Harness: reuse `main_timeline_zoom_test.dart` patterns — `setUpAll` (TestUtils.init, SharedPreferences mock, EasyLocalization.ensureInitialized, in-memory Drift + StoreService.init), `Store.put(StoreKey.tilesPerRow, 3)`, `_StubCurrentUserNotifier` for `currentUserProvider`, a mocktail `TimelineFactory` whose `remoteAlbum(albumId: any, groupBy: any?, temporalScope: any)` returns a fake `TimelineService` (use the zoom test's `_service(...)` helper style; give it day buckets with enough assets to scroll, e.g. 6 × `TimeBucket(date: DateTime(2026, 6, X), assetCount: 12)`). Size the fixture so content height comfortably exceeds the fling distance (more buckets/assets if needed — verify `maxScrollExtent > 0` after the fling, or scroll with `scrollUntilVisible`/`jumpTo(maxScrollExtent)` instead of a fixed fling). Build a `RemoteAlbum` fixture (find the model's constructor under `mobile/lib/domain/models/album/` and fill required fields). Page is pumped inside `ProviderScope(overrides: [...]) > MaterialApp/EasyLocalization wrapper > RemoteAlbumPage(album: fixture)`.
@@ -55,6 +56,7 @@ Expected: test 1 FAILS at the post-scroll assertion (header scrolled away → se
 ### Task 2: GREEN — migrate the album page
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/pages/drift_remote_album.page.dart`
 
 - [ ] Remove the `timelineOverviewTopSliverHeight` static const and the `TimelineGroupingHeaderSliver`/`kTimelineGroupingHeaderSliverHeight` imports; change the Timeline construction:
@@ -73,6 +75,7 @@ Expected: test 1 FAILS at the post-scroll assertion (header scrolled away → se
 ### Task 3: migrate favorites + space detail
 
 **Files:**
+
 - Modify: `mobile/lib/presentation/pages/drift_favorite.page.dart` — same mechanical change as the album page.
 - Modify: `mobile/lib/pages/library/spaces/space_detail.page.dart` — **keep the sync banner**:
 
