@@ -181,7 +181,7 @@
             {$t('assistant_onboarding_footer_settings')}
           </span>
           <div class="inline-flex items-center gap-2">
-            <Button onclick={() => (step = 1)}>
+            <Button shape="round" onclick={() => (step = 1)}>
               {$t('assistant_onboarding_get_started')}
               <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M5 12h14M13 6l6 6-6 6" />
@@ -211,7 +211,7 @@
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
-          <Button disabled={!continueEnabled} onclick={goNext}>
+          <Button shape="round" disabled={!continueEnabled} onclick={goNext}>
             {$t('assistant_onboarding_continue')}
             <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
@@ -233,7 +233,7 @@
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
-          <Button onclick={goNext}>
+          <Button shape="round" onclick={goNext}>
             {$t('assistant_onboarding_continue')}
             <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
@@ -255,7 +255,7 @@
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
-          <Button onclick={goNext}>
+          <Button shape="round" onclick={goNext}>
             {$t('assistant_onboarding_continue')}
             <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
@@ -396,7 +396,7 @@
         </span>
         <div class="inline-flex items-center gap-2">
           <Button shape="round" color="secondary" onclick={goBack}>{$t('assistant_onboarding_back')}</Button>
-          <Button onclick={() => finish()}>
+          <Button shape="round" onclick={() => finish()}>
             {$t('assistant_onboarding_open')}
             <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <path d="M5 12h14M13 6l6 6-6 6" />
