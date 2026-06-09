@@ -46,7 +46,7 @@ describe('agent-onboarding-connect', () => {
     expect(sdkMock.validateAgentSession).toHaveBeenCalledWith({
       agentSessionCreateDto: expect.objectContaining({ providerCredentialId: 'cred-1', model: 'llama3.1' }),
     });
-    await waitFor(() => expect(onConnected).toHaveBeenCalledWith('cred-1', 'llama3.1'));
+    await waitFor(() => expect(onConnected).toHaveBeenCalledWith('cred-1', 'llama3.1', 'local'));
     expect(await screen.findByText('assistant_onboarding_connected')).toBeInTheDocument();
   });
 
