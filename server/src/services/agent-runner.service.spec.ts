@@ -126,6 +126,7 @@ describe(AgentRunnerService.name, () => {
   let activityService: {
     createSystemEvent: ReturnType<typeof vi.fn>;
     normalizeRunnerEvent: ReturnType<typeof vi.fn>;
+    closeOpenLifecycleEvents: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -145,6 +146,7 @@ describe(AgentRunnerService.name, () => {
     activityService = {
       createSystemEvent: vi.fn((_userId, _sessionId, event) => Promise.resolve({ ...event, id: 'activity-event-1' })),
       normalizeRunnerEvent: vi.fn((event) => event),
+      closeOpenLifecycleEvents: vi.fn(),
     };
     sut = new AgentRunnerService(
       configRepository,
@@ -2351,5 +2353,93 @@ describe(AgentRunnerService.name, () => {
     await sut.getStatus();
 
     expect(agentRunnerRepository.getStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes open lifecycle events after a successful turn', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const assistantContent: AgentMessageContent = { blocks: [{ type: 'text', text: 'Done.' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'assistant-message-completed',
+          sessionId,
+          runnerSessionId,
+          providerMessageId: null,
+          content: assistantContent,
+        },
+      ]),
+    );
+    messageRepository.create.mockResolvedValue(makeAssistantMessage({ sessionId, content: assistantContent }));
+    sessionRepository.getById.mockResolvedValue({ status: AgentSessionStatus.Running } as never);
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(activityService.closeOpenLifecycleEvents).toHaveBeenCalledWith(
+      userId,
+      sessionId,
+      AgentSessionActivityEventStatus.Completed,
+    );
+  });
+
+  it('does not close lifecycle events when pausing for tool approval', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'How many photos are in this album?' }] };
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(
+      streamEvents([
+        {
+          type: 'tool-approval-needed',
+          sessionId,
+          runnerSessionId,
+          toolCallId: '00000000-0000-4000-8000-000000000333',
+        },
+      ]),
+    );
+
+    await sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content });
+
+    expect(activityService.closeOpenLifecycleEvents).not.toHaveBeenCalled();
+  });
+
+  it('does not close lifecycle events on runner failure (failure event already records it)', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000000100';
+    const runnerSessionId = 'runner-session-1';
+    const messageId = '00000000-0000-4000-8000-000000000200';
+    const content: AgentMessageContent = { blocks: [{ type: 'text', text: 'Organize my photos.' }] };
+    const error = new Error('connection refused');
+
+    configRepository.getEnv.mockReturnValue({
+      agent: {
+        runnerUrl: 'http://agent-runner:4477',
+        runnerHealthTimeoutMs: 3000,
+        runnerMessageStreamTimeoutMs: 120_000,
+      },
+    } as never);
+    agentRunnerRepository.streamMessage.mockReturnValue(failingStream(error));
+    sessionRepository.markInterruptedFromActive.mockResolvedValue({} as never);
+
+    await expect(sut.sendMessage({ userId, sessionId, runnerSessionId, messageId, content })).rejects.toBe(error);
+
+    expect(activityService.closeOpenLifecycleEvents).not.toHaveBeenCalled();
   });
 });
