@@ -19,6 +19,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'album.addUsers',
   'album.removeUsers',
   'album.updateUserRole',
+  'album.delete',
   'space.create',
   'space.addAssets',
   'space.removeAssets',
@@ -26,6 +27,7 @@ export const KNOWN_OPERATION_TYPES = new Set([
   'space.addMembers',
   'space.removeMembers',
   'space.updateMemberRole',
+  'space.delete',
   'asset.rotate',
   'asset.crop',
   'asset.setFavorite',
@@ -458,12 +460,28 @@ const validateAlbumUpdateUserRole = (op) => {
   if (!ASSIGNABLE_ALBUM_ROLES.has(op.payload?.role)) fail('album.updateUserRole role must be editor or viewer');
 };
 
+// album.delete: requires existing_album + targetId, no payload (photos preserved).
+const validateAlbumDelete = (op) => {
+  requireExistingAlbumTarget(op);
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0)
+    fail('album.delete must not set a payload (photos are kept in the library)');
+};
+
+// space.delete: requires existing_space + targetId, no payload (photos preserved).
+const validateSpaceDelete = (op) => {
+  requireExistingSpaceTarget(op);
+  if (op.payload !== undefined && Object.keys(op.payload).length > 0)
+    fail('space.delete must not set a payload (photos stay in members\' libraries)');
+};
+
 const ALBUM_OP_VALIDATORS = {
   'album.removeAssets': validateAlbumRemoveAssets,
   'album.setCover': validateAlbumSetCover,
   'album.addUsers': validateAlbumAddUsers,
   'album.removeUsers': validateAlbumRemoveUsers,
   'album.updateUserRole': validateAlbumUpdateUserRole,
+  'album.delete': validateAlbumDelete,
+  'space.delete': validateSpaceDelete,
   'asset.removeTag': validateAssetRemoveTag,
   'asset.trash': validateAssetTrash,
   'asset.restore': validateAssetRestore,

@@ -26,11 +26,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf24 {
     required this.payload,
   });
 
-  AgentAssetRemoveTagOperationType type;
+  AgentAssetUpdateMetadataOperationType type;
 
   String summary;
 
-  AgentOperationTargetKind targetKind;
+  AgentAssetUpdateMetadataTargetKind targetKind;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -155,9 +155,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf24 {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf24(
-        type: AgentAssetRemoveTagOperationType.fromJson(json[r'type'])!,
+        type: AgentAssetUpdateMetadataOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
-        targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
+        targetKind: AgentAssetUpdateMetadataTargetKind.fromJson(json[r'targetKind'])!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),

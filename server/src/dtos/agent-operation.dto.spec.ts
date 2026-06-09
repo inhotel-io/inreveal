@@ -3393,4 +3393,78 @@ describe('Agent operation DTOs', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // ── album.delete + space.delete (Slice 3.2) ─────────────────────────────────
+
+  describe('album.delete', () => {
+    const makeValidAlbumDeleteOp = (overrides: Record<string, unknown> = {}) => ({
+      type: AgentOperationType.AlbumDelete,
+      summary: 'Delete the Test album (photos are kept in your library).',
+      targetKind: AgentOperationTargetKind.ExistingAlbum,
+      targetId: factory.uuid(),
+      riskLevel: AgentOperationRiskLevel.High,
+      enabled: true,
+      ...overrides,
+    });
+
+    it('parses a valid album.delete op targeting an existing album', () => {
+      const result = parseSingleOperationProposal(makeValidAlbumDeleteOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0].type).toBe(AgentOperationType.AlbumDelete);
+        expect(result.data.operations[0].targetKind).toBe(AgentOperationTargetKind.ExistingAlbum);
+      }
+    });
+
+    it('rejects album.delete with missing targetId', () => {
+      const result = parseSingleOperationProposal(makeValidAlbumDeleteOp({ targetId: undefined }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects album.delete with wrong targetKind', () => {
+      const result = parseSingleOperationProposal(makeValidAlbumDeleteOp({ targetKind: AgentOperationTargetKind.NewAlbum, targetId: undefined, temporaryTargetId: 'tmp-album' }));
+      expect(result.success).toBe(false);
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidAlbumDeleteOp());
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('space.delete', () => {
+    const makeValidSpaceDeleteOp = (overrides: Record<string, unknown> = {}) => ({
+      type: AgentOperationType.SpaceDelete,
+      summary: 'Delete the Family space (photos stay in members\' libraries).',
+      targetKind: AgentOperationTargetKind.ExistingSpace,
+      targetId: factory.uuid(),
+      riskLevel: AgentOperationRiskLevel.High,
+      enabled: true,
+      ...overrides,
+    });
+
+    it('parses a valid space.delete op targeting an existing space', () => {
+      const result = parseSingleOperationProposal(makeValidSpaceDeleteOp());
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.operations[0].type).toBe(AgentOperationType.SpaceDelete);
+        expect(result.data.operations[0].targetKind).toBe(AgentOperationTargetKind.ExistingSpace);
+      }
+    });
+
+    it('rejects space.delete with missing targetId', () => {
+      const result = parseSingleOperationProposal(makeValidSpaceDeleteOp({ targetId: undefined }));
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects space.delete with wrong targetKind', () => {
+      const result = parseSingleOperationProposal(makeValidSpaceDeleteOp({ targetKind: AgentOperationTargetKind.NewSpace, targetId: undefined, temporaryTargetId: 'tmp-space' }));
+      expect(result.success).toBe(false);
+    });
+
+    it('is accepted by the AgentGalleryOperationInputSchema union', () => {
+      const result = parseSingleOperationProposal(makeValidSpaceDeleteOp());
+      expect(result.success).toBe(true);
+    });
+  });
 });

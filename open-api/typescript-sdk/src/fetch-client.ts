@@ -995,6 +995,24 @@ export type AgentProposeAlbumOperationsDto = {
             role: AgentAssignableAlbumUserRole;
         };
     } | {
+        "type": AgentAlbumDeleteOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": AgentSpaceDeleteOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
         "type": AgentAssetRotateOperationType;
         summary: string;
         targetKind: AgentOperationTargetKind;
@@ -1503,6 +1521,24 @@ export type AgentReviseAlbumOperationsDto = {
             userId: string;
             role: AgentAssignableAlbumUserRole;
         };
+    } | {
+        "type": AgentAlbumDeleteOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingAlbumTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
+    } | {
+        "type": AgentSpaceDeleteOperationType;
+        summary: string;
+        targetKind: AgentOperationExistingSpaceTargetKind;
+        targetId?: string;
+        temporaryTargetId?: string;
+        riskLevel?: AgentOperationRiskLevel;
+        enabled?: boolean;
+        payload?: {};
     } | {
         "type": AgentAssetRotateOperationType;
         summary: string;
@@ -11035,6 +11071,7 @@ export enum AgentOperationType {
     AlbumAddUsers = "album.addUsers",
     AlbumRemoveUsers = "album.removeUsers",
     AlbumUpdateUserRole = "album.updateUserRole",
+    AlbumDelete = "album.delete",
     SpaceCreate = "space.create",
     SpaceAddAssets = "space.addAssets",
     SpaceRemoveAssets = "space.removeAssets",
@@ -11042,6 +11079,7 @@ export enum AgentOperationType {
     SpaceAddMembers = "space.addMembers",
     SpaceRemoveMembers = "space.removeMembers",
     SpaceUpdateMemberRole = "space.updateMemberRole",
+    SpaceDelete = "space.delete",
     AssetRotate = "asset.rotate",
     AssetCrop = "asset.crop",
     AssetAdjust = "asset.adjust",
@@ -11169,6 +11207,12 @@ export enum AgentAlbumRemoveUsersOperationType {
 }
 export enum AgentAlbumUpdateUserRoleOperationType {
     AlbumUpdateUserRole = "album.updateUserRole"
+}
+export enum AgentAlbumDeleteOperationType {
+    AlbumDelete = "album.delete"
+}
+export enum AgentSpaceDeleteOperationType {
+    SpaceDelete = "space.delete"
 }
 export enum AgentAssetRotateOperationType {
     AssetRotate = "asset.rotate"

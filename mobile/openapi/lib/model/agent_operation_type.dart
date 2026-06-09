@@ -31,6 +31,7 @@ class AgentOperationType {
   static const albumPeriodAddUsers = AgentOperationType._(r'album.addUsers');
   static const albumPeriodRemoveUsers = AgentOperationType._(r'album.removeUsers');
   static const albumPeriodUpdateUserRole = AgentOperationType._(r'album.updateUserRole');
+  static const albumPeriodDelete = AgentOperationType._(r'album.delete');
   static const spacePeriodCreate = AgentOperationType._(r'space.create');
   static const spacePeriodAddAssets = AgentOperationType._(r'space.addAssets');
   static const spacePeriodRemoveAssets = AgentOperationType._(r'space.removeAssets');
@@ -38,6 +39,7 @@ class AgentOperationType {
   static const spacePeriodAddMembers = AgentOperationType._(r'space.addMembers');
   static const spacePeriodRemoveMembers = AgentOperationType._(r'space.removeMembers');
   static const spacePeriodUpdateMemberRole = AgentOperationType._(r'space.updateMemberRole');
+  static const spacePeriodDelete = AgentOperationType._(r'space.delete');
   static const assetPeriodRotate = AgentOperationType._(r'asset.rotate');
   static const assetPeriodCrop = AgentOperationType._(r'asset.crop');
   static const assetPeriodAdjust = AgentOperationType._(r'asset.adjust');
@@ -67,6 +69,7 @@ class AgentOperationType {
     albumPeriodAddUsers,
     albumPeriodRemoveUsers,
     albumPeriodUpdateUserRole,
+    albumPeriodDelete,
     spacePeriodCreate,
     spacePeriodAddAssets,
     spacePeriodRemoveAssets,
@@ -74,6 +77,7 @@ class AgentOperationType {
     spacePeriodAddMembers,
     spacePeriodRemoveMembers,
     spacePeriodUpdateMemberRole,
+    spacePeriodDelete,
     assetPeriodRotate,
     assetPeriodCrop,
     assetPeriodAdjust,
@@ -138,6 +142,7 @@ class AgentOperationTypeTypeTransformer {
         case r'album.addUsers': return AgentOperationType.albumPeriodAddUsers;
         case r'album.removeUsers': return AgentOperationType.albumPeriodRemoveUsers;
         case r'album.updateUserRole': return AgentOperationType.albumPeriodUpdateUserRole;
+        case r'album.delete': return AgentOperationType.albumPeriodDelete;
         case r'space.create': return AgentOperationType.spacePeriodCreate;
         case r'space.addAssets': return AgentOperationType.spacePeriodAddAssets;
         case r'space.removeAssets': return AgentOperationType.spacePeriodRemoveAssets;
@@ -145,6 +150,7 @@ class AgentOperationTypeTypeTransformer {
         case r'space.addMembers': return AgentOperationType.spacePeriodAddMembers;
         case r'space.removeMembers': return AgentOperationType.spacePeriodRemoveMembers;
         case r'space.updateMemberRole': return AgentOperationType.spacePeriodUpdateMemberRole;
+        case r'space.delete': return AgentOperationType.spacePeriodDelete;
         case r'asset.rotate': return AgentOperationType.assetPeriodRotate;
         case r'asset.crop': return AgentOperationType.assetPeriodCrop;
         case r'asset.adjust': return AgentOperationType.assetPeriodAdjust;

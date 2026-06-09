@@ -1198,6 +1198,7 @@ export class AgentOperationPlanService {
       AgentOperationType.SpaceAddMembers,
       AgentOperationType.SpaceRemoveMembers,
       AgentOperationType.SpaceUpdateMemberRole,
+      AgentOperationType.SpaceDelete,
     ].includes(type);
   }
 
@@ -2097,6 +2098,14 @@ export class AgentOperationPlanService {
     ) {
       throw new BadRequestException('Agent permission policy does not allow managing people');
     }
+
+    if (type === AgentOperationType.AlbumDelete && !writeScope.deleteContainers) {
+      throw new BadRequestException('Agent permission policy does not allow deleting albums');
+    }
+
+    if (type === AgentOperationType.SpaceDelete && !writeScope.deleteContainers) {
+      throw new BadRequestException('Agent permission policy does not allow deleting spaces');
+    }
   }
 
   private async markWaitingForPlanReview(auth: AuthDto, session: AgentSession, plan: AgentOperationPlanWithOperations) {
@@ -2239,6 +2248,18 @@ export class AgentOperationPlanService {
         return { payload, targetAlbumId };
       }
 
+      case AgentOperationType.AlbumDelete: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'targetAlbumId')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+        const targetAlbumId = fields.targetAlbumId;
+        if (typeof targetAlbumId !== 'string') {
+          throw new BadRequestException('targetAlbumId must be a string');
+        }
+        return { targetAlbumId };
+      }
+
       case AgentOperationType.AlbumAddAssets:
       case AgentOperationType.AlbumRemoveAssets: {
         const fieldNames = Object.keys(fields);
@@ -2283,6 +2304,18 @@ export class AgentOperationPlanService {
         }
 
         return { payload, targetSpaceId };
+      }
+
+      case AgentOperationType.SpaceDelete: {
+        const fieldNames = Object.keys(fields);
+        if (fieldNames.some((field) => field !== 'targetSpaceId')) {
+          throw new BadRequestException('Unsupported field override for operation type');
+        }
+        const targetSpaceId = fields.targetSpaceId;
+        if (typeof targetSpaceId !== 'string') {
+          throw new BadRequestException('targetSpaceId must be a string');
+        }
+        return { targetSpaceId };
       }
 
       case AgentOperationType.SpaceAddAssets:
@@ -2814,6 +2847,12 @@ export class AgentOperationPlanService {
         return this.appliedOperation(operation.id, { albumId, userIds: [userId] });
       }
 
+      case AgentOperationType.AlbumDelete: {
+        const albumId = this.resolveTargetAlbumId(operation, createdAlbumIdByTemporaryTargetId);
+        await this.albumService.delete(auth, albumId);
+        return this.appliedOperation(operation.id, { albumId });
+      }
+
       case AgentOperationType.SpaceCreate: {
         const payload = this.requireSpacePayload(operation.payload, operation.summary);
         if (!payload.spaceName) {
@@ -2934,6 +2973,12 @@ export class AgentOperationPlanService {
         }
 
         return this.appliedOperation(operation.id, { spaceId, userIds: appliedUserIds, skippedUserIds });
+      }
+
+      case AgentOperationType.SpaceDelete: {
+        const spaceId = this.resolveTargetSpaceId(operation, createdSpaceIdByTemporaryTargetId);
+        await this.sharedSpaceService.remove(auth, spaceId);
+        return this.appliedOperation(operation.id, { spaceId });
       }
 
       case AgentOperationType.AssetSetFavorite: {
@@ -4500,6 +4545,8 @@ export class AgentOperationPlanService {
         AgentOperationType.AlbumAddUsers,
         AgentOperationType.AlbumRemoveUsers,
         AgentOperationType.AlbumUpdateUserRole,
+        AgentOperationType.AlbumDelete,
+        AgentOperationType.SpaceDelete,
       ].includes(operation.type),
     ).length;
     const coverCount = plan.operations.filter(
