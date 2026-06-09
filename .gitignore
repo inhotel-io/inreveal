@@ -50,3 +50,4 @@ vite.config.js.timestamp-*
 .codex
 .superpowers
 agent-runner/.pi-runtime/
+.superpowers/
