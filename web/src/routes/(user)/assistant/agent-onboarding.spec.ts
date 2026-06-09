@@ -53,4 +53,38 @@ describe('agent-onboarding orchestrator', () => {
     await user.type(screen.getByLabelText('assistant_onboarding_model'), 'llama3.1');
     expect(screen.getByRole('button', { name: 'assistant_onboarding_continue' })).toBeDisabled();
   });
+
+  it('deletes the previous credential when the user edits from the Ready step and re-tests', async () => {
+    sdkMock.createAgentProviderCredential
+      .mockResolvedValueOnce({ id: 'cred-1', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto)
+      .mockResolvedValueOnce({ id: 'cred-2', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto);
+
+    const user = userEvent.setup();
+    render(AgentOnboarding, { props: { onComplete: vi.fn() } });
+
+    // welcome → connect
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_get_started' }));
+    await user.type(screen.getByLabelText('assistant_onboarding_model'), 'llama3.1');
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_test' }));
+    await screen.findByText('assistant_onboarding_connected');
+    // connect → access → approval → ready
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_continue' }));
+
+    // on Ready, click the Model row's Edit button (first Edit button) → back to step 1
+    const editButtons = screen.getAllByRole('button', { name: 'Edit' });
+    await user.click(editButtons[0]);
+
+    // re-test in connect (cred-1 was created inside the connect child, but orchestrator held it via onConnected)
+    // The connect child remounts with a fresh createdCredentialId=null, so it won't delete cred-1 itself.
+    // The orchestrator must delete it when it receives the new credentialId (cred-2) that differs from cred-1.
+    await user.type(screen.getByLabelText('assistant_onboarding_model'), '2');
+    await user.click(screen.getByRole('button', { name: 'assistant_onboarding_test' }));
+    await screen.findByText('assistant_onboarding_connected');
+
+    await waitFor(() =>
+      expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: 'cred-1' }),
+    );
+  });
 });
