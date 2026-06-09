@@ -582,18 +582,22 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
     origin: origin,
   );
 
-  TimelineQuery fromAssetStream(List<BaseAsset> Function() getAssets, Stream<int> assetCount, TimelineOrigin origin) =>
-      (
-        bucketSource: () async* {
-          yield _generateBuckets(getAssets().length);
-          yield* assetCount.map(_generateBuckets);
-        },
-        assetSource: (offset, count) {
-          final assets = getAssets();
-          return Future.value(assets.skip(offset).take(count).toList(growable: false));
-        },
-        origin: origin,
-      );
+  TimelineQuery fromAssetStream(
+    List<BaseAsset> Function() getAssets,
+    Stream<int> assetCount,
+    TimelineOrigin origin, {
+    GroupAssetsBy groupBy = GroupAssetsBy.none,
+    bool descending = true,
+  }) => (
+    bucketSource: () async* {
+      yield _buildBuckets(getAssets(), groupBy, descending);
+      yield* assetCount.map((_) => _buildBuckets(getAssets(), groupBy, descending));
+    },
+    assetSource: (offset, count) => Future.value(
+      _orderedForGrouping(getAssets(), groupBy, descending).skip(offset).take(count).toList(growable: false),
+    ),
+    origin: origin,
+  );
 
   TimelineQuery fromAssetsWithBuckets(List<BaseAsset> assets, TimelineOrigin origin) {
     // Sort assets by date descending and group by day
@@ -1168,6 +1172,34 @@ List<Bucket> _generateBuckets(int count) {
     buckets[buckets.length - 1] = Bucket(assetCount: count % kTimelineNoneSegmentSize);
   }
   return buckets;
+}
+
+// Date-less segments (flat) for `none`; dated TimeBuckets in `descending` order otherwise.
+List<Bucket> _buildBuckets(List<BaseAsset> assets, GroupAssetsBy groupBy, bool descending) {
+  if (groupBy == GroupAssetsBy.none) return _generateBuckets(assets.length);
+  final counts = <DateTime, int>{}; // LinkedHashMap: insertion order follows the pre-ordered list
+  for (final asset in _orderedForGrouping(assets, groupBy, descending)) {
+    final key = _localBucketDate(asset.createdAt, groupBy);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return [for (final e in counts.entries) TimeBucket(date: e.key, assetCount: e.value)];
+}
+
+List<BaseAsset> _orderedForGrouping(List<BaseAsset> assets, GroupAssetsBy groupBy, bool descending) {
+  if (groupBy == GroupAssetsBy.none) return assets;
+  final sorted = [...assets]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  return descending ? sorted.reversed.toList(growable: false) : sorted.toList(growable: false);
+}
+
+DateTime _localBucketDate(DateTime createdAt, GroupAssetsBy groupBy) {
+  final t = createdAt.toLocal();
+  return switch (groupBy) {
+    GroupAssetsBy.day || GroupAssetsBy.auto => DateTime(t.year, t.month, t.day),
+    GroupAssetsBy.month => DateTime(t.year, t.month),
+    GroupAssetsBy.year => DateTime(t.year),
+    // Unreachable: _buildBuckets guards `none` before calling here. Present only to keep the switch exhaustive.
+    GroupAssetsBy.none => DateTime(t.year, t.month, t.day),
+  };
 }
 
 final _scopeDateFormat = DateFormat('yyyy-MM-dd', 'en');
