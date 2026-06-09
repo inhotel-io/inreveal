@@ -224,8 +224,13 @@
             {$t('assistant_onboarding_api_key_optional')}
           {/if}
         </label>
-        {#if isCloudProvider(provider)}
-          <span class="cursor-pointer text-[12.5px] font-semibold text-primary hover:underline">{$t('assistant_onboarding_api_key_help')}</span>
+        {#if meta.keyHelpUrl}
+          <a
+            href={meta.keyHelpUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-[12.5px] font-semibold text-primary hover:underline"
+          >{$t('assistant_onboarding_api_key_help')}</a>
         {/if}
       </div>
       <div class="relative flex items-center">
