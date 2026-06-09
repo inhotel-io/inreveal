@@ -3,12 +3,28 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import { WORKFLOW_MANIFEST, getWorkflowManifestEntry, listWorkflowKinds } from './manifest.mjs';
+import { createWorkflowRegistry } from './registry.mjs';
 
 describe('strict/hybrid workflow manifest', () => {
   it('exposes unique kinds', () => {
     const kinds = listWorkflowKinds();
     assert.deepEqual(kinds, [...new Set(kinds)]);
     assert.ok(kinds.includes('create_recent_trip_album'));
+  });
+
+  // Every routable workflow MUST have a manifest entry: the manifest is the
+  // canonical catalog consumed by the LLM classifier prompt, the `isKnownKind`
+  // gate, the live dispatch, and the capability matrix. A workflow registered in
+  // WORKFLOW_FACTORIES but absent from the manifest is invisible to all of those
+  // manifest-driven layers, so it routes fine at the component level (regex over
+  // the full registry) yet returns `none` on the live server (PR #574: lock_assets).
+  it('has a manifest entry for every registered workflow, and no orphans', () => {
+    const registryKinds = createWorkflowRegistry()
+      .listWorkflows()
+      .map((wf) => wf.kind)
+      .sort();
+    const manifestKinds = [...listWorkflowKinds()].sort();
+    assert.deepEqual(manifestKinds, registryKinds);
   });
 
   it('describes create_recent_trip_album as a strict workflow with its tools', () => {
