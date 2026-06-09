@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10 (revised same day after code-grounded review)
 **Status:** Approved UX (brainstormed with Pierre; layout chosen visually); revised for implementability — pending re-review
-**Scope:** Web (`web/src/routes/(user)/assistant/`) + server (`server/src/services/agent-*`). Agent-runner untouched. No DB schema changes, no new REST endpoints; one new websocket client event.
+**Scope:** Web (`web/src/routes/(user)/assistant/`) + server (`server/src/services/agent-*`). Agent-runner untouched. No DB schema changes, no new REST endpoints, no new websocket events.
 
 ## Problem
 
@@ -17,7 +17,7 @@ Primary audience (per brainstorm): **debugging / power-user**. The view should b
 - `agent_tool_call` has **no message/turn linkage**; turns are derived by timestamp windows anchored on user messages — `buildAgentSessionActivityTurns()` (`agent-session-activity-turns-ui.ts:167`) already does exactly this for tool calls via `toolCallBelongsToTurn` using `startedAt` (non-nullable) / `completedAt` (nullable).
 - `AgentToolCallStatus` = `pending_approval | approved | executing | denied | completed | failed`. There is **no cancelled status**; cancelled is a UI derivation.
 - Activity events are **append-only** (`agent-session-activity-event.repository.ts` has `create` + `getBySessionId` only). "Closing" an event means **inserting a terminal sibling** of the same kind, never updating a row.
-- The websocket `AgentSessionClientEvent` union (`websocket.repository.ts:25`) has **no tool-call event**; the chat panel (`agent-session-chat-panel.svelte:591`) learns about tool calls only from initial load — there is no live push today. Auto-approved tool calls execute without any websocket signal, so a live one-liner **requires a new client event**.
+- The websocket `AgentSessionClientEvent` union (`websocket.repository.ts:25`) has **no tool-call event**; the chat panel (`agent-session-chat-panel.svelte:591`) learns about tool calls only from initial load — there is no dedicated tool-call push today; liveness comes from the dock's refetch-on-any-event + 3s polling pipeline (see Server changes B).
 - Tool calls are persisted at three service sites: `agent-tool.service.ts`, `agent-operation-plan.service.ts`, `agent-runner.service.ts` (all via `toolCallRepository.create`/`update`).
 - `strict_router_decision` events carry `kind/status/source/summary` with `key=value` summaries (e.g. `matched=true via=regex`) — enough for a timeline annotation row.
 - Session cancel is `AgentSessionService.cancel()` (controller `POST /agent/sessions/:id/cancel`); it currently has no activity-event involvement.
