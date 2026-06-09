@@ -283,13 +283,25 @@ describe(AgentSessionActivityEventService.name, () => {
       const session = makeSession();
       sessionRepository.getById.mockResolvedValue(session);
       repository.getBySessionId.mockResolvedValue([
-        makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
-        makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.PlanComposing, status: AgentSessionActivityEventStatus.Running }),
+        makeEvent({
+          sessionId: session.id,
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
+        makeEvent({
+          sessionId: session.id,
+          kind: AgentSessionActivityEventKind.PlanComposing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
       ]);
       const closer = makeEvent({ sessionId: session.id, status: AgentSessionActivityEventStatus.Completed });
       repository.create.mockResolvedValue(closer);
 
-      const result = await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
+      const result = await sut.closeOpenLifecycleEvents(
+        session.userId,
+        session.id,
+        AgentSessionActivityEventStatus.Completed,
+      );
 
       expect(repository.create).toHaveBeenCalledTimes(2);
       expect(repository.create).toHaveBeenCalledWith({
@@ -300,6 +312,12 @@ describe(AgentSessionActivityEventService.name, () => {
         summary: null,
         counts: null,
       });
+      expect(repository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: AgentSessionActivityEventKind.PlanComposing,
+          status: AgentSessionActivityEventStatus.Completed,
+        }),
+      );
       expect(websocketRepository.clientSend).toHaveBeenCalledWith(
         'on_agent_session_event',
         session.userId,
@@ -312,8 +330,14 @@ describe(AgentSessionActivityEventService.name, () => {
       const session = makeSession();
       sessionRepository.getById.mockResolvedValue(session);
       repository.getBySessionId.mockResolvedValue([
-        makeEvent({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
-        makeEvent({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Completed }),
+        makeEvent({
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
+        makeEvent({
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Completed,
+        }),
       ]);
 
       await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
@@ -325,7 +349,10 @@ describe(AgentSessionActivityEventService.name, () => {
       const session = makeSession();
       sessionRepository.getById.mockResolvedValue(session);
       repository.getBySessionId.mockResolvedValue([
-        makeEvent({ kind: AgentSessionActivityEventKind.StrictRouterDecision, status: AgentSessionActivityEventStatus.Running }),
+        makeEvent({
+          kind: AgentSessionActivityEventKind.StrictRouterDecision,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
       ]);
 
       await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
@@ -337,21 +364,51 @@ describe(AgentSessionActivityEventService.name, () => {
       const session = makeSession({ status: AgentSessionStatus.Cancelled });
       sessionRepository.getById.mockResolvedValue(session);
       repository.getBySessionId.mockResolvedValue([
-        makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
+        makeEvent({
+          sessionId: session.id,
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
       ]);
       repository.create.mockResolvedValue(makeEvent({ status: AgentSessionActivityEventStatus.Skipped }));
 
       await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Skipped);
 
       expect(repository.create).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Skipped }),
+        expect.objectContaining({
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Skipped,
+        }),
       );
     });
 
-    it('returns empty and inserts nothing when the session is not found', async () => {
-      sessionRepository.getById.mockResolvedValue(null);
+    it('returns empty without inserting when called with a non-terminal status', async () => {
+      const session = makeSession();
+      sessionRepository.getById.mockResolvedValue(session);
+      repository.getBySessionId.mockResolvedValue([
+        makeEvent({
+          sessionId: session.id,
+          kind: AgentSessionActivityEventKind.StartProcessing,
+          status: AgentSessionActivityEventStatus.Running,
+        }),
+      ]);
+      const result = await sut.closeOpenLifecycleEvents(
+        session.userId,
+        session.id,
+        AgentSessionActivityEventStatus.Running,
+      );
+      expect(result).toEqual([]);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
 
-      const result = await sut.closeOpenLifecycleEvents(factory.uuid(), factory.uuid(), AgentSessionActivityEventStatus.Completed);
+    it('returns empty and inserts nothing when the session is not found', async () => {
+      sessionRepository.getById.mockResolvedValue(undefined);
+
+      const result = await sut.closeOpenLifecycleEvents(
+        factory.uuid(),
+        factory.uuid(),
+        AgentSessionActivityEventStatus.Completed,
+      );
 
       expect(result).toEqual([]);
       expect(repository.create).not.toHaveBeenCalled();
