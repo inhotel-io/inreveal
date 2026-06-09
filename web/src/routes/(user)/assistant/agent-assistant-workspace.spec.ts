@@ -1011,13 +1011,15 @@ describe(AgentAssistantWorkspace.name, () => {
     render(AgentAssistantWorkspace, {
       props: {
         runnerStatus: healthyRunner,
-        credentials: [],
+        credentials,
         sessions: [],
         requestedSessionId: null,
       },
     });
 
     await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
+    // With an existing credential, the settings API-keys section opens in manage mode; add a second key from there.
+    await user.click(screen.getByRole('button', { name: 'Manage API keys' }));
     await user.click(screen.getByRole('button', { name: 'Add API key' }));
 
     const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
@@ -1111,28 +1113,6 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(within(settingsDialog).getAllByText('OpenAI personal')).not.toHaveLength(0);
   });
 
-  it('guides first-time users to add an API key from assistant settings', async () => {
-    const user = userEvent.setup();
-
-    render(AgentAssistantWorkspace, {
-      props: {
-        runnerStatus: healthyRunner,
-        credentials: [],
-        sessions: [],
-        requestedSessionId: null,
-      },
-    });
-
-    await user.click(screen.getByRole('button', { name: 'Assistant settings' }));
-    await user.click(screen.getByRole('button', { name: 'Add API key' }));
-
-    const settingsDialog = screen.getByRole('dialog', { name: 'Assistant settings' });
-    expect(screen.queryByRole('dialog', { name: 'API keys' })).not.toBeInTheDocument();
-    expect(within(settingsDialog).getByText('No API keys have been added yet.')).toBeInTheDocument();
-    expect(within(settingsDialog).getByLabelText('Provider')).toBeInTheDocument();
-    expect(within(settingsDialog).getByLabelText('Name')).toBeInTheDocument();
-  });
-
   it('shows the onboarding flow when there are no credentials and the runner is healthy', () => {
     render(AgentAssistantWorkspace, {
       props: {
@@ -1144,6 +1124,9 @@ describe(AgentAssistantWorkspace.name, () => {
     });
     expect(screen.getByRole('button', { name: 'assistant_onboarding_get_started' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Message' })).not.toBeInTheDocument();
+    // Chat chrome (sidebar toggle + settings menu) is hidden during first-run setup.
+    expect(screen.queryByTestId('assistant-settings-menu')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'assistant_open_sessions' })).not.toBeInTheDocument();
   });
 
   it('shows the normal composer when a credential exists, not onboarding', () => {
@@ -1157,6 +1140,7 @@ describe(AgentAssistantWorkspace.name, () => {
     });
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'assistant_onboarding_get_started' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('assistant-settings-menu')).toBeInTheDocument();
   });
 
   it('adds a newly created session from the first message to the sidebar and selects it', async () => {
