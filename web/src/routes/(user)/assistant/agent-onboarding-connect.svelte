@@ -19,7 +19,7 @@
   } from './agent-onboarding-model';
 
   interface Props {
-    onConnected: (credentialId: string, model: string) => void;
+    onConnected: (credentialId: string, model: string, provider: OnboardingProviderId) => void;
   }
   let { onConnected }: Props = $props();
 
@@ -40,7 +40,7 @@
   const markDirty = () => {
     if (status === 'connected' || status === 'error') {
       status = 'idle';
-      onConnected('', '');
+      onConnected('', '', provider);
     }
   };
 
@@ -54,7 +54,7 @@
     secret = '';
     status = 'idle';
     errorMessage = null;
-    onConnected('', '');
+    onConnected('', '', next);
   };
 
   const test = async () => {
@@ -72,7 +72,7 @@
       createdCredentialId = created.id;
       await validateAgentSession({ agentSessionCreateDto: buildValidateDto(created.id, model) });
       status = 'connected';
-      onConnected(created.id, model.trim());
+      onConnected(created.id, model.trim(), provider);
     } catch {
       status = 'error';
       errorMessage = $t('assistant_onboarding_test_error');
