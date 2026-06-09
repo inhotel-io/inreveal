@@ -176,6 +176,26 @@ const makeValidPersonMergeOp = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const makeValidAlbumDeleteOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.AlbumDelete,
+  summary: 'Delete the Test album (photos are kept in your library).',
+  targetKind: AgentOperationTargetKind.ExistingAlbum,
+  targetId: factory.uuid(),
+  riskLevel: AgentOperationRiskLevel.High,
+  enabled: true,
+  ...overrides,
+});
+
+const makeValidSpaceDeleteOp = (overrides: Record<string, unknown> = {}) => ({
+  type: AgentOperationType.SpaceDelete,
+  summary: "Delete the Family space (photos stay in members' libraries).",
+  targetKind: AgentOperationTargetKind.ExistingSpace,
+  targetId: factory.uuid(),
+  riskLevel: AgentOperationRiskLevel.High,
+  enabled: true,
+  ...overrides,
+});
+
 describe('Agent operation DTOs', () => {
   describe('asset source planning input', () => {
     it('accepts assetSelectionHandleId instead of explicit assetIds for asset-bearing operations', () => {
@@ -3397,16 +3417,6 @@ describe('Agent operation DTOs', () => {
   // ── album.delete + space.delete (Slice 3.2) ─────────────────────────────────
 
   describe('album.delete', () => {
-    const makeValidAlbumDeleteOp = (overrides: Record<string, unknown> = {}) => ({
-      type: AgentOperationType.AlbumDelete,
-      summary: 'Delete the Test album (photos are kept in your library).',
-      targetKind: AgentOperationTargetKind.ExistingAlbum,
-      targetId: factory.uuid(),
-      riskLevel: AgentOperationRiskLevel.High,
-      enabled: true,
-      ...overrides,
-    });
-
     it('parses a valid album.delete op targeting an existing album', () => {
       const result = parseSingleOperationProposal(makeValidAlbumDeleteOp());
       expect(result.success).toBe(true);
@@ -3433,16 +3443,6 @@ describe('Agent operation DTOs', () => {
   });
 
   describe('space.delete', () => {
-    const makeValidSpaceDeleteOp = (overrides: Record<string, unknown> = {}) => ({
-      type: AgentOperationType.SpaceDelete,
-      summary: 'Delete the Family space (photos stay in members\' libraries).',
-      targetKind: AgentOperationTargetKind.ExistingSpace,
-      targetId: factory.uuid(),
-      riskLevel: AgentOperationRiskLevel.High,
-      enabled: true,
-      ...overrides,
-    });
-
     it('parses a valid space.delete op targeting an existing space', () => {
       const result = parseSingleOperationProposal(makeValidSpaceDeleteOp());
       expect(result.success).toBe(true);
