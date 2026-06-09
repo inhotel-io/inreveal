@@ -3,7 +3,11 @@
   import { Icon } from '@immich/ui';
   import { mdiCheck, mdiClose, mdiDeleteOutline, mdiDotsHorizontal, mdiPencilOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
-  import { getAgentSessionTitle, type AgentSessionTitleCache } from './agent-session-workspace-ui';
+  import {
+    getAgentSessionStatusBadge,
+    getAgentSessionTitle,
+    type AgentSessionTitleCache,
+  } from './agent-session-workspace-ui';
 
   interface Props {
     session: AgentSessionResponseDto;
@@ -17,6 +21,24 @@
   let { session, selected, titleBySessionId = {}, onSelectSession, onRenameSession, onDeleteSession }: Props = $props();
 
   const title = $derived(getAgentSessionTitle(session, titleBySessionId));
+  const statusDotClass = $derived.by(() => {
+    const tone = getAgentSessionStatusBadge(session.status)?.tone;
+
+    switch (tone) {
+      case 'attention':
+      case 'danger': {
+        return 'bg-amber-500';
+      }
+
+      case 'active': {
+        return 'bg-blue-500 animate-pulse';
+      }
+
+      default: {
+        return null;
+      }
+    }
+  });
   let menuOpen = $state(false);
   let renaming = $state(false);
   let draftTitle = $state('');
@@ -97,7 +119,7 @@
     <button
       type="button"
       class={[
-        'flex min-h-9 w-full items-center overflow-hidden rounded-md px-2.5 py-2 pr-9 text-left text-sm transition-colors',
+        'flex min-h-9 w-full items-center gap-2 overflow-hidden rounded-xl px-2.5 py-2 pr-9 text-left text-sm transition-colors',
         selected
           ? 'bg-slate-200 text-slate-950 dark:bg-neutral-800 dark:text-neutral-50'
           : 'text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-neutral-300 dark:hover:bg-neutral-900 dark:hover:text-neutral-50',
@@ -107,6 +129,9 @@
       aria-current={selected ? 'true' : undefined}
       onclick={() => onSelectSession(session.id)}
     >
+      {#if statusDotClass}
+        <span class={['h-1.5 w-1.5 shrink-0 rounded-full', statusDotClass]} aria-hidden="true"></span>
+      {/if}
       <span class="min-w-0 truncate">{title}</span>
     </button>
 

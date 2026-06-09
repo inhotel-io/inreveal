@@ -58,7 +58,7 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_visibility: 'Activity preview',
     assistant_activity_visibility_compact: 'Compact',
     assistant_activity_visibility_expanded: 'Expanded',
-    assistant_activity_visibility_menu: 'Activity preview options',
+    assistant_session_menu: 'Chat options',
     assistant_activity_visibility_off: 'Off',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_searchAssets: 'Search photos',
@@ -937,7 +937,8 @@ describe(AgentConversationPane.name, () => {
 
     expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: 'Details' }));
     expect(screen.getByRole('dialog', { name: 'Session details' })).toBeInTheDocument();
     expect(screen.getByText('Careful')).toBeInTheDocument();
 
@@ -957,13 +958,15 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    const trigger = screen.getByRole('button', { name: /Activity preview/i });
-    expect(trigger).toHaveTextContent('Compact');
+    const trigger = screen.getByRole('button', { name: 'Chat options' });
 
     await fireEvent.click(trigger);
+    expect(screen.getByRole('menuitemradio', { name: 'Compact' })).toHaveAttribute('aria-checked', 'true');
     await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Expanded' }));
 
-    expect(trigger).toHaveTextContent('Expanded');
+    await fireEvent.click(trigger);
+    expect(screen.getByRole('menuitemradio', { name: 'Expanded' })).toHaveAttribute('aria-checked', 'true');
+    await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Expanded' }));
     expect(globalThis.localStorage.setItem).toHaveBeenCalledWith(
       `gallery.assistant.activityVisibility.${session.id}`,
       'expanded',
@@ -985,7 +988,9 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    expect(screen.getByRole('button', { name: /Activity preview/i })).toHaveTextContent('Off');
+    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
+    expect(screen.getByRole('menuitemradio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
+    await fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
 
     await view.rerender({
       session: secondSession,
@@ -994,11 +999,12 @@ describe(AgentConversationPane.name, () => {
       onTitleDiscovered: vi.fn(),
     });
 
-    expect(screen.getByRole('button', { name: /Activity preview/i })).toHaveTextContent('Expanded');
+    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
+    expect(screen.getByRole('menuitemradio', { name: 'Expanded' })).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('forwards New chat and discovered titles', async () => {
-    const session = makeSession();
+  it('forwards New chat from the terminal action and discovered titles', async () => {
+    const session = makeSession({ status: AgentSessionStatus.Completed });
     const onNewChat = vi.fn();
     const onTitleDiscovered = vi.fn();
     sdkMock.getAgentSessionMessages.mockResolvedValue([makeMessage(session.id, 'Build a family highlights album')]);
@@ -1012,7 +1018,7 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Start new chat' }));
     expect(onNewChat).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(onTitleDiscovered).toHaveBeenCalledWith(session.id, 'Build a family highlights album'));
   });
