@@ -94,6 +94,10 @@ export class AgentSessionActivityEventService {
     sessionId: string,
     terminalStatus: AgentSessionActivityEventStatus,
   ): Promise<AgentSessionActivityEvent[]> {
+    if (terminalStatus === AgentSessionActivityEventStatus.Running) {
+      return [];
+    }
+
     const session = await this.sessionRepository.getById(userId, sessionId);
     if (!session) {
       return [];
