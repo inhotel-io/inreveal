@@ -97,6 +97,12 @@ describe('trash_assets router — match rejects (disambiguation)', () => {
   it('rejects "delete the recent trip album" (container-level)', () => {
     assert.equal(wf.match('delete the recent trip album'), undefined);
   });
+
+  // Regression for slice 3.3: trash_assets must cede "delete the Beach album"
+  // to delete_album (containerSourcePattern ends with \b(?:album|space)$).
+  it('cedes "delete the Beach album" to delete_album (container-level)', () => {
+    assert.equal(wf.match('delete the Beach album'), undefined);
+  });
 });
 
 // ── parseSlots ────────────────────────────────────────────────────────────────

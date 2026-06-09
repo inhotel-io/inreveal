@@ -69,6 +69,36 @@ export const WORKFLOW_MANIFEST = Object.freeze([
     }),
   }),
   Object.freeze({
+    kind: 'delete_album',
+    flow: 'strict',
+    title: 'Delete an album',
+    classifierDescription:
+      'User wants to delete (remove/get rid of) an existing album container. The album is deleted but all photos stay in the library. DECLINES photo-deletion intents ("delete the photos in X album") and space deletion ("delete the X space" → delete_space).',
+    positiveExamples: Object.freeze([
+      'Delete the Beach album',
+      'Remove the Trip album',
+      'Get rid of the Family album',
+    ]),
+    negativeExamples: Object.freeze([
+      'Delete the photos in the Beach album',
+      'Delete the Beach album photos',
+      'Delete the Family space',
+      'Trash my 2024 screenshots',
+    ]),
+    slots: Object.freeze({
+      albumRef: Object.freeze({ type: 'string', required: true, description: 'How the user referred to the album.' }),
+    }),
+    requiredReadTools: Object.freeze(['listAlbums']),
+    planTool: 'proposeAlbumOperations',
+    supportsContinuation: true,
+    matrixRow: Object.freeze({
+      capability: 'Delete an album',
+      tier: 'Solid now',
+      workflowOrBoundary:
+        '`delete_album` resolves the album by name (durable disambiguation for duplicate names) and proposes an `album.delete` plan. Photos stay in the library — only the container is removed. `deleteContainers` write-scope required.',
+    }),
+  }),
+  Object.freeze({
     kind: 'set_album_cover',
     flow: 'strict',
     title: 'Set album cover',
