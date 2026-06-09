@@ -15,7 +15,7 @@ import {
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import type { AgentActivityEvent } from './agent-session-activity-turns-ui';
-import { buildAgentTurnTimelines } from './agent-turn-timeline-ui';
+import { buildAgentTurnTimelines, formatAgentTimelineDuration } from './agent-turn-timeline-ui';
 
 const sessionId = '00000000-0000-4000-8000-000000000100';
 
@@ -645,5 +645,20 @@ describe('buildAgentTurnTimelines', () => {
     expect(detail.error).toBeNull();
     expect(detail.startedAt).toBe('2026-05-18T10:00:05.000Z');
     expect(detail.completedAt).toBe('2026-05-18T10:00:07.000Z');
+  });
+});
+
+describe('formatAgentTimelineDuration', () => {
+  it('formats sub-minute durations with one decimal', () => {
+    expect(formatAgentTimelineDuration(2300)).toBe('2.3s');
+    expect(formatAgentTimelineDuration(400)).toBe('0.4s');
+  });
+
+  it('formats minute durations', () => {
+    expect(formatAgentTimelineDuration(65_000)).toBe('1m 5s');
+  });
+
+  it('clamps negatives to zero', () => {
+    expect(formatAgentTimelineDuration(-50)).toBe('0.0s');
   });
 });
