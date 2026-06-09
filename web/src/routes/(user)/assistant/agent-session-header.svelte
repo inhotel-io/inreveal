@@ -94,7 +94,7 @@
         disabled={cancelDisabled}
         onclick={onCancel}
       >
-        {$t('assistant_cancel')}
+        {$t('assistant_close_session')}
       </button>
     {/if}
     <AgentActivityVisibilityMenu
