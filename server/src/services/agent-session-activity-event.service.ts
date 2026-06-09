@@ -2,11 +2,23 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { AgentSessionActivityEvent } from 'src/database';
 import { AgentSessionActivityEventCreateDto } from 'src/dtos/agent-session-activity-event.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { AgentSessionActivityEventSource, AgentSessionActivityEventStatus, AgentSessionStatus } from 'src/enum';
+import {
+  AgentSessionActivityEventKind,
+  AgentSessionActivityEventSource,
+  AgentSessionActivityEventStatus,
+  AgentSessionStatus,
+} from 'src/enum';
 import { AgentSessionActivityEventRepository } from 'src/repositories/agent-session-activity-event.repository';
 import { AgentSessionRepository } from 'src/repositories/agent-session.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { AgentRunnerActivityStreamEvent } from 'src/types/agent-runner.types';
+
+const LIFECYCLE_EVENT_KINDS: AgentSessionActivityEventKind[] = [
+  AgentSessionActivityEventKind.StartProcessing,
+  AgentSessionActivityEventKind.PlanComposing,
+  AgentSessionActivityEventKind.ApplyProgress,
+  AgentSessionActivityEventKind.RunnerRecovery,
+];
 
 @Injectable()
 export class AgentSessionActivityEventService {
@@ -72,6 +84,53 @@ export class AgentSessionActivityEventService {
       summary: event.summary,
       counts: event.counts,
     } as AgentSessionActivityEventCreateDto);
+  }
+
+  // Closes still-running lifecycle events by inserting a terminal sibling per kind
+  // (events are append-only). Unlike create(), this intentionally runs for sessions
+  // that are already terminal: cancel flips the session status before closing.
+  async closeOpenLifecycleEvents(
+    userId: string,
+    sessionId: string,
+    terminalStatus: AgentSessionActivityEventStatus,
+  ): Promise<AgentSessionActivityEvent[]> {
+    const session = await this.sessionRepository.getById(userId, sessionId);
+    if (!session) {
+      return [];
+    }
+
+    const events = await this.repository.getBySessionId(session.id);
+    const latestStatusByKind = new Map<AgentSessionActivityEventKind, AgentSessionActivityEventStatus>();
+    for (const event of events) {
+      if (LIFECYCLE_EVENT_KINDS.includes(event.kind)) {
+        latestStatusByKind.set(event.kind, event.status);
+      }
+    }
+
+    const closers: AgentSessionActivityEvent[] = [];
+    for (const [kind, status] of latestStatusByKind) {
+      if (status !== AgentSessionActivityEventStatus.Running) {
+        continue;
+      }
+
+      const closer = await this.repository.create({
+        sessionId: session.id,
+        kind,
+        status: terminalStatus,
+        source: AgentSessionActivityEventSource.Server,
+        summary: null,
+        counts: null,
+      });
+      this.websocketRepository.clientSend('on_agent_session_event', userId, {
+        type: 'activity',
+        sessionId: session.id,
+        event: closer,
+        createdAt: closer.createdAt.toISOString(),
+      });
+      closers.push(closer);
+    }
+
+    return closers;
   }
 
   normalizeRunnerEvent(event: AgentRunnerActivityStreamEvent): AgentSessionActivityEventCreateDto | null {
