@@ -66,7 +66,7 @@ vi.mock('svelte-i18n', () => {
     assistant_agent_tool_status_denied: 'Denied',
     assistant_agent_tool_status_failed: 'Failed',
     assistant_busy_ascii: 'pi is working...',
-    assistant_cancel: 'Cancel',
+    assistant_close_session: 'Close session',
     assistant_chat: 'Chat',
     assistant_details: 'Details',
     assistant_close_details: 'Close details',
@@ -844,7 +844,7 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close session' }));
 
     await waitFor(() => expect(sdkMock.cancelAgentSession).toHaveBeenCalledWith({ id: session.id }));
     expect(onSessionUpdated).toHaveBeenCalledWith(cancelledSession);
@@ -865,11 +865,11 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close session' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to cancel assistant session');
     expect(onSessionUpdated).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Close session' })).toBeEnabled();
   });
 
   it('does not offer or invoke cancel for non-cancellable sessions', () => {
@@ -884,7 +884,7 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close session' })).not.toBeInTheDocument();
     expect(sdkMock.cancelAgentSession).not.toHaveBeenCalled();
   });
 
@@ -909,7 +909,7 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Close session' }));
     await view.rerender({
       session: secondSession,
       title: null,
