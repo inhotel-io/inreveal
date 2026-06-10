@@ -82,7 +82,7 @@ class TimelineGroupingBottomPill extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: const Center(child: TimelineGroupingSelector()),
+                    child: const Center(child: TimelineGroupingSelector(bare: true)),
                   ),
                 ),
               ),

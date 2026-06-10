@@ -62,6 +62,28 @@ void main() {
       expect(selected(tester, GroupAssetsBy.day), isTrue);
     });
 
+    testWidgets('bare variant draws no surface or border of its own (for hosts that paint the pill)', (tester) async {
+      await tester.pumpConsumerWidget(const TimelineGroupingSelector(bare: true));
+      await tester.pumpAndSettle();
+
+      final material = tester.widget<Material>(
+        find.descendant(of: find.byKey(const Key('timeline-grouping-selector')), matching: find.byType(Material)),
+      );
+      expect(material.color, Colors.transparent);
+      expect((material.shape! as StadiumBorder).side, BorderSide.none);
+    });
+
+    testWidgets('default variant keeps its own surface and border (app-bar hosts paint nothing)', (tester) async {
+      await tester.pumpConsumerWidget(const TimelineGroupingSelector());
+      await tester.pumpAndSettle();
+
+      final material = tester.widget<Material>(
+        find.descendant(of: find.byKey(const Key('timeline-grouping-selector')), matching: find.byType(Material)),
+      );
+      expect(material.color, isNot(Colors.transparent));
+      expect((material.shape! as StadiumBorder).side.style, BorderStyle.solid);
+    });
+
     testWidgets('initializes selected segment from Setting.groupAssetsBy', (tester) async {
       await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.month.index);
 

@@ -65,6 +65,19 @@ void main() {
       expect(tester.getSize(find.byKey(const Key('timeline-grouping-bottom-pill'))).width, lessThanOrEqualTo(234));
     });
 
+    testWidgets('selector inside the pill draws no surface of its own (single pill border)', (tester) async {
+      await tester.pumpConsumerWidget(host());
+      await tester.pumpAndSettle();
+
+      // The pill already paints the blur surface + outline; a second Material slab
+      // with its own stadium side inside it reads as a double border on device.
+      final selectorMaterial = tester.widget<Material>(
+        find.descendant(of: find.byType(TimelineGroupingSelector), matching: find.byType(Material)),
+      );
+      expect(selectorMaterial.color, Colors.transparent);
+      expect((selectorMaterial.shape! as StadiumBorder).side, BorderSide.none);
+    });
+
     testWidgets('tapping a segment writes Setting.groupAssetsBy', (tester) async {
       await tester.pumpConsumerWidget(host());
       await tester.pumpAndSettle();

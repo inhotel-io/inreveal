@@ -27,9 +27,11 @@ GroupAssetsBy timelineGroupingFromSettingIndex(int index) {
 }
 
 class TimelineGroupingSelector extends ConsumerWidget {
-  const TimelineGroupingSelector({super.key, this.enabled = true}) : compact = false;
+  const TimelineGroupingSelector({super.key, this.enabled = true, this.bare = false}) : compact = false;
 
-  const TimelineGroupingSelector.compact({super.key, this.enabled = true}) : compact = true;
+  /// Named constructor for the compact app-bar chip variant. Does not expose [bare] because the
+  /// chip always paints its own pill surface.
+  const TimelineGroupingSelector.compact({super.key, this.enabled = true}) : compact = true, bare = false;
 
   static const double _maxWidth = 218;
   static const double _height = 48;
@@ -41,6 +43,12 @@ class TimelineGroupingSelector extends ConsumerWidget {
 
   final bool enabled;
   final bool compact;
+
+  /// When true the full-variant selector renders with a transparent Material and no stadium border,
+  /// because the host widget (e.g. [TimelineGroupingBottomPill]) already paints the pill surface
+  /// and outline ring. Keeping both would produce a double border on device. Defaults to false so
+  /// the standalone app-bar usage retains its own surface and border.
+  final bool bare;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -75,10 +83,14 @@ class TimelineGroupingSelector extends ConsumerWidget {
               width: width,
               height: _height,
               child: Material(
-                color: colors.surfaceContainerHighest.withValues(
-                  alpha: theme.brightness == Brightness.dark ? 0.74 : 0.9,
-                ),
-                shape: StadiumBorder(side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7))),
+                color: bare
+                    ? Colors.transparent
+                    : colors.surfaceContainerHighest.withValues(
+                        alpha: theme.brightness == Brightness.dark ? 0.74 : 0.9,
+                      ),
+                shape: bare
+                    ? const StadiumBorder()
+                    : StadiumBorder(side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7))),
                 clipBehavior: Clip.antiAlias,
                 child: Row(
                   children: [
