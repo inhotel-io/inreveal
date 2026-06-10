@@ -402,7 +402,7 @@ describe(AgentSessionActivityEventService.name, () => {
     });
 
     it('returns empty and inserts nothing when the session is not found', async () => {
-      sessionRepository.getById.mockResolvedValue(undefined);
+      sessionRepository.getById.mockResolvedValue(void 0);
 
       const result = await sut.closeOpenLifecycleEvents(
         factory.uuid(),
