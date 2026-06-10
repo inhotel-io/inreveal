@@ -34,9 +34,15 @@
     onSessionUpdated,
   }: Props = $props();
 
-  let detailsOpen = $derived.by(() => {
-    void session.id;
-    return false;
+  let detailsOpen = $state(false);
+  // Close the drawer only when actually switching sessions — the session prop's object
+  // identity churns on periodic refreshes (dock poll), which must not affect the drawer.
+  let detailsOpenSessionId = session.id;
+  $effect(() => {
+    if (session.id !== detailsOpenSessionId) {
+      detailsOpenSessionId = session.id;
+      detailsOpen = false;
+    }
   });
   let pendingApprovalCount = $state(0);
   let approvalResumePending = $state(false);
