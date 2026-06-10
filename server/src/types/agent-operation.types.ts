@@ -15,13 +15,6 @@ export type AgentOperationAssetResult = {
   errorMessage?: string;
 };
 
-export type AgentOperationAssetResult = {
-  id: string;
-  success: boolean;
-  error?: string;
-  errorMessage?: string;
-};
-
 export type AgentOperationResult = {
   albumId?: string;
   spaceId?: string;
