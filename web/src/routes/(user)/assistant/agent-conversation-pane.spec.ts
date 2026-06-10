@@ -58,7 +58,6 @@ vi.mock('svelte-i18n', () => {
     assistant_activity_visibility: 'Activity preview',
     assistant_activity_visibility_compact: 'Compact',
     assistant_activity_visibility_expanded: 'Expanded',
-    assistant_session_menu: 'Chat options',
     assistant_activity_visibility_off: 'Off',
     assistant_agent_tool_data_class_metadata: 'Metadata',
     assistant_agent_tool_name_searchAssets: 'Search photos',
@@ -952,70 +951,12 @@ describe(AgentConversationPane.name, () => {
 
     expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
-    await fireEvent.click(screen.getByRole('menuitem', { name: 'Details' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
     expect(screen.getByRole('dialog', { name: 'Session details' })).toBeInTheDocument();
     expect(screen.getByText('Careful')).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Close details' }));
     expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
-  });
-
-  it('persists activity visibility changes from the session header menu', async () => {
-    const session = makeSession();
-
-    render(AgentConversationPane, {
-      props: {
-        session,
-        title: null,
-        onNewChat: vi.fn(),
-        onTitleDiscovered: vi.fn(),
-      },
-    });
-
-    const trigger = screen.getByRole('button', { name: 'Chat options' });
-
-    await fireEvent.click(trigger);
-    expect(screen.getByRole('menuitemradio', { name: 'Compact' })).toHaveAttribute('aria-checked', 'true');
-    await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Expanded' }));
-
-    await fireEvent.click(trigger);
-    expect(screen.getByRole('menuitemradio', { name: 'Expanded' })).toHaveAttribute('aria-checked', 'true');
-    await fireEvent.click(screen.getByRole('menuitemradio', { name: 'Expanded' }));
-    expect(globalThis.localStorage.setItem).toHaveBeenCalledWith(
-      `gallery.assistant.activityVisibility.${session.id}`,
-      'expanded',
-    );
-  });
-
-  it('loads activity visibility per session instead of sharing one global mode', async () => {
-    const firstSession = makeSession({ id: '00000000-0000-4000-8000-000000000101' });
-    const secondSession = makeSession({ id: '00000000-0000-4000-8000-000000000102' });
-    storageValues.set(`gallery.assistant.activityVisibility.${firstSession.id}`, 'off');
-    storageValues.set(`gallery.assistant.activityVisibility.${secondSession.id}`, 'expanded');
-
-    const view = render(AgentConversationPane, {
-      props: {
-        session: firstSession,
-        title: null,
-        onNewChat: vi.fn(),
-        onTitleDiscovered: vi.fn(),
-      },
-    });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
-    expect(screen.getByRole('menuitemradio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
-    await fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
-
-    await view.rerender({
-      session: secondSession,
-      title: null,
-      onNewChat: vi.fn(),
-      onTitleDiscovered: vi.fn(),
-    });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Chat options' }));
-    expect(screen.getByRole('menuitemradio', { name: 'Expanded' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('forwards New chat from the terminal action and discovered titles', async () => {
