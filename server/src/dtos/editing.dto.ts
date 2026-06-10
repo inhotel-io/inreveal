@@ -124,6 +124,7 @@ const actionParameterKeys = {
   [AssetEditAction.Rotate]: Object.keys(RotateParametersSchema.shape),
   [AssetEditAction.Mirror]: Object.keys(MirrorParametersSchema.shape),
   [AssetEditAction.Trim]: ['startTime', 'endTime'],
+  [AssetEditAction.Adjust]: ['brightness', 'contrast', 'saturation', 'autoEnhance'],
 } as const;
 
 function getExpectedKeysByActionMessage(): string {
