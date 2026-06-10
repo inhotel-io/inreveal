@@ -14,6 +14,7 @@
     AgentMessageRole,
     AgentMessageTextBlockType,
     AgentSessionStatus,
+    AgentSessionActivityEventStatus,
     AgentToolCallStatus,
     AssetMediaSize,
     type AgentMessageClarificationBlock,
@@ -600,6 +601,11 @@
 
     if (event.type === 'activity') {
       appendActivityEventIfNew(event.event);
+      if (event.event.status !== AgentSessionActivityEventStatus.Running) {
+        // A terminal lifecycle event marks a settled turn — re-sync messages in case the
+        // assistant-message-created event raced this panel's subscription (merge is idempotent).
+        void loadMessages();
+      }
       return;
     }
 
