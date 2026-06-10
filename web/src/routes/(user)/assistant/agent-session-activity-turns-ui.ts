@@ -1,32 +1,11 @@
 import {
   AgentMessageRole,
-  AgentSessionStatus,
   type AgentMessageResponseDto,
-  type AgentOperationPlanResponseDto,
-  type AgentSessionResponseDto,
+  type AgentSessionActivityEventResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
-import { buildAgentActivityModel, type AgentActivityEvent, type AgentActivityModel } from './agent-activity-ui';
 
-export type AgentSessionActivityTurn = {
-  id: string;
-  anchorMessageId: string;
-  occurredAt: string;
-  model: AgentActivityModel;
-  coveredToolCallIds: Set<string>;
-  appliedPlanKeys: Set<string>;
-};
-
-export type BuildAgentSessionActivityTurnsInput = {
-  session: AgentSessionResponseDto;
-  messages: AgentMessageResponseDto[];
-  toolCalls: AgentToolCallResponseDto[];
-  currentPlan: AgentOperationPlanResponseDto | null;
-  appliedPlans: AgentOperationPlanResponseDto[];
-  activityEvents?: AgentActivityEvent[];
-  streamingText?: string;
-  isAssistantActive?: boolean;
-};
+export type AgentActivityEvent = AgentSessionActivityEventResponseDto;
 
 export type UserTurnAnchor = {
   message: AgentMessageResponseDto;
@@ -59,25 +38,12 @@ const getToolCallActivityAt = (toolCall: AgentToolCallResponseDto) => {
   return isValidActivityDate(toolCall.completedAt) ? toolCall.completedAt : null;
 };
 
-const getPlanActivityAt = (plan: AgentOperationPlanResponseDto) => {
-  if (isValidActivityDate(plan.updatedAt)) {
-    return plan.updatedAt;
-  }
-
-  return isValidActivityDate(plan.createdAt) ? plan.createdAt : null;
-};
-
 const getEventActivityAt = (event: AgentActivityEvent) =>
   isValidActivityDate(event.createdAt) ? event.createdAt : null;
 
 const isAtOrAfter = (value: string, boundary: string) => value >= boundary;
 
 const isBefore = (value: string, boundary: string | null) => boundary === null || value < boundary;
-
-const getAppliedPlanKey = (plan: AgentOperationPlanResponseDto) => `${plan.id}:${plan.revision}`;
-
-const getCoveredToolCallIds = (model: AgentActivityModel) =>
-  new Set(model.items.flatMap((item) => item.technical?.toolCallIds ?? []));
 
 export const buildStableTurnAnchors = (messages: AgentMessageResponseDto[]) => {
   const validUserMessages = sortedBy(
@@ -124,16 +90,6 @@ export const toolCallBelongsToTurn = (
   return isAtOrAfter(activityAt, turn.startAt) && isBefore(activityAt, turnEnd);
 };
 
-const appliedPlanBelongsToTurn = (plan: AgentOperationPlanResponseDto, turn: UserTurnAnchor) => {
-  const activityAt = getPlanActivityAt(plan);
-
-  if (!activityAt) {
-    return false;
-  }
-
-  return isAtOrAfter(activityAt, turn.startAt) && isBefore(activityAt, turn.nextUserAt);
-};
-
 export const activityEventBelongsToTurn = (event: AgentActivityEvent, turn: UserTurnAnchor) => {
   const activityAt = getEventActivityAt(event);
 
@@ -145,69 +101,3 @@ export const activityEventBelongsToTurn = (event: AgentActivityEvent, turn: User
 
   return isAtOrAfter(activityAt, turn.startAt) && isBefore(activityAt, turnEnd);
 };
-
-const dedupeActivityEvents = (events: AgentActivityEvent[]) => {
-  const eventsById = new Map<string, AgentActivityEvent>();
-
-  for (const event of events) {
-    eventsById.set(event.id, event);
-  }
-
-  return [...eventsById.values()];
-};
-
-const getTurnSession = (session: AgentSessionResponseDto, turn: UserTurnAnchor, hasAppliedPlans: boolean) => {
-  if (turn.isLatest) {
-    if (session.status === AgentSessionStatus.Applying && hasAppliedPlans) {
-      return { ...session, status: AgentSessionStatus.Running };
-    }
-
-    return session;
-  }
-
-  return { ...session, status: AgentSessionStatus.Completed };
-};
-
-export const buildAgentSessionActivityTurns = (input: BuildAgentSessionActivityTurnsInput) => {
-  const anchors = buildStableTurnAnchors(input.messages);
-  const activityEvents = dedupeActivityEvents(input.activityEvents ?? []);
-
-  return anchors
-    .map((turn): AgentSessionActivityTurn | null => {
-      const turnToolCalls = input.toolCalls.filter((toolCall) => toolCallBelongsToTurn(toolCall, turn, anchors.length));
-      const turnAppliedPlans = input.appliedPlans.filter((plan) => appliedPlanBelongsToTurn(plan, turn));
-      const turnActivityEvents = activityEvents.filter((event) => activityEventBelongsToTurn(event, turn));
-      const model = buildAgentActivityModel({
-        session: getTurnSession(input.session, turn, turnAppliedPlans.length > 0),
-        messages: input.messages,
-        toolCalls: turnToolCalls,
-        currentPlan: turn.isLatest ? input.currentPlan : null,
-        appliedPlans: turnAppliedPlans,
-        activityEvents: turnActivityEvents,
-        streamingText: turn.isLatest ? input.streamingText : undefined,
-        isAssistantActive: turn.isLatest ? input.isAssistantActive : false,
-      });
-
-      if (model.items.length === 0) {
-        return null;
-      }
-
-      return {
-        id: `activity-turn-${turn.message.id}`,
-        anchorMessageId: turn.message.id,
-        occurredAt: turn.startAt,
-        model,
-        coveredToolCallIds: getCoveredToolCallIds(model),
-        appliedPlanKeys: new Set(turnAppliedPlans.map((plan) => getAppliedPlanKey(plan))),
-      };
-    })
-    .filter((turn): turn is AgentSessionActivityTurn => turn !== null);
-};
-
-export const getCoveredToolCallIdsForActivityTurns = (turns: AgentSessionActivityTurn[]) =>
-  new Set(turns.flatMap((turn) => [...turn.coveredToolCallIds]));
-
-export const getAppliedPlanKeysForActivityTurns = (turns: AgentSessionActivityTurn[]) =>
-  new Set(turns.flatMap((turn) => [...turn.appliedPlanKeys]));
-
-export type { AgentActivityEvent } from './agent-activity-ui';
