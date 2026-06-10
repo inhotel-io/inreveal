@@ -1,6 +1,7 @@
 import {
   AgentApprovalMode,
   AgentMessageRole,
+  AgentMessageTextBlockType,
   AgentPermissionPreset,
   AgentProviderType,
   Kind as AgentSessionActivityEventKind,
@@ -95,7 +96,7 @@ const makeUserMessage = (id: string, createdAt: string): AgentMessageResponseDto
   role: AgentMessageRole.User,
   providerMessageId: null,
   toolCallId: null,
-  content: { blocks: [{ type: 'text' as const, text: 'Do something' }] },
+  content: { blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Do something' }] },
   createdAt,
 });
 
@@ -105,7 +106,7 @@ const makeAssistantMessage = (id: string, createdAt: string): AgentMessageRespon
   role: AgentMessageRole.Assistant,
   providerMessageId: null,
   toolCallId: null,
-  content: { blocks: [{ type: 'text' as const, text: 'Done' }] },
+  content: { blocks: [{ type: AgentMessageTextBlockType.Text, text: 'Done' }] },
   createdAt,
 });
 
