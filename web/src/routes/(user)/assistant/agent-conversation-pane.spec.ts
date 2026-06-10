@@ -943,6 +943,33 @@ describe(AgentConversationPane.name, () => {
     expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
   });
 
+  it('keeps the details drawer open across equivalent session refreshes, closing only on a session switch', async () => {
+    const session = makeSession({ status: AgentSessionStatus.Running });
+    sdkMock.getAgentSessionMessages.mockResolvedValue([]);
+
+    const view = render(AgentConversationPane, {
+      props: {
+        session,
+        title: null,
+        onNewChat: vi.fn(),
+        onTitleDiscovered: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(screen.getByRole('dialog', { name: 'Session details' })).toBeInTheDocument();
+
+    // dock-style periodic refresh: same content, new object identity
+    await view.rerender({ session: { ...session } });
+    expect(screen.getByRole('dialog', { name: 'Session details' })).toBeInTheDocument();
+
+    // a genuinely different session still closes the drawer
+    await view.rerender({
+      session: makeSession({ id: '00000000-0000-4000-8000-00000000beef', status: AgentSessionStatus.Running }),
+    });
+    expect(screen.queryByRole('dialog', { name: 'Session details' })).not.toBeInTheDocument();
+  });
+
   it('forwards New chat from the terminal action and discovered titles', async () => {
     const session = makeSession({ status: AgentSessionStatus.Completed });
     const onNewChat = vi.fn();
