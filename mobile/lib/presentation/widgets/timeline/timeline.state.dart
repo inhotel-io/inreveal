@@ -6,8 +6,8 @@ import 'package:immich_mobile/presentation/widgets/timeline/constants.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment_builder.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment_builder.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
-import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 
 class TimelineArgs {
   final double maxWidth;
@@ -93,7 +93,7 @@ final timelineSegmentProvider = StreamProvider.autoDispose<List<Segment>>((ref) 
   final availableTileWidth = args.maxWidth - (spacing * (columnCount - 1));
   final tileExtent = math.max(0, availableTileWidth) / columnCount;
 
-  final groupBy = args.groupBy ?? ref.watch(appConfigProvider).timeline.groupAssetsBy;
+  final GroupAssetsBy groupBy = args.groupBy ?? ref.watch(timelineGroupingProvider);
 
   final timelineService = ref.watch(timelineServiceProvider);
   yield* timelineService.watchBuckets().map((buckets) {
@@ -113,6 +113,10 @@ final timelineSegmentProvider = StreamProvider.autoDispose<List<Segment>>((ref) 
       groupBy: effectiveGroupBy,
     ).generate();
   });
-}, dependencies: [timelineServiceProvider, timelineArgsProvider]);
+  // timelineGroupingProvider must be listed so the auto-scoped copy of this provider
+  // inside a TimelineRouteScope resolves the ROUTE-LOCAL grouping override; without it
+  // the copy reads the root (persisted) grouping and detail routes silently render
+  // the persisted grouping instead of their own.
+}, dependencies: [timelineServiceProvider, timelineArgsProvider, timelineGroupingProvider]);
 
 final timelineStateProvider = NotifierProvider<TimelineStateNotifier, TimelineState>(TimelineStateNotifier.new);
