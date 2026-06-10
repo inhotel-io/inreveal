@@ -721,6 +721,25 @@ describe('buildAgentTurnTimelines', () => {
     expect(detail.startedAt).toBe('2026-05-18T10:00:05.000Z');
     expect(detail.completedAt).toBe('2026-05-18T10:00:07.000Z');
   });
+
+  it('settles the last turn once the assistant has answered, even while the session stays running', () => {
+    const result = buildAgentTurnTimelines({
+      session: makeSession(AgentSessionStatus.Running),
+      messages: [
+        makeUserMessage('user-a', '2026-06-10T10:00:00.000Z'),
+        makeAssistantMessage('assistant-a', '2026-06-10T10:00:05.000Z'),
+      ],
+      toolCalls: [
+        makeToolCall({ id: 'tc-a', startedAt: '2026-06-10T10:00:01.000Z', completedAt: '2026-06-10T10:00:02.000Z' }),
+      ],
+      activityEvents: [],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].state).toBe('settled');
+    expect(result[0].oneLiner).toBeNull();
+    expect(result[0].summary).not.toBeNull();
+  });
 });
 
 describe('formatAgentTimelineDuration', () => {

@@ -1577,6 +1577,34 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByText('Then save it.')).toBeInTheDocument();
   });
 
+  it('refetches messages when a terminal activity event lands (self-heal for missed message events)', async () => {
+    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
+    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    sdkMock.getAgentSessionMessages.mockResolvedValueOnce([
+      makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+    ]);
+
+    render(AgentSessionChatPanel, { props: { session } });
+    await screen.findByText('make an album of my recent trip');
+    expect(screen.queryByText('Which date range should I use?')).not.toBeInTheDocument();
+
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+      makeMessage('message-assistant', AgentMessageRole.Assistant, 'Which date range should I use?'),
+    ]);
+    handler?.({
+      type: 'activity',
+      sessionId: session.id,
+      event: makeActivityEvent({ status: AgentSessionActivityEventStatus.Completed }),
+      createdAt: '2026-05-14T00:00:02.000Z',
+    });
+
+    expect(await screen.findByText('Which date range should I use?')).toBeInTheDocument();
+  });
+
   it('renders streamed assistant fenced multiline code blocks as formatted code', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
@@ -1986,7 +2014,8 @@ describe(AgentSessionChatPanel.name, () => {
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('First same-time message'),
       expect.stringContaining('Second same-time message'),
-      expect.stringContaining('Thinking'),
+      // the turn is answered (assistant response below), so the timeline shows the settled summary line
+      expect.stringContaining('1 step'),
       expect.stringContaining('Later assistant response'),
     ]);
   });
