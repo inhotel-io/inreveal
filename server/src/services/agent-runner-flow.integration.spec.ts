@@ -39,6 +39,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { MapRepository } from 'src/repositories/map.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
@@ -843,6 +844,7 @@ const setup = () => {
       sharedSpaceRepository as unknown as SharedSpaceRepository,
     ),
     { searchPlaces: vi.fn(() => Promise.resolve([])) } as unknown as MapRepository,
+    { getByName: vi.fn(() => Promise.resolve([])) } as unknown as PersonRepository,
   );
   toolServiceContainer.current = toolService;
   const mcpToolContractService = new AgentMcpToolContractService();
