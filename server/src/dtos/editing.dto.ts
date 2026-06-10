@@ -97,9 +97,18 @@ const __AssetEditActionItemSchema = z.discriminatedUnion('action', [
 ]);
 
 const AssetEditParametersSchema = z
-  .union([CropParametersSchema, RotateParametersSchema, MirrorParametersSchema, TrimParametersSchema, AdjustParametersSchema], {
-    error: getExpectedKeysByActionMessage,
-  })
+  .union(
+    [
+      CropParametersSchema,
+      RotateParametersSchema,
+      MirrorParametersSchema,
+      TrimParametersSchema,
+      AdjustParametersSchema,
+    ],
+    {
+      error: getExpectedKeysByActionMessage,
+    },
+  )
   .describe('List of edit actions to apply (crop, rotate, mirror, trim, or adjust)');
 
 const actionParameterMap = {
@@ -181,9 +190,14 @@ const AssetEditsResponseSchema = z
   })
   .meta({ id: 'AssetEditsResponseDto' });
 
+const AssetEditPreviewQuerySchema = z
+  .object({ size: z.enum(['thumbnail', 'preview']).default('preview') })
+  .meta({ id: 'AssetEditPreviewQueryDto' });
+
 export class AssetEditActionItemResponseDto extends createZodDto(AssetEditActionItemResponseSchema) {}
 export class AssetEditsCreateDto extends createZodDto(AssetEditsCreateSchema) {}
 export class AssetEditsResponseDto extends createZodDto(AssetEditsResponseSchema) {}
+export class AssetEditPreviewQueryDto extends createZodDto(AssetEditPreviewQuerySchema) {}
 export type CropParameters = z.infer<typeof CropParametersSchema>;
 export type TrimParameters = z.infer<typeof TrimParametersSchema>;
 export type RotateParameters = z.infer<typeof RotateParametersSchema>;
