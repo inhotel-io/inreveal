@@ -42,6 +42,8 @@ class JobName {
   static const databaseBackup = JobName._(r'DatabaseBackup');
   static const facialRecognitionQueueAll = JobName._(r'FacialRecognitionQueueAll');
   static const facialRecognition = JobName._(r'FacialRecognition');
+  static const faceIdentityBackfill = JobName._(r'FaceIdentityBackfill');
+  static const faceIdentityMaintenanceAfterRecognition = JobName._(r'FaceIdentityMaintenanceAfterRecognition');
   static const fileDelete = JobName._(r'FileDelete');
   static const fileMigrationQueueAll = JobName._(r'FileMigrationQueueAll');
   static const libraryDeleteCheck = JobName._(r'LibraryDeleteCheck');
@@ -78,6 +80,8 @@ class JobName {
   static const versionCheck = JobName._(r'VersionCheck');
   static const ocrQueueAll = JobName._(r'OcrQueueAll');
   static const ocr = JobName._(r'Ocr');
+  static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
+  static const petDetection = JobName._(r'PetDetection');
   static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
   static const integrityUntrackedFilesQueueAll = JobName._(r'IntegrityUntrackedFilesQueueAll');
   static const integrityUntrackedFiles = JobName._(r'IntegrityUntrackedFiles');
@@ -89,6 +93,19 @@ class JobName {
   static const integrityChecksumFilesRefresh = JobName._(r'IntegrityChecksumFilesRefresh');
   static const integrityDeleteReportType = JobName._(r'IntegrityDeleteReportType');
   static const integrityDeleteReports = JobName._(r'IntegrityDeleteReports');
+  static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
+  static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
+  static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
+  static const sharedSpaceFaceMatchAll = JobName._(r'SharedSpaceFaceMatchAll');
+  static const sharedSpaceFaceMatchPage = JobName._(r'SharedSpaceFaceMatchPage');
+  static const sharedSpaceFaceMatchFromBackfill = JobName._(r'SharedSpaceFaceMatchFromBackfill');
+  static const sharedSpaceLibraryFaceSync = JobName._(r'SharedSpaceLibraryFaceSync');
+  static const sharedSpaceIdentityReconciliation = JobName._(r'SharedSpaceIdentityReconciliation');
+  static const sharedSpacePersonDedup = JobName._(r'SharedSpacePersonDedup');
+  static const sharedSpacePersonMetadataBackfill = JobName._(r'SharedSpacePersonMetadataBackfill');
+  static const sharedSpaceBulkAddAssets = JobName._(r'SharedSpaceBulkAddAssets');
+  static const assetClassifyQueueAll = JobName._(r'AssetClassifyQueueAll');
+  static const assetClassify = JobName._(r'AssetClassify');
 
   /// List of all possible values in this [enum][JobName].
   static const values = <JobName>[
@@ -111,6 +128,8 @@ class JobName {
     databaseBackup,
     facialRecognitionQueueAll,
     facialRecognition,
+    faceIdentityBackfill,
+    faceIdentityMaintenanceAfterRecognition,
     fileDelete,
     fileMigrationQueueAll,
     libraryDeleteCheck,
@@ -147,6 +166,8 @@ class JobName {
     versionCheck,
     ocrQueueAll,
     ocr,
+    petDetectionQueueAll,
+    petDetection,
     workflowAssetTrigger,
     integrityUntrackedFilesQueueAll,
     integrityUntrackedFiles,
@@ -158,6 +179,19 @@ class JobName {
     integrityChecksumFilesRefresh,
     integrityDeleteReportType,
     integrityDeleteReports,
+    storageBackendMigrationQueueAll,
+    storageBackendMigrationSingle,
+    sharedSpaceFaceMatch,
+    sharedSpaceFaceMatchAll,
+    sharedSpaceFaceMatchPage,
+    sharedSpaceFaceMatchFromBackfill,
+    sharedSpaceLibraryFaceSync,
+    sharedSpaceIdentityReconciliation,
+    sharedSpacePersonDedup,
+    sharedSpacePersonMetadataBackfill,
+    sharedSpaceBulkAddAssets,
+    assetClassifyQueueAll,
+    assetClassify,
   ];
 
   static JobName? fromJson(dynamic value) => JobNameTypeTransformer().decode(value);
@@ -215,6 +249,8 @@ class JobNameTypeTransformer {
         case r'DatabaseBackup': return JobName.databaseBackup;
         case r'FacialRecognitionQueueAll': return JobName.facialRecognitionQueueAll;
         case r'FacialRecognition': return JobName.facialRecognition;
+        case r'FaceIdentityBackfill': return JobName.faceIdentityBackfill;
+        case r'FaceIdentityMaintenanceAfterRecognition': return JobName.faceIdentityMaintenanceAfterRecognition;
         case r'FileDelete': return JobName.fileDelete;
         case r'FileMigrationQueueAll': return JobName.fileMigrationQueueAll;
         case r'LibraryDeleteCheck': return JobName.libraryDeleteCheck;
@@ -251,6 +287,8 @@ class JobNameTypeTransformer {
         case r'VersionCheck': return JobName.versionCheck;
         case r'OcrQueueAll': return JobName.ocrQueueAll;
         case r'Ocr': return JobName.ocr;
+        case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
+        case r'PetDetection': return JobName.petDetection;
         case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
         case r'IntegrityUntrackedFilesQueueAll': return JobName.integrityUntrackedFilesQueueAll;
         case r'IntegrityUntrackedFiles': return JobName.integrityUntrackedFiles;
@@ -262,6 +300,19 @@ class JobNameTypeTransformer {
         case r'IntegrityChecksumFilesRefresh': return JobName.integrityChecksumFilesRefresh;
         case r'IntegrityDeleteReportType': return JobName.integrityDeleteReportType;
         case r'IntegrityDeleteReports': return JobName.integrityDeleteReports;
+        case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
+        case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
+        case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
+        case r'SharedSpaceFaceMatchAll': return JobName.sharedSpaceFaceMatchAll;
+        case r'SharedSpaceFaceMatchPage': return JobName.sharedSpaceFaceMatchPage;
+        case r'SharedSpaceFaceMatchFromBackfill': return JobName.sharedSpaceFaceMatchFromBackfill;
+        case r'SharedSpaceLibraryFaceSync': return JobName.sharedSpaceLibraryFaceSync;
+        case r'SharedSpaceIdentityReconciliation': return JobName.sharedSpaceIdentityReconciliation;
+        case r'SharedSpacePersonDedup': return JobName.sharedSpacePersonDedup;
+        case r'SharedSpacePersonMetadataBackfill': return JobName.sharedSpacePersonMetadataBackfill;
+        case r'SharedSpaceBulkAddAssets': return JobName.sharedSpaceBulkAddAssets;
+        case r'AssetClassifyQueueAll': return JobName.assetClassifyQueueAll;
+        case r'AssetClassify': return JobName.assetClassify;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
