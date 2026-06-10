@@ -91,7 +91,7 @@ describe(AgentMessageController.name, () => {
         .send(body);
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should reject empty message blocks', async () => {
@@ -101,7 +101,9 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[content.blocks] Too small: expected array to have >=1 items']),
+        factory.responses.validationError([
+          { path: ['content', 'blocks'], message: expect.stringContaining('Too small') as string },
+        ]),
       );
     });
 
@@ -112,7 +114,9 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[content.blocks.0.text] Too small: expected string to have >=1 characters']),
+        factory.responses.validationError([
+          { path: ['content', 'blocks', 0, 'text'], message: expect.stringContaining('Too small') as string },
+        ]),
       );
     });
 
@@ -123,7 +127,7 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(expect.arrayContaining([expect.stringContaining('[content.blocks.0.type]')])),
+        factory.responses.validationError([{ path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string }]),
       );
     });
 
@@ -134,7 +138,7 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(expect.arrayContaining([expect.stringContaining('[content.blocks.0.type]')])),
+        factory.responses.validationError([{ path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string }]),
       );
     });
 
@@ -151,7 +155,9 @@ describe(AgentMessageController.name, () => {
         });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[content] content must be 32 KiB or less']));
+      expect(result).toEqual(
+        factory.responses.validationError([{ path: ['content'], message: expect.stringContaining('32 KiB') as string }]),
+      );
     });
   });
 
@@ -179,7 +185,7 @@ describe(AgentMessageController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).get('/agent/sessions/not-a-uuid/messages');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
   });
 });

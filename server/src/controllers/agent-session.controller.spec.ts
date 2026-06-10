@@ -211,7 +211,9 @@ describe(AgentSessionController.name, () => {
         .send({ ...body, providerCredentialId: '123' });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[providerCredentialId] Invalid UUID']));
+      expect(result).toEqual(
+        factory.responses.validationError([{ path: ['providerCredentialId'], message: 'Invalid UUID' }]),
+      );
     });
 
     it('should require permissionPlan for custom sessions', async () => {
@@ -221,7 +223,9 @@ describe(AgentSessionController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[permissionPlan] permissionPlan is required when permissionPreset is custom']),
+        factory.responses.validationError([
+          { path: ['permissionPlan'], message: expect.stringContaining('permissionPlan is required') as string },
+        ]),
       );
     });
 
@@ -250,8 +254,8 @@ describe(AgentSessionController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest([
-          '[permissionPlan] permissionPlan is only accepted when permissionPreset is custom',
+        factory.responses.validationError([
+          { path: ['permissionPlan'], message: expect.stringContaining('permissionPlan is only accepted') as string },
         ]),
       );
     });
@@ -262,7 +266,11 @@ describe(AgentSessionController.name, () => {
         .send({ ...body, approvalMode: 'sometimes' });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest([expect.stringContaining('[approvalMode] Invalid option')]));
+      expect(result).toEqual(
+        factory.responses.validationError([
+          { path: ['approvalMode'], message: expect.stringContaining('Invalid option') as string },
+        ]),
+      );
     });
 
     it('should reject inconsistent custom permission plans', async () => {
@@ -275,9 +283,15 @@ describe(AgentSessionController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest([
-          '[permissionPlan.providerExposure.previews] preview exposure requires preview reads',
-          '[permissionPlan.limits.maxPreviewsPerToolCall] preview limits require preview reads',
+        factory.responses.validationError([
+          {
+            path: ['permissionPlan', 'providerExposure', 'previews'],
+            message: expect.stringContaining('preview exposure requires preview reads') as string,
+          },
+          {
+            path: ['permissionPlan', 'limits', 'maxPreviewsPerToolCall'],
+            message: expect.stringContaining('preview limits require preview reads') as string,
+          },
         ]),
       );
     });
@@ -288,7 +302,11 @@ describe(AgentSessionController.name, () => {
         .send({ ...body, initialContext: makeInitialContext(16_385) });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[initialContext] initialContext must be 16 KiB or less']));
+      expect(result).toEqual(
+        factory.responses.validationError([
+          { path: ['initialContext'], message: expect.stringContaining('16 KiB') as string },
+        ]),
+      );
     });
   });
 
@@ -328,7 +346,7 @@ describe(AgentSessionController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).get('/agent/sessions/123');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the service with auth and id', async () => {
@@ -356,7 +374,7 @@ describe(AgentSessionController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).get('/agent/sessions/123/activity-events');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the activity event service with auth and id', async () => {
@@ -409,7 +427,9 @@ describe(AgentSessionController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[title] Too small: expected string to have >=1 characters']),
+        factory.responses.validationError([
+          { path: ['title'], message: expect.stringContaining('Too small') as string },
+        ]),
       );
     });
   });
@@ -456,7 +476,7 @@ describe(AgentSessionController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).post('/agent/sessions/123/cancel');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the service with auth and id, and return the cancelled response', async () => {
