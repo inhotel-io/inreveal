@@ -1,4 +1,3 @@
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
   AgentPermissionPreset,
@@ -10,6 +9,7 @@ import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'svelte';
 import { readable } from 'svelte/store';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import AgentSessionSidebar from './agent-session-sidebar.svelte';
 
 vi.mock('svelte-i18n', () => {
