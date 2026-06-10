@@ -61,9 +61,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
 
   await sql`CREATE INDEX "agent_operation_planId_idx" ON "agent_operation" ("planId")`.execute(db);
   await sql`CREATE INDEX "agent_operation_planId_status_idx" ON "agent_operation" ("planId", "status")`.execute(db);
-  await sql`CREATE INDEX "agent_operation_planId_position_idx" ON "agent_operation" ("planId", "position")`.execute(
-    db,
-  );
+  await sql`CREATE INDEX "agent_operation_planId_position_idx" ON "agent_operation" ("planId", "position")`.execute(db);
   await sql`CREATE INDEX "agent_operation_updateId_idx" ON "agent_operation" ("updateId")`.execute(db);
 
   await sql`

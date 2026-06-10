@@ -1,4 +1,3 @@
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
   AgentOperationApplyStatus,
@@ -19,9 +18,10 @@ import {
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
-import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { websocketMock } from '@test-data/mocks/websocket.mock';
 import AgentSessionActionDock from './agent-session-action-dock.svelte';
 
 vi.mock('$lib/stores/websocket');
