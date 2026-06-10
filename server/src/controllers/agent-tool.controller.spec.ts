@@ -1,4 +1,5 @@
-import { DECORATORS } from '@nestjs/swagger/dist/constants';
+// @nestjs/swagger 11.4+ no longer exports ./dist/constants; the metadata key is stable.
+const DECORATORS = { API_RESPONSE: 'swagger/apiResponse' } as const;
 import { AgentToolController } from 'src/controllers/agent-tool.controller';
 import {
   AgentFindTripCandidatesToolRequestDto,
