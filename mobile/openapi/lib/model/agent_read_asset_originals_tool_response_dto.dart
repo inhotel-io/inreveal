@@ -15,48 +15,44 @@ class AgentReadAssetOriginalsToolResponseDto {
   AgentReadAssetOriginalsToolResponseDto({
     required this.status,
     required this.toolCall,
-    required this.reason,
+    this.reason,
     this.originals = const [],
-    required this.resultSize,
   });
 
   AgentReadAssetOriginalsToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String reason;
+  String? reason;
 
   List<AgentAssetMediaReference> originals;
-
-  AgentToolResultSize resultSize;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetOriginalsToolResponseDto &&
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
-    _deepEquality.equals(other.originals, originals) &&
-    other.resultSize == resultSize;
+    _deepEquality.equals(other.originals, originals);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason.hashCode) +
-    (originals.hashCode) +
-    (resultSize.hashCode);
+    (reason == null ? 0 : reason!.hashCode) +
+    (originals.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetOriginalsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, originals=$originals, resultSize=$resultSize]';
+  String toString() => 'AgentReadAssetOriginalsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, originals=$originals]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
+    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    }
       json[r'originals'] = this.originals;
-      json[r'resultSize'] = this.resultSize;
     return json;
   }
 
@@ -71,9 +67,8 @@ class AgentReadAssetOriginalsToolResponseDto {
       return AgentReadAssetOriginalsToolResponseDto(
         status: AgentReadAssetOriginalsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason')!,
+        reason: mapValueOfType<String>(json, r'reason'),
         originals: AgentAssetMediaReference.listFromJson(json[r'originals']),
-        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
       );
     }
     return null;
@@ -123,9 +118,6 @@ class AgentReadAssetOriginalsToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
-    'reason',
-    'originals',
-    'resultSize',
   };
 }
 
@@ -142,10 +134,14 @@ class AgentReadAssetOriginalsToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
+  static const approvalRequired = AgentReadAssetOriginalsToolResponseDtoStatusEnum._(r'approval-required');
+  static const denied = AgentReadAssetOriginalsToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentReadAssetOriginalsToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentReadAssetOriginalsToolResponseDtoStatusEnum].
   static const values = <AgentReadAssetOriginalsToolResponseDtoStatusEnum>[
+    approvalRequired,
+    denied,
     success,
   ];
 
@@ -185,6 +181,8 @@ class AgentReadAssetOriginalsToolResponseDtoStatusEnumTypeTransformer {
   AgentReadAssetOriginalsToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
+        case r'approval-required': return AgentReadAssetOriginalsToolResponseDtoStatusEnum.approvalRequired;
+        case r'denied': return AgentReadAssetOriginalsToolResponseDtoStatusEnum.denied;
         case r'success': return AgentReadAssetOriginalsToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -198,5 +196,4 @@ class AgentReadAssetOriginalsToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentReadAssetOriginalsToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentReadAssetOriginalsToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
-
 
