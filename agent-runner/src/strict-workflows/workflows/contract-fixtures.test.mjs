@@ -928,3 +928,45 @@ describe('makeContractClient — listDuplicateGroups handler', () => {
     assert.equal(client.calls[0].name, 'listDuplicateGroups');
   });
 });
+
+describe('makeContractClient — searchPeople', () => {
+  const alice = { id: 'person-alice', name: 'Alice', faceAssetId: 'asset-alice-face' };
+  const john1 = { id: 'person-john-1', name: 'John', faceAssetId: null };
+  const john2 = { id: 'person-john-2', name: 'John', faceAssetId: null };
+
+  it('returns matched when exactly one person matches the name (case-insensitive)', async () => {
+    const client = makeContractClient({ people: [alice] });
+    const result = await client.call('searchPeople', { name: 'alice' });
+    assert.deepEqual(result, {
+      people: { status: 'matched', personId: 'person-alice', name: 'Alice', thumbnailAssetId: 'asset-alice-face' },
+    });
+  });
+
+  it('returns ambiguous when multiple people share the same name', async () => {
+    const client = makeContractClient({ people: [john1, john2] });
+    const result = await client.call('searchPeople', { name: 'John' });
+    assert.equal(result.people.status, 'ambiguous');
+    assert.equal(result.people.choices.length, 2);
+    assert.equal(result.people.choices[0].personId, 'person-john-1');
+    assert.equal(result.people.choices[1].personId, 'person-john-2');
+  });
+
+  it('returns not_found when no person matches the name', async () => {
+    const client = makeContractClient({ people: [alice] });
+    const result = await client.call('searchPeople', { name: 'Bob' });
+    assert.deepEqual(result, { people: { status: 'not_found' } });
+  });
+
+  it('returns not_found when name is empty', async () => {
+    const client = makeContractClient({ people: [alice] });
+    const result = await client.call('searchPeople', { name: '' });
+    assert.deepEqual(result, { people: { status: 'not_found' } });
+  });
+
+  it('returns peopleResult override when provided', async () => {
+    const override = { status: 'ambiguous', choices: [] };
+    const client = makeContractClient({ peopleResult: override });
+    const result = await client.call('searchPeople', { name: 'Alice' });
+    assert.deepEqual(result, { people: override });
+  });
+});

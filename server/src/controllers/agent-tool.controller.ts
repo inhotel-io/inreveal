@@ -22,6 +22,8 @@ import {
   AgentReadSpaceToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchPeopleToolRequestDto,
+  AgentSearchPeopleToolResponseDto,
   AgentSearchUsersToolRequestDto,
   AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
@@ -224,6 +226,23 @@ export class AgentToolController {
     @Body() dto: AgentSearchUsersToolRequestDto,
   ): Promise<AgentSearchUsersToolResponseDto> {
     return this.service.searchUsers(auth, id, dto);
+  }
+
+  @Post('tools/search-people')
+  @Authenticated({ permission: Permission.AgentSessionUpdate })
+  @ApiCreatedResponse({ type: AgentSearchPeopleToolResponseDto })
+  @Endpoint({
+    summary: 'Execute the internal searchPeople agent tool',
+    description:
+      'Internal route for requesting or resuming a strict-approved person name resolution tool call for an AI agent session.',
+    history: new HistoryBuilder().added('v2.7.5').internal('v2.7.5'),
+  })
+  searchAgentPeople(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: AgentSearchPeopleToolRequestDto,
+  ): Promise<AgentSearchPeopleToolResponseDto> {
+    return this.service.searchPeople(auth, id, dto);
   }
 
   @Get('tool-calls')

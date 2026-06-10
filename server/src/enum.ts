@@ -110,6 +110,7 @@ export enum AgentToolName {
   CurateSelection = 'curateSelection',
   ResolveAssetSearchFilters = 'resolveAssetSearchFilters',
   ResolveLocation = 'resolveLocation',
+  SearchPeople = 'searchPeople',
   ReadAssetMetadata = 'readAssetMetadata',
   ReadAssetPreviews = 'readAssetPreviews',
   ReadAssetOriginals = 'readAssetOriginals',

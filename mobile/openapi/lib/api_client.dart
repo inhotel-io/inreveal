@@ -598,6 +598,26 @@ class ApiClient {
           return AgentSearchAssetsToolResponseDto.fromJson(value);
         case 'AgentSearchAssetsToolSuccessResponse':
           return AgentSearchAssetsToolSuccessResponse.fromJson(value);
+        case 'AgentSearchPeopleAmbiguousResult':
+          return AgentSearchPeopleAmbiguousResult.fromJson(value);
+        case 'AgentSearchPeopleChoice':
+          return AgentSearchPeopleChoice.fromJson(value);
+        case 'AgentSearchPeopleMatchedResult':
+          return AgentSearchPeopleMatchedResult.fromJson(value);
+        case 'AgentSearchPeopleNotFoundResult':
+          return AgentSearchPeopleNotFoundResult.fromJson(value);
+        case 'AgentSearchPeopleResult':
+          return AgentSearchPeopleResult.fromJson(value);
+        case 'AgentSearchPeopleToolApprovalRequiredResponse':
+          return AgentSearchPeopleToolApprovalRequiredResponse.fromJson(value);
+        case 'AgentSearchPeopleToolDeniedResponse':
+          return AgentSearchPeopleToolDeniedResponse.fromJson(value);
+        case 'AgentSearchPeopleToolRequestDto':
+          return AgentSearchPeopleToolRequestDto.fromJson(value);
+        case 'AgentSearchPeopleToolResponseDto':
+          return AgentSearchPeopleToolResponseDto.fromJson(value);
+        case 'AgentSearchPeopleToolSuccessResponse':
+          return AgentSearchPeopleToolSuccessResponse.fromJson(value);
         case 'AgentSearchUsersToolApprovalRequiredResponse':
           return AgentSearchUsersToolApprovalRequiredResponse.fromJson(value);
         case 'AgentSearchUsersToolDeniedResponse':

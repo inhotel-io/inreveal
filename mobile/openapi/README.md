@@ -115,6 +115,7 @@ Class | Method | HTTP request | Description
 *AgentSessionsApi* | [**readAssetPreviews**](doc//AgentSessionsApi.md#readassetpreviews) | **POST** /agent/sessions/{id}/tools/read-asset-previews | Execute the internal readAssetPreviews agent tool
 *AgentSessionsApi* | [**readSpace**](doc//AgentSessionsApi.md#readspace) | **POST** /agent/sessions/{id}/tools/read-space | Execute the internal readSpace agent tool
 *AgentSessionsApi* | [**reviseProposedOperations**](doc//AgentSessionsApi.md#reviseproposedoperations) | **POST** /agent/sessions/{id}/operation-plan/{planId}/revisions | Revise agent album operations
+*AgentSessionsApi* | [**searchAgentPeople**](doc//AgentSessionsApi.md#searchagentpeople) | **POST** /agent/sessions/{id}/tools/search-people | Execute the internal searchPeople agent tool
 *AgentSessionsApi* | [**searchAgentUsers**](doc//AgentSessionsApi.md#searchagentusers) | **POST** /agent/sessions/{id}/tools/search-users | Execute the internal searchUsers agent tool
 *AgentSessionsApi* | [**summarizePlan**](doc//AgentSessionsApi.md#summarizeplan) | **POST** /agent/sessions/{id}/operation-plan/{planId}/summary | Summarize an agent operation plan
 *AgentSessionsApi* | [**updateAgentSession**](doc//AgentSessionsApi.md#updateagentsession) | **PUT** /agent/sessions/{id} | Update an agent session
@@ -630,6 +631,16 @@ Class | Method | HTTP request | Description
  - [AgentSearchAssetsToolRequestDto](doc//AgentSearchAssetsToolRequestDto.md)
  - [AgentSearchAssetsToolResponseDto](doc//AgentSearchAssetsToolResponseDto.md)
  - [AgentSearchAssetsToolSuccessResponse](doc//AgentSearchAssetsToolSuccessResponse.md)
+ - [AgentSearchPeopleAmbiguousResult](doc//AgentSearchPeopleAmbiguousResult.md)
+ - [AgentSearchPeopleChoice](doc//AgentSearchPeopleChoice.md)
+ - [AgentSearchPeopleMatchedResult](doc//AgentSearchPeopleMatchedResult.md)
+ - [AgentSearchPeopleNotFoundResult](doc//AgentSearchPeopleNotFoundResult.md)
+ - [AgentSearchPeopleResult](doc//AgentSearchPeopleResult.md)
+ - [AgentSearchPeopleToolApprovalRequiredResponse](doc//AgentSearchPeopleToolApprovalRequiredResponse.md)
+ - [AgentSearchPeopleToolDeniedResponse](doc//AgentSearchPeopleToolDeniedResponse.md)
+ - [AgentSearchPeopleToolRequestDto](doc//AgentSearchPeopleToolRequestDto.md)
+ - [AgentSearchPeopleToolResponseDto](doc//AgentSearchPeopleToolResponseDto.md)
+ - [AgentSearchPeopleToolSuccessResponse](doc//AgentSearchPeopleToolSuccessResponse.md)
  - [AgentSearchUsersToolApprovalRequiredResponse](doc//AgentSearchUsersToolApprovalRequiredResponse.md)
  - [AgentSearchUsersToolDeniedResponse](doc//AgentSearchUsersToolDeniedResponse.md)
  - [AgentSearchUsersToolRequestDto](doc//AgentSearchUsersToolRequestDto.md)
