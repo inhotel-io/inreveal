@@ -415,16 +415,18 @@
   };
 
   const handleSessionUpdated = (session: AgentSessionResponseDto) => {
-    if (
-      session.id !== selectedSessionId ||
-      !localSessions.some((existingSession) => existingSession.id === session.id)
-    ) {
+    const existingSession = localSessions.find((candidate) => candidate.id === session.id);
+    if (session.id !== selectedSessionId || !existingSession) {
       return;
     }
 
-    localSessions = localSessions.map((existingSession) =>
-      existingSession.id === session.id ? session : existingSession,
-    );
+    // Periodic refreshes often return an unchanged session — keep the existing object so
+    // downstream consumers (pane, drawer, header) see no identity churn.
+    if (existingSession.status === session.status && existingSession.updatedAt === session.updatedAt) {
+      return;
+    }
+
+    localSessions = localSessions.map((candidate) => (candidate.id === session.id ? session : candidate));
   };
 
   // Persist the first message as the session title so it survives reloads (best-effort:
