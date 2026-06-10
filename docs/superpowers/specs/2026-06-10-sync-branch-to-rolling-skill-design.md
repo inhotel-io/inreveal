@@ -1,7 +1,7 @@
 # sync-branch-to-rolling Skill — Design
 
 **Date:** 2026-06-10
-**Status:** Approved (brainstormed with Pierre)
+**Status:** Implemented 2026-06-10 (skill at `~/.claude/skills/sync-branch-to-rolling/`)
 **Artifact:** a new user-level Claude Code skill at `~/.claude/skills/sync-branch-to-rolling/`
 
 ## Problem
