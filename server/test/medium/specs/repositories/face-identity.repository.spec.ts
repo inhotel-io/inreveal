@@ -1717,6 +1717,141 @@ describe(FaceIdentityRepository.name, () => {
         .execute();
     }
   });
+
+  it('picks the most-recently edited manual birthday across spaces', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Ina' }); // owner: no birthday
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: spaceA.id, assetId: asset.id, addedById: user.id });
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: spaceB.id, assetId: asset.id, addedById: user.id });
+
+    // Newer edit (the winner), inserted FIRST so a profileId/updatedAt-only ordering would NOT pick it.
+    const newerWinner = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: spaceA.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        birthDate: '2014-02-14',
+        birthDateSource: 'manual',
+        birthDateSourceUpdatedAt: new Date('2026-06-10T20:41:12.000Z'), // most recent
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: newerWinner.id, assetFaceId: assetFace.id })
+      .execute();
+
+    const olderLoser = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: spaceB.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        birthDate: '2013-02-14',
+        birthDateSource: 'manual',
+        birthDateSourceUpdatedAt: new Date('2025-01-01T00:00:00.000Z'), // older
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: olderLoser.id, assetFaceId: assetFace.id })
+      .execute();
+
+    try {
+      const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+      expect(result.people).toEqual([
+        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
+      ]);
+    } finally {
+      await ctx.database
+        .deleteFrom('shared_space_person')
+        .where('id', 'in', [newerWinner.id, olderLoser.id])
+        .execute();
+    }
+  });
+
+  it('prefers a manual birthday over a more-recent inherited one', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Ina' }); // owner: no birthday
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: spaceA.id, assetId: asset.id, addedById: user.id });
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: spaceB.id, assetId: asset.id, addedById: user.id });
+
+    const manualWinner = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: spaceA.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        birthDate: '2014-02-14',
+        birthDateSource: 'manual',
+        birthDateSourceUpdatedAt: new Date('2025-01-01T00:00:00.000Z'), // older
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: manualWinner.id, assetFaceId: assetFace.id })
+      .execute();
+
+    const inheritedLoser = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: spaceB.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        birthDate: '2013-02-14',
+        birthDateSource: 'inherited',
+        birthDateSourceUpdatedAt: new Date('2026-06-10T20:41:12.000Z'), // newer, but inherited
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: inheritedLoser.id, assetFaceId: assetFace.id })
+      .execute();
+
+    try {
+      const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+      expect(result.people).toEqual([
+        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
+      ]);
+    } finally {
+      await ctx.database
+        .deleteFrom('shared_space_person')
+        .where('id', 'in', [manualWinner.id, inheritedLoser.id])
+        .execute();
+    }
+  });
   it('filters unnamed identity-grouped people below the configured minimum face count', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
