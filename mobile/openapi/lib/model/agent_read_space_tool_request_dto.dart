@@ -13,8 +13,8 @@ part of openapi.api;
 class AgentReadSpaceToolRequestDto {
   /// Returns a new [AgentReadSpaceToolRequestDto] instance.
   AgentReadSpaceToolRequestDto({
-    this.spaceId,
-    this.toolCallId,
+    this.spaceId = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Shared space id to inspect
@@ -24,7 +24,7 @@ class AgentReadSpaceToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? spaceId;
+  Optional<String?> spaceId;
 
   /// Approved tool call id when retrying after user approval
   ///
@@ -33,7 +33,7 @@ class AgentReadSpaceToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadSpaceToolRequestDto &&
@@ -51,15 +51,13 @@ class AgentReadSpaceToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.spaceId != null) {
-      json[r'spaceId'] = this.spaceId;
-    } else {
-    //  json[r'spaceId'] = null;
+    if (this.spaceId.isPresent) {
+      final value = this.spaceId.value;
+      json[r'spaceId'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -73,8 +71,8 @@ class AgentReadSpaceToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentReadSpaceToolRequestDto(
-        spaceId: mapValueOfType<String>(json, r'spaceId'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        spaceId: json.containsKey(r'spaceId') ? Optional.present(mapValueOfType<String>(json, r'spaceId')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

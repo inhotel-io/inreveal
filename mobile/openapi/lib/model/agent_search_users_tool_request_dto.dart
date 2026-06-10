@@ -13,9 +13,9 @@ part of openapi.api;
 class AgentSearchUsersToolRequestDto {
   /// Returns a new [AgentSearchUsersToolRequestDto] instance.
   AgentSearchUsersToolRequestDto({
-    this.limit,
-    this.query,
-    this.toolCallId,
+    this.limit = const Optional.absent(),
+    this.query = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Minimum value: 1
@@ -26,7 +26,7 @@ class AgentSearchUsersToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? limit;
+  Optional<int?> limit;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -34,7 +34,7 @@ class AgentSearchUsersToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? query;
+  Optional<String?> query;
 
   /// Approved tool call id when retrying after user approval
   ///
@@ -43,7 +43,7 @@ class AgentSearchUsersToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchUsersToolRequestDto &&
@@ -63,20 +63,17 @@ class AgentSearchUsersToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.limit != null) {
-      json[r'limit'] = this.limit;
-    } else {
-    //  json[r'limit'] = null;
+    if (this.limit.isPresent) {
+      final value = this.limit.value;
+      json[r'limit'] = value;
     }
-    if (this.query != null) {
-      json[r'query'] = this.query;
-    } else {
-    //  json[r'query'] = null;
+    if (this.query.isPresent) {
+      final value = this.query.value;
+      json[r'query'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -90,9 +87,9 @@ class AgentSearchUsersToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchUsersToolRequestDto(
-        limit: mapValueOfType<int>(json, r'limit'),
-        query: mapValueOfType<String>(json, r'query'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        limit: json.containsKey(r'limit') ? Optional.present(json[r'limit'] == null ? null : int.parse('${json[r'limit']}')) : const Optional.absent(),
+        query: json.containsKey(r'query') ? Optional.present(mapValueOfType<String>(json, r'query')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

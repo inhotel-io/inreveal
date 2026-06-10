@@ -13,14 +13,14 @@ part of openapi.api;
 class AgentAssetSourceInput {
   /// Returns a new [AgentAssetSourceInput] instance.
   AgentAssetSourceInput({
-    this.filters,
+    this.filters = const Optional.absent(),
     required this.kind,
-    this.limit,
-    this.materialization,
-    this.mode,
-    this.order,
-    this.page,
-    this.query,
+    this.limit = const Optional.absent(),
+    this.materialization = const Optional.absent(),
+    this.mode = const Optional.absent(),
+    this.order = const Optional.absent(),
+    this.page = const Optional.absent(),
+    this.query = const Optional.absent(),
     required this.sourceRef,
     required this.selectionHandleId,
     this.assetIds = const [],
@@ -32,7 +32,7 @@ class AgentAssetSourceInput {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentDeclarativeAssetFilters? filters;
+  Optional<AgentDeclarativeAssetFilters?> filters;
 
   AgentAssetSourceInputKindEnum kind;
 
@@ -44,13 +44,13 @@ class AgentAssetSourceInput {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? limit;
+  Optional<int?> limit;
 
-  AgentAssetSourceInputMaterializationEnum? materialization;
+  Optional<AgentAssetSourceInputMaterializationEnum?> materialization;
 
-  AgentAssetSourceInputModeEnum? mode;
+  Optional<AgentAssetSourceInputModeEnum?> mode;
 
-  AgentAssetSourceInputOrderEnum? order;
+  Optional<AgentAssetSourceInputOrderEnum?> order;
 
   /// Minimum value: 1
   /// Maximum value: 9007199254740991
@@ -60,7 +60,7 @@ class AgentAssetSourceInput {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? page;
+  Optional<int?> page;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -68,7 +68,7 @@ class AgentAssetSourceInput {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? query;
+  Optional<String?> query;
 
   String sourceRef;
 
@@ -110,41 +110,34 @@ class AgentAssetSourceInput {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.filters != null) {
-      json[r'filters'] = this.filters;
-    } else {
-    //  json[r'filters'] = null;
+    if (this.filters.isPresent) {
+      final value = this.filters.value;
+      json[r'filters'] = value;
     }
       json[r'kind'] = this.kind;
-    if (this.limit != null) {
-      json[r'limit'] = this.limit;
-    } else {
-    //  json[r'limit'] = null;
+    if (this.limit.isPresent) {
+      final value = this.limit.value;
+      json[r'limit'] = value;
     }
-    if (this.materialization != null) {
-      json[r'materialization'] = this.materialization;
-    } else {
-    //  json[r'materialization'] = null;
+    if (this.materialization.isPresent) {
+      final value = this.materialization.value;
+      json[r'materialization'] = value;
     }
-    if (this.mode != null) {
-      json[r'mode'] = this.mode;
-    } else {
-    //  json[r'mode'] = null;
+    if (this.mode.isPresent) {
+      final value = this.mode.value;
+      json[r'mode'] = value;
     }
-    if (this.order != null) {
-      json[r'order'] = this.order;
-    } else {
-    //  json[r'order'] = null;
+    if (this.order.isPresent) {
+      final value = this.order.value;
+      json[r'order'] = value;
     }
-    if (this.page != null) {
-      json[r'page'] = this.page;
-    } else {
-    //  json[r'page'] = null;
+    if (this.page.isPresent) {
+      final value = this.page.value;
+      json[r'page'] = value;
     }
-    if (this.query != null) {
-      json[r'query'] = this.query;
-    } else {
-    //  json[r'query'] = null;
+    if (this.query.isPresent) {
+      final value = this.query.value;
+      json[r'query'] = value;
     }
       json[r'sourceRef'] = this.sourceRef;
       json[r'selectionHandleId'] = this.selectionHandleId;
@@ -161,14 +154,14 @@ class AgentAssetSourceInput {
       final json = value.cast<String, dynamic>();
 
       return AgentAssetSourceInput(
-        filters: AgentDeclarativeAssetFilters.fromJson(json[r'filters']),
+        filters: json.containsKey(r'filters') ? Optional.present(AgentDeclarativeAssetFilters.fromJson(json[r'filters'])) : const Optional.absent(),
         kind: AgentAssetSourceInputKindEnum.fromJson(json[r'kind'])!,
-        limit: mapValueOfType<int>(json, r'limit'),
-        materialization: AgentAssetSourceInputMaterializationEnum.fromJson(json[r'materialization']),
-        mode: AgentAssetSourceInputModeEnum.fromJson(json[r'mode']),
-        order: AgentAssetSourceInputOrderEnum.fromJson(json[r'order']),
-        page: mapValueOfType<int>(json, r'page'),
-        query: mapValueOfType<String>(json, r'query'),
+        limit: json.containsKey(r'limit') ? Optional.present(json[r'limit'] == null ? null : int.parse('${json[r'limit']}')) : const Optional.absent(),
+        materialization: json.containsKey(r'materialization') ? Optional.present(AgentAssetSourceInputMaterializationEnum.fromJson(json[r'materialization'])) : const Optional.absent(),
+        mode: json.containsKey(r'mode') ? Optional.present(AgentAssetSourceInputModeEnum.fromJson(json[r'mode'])) : const Optional.absent(),
+        order: json.containsKey(r'order') ? Optional.present(AgentAssetSourceInputOrderEnum.fromJson(json[r'order'])) : const Optional.absent(),
+        page: json.containsKey(r'page') ? Optional.present(json[r'page'] == null ? null : int.parse('${json[r'page']}')) : const Optional.absent(),
+        query: json.containsKey(r'query') ? Optional.present(mapValueOfType<String>(json, r'query')) : const Optional.absent(),
         sourceRef: mapValueOfType<String>(json, r'sourceRef')!,
         selectionHandleId: mapValueOfType<String>(json, r'selectionHandleId')!,
         assetIds: json[r'assetIds'] is Iterable
@@ -337,7 +330,7 @@ class AgentAssetSourceInputMaterializationEnum {
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentAssetSourceInputMaterializationEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentAssetSourceInputMaterializationEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentAssetSourceInputMaterializationEnum].
 class AgentAssetSourceInputMaterializationEnumTypeTransformer {
   factory AgentAssetSourceInputMaterializationEnumTypeTransformer() => _instance ??= const AgentAssetSourceInputMaterializationEnumTypeTransformer._();
@@ -417,7 +410,7 @@ class AgentAssetSourceInputModeEnum {
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentAssetSourceInputModeEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentAssetSourceInputModeEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentAssetSourceInputModeEnum].
 class AgentAssetSourceInputModeEnumTypeTransformer {
   factory AgentAssetSourceInputModeEnumTypeTransformer() => _instance ??= const AgentAssetSourceInputModeEnumTypeTransformer._();
@@ -496,7 +489,7 @@ class AgentAssetSourceInputOrderEnum {
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentAssetSourceInputOrderEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentAssetSourceInputOrderEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentAssetSourceInputOrderEnum].
 class AgentAssetSourceInputOrderEnumTypeTransformer {
   factory AgentAssetSourceInputOrderEnumTypeTransformer() => _instance ??= const AgentAssetSourceInputOrderEnumTypeTransformer._();

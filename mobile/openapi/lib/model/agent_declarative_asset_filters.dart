@@ -13,22 +13,22 @@ part of openapi.api;
 class AgentDeclarativeAssetFilters {
   /// Returns a new [AgentDeclarativeAssetFilters] instance.
   AgentDeclarativeAssetFilters({
-    this.albums,
-    this.camera,
-    this.city,
-    this.country,
-    this.isFavorite,
-    this.isNotInAlbum,
-    this.people,
-    this.rating,
-    this.space,
-    this.state,
-    this.tags,
-    this.takenAfter,
-    this.takenBefore,
-    this.type,
-    this.visibility,
-    this.withSharedSpaces,
+    this.albums = const Optional.absent(),
+    this.camera = const Optional.absent(),
+    this.city = const Optional.absent(),
+    this.country = const Optional.absent(),
+    this.isFavorite = const Optional.absent(),
+    this.isNotInAlbum = const Optional.absent(),
+    this.people = const Optional.absent(),
+    this.rating = const Optional.absent(),
+    this.space = const Optional.absent(),
+    this.state = const Optional.absent(),
+    this.tags = const Optional.absent(),
+    this.takenAfter = const Optional.absent(),
+    this.takenBefore = const Optional.absent(),
+    this.type = const Optional.absent(),
+    this.visibility = const Optional.absent(),
+    this.withSharedSpaces = const Optional.absent(),
   });
 
   ///
@@ -37,7 +37,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentDeclarativeNamedFilter? albums;
+  Optional<AgentDeclarativeNamedFilter?> albums;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -45,19 +45,11 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentDeclarativeCameraFilter? camera;
+  Optional<AgentDeclarativeCameraFilter?> camera;
 
-  String? city;
+  Optional<String?> city;
 
-  String? country;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  bool? isFavorite;
+  Optional<String?> country;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -65,7 +57,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isNotInAlbum;
+  Optional<bool?> isFavorite;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -73,11 +65,19 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentDeclarativeNamedFilter? people;
+  Optional<bool?> isNotInAlbum;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<AgentDeclarativeNamedFilter?> people;
 
   /// Minimum value: 1
   /// Maximum value: 5
-  int? rating;
+  Optional<int?> rating;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -85,17 +85,9 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentDeclarativeSpaceFilter? space;
+  Optional<AgentDeclarativeSpaceFilter?> space;
 
-  String? state;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  AgentDeclarativeNamedFilter? tags;
+  Optional<String?> state;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -103,7 +95,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? takenAfter;
+  Optional<AgentDeclarativeNamedFilter?> tags;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -111,7 +103,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? takenBefore;
+  Optional<DateTime?> takenAfter;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -119,7 +111,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AssetTypeEnum? type;
+  Optional<DateTime?> takenBefore;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -127,7 +119,7 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AssetVisibility? visibility;
+  Optional<AssetTypeEnum?> type;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -135,7 +127,15 @@ class AgentDeclarativeAssetFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? withSharedSpaces;
+  Optional<AssetVisibility?> visibility;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<bool?> withSharedSpaces;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentDeclarativeAssetFilters &&
@@ -181,89 +181,73 @@ class AgentDeclarativeAssetFilters {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.albums != null) {
-      json[r'albums'] = this.albums;
-    } else {
-    //  json[r'albums'] = null;
+    if (this.albums.isPresent) {
+      final value = this.albums.value;
+      json[r'albums'] = value;
     }
-    if (this.camera != null) {
-      json[r'camera'] = this.camera;
-    } else {
-    //  json[r'camera'] = null;
+    if (this.camera.isPresent) {
+      final value = this.camera.value;
+      json[r'camera'] = value;
     }
-    if (this.city != null) {
-      json[r'city'] = this.city;
-    } else {
-    //  json[r'city'] = null;
+    if (this.city.isPresent) {
+      final value = this.city.value;
+      json[r'city'] = value;
     }
-    if (this.country != null) {
-      json[r'country'] = this.country;
-    } else {
-    //  json[r'country'] = null;
+    if (this.country.isPresent) {
+      final value = this.country.value;
+      json[r'country'] = value;
     }
-    if (this.isFavorite != null) {
-      json[r'isFavorite'] = this.isFavorite;
-    } else {
-    //  json[r'isFavorite'] = null;
+    if (this.isFavorite.isPresent) {
+      final value = this.isFavorite.value;
+      json[r'isFavorite'] = value;
     }
-    if (this.isNotInAlbum != null) {
-      json[r'isNotInAlbum'] = this.isNotInAlbum;
-    } else {
-    //  json[r'isNotInAlbum'] = null;
+    if (this.isNotInAlbum.isPresent) {
+      final value = this.isNotInAlbum.value;
+      json[r'isNotInAlbum'] = value;
     }
-    if (this.people != null) {
-      json[r'people'] = this.people;
-    } else {
-    //  json[r'people'] = null;
+    if (this.people.isPresent) {
+      final value = this.people.value;
+      json[r'people'] = value;
     }
-    if (this.rating != null) {
-      json[r'rating'] = this.rating;
-    } else {
-    //  json[r'rating'] = null;
+    if (this.rating.isPresent) {
+      final value = this.rating.value;
+      json[r'rating'] = value;
     }
-    if (this.space != null) {
-      json[r'space'] = this.space;
-    } else {
-    //  json[r'space'] = null;
+    if (this.space.isPresent) {
+      final value = this.space.value;
+      json[r'space'] = value;
     }
-    if (this.state != null) {
-      json[r'state'] = this.state;
-    } else {
-    //  json[r'state'] = null;
+    if (this.state.isPresent) {
+      final value = this.state.value;
+      json[r'state'] = value;
     }
-    if (this.tags != null) {
-      json[r'tags'] = this.tags;
-    } else {
-    //  json[r'tags'] = null;
+    if (this.tags.isPresent) {
+      final value = this.tags.value;
+      json[r'tags'] = value;
     }
-    if (this.takenAfter != null) {
-      json[r'takenAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.takenAfter!.millisecondsSinceEpoch
-        : this.takenAfter!.toUtc().toIso8601String();
-    } else {
-    //  json[r'takenAfter'] = null;
+    if (this.takenAfter.isPresent) {
+      final value = this.takenAfter.value;
+      json[r'takenAfter'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.takenBefore != null) {
-      json[r'takenBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.takenBefore!.millisecondsSinceEpoch
-        : this.takenBefore!.toUtc().toIso8601String();
-    } else {
-    //  json[r'takenBefore'] = null;
+    if (this.takenBefore.isPresent) {
+      final value = this.takenBefore.value;
+      json[r'takenBefore'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.type != null) {
-      json[r'type'] = this.type;
-    } else {
-    //  json[r'type'] = null;
+    if (this.type.isPresent) {
+      final value = this.type.value;
+      json[r'type'] = value;
     }
-    if (this.visibility != null) {
-      json[r'visibility'] = this.visibility;
-    } else {
-    //  json[r'visibility'] = null;
+    if (this.visibility.isPresent) {
+      final value = this.visibility.value;
+      json[r'visibility'] = value;
     }
-    if (this.withSharedSpaces != null) {
-      json[r'withSharedSpaces'] = this.withSharedSpaces;
-    } else {
-    //  json[r'withSharedSpaces'] = null;
+    if (this.withSharedSpaces.isPresent) {
+      final value = this.withSharedSpaces.value;
+      json[r'withSharedSpaces'] = value;
     }
     return json;
   }
@@ -277,22 +261,22 @@ class AgentDeclarativeAssetFilters {
       final json = value.cast<String, dynamic>();
 
       return AgentDeclarativeAssetFilters(
-        albums: AgentDeclarativeNamedFilter.fromJson(json[r'albums']),
-        camera: AgentDeclarativeCameraFilter.fromJson(json[r'camera']),
-        city: mapValueOfType<String>(json, r'city'),
-        country: mapValueOfType<String>(json, r'country'),
-        isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
-        isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
-        people: AgentDeclarativeNamedFilter.fromJson(json[r'people']),
-        rating: mapValueOfType<int>(json, r'rating'),
-        space: AgentDeclarativeSpaceFilter.fromJson(json[r'space']),
-        state: mapValueOfType<String>(json, r'state'),
-        tags: AgentDeclarativeNamedFilter.fromJson(json[r'tags']),
-        takenAfter: mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        takenBefore: mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        type: AssetTypeEnum.fromJson(json[r'type']),
-        visibility: AssetVisibility.fromJson(json[r'visibility']),
-        withSharedSpaces: mapValueOfType<bool>(json, r'withSharedSpaces'),
+        albums: json.containsKey(r'albums') ? Optional.present(AgentDeclarativeNamedFilter.fromJson(json[r'albums'])) : const Optional.absent(),
+        camera: json.containsKey(r'camera') ? Optional.present(AgentDeclarativeCameraFilter.fromJson(json[r'camera'])) : const Optional.absent(),
+        city: json.containsKey(r'city') ? Optional.present(mapValueOfType<String>(json, r'city')) : const Optional.absent(),
+        country: json.containsKey(r'country') ? Optional.present(mapValueOfType<String>(json, r'country')) : const Optional.absent(),
+        isFavorite: json.containsKey(r'isFavorite') ? Optional.present(mapValueOfType<bool>(json, r'isFavorite')) : const Optional.absent(),
+        isNotInAlbum: json.containsKey(r'isNotInAlbum') ? Optional.present(mapValueOfType<bool>(json, r'isNotInAlbum')) : const Optional.absent(),
+        people: json.containsKey(r'people') ? Optional.present(AgentDeclarativeNamedFilter.fromJson(json[r'people'])) : const Optional.absent(),
+        rating: json.containsKey(r'rating') ? Optional.present(json[r'rating'] == null ? null : int.parse('${json[r'rating']}')) : const Optional.absent(),
+        space: json.containsKey(r'space') ? Optional.present(AgentDeclarativeSpaceFilter.fromJson(json[r'space'])) : const Optional.absent(),
+        state: json.containsKey(r'state') ? Optional.present(mapValueOfType<String>(json, r'state')) : const Optional.absent(),
+        tags: json.containsKey(r'tags') ? Optional.present(AgentDeclarativeNamedFilter.fromJson(json[r'tags'])) : const Optional.absent(),
+        takenAfter: json.containsKey(r'takenAfter') ? Optional.present(mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        takenBefore: json.containsKey(r'takenBefore') ? Optional.present(mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        type: json.containsKey(r'type') ? Optional.present(AssetTypeEnum.fromJson(json[r'type'])) : const Optional.absent(),
+        visibility: json.containsKey(r'visibility') ? Optional.present(AssetVisibility.fromJson(json[r'visibility'])) : const Optional.absent(),
+        withSharedSpaces: json.containsKey(r'withSharedSpaces') ? Optional.present(mapValueOfType<bool>(json, r'withSharedSpaces')) : const Optional.absent(),
       );
     }
     return null;

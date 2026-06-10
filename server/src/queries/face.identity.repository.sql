@@ -9,27 +9,6 @@ from
 where
   "ownerId" = $1
   and "id" in ($2)
-select
-  "shared_space_person"."id",
-  "shared_space_person"."identityId",
-  "shared_space_person"."spaceId",
-  "shared_space_member"."showInTimeline"
-from
-  "shared_space_person"
-  inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_person"."spaceId"
-  and "shared_space_member"."userId" = $1
-where
-  "shared_space_person"."id" in ($2)
-  and exists (
-    select
-    from
-      "shared_space_person_face"
-      inner join "asset_face" as "profile_face" on "profile_face"."id" = "shared_space_person_face"."assetFaceId"
-    where
-      "shared_space_person_face"."personId" = "shared_space_person"."id"
-      and "profile_face"."deletedAt" is null
-      and "profile_face"."isVisible" = $3
-  )
 
 -- FaceIdentityRepository.findClosestAccessibleIdentityForFace
 begin
@@ -95,7 +74,7 @@ ORDER BY
   distance
 LIMIT
   2
-commit
+rollback
 
 -- FaceIdentityRepository.searchAccessiblePeople
 WITH
@@ -1428,22 +1407,6 @@ set
   "representativeFaceId" = $1
 where
   "id" = $2
-insert into
-  "face_identity_face" (
-    "assetFaceId",
-    "identityId",
-    "source",
-    "confidence"
-  )
-values
-  ($1, $2, $3, $4)
-on conflict ("assetFaceId") do update
-set
-  "identityId" = $5,
-  "source" = $6,
-  "confidence" = $7
-returning
-  *
 
 -- FaceIdentityRepository.unlinkFaces
 delete from "face_identity_face"
