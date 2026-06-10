@@ -128,10 +128,10 @@ void main() {
       expect(success!.status.value, 'success');
       expect(success.reason, isNull);
       expect(success.summary, 'Created a selection handle for 1 asset');
-      expect(success.detail?.value, 'summary');
+      expect(success.detail.value, 'summary');
       expect(success.nextPage, isNull);
-      expect(success.selectionHandle?.assetCount, 1);
-      expect(success.sample?.items.first.itemRef, 'item:001');
+      expect(success.selectionHandle.assetCount, 1);
+      expect(success.sample.value?.items.first.itemRef, 'item:001');
     });
   });
 }
