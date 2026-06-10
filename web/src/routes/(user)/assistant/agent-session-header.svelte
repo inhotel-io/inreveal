@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { Icon } from '@immich/ui';
+  import { mdiInformationOutline } from '@mdi/js';
   import type { AgentSessionResponseDto } from '@immich/sdk';
   import { t } from 'svelte-i18n';
-  import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
-  import AgentActivityVisibilityMenu from './agent-activity-visibility-menu.svelte';
   import { getApprovalModeLabelKey } from './agent-session-ui';
   import { getAgentSessionStatusBadge, getAgentSessionStatusLabelKey } from './agent-session-workspace-ui';
 
@@ -12,19 +12,9 @@
     cancelDisabled?: boolean;
     onCancel?: (() => void) | null;
     onOpenDetails: () => void;
-    activityVisibilityMode?: AgentActivityVisibilityMode;
-    onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
   }
 
-  let {
-    session,
-    title = null,
-    cancelDisabled = false,
-    onCancel = null,
-    onOpenDetails,
-    activityVisibilityMode,
-    onActivityVisibilityModeChange,
-  }: Props = $props();
+  let { session, title = null, cancelDisabled = false, onCancel = null, onOpenDetails }: Props = $props();
 
   const displayTitle = $derived(title?.trim() || $t('assistant_new_chat'));
   const statusBadge = $derived(getAgentSessionStatusBadge(session.status));
@@ -97,10 +87,14 @@
         {$t('assistant_close_session')}
       </button>
     {/if}
-    <AgentActivityVisibilityMenu
-      mode={activityVisibilityMode}
-      onModeChange={onActivityVisibilityModeChange}
-      {onOpenDetails}
-    />
+    <button
+      type="button"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-neutral-300 dark:hover:bg-gray-800"
+      aria-label={$t('assistant_details')}
+      title={$t('assistant_details')}
+      onclick={onOpenDetails}
+    >
+      <Icon icon={mdiInformationOutline} size="18" />
+    </button>
   </div>
 </section>
