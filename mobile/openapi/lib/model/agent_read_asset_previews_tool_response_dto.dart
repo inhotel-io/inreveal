@@ -15,44 +15,48 @@ class AgentReadAssetPreviewsToolResponseDto {
   AgentReadAssetPreviewsToolResponseDto({
     required this.status,
     required this.toolCall,
-    this.reason,
+    required this.reason,
     this.previews = const [],
+    required this.resultSize,
   });
 
   AgentReadAssetPreviewsToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String? reason;
+  String reason;
 
   List<AgentAssetMediaReference> previews;
+
+  AgentToolResultSize resultSize;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetPreviewsToolResponseDto &&
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
-    _deepEquality.equals(other.previews, previews);
+    _deepEquality.equals(other.previews, previews) &&
+    other.resultSize == resultSize;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason == null ? 0 : reason!.hashCode) +
-    (previews.hashCode);
+    (reason.hashCode) +
+    (previews.hashCode) +
+    (resultSize.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetPreviewsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, previews=$previews]';
+  String toString() => 'AgentReadAssetPreviewsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, previews=$previews, resultSize=$resultSize]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
-    if (this.reason != null) {
       json[r'reason'] = this.reason;
-    }
       json[r'previews'] = this.previews;
+      json[r'resultSize'] = this.resultSize;
     return json;
   }
 
@@ -67,8 +71,9 @@ class AgentReadAssetPreviewsToolResponseDto {
       return AgentReadAssetPreviewsToolResponseDto(
         status: AgentReadAssetPreviewsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason'),
+        reason: mapValueOfType<String>(json, r'reason')!,
         previews: AgentAssetMediaReference.listFromJson(json[r'previews']),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
       );
     }
     return null;
@@ -118,6 +123,9 @@ class AgentReadAssetPreviewsToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
+    'reason',
+    'previews',
+    'resultSize',
   };
 }
 
@@ -134,14 +142,10 @@ class AgentReadAssetPreviewsToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
-  static const approvalRequired = AgentReadAssetPreviewsToolResponseDtoStatusEnum._(r'approval-required');
-  static const denied = AgentReadAssetPreviewsToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentReadAssetPreviewsToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentReadAssetPreviewsToolResponseDtoStatusEnum].
   static const values = <AgentReadAssetPreviewsToolResponseDtoStatusEnum>[
-    approvalRequired,
-    denied,
     success,
   ];
 
@@ -181,8 +185,6 @@ class AgentReadAssetPreviewsToolResponseDtoStatusEnumTypeTransformer {
   AgentReadAssetPreviewsToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
-        case r'approval-required': return AgentReadAssetPreviewsToolResponseDtoStatusEnum.approvalRequired;
-        case r'denied': return AgentReadAssetPreviewsToolResponseDtoStatusEnum.denied;
         case r'success': return AgentReadAssetPreviewsToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -196,4 +198,5 @@ class AgentReadAssetPreviewsToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentReadAssetPreviewsToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentReadAssetPreviewsToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
+
 

@@ -13,17 +13,17 @@ part of openapi.api;
 class AgentSearchAssetsToolRequestDto {
   /// Returns a new [AgentSearchAssetsToolRequestDto] instance.
   AgentSearchAssetsToolRequestDto({
-    this.createSelectionHandle,
-    this.detail,
-    this.fields = const [],
-    this.filters,
-    this.limit,
-    this.mode,
-    this.order,
-    this.page,
-    this.query,
-    this.sampleSize,
-    this.toolCallId,
+    this.createSelectionHandle = const Optional.absent(),
+    this.detail = const Optional.absent(),
+    this.fields = const Optional.present(const []),
+    this.filters = const Optional.absent(),
+    this.limit = const Optional.absent(),
+    this.mode = const Optional.absent(),
+    this.order = const Optional.absent(),
+    this.page = const Optional.absent(),
+    this.query = const Optional.absent(),
+    this.sampleSize = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   ///
@@ -32,7 +32,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? createSelectionHandle;
+  Optional<bool?> createSelectionHandle;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -40,9 +40,9 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsRequestDetail? detail;
+  Optional<AgentSearchAssetsRequestDetail?> detail;
 
-  List<AgentSearchAssetsField> fields;
+  Optional<List<AgentSearchAssetsField>?> fields;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -50,7 +50,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsFilters? filters;
+  Optional<AgentSearchAssetsFilters?> filters;
 
   /// Minimum value: 1
   /// Maximum value: 10000
@@ -60,7 +60,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? limit;
+  Optional<int?> limit;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -68,7 +68,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsMode? mode;
+  Optional<AgentSearchAssetsMode?> mode;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -76,7 +76,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsOrder? order;
+  Optional<AgentSearchAssetsOrder?> order;
 
   /// Minimum value: 1
   /// Maximum value: 9007199254740991
@@ -86,7 +86,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? page;
+  Optional<int?> page;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -94,7 +94,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? query;
+  Optional<String?> query;
 
   /// Minimum value: 0
   /// Maximum value: 25
@@ -104,7 +104,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? sampleSize;
+  Optional<int?> sampleSize;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -112,7 +112,7 @@ class AgentSearchAssetsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolRequestDto &&
@@ -148,56 +148,49 @@ class AgentSearchAssetsToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.createSelectionHandle != null) {
-      json[r'createSelectionHandle'] = this.createSelectionHandle;
-    } else {
-    //  json[r'createSelectionHandle'] = null;
+    if (this.createSelectionHandle.isPresent) {
+      final value = this.createSelectionHandle.value;
+      json[r'createSelectionHandle'] = value;
     }
-    if (this.detail != null) {
-      json[r'detail'] = this.detail;
-    } else {
-    //  json[r'detail'] = null;
+    if (this.detail.isPresent) {
+      final value = this.detail.value;
+      json[r'detail'] = value;
     }
-      json[r'fields'] = this.fields;
-    if (this.filters != null) {
-      json[r'filters'] = this.filters;
-    } else {
-    //  json[r'filters'] = null;
+    if (this.fields.isPresent) {
+      final value = this.fields.value;
+      json[r'fields'] = value;
     }
-    if (this.limit != null) {
-      json[r'limit'] = this.limit;
-    } else {
-    //  json[r'limit'] = null;
+    if (this.filters.isPresent) {
+      final value = this.filters.value;
+      json[r'filters'] = value;
     }
-    if (this.mode != null) {
-      json[r'mode'] = this.mode;
-    } else {
-    //  json[r'mode'] = null;
+    if (this.limit.isPresent) {
+      final value = this.limit.value;
+      json[r'limit'] = value;
     }
-    if (this.order != null) {
-      json[r'order'] = this.order;
-    } else {
-    //  json[r'order'] = null;
+    if (this.mode.isPresent) {
+      final value = this.mode.value;
+      json[r'mode'] = value;
     }
-    if (this.page != null) {
-      json[r'page'] = this.page;
-    } else {
-    //  json[r'page'] = null;
+    if (this.order.isPresent) {
+      final value = this.order.value;
+      json[r'order'] = value;
     }
-    if (this.query != null) {
-      json[r'query'] = this.query;
-    } else {
-    //  json[r'query'] = null;
+    if (this.page.isPresent) {
+      final value = this.page.value;
+      json[r'page'] = value;
     }
-    if (this.sampleSize != null) {
-      json[r'sampleSize'] = this.sampleSize;
-    } else {
-    //  json[r'sampleSize'] = null;
+    if (this.query.isPresent) {
+      final value = this.query.value;
+      json[r'query'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.sampleSize.isPresent) {
+      final value = this.sampleSize.value;
+      json[r'sampleSize'] = value;
+    }
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -211,17 +204,17 @@ class AgentSearchAssetsToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchAssetsToolRequestDto(
-        createSelectionHandle: mapValueOfType<bool>(json, r'createSelectionHandle'),
-        detail: AgentSearchAssetsRequestDetail.fromJson(json[r'detail']),
-        fields: AgentSearchAssetsField.listFromJson(json[r'fields']),
-        filters: AgentSearchAssetsFilters.fromJson(json[r'filters']),
-        limit: mapValueOfType<int>(json, r'limit'),
-        mode: AgentSearchAssetsMode.fromJson(json[r'mode']),
-        order: AgentSearchAssetsOrder.fromJson(json[r'order']),
-        page: mapValueOfType<int>(json, r'page'),
-        query: mapValueOfType<String>(json, r'query'),
-        sampleSize: mapValueOfType<int>(json, r'sampleSize'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        createSelectionHandle: json.containsKey(r'createSelectionHandle') ? Optional.present(mapValueOfType<bool>(json, r'createSelectionHandle')) : const Optional.absent(),
+        detail: json.containsKey(r'detail') ? Optional.present(AgentSearchAssetsRequestDetail.fromJson(json[r'detail'])) : const Optional.absent(),
+        fields: json.containsKey(r'fields') ? Optional.present(AgentSearchAssetsField.listFromJson(json[r'fields'])) : const Optional.absent(),
+        filters: json.containsKey(r'filters') ? Optional.present(AgentSearchAssetsFilters.fromJson(json[r'filters'])) : const Optional.absent(),
+        limit: json.containsKey(r'limit') ? Optional.present(json[r'limit'] == null ? null : int.parse('${json[r'limit']}')) : const Optional.absent(),
+        mode: json.containsKey(r'mode') ? Optional.present(AgentSearchAssetsMode.fromJson(json[r'mode'])) : const Optional.absent(),
+        order: json.containsKey(r'order') ? Optional.present(AgentSearchAssetsOrder.fromJson(json[r'order'])) : const Optional.absent(),
+        page: json.containsKey(r'page') ? Optional.present(json[r'page'] == null ? null : int.parse('${json[r'page']}')) : const Optional.absent(),
+        query: json.containsKey(r'query') ? Optional.present(mapValueOfType<String>(json, r'query')) : const Optional.absent(),
+        sampleSize: json.containsKey(r'sampleSize') ? Optional.present(json[r'sampleSize'] == null ? null : int.parse('${json[r'sampleSize']}')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

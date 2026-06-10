@@ -15,44 +15,75 @@ class AgentReadAssetMetadataToolResponseDto {
   AgentReadAssetMetadataToolResponseDto({
     required this.status,
     required this.toolCall,
-    this.reason,
+    required this.reason,
     this.assets = const [],
+    this.detail = const Optional.absent(),
+    this.fields = const [],
+    required this.resultSize,
+    required this.summary,
   });
 
   AgentReadAssetMetadataToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String? reason;
+  String reason;
 
   List<AgentAssetMetadataResult> assets;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<AgentAssetMetadataDetail?> detail;
+
+  List<AgentAssetMetadataField> fields;
+
+  AgentToolResultSize resultSize;
+
+  String summary;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetMetadataToolResponseDto &&
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
-    _deepEquality.equals(other.assets, assets);
+    _deepEquality.equals(other.assets, assets) &&
+    other.detail == detail &&
+    _deepEquality.equals(other.fields, fields) &&
+    other.resultSize == resultSize &&
+    other.summary == summary;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason == null ? 0 : reason!.hashCode) +
-    (assets.hashCode);
+    (reason.hashCode) +
+    (assets.hashCode) +
+    (detail == null ? 0 : detail!.hashCode) +
+    (fields.hashCode) +
+    (resultSize.hashCode) +
+    (summary.hashCode);
 
   @override
-  String toString() => 'AgentReadAssetMetadataToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, assets=$assets]';
+  String toString() => 'AgentReadAssetMetadataToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, assets=$assets, detail=$detail, fields=$fields, resultSize=$resultSize, summary=$summary]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
-    if (this.reason != null) {
       json[r'reason'] = this.reason;
-    }
       json[r'assets'] = this.assets;
+    if (this.detail.isPresent) {
+      final value = this.detail.value;
+      json[r'detail'] = value;
+    }
+      json[r'fields'] = this.fields;
+      json[r'resultSize'] = this.resultSize;
+      json[r'summary'] = this.summary;
     return json;
   }
 
@@ -67,8 +98,12 @@ class AgentReadAssetMetadataToolResponseDto {
       return AgentReadAssetMetadataToolResponseDto(
         status: AgentReadAssetMetadataToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason'),
+        reason: mapValueOfType<String>(json, r'reason')!,
         assets: AgentAssetMetadataResult.listFromJson(json[r'assets']),
+        detail: json.containsKey(r'detail') ? Optional.present(AgentAssetMetadataDetail.fromJson(json[r'detail'])) : const Optional.absent(),
+        fields: AgentAssetMetadataField.listFromJson(json[r'fields']),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
+        summary: mapValueOfType<String>(json, r'summary')!,
       );
     }
     return null;
@@ -118,6 +153,11 @@ class AgentReadAssetMetadataToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
+    'reason',
+    'assets',
+    'fields',
+    'resultSize',
+    'summary',
   };
 }
 
@@ -134,14 +174,10 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
-  static const approvalRequired = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'approval-required');
-  static const denied = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentReadAssetMetadataToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentReadAssetMetadataToolResponseDtoStatusEnum].
   static const values = <AgentReadAssetMetadataToolResponseDtoStatusEnum>[
-    approvalRequired,
-    denied,
     success,
   ];
 
@@ -181,8 +217,6 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer {
   AgentReadAssetMetadataToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
-        case r'approval-required': return AgentReadAssetMetadataToolResponseDtoStatusEnum.approvalRequired;
-        case r'denied': return AgentReadAssetMetadataToolResponseDtoStatusEnum.denied;
         case r'success': return AgentReadAssetMetadataToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -196,4 +230,5 @@ class AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentReadAssetMetadataToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
+
 

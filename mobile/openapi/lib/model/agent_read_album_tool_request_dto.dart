@@ -13,8 +13,8 @@ part of openapi.api;
 class AgentReadAlbumToolRequestDto {
   /// Returns a new [AgentReadAlbumToolRequestDto] instance.
   AgentReadAlbumToolRequestDto({
-    this.albumId,
-    this.toolCallId,
+    this.albumId = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   ///
@@ -23,7 +23,7 @@ class AgentReadAlbumToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? albumId;
+  Optional<String?> albumId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -31,7 +31,7 @@ class AgentReadAlbumToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAlbumToolRequestDto &&
@@ -49,15 +49,13 @@ class AgentReadAlbumToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.albumId != null) {
-      json[r'albumId'] = this.albumId;
-    } else {
-    //  json[r'albumId'] = null;
+    if (this.albumId.isPresent) {
+      final value = this.albumId.value;
+      json[r'albumId'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -71,8 +69,8 @@ class AgentReadAlbumToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentReadAlbumToolRequestDto(
-        albumId: mapValueOfType<String>(json, r'albumId'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        albumId: json.containsKey(r'albumId') ? Optional.present(mapValueOfType<String>(json, r'albumId')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

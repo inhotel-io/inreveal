@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentOperationPlanSummaryRequestDto {
   /// Returns a new [AgentOperationPlanSummaryRequestDto] instance.
   AgentOperationPlanSummaryRequestDto({
-    this.focus,
+    this.focus = const Optional.absent(),
   });
 
   ///
@@ -22,7 +22,7 @@ class AgentOperationPlanSummaryRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? focus;
+  Optional<String?> focus;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationPlanSummaryRequestDto &&
@@ -38,10 +38,9 @@ class AgentOperationPlanSummaryRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.focus != null) {
-      json[r'focus'] = this.focus;
-    } else {
-    //  json[r'focus'] = null;
+    if (this.focus.isPresent) {
+      final value = this.focus.value;
+      json[r'focus'] = value;
     }
     return json;
   }
@@ -55,7 +54,7 @@ class AgentOperationPlanSummaryRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationPlanSummaryRequestDto(
-        focus: mapValueOfType<String>(json, r'focus'),
+        focus: json.containsKey(r'focus') ? Optional.present(mapValueOfType<String>(json, r'focus')) : const Optional.absent(),
       );
     }
     return null;

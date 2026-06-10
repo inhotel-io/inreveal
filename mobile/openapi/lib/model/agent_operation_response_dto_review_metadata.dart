@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentOperationResponseDtoReviewMetadata {
   /// Returns a new [AgentOperationResponseDtoReviewMetadata] instance.
   AgentOperationResponseDtoReviewMetadata({
-    this.assetMetadata,
+    this.assetMetadata = const Optional.absent(),
   });
 
   ///
@@ -22,7 +22,7 @@ class AgentOperationResponseDtoReviewMetadata {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationResponseDtoReviewMetadataAssetMetadata? assetMetadata;
+  Optional<AgentOperationResponseDtoReviewMetadataAssetMetadata?> assetMetadata;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationResponseDtoReviewMetadata &&
@@ -38,10 +38,9 @@ class AgentOperationResponseDtoReviewMetadata {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.assetMetadata != null) {
-      json[r'assetMetadata'] = this.assetMetadata;
-    } else {
-    //  json[r'assetMetadata'] = null;
+    if (this.assetMetadata.isPresent) {
+      final value = this.assetMetadata.value;
+      json[r'assetMetadata'] = value;
     }
     return json;
   }
@@ -55,7 +54,7 @@ class AgentOperationResponseDtoReviewMetadata {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationResponseDtoReviewMetadata(
-        assetMetadata: AgentOperationResponseDtoReviewMetadataAssetMetadata.fromJson(json[r'assetMetadata']),
+        assetMetadata: json.containsKey(r'assetMetadata') ? Optional.present(AgentOperationResponseDtoReviewMetadataAssetMetadata.fromJson(json[r'assetMetadata'])) : const Optional.absent(),
       );
     }
     return null;

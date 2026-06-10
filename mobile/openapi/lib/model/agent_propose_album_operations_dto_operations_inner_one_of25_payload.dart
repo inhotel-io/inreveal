@@ -13,8 +13,8 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload({
-    this.tagId,
-    this.tagName,
+    this.tagId = const Optional.absent(),
+    this.tagName = const Optional.absent(),
   });
 
   ///
@@ -23,7 +23,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? tagId;
+  Optional<String?> tagId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -31,7 +31,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? tagName;
+  Optional<String?> tagName;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload &&
@@ -49,15 +49,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.tagId != null) {
-      json[r'tagId'] = this.tagId;
-    } else {
-    //  json[r'tagId'] = null;
+    if (this.tagId.isPresent) {
+      final value = this.tagId.value;
+      json[r'tagId'] = value;
     }
-    if (this.tagName != null) {
-      json[r'tagName'] = this.tagName;
-    } else {
-    //  json[r'tagName'] = null;
+    if (this.tagName.isPresent) {
+      final value = this.tagName.value;
+      json[r'tagName'] = value;
     }
     return json;
   }
@@ -71,8 +69,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf25Payload(
-        tagId: mapValueOfType<String>(json, r'tagId'),
-        tagName: mapValueOfType<String>(json, r'tagName'),
+        tagId: json.containsKey(r'tagId') ? Optional.present(mapValueOfType<String>(json, r'tagId')) : const Optional.absent(),
+        tagName: json.containsKey(r'tagName') ? Optional.present(mapValueOfType<String>(json, r'tagName')) : const Optional.absent(),
       );
     }
     return null;

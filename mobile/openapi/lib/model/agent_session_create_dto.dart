@@ -14,17 +14,17 @@ class AgentSessionCreateDto {
   /// Returns a new [AgentSessionCreateDto] instance.
   AgentSessionCreateDto({
     required this.approvalMode,
-    this.initialContext = const {},
+    this.initialContext = const Optional.present(const {}),
     required this.model,
-    this.permissionPlan,
+    this.permissionPlan = const Optional.absent(),
     required this.permissionPreset,
     required this.providerCredentialId,
-    this.runnerEndpoint,
+    this.runnerEndpoint = const Optional.absent(),
   });
 
   AgentApprovalMode approvalMode;
 
-  Map<String, Object> initialContext;
+  Optional<Map<String, Object>?> initialContext;
 
   String model;
 
@@ -34,13 +34,13 @@ class AgentSessionCreateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentPermissionPlan? permissionPlan;
+  Optional<AgentPermissionPlan?> permissionPlan;
 
   AgentPermissionPreset permissionPreset;
 
   String providerCredentialId;
 
-  String? runnerEndpoint;
+  Optional<String?> runnerEndpoint;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSessionCreateDto &&
@@ -69,19 +69,20 @@ class AgentSessionCreateDto {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'approvalMode'] = this.approvalMode;
-      json[r'initialContext'] = this.initialContext;
+    if (this.initialContext.isPresent) {
+      final value = this.initialContext.value;
+      json[r'initialContext'] = value;
+    }
       json[r'model'] = this.model;
-    if (this.permissionPlan != null) {
-      json[r'permissionPlan'] = this.permissionPlan;
-    } else {
-    //  json[r'permissionPlan'] = null;
+    if (this.permissionPlan.isPresent) {
+      final value = this.permissionPlan.value;
+      json[r'permissionPlan'] = value;
     }
       json[r'permissionPreset'] = this.permissionPreset;
       json[r'providerCredentialId'] = this.providerCredentialId;
-    if (this.runnerEndpoint != null) {
-      json[r'runnerEndpoint'] = this.runnerEndpoint;
-    } else {
-    //  json[r'runnerEndpoint'] = null;
+    if (this.runnerEndpoint.isPresent) {
+      final value = this.runnerEndpoint.value;
+      json[r'runnerEndpoint'] = value;
     }
     return json;
   }
@@ -96,12 +97,12 @@ class AgentSessionCreateDto {
 
       return AgentSessionCreateDto(
         approvalMode: AgentApprovalMode.fromJson(json[r'approvalMode'])!,
-        initialContext: mapCastOfType<String, Object>(json, r'initialContext') ?? const {},
+        initialContext: json.containsKey(r'initialContext') ? Optional.present(mapCastOfType<String, Object>(json, r'initialContext')) : const Optional.absent(),
         model: mapValueOfType<String>(json, r'model')!,
-        permissionPlan: AgentPermissionPlan.fromJson(json[r'permissionPlan']),
+        permissionPlan: json.containsKey(r'permissionPlan') ? Optional.present(AgentPermissionPlan.fromJson(json[r'permissionPlan'])) : const Optional.absent(),
         permissionPreset: AgentPermissionPreset.fromJson(json[r'permissionPreset'])!,
         providerCredentialId: mapValueOfType<String>(json, r'providerCredentialId')!,
-        runnerEndpoint: mapValueOfType<String>(json, r'runnerEndpoint'),
+        runnerEndpoint: json.containsKey(r'runnerEndpoint') ? Optional.present(mapValueOfType<String>(json, r'runnerEndpoint')) : const Optional.absent(),
       );
     }
     return null;

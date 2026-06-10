@@ -22,7 +22,7 @@ class AgentToolCallResponseDto {
     required this.id,
     required this.requestSummary,
     required this.responseSummary,
-    this.resultSize,
+    this.resultSize = const Optional.absent(),
     required this.sessionId,
     required this.startedAt,
     required this.status,
@@ -57,7 +57,7 @@ class AgentToolCallResponseDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentToolResultSize? resultSize;
+  Optional<AgentToolResultSize?> resultSize;
 
   String sessionId;
 
@@ -134,10 +134,9 @@ class AgentToolCallResponseDto {
     } else {
     //  json[r'responseSummary'] = null;
     }
-    if (this.resultSize != null) {
-      json[r'resultSize'] = this.resultSize;
-    } else {
-    //  json[r'resultSize'] = null;
+    if (this.resultSize.isPresent) {
+      final value = this.resultSize.value;
+      json[r'resultSize'] = value;
     }
       json[r'sessionId'] = this.sessionId;
       json[r'startedAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
@@ -166,7 +165,7 @@ class AgentToolCallResponseDto {
         id: mapValueOfType<String>(json, r'id')!,
         requestSummary: mapValueOfType<String>(json, r'requestSummary')!,
         responseSummary: mapValueOfType<String>(json, r'responseSummary'),
-        resultSize: AgentToolResultSize.fromJson(json[r'resultSize']),
+        resultSize: json.containsKey(r'resultSize') ? Optional.present(AgentToolResultSize.fromJson(json[r'resultSize'])) : const Optional.absent(),
         sessionId: mapValueOfType<String>(json, r'sessionId')!,
         startedAt: mapDateTime(json, r'startedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')!,
         status: AgentToolCallStatus.fromJson(json[r'status'])!,

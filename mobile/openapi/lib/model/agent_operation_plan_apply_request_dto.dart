@@ -13,15 +13,15 @@ part of openapi.api;
 class AgentOperationPlanApplyRequestDto {
   /// Returns a new [AgentOperationPlanApplyRequestDto] instance.
   AgentOperationPlanApplyRequestDto({
-    this.fieldOverrides = const {},
-    this.itemSelections = const {},
+    this.fieldOverrides = const Optional.present(const {}),
+    this.itemSelections = const Optional.present(const {}),
     this.operationIds = const [],
-    this.planRevision,
+    this.planRevision = const Optional.absent(),
   });
 
-  Map<String, Map<String, String>> fieldOverrides;
+  Optional<Map<String, Map<String, String>>?> fieldOverrides;
 
-  Map<String, AgentOperationItemSelection> itemSelections;
+  Optional<Map<String, AgentOperationItemSelection>?> itemSelections;
 
   List<String> operationIds;
 
@@ -33,7 +33,7 @@ class AgentOperationPlanApplyRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? planRevision;
+  Optional<int?> planRevision;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationPlanApplyRequestDto &&
@@ -55,13 +55,18 @@ class AgentOperationPlanApplyRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'fieldOverrides'] = this.fieldOverrides;
-      json[r'itemSelections'] = this.itemSelections;
+    if (this.fieldOverrides.isPresent) {
+      final value = this.fieldOverrides.value;
+      json[r'fieldOverrides'] = value;
+    }
+    if (this.itemSelections.isPresent) {
+      final value = this.itemSelections.value;
+      json[r'itemSelections'] = value;
+    }
       json[r'operationIds'] = this.operationIds;
-    if (this.planRevision != null) {
-      json[r'planRevision'] = this.planRevision;
-    } else {
-    //  json[r'planRevision'] = null;
+    if (this.planRevision.isPresent) {
+      final value = this.planRevision.value;
+      json[r'planRevision'] = value;
     }
     return json;
   }
@@ -75,12 +80,12 @@ class AgentOperationPlanApplyRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentOperationPlanApplyRequestDto(
-        fieldOverrides: mapCastOfType<String, Map<String, String>>(json, r'fieldOverrides') ?? const {},
-        itemSelections: AgentOperationItemSelection.mapFromJson(json[r'itemSelections']),
+        fieldOverrides: json.containsKey(r'fieldOverrides') ? Optional.present(mapCastOfType<String, dynamic>(json, r'fieldOverrides')) : const Optional.absent(),
+        itemSelections: json.containsKey(r'itemSelections') ? Optional.present(AgentOperationItemSelection.mapFromJson(json[r'itemSelections'])) : const Optional.absent(),
         operationIds: json[r'operationIds'] is Iterable
             ? (json[r'operationIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
-        planRevision: mapValueOfType<int>(json, r'planRevision'),
+        planRevision: json.containsKey(r'planRevision') ? Optional.present(json[r'planRevision'] == null ? null : int.parse('${json[r'planRevision']}')) : const Optional.absent(),
       );
     }
     return null;

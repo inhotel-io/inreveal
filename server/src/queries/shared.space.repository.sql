@@ -882,37 +882,6 @@ group by
   "person"."species",
   "person"."updatedAt",
   "isAssetAdder"
-select
-  "source_person"."id" as "personId",
-  'space-person' as "sourceProfileType",
-  "source_person"."id" as "sourceProfileId",
-  "target_member"."userId" as "userId",
-  "target_member"."role",
-  "source_person"."birthDate",
-  "source_person"."type",
-  "source_person"."updatedAt",
-  COALESCE(
-    NULLIF("source_alias"."alias", ''),
-    "source_person"."name",
-    ''
-  ) as "name",
-  NULL as "species",
-  "source_person"."faceCount" as "supportingFaceCount",
-  true as "isAssetAdder"
-from
-  "shared_space_person" as "source_person"
-  inner join "shared_space_member" as "source_member" on "source_member"."spaceId" = "source_person"."spaceId"
-  and "source_member"."userId" = any ($1::uuid[])
-  and "source_member"."showInTimeline" = $2
-  inner join "shared_space_member" as "target_member" on "target_member"."spaceId" = $3
-  and "target_member"."userId" = any ($4::uuid[])
-  and "target_member"."sharePersonMetadata" = $5
-  left join "shared_space_person_alias" as "source_alias" on "source_alias"."personId" = "source_person"."id"
-  and "source_alias"."userId" = "source_member"."userId"
-where
-  "source_person"."identityId" = $6
-  and "source_person"."spaceId" != $7
-  and "source_person"."isHidden" = $8
 
 -- SharedSpaceRepository.getSpacePersonAssetAdderIds
 select distinct
@@ -925,19 +894,6 @@ from
 where
   "shared_space_person_face"."personId" = $2
   and "shared_space_asset"."addedById" is not null
-select distinct
-  "shared_space_library"."addedById" as "userId"
-from
-  "shared_space_person_face"
-  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
-  inner join "asset" on "asset"."id" = "asset_face"."assetId"
-  inner join "shared_space_library" on "shared_space_library"."libraryId" = "asset"."libraryId"
-  and "shared_space_library"."spaceId" = $1
-where
-  "shared_space_person_face"."personId" = $2
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $3
-  and "shared_space_library"."addedById" is not null
 
 -- SharedSpaceRepository.getSpaceAssetAdder
 select
@@ -947,16 +903,6 @@ from
 where
   "spaceId" = $1
   and "assetId" = $2
-select
-  "shared_space_library"."addedById"
-from
-  "shared_space_library"
-  inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
-where
-  "shared_space_library"."spaceId" = $1
-  and "asset"."id" = $2
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $3
 
 -- SharedSpaceRepository.getSpacePersonMetadataBackfillPage
 select
@@ -1048,11 +994,6 @@ where
     where
       "personId" = $2
   )
-update "shared_space_person_face"
-set
-  "personId" = $1
-where
-  "personId" = $2
 
 -- SharedSpaceRepository.getFirstFaceIdForPerson
 select
@@ -1189,49 +1130,12 @@ where
     where
       "shared_space_person"."spaceId" = $2
   )
-delete from "shared_space_person_face"
-where
-  "assetFaceId" in (
-    select
-      "asset_face"."id"
-    from
-      "asset_face"
-    where
-      "asset_face"."assetId" in ($1)
-  )
-  and "personId" in (
-    select
-      "shared_space_person"."id"
-    from
-      "shared_space_person"
-    where
-      "shared_space_person"."spaceId" = $2
-  )
 
 -- SharedSpaceRepository.removePersonFacesByLibrary
 select distinct
   "personId"
 from
   "shared_space_person_face"
-where
-  "assetFaceId" in (
-    select
-      "asset_face"."id"
-    from
-      "asset_face"
-      inner join "asset" on "asset"."id" = "asset_face"."assetId"
-    where
-      "asset"."libraryId" = $1
-  )
-  and "personId" in (
-    select
-      "shared_space_person"."id"
-    from
-      "shared_space_person"
-    where
-      "shared_space_person"."spaceId" = $2
-  )
-delete from "shared_space_person_face"
 where
   "assetFaceId" in (
     select
@@ -1356,9 +1260,6 @@ from
   "shared_space_person_alias"
 where
   "personId" = $1
-delete from "shared_space_person_alias"
-where
-  "personId" = $1
 
 -- SharedSpaceRepository.findClosestSpacePerson
 begin
@@ -1389,7 +1290,7 @@ from
   "cte"
 where
   "cte"."distance" <= $4
-commit
+rollback
 
 -- SharedSpaceRepository.getSpacePersonsWithEmbeddings
 select

@@ -14,8 +14,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload({
     required this.spaceName,
-    this.description,
-    this.color,
+    this.description = const Optional.absent(),
+    this.color = const Optional.absent(),
   });
 
   String spaceName;
@@ -26,7 +26,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? description;
+  Optional<String?> description;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -34,7 +34,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  UserAvatarColor? color;
+  Optional<UserAvatarColor?> color;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload &&
@@ -55,15 +55,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'spaceName'] = this.spaceName;
-    if (this.description != null) {
-      json[r'description'] = this.description;
-    } else {
-    //  json[r'description'] = null;
+    if (this.description.isPresent) {
+      final value = this.description.value;
+      json[r'description'] = value;
     }
-    if (this.color != null) {
-      json[r'color'] = this.color;
-    } else {
-    //  json[r'color'] = null;
+    if (this.color.isPresent) {
+      final value = this.color.value;
+      json[r'color'] = value;
     }
     return json;
   }
@@ -78,8 +76,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload {
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf5Payload(
         spaceName: mapValueOfType<String>(json, r'spaceName')!,
-        description: mapValueOfType<String>(json, r'description'),
-        color: UserAvatarColor.fromJson(json[r'color']),
+        description: json.containsKey(r'description') ? Optional.present(mapValueOfType<String>(json, r'description')) : const Optional.absent(),
+        color: json.containsKey(r'color') ? Optional.present(UserAvatarColor.fromJson(json[r'color'])) : const Optional.absent(),
       );
     }
     return null;
