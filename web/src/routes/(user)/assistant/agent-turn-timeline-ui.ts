@@ -252,7 +252,10 @@ export const buildAgentTurnTimelines = (input: {
   const anchorCount = anchors.length;
 
   return anchors.map((anchor): AgentTurnTimeline => {
-    const turnIsRunning = anchor.isLatest && ACTIVE_SESSION_STATUSES.has(session.status);
+    // A turn is only "running" while it has no terminal assistant answer yet — sessions
+    // rest at status Running between turns, so session status alone cannot settle a turn.
+    const turnIsRunning =
+      anchor.isLatest && anchor.terminalAssistantAt === null && ACTIVE_SESSION_STATUSES.has(session.status);
 
     const turnToolCalls = toolCalls.filter((tc) => toolCallBelongsToTurn(tc, anchor, anchorCount));
     const turnEvents = activityEvents.filter((e) => activityEventBelongsToTurn(e, anchor));
