@@ -21,7 +21,9 @@ describe('agent-onboarding-access', () => {
   it('emits onChange when a preset is clicked', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(AgentOnboardingAccess, { props: { provider: 'local', preset: AgentPermissionPreset.VisualOrganizer, onChange } });
+    render(AgentOnboardingAccess, {
+      props: { provider: 'local', preset: AgentPermissionPreset.VisualOrganizer, onChange },
+    });
     await user.click(screen.getByRole('button', { name: /assistant_permission_preset_careful/ }));
     expect(onChange).toHaveBeenCalledWith(AgentPermissionPreset.Careful);
   });

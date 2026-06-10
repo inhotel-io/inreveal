@@ -12,7 +12,10 @@ describe('agent-onboarding-approval', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(AgentOnboardingApproval, { props: { approval: AgentApprovalMode.PlanOnly, onChange } });
-    expect(screen.getByRole('button', { name: /assistant_onboarding_approval_plan/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /assistant_onboarding_approval_plan/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await user.click(screen.getByRole('button', { name: /assistant_onboarding_approval_strict/ }));
     expect(onChange).toHaveBeenCalledWith(AgentApprovalMode.Strict);
   });
