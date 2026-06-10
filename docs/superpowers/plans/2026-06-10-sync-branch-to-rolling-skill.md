@@ -104,7 +104,7 @@ echo "ALL PHASE-A TESTS PASSED"
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: FAIL — `sync.sh: No such file or directory` (or "expected failure, got success" once a stub exists).
+Expected: FAIL — the first refusal case aborts with `FAIL: expected 'not onboarded' in output: ...` (the captured output is bash's `No such file or directory` for the missing sync.sh).
 
 - [ ] **Step 3: Write sync.sh with usage + refusals (rebase logic still a stub)**
 
@@ -280,7 +280,7 @@ The conflict path needs state to survive between `sync.sh <branch>` (which stops
 - Modify: `~/.claude/skills/sync-branch-to-rolling/test-sync.sh` (append Phases C-D)
 - Modify: `~/.claude/skills/sync-branch-to-rolling/sync.sh` (merge check, state file, `finish()`)
 
-- [ ] **Step 1: Append Phase C-D tests**
+- [ ] **Step 1: Append the Phase C test (merge-commit refusal)**
 
 In `test-sync.sh`, replace the final line `echo "ALL TESTS PASSED (phases A-B)"` with:
 
@@ -309,7 +309,39 @@ pass "refuses merge commits in replay range"
 git reset -q --hard HEAD~1   # drop the merge
 git branch -qD side
 
+echo "ALL TESTS PASSED (phases A-C)"
+```
+
+- [ ] **Step 2: Run tests to verify the Phase C case fails**
+
+Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
+Expected: phases A-B pass, then FAIL with `expected failure, got success` — without the guard, the merge case proceeds (in this fixture the rebase flattens the merge cleanly and even moves the tag). The sandbox is rebuilt fresh on every run, so that stray state is harmless.
+
+- [ ] **Step 3: Implement the merge-commit guard**
+
+In `sync.sh`, insert immediately after the `if [[ "$OLD" == "$NEW" ]] ... fi` block (before the `own_before=` line):
+
+```bash
+merges="$(git rev-list --merges --count "$OLD..$branch")"
+if [[ "$merges" -gt 0 ]]; then
+  die "$merges merge commit(s) in $OLD..$branch — new 'merge origin/main' merges need judgment; see SKILL.md failure modes"
+fi
+```
+
+- [ ] **Step 4: Run tests to verify phases A-C pass**
+
+Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
+Expected: six `ok:` lines, then `ALL TESTS PASSED (phases A-C)`.
+
+- [ ] **Step 5: Append the Phase D test (conflict → resolve → --finish)**
+
+In `test-sync.sh`, replace the final line `echo "ALL TESTS PASSED (phases A-C)"` with:
+
+```bash
 # ---- Phase D: conflict -> manual resolve -> --finish ----
+expect_fail "no sync in progress" -- "$SYNC" --finish
+pass "--finish refuses when no sync in progress"
+
 echo "feat edit" > shared.txt
 git commit -qam "feat: edit shared.txt"
 
@@ -336,12 +368,12 @@ pass "conflict resolution completed via --finish"
 echo "ALL TESTS PASSED (phases A-D)"
 ```
 
-- [ ] **Step 2: Run tests to verify Phase C fails**
+- [ ] **Step 6: Run tests to verify the Phase D cases fail**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: phases A-B pass, then FAIL — the merge case proceeds instead of refusing (`expected failure, got success` or a rebase error), because the merge check doesn't exist yet.
+Expected: phases A-C pass, then FAIL with `expected 'no sync in progress' in output` — the stub still dies with `--finish not implemented yet`. (Once that needle existed, the next failure would be `expected conflict exit code 3, got 1`: the bare `git rebase` under `set -e` exits with git's status 1 and leaves the sandbox mid-rebase — harmless, every run rebuilds the temp dir.)
 
-- [ ] **Step 3: Implement merge check, state file, and finish()**
+- [ ] **Step 7: Implement the state file, finish(), and conflict exit code**
 
 Rewrite `sync.sh` in full (this is the complete final script):
 
@@ -460,12 +492,12 @@ fi
 finish
 ```
 
-- [ ] **Step 4: Run tests to verify phases A-D pass**
+- [ ] **Step 8: Run tests to verify phases A-D pass**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: eight `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
+Expected: nine `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
 
-- [ ] **Step 5: Commit (in ~/.claude)**
+- [ ] **Step 9: Commit (in ~/.claude)**
 
 ```bash
 cd ~/.claude
