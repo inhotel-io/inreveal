@@ -101,8 +101,21 @@ class AppConfig {
           other.share == share);
 
   @override
-  int get hashCode =>
-      Object.hash(logLevel, theme, cleanup, map, timeline, image, viewer, slideshow, album, people, backup, network, share);
+  int get hashCode => Object.hash(
+    logLevel,
+    theme,
+    cleanup,
+    map,
+    timeline,
+    image,
+    viewer,
+    slideshow,
+    album,
+    people,
+    backup,
+    network,
+    share,
+  );
 
   @override
   String toString() =>
