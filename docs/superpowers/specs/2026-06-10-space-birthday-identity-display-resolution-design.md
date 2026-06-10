@@ -72,9 +72,10 @@ write-time backfill or stored rows.** This matches the existing name design exac
 ### Birthday precedence (when multiple profiles carry a birthday)
 
 **Owner first, then most-recent manual.** If the owner's own `person` row has a birthday,
-show it. Otherwise show the most recently edited manual birthday among the visible
-profiles. Implemented as an ordering where NULL birthdays sort last, so the owner only
-"wins" when they actually have a value.
+show it. Otherwise, among the visible profiles, prefer a `manual` birthday over an
+`inherited` one, and within a tier pick the most recently edited
+(`birthDateSourceUpdatedAt`). Implemented as an ordering where NULL birthdays sort last, so
+the owner only "wins" when they actually have a value.
 
 ## Implementation
 
@@ -143,33 +144,93 @@ unchanged. `name` continues to resolve via `display_profiles` exactly as today.
   diverging stored `shared_space_person` rows. Space D's stale `2013-02-14` remains in the
   DB; it would only surface if it were the most-recent manual value *and* no owner value
   existed — consistent and acceptable.
-- **No schema migration.** All columns used already exist.
+- **Search path is unaffected (verified).** `SearchRepository.searchFaces` /
+  `getFilteredIdentityPeople` return only `id/name/profileType/profileId/spaceId` — no
+  `birthDate`. (`minBirthDate` there is an age *filter*, not a displayed value.) No change.
+- **`getMetadataInheritanceCandidates` is unchanged.** It feeds the write-time backfill,
+  which is out of scope (above).
+- **No schema migration.** All columns used already exist (`person.birthDate`;
+  `shared_space_person.birthDate` / `birthDateSource` / `birthDateSourceUpdatedAt`). The
+  `person` table has no source columns — hence the synthesized source in step 1.
 - **No new endpoint or DTO change.** `PersonResponseDto.birthDate` is already populated by
-  this resolver.
+  this resolver via `mapAccessiblePerson` (`birthDate: asBirthDateString(row.birthDate)`).
+- **Visibility is not broadened.** `birthdate_rn` ranks only within the existing `profiles`
+  CTE, which is already scoped to the viewer's own `person` rows and the spaces visible to
+  them (`timeline_spaces`). A birthday in a space the viewer cannot see is never consulted.
+
+## Build & regeneration (required)
+
+- `hydrateAccessiblePeople` is decorated with `@GenerateSql` (`face-identity.repository.ts`
+  ~line 1764). Any change to its SQL **requires running `make sql`** to regenerate
+  `src/queries/face.identity.repository.sql`. **CI fails if this file is stale** — it must
+  be committed alongside the code change.
+- `face-identity-query-shape.spec.ts` asserts only keyword presence/absence
+  (`face_identity_face`, `<=>`, `face_search.embedding`) — adding the `birthdate_rn` window
+  and alias does **not** affect it. No change needed there.
 
 ## Testing (TDD)
 
-`hydrateAccessiblePeople` is raw SQL, so the failing-test-first must be a **medium test
-against a real Postgres** (testcontainers), in the `FaceIdentityRepository` medium suite.
-The exact harness/fixtures (identity, person, space, member, shared_space_person,
-shared_space_person_face, asset_face) will be confirmed when writing the plan.
+`hydrateAccessiblePeople` is raw SQL whose behavior only exists against a real database, so
+unit/mocked coverage cannot exercise it — all tests are **medium tests against a real
+Postgres** (testcontainers) in
+`test/medium/specs/repositories/face-identity.repository.spec.ts`. Fixture helpers already
+used by that suite: `ctx.newUser`, `ctx.newPerson({ ownerId, name, birthDate, isHidden })`,
+`ctx.newAsset`, `ctx.newAssetFace`, `ctx.newSharedSpace`, `ctx.newSharedSpaceMember`,
+`ctx.newSharedSpaceAsset`, `sut.ensurePersonIdentity(personId)`,
+`sut.linkFace({ assetFaceId, identityId, source })`, and a raw insert into
+`shared_space_person` (+ `shared_space_person_face`). Assertions compare against the
+formatted date string (e.g. `birthDate: '2014-02-14'`) so a timezone/off-by-one regression
+is caught.
 
-Tests (write first, watch fail, then implement):
+### TDD cadence (one test at a time; red → green → next)
 
-1. **Repro / primary fix (list view):** owner `person` named with NULL birthday + one
-   space-person with a manual birthday + NULL siblings → `getAccessiblePeople` returns the
-   owner's resolved person with the space birthday. (Red today.)
-2. **Single-person view:** same fixture via `getAccessiblePersonByProfileId` → resolves the
-   same birthday. (Red today; same SQL, explicit coverage.)
-3. **Owner precedence:** owner has a birthday AND a space has a different manual birthday →
-   owner's value wins.
-4. **Most-recent-manual tiebreak:** two spaces with manual birthdays, different
-   `birthDateSourceUpdatedAt`, owner has none → the most-recent manual value wins.
-5. **No-birthday-anywhere:** all profiles NULL → resolves NULL (no regression / no crash).
-6. **Name unaffected:** existing name-resolution assertions still pass (regression guard).
+**Behavior-driving tests** — each must be written and confirmed to fail before the
+implementation step that makes it pass. They are constructed so a *partial* implementation
+cannot pass by accident:
+
+1. **Repro — space-only birthday (the bug).** Owner `person`: named, NULL birthday. One
+   space-person: manual `2014-02-14`. Siblings: NULL. → `getAccessiblePeople(owner)` returns
+   the person with `birthDate: '2014-02-14'` **and** the correct name (name and birthday
+   resolve from different profiles simultaneously). **Red today** (returns `null`). Drives
+   adding `birthdate_rn` + the new alias/COALESCE.
+2. **Single-person view parity.** Same fixture via `getAccessiblePersonByProfileId` → same
+   `2014-02-14`. **Red today.** Confirms the shared SQL covers both entry points.
+3. **Owner precedence over a space value.** Owner `person`: manual `1990-01-01`. A space:
+   manual `2014-02-14` (with a *newer* `birthDateSourceUpdatedAt`). → owner's `1990-01-01`
+   wins. Drives the `user-person`-first ORDER BY term (a recency-only ranking would pick the
+   space value and fail this test).
+4. **Most-recent-manual tiebreak (recency is the deciding factor).** Owner: no birthday. Two
+   spaces, both `manual`. The winning row is given the **older** `profileId`/`updatedAt` but
+   the **newer** `birthDateSourceUpdatedAt`, so only the `birthDateSourceUpdatedAt DESC` term
+   selects it — a naive `profileId`/`updatedAt` ordering would pick the wrong one. Asserts
+   the newer-manual date.
+5. **Manual beats inherited.** Owner: no birthday. One space `manual` = date A, another space
+   `inherited` = date B with a *newer* `birthDateSourceUpdatedAt`. → date A (manual) wins,
+   proving the `manual < inherited` source tier outranks pure recency.
+
+**Boundary / regression guards** — assert behavior that must be preserved:
+
+6. **No birthday anywhere.** All profiles NULL → person is **still returned** with
+   `birthDate: null` (verifies the new `INNER JOIN ranked_profiles AS birthdate_profiles`
+   does not drop the identity).
+7. **Hidden profile excluded.** A hidden space-person holds the only birthday;
+   `withHidden: false` → `birthDate: null` (hidden rows are excluded from `profiles`, same as
+   for name). With `withHidden: true` → the birthday resolves.
+8. **Cross-space visibility — no leak.** The only birthday lives in a space the viewer is
+   **not** a member of (absent from `timeline_spaces`) → `birthDate: null`. Confirms the fix
+   does not broaden visibility.
+9. **Owner-birthday-only (existing guard).** The existing test
+   "uses a named accessible space profile for display while keeping a viewer-owned primary
+   profile" (`face-identity.repository.spec.ts:1519` — owner has birthday, space supplies the
+   name) must continue to pass. Verifies the fix preserves owner-only resolution.
+10. **Name resolution unchanged.** Existing name-resolution assertions still pass (the `name`
+    projection via `display_profiles` is untouched).
 
 ## Affected files
 
-- `server/src/repositories/face-identity.repository.ts` — the `hydrateAccessiblePeople` SQL.
-- `server/src/repositories/face-identity.repository.spec.ts` (or the corresponding medium
-  test file) — new fixtures + assertions.
+- `server/src/repositories/face-identity.repository.ts` — the `hydrateAccessiblePeople` SQL
+  (3 edits: `profiles` CTE columns, `birthdate_rn` window, final SELECT + join).
+- `server/src/queries/face.identity.repository.sql` — **regenerated via `make sql`** and
+  committed (CI-enforced).
+- `server/test/medium/specs/repositories/face-identity.repository.spec.ts` — new fixtures +
+  assertions (tests 1–8 above; 9–10 are existing guards).
