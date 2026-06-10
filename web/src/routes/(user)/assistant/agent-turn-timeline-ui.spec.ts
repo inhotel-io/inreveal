@@ -603,7 +603,7 @@ describe('buildAgentTurnTimelines', () => {
           status: AgentToolCallStatus.Failed,
           startedAt: '2026-05-18T10:00:05.000Z',
           completedAt: '2026-05-18T10:00:07.000Z',
-          requestSummary: null,
+          requestSummary: undefined,
           responseSummary: 'api_key=sk-proj-supersecret123',
           error: 'provider key sk-live-456 rejected',
         }),
