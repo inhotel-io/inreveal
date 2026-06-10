@@ -646,28 +646,36 @@ Design spec: `docs/superpowers/specs/2026-06-10-sync-branch-to-rolling-skill-des
   currently sits on (pushed to origin; also pins the otherwise-unreachable old base against GC).
 - **HARD RULE:** never write `rolling-state.json`, never run `upstream-*` make targets from
   this skill. This skill is strictly downstream of the rolling operation. Reading
-  `rolling-state.json` (e.g. `integratedForkHead`, `appendHistory`) is fine.
+  `rolling-state.json` (e.g. `integratedForkHead`, `appendHistory`) is fine — note it is
+  UNTRACKED local state in the rolling worktree's gitdir, NOT committed on the rolling
+  branch: `$(git rev-parse --git-dir)/upstream-preflight/rolling-state.json` from inside
+  that worktree (locate the worktree via `git worktree list`).
 
 ## Mode detection
 
 `git rev-parse -q --verify "refs/tags/rolling-base/<branch>^{commit}"` —
 missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
 
+Resolve the branch name via Branch Profiles first: for onboarded branches the sync target
+is the rolling-suffixed name (`sync.sh <branch>-rolling`); the frozen main-based name will
+always look un-onboarded — do not re-onboard it.
+
 ## MAINTAIN mode (recurring, per rolling batch)
 
 1. Pick the new base: the canonical rolling tip, **only if its batch is CI-green**.
-   Authoritative source: `appendHistory` in `rolling-state.json` on the rolling branch
-   (read-only); fallback `gh --repo open-noodle/gallery run list` on the batch branch.
+   Authoritative source: `appendHistory` in the rolling worktree's `rolling-state.json`
+   (see Constants for its real location); fallback `gh --repo open-noodle/gallery run list`
+   on the batch branch.
    If not green, pass the last green batch SHA as the second argument.
 2. From the branch's own worktree, with the branch checked out:
    ```bash
    ~/.claude/skills/sync-branch-to-rolling/sync.sh <branch> [green-base-sha]
    ```
    The script refuses on: dirty worktree, rebase/cherry-pick in progress, branch not checked
-   out here, missing or stale (non-ancestor) tag, merge commits in the replay range. It backs up the branch to
-   `origin/backup/<branch>-YYYYMMDD-<sha>`, runs `git rebase --onto NEW OLD <branch>`, and on
-   clean completion moves + pushes the tag, then prints a range-diff + own-commit-count
-   comparison.
+   out here, missing or stale (non-ancestor) tag, merge commits in the replay range. It backs
+   up the branch to `origin/backup/<branch>-YYYYMMDD-<sha>`, runs
+   `git rebase --onto NEW OLD <branch>`, and on clean completion moves + pushes the tag, then
+   prints a range-diff + own-commit-count comparison.
 3. **On conflict (exit 3):** resolve per the `rebase-upstream-report` conflict discipline —
    read the full file, prefer upstream/rolling for upstream-owned code, preserve branch
    additions, record a Conflict Resolution Entry per file (fork side / upstream side /
@@ -686,8 +694,8 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
 
 1. **Preconditions:** clean worktree; base = `git merge-base origin/main <branch>`;
    `git merge-base --is-ancestor <base> <integratedForkHead>` must hold (integratedForkHead
-   from rolling-state.json on the rolling branch — read-only). If it doesn't, stop and wait
-   for the rolling flow's next `upstream-sync-fork-main`.
+   from the rolling worktree's `rolling-state.json` — see Constants). If it doesn't, stop
+   and wait for the rolling flow's next `upstream-sync-fork-main`.
 2. **Pin the base:** choose a CI-green rolling tip; `git tag pin/onboard-<branch> <sha>`
    (delete after onboarding). Never chase a moving tip mid-onboard.
 3. **Collision-surface audit → USER CHECKPOINT.** Present before rewriting anything:
@@ -701,9 +709,12 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
      code should adopt (route verb changes, dependency majors, test-API shifts).
 4. **rerere seeding:** if the branch contains "merge origin/main" commits:
    ```bash
-   sh /opt/homebrew/share/git-core/contrib/rerere-train.sh <merge-commit-shas>
+   git config rerere.enabled true
+   sh /opt/homebrew/share/git-core/contrib/rerere-train.sh <base>..<branch>
    ```
-   (needs a clean worktree; helps where the same conflict text recurs — not a guarantee).
+   (pass a RANGE, not bare SHAs — bare args walk the whole ancestry and re-merge dozens of
+   irrelevant historical merges; needs a clean worktree; helps where the same conflict text
+   recurs — not a guarantee).
 5. **Segmented replay** at merge-commit epoch boundaries (`git log --merges <base>..<branch>`),
    sub-gating very large epochs at feature milestones. Only the FIRST segment rebases onto
    the pinned tip; later segments chain onto the previous segment's result:
@@ -712,15 +723,21 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
    git rebase --onto H1 <epoch1-tip> <epoch2-tip>         # → H2 ... repeat
    git switch -c <branch>-rolling                          # after the final segment
    ```
+   Use commit SHAs for every segment endpoint — including the final tip
+   (`git rev-parse <branch>`), never the branch name, so the frozen `<branch>` never moves.
    Gate per segment: `make check-server` + `cd server && pnpm exec tsc --noEmit` (direct —
    the make target's cache can mask spec errors). Document every conflict resolution.
 6. **Regen pass (once, at the end):** resolve generated-file conflicts mechanically during
-   replay, then regenerate honestly: `pnpm -C server sync:open-api`, `make open-api`
+   replay, then regenerate honestly — `pnpm -C server build` FIRST (the sync scripts run
+   from `dist`; without a fresh build they regenerate from pre-rebase code), then
+   `pnpm -C server sync:open-api`, `make open-api`
    (TypeScript AND Dart), `make sql`, branch-specific generated artifacts (see profile),
    lockfile, i18n formatting.
-7. **Verify:** "lost upstream content" check per conflicted file
-   (`git diff <pinned-tip>..HEAD -- <file>` — large `-` blocks of upstream content with no
-   `+` re-add = dropped work); Tier-2 suites; Tier-3 before any deploy.
+7. **Verify:** drop accounting first — `git rev-list --count <base>..<branch>` (before) vs
+   `git rev-list --count <pinned-tip>..HEAD` (after); every dropped commit must be
+   explainable as already-in-rolling. Then the "lost upstream content" check per conflicted
+   file (`git diff <pinned-tip>..HEAD -- <file>` — large `-` blocks of upstream content with
+   no `+` re-add = dropped work); Tier-2 suites; Tier-3 before any deploy.
 8. **Publish + register:**
    ```bash
    git tag "rolling-base/<branch>-rolling" <pinned-tip>
@@ -729,15 +746,16 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
    git tag -d pin/onboard-<branch>
    ```
    The original `<branch>` stays frozen at its main-based head (protects an open PR that
-   targets main — its diff would explode if force-pushed). Add a row to Branch Profiles below.
+   targets main — its diff would explode if force-pushed). Add a column to Branch Profiles below.
 
 ## Verification tiers
 
 - **Tier 1 — every sync:** `make check-server`, direct `cd server && pnpm exec tsc --noEmit`,
   and the profile's fast suites.
 - **Tier 2 — conflicts occurred, or computed overlap non-empty**
-  (`git diff --name-only OLD NEW` ∩ branch's own touched files — compute per sync; the
-  profile hotspot list is advisory only): full regen pass + profile full suites +
+  (`git diff --name-only OLD NEW` ∩ `git diff --name-only NEW <branch>`, using the OLD/NEW
+  SHAs the script printed — compute per sync; the profile hotspot list is advisory only):
+  full regen pass + profile full suites +
   `gh --repo open-noodle/gallery workflow run test.yml --ref <pushed-branch>`.
 - **Tier 3 — before an RC/deploy from the branch, or after jumping many batches:** dispatch
   the full set — test.yml, docker.yml, static_analysis.yml, gallery-build-mobile.yml
@@ -746,29 +764,29 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
 
 ## Branch profiles
 
-| Field            | explore/pi-agent-brainstorm                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rolling branch   | `explore/pi-agent-brainstorm-rolling` (local + origin)                                                                                            |
-| Frozen main line | `explore/pi-agent-brainstorm` (PR #574 — do NOT force-push until rolling lands on main)                                                           |
-| Fast suites (T1) | `pnpm --dir agent-runner test`                                                                                                                    |
-| Full suites (T2) | `cd server && pnpm test`; `cd web && pnpm test`; `make check-web`; agent factory↔manifest parity test (in agent-runner suite)                     |
-| Regen targets    | OpenAPI (TS+Dart), `make sql`, agent capability manifest (`sync-agent-capabilities` script in agent-runner, then re-run its vitest)               |
-| Live checks (T3) | L1 eval: `agent-runner/eval/run.mjs` per `agent-runner/eval/README.md`; L3 via clone-personal skill (curated `eval/scenarios/l3-readonly.mjs`)    |
-| Overlap hotspots | `asset.service/controller`, `media.repository` (sharp edits), `job/queue.service`, `enum.ts`/`types.ts`, `i18n/en.json`, people/spaces web routes |
+| Field            | explore/pi-agent-brainstorm                                                                                                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rolling branch   | `explore/pi-agent-brainstorm-rolling` (local + origin)                                                                                                                                                                                                        |
+| Frozen main line | `explore/pi-agent-brainstorm` (PR #574 — do NOT force-push until rolling lands on main)                                                                                                                                                                       |
+| Fast suites (T1) | `pnpm --dir agent-runner test`                                                                                                                                                                                                                                |
+| Full suites (T2) | `cd server && pnpm test`; `cd web && pnpm test`; `make check-web`; agent factory↔manifest parity test (in agent-runner suite)                                                                                                                                 |
+| Regen targets    | OpenAPI (TS+Dart), `make sql`; capability-matrix doc block: `pnpm -C server run sync:agent-capabilities` (server script, runs from `dist`); workflow manifest: `node agent-runner/src/bin/sync-strict-workflow-manifest.mjs`; then re-run agent-runner vitest |
+| Live checks (T3) | L1 eval: `agent-runner/eval/run.mjs` per `agent-runner/eval/README.md`; L3 via clone-personal skill (curated `eval/scenarios/l3-readonly.mjs`)                                                                                                                |
+| Overlap hotspots | `asset.service/controller`, `media.repository` (sharp edits), `job/queue.service`, `enum.ts`/`types.ts`, `i18n/en.json`, people/spaces web routes, `docker-compose*`, `.github/workflows/test.yml`                                                            |
 
 ## Failure modes
 
 - **Merge commits in replay range** (script refuses): someone merged origin/main into the
   branch since the last sync. Decide: if the merge brought main commits not yet in rolling's
   `integratedForkHead`, wait for fork-sync; otherwise flatten deliberately — seed rerere from
-  the merge (`rerere-train.sh <merge-sha>`), then rerun. Never auto-flatten.
+  the merge (`rerere-train.sh --no-walk <merge-sha>`), then rerun. Never auto-flatten.
 - **Rolling branch renamed/restarted:** update the constant; `git merge-base --is-ancestor
 $(git rev-parse 'rolling-base/<branch>^{commit}') <new-tip>` will fail — re-onboard from the
   branch's current state (its base = old rolling tip, still pinned by the tag).
 - **Backups accumulate:** delete `origin/backup/<branch>-*` refs a few days after a sync
   proves stable.
-- **Local tag is authoritative; `git fetch` never updates an existing local tag.** On a new
-  machine, fetch it explicitly first:
+- **Local tag is authoritative; `git fetch` never updates an existing local tag.** On any
+  machine that didn't run the last sync, fetch it explicitly first:
   `git fetch origin "refs/tags/rolling-base/<branch>:refs/tags/rolling-base/<branch>" --force`.
   The script's ancestor guard refuses stale/foreign tags before any rebase.
 - **Mistyped SHAs:** never hand-paste; always `git rev-parse` and verify with `git log -1`.
