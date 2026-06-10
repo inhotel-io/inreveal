@@ -891,6 +891,54 @@ const resolveLocationContract: AgentMcpToolContract<AgentToolName.ResolveLocatio
   safety,
 };
 
+const searchPeopleContract: AgentMcpToolContract<AgentToolName.SearchPeople> = {
+  name: AgentToolName.SearchPeople,
+  title: 'Search people',
+  description:
+    'Resolve a person by name to an id. Returns matched (single clear result), ambiguous (up to 5 candidate people), or not_found. Scrubbed: id, name, thumbnail asset id — no face data.',
+  usage:
+    'Use when a user refers to a person by name and you need their person id. If the result is ambiguous, present the choices to the user and ask them to pick one. If not_found, tell the user the person was not recognised and ask for a more specific name.',
+  argumentModes: [
+    {
+      name: 'search-by-name',
+      description: 'Search for a person by name string.',
+      requiredFields: ['name'],
+      forbiddenFields: ['toolCallId'],
+      whenToUse: 'Use when you have a person name from the user that needs to be resolved to a person id.',
+    },
+    {
+      name: 'approved-retry',
+      description: 'Retry a people search request that Gallery already approved.',
+      requiredFields: ['toolCallId'],
+      forbiddenFields: ['name'],
+      whenToUse: 'Use only after Gallery resumes the assistant from an approved search-people request.',
+    },
+  ],
+  examples: [
+    {
+      name: 'search-alice-matched',
+      description: 'Search for a person named "Alice" — likely returns matched with person id.',
+      arguments: { name: 'Alice' },
+    },
+    {
+      name: 'search-john-ambiguous',
+      description: 'Search for "John" — may return ambiguous if multiple people named John exist.',
+      arguments: { name: 'John' },
+    },
+    approvedRetryExample,
+  ],
+  commonMistakes: [
+    {
+      id: 'search-people-missing-name',
+      match: { messageIncludes: 'Provide a name string' },
+      hint: 'Provide the name field with the person name string to search for.',
+      exampleName: 'search-alice-matched',
+    },
+  ],
+  approvalRetry,
+  safety,
+};
+
 const resolveAssetSearchFiltersContract: AgentMcpToolContract<AgentToolName.ResolveAssetSearchFilters> = {
   name: AgentToolName.ResolveAssetSearchFilters,
   title: 'Resolve asset search filters',
@@ -1290,6 +1338,7 @@ const searchUsersContract: AgentMcpToolContract<AgentToolName.SearchUsers> = {
 
 const readToolContracts: AgentMcpReadToolContract[] = [
   resolveLocationContract,
+  searchPeopleContract,
   resolveAssetSearchFiltersContract,
   searchAssetsContract,
   findTripCandidatesContract,

@@ -717,6 +717,7 @@
   "assistant_agent_tool_name_resolveLocation": "Resolve location",
   "assistant_agent_tool_name_reviseProposedOperations": "Revise proposed operations",
   "assistant_agent_tool_name_searchAssets": "Search assets",
+  "assistant_agent_tool_name_searchPeople": "Search people",
   "assistant_agent_tool_name_searchUsers": "Search users",
   "assistant_agent_tool_name_summarizePlan": "Summarize plan",
   "assistant_agent_tool_status_completed": "Completed",
