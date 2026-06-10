@@ -1,12 +1,3 @@
-const { authenticate, getFormatter } = vi.hoisted(() => ({
-  authenticate: vi.fn(),
-  getFormatter: vi.fn(),
-}));
-
-vi.mock('$lib/utils/auth', () => ({ authenticate }));
-vi.mock('$lib/utils/i18n', () => ({ getFormatter }));
-
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import type { AgentSessionResponseDto } from '@immich/sdk';
 import {
   AgentApprovalMode,
@@ -16,7 +7,16 @@ import {
   AgentSessionStatus,
   ProviderType,
 } from '@immich/sdk';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { load } from './+page';
+
+const { authenticate, getFormatter } = vi.hoisted(() => ({
+  authenticate: vi.fn(),
+  getFormatter: vi.fn(),
+}));
+
+vi.mock('$lib/utils/auth', () => ({ authenticate }));
+vi.mock('$lib/utils/i18n', () => ({ getFormatter }));
 
 const runnerStatus = {
   configured: false,

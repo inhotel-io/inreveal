@@ -127,7 +127,9 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.validationError([{ path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string }]),
+        factory.responses.validationError([
+          { path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string },
+        ]),
       );
     });
 
@@ -138,7 +140,9 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.validationError([{ path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string }]),
+        factory.responses.validationError([
+          { path: expect.arrayContaining(['content', 'blocks', 0]) as never, message: expect.any(String) as string },
+        ]),
       );
     });
 
@@ -156,7 +160,9 @@ describe(AgentMessageController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.validationError([{ path: ['content'], message: expect.stringContaining('32 KiB') as string }]),
+        factory.responses.validationError([
+          { path: ['content'], message: expect.stringContaining('32 KiB') as string },
+        ]),
       );
     });
   });

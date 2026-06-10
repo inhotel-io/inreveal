@@ -105,7 +105,10 @@ describe(AgentProviderCredentialController.name, () => {
       expect(status).toBe(400);
       expect(result).toEqual(
         factory.responses.validationError([
-          { path: expect.any(Array) as never, message: expect.stringContaining('baseUrl is required for openai-compatible providers') as string },
+          {
+            path: expect.any(Array) as never,
+            message: expect.stringContaining('baseUrl is required for openai-compatible providers') as string,
+          },
         ]),
       );
     });
@@ -118,7 +121,9 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.validationError([{ path: ['secret'], message: expect.stringContaining('Invalid input') as string }]),
+        factory.responses.validationError([
+          { path: ['secret'], message: expect.stringContaining('Invalid input') as string },
+        ]),
       );
     });
 
@@ -131,7 +136,9 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.validationError([{ path: ['label'], message: expect.stringContaining('Too small') as string }]),
+        factory.responses.validationError([
+          { path: ['label'], message: expect.stringContaining('Too small') as string },
+        ]),
       );
     });
   });

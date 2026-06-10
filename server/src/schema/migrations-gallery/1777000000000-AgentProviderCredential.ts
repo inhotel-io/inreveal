@@ -21,9 +21,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     )
   `.execute(db);
 
-  await sql`CREATE INDEX "agent_provider_credential_userId_idx" ON "agent_provider_credential" ("userId")`.execute(
-    db,
-  );
+  await sql`CREATE INDEX "agent_provider_credential_userId_idx" ON "agent_provider_credential" ("userId")`.execute(db);
   await sql`CREATE INDEX "agent_provider_credential_updateId_idx" ON "agent_provider_credential" ("updateId")`.execute(
     db,
   );

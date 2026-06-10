@@ -192,7 +192,7 @@ limit
   $13
 offset
   $14
-rollback
+commit
 
 -- SearchRepository.getSmartSearchFacets
 begin
@@ -232,7 +232,548 @@ drop as (
     and (smart_search.embedding <=> $5) <= $6
     and "smart_search"."embedding" is not null
 )
-rollback
+create index smart_search_facet_candidates_asset_id_idx on smart_search_facet_candidates ("id")
+select
+  count(*) as "count"
+from
+  (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."country" = $6
+      and "asset_exif"."make" = $7
+      and "asset_exif"."rating" >= $8
+  ) as "filtered"
+with
+  "asset" as (
+    select
+      date_trunc('MONTH', "localDateTime" AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' as "timeBucket"
+    from
+      "asset"
+    where
+      "asset"."id" in (
+        select
+          "asset"."id"
+        from
+          "asset"
+          inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+          inner join (
+            select
+              "assetId"
+            from
+              "tag_asset"
+              inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+            where
+              "tag_closure"."id_ancestor" = any ($1::uuid[])
+            group by
+              "assetId"
+            having
+              count(distinct "tag_closure"."id_ancestor") >= $2
+          ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+        where
+          "asset"."id" in (
+            select
+              "candidates"."id"
+            from
+              smart_search_facet_candidates as "candidates"
+          )
+          and "asset"."type" = $3
+          and "asset_exif"."country" = $4
+          and "asset_exif"."make" = $5
+          and "asset_exif"."rating" >= $6
+      )
+  )
+select
+  ("timeBucket" AT TIME ZONE 'UTC')::date::text as "timeBucket",
+  count(*) as "count"
+from
+  "asset"
+group by
+  "timeBucket"
+order by
+  "timeBucket" desc
+select distinct
+  "country"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."make" = $6
+      and "asset_exif"."rating" >= $7
+  )
+  and "country" is not null
+  and "country" != $8
+order by
+  "country"
+select distinct
+  "city"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."country" = $6
+      and "asset_exif"."make" = $7
+      and "asset_exif"."rating" >= $8
+  )
+  and "city" is not null
+  and "city" != $9
+order by
+  "city"
+select distinct
+  "make"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."country" = $6
+      and "asset_exif"."rating" >= $7
+  )
+  and "make" is not null
+  and "make" != $8
+order by
+  "make"
+select distinct
+  "model"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."country" = $6
+      and "asset_exif"."make" = $7
+      and "asset_exif"."rating" >= $8
+  )
+  and "model" is not null
+  and "model" != $9
+order by
+  "model"
+select distinct
+  "tag"."id",
+  "tag"."value"
+from
+  "tag"
+  inner join "tag_asset" on "tag"."id" = "tag_asset"."tagId"
+where
+  "tag_asset"."assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $1
+      and "asset"."fileCreatedAt" <= $2
+      and "asset"."type" = $3
+      and "asset_exif"."country" = $4
+      and "asset_exif"."make" = $5
+      and "asset_exif"."rating" >= $6
+  )
+order by
+  "tag"."value"
+WITH
+  filtered_assets AS (
+    (
+      select
+        "asset"."id"
+      from
+        "asset"
+        inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+        inner join (
+          select
+            "assetId"
+          from
+            "tag_asset"
+            inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+          where
+            "tag_closure"."id_ancestor" = any ($1::uuid[])
+          group by
+            "assetId"
+          having
+            count(distinct "tag_closure"."id_ancestor") >= $2
+        ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+      where
+        "asset"."id" in (
+          select
+            "candidates"."id"
+          from
+            smart_search_facet_candidates as "candidates"
+        )
+        and "asset"."fileCreatedAt" >= $3
+        and "asset"."fileCreatedAt" <= $4
+        and "asset"."type" = $5
+        and "asset_exif"."country" = $6
+        and "asset_exif"."make" = $7
+        and "asset_exif"."rating" >= $8
+    )
+  ),
+  identity_faces AS (
+    SELECT DISTINCT
+      face_identity_face."identityId"
+    FROM
+      face_identity_face
+      INNER JOIN asset_face ON asset_face.id = face_identity_face."assetFaceId"
+      INNER JOIN filtered_assets ON filtered_assets.id = asset_face."assetId"
+    WHERE
+      asset_face."deletedAt" IS NULL
+      AND asset_face."isVisible" = true
+  ),
+  profiles AS (
+    SELECT
+      'user-person'::text AS "profileType",
+      person.id AS "profileId",
+      NULL::uuid AS "spaceId",
+      person."identityId",
+      person.name,
+      person."isHidden",
+      person."updatedAt",
+      0 AS "profileRank"
+    FROM
+      person
+    WHERE
+      person."ownerId" = $9
+      AND person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          identity_faces
+        WHERE
+          identity_faces."identityId" = person."identityId"
+      )
+    UNION ALL
+    SELECT
+      'space-person'::text AS "profileType",
+      shared_space_person.id AS "profileId",
+      shared_space_person."spaceId",
+      shared_space_person."identityId",
+      COALESCE(
+        NULLIF(shared_space_person_alias.alias, ''),
+        shared_space_person.name,
+        ''
+      ) AS name,
+      shared_space_person."isHidden",
+      shared_space_person."updatedAt",
+      CASE
+        WHEN NULLIF(shared_space_person_alias.alias, '') IS NULL THEN 2
+        ELSE 1
+      END AS "profileRank"
+    FROM
+      shared_space_person
+      LEFT JOIN shared_space_person_alias ON shared_space_person_alias."personId" = shared_space_person.id
+      AND shared_space_person_alias."userId" = $10
+    WHERE
+      shared_space_person."spaceId" = any ($11::uuid[])
+      AND shared_space_person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          identity_faces
+        WHERE
+          identity_faces."identityId" = shared_space_person."identityId"
+      )
+  ),
+  ranked_profiles AS (
+    SELECT
+      profiles.*,
+      row_number() OVER (
+        PARTITION BY
+          profiles."identityId"
+        ORDER BY
+          NULLIF(profiles.name, '') IS NULL,
+          profiles."profileRank",
+          lower(profiles.name),
+          profiles."updatedAt" DESC,
+          profiles."profileId"
+      ) AS display_rn,
+      row_number() OVER (
+        PARTITION BY
+          profiles."identityId"
+        ORDER BY
+          CASE
+            WHEN profiles."profileType" = 'user-person' THEN 0
+            ELSE profiles."profileRank"
+          END,
+          NULLIF(profiles.name, '') IS NULL,
+          lower(profiles.name),
+          profiles."updatedAt" DESC,
+          profiles."profileId"
+      ) AS primary_rn
+    FROM
+      profiles
+    WHERE
+      profiles."isHidden" = false
+  )
+SELECT
+  CASE
+    WHEN primary_profiles."profileType" = 'space-person' THEN 'space-person:' || primary_profiles."profileId"::text
+    ELSE 'person:' || primary_profiles."profileId"::text
+  END AS id,
+  COALESCE(
+    NULLIF(display_profiles.name, ''),
+    primary_profiles.name,
+    ''
+  ) AS name,
+  primary_profiles."profileType",
+  primary_profiles."profileId",
+  primary_profiles."spaceId"
+FROM
+  ranked_profiles AS primary_profiles
+  INNER JOIN ranked_profiles AS display_profiles ON display_profiles."identityId" = primary_profiles."identityId"
+  AND display_profiles.display_rn = 1
+WHERE
+  primary_profiles.primary_rn = 1
+ORDER BY
+  NULLIF(
+    COALESCE(
+      NULLIF(display_profiles.name, ''),
+      primary_profiles.name,
+      ''
+    ),
+    ''
+  ) IS NULL,
+  lower(
+    COALESCE(
+      NULLIF(display_profiles.name, ''),
+      primary_profiles.name,
+      ''
+    )
+  ),
+  primary_profiles."profileId"
+select distinct
+  "rating"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset"."type" = $5
+      and "asset_exif"."country" = $6
+      and "asset_exif"."make" = $7
+  )
+  and "rating" is not null
+  and "rating" > $8
+order by
+  "rating"
+select distinct
+  "type"
+from
+  "asset"
+where
+  "id" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+      inner join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+      inner join (
+        select
+          "assetId"
+        from
+          "tag_asset"
+          inner join "tag_closure" on "tag_asset"."tagId" = "tag_closure"."id_descendant"
+        where
+          "tag_closure"."id_ancestor" = any ($1::uuid[])
+        group by
+          "assetId"
+        having
+          count(distinct "tag_closure"."id_ancestor") >= $2
+      ) as "has_tags" on "has_tags"."assetId" = "asset"."id"
+    where
+      "asset"."id" in (
+        select
+          "candidates"."id"
+        from
+          smart_search_facet_candidates as "candidates"
+      )
+      and "asset"."fileCreatedAt" >= $3
+      and "asset"."fileCreatedAt" <= $4
+      and "asset_exif"."country" = $5
+      and "asset_exif"."make" = $6
+      and "asset_exif"."rating" >= $7
+  )
+order by
+  "type"
+commit
 
 -- SearchRepository.searchFaces
 begin
@@ -263,7 +804,7 @@ from
   "cte"
 where
   "cte"."distance" <= $4
-rollback
+commit
 
 -- SearchRepository.searchPlaces
 select
@@ -436,6 +977,104 @@ order by
 
 -- SearchRepository.getFilterSuggestions (identity-filter-suggestions)
 select distinct
+  "country"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."visibility" = $1
+      and "asset"."deletedAt" is null
+      and (
+        "asset"."ownerId" = any ($2::uuid[])
+        or exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($4::uuid[])
+        )
+      )
+      and "asset"."fileCreatedAt" >= $5
+      and exists (
+        select
+        from
+          "asset_face"
+          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
+        where
+          "asset_face"."assetId" = "asset"."id"
+          and "asset_face"."deletedAt" is null
+          and "asset_face"."isVisible" is true
+          and "face_identity_face"."identityId" = $6::uuid
+      )
+  )
+  and "country" is not null
+  and "country" != $7
+order by
+  "country"
+select distinct
+  "make"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."visibility" = $1
+      and "asset"."deletedAt" is null
+      and (
+        "asset"."ownerId" = any ($2::uuid[])
+        or exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($4::uuid[])
+        )
+      )
+      and "asset"."fileCreatedAt" >= $5
+      and exists (
+        select
+        from
+          "asset_face"
+          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
+        where
+          "asset_face"."assetId" = "asset"."id"
+          and "asset_face"."deletedAt" is null
+          and "asset_face"."isVisible" is true
+          and "face_identity_face"."identityId" = $6::uuid
+      )
+  )
+  and "make" is not null
+  and "make" != $7
+order by
+  "make"
+select distinct
   "tag"."id",
   "tag"."value"
 from
@@ -484,3 +1123,276 @@ where
   )
 order by
   "tag"."value"
+WITH
+  filtered_assets AS (
+    (
+      select
+        "asset"."id"
+      from
+        "asset"
+      where
+        "asset"."visibility" = $1
+        and "asset"."deletedAt" is null
+        and (
+          "asset"."ownerId" = any ($2::uuid[])
+          or exists (
+            select
+            from
+              "shared_space_asset"
+            where
+              "shared_space_asset"."assetId" = "asset"."id"
+              and "shared_space_asset"."spaceId" = any ($3::uuid[])
+          )
+          or exists (
+            select
+            from
+              "shared_space_library"
+            where
+              "shared_space_library"."libraryId" = "asset"."libraryId"
+              and "shared_space_library"."spaceId" = any ($4::uuid[])
+          )
+        )
+        and "asset"."fileCreatedAt" >= $5
+    )
+  ),
+  identity_faces AS (
+    SELECT DISTINCT
+      face_identity_face."identityId"
+    FROM
+      face_identity_face
+      INNER JOIN asset_face ON asset_face.id = face_identity_face."assetFaceId"
+      INNER JOIN filtered_assets ON filtered_assets.id = asset_face."assetId"
+    WHERE
+      asset_face."deletedAt" IS NULL
+      AND asset_face."isVisible" = true
+  ),
+  profiles AS (
+    SELECT
+      'user-person'::text AS "profileType",
+      person.id AS "profileId",
+      NULL::uuid AS "spaceId",
+      person."identityId",
+      person.name,
+      person."isHidden",
+      person."updatedAt",
+      0 AS "profileRank"
+    FROM
+      person
+    WHERE
+      person."ownerId" = $6
+      AND person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          identity_faces
+        WHERE
+          identity_faces."identityId" = person."identityId"
+      )
+    UNION ALL
+    SELECT
+      'space-person'::text AS "profileType",
+      shared_space_person.id AS "profileId",
+      shared_space_person."spaceId",
+      shared_space_person."identityId",
+      COALESCE(
+        NULLIF(shared_space_person_alias.alias, ''),
+        shared_space_person.name,
+        ''
+      ) AS name,
+      shared_space_person."isHidden",
+      shared_space_person."updatedAt",
+      CASE
+        WHEN NULLIF(shared_space_person_alias.alias, '') IS NULL THEN 2
+        ELSE 1
+      END AS "profileRank"
+    FROM
+      shared_space_person
+      LEFT JOIN shared_space_person_alias ON shared_space_person_alias."personId" = shared_space_person.id
+      AND shared_space_person_alias."userId" = $7
+    WHERE
+      shared_space_person."spaceId" = any ($8::uuid[])
+      AND shared_space_person."identityId" IS NOT NULL
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          shared_space_person_face
+          INNER JOIN asset_face AS profile_face ON profile_face.id = shared_space_person_face."assetFaceId"
+        WHERE
+          shared_space_person_face."personId" = shared_space_person.id
+          AND profile_face."deletedAt" IS NULL
+          AND profile_face."isVisible" = true
+      )
+      AND EXISTS (
+        SELECT
+          1
+        FROM
+          identity_faces
+        WHERE
+          identity_faces."identityId" = shared_space_person."identityId"
+      )
+  ),
+  ranked_profiles AS (
+    SELECT
+      profiles.*,
+      row_number() OVER (
+        PARTITION BY
+          profiles."identityId"
+        ORDER BY
+          NULLIF(profiles.name, '') IS NULL,
+          profiles."profileRank",
+          lower(profiles.name),
+          profiles."updatedAt" DESC,
+          profiles."profileId"
+      ) AS display_rn,
+      row_number() OVER (
+        PARTITION BY
+          profiles."identityId"
+        ORDER BY
+          CASE
+            WHEN profiles."profileType" = 'user-person' THEN 0
+            ELSE profiles."profileRank"
+          END,
+          NULLIF(profiles.name, '') IS NULL,
+          lower(profiles.name),
+          profiles."updatedAt" DESC,
+          profiles."profileId"
+      ) AS primary_rn
+    FROM
+      profiles
+    WHERE
+      profiles."isHidden" = false
+  )
+SELECT
+  CASE
+    WHEN primary_profiles."profileType" = 'space-person' THEN 'space-person:' || primary_profiles."profileId"::text
+    ELSE 'person:' || primary_profiles."profileId"::text
+  END AS id,
+  COALESCE(
+    NULLIF(display_profiles.name, ''),
+    primary_profiles.name,
+    ''
+  ) AS name,
+  primary_profiles."profileType",
+  primary_profiles."profileId",
+  primary_profiles."spaceId"
+FROM
+  ranked_profiles AS primary_profiles
+  INNER JOIN ranked_profiles AS display_profiles ON display_profiles."identityId" = primary_profiles."identityId"
+  AND display_profiles.display_rn = 1
+WHERE
+  primary_profiles.primary_rn = 1
+ORDER BY
+  NULLIF(
+    COALESCE(
+      NULLIF(display_profiles.name, ''),
+      primary_profiles.name,
+      ''
+    ),
+    ''
+  ) IS NULL,
+  lower(
+    COALESCE(
+      NULLIF(display_profiles.name, ''),
+      primary_profiles.name,
+      ''
+    )
+  ),
+  primary_profiles."profileId"
+select distinct
+  "rating"
+from
+  "asset_exif"
+where
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."visibility" = $1
+      and "asset"."deletedAt" is null
+      and (
+        "asset"."ownerId" = any ($2::uuid[])
+        or exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($4::uuid[])
+        )
+      )
+      and "asset"."fileCreatedAt" >= $5
+      and exists (
+        select
+        from
+          "asset_face"
+          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
+        where
+          "asset_face"."assetId" = "asset"."id"
+          and "asset_face"."deletedAt" is null
+          and "asset_face"."isVisible" is true
+          and "face_identity_face"."identityId" = $6::uuid
+      )
+  )
+  and "rating" is not null
+  and "rating" > $7
+order by
+  "rating"
+select distinct
+  "type"
+from
+  "asset"
+where
+  "id" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."visibility" = $1
+      and "asset"."deletedAt" is null
+      and (
+        "asset"."ownerId" = any ($2::uuid[])
+        or exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($4::uuid[])
+        )
+      )
+      and "asset"."fileCreatedAt" >= $5
+      and exists (
+        select
+        from
+          "asset_face"
+          inner join "face_identity_face" on "face_identity_face"."assetFaceId" = "asset_face"."id"
+        where
+          "asset_face"."assetId" = "asset"."id"
+          and "asset_face"."deletedAt" is null
+          and "asset_face"."isVisible" is true
+          and "face_identity_face"."identityId" = $6::uuid
+      )
+  )
+order by
+  "type"

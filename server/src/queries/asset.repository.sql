@@ -99,7 +99,7 @@ delete from "asset_metadata"
 where
   "assetId" = $1
   and "key" = $2
-rollback
+commit
 
 -- AssetRepository.getByDayOfYear
 with
@@ -922,8 +922,6 @@ from
 where
   "ownerId" = $1::uuid
   and "checksum" in ($2)
-
--- AssetRepository.getUploadAssetIdByChecksum
 select
   "assetId" as "id",
   "checksum"
@@ -932,6 +930,8 @@ from
 where
   "ownerId" = $1::uuid
   and "checksum" in ($2)
+
+-- AssetRepository.getUploadAssetIdByChecksum
 select
   "id"
 from
@@ -940,6 +940,15 @@ where
   "ownerId" = $1::uuid
   and "checksum" = $2
   and "libraryId" is null
+limit
+  $3
+select
+  "assetId"
+from
+  "asset_duplicate_checksum"
+where
+  "ownerId" = $1::uuid
+  and "checksum" = $2
 limit
   $3
 

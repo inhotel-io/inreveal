@@ -1,7 +1,7 @@
 import { Kysely, sql } from 'kysely';
 import { AgentApprovalMode, AgentPermissionPreset, AgentProviderType, AgentSessionStatus } from 'src/enum';
 import { DB } from 'src/schema';
-import { up as backfillAgentReadSessionLimits } from 'src/schema/migrations/1778910000000-BackfillAgentReadSessionLimits';
+import { up as backfillAgentReadSessionLimits } from 'src/schema/migrations-gallery/1778910000000-BackfillAgentReadSessionLimits';
 import { AgentPermissionPlanSnapshot } from 'src/types/agent-session.types';
 import { SyncTestContext } from 'test/medium.factory';
 import { newUuid } from 'test/small.factory';
