@@ -5,26 +5,10 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:immich_mobile/domain/models/setting.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
-import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 
 const timelineGroupingSelectorGroups = <GroupAssetsBy>[GroupAssetsBy.year, GroupAssetsBy.month, GroupAssetsBy.day];
-
-GroupAssetsBy normalizeTimelineGrouping(GroupAssetsBy groupBy) {
-  return switch (groupBy) {
-    GroupAssetsBy.year || GroupAssetsBy.month || GroupAssetsBy.day => groupBy,
-    GroupAssetsBy.auto || GroupAssetsBy.none => GroupAssetsBy.day,
-  };
-}
-
-GroupAssetsBy timelineGroupingFromSettingIndex(int index) {
-  if (index < 0 || index >= GroupAssetsBy.values.length) {
-    return GroupAssetsBy.day;
-  }
-
-  return normalizeTimelineGrouping(GroupAssetsBy.values[index]);
-}
 
 class TimelineGroupingSelector extends ConsumerWidget {
   const TimelineGroupingSelector({super.key, this.enabled = true, this.bare = false}) : compact = false;
@@ -54,9 +38,7 @@ class TimelineGroupingSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(
-      settingsProvider.select((settings) => timelineGroupingFromSettingIndex(settings.get(Setting.groupAssetsBy))),
-    );
+    final selected = ref.watch(timelineGroupingProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
@@ -66,7 +48,7 @@ class TimelineGroupingSelector extends ConsumerWidget {
         enabled: enabled,
         onSelected: (groupBy) async {
           unawaited(HapticFeedback.selectionClick());
-          await ref.read(settingsProvider.notifier).set(Setting.groupAssetsBy, groupBy.index);
+          await ref.read(timelineGroupingProvider.notifier).set(groupBy);
         },
       );
     }
@@ -104,7 +86,7 @@ class TimelineGroupingSelector extends ConsumerWidget {
                           enabled: enabled,
                           onTap: () async {
                             unawaited(HapticFeedback.selectionClick());
-                            await ref.read(settingsProvider.notifier).set(Setting.groupAssetsBy, groupBy.index);
+                            await ref.read(timelineGroupingProvider.notifier).set(groupBy);
                           },
                         ),
                       ),

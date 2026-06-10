@@ -54,6 +54,7 @@ void main() {
     await EasyLocalization.ensureInitialized();
     await initializeDateFormatting('en');
     registerFallbackValue(const TimelineTemporalScope.none());
+    registerFallbackValue(GroupAssetsBy.day);
     db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
     await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
   });
@@ -153,7 +154,14 @@ TimelineService _service() {
 Future<void> _pumpTimeline(WidgetTester tester, {required bool withGroupingPill, Widget? bottomSheet}) async {
   final service = _service();
   final factory = _MockTimelineFactory();
-  when(() => factory.main(any(), any(), temporalScope: any(named: 'temporalScope'))).thenReturn(service);
+  when(
+    () => factory.main(
+      any(),
+      any(),
+      groupBy: any(named: 'groupBy'),
+      temporalScope: any(named: 'temporalScope'),
+    ),
+  ).thenReturn(service);
 
   final user = _testUser();
   final userService = _MockUserService();

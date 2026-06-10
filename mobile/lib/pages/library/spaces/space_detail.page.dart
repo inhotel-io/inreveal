@@ -285,8 +285,9 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     final isRemoteSyncing = ref.watch(syncStatusProvider.select((s) => s.isRemoteSyncing));
 
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) =>
-          ref.watch(timelineFactoryProvider).sharedSpace(spaceId: widget.spaceId, temporalScope: scope),
+      timelineServiceBuilder: (ref, scope, groupBy) => ref
+          .watch(timelineFactoryProvider)
+          .sharedSpace(spaceId: widget.spaceId, groupBy: groupBy, temporalScope: scope),
       child: Timeline(
         withGroupingPill: true,
         topSliverWidget: const SyncStatusBannerSliver(),

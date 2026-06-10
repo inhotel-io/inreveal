@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
-import 'package:immich_mobile/domain/models/setting.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
@@ -65,9 +64,16 @@ TimelineService _service(List<Bucket> buckets) {
   required TimelineService dayService,
 }) {
   final factory = _MockTimelineFactory();
-  // Favorites page uses factory.favorite(userId, temporalScope: scope)
-  when(() => factory.favorite(any(), temporalScope: any(named: 'temporalScope'))).thenAnswer((_) {
-    final groupBy = GroupAssetsBy.values[Store.get(StoreKey.groupAssetsBy, Setting.groupAssetsBy.defaultValue)];
+  // Favorites page uses factory.favorite(userId, groupBy: groupBy, temporalScope: scope);
+  // the grouping is now an explicit route-local parameter, so pick the service from it.
+  when(
+    () => factory.favorite(
+      any(),
+      groupBy: any(named: 'groupBy'),
+      temporalScope: any(named: 'temporalScope'),
+    ),
+  ).thenAnswer((invocation) {
+    final groupBy = invocation.namedArguments[const Symbol('groupBy')] as GroupAssetsBy? ?? GroupAssetsBy.day;
     return switch (groupBy) {
       GroupAssetsBy.year => yearService,
       GroupAssetsBy.month => monthService,
@@ -96,6 +102,7 @@ void main() {
     await EasyLocalization.ensureInitialized();
     await initializeDateFormatting('en');
     registerFallbackValue(const TimelineTemporalScope.none());
+    registerFallbackValue(GroupAssetsBy.day);
     db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
     await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
   });
@@ -209,7 +216,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
+    // Grouping is route-local on detail timelines: the persisted setting is untouched.
+    expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
     // The timeline actually regroups: month overview cards render from the month service.
     expect(find.byType(TimelineOverviewCard), findsWidgets);
   });

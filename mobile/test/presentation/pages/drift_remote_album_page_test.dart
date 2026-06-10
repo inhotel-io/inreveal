@@ -87,6 +87,7 @@ void main() {
     await EasyLocalization.ensureInitialized();
     await initializeDateFormatting('en');
     registerFallbackValue(const TimelineTemporalScope.none());
+    registerFallbackValue(GroupAssetsBy.day);
     db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
     await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
   });
@@ -133,6 +134,7 @@ void main() {
     when(
       () => factory.remoteAlbum(
         albumId: any(named: 'albumId'),
+        groupBy: any(named: 'groupBy'),
         temporalScope: any(named: 'temporalScope'),
       ),
     ).thenReturn(service);

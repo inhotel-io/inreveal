@@ -47,13 +47,13 @@ class _DriftLockedFolderPageState extends ConsumerState<DriftLockedFolderPage> w
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) {
+      timelineServiceBuilder: (ref, scope, groupBy) {
         final user = ref.watch(currentUserProvider);
         if (user == null) {
           throw Exception('User must be logged in to access locked folder');
         }
 
-        return ref.watch(timelineFactoryProvider).lockedFolder(user.id, temporalScope: scope);
+        return ref.watch(timelineFactoryProvider).lockedFolder(user.id, groupBy: groupBy, temporalScope: scope);
       },
       child: _showOverlay
           ? const SizedBox()

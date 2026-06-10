@@ -22,13 +22,13 @@ class DriftTrashPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) {
+      timelineServiceBuilder: (ref, scope, groupBy) {
         final user = ref.watch(currentUserProvider);
         if (user == null) {
           throw Exception('User must be logged in to access trash');
         }
 
-        return ref.watch(timelineFactoryProvider).trash(user.id, temporalScope: scope);
+        return ref.watch(timelineFactoryProvider).trash(user.id, groupBy: groupBy, temporalScope: scope);
       },
       child: Timeline(
         withGroupingPill: true,

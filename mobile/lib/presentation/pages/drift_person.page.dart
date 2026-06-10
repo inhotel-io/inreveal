@@ -76,13 +76,13 @@ class _DriftPersonPageState extends ConsumerState<DriftPersonPage> {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) {
+      timelineServiceBuilder: (ref, scope, groupBy) {
         final user = ref.watch(currentUserProvider);
         if (user == null) {
           throw Exception('User must be logged in to view person timeline');
         }
 
-        return ref.watch(timelineFactoryProvider).person(user.id, _person.id, temporalScope: scope);
+        return ref.watch(timelineFactoryProvider).person(user.id, _person.id, groupBy: groupBy, temporalScope: scope);
       },
       child: Timeline(
         withGroupingPill: true,

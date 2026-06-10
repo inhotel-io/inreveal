@@ -17,13 +17,13 @@ class DriftArchivePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) {
+      timelineServiceBuilder: (ref, scope, groupBy) {
         final user = ref.watch(currentUserProvider);
         if (user == null) {
           throw Exception('User must be logged in to access archive');
         }
 
-        return ref.watch(timelineFactoryProvider).archive(user.id, temporalScope: scope);
+        return ref.watch(timelineFactoryProvider).archive(user.id, groupBy: groupBy, temporalScope: scope);
       },
       child: Timeline(
         withGroupingPill: true,

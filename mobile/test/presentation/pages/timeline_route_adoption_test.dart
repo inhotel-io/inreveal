@@ -72,10 +72,6 @@ const _adoptedRouteCases = [
   _AdoptedRouteCase(label: 'local album', constraint: 'local-album:local-1', origin: TimelineOrigin.localAlbum),
 ];
 
-GroupAssetsBy _storedGroupBy() {
-  return GroupAssetsBy.values[Store.get(StoreKey.groupAssetsBy, GroupAssetsBy.day.index)];
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -104,7 +100,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           home: TimelineRouteScope(
-            timelineServiceBuilder: (ref, scope) {
+            timelineServiceBuilder: (ref, scope, groupBy) {
               seenScopes.add(scope);
               return TimelineService((
                 bucketSource: () => const Stream<List<Bucket>>.empty(),
@@ -171,6 +167,8 @@ void main() {
 
     for (final route in _adoptedRouteCases) {
       testWidgets('${route.label} keeps route constraints during year and month zoom', (tester) async {
+        // The persisted grouping is seeded to Years to prove detail routes IGNORE it
+        // (they open at All) and never write it back.
         await Store.put(StoreKey.groupAssetsBy, GroupAssetsBy.year.index);
         final calls = <_ObservedRouteCall>[];
 
@@ -178,8 +176,8 @@ void main() {
           ProviderScope(
             child: MaterialApp(
               home: TimelineRouteScope(
-                timelineServiceBuilder: (ref, scope) {
-                  calls.add(_ObservedRouteCall(constraint: route.constraint, scope: scope, groupBy: _storedGroupBy()));
+                timelineServiceBuilder: (ref, scope, groupBy) {
+                  calls.add(_ObservedRouteCall(constraint: route.constraint, scope: scope, groupBy: groupBy));
                   return _emptyService(route.origin);
                 },
                 child: const CustomScrollView(slivers: [SliverToBoxAdapter(child: TimelineGroupingSelector())]),
@@ -193,8 +191,18 @@ void main() {
 
         expect(calls.single.constraint, route.constraint);
         expect(calls.single.scope, const TimelineTemporalScope.none());
-        expect(calls.single.groupBy, GroupAssetsBy.year);
+        expect(calls.single.groupBy, GroupAssetsBy.day, reason: 'route opens at All regardless of the stored Years');
         expect(find.byType(TimelineGroupingSelector), findsOneWidget);
+
+        // Drive the route to Years through the selector (route-local, never persisted).
+        calls.clear();
+        await tester.tap(find.byKey(const Key('timeline-grouping-year')));
+        await tester.pump();
+        ref.read(timelineServiceProvider);
+
+        expect(calls.single.constraint, route.constraint);
+        expect(calls.single.scope, const TimelineTemporalScope.none());
+        expect(calls.single.groupBy, GroupAssetsBy.year);
 
         calls.clear();
         await tester.runAsync(
@@ -205,7 +213,6 @@ void main() {
         ref.read(timelineServiceProvider);
         await tester.pump();
 
-        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.month.index);
         expect(calls.single.constraint, route.constraint);
         expect(calls.single.scope, const TimelineTemporalScope.none());
         expect(calls.single.groupBy, GroupAssetsBy.month);
@@ -221,12 +228,14 @@ void main() {
         ref.read(timelineServiceProvider);
         await tester.pump();
 
-        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.day.index);
         expect(calls.single.constraint, route.constraint);
         expect(calls.single.scope, const TimelineTemporalScope.none());
         expect(calls.single.groupBy, GroupAssetsBy.day);
         expect(ref.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
         expect(find.text('Mar 2025'), findsNothing);
+
+        // The persisted setting was never written: it still holds the seeded Years.
+        expect(Store.get(StoreKey.groupAssetsBy), GroupAssetsBy.year.index);
       });
     }
   });

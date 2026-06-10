@@ -18,8 +18,8 @@ class LocalTimelinePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) =>
-          ref.watch(timelineFactoryProvider).localAlbum(albumId: album.id, temporalScope: scope),
+      timelineServiceBuilder: (ref, scope, groupBy) =>
+          ref.watch(timelineFactoryProvider).localAlbum(albumId: album.id, groupBy: groupBy, temporalScope: scope),
       child: Timeline(
         withGroupingPill: true,
         appBar: MesmerizingSliverAppBar(title: album.name),

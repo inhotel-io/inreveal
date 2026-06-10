@@ -32,6 +32,7 @@ import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.da
 import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 import 'package:immich_mobile/widgets/common/immich_loading_indicator.dart';
 import 'package:immich_mobile/widgets/common/immich_sliver_app_bar.dart';
@@ -210,7 +211,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
       if (mounted) _requestScrollDrain();
     });
 
-    ref.listenManual(settingsProvider.select((settings) => settings.get(Setting.groupAssetsBy)), _onGroupingChanged);
+    ref.listenManual(timelineGroupingProvider, _onGroupingChanged);
   }
 
   @override
@@ -271,7 +272,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
   // When the grouping granularity changes (e.g. via the grouping selector),
   // anchor the rebuilt timeline to the date currently at the top of the viewport
   // so the user keeps their place instead of jumping to the most recent content.
-  void _onGroupingChanged(int? previous, int next) {
+  void _onGroupingChanged(GroupAssetsBy? previous, GroupAssetsBy next) {
     if (previous == null || previous == next) {
       return;
     }
@@ -291,7 +292,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
     final anchorNotifier = ref.read(timelineZoomAnchorProvider.notifier);
     final resolved = resolveGroupingChangeAnchorDate(
       topBucketDate: topBucketDate,
-      previousGroupBy: GroupAssetsBy.values[previous],
+      previousGroupBy: previous,
       remembered: anchorNotifier.lastPositionDate,
     );
     anchorNotifier.setDate(resolved);
@@ -437,9 +438,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
       return;
     }
 
-    final activeGroupBy =
-        ref.read(timelineArgsProvider).groupBy ??
-        GroupAssetsBy.values[ref.read(settingsProvider).get(Setting.groupAssetsBy)];
+    final GroupAssetsBy activeGroupBy = ref.read(timelineArgsProvider).groupBy ?? ref.read(timelineGroupingProvider);
     if (activeGroupBy != groupBy) {
       return;
     }
@@ -567,9 +566,8 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> {
             ),
         onData: (segments) {
           _lastRenderedSegments = segments;
-          final activeGroupBy =
-              ref.watch(timelineArgsProvider).groupBy ??
-              GroupAssetsBy.values[ref.watch(settingsProvider).get(Setting.groupAssetsBy)];
+          final GroupAssetsBy activeGroupBy =
+              ref.watch(timelineArgsProvider).groupBy ?? ref.watch(timelineGroupingProvider);
           final zoomAnchor = ref.watch(timelineZoomAnchorProvider);
           _scheduleZoomAnchorResolution(anchor: zoomAnchor, groupBy: activeGroupBy, segments: segments);
           final childCount = (segments.lastOrNull?.lastIndex ?? -1) + 1;

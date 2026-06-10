@@ -25,8 +25,8 @@ class DriftPartnerDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) =>
-          ref.watch(timelineFactoryProvider).remoteAssets(partner.id, temporalScope: scope),
+      timelineServiceBuilder: (ref, scope, groupBy) =>
+          ref.watch(timelineFactoryProvider).remoteAssets(partner.id, groupBy: groupBy, temporalScope: scope),
       child: Timeline(
         withGroupingPill: true,
         appBar: MesmerizingSliverAppBar(title: partner.name, icon: Icons.person_outline),

@@ -18,13 +18,13 @@ class DriftPlaceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope) {
+      timelineServiceBuilder: (ref, scope, groupBy) {
         final user = ref.watch(currentUserProvider);
         if (user == null) {
           throw Exception('User must be logged in to access place');
         }
         final users = ref.watch(timelineUsersProvider).valueOrNull ?? [user.id];
-        return ref.watch(timelineFactoryProvider).place(place, users, user.id, temporalScope: scope);
+        return ref.watch(timelineFactoryProvider).place(place, users, user.id, groupBy: groupBy, temporalScope: scope);
       },
       child: Timeline(
         withGroupingPill: true,
