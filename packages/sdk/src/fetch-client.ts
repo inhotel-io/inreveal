@@ -1,6 +1,6 @@
 /**
  * Immich
- * 2.7.5
+ * 3.0.0
  * DO NOT MODIFY - This file has been generated using oazapfts.
  * See https://www.npmjs.com/package/oazapfts
  */
@@ -73,6 +73,51 @@ export type DatabaseBackupListResponseDto = {
 export type DatabaseBackupUploadDto = {
     /** Database backup file */
     file?: Blob;
+};
+export type FaceRepairRequestDto = {
+    dryRun?: boolean;
+    maxAttributionDistance?: number;
+    maxDistance?: number;
+    maxFlaggedFraction?: number;
+    minFaces?: number;
+    ownerId?: string;
+    personId?: string;
+    voteMargin?: number;
+    voteWindow?: number;
+};
+export type FaceRepairResponseDto = {
+    dryRun: boolean;
+    executed?: {
+        requeued: number;
+        unassigned: number;
+    };
+    mutated: boolean;
+    report: {
+        persons: {
+            eligible: number;
+            flagged: number;
+            flaggedFraction: number;
+            personId: string;
+            reviewOnly: boolean;
+            suspectedOwners: {
+                count: number;
+                ownerPersonId: string;
+            }[];
+        }[];
+        totals: {
+            affectedPersons: number;
+            eligibleFaces: number;
+            flaggedFaces: number;
+            reviewOnlyByReason: {
+                badTarget: number;
+                overCap: number;
+                unAttributable: number;
+            };
+            reviewOnlyFaces: number;
+            reviewOnlyPersons: number;
+            toRepair: number;
+        };
+    };
 };
 export type SetMaintenanceModeDto = {
     action: MaintenanceAction;
@@ -262,6 +307,20 @@ export type UserAdminUpdateDto = {
     /** Storage label */
     storageLabel?: string | null;
 };
+export type CalendarHeatmapResponseDto = {
+    /** Start date in UTC */
+    "from": string;
+    series: {
+        /** Activity count */
+        count: number;
+        /** Date in UTC */
+        date: string;
+    }[];
+    /** End date in UTC */
+    to: string;
+    /** Total activity count over the period */
+    totalCount: number;
+};
 export type AlbumsResponse = {
     defaultAssetOrder: AssetOrder;
 };
@@ -298,6 +357,8 @@ export type MemoriesResponse = {
 export type PeopleResponse = {
     /** Whether people are enabled */
     enabled: boolean;
+    /** People face threshold */
+    minimumFaces?: number;
     /** Whether people appear in web sidebar */
     sidebarWeb: boolean;
 };
@@ -375,6 +436,8 @@ export type MemoriesUpdate = {
 export type PeopleUpdate = {
     /** Whether people are enabled */
     enabled?: boolean;
+    /** People face threshold */
+    minimumFaces?: number;
     /** Whether people appear in web sidebar */
     sidebarWeb?: boolean;
 };
@@ -442,812 +505,6 @@ export type AssetStatsResponseDto = {
     /** Number of videos */
     videos: number;
 };
-export type AgentProviderCredentialResponseDto = {
-    baseUrl: string | null;
-    createdAt: string;
-    defaultModel: string | null;
-    id: string;
-    label: string;
-    lastUsedAt: string | null;
-    models: string[];
-    providerType: ProviderType;
-    updatedAt: string;
-};
-export type AgentProviderCredentialCreateDto = {
-    baseUrl?: string;
-    defaultModel?: string;
-    label: string;
-    models?: string[];
-    providerType: ProviderType;
-    secret: string;
-};
-export type AgentProviderCredentialUpdateDto = {
-    baseUrl?: string | null;
-    defaultModel?: string | null;
-    label?: string;
-    models?: string[];
-    providerType?: ProviderType;
-    secret?: string;
-};
-export type AgentRunnerCapabilitiesDto = {
-    /** Model IDs reported by the runner */
-    models: string[];
-    /** Runner protocol version */
-    protocolVersion: string | null;
-    /** Whether the runner can stream events */
-    streaming: boolean;
-    /** MCP tool or capability identifiers reported by the runner */
-    tools: string[];
-};
-export type AgentRunnerStatusDto = {
-    /** Normalized runner capabilities */
-    capabilities: (AgentRunnerCapabilitiesDto) | null;
-    /** When this status was checked */
-    checkedAt: string;
-    /** Whether a runner endpoint is configured */
-    configured: boolean;
-    /** Whether the configured runner is reachable and healthy */
-    healthy: boolean;
-    reason: AgentRunnerStatusReason;
-    /** Runner version when reported */
-    version: string | null;
-};
-export type AgentCredentialSnapshot = {
-    baseUrl: string | null;
-    defaultModel: string | null;
-    id: string;
-    label: string;
-    models: string[];
-    providerType: AgentProviderType;
-};
-export type AgentInitialContext = {
-    [key: string]: any;
-};
-export type AgentModelSnapshot = {
-    model: string;
-    providerCredentialId: string;
-};
-export type AgentPermissionPlan = {
-    assetScope: {
-        locked: boolean;
-        owned: boolean;
-        sharedSpaces: boolean;
-    };
-    limits: {
-        expiresInMinutes: number | null;
-        maxAssetsPerSession: number;
-        maxAssetsPerToolCall: number;
-        maxOriginalsPerSession?: number;
-        maxOriginalsPerToolCall: number;
-        maxPreviewsPerSession?: number;
-        maxPreviewsPerToolCall: number;
-    };
-    providerExposure: {
-        allowOriginalsForExternalProviders: boolean;
-        metadata: boolean;
-        originals: boolean;
-        previews: boolean;
-    };
-    read: {
-        metadata: boolean;
-        originals: boolean;
-        previews: boolean;
-    };
-    writeScope: {
-        addAssets: boolean;
-        addAssetsToSpaces: boolean;
-        archiveAssets: boolean;
-        createAlbum: boolean;
-        createSpace: boolean;
-        editAssets: boolean;
-        favoriteAssets: boolean;
-        removeAssets: boolean;
-        removeAssetsFromSpaces: boolean;
-        setCover: boolean;
-        tagAssets: boolean;
-        updateDetails: boolean;
-        updateSpaceDetails: boolean;
-    };
-};
-export type AgentRunnerCapabilitiesSnapshot = {
-    [key: string]: any;
-} | null;
-export type AgentSessionResponseDto = {
-    approvalMode: AgentApprovalMode;
-    createdAt: string;
-    credentialSnapshot: AgentCredentialSnapshot;
-    endedAt: string | null;
-    id: string;
-    initialContextSnapshot: AgentInitialContext;
-    modelSnapshot: AgentModelSnapshot;
-    permissionPlanSnapshot: AgentPermissionPlan;
-    permissionPreset: AgentPermissionPreset;
-    providerCredentialId: string | null;
-    runnerCapabilitiesSnapshot: AgentRunnerCapabilitiesSnapshot;
-    runnerEndpoint: string | null;
-    runnerSessionId: string | null;
-    status: AgentSessionStatus;
-    title?: string | null;
-    updatedAt: string;
-};
-export type AgentSessionCreateDto = {
-    approvalMode: AgentApprovalMode;
-    initialContext?: AgentInitialContext;
-    model: string;
-    permissionPlan?: AgentPermissionPlan;
-    permissionPreset: AgentPermissionPreset;
-    providerCredentialId: string;
-    runnerEndpoint?: string | null;
-};
-export type AgentSessionUpdateDto = {
-    title: string | null;
-};
-export type AgentSessionActivityEventCounts = {
-    applied?: number;
-    failed?: number;
-    skipped?: number;
-    total?: number;
-};
-export type AgentSessionActivityEventResponseDto = {
-    counts: (AgentSessionActivityEventCounts) | null;
-    createdAt: string;
-    id: string;
-    kind: Kind;
-    sessionId: string;
-    source: AgentSessionActivityEventSource;
-    status: AgentSessionActivityEventStatus;
-    summary: string | null;
-};
-export type AgentMessageTextBlock = {
-    text: string;
-    "type": AgentMessageTextBlockType;
-};
-export type AgentMessageToolCallBlock = {
-    summary?: string;
-    toolCallId: string;
-    "type": AgentMessageToolCallBlockType;
-};
-export type AgentMessageAssetBlock = {
-    assetId: string;
-    label?: string;
-    "type": AgentMessageAssetBlockType;
-};
-export type AgentMessagePlanBlock = {
-    label?: string;
-    planId: string;
-    "type": AgentMessagePlanBlockType;
-};
-export type AgentMessageBlock = AgentMessageTextBlock | AgentMessageToolCallBlock | AgentMessageAssetBlock | AgentMessagePlanBlock;
-export type AgentMessageContent = {
-    blocks: AgentMessageBlock[];
-};
-export type AgentMessageResponseDto = {
-    content: AgentMessageContent;
-    createdAt: string;
-    id: string;
-    providerMessageId: string | null;
-    role: AgentMessageRole;
-    sessionId: string;
-    toolCallId: string | null;
-};
-export type AgentUserMessageContent = {
-    blocks: AgentMessageTextBlock[];
-};
-export type AgentMessageCreateDto = {
-    content: AgentUserMessageContent;
-};
-export type AgentOperationResponseDto = {
-    assetIds: string[];
-    createdAt: string;
-    dependencyIds: string[];
-    enabled: boolean;
-    error: string | null;
-    id: string;
-    payload: {
-        [key: string]: any;
-    };
-    planId: string;
-    result: {
-        [key: string]: any;
-    } | null;
-    riskLevel: AgentOperationRiskLevel;
-    status: AgentOperationStatus;
-    summary: string;
-    targetId: string | null;
-    targetKind: AgentOperationTargetKind;
-    temporaryTargetId: string | null;
-    "type": AgentOperationType;
-    updatedAt: string;
-};
-export type AgentOperationPlanResponseDto = {
-    createdAt: string;
-    id: string;
-    operations: AgentOperationResponseDto[];
-    revision: number;
-    sessionId: string;
-    status: AgentOperationPlanStatus;
-    summary: string;
-    updatedAt: string;
-};
-export type AgentProposeAlbumOperationsDto = {
-    operations: ({
-        "type": AgentAlbumCreateOperationType;
-        summary: string;
-        targetKind: AgentOperationNewAlbumTargetKind;
-        temporaryTargetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            albumName: string;
-            description?: string;
-        };
-    } | {
-        "type": AgentAlbumAddAssetsOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentAlbumRemoveAssetsOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentAlbumUpdateDetailsOperationType;
-        summary: string;
-        targetKind: AgentOperationExistingAlbumTargetKind;
-        targetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            albumName?: string;
-            description?: string;
-        };
-    } | {
-        "type": AgentAlbumSetCoverOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentSpaceCreateOperationType;
-        summary: string;
-        targetKind: AgentOperationNewSpaceTargetKind;
-        temporaryTargetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            spaceName: string;
-            description?: string;
-            color?: UserAvatarColor;
-        };
-    } | {
-        "type": Type;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": Type2;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentSpaceUpdateDetailsOperationType;
-        summary: string;
-        targetKind: AgentOperationExistingSpaceTargetKind;
-        targetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            spaceName?: string;
-            description?: string;
-            color?: UserAvatarColor;
-        };
-    } | {
-        "type": AgentAssetRotateOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            angle: number;
-        };
-    } | {
-        "type": AgentAssetSetFavoriteOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            favorite: boolean;
-        };
-    } | {
-        "type": AgentAssetSetArchiveOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            archived: boolean;
-        };
-    } | {
-        "type": AgentAssetAddTagOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            tagId?: string;
-            tagName?: string;
-        };
-    } | {
-        "type": AgentAssetRemoveTagOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            tagId: string;
-        };
-    })[];
-    summary: string;
-};
-export type AgentToolCallResponseDto = {
-    albumCount: number;
-    approvalDecision: (AgentToolApprovalDecision) | null;
-    assetCount: number;
-    completedAt: string | null;
-    dataClass: AgentToolDataClass;
-    error: string | null;
-    id: string;
-    requestSummary: string;
-    responseSummary: string | null;
-    sessionId: string;
-    startedAt: string;
-    status: AgentToolCallStatus;
-    toolName: AgentToolName;
-};
-export type AgentOperationPlanToolResponseDto = {
-    plan: (AgentOperationPlanResponseDto) | null;
-    status: Status;
-    summary: string;
-    toolCall: (AgentToolCallResponseDto) | null;
-};
-export type AgentOperationFieldOverride = {
-    [key: string]: string;
-};
-export type AgentOperationItemSelection = {
-    itemKind: AgentOperationItemKind;
-    mode: Mode;
-    itemIds?: string[];
-} | {
-    itemKind: AgentOperationItemKind;
-    mode: Mode2;
-    itemIds: string[];
-} | {
-    itemKind: AgentOperationItemKind;
-    mode: Mode3;
-    itemIds: string[];
-} | {
-    itemKind: AgentOperationItemKind;
-    mode: Mode4;
-    itemIds?: string[];
-};
-export type AgentOperationPlanApplyRequestDto = {
-    fieldOverrides?: {
-        [key: string]: AgentOperationFieldOverride;
-    };
-    itemSelections?: {
-        [key: string]: AgentOperationItemSelection;
-    };
-    operationIds: string[];
-    planRevision?: number;
-};
-export type AgentOperationPlanApplyResponseDto = {
-    appliedOperationIds: string[];
-    failedOperationIds: string[];
-    plan: AgentOperationPlanResponseDto;
-    skippedOperationIds: string[];
-    status: AgentOperationApplyStatus;
-    summary: string;
-};
-export type AgentReviseAlbumOperationsDto = {
-    feedback?: string;
-    operations: ({
-        "type": AgentAlbumCreateOperationType;
-        summary: string;
-        targetKind: AgentOperationNewAlbumTargetKind;
-        temporaryTargetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            albumName: string;
-            description?: string;
-        };
-    } | {
-        "type": AgentAlbumAddAssetsOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentAlbumRemoveAssetsOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentAlbumUpdateDetailsOperationType;
-        summary: string;
-        targetKind: AgentOperationExistingAlbumTargetKind;
-        targetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            albumName?: string;
-            description?: string;
-        };
-    } | {
-        "type": AgentAlbumSetCoverOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentSpaceCreateOperationType;
-        summary: string;
-        targetKind: AgentOperationNewSpaceTargetKind;
-        temporaryTargetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            spaceName: string;
-            description?: string;
-            color?: UserAvatarColor;
-        };
-    } | {
-        "type": Type3;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": Type4;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload?: {};
-    } | {
-        "type": AgentSpaceUpdateDetailsOperationType;
-        summary: string;
-        targetKind: AgentOperationExistingSpaceTargetKind;
-        targetId?: string;
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            spaceName?: string;
-            description?: string;
-            color?: UserAvatarColor;
-        };
-    } | {
-        "type": AgentAssetRotateOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            angle: number;
-        };
-    } | {
-        "type": AgentAssetSetFavoriteOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            favorite: boolean;
-        };
-    } | {
-        "type": AgentAssetSetArchiveOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            archived: boolean;
-        };
-    } | {
-        "type": AgentAssetAddTagOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            tagId?: string;
-            tagName?: string;
-        };
-    } | {
-        "type": AgentAssetRemoveTagOperationType;
-        summary: string;
-        targetKind: AgentOperationTargetKind;
-        targetId?: string;
-        temporaryTargetId?: string;
-        assetIds: string[];
-        riskLevel?: AgentOperationRiskLevel;
-        enabled?: boolean;
-        payload: {
-            tagId: string;
-        };
-    })[];
-    summary: string;
-};
-export type AgentOperationPlanSummaryRequestDto = {
-    focus?: string;
-};
-export type AgentToolApprovalDto = {
-    decision: AgentToolApprovalDecision;
-    reason?: string;
-};
-export type AgentListAlbumsToolRequestDto = {
-    toolCallId?: string;
-};
-export type AgentListAlbumsToolApprovalRequiredResponse = {
-    status: Status2;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentListAlbumsToolDeniedResponse = {
-    reason: string;
-    status: Status3;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentAlbumSummary = {
-    albumName: string;
-    albumThumbnailAssetId: string | null;
-    assetCount: number;
-    description: string;
-    endDate: string | null;
-    id: string;
-    ownerId: string;
-    startDate: string | null;
-};
-export type AgentListAlbumsToolSuccessResponse = {
-    albums: AgentAlbumSummary[];
-    status: Status4;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentListAlbumsToolResponseDto = AgentListAlbumsToolApprovalRequiredResponse | AgentListAlbumsToolDeniedResponse | AgentListAlbumsToolSuccessResponse;
-export type AgentReadAlbumToolRequestDto = {
-    albumId?: string;
-    toolCallId?: string;
-};
-export type AgentReadAlbumToolApprovalRequiredResponse = {
-    status: Status5;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAlbumToolDeniedResponse = {
-    reason: string;
-    status: Status6;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentAlbumDetail = {
-    albumName: string;
-    albumThumbnailAssetId: string | null;
-    assetCount: number;
-    assetIds: string[];
-    description: string;
-    endDate: string | null;
-    id: string;
-    ownerId: string;
-    startDate: string | null;
-};
-export type AgentReadAlbumToolSuccessResponse = {
-    album: AgentAlbumDetail;
-    status: Status7;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAlbumToolResponseDto = AgentReadAlbumToolApprovalRequiredResponse | AgentReadAlbumToolDeniedResponse | AgentReadAlbumToolSuccessResponse;
-export type AgentReadAssetMetadataToolRequestDto = {
-    assetIds?: string[];
-    toolCallId?: string;
-};
-export type AgentReadAssetMetadataToolApprovalRequiredResponse = {
-    status: Status8;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetMetadataToolDeniedResponse = {
-    reason: string;
-    status: Status9;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentAssetMetadataExif = {
-    city: string | null;
-    country: string | null;
-    dateTimeOriginal: string | null;
-    latitude: number | null;
-    lensModel: string | null;
-    longitude: number | null;
-    make: string | null;
-    model: string | null;
-    rating: number | null;
-    state: string | null;
-};
-export type AgentAssetMetadataTag = {
-    color: string | null;
-    id: string;
-    value: string;
-};
-export type AgentAssetMetadata = {
-    exifInfo: (AgentAssetMetadataExif) | null;
-    fileCreatedAt: string;
-    fileModifiedAt: string;
-    id: string;
-    isFavorite: boolean;
-    localDateTime: string;
-    originalFileName: string;
-    ownerId: string;
-    tags: AgentAssetMetadataTag[];
-    "type": AssetTypeEnum;
-    visibility: AssetVisibility;
-};
-export type AgentReadAssetMetadataToolSuccessResponse = {
-    assets: AgentAssetMetadata[];
-    status: Status10;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetMetadataToolResponseDto = AgentReadAssetMetadataToolApprovalRequiredResponse | AgentReadAssetMetadataToolDeniedResponse | AgentReadAssetMetadataToolSuccessResponse;
-export type AgentReadAssetOriginalsToolRequestDto = {
-    assetIds?: string[];
-    toolCallId?: string;
-};
-export type AgentReadAssetOriginalsToolApprovalRequiredResponse = {
-    status: Status11;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetOriginalsToolDeniedResponse = {
-    reason: string;
-    status: Status12;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentAssetMediaReference = {
-    assetId: string;
-    fileName: string;
-    height: number | null;
-    mediaUrl: string;
-    mimeType: string;
-    width: number | null;
-};
-export type AgentReadAssetOriginalsToolSuccessResponse = {
-    originals: AgentAssetMediaReference[];
-    status: Status13;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetOriginalsToolResponseDto = AgentReadAssetOriginalsToolApprovalRequiredResponse | AgentReadAssetOriginalsToolDeniedResponse | AgentReadAssetOriginalsToolSuccessResponse;
-export type AgentReadAssetPreviewsToolRequestDto = {
-    assetIds?: string[];
-    toolCallId?: string;
-};
-export type AgentReadAssetPreviewsToolApprovalRequiredResponse = {
-    status: Status14;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetPreviewsToolDeniedResponse = {
-    reason: string;
-    status: Status15;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetPreviewsToolSuccessResponse = {
-    previews: AgentAssetMediaReference[];
-    status: Status16;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentReadAssetPreviewsToolResponseDto = AgentReadAssetPreviewsToolApprovalRequiredResponse | AgentReadAssetPreviewsToolDeniedResponse | AgentReadAssetPreviewsToolSuccessResponse;
-export type AgentSearchAssetsFilters = {
-    albumIds?: string[];
-    city?: string | null;
-    country?: string | null;
-    isFavorite?: boolean;
-    isNotInAlbum?: boolean;
-    lensModel?: string | null;
-    make?: string | null;
-    model?: string | null;
-    rating?: number | null;
-    state?: string | null;
-    tagIds?: string[];
-    takenAfter?: string;
-    takenBefore?: string;
-    "type"?: AssetTypeEnum;
-};
-export type AgentSearchAssetsToolRequestDto = {
-    filters?: AgentSearchAssetsFilters;
-    limit?: number;
-    toolCallId?: string;
-};
-export type AgentSearchAssetsToolApprovalRequiredResponse = {
-    status: Status17;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentSearchAssetsToolDeniedResponse = {
-    reason: string;
-    status: Status18;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentSearchAssetsToolSuccessResponse = {
-    assets: AgentAssetMetadata[];
-    nextPage: string | null;
-    status: Status19;
-    toolCall: AgentToolCallResponseDto;
-};
-export type AgentSearchAssetsToolResponseDto = AgentSearchAssetsToolApprovalRequiredResponse | AgentSearchAssetsToolDeniedResponse | AgentSearchAssetsToolSuccessResponse;
 export type AlbumUserResponseDto = {
     role: AlbumUserRole;
     user: UserResponseDto;
@@ -1263,6 +520,7 @@ export type AlbumResponseDto = {
     albumName: string;
     /** Thumbnail asset ID */
     albumThumbnailAssetId: string | null;
+    /** First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically. */
     albumUsers: AlbumUserResponseDto[];
     /** Number of assets */
     assetCount: number;
@@ -1282,9 +540,6 @@ export type AlbumResponseDto = {
     /** Last modified asset timestamp */
     lastModifiedAssetTimestamp?: string;
     order?: AssetOrder;
-    owner: UserResponseDto;
-    /** Owner user ID */
-    ownerId: string;
     /** Is shared album */
     shared: boolean;
     /** Start date (earliest asset) */
@@ -1431,8 +686,8 @@ export type AssetMetadataUpsertItemDto = {
 export type AssetMediaCreateDto = {
     /** Asset file data */
     assetData: Blob;
-    /** Duration (for videos) */
-    duration?: string;
+    /** Duration in milliseconds (for videos) */
+    duration?: number;
     /** File creation date */
     fileCreatedAt: string;
     /** File modification date */
@@ -1471,7 +726,7 @@ export type AssetBulkUpdateDto = {
     latitude?: number;
     /** Longitude coordinate */
     longitude?: number;
-    /** Rating in range [1-5], or null for unrated */
+    /** Rating in range [1-5] (starred), -1 (rejected), or null (unrated) */
     rating?: number | null;
     /** Time zone (IANA timezone) */
     timeZone?: string;
@@ -1604,34 +859,16 @@ export type ExifResponseDto = {
     /** Time zone */
     timeZone?: string | null;
 };
-export type AssetFaceWithoutPersonResponseDto = {
-    /** Bounding box X1 coordinate */
-    boundingBoxX1: number;
-    /** Bounding box X2 coordinate */
-    boundingBoxX2: number;
-    /** Bounding box Y1 coordinate */
-    boundingBoxY1: number;
-    /** Bounding box Y2 coordinate */
-    boundingBoxY2: number;
-    /** Face ID */
-    id: string;
-    /** Image height in pixels */
-    imageHeight: number;
-    /** Image width in pixels */
-    imageWidth: number;
-    sourceType?: SourceType;
-};
 export type ScopedPrimaryProfile = {
     id: string;
     spaceId?: string;
-    "type": Type5;
+    "type": Type;
 };
-export type PersonWithFacesResponseDto = {
+export type PersonResponseDto = {
     /** Person date of birth */
     birthDate: string | null;
     /** Person color (hex) */
     color?: string;
-    faces: AssetFaceWithoutPersonResponseDto[];
     /** Scoped identity filter token */
     filterId?: string;
     /** Person ID */
@@ -1646,7 +883,7 @@ export type PersonWithFacesResponseDto = {
     numberOfAssets?: number;
     /** Accessible profile used for navigation */
     primaryProfile?: ScopedPrimaryProfile;
-    /** Space person ID (when viewed through a space) */
+    /** Space person ID when viewed through a shared space */
     spacePersonId?: string;
     /** Pet species (e.g. dog, cat) */
     species?: string | null;
@@ -1688,8 +925,8 @@ export type AssetResponseDto = {
     createdAt: string;
     /** Duplicate group ID */
     duplicateId?: string | null;
-    /** Video/gif duration in hh:mm:ss.SSS format (null for static images) */
-    duration: string | null;
+    /** Video/gif duration in milliseconds (null for static images) */
+    duration: number | null;
     exifInfo?: ExifResponseDto;
     /** The actual UTC timestamp when the file was created/captured, preserving timezone information. This is the authoritative timestamp for chronological sorting within timeline groups. Combined with timezone data, this can be used to determine the exact moment the photo was taken. */
     fileCreatedAt: string;
@@ -1726,7 +963,7 @@ export type AssetResponseDto = {
     owner?: UserResponseDto;
     /** Owner user ID */
     ownerId: string;
-    people?: PersonWithFacesResponseDto[];
+    people?: PersonResponseDto[];
     /** Is resized */
     resized?: boolean;
     /** Resolved space ID (when server auto-detects space context) */
@@ -1736,7 +973,6 @@ export type AssetResponseDto = {
     /** Thumbhash for thumbnail generation (base64) also used as the c query param for thumbnail cache busting. */
     thumbhash: string | null;
     "type": AssetTypeEnum;
-    unassignedFaces?: AssetFaceWithoutPersonResponseDto[];
     /** The UTC timestamp when the asset record was last updated in the database. This is automatically maintained by the database and reflects when any field in the asset was last modified. */
     updatedAt: string;
     visibility: AssetVisibility;
@@ -1756,7 +992,7 @@ export type UpdateAssetDto = {
     livePhotoVideoId?: string | null;
     /** Longitude coordinate */
     longitude?: number;
-    /** Rating in range [1-5], or null for unrated */
+    /** Rating in range [1-5] (starred), -1 (rejected), or null (unrated) */
     rating?: number | null;
     visibility?: AssetVisibility;
 };
@@ -1979,34 +1215,6 @@ export type DuplicateResolveGroupDto = {
 export type DuplicateResolveDto = {
     /** List of duplicate groups to resolve */
     groups: DuplicateResolveGroupDto[];
-};
-export type PersonResponseDto = {
-    /** Person date of birth */
-    birthDate: string | null;
-    /** Person color (hex) */
-    color?: string;
-    /** Scoped identity filter token */
-    filterId?: string;
-    /** Person ID */
-    id: string;
-    /** Is favorite */
-    isFavorite?: boolean;
-    /** Is hidden */
-    isHidden: boolean;
-    /** Person name */
-    name: string;
-    /** Accessible asset count for this grouped person */
-    numberOfAssets?: number;
-    /** Accessible profile used for navigation */
-    primaryProfile?: ScopedPrimaryProfile;
-    /** Pet species (e.g. dog, cat) */
-    species?: string | null;
-    /** Thumbnail path */
-    thumbnailPath: string;
-    /** Entity type (person or pet) */
-    "type"?: string;
-    /** Last update date */
-    updatedAt?: string;
 };
 export type AssetFaceResponseDto = {
     /** Bounding box X1 coordinate */
@@ -2353,7 +1561,7 @@ export type ScopedPersonProfileRefDto = {
     /** Space ID for Space Person refs */
     spaceId?: string;
     /** Scoped profile type */
-    "type": Type6;
+    "type": Type2;
 };
 export type DetachScopedPersonDto = {
     /** Scoped profile to detach */
@@ -2450,72 +1658,33 @@ export type PersonStatisticsResponseDto = {
     /** Number of faces assigned to this person in the current accessible scope */
     faces: number;
 };
-export type PluginJsonSchemaProperty = {
-    additionalProperties?: boolean | PluginJsonSchemaProperty;
-    "default"?: any;
-    description?: string;
-    "enum"?: string[];
-    items?: PluginJsonSchemaProperty;
-    properties?: {
-        [key: string]: PluginJsonSchemaProperty;
-    };
-    required?: string[];
-    "type"?: PluginJsonSchemaType;
-};
-export type PluginJsonSchema = {
-    additionalProperties?: boolean;
-    description?: string;
-    properties?: {
-        [key: string]: PluginJsonSchemaProperty;
-    };
-    required?: string[];
-    "type"?: PluginJsonSchemaType;
-};
-export type PluginActionResponseDto = {
-    /** Action description */
+export type PluginMethodResponseDto = {
+    /** Description */
     description: string;
-    /** Action ID */
-    id: string;
-    /** Method name */
-    methodName: string;
-    /** Plugin ID */
-    pluginId: string;
-    /** Action schema */
-    schema: (PluginJsonSchema) | null;
-    /** Supported contexts */
-    supportedContexts: PluginContextType[];
-    /** Action title */
+    hostFunctions: boolean;
+    /** Key */
+    key: string;
+    /** Name */
+    name: string;
+    schema?: {};
+    /** Title */
     title: string;
-};
-export type PluginFilterResponseDto = {
-    /** Filter description */
-    description: string;
-    /** Filter ID */
-    id: string;
-    /** Method name */
-    methodName: string;
-    /** Plugin ID */
-    pluginId: string;
-    /** Filter schema */
-    schema: (PluginJsonSchema) | null;
-    /** Supported contexts */
-    supportedContexts: PluginContextType[];
-    /** Filter title */
-    title: string;
+    /** Workflow types */
+    types: WorkflowType[];
+    /** Ui hints */
+    uiHints: string[];
 };
 export type PluginResponseDto = {
-    /** Plugin actions */
-    actions: PluginActionResponseDto[];
     /** Plugin author */
     author: string;
     /** Creation date */
     createdAt: string;
     /** Plugin description */
     description: string;
-    /** Plugin filters */
-    filters: PluginFilterResponseDto[];
     /** Plugin ID */
     id: string;
+    /** Plugin methods */
+    methods: PluginMethodResponseDto[];
     /** Plugin name */
     name: string;
     /** Plugin title */
@@ -2525,9 +1694,29 @@ export type PluginResponseDto = {
     /** Plugin version */
     version: string;
 };
-export type PluginTriggerResponseDto = {
-    contextType: PluginContextType;
-    "type": PluginTriggerType;
+export type PluginTemplateStepResponseDto = {
+    /** Step configuration */
+    config: {
+        [key: string]: any;
+    } | null;
+    /** Whether the step is enabled */
+    enabled?: boolean;
+    /** Step plugin method */
+    method: string;
+};
+export type PluginTemplateResponseDto = {
+    /** Template description */
+    description: string;
+    /** Template key (unique across all templates) */
+    key: string;
+    /** Workflow steps */
+    steps: PluginTemplateStepResponseDto[];
+    /** Template title */
+    title: string;
+    /** Workflow trigger */
+    trigger: WorkflowTrigger;
+    /** Ui hints, for example "smart-album" */
+    uiHints: string[];
 };
 export type QueueJobTypeCountsDto = {
     /** Number of sampled active jobs with this name */
@@ -3096,6 +2285,8 @@ export type ServerConfigDto = {
     mapDarkStyleUrl: string;
     /** Map light style URL */
     mapLightStyleUrl: string;
+    /** People min faces server default */
+    minFaces: number;
     /** OAuth button text */
     oauthButtonText: string;
     /** Whether public user registration is enabled */
@@ -3128,6 +2319,8 @@ export type ServerFeaturesDto = {
     passwordLogin: boolean;
     /** Whether the people face statistics UI is enabled */
     peopleStatistics: boolean;
+    /** Whether real-time transcoding is enabled */
+    realtimeTranscoding: boolean;
     /** Whether reverse geocoding is enabled */
     reverseGeocoding: boolean;
     /** Whether search is enabled */
@@ -3215,6 +2408,8 @@ export type ServerVersionResponseDto = {
     minor: number;
     /** Patch version number */
     patch: number;
+    /** Pre-release version number */
+    prerelease: number | null;
 };
 export type VersionCheckStateResponseDto = {
     /** Last check timestamp */
@@ -3321,8 +2516,6 @@ export type SharedLinkEditDto = {
     allowDownload?: boolean;
     /** Allow uploads */
     allowUpload?: boolean;
-    /** Whether to change the expiry time. Few clients cannot send null to set the expiryTime to never. Setting this flag and not sending expiryAt is considered as null instead. Clients that can send null values can ignore this. */
-    changeExpiryTime?: boolean;
     /** Link description */
     description?: string | null;
     /** Expiration date */
@@ -3662,6 +2855,10 @@ export type SystemConfigClassificationDto = {
     /** Enable classification globally */
     enabled: boolean;
 };
+export type SystemConfigFFmpegRealtimeDto = {
+    /** Enable real-time HLS transcoding (alpha) */
+    enabled: boolean;
+};
 export type SystemConfigFFmpegDto = {
     accel: TranscodeHWAccel;
     /** Accelerated decode */
@@ -3685,6 +2882,7 @@ export type SystemConfigFFmpegDto = {
     preferredHwDevice: string;
     /** Preset */
     preset: string;
+    realtime: SystemConfigFFmpegRealtimeDto;
     /** References */
     refs: number;
     targetAudioCodec: AudioCodec;
@@ -3856,6 +3054,7 @@ export type SystemConfigMetadataDto = {
     faces: SystemConfigFacesDto;
 };
 export type SystemConfigNewVersionCheckDto = {
+    channel: ReleaseChannel;
     /** Enabled */
     enabled: boolean;
 };
@@ -4049,11 +3248,13 @@ export type TagUpdateDto = {
 };
 export type TimeBucketAssetResponseDto = {
     /** Array of city names extracted from EXIF GPS data */
-    city: (string | null)[];
+    city?: (string | null)[];
     /** Array of country names extracted from EXIF GPS data */
-    country: (string | null)[];
-    /** Array of video/gif durations in hh:mm:ss.SSS format (null for static images) */
-    duration: (string | null)[];
+    country?: (string | null)[];
+    /** Array of UTC timestamps when each asset was originally uploaded to Immich */
+    createdAt: string[];
+    /** Array of video/gif durations in milliseconds (null for static images) */
+    duration: (number | null)[];
     /** Array of file creation timestamps in UTC */
     fileCreatedAt: string[];
     /** Array of asset IDs in the time bucket */
@@ -4085,6 +3286,15 @@ export type TimeBucketAssetResponseDto = {
     /** Array of visibility statuses for each asset (e.g., ARCHIVE, TIMELINE, HIDDEN, LOCKED) */
     visibility: AssetVisibility[];
 };
+export type TimeBucketCoverResponseDto = {
+    /** Representative asset ID for this bucket */
+    representativeAssetId: string | null;
+    /** Representative asset width/height ratio */
+    representativeRatio: number | null;
+    /** Representative asset thumbhash, base64 encoded */
+    representativeThumbhash: string | null;
+    timeBucket: string;
+};
 export type TrashResponseDto = {
     /** Number of items in trash */
     count: number;
@@ -4103,7 +3313,7 @@ export type UserGroupMemberResponseDto = {
 };
 export type UserGroupResponseDto = {
     /** Group color */
-    color?: Color | null;
+    color?: (UserAvatarColor) | null;
     /** Creation date */
     createdAt: string;
     /** Group ID */
@@ -4160,91 +3370,93 @@ export type CreateProfileImageResponseDto = {
     /** User ID */
     userId: string;
 };
-export type PluginConfigValue = any;
-export type WorkflowActionConfig = {
-    [key: string]: PluginConfigValue;
-};
-export type WorkflowActionResponseDto = {
-    actionConfig: (WorkflowActionConfig) | null;
-    /** Action ID */
-    id: string;
-    /** Action order */
-    order: number;
-    /** Plugin action ID */
-    pluginActionId: string;
-    /** Workflow ID */
-    workflowId: string;
-};
-export type WorkflowFilterConfig = {
-    [key: string]: PluginConfigValue;
-};
-export type WorkflowFilterResponseDto = {
-    filterConfig: (WorkflowFilterConfig) | null;
-    /** Filter ID */
-    id: string;
-    /** Filter order */
-    order: number;
-    /** Plugin filter ID */
-    pluginFilterId: string;
-    /** Workflow ID */
-    workflowId: string;
+export type WorkflowStepDto = {
+    /** Step configuration */
+    config: {
+        [key: string]: any;
+    } | null;
+    /** Step is enabled */
+    enabled?: boolean;
+    /** Step plugin method */
+    method: string;
 };
 export type WorkflowResponseDto = {
-    /** Workflow actions */
-    actions: WorkflowActionResponseDto[];
     /** Creation date */
     createdAt: string;
     /** Workflow description */
-    description: string;
+    description: string | null;
     /** Workflow enabled */
     enabled: boolean;
-    /** Workflow filters */
-    filters: WorkflowFilterResponseDto[];
     /** Workflow ID */
     id: string;
     /** Workflow name */
     name: string | null;
-    /** Owner user ID */
-    ownerId: string;
-    triggerType: PluginTriggerType;
-};
-export type WorkflowActionItemDto = {
-    actionConfig?: WorkflowActionConfig;
-    /** Plugin action ID */
-    pluginActionId: string;
-};
-export type WorkflowFilterItemDto = {
-    filterConfig?: WorkflowFilterConfig;
-    /** Plugin filter ID */
-    pluginFilterId: string;
+    /** Workflow steps */
+    steps: WorkflowStepDto[];
+    /** Workflow trigger type */
+    trigger: WorkflowTrigger;
+    /** Update date */
+    updatedAt: string;
 };
 export type WorkflowCreateDto = {
-    /** Workflow actions */
-    actions: WorkflowActionItemDto[];
     /** Workflow description */
-    description?: string;
+    description?: string | null;
     /** Workflow enabled */
     enabled?: boolean;
-    /** Workflow filters */
-    filters: WorkflowFilterItemDto[];
     /** Workflow name */
-    name: string;
-    triggerType: PluginTriggerType;
+    name?: string | null;
+    steps?: WorkflowStepDto[];
+    /** Workflow trigger type */
+    trigger: WorkflowTrigger;
+};
+export type WorkflowTriggerResponseDto = {
+    /** Trigger type */
+    trigger: WorkflowTrigger;
+    /** Workflow types */
+    types: WorkflowType[];
 };
 export type WorkflowUpdateDto = {
-    /** Workflow actions */
-    actions?: WorkflowActionItemDto[];
     /** Workflow description */
-    description?: string;
+    description?: string | null;
     /** Workflow enabled */
     enabled?: boolean;
-    /** Workflow filters */
-    filters?: WorkflowFilterItemDto[];
     /** Workflow name */
-    name?: string;
-    triggerType?: PluginTriggerType;
+    name?: string | null;
+    steps?: WorkflowStepDto[];
+    /** Workflow trigger type */
+    trigger?: WorkflowTrigger;
+};
+export type WorkflowShareStepDto = {
+    /** Step configuration */
+    config: {
+        [key: string]: any;
+    } | null;
+    /** Step is enabled */
+    enabled?: boolean;
+    /** Step plugin method */
+    method: string;
+};
+export type WorkflowShareResponseDto = {
+    /** Workflow description */
+    description: string | null;
+    /** Workflow name */
+    name: string | null;
+    /** Workflow steps */
+    steps: WorkflowShareStepDto[];
+    /** Workflow trigger type */
+    trigger: WorkflowTrigger;
 };
 export type LicenseResponseDto = UserLicense;
+export type ReleaseEventV1 = {
+    /** When the server last checked for a latest version. As an ISO timestamp */
+    checkedAt: string;
+    /** Whether a new version is available */
+    isAvailable: boolean;
+    releaseVersion: ServerVersionResponseDto;
+    serverVersion: ServerVersionResponseDto;
+    /** Release type */
+    "type": ReleaseType;
+};
 export type SyncAckV1 = {};
 export type SyncAlbumDeleteV1 = {
     /** Album ID */
@@ -4289,6 +3501,23 @@ export type SyncAlbumV1 = {
     order: AssetOrder;
     /** Owner ID */
     ownerId: string;
+    /** Thumbnail asset ID */
+    thumbnailAssetId: string | null;
+    /** Updated at */
+    updatedAt: string;
+};
+export type SyncAlbumV2 = {
+    /** Created at */
+    createdAt: string;
+    /** Album description */
+    description: string;
+    /** Album ID */
+    id: string;
+    /** Is activity enabled */
+    isActivityEnabled: boolean;
+    /** Album name */
+    name: string;
+    order: AssetOrder;
     /** Thumbnail asset ID */
     thumbnailAssetId: string | null;
     /** Updated at */
@@ -4435,13 +3664,93 @@ export type SyncAssetMetadataV1 = {
         [key: string]: any;
     };
 };
+export type SyncAssetOcrDeleteV1 = {
+    /** Original asset ID of the deleted OCR entry */
+    assetId: string;
+    /** Timestamp when the OCR entry was deleted */
+    deletedAt: string;
+    /** Audit row ID of the deleted OCR entry */
+    id: string;
+};
+export type SyncAssetOcrV1 = {
+    /** Asset ID */
+    assetId: string;
+    /** Confidence score of the bounding box */
+    boxScore: number;
+    /** OCR entry ID */
+    id: string;
+    /** Whether the OCR entry is visible */
+    isVisible: boolean;
+    /** Recognized text content */
+    text: string;
+    /** Confidence score of the recognized text */
+    textScore: number;
+    /** Top-left X coordinate (normalized 0–1) */
+    x1: number;
+    /** Top-right X coordinate (normalized 0–1) */
+    x2: number;
+    /** Bottom-right X coordinate (normalized 0–1) */
+    x3: number;
+    /** Bottom-left X coordinate (normalized 0–1) */
+    x4: number;
+    /** Top-left Y coordinate (normalized 0–1) */
+    y1: number;
+    /** Top-right Y coordinate (normalized 0–1) */
+    y2: number;
+    /** Bottom-right Y coordinate (normalized 0–1) */
+    y3: number;
+    /** Bottom-left Y coordinate (normalized 0–1) */
+    y4: number;
+};
 export type SyncAssetV1 = {
     /** Checksum */
     checksum: string;
+    /** Uploaded to Immich at */
+    createdAt: string | null;
     /** Deleted at */
     deletedAt: string | null;
     /** Duration */
     duration: string | null;
+    /** File created at */
+    fileCreatedAt: string | null;
+    /** File modified at */
+    fileModifiedAt: string | null;
+    /** Asset height */
+    height: number | null;
+    /** Asset ID */
+    id: string;
+    /** Is edited */
+    isEdited: boolean;
+    /** Is favorite */
+    isFavorite: boolean;
+    /** Library ID */
+    libraryId: string | null;
+    /** Live photo video ID */
+    livePhotoVideoId: string | null;
+    /** Local date time */
+    localDateTime: string | null;
+    /** Original file name */
+    originalFileName: string;
+    /** Owner ID */
+    ownerId: string;
+    /** Stack ID */
+    stackId: string | null;
+    /** Thumbhash */
+    thumbhash: string | null;
+    "type": AssetTypeEnum;
+    visibility: AssetVisibility;
+    /** Asset width */
+    width: number | null;
+};
+export type SyncAssetV2 = {
+    /** Checksum */
+    checksum: string;
+    /** Uploaded to Immich at */
+    createdAt: string | null;
+    /** Deleted at */
+    deletedAt: string | null;
+    /** Duration */
+    duration: number | null;
     /** File created at */
     fileCreatedAt: string | null;
     /** File modified at */
@@ -4865,6 +4174,21 @@ export function downloadDatabaseBackup({ filename }: {
     }));
 }
 /**
+ * Run face re-attribution repair
+ */
+export function runFaceRepair({ faceRepairRequestDto }: {
+    faceRepairRequestDto: FaceRepairRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairResponseDto;
+    }>("/admin/face-repair", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairRequestDto
+    })));
+}
+/**
  * Set maintenance mode
  */
 export function setMaintenanceMode({ setMaintenanceModeDto }: {
@@ -5037,6 +4361,26 @@ export function updateUserAdmin({ id, userAdminUpdateDto }: {
     })));
 }
 /**
+ * Retrieve calendar heatmap activity
+ */
+export function getUserCalendarHeatmapAdmin({ $from, id, to, $type }: {
+    $from?: string;
+    id: string;
+    to?: string;
+    $type?: CalendarHeatmapType;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: CalendarHeatmapResponseDto;
+    }>(`/admin/users/${encodeURIComponent(id)}/calendar-heatmap${QS.query(QS.explode({
+        "from": $from,
+        to,
+        "type": $type
+    }))}`, {
+        ...opts
+    }));
+}
+/**
  * Retrieve user preferences
  */
 export function getUserPreferencesAdmin({ id }: {
@@ -5113,459 +4457,24 @@ export function getUserStatisticsAdmin({ id, isFavorite, isTrashed, visibility }
     }));
 }
 /**
- * Handle the internal runner MCP endpoint
- */
-export function handle({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/agent/internal/mcp/sessions/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * List agent provider credentials
- */
-export function getAgentProviderCredentials(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentProviderCredentialResponseDto[];
-    }>("/agent/provider-credentials", {
-        ...opts
-    }));
-}
-/**
- * Create an agent provider credential
- */
-export function createAgentProviderCredential({ agentProviderCredentialCreateDto }: {
-    agentProviderCredentialCreateDto: AgentProviderCredentialCreateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentProviderCredentialResponseDto;
-    }>("/agent/provider-credentials", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentProviderCredentialCreateDto
-    })));
-}
-/**
- * Delete an agent provider credential
- */
-export function deleteAgentProviderCredential({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/agent/provider-credentials/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
-}
-/**
- * Retrieve an agent provider credential
- */
-export function getAgentProviderCredential({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentProviderCredentialResponseDto;
-    }>(`/agent/provider-credentials/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
-}
-/**
- * Update an agent provider credential
- */
-export function updateAgentProviderCredential({ id, agentProviderCredentialUpdateDto }: {
-    id: string;
-    agentProviderCredentialUpdateDto: AgentProviderCredentialUpdateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentProviderCredentialResponseDto;
-    }>(`/agent/provider-credentials/${encodeURIComponent(id)}`, oazapfts.json({
-        ...opts,
-        method: "PUT",
-        body: agentProviderCredentialUpdateDto
-    })));
-}
-/**
- * Get agent runner status
- */
-export function getAgentRunnerStatus(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentRunnerStatusDto;
-    }>("/agent/runner/status", {
-        ...opts
-    }));
-}
-/**
- * List agent sessions
- */
-export function getAgentSessions(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentSessionResponseDto[];
-    }>("/agent/sessions", {
-        ...opts
-    }));
-}
-/**
- * Create an agent session
- */
-export function createAgentSession({ agentSessionCreateDto }: {
-    agentSessionCreateDto: AgentSessionCreateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentSessionResponseDto;
-    }>("/agent/sessions", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentSessionCreateDto
-    })));
-}
-/**
- * Validate an agent session setup
- */
-export function validateAgentSession({ agentSessionCreateDto }: {
-    agentSessionCreateDto: AgentSessionCreateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/agent/sessions/validate", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentSessionCreateDto
-    })));
-}
-/**
- * Delete an agent session
- */
-export function deleteAgentSession({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/agent/sessions/${encodeURIComponent(id)}`, {
-        ...opts,
-        method: "DELETE"
-    }));
-}
-/**
- * Retrieve an agent session
- */
-export function getAgentSession({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentSessionResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}`, {
-        ...opts
-    }));
-}
-/**
- * Update an agent session
- */
-export function updateAgentSession({ id, agentSessionUpdateDto }: {
-    id: string;
-    agentSessionUpdateDto: AgentSessionUpdateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentSessionResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}`, oazapfts.json({
-        ...opts,
-        method: "PUT",
-        body: agentSessionUpdateDto
-    })));
-}
-/**
- * List agent session activity events
- */
-export function getAgentSessionActivityEvents({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentSessionActivityEventResponseDto[];
-    }>(`/agent/sessions/${encodeURIComponent(id)}/activity-events`, {
-        ...opts
-    }));
-}
-/**
- * Cancel an agent session
- */
-export function cancelAgentSession({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentSessionResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/cancel`, {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * List agent session messages
- */
-export function getAgentSessionMessages({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentMessageResponseDto[];
-    }>(`/agent/sessions/${encodeURIComponent(id)}/messages`, {
-        ...opts
-    }));
-}
-/**
- * Append an agent session message
- */
-export function appendAgentSessionMessage({ id, agentMessageCreateDto }: {
-    id: string;
-    agentMessageCreateDto: AgentMessageCreateDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentMessageResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/messages`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentMessageCreateDto
-    })));
-}
-/**
- * Get the current agent operation plan
- */
-export function getCurrentOperationPlan({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentOperationPlanResponseDto | null;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan`, {
-        ...opts
-    }));
-}
-/**
- * Get applied agent operation plans
- */
-export function getAppliedOperationPlans({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentOperationPlanResponseDto[];
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/applied`, {
-        ...opts
-    }));
-}
-/**
- * Propose agent album operations
- */
-export function proposeAlbumOperations({ id, agentProposeAlbumOperationsDto }: {
-    id: string;
-    agentProposeAlbumOperationsDto: AgentProposeAlbumOperationsDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentOperationPlanToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/proposals`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentProposeAlbumOperationsDto
-    })));
-}
-/**
- * Apply approved agent album operations
- */
-export function applyApprovedOperations({ id, planId, agentOperationPlanApplyRequestDto }: {
-    id: string;
-    planId: string;
-    agentOperationPlanApplyRequestDto: AgentOperationPlanApplyRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentOperationPlanApplyResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/apply`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentOperationPlanApplyRequestDto
-    })));
-}
-/**
- * Revise agent album operations
- */
-export function reviseProposedOperations({ id, planId, agentReviseAlbumOperationsDto }: {
-    id: string;
-    planId: string;
-    agentReviseAlbumOperationsDto: AgentReviseAlbumOperationsDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentOperationPlanToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/revisions`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentReviseAlbumOperationsDto
-    })));
-}
-/**
- * Summarize an agent operation plan
- */
-export function summarizePlan({ id, planId, agentOperationPlanSummaryRequestDto }: {
-    id: string;
-    planId: string;
-    agentOperationPlanSummaryRequestDto: AgentOperationPlanSummaryRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentOperationPlanToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/operation-plan/${encodeURIComponent(planId)}/summary`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentOperationPlanSummaryRequestDto
-    })));
-}
-/**
- * List agent tool calls
- */
-export function getToolCalls({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: AgentToolCallResponseDto[];
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tool-calls`, {
-        ...opts
-    }));
-}
-/**
- * Approve or deny an agent tool call
- */
-export function approveToolCall({ id, toolCallId, agentToolApprovalDto }: {
-    id: string;
-    toolCallId: string;
-    agentToolApprovalDto: AgentToolApprovalDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentToolCallResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tool-calls/${encodeURIComponent(toolCallId)}/approval`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentToolApprovalDto
-    })));
-}
-/**
- * Execute the internal listAlbums agent tool
- */
-export function listAlbums({ id, agentListAlbumsToolRequestDto }: {
-    id: string;
-    agentListAlbumsToolRequestDto: AgentListAlbumsToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentListAlbumsToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/list-albums`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentListAlbumsToolRequestDto
-    })));
-}
-/**
- * Execute the internal readAlbum agent tool
- */
-export function readAlbum({ id, agentReadAlbumToolRequestDto }: {
-    id: string;
-    agentReadAlbumToolRequestDto: AgentReadAlbumToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentReadAlbumToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-album`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentReadAlbumToolRequestDto
-    })));
-}
-/**
- * Execute the internal readAssetMetadata agent tool
- */
-export function readAssetMetadata({ id, agentReadAssetMetadataToolRequestDto }: {
-    id: string;
-    agentReadAssetMetadataToolRequestDto: AgentReadAssetMetadataToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentReadAssetMetadataToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-metadata`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentReadAssetMetadataToolRequestDto
-    })));
-}
-/**
- * Execute the internal readAssetOriginals agent tool
- */
-export function readAssetOriginals({ id, agentReadAssetOriginalsToolRequestDto }: {
-    id: string;
-    agentReadAssetOriginalsToolRequestDto: AgentReadAssetOriginalsToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentReadAssetOriginalsToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-originals`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentReadAssetOriginalsToolRequestDto
-    })));
-}
-/**
- * Execute the internal readAssetPreviews agent tool
- */
-export function readAssetPreviews({ id, agentReadAssetPreviewsToolRequestDto }: {
-    id: string;
-    agentReadAssetPreviewsToolRequestDto: AgentReadAssetPreviewsToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentReadAssetPreviewsToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/read-asset-previews`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentReadAssetPreviewsToolRequestDto
-    })));
-}
-/**
- * Execute the internal searchAssets agent tool
- */
-export function executeAgentSearchAssets({ id, agentSearchAssetsToolRequestDto }: {
-    id: string;
-    agentSearchAssetsToolRequestDto: AgentSearchAssetsToolRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: AgentSearchAssetsToolResponseDto;
-    }>(`/agent/sessions/${encodeURIComponent(id)}/tools/search-assets`, oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: agentSearchAssetsToolRequestDto
-    })));
-}
-/**
  * List all albums
  */
-export function getAllAlbums({ assetId, shared }: {
+export function getAllAlbums({ assetId, id, isOwned, isShared, name }: {
     assetId?: string;
-    shared?: boolean;
+    id?: string;
+    isOwned?: boolean;
+    isShared?: boolean;
+    name?: string;
 }, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: AlbumResponseDto[];
     }>(`/albums${QS.query(QS.explode({
         assetId,
-        shared
+        id,
+        isOwned,
+        isShared,
+        name
     }))}`, {
         ...opts
     }));
@@ -6179,6 +5088,82 @@ export function playAssetVideo({ id, key, slug }: {
     }));
 }
 /**
+ * Get HLS main playlist
+ */
+export function getMainPlaylist({ id, key, slug }: {
+    id: string;
+    key?: string;
+    slug?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: string;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/main.m3u8${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * End HLS streaming session
+ */
+export function endSession({ id, key, sessionId, slug }: {
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchText(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts,
+        method: "DELETE"
+    }));
+}
+/**
+ * Get HLS media playlist
+ */
+export function getMediaPlaylist({ id, key, sessionId, slug, variantIndex }: {
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+    variantIndex: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: string;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}/${encodeURIComponent(variantIndex)}/playlist.m3u8${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get HLS segment or init file
+ */
+export function getSegment({ filename, id, key, sessionId, slug, variantIndex }: {
+    filename: string;
+    id: string;
+    key?: string;
+    sessionId: string;
+    slug?: string;
+    variantIndex: number;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/assets/${encodeURIComponent(id)}/video/stream/${encodeURIComponent(sessionId)}/${encodeURIComponent(variantIndex)}/${encodeURIComponent(filename)}${QS.query(QS.explode({
+        key,
+        slug
+    }))}`, {
+        ...opts
+    }));
+}
+/**
  * Register admin
  */
 export function signUpAdmin({ signUpDto }: {
@@ -6403,7 +5388,7 @@ export function resolveDuplicates({ duplicateResolveDto }: {
     })));
 }
 /**
- * Delete a duplicate
+ * Dismiss a duplicate group
  */
 export function deleteDuplicate({ id }: {
     id: string;
@@ -7359,22 +6344,67 @@ export function getPersonThumbnail({ id }: {
 /**
  * List all plugins
  */
-export function getPlugins(opts?: Oazapfts.RequestOpts) {
+export function searchPlugins({ description, enabled, id, name, title, version }: {
+    description?: string;
+    enabled?: boolean;
+    id?: string;
+    name?: string;
+    title?: string;
+    version?: string;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: PluginResponseDto[];
-    }>("/plugins", {
+    }>(`/plugins${QS.query(QS.explode({
+        description,
+        enabled,
+        id,
+        name,
+        title,
+        version
+    }))}`, {
         ...opts
     }));
 }
 /**
- * List all plugin triggers
+ * Retrieve plugin methods
  */
-export function getPluginTriggers(opts?: Oazapfts.RequestOpts) {
+export function searchPluginMethods({ description, enabled, id, name, pluginName, pluginVersion, title, trigger, $type }: {
+    description?: string;
+    enabled?: boolean;
+    id?: string;
+    name?: string;
+    pluginName?: string;
+    pluginVersion?: string;
+    title?: string;
+    trigger?: WorkflowTrigger;
+    $type?: WorkflowType;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
-        data: PluginTriggerResponseDto[];
-    }>("/plugins/triggers", {
+        data: PluginMethodResponseDto[];
+    }>(`/plugins/methods${QS.query(QS.explode({
+        description,
+        enabled,
+        id,
+        name,
+        pluginName,
+        pluginVersion,
+        title,
+        trigger,
+        "type": $type
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Retrieve workflow templates
+ */
+export function searchPluginTemplates(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: PluginTemplateResponseDto[];
+    }>("/plugins/templates", {
         ...opts
     }));
 }
@@ -7841,7 +6871,12 @@ export function deleteServerLicense(opts?: Oazapfts.RequestOpts) {
  * Get product key
  */
 export function getServerLicense(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/server/license", {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: UserLicense;
+    } | {
+        status: 404;
+    }>("/server/license", {
         ...opts
     }));
 }
@@ -9118,9 +8153,10 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
+    bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
     isFavorite?: boolean;
@@ -9130,6 +8166,7 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
     make?: string;
     model?: string;
     order?: AssetOrder;
+    orderBy?: AssetOrderBy;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -9156,6 +8193,7 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
     }>(`/timeline/bucket${QS.query(QS.explode({
         albumId,
         bbox,
+        bucketSize,
         city,
         country,
         isFavorite,
@@ -9165,6 +8203,7 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
         make,
         model,
         order,
+        orderBy,
         personId,
         personIds,
         rating,
@@ -9189,11 +8228,12 @@ export function getTimeBucket({ albumId, bbox, city, country, isFavorite, isNotI
     }));
 }
 /**
- * Get time buckets
+ * Get time bucket covers
  */
-export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBuckets, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
+    bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
     isFavorite?: boolean;
@@ -9203,6 +8243,84 @@ export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNot
     make?: string;
     model?: string;
     order?: AssetOrder;
+    orderBy?: AssetOrderBy;
+    personId?: string;
+    personIds?: string[];
+    rating?: number;
+    slug?: string;
+    spaceId?: string;
+    spacePersonId?: string;
+    spacePersonIds?: string[];
+    tagId?: string;
+    tagIds?: string[];
+    takenAfter?: string;
+    takenBefore?: string;
+    timeBuckets: string[];
+    $type?: AssetTypeEnum;
+    userId?: string;
+    visibility?: AssetVisibility;
+    withCoordinates?: boolean;
+    withPartners?: boolean;
+    withSharedSpaces?: boolean;
+    withStacked?: boolean;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: TimeBucketCoverResponseDto[];
+    }>(`/timeline/bucket-covers${QS.query(QS.explode({
+        albumId,
+        bbox,
+        bucketSize,
+        city,
+        country,
+        isFavorite,
+        isNotInAlbum,
+        isTrashed,
+        key,
+        make,
+        model,
+        order,
+        orderBy,
+        personId,
+        personIds,
+        rating,
+        slug,
+        spaceId,
+        spacePersonId,
+        spacePersonIds,
+        tagId,
+        tagIds,
+        takenAfter,
+        takenBefore,
+        timeBuckets,
+        "type": $type,
+        userId,
+        visibility,
+        withCoordinates,
+        withPartners,
+        withSharedSpaces,
+        withStacked
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Get time buckets
+ */
+export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFavorite, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+    albumId?: string;
+    bbox?: string;
+    bucketSize?: TimeBucketSize;
+    city?: string;
+    country?: string;
+    isFavorite?: boolean;
+    isNotInAlbum?: boolean;
+    isTrashed?: boolean;
+    key?: string;
+    make?: string;
+    model?: string;
+    order?: AssetOrder;
+    orderBy?: AssetOrderBy;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -9228,6 +8346,7 @@ export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNot
     }>(`/timeline/buckets${QS.query(QS.explode({
         albumId,
         bbox,
+        bucketSize,
         city,
         country,
         isFavorite,
@@ -9237,6 +8356,7 @@ export function getTimeBuckets({ albumId, bbox, city, country, isFavorite, isNot
         make,
         model,
         order,
+        orderBy,
         personId,
         personIds,
         rating,
@@ -9418,6 +8538,25 @@ export function updateMyUser({ userUpdateMeDto }: {
     })));
 }
 /**
+ * Retrieve calendar heatmap activity
+ */
+export function getMyCalendarHeatmap({ $from, to, $type }: {
+    $from?: string;
+    to?: string;
+    $type?: CalendarHeatmapType;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: CalendarHeatmapResponseDto;
+    }>(`/users/me/calendar-heatmap${QS.query(QS.explode({
+        "from": $from,
+        to,
+        "type": $type
+    }))}`, {
+        ...opts
+    }));
+}
+/**
  * Delete user product key
  */
 export function deleteUserLicense(opts?: Oazapfts.RequestOpts) {
@@ -9592,11 +8731,23 @@ export function getUniqueOriginalPaths(opts?: Oazapfts.RequestOpts) {
 /**
  * List all workflows
  */
-export function getWorkflows(opts?: Oazapfts.RequestOpts) {
+export function searchWorkflows({ description, enabled, id, name, trigger }: {
+    description?: string;
+    enabled?: boolean;
+    id?: string;
+    name?: string;
+    trigger?: WorkflowTrigger;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: WorkflowResponseDto[];
-    }>("/workflows", {
+    }>(`/workflows${QS.query(QS.explode({
+        description,
+        enabled,
+        id,
+        name,
+        trigger
+    }))}`, {
         ...opts
     }));
 }
@@ -9614,6 +8765,17 @@ export function createWorkflow({ workflowCreateDto }: {
         method: "POST",
         body: workflowCreateDto
     })));
+}
+/**
+ * List all workflow triggers
+ */
+export function getWorkflowTriggers(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: WorkflowTriggerResponseDto[];
+    }>("/workflows/triggers", {
+        ...opts
+    }));
 }
 /**
  * Delete a workflow
@@ -9654,6 +8816,19 @@ export function updateWorkflow({ id, workflowUpdateDto }: {
         method: "PUT",
         body: workflowUpdateDto
     })));
+}
+/**
+ * Retrieve a workflow
+ */
+export function getWorkflowForShare({ id }: {
+    id: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: WorkflowShareResponseDto;
+    }>(`/workflows/${encodeURIComponent(id)}/share`, {
+        ...opts
+    }));
 }
 export enum ReactionLevel {
     Album = "album",
@@ -9708,6 +8883,10 @@ export enum UserStatus {
     Removing = "removing",
     Deleted = "deleted"
 }
+export enum CalendarHeatmapType {
+    Upload = "Upload",
+    Taken = "Taken"
+}
 export enum AssetOrder {
     Asc = "asc",
     Desc = "desc"
@@ -9718,300 +8897,9 @@ export enum AssetVisibility {
     Hidden = "hidden",
     Locked = "locked"
 }
-export enum ProviderType {
-    Openai = "openai",
-    Anthropic = "anthropic",
-    OpenaiCompatible = "openai-compatible"
-}
-export enum AgentRunnerStatusReason {
-    NotConfigured = "not-configured",
-    Healthy = "healthy",
-    Unhealthy = "unhealthy",
-    Timeout = "timeout",
-    InvalidResponse = "invalid-response"
-}
-export enum AgentApprovalMode {
-    Strict = "strict",
-    AskOnEscalation = "ask-on-escalation",
-    PlanOnly = "plan-only",
-    DangerouslySkipPermissions = "dangerously-skip-permissions"
-}
-export enum AgentProviderType {
-    Openai = "openai",
-    Anthropic = "anthropic",
-    OpenaiCompatible = "openai-compatible"
-}
-export enum AgentPermissionPreset {
-    Careful = "careful",
-    VisualOrganizer = "visual-organizer",
-    LocalPowerUser = "local-power-user",
-    Custom = "custom"
-}
-export enum AgentSessionStatus {
-    Created = "created",
-    Running = "running",
-    WaitingForToolApproval = "waiting_for_tool_approval",
-    WaitingForPlanReview = "waiting_for_plan_review",
-    Applying = "applying",
-    Completed = "completed",
-    Cancelled = "cancelled",
-    Interrupted = "interrupted",
-    Failed = "failed"
-}
-export enum Kind {
-    StartProcessing = "start-processing",
-    PlanComposing = "plan-composing",
-    ApplyProgress = "apply-progress",
-    RunnerRecovery = "runner-recovery",
-    Unknown = "unknown"
-}
-export enum AgentSessionActivityEventSource {
-    Server = "server",
-    Runner = "runner"
-}
-export enum AgentSessionActivityEventStatus {
-    Running = "running",
-    Completed = "completed",
-    Failed = "failed",
-    Skipped = "skipped"
-}
-export enum AgentMessageTextBlockType {
-    Text = "text"
-}
-export enum AgentMessageToolCallBlockType {
-    ToolCall = "tool-call"
-}
-export enum AgentMessageAssetBlockType {
-    Asset = "asset"
-}
-export enum AgentMessagePlanBlockType {
-    Plan = "plan"
-}
-export enum AgentMessageRole {
-    User = "user",
-    Assistant = "assistant",
-    System = "system",
-    Tool = "tool"
-}
-export enum AgentOperationRiskLevel {
-    Low = "low",
-    Medium = "medium",
-    High = "high"
-}
-export enum AgentOperationStatus {
-    Proposed = "proposed",
-    Applied = "applied",
-    Skipped = "skipped",
-    Failed = "failed"
-}
-export enum AgentOperationTargetKind {
-    NewAlbum = "new_album",
-    ExistingAlbum = "existing_album",
-    NewSpace = "new_space",
-    ExistingSpace = "existing_space",
-    AssetBatch = "asset_batch",
-    ImageEditBatch = "image_edit_batch"
-}
-export enum AgentOperationType {
-    AlbumCreate = "album.create",
-    AlbumAddAssets = "album.addAssets",
-    AlbumRemoveAssets = "album.removeAssets",
-    AlbumUpdateDetails = "album.updateDetails",
-    AlbumSetCover = "album.setCover",
-    SpaceCreate = "space.create",
-    SpaceAddAssets = "space.addAssets",
-    SpaceRemoveAssets = "space.removeAssets",
-    SpaceUpdateDetails = "space.updateDetails",
-    AssetRotate = "asset.rotate",
-    AssetSetFavorite = "asset.setFavorite",
-    AssetSetArchive = "asset.setArchive",
-    AssetAddTag = "asset.addTag",
-    AssetRemoveTag = "asset.removeTag"
-}
-export enum AgentOperationPlanStatus {
-    Proposed = "proposed",
-    Superseded = "superseded",
-    Applied = "applied",
-    Cancelled = "cancelled"
-}
-export enum AgentAlbumCreateOperationType {
-    AlbumCreate = "album.create"
-}
-export enum AgentOperationNewAlbumTargetKind {
-    NewAlbum = "new_album"
-}
-export enum AgentAlbumAddAssetsOperationType {
-    AlbumAddAssets = "album.addAssets"
-}
-export enum AgentAlbumRemoveAssetsOperationType {
-    AlbumRemoveAssets = "album.removeAssets"
-}
-export enum AgentAlbumUpdateDetailsOperationType {
-    AlbumUpdateDetails = "album.updateDetails"
-}
-export enum AgentOperationExistingAlbumTargetKind {
-    ExistingAlbum = "existing_album"
-}
-export enum AgentAlbumSetCoverOperationType {
-    AlbumSetCover = "album.setCover"
-}
-export enum AgentSpaceCreateOperationType {
-    SpaceCreate = "space.create"
-}
-export enum AgentOperationNewSpaceTargetKind {
-    NewSpace = "new_space"
-}
-export enum Type {
-    SpaceAddAssets = "space.addAssets"
-}
-export enum Type2 {
-    SpaceRemoveAssets = "space.removeAssets"
-}
-export enum AgentSpaceUpdateDetailsOperationType {
-    SpaceUpdateDetails = "space.updateDetails"
-}
-export enum AgentOperationExistingSpaceTargetKind {
-    ExistingSpace = "existing_space"
-}
-export enum AgentAssetRotateOperationType {
-    AssetRotate = "asset.rotate"
-}
-export enum AgentAssetSetFavoriteOperationType {
-    AssetSetFavorite = "asset.setFavorite"
-}
-export enum AgentAssetSetArchiveOperationType {
-    AssetSetArchive = "asset.setArchive"
-}
-export enum AgentAssetAddTagOperationType {
-    AssetAddTag = "asset.addTag"
-}
-export enum AgentAssetRemoveTagOperationType {
-    AssetRemoveTag = "asset.removeTag"
-}
-export enum Status {
-    Success = "success"
-}
-export enum AgentToolApprovalDecision {
-    Approved = "approved",
-    Denied = "denied"
-}
-export enum AgentToolDataClass {
-    Metadata = "metadata",
-    Previews = "previews",
-    Originals = "originals",
-    Plan = "plan"
-}
-export enum AgentToolCallStatus {
-    PendingApproval = "pending_approval",
-    Approved = "approved",
-    Executing = "executing",
-    Denied = "denied",
-    Completed = "completed",
-    Failed = "failed"
-}
-export enum AgentToolName {
-    SearchAssets = "searchAssets",
-    ReadAssetMetadata = "readAssetMetadata",
-    ReadAssetPreviews = "readAssetPreviews",
-    ReadAssetOriginals = "readAssetOriginals",
-    ListAlbums = "listAlbums",
-    ReadAlbum = "readAlbum",
-    ProposeAlbumOperations = "proposeAlbumOperations",
-    ReviseProposedOperations = "reviseProposedOperations",
-    SummarizePlan = "summarizePlan"
-}
-export enum AgentOperationItemKind {
-    Asset = "asset",
-    Album = "album",
-    Space = "space",
-    Person = "person",
-    Tag = "tag"
-}
-export enum Mode {
-    All = "all"
-}
-export enum Mode2 {
-    AllExcept = "allExcept"
-}
-export enum Mode3 {
-    Only = "only"
-}
-export enum Mode4 {
-    None = "none"
-}
-export enum AgentOperationApplyStatus {
-    Applied = "applied",
-    PartiallyApplied = "partially_applied",
-    Failed = "failed"
-}
-export enum Type3 {
-    SpaceAddAssets = "space.addAssets"
-}
-export enum Type4 {
-    SpaceRemoveAssets = "space.removeAssets"
-}
-export enum Status2 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status3 {
-    Denied = "denied"
-}
-export enum Status4 {
-    Success = "success"
-}
-export enum Status5 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status6 {
-    Denied = "denied"
-}
-export enum Status7 {
-    Success = "success"
-}
-export enum Status8 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status9 {
-    Denied = "denied"
-}
-export enum AssetTypeEnum {
-    Image = "IMAGE",
-    Video = "VIDEO",
-    Audio = "AUDIO",
-    Other = "OTHER"
-}
-export enum Status10 {
-    Success = "success"
-}
-export enum Status11 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status12 {
-    Denied = "denied"
-}
-export enum Status13 {
-    Success = "success"
-}
-export enum Status14 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status15 {
-    Denied = "denied"
-}
-export enum Status16 {
-    Success = "success"
-}
-export enum Status17 {
-    ApprovalRequired = "approval-required"
-}
-export enum Status18 {
-    Denied = "denied"
-}
-export enum Status19 {
-    Success = "success"
-}
 export enum AlbumUserRole {
     Editor = "editor",
+    Owner = "owner",
     Viewer = "viewer"
 }
 export enum BulkIdErrorReason {
@@ -10032,14 +8920,6 @@ export enum Permission {
     ApiKeyRead = "apiKey.read",
     ApiKeyUpdate = "apiKey.update",
     ApiKeyDelete = "apiKey.delete",
-    AgentCredentialCreate = "agentCredential.create",
-    AgentCredentialRead = "agentCredential.read",
-    AgentCredentialUpdate = "agentCredential.update",
-    AgentCredentialDelete = "agentCredential.delete",
-    AgentRunnerRead = "agentRunner.read",
-    AgentSessionCreate = "agentSession.create",
-    AgentSessionRead = "agentSession.read",
-    AgentSessionUpdate = "agentSession.update",
     AssetRead = "asset.read",
     AssetUpdate = "asset.update",
     AssetDelete = "asset.delete",
@@ -10220,14 +9100,15 @@ export enum AssetJobName {
     RegenerateThumbnail = "regenerate-thumbnail",
     TranscodeVideo = "transcode-video"
 }
-export enum SourceType {
-    MachineLearning = "machine-learning",
-    Exif = "exif",
-    Manual = "manual"
-}
-export enum Type5 {
+export enum Type {
     UserPerson = "user-person",
     SpacePerson = "space-person"
+}
+export enum AssetTypeEnum {
+    Image = "IMAGE",
+    Video = "VIDEO",
+    Audio = "AUDIO",
+    Other = "OTHER"
 }
 export enum AssetEditAction {
     Crop = "crop",
@@ -10244,6 +9125,11 @@ export enum AssetMediaSize {
     Fullsize = "fullsize",
     Preview = "preview",
     Thumbnail = "thumbnail"
+}
+export enum SourceType {
+    MachineLearning = "machine-learning",
+    Exif = "exif",
+    Manual = "manual"
 }
 export enum MapMediaType {
     Image = "IMAGE",
@@ -10303,26 +9189,17 @@ export enum PartnerDirection {
     SharedBy = "shared-by",
     SharedWith = "shared-with"
 }
-export enum Type6 {
+export enum Type2 {
     Person = "person",
     SpacePerson = "space-person"
 }
-export enum PluginJsonSchemaType {
-    String = "string",
-    Number = "number",
-    Integer = "integer",
-    Boolean = "boolean",
-    Object = "object",
-    Array = "array",
-    Null = "null"
+export enum WorkflowType {
+    AssetV1 = "AssetV1",
+    AssetPersonV1 = "AssetPersonV1"
 }
-export enum PluginContextType {
-    Asset = "asset",
-    Album = "album",
-    Person = "person"
-}
-export enum PluginTriggerType {
+export enum WorkflowTrigger {
     AssetCreate = "AssetCreate",
+    AssetMetadataExtraction = "AssetMetadataExtraction",
     PersonRecognized = "PersonRecognized"
 }
 export enum JobName {
@@ -10357,6 +9234,7 @@ export enum JobName {
     LibrarySyncFilesQueueAll = "LibrarySyncFilesQueueAll",
     LibrarySyncFiles = "LibrarySyncFiles",
     LibraryScanQueueAll = "LibraryScanQueueAll",
+    HlsSessionCleanup = "HlsSessionCleanup",
     MemoryCleanup = "MemoryCleanup",
     MemoryGenerate = "MemoryGenerate",
     NotificationsCleanup = "NotificationsCleanup",
@@ -10384,12 +9262,13 @@ export enum JobName {
     Ocr = "Ocr",
     PetDetectionQueueAll = "PetDetectionQueueAll",
     PetDetection = "PetDetection",
-    WorkflowRun = "WorkflowRun",
+    WorkflowAssetTrigger = "WorkflowAssetTrigger",
     StorageBackendMigrationQueueAll = "StorageBackendMigrationQueueAll",
     StorageBackendMigrationSingle = "StorageBackendMigrationSingle",
     SharedSpaceFaceMatch = "SharedSpaceFaceMatch",
     SharedSpaceFaceMatchAll = "SharedSpaceFaceMatchAll",
     SharedSpaceFaceMatchPage = "SharedSpaceFaceMatchPage",
+    SharedSpaceFaceMatchFromBackfill = "SharedSpaceFaceMatchFromBackfill",
     SharedSpaceLibraryFaceSync = "SharedSpaceLibraryFaceSync",
     SharedSpaceIdentityReconciliation = "SharedSpaceIdentityReconciliation",
     SharedSpacePersonDedup = "SharedSpacePersonDedup",
@@ -10441,16 +9320,21 @@ export enum SyncEntityType {
     UserV1 = "UserV1",
     UserDeleteV1 = "UserDeleteV1",
     AssetV1 = "AssetV1",
+    AssetV2 = "AssetV2",
     AssetDeleteV1 = "AssetDeleteV1",
     AssetExifV1 = "AssetExifV1",
     AssetEditV1 = "AssetEditV1",
     AssetEditDeleteV1 = "AssetEditDeleteV1",
     AssetMetadataV1 = "AssetMetadataV1",
     AssetMetadataDeleteV1 = "AssetMetadataDeleteV1",
+    AssetOcrV1 = "AssetOcrV1",
+    AssetOcrDeleteV1 = "AssetOcrDeleteV1",
     PartnerV1 = "PartnerV1",
     PartnerDeleteV1 = "PartnerDeleteV1",
     PartnerAssetV1 = "PartnerAssetV1",
+    PartnerAssetV2 = "PartnerAssetV2",
     PartnerAssetBackfillV1 = "PartnerAssetBackfillV1",
+    PartnerAssetBackfillV2 = "PartnerAssetBackfillV2",
     PartnerAssetDeleteV1 = "PartnerAssetDeleteV1",
     PartnerAssetExifV1 = "PartnerAssetExifV1",
     PartnerAssetExifBackfillV1 = "PartnerAssetExifBackfillV1",
@@ -10458,13 +9342,17 @@ export enum SyncEntityType {
     PartnerStackDeleteV1 = "PartnerStackDeleteV1",
     PartnerStackV1 = "PartnerStackV1",
     AlbumV1 = "AlbumV1",
+    AlbumV2 = "AlbumV2",
     AlbumDeleteV1 = "AlbumDeleteV1",
     AlbumUserV1 = "AlbumUserV1",
     AlbumUserBackfillV1 = "AlbumUserBackfillV1",
     AlbumUserDeleteV1 = "AlbumUserDeleteV1",
     AlbumAssetCreateV1 = "AlbumAssetCreateV1",
+    AlbumAssetCreateV2 = "AlbumAssetCreateV2",
     AlbumAssetUpdateV1 = "AlbumAssetUpdateV1",
+    AlbumAssetUpdateV2 = "AlbumAssetUpdateV2",
     AlbumAssetBackfillV1 = "AlbumAssetBackfillV1",
+    AlbumAssetBackfillV2 = "AlbumAssetBackfillV2",
     AlbumAssetExifCreateV1 = "AlbumAssetExifCreateV1",
     AlbumAssetExifUpdateV1 = "AlbumAssetExifUpdateV1",
     AlbumAssetExifBackfillV1 = "AlbumAssetExifBackfillV1",
@@ -10514,19 +9402,24 @@ export enum SyncEntityType {
 }
 export enum SyncRequestType {
     AlbumsV1 = "AlbumsV1",
+    AlbumsV2 = "AlbumsV2",
     AlbumUsersV1 = "AlbumUsersV1",
     AlbumToAssetsV1 = "AlbumToAssetsV1",
     AlbumAssetsV1 = "AlbumAssetsV1",
+    AlbumAssetsV2 = "AlbumAssetsV2",
     AlbumAssetExifsV1 = "AlbumAssetExifsV1",
     AssetsV1 = "AssetsV1",
+    AssetsV2 = "AssetsV2",
     AssetExifsV1 = "AssetExifsV1",
     AssetEditsV1 = "AssetEditsV1",
     AssetMetadataV1 = "AssetMetadataV1",
+    AssetOcrV1 = "AssetOcrV1",
     AuthUsersV1 = "AuthUsersV1",
     MemoriesV1 = "MemoriesV1",
     MemoryToAssetsV1 = "MemoryToAssetsV1",
     PartnersV1 = "PartnersV1",
     PartnerAssetsV1 = "PartnerAssetsV1",
+    PartnerAssetsV2 = "PartnerAssetsV2",
     PartnerAssetExifsV1 = "PartnerAssetExifsV1",
     PartnerStacksV1 = "PartnerStacksV1",
     StacksV1 = "StacksV1",
@@ -10565,7 +9458,6 @@ export enum TranscodeHWAccel {
 export enum AudioCodec {
     Mp3 = "mp3",
     Aac = "aac",
-    Libopus = "libopus",
     Opus = "opus",
     PcmS16Le = "pcm_s16le"
 }
@@ -10615,21 +9507,31 @@ export enum LogLevel {
     Error = "error",
     Fatal = "fatal"
 }
+export enum ReleaseChannel {
+    Stable = "stable",
+    ReleaseCandidate = "releaseCandidate"
+}
 export enum OAuthTokenEndpointAuthMethod {
     ClientSecretPost = "client_secret_post",
     ClientSecretBasic = "client_secret_basic"
 }
-export enum Color {
-    Primary = "primary",
-    Pink = "pink",
-    Red = "red",
-    Yellow = "yellow",
-    Blue = "blue",
-    Green = "green",
-    Purple = "purple",
-    Orange = "orange",
-    Gray = "gray",
-    Amber = "amber"
+export enum TimeBucketSize {
+    Year = "year",
+    Month = "month",
+    Day = "day"
+}
+export enum AssetOrderBy {
+    TakenAt = "takenAt",
+    CreatedAt = "createdAt"
+}
+export enum ReleaseType {
+    Major = "major",
+    Premajor = "premajor",
+    Minor = "minor",
+    Preminor = "preminor",
+    Patch = "patch",
+    Prepatch = "prepatch",
+    Prerelease = "prerelease"
 }
 export enum UserMetadataKey {
     Preferences = "preferences",
