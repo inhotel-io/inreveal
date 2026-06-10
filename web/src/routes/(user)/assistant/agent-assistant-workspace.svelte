@@ -9,6 +9,7 @@
     createAgentSession,
     deleteAgentSession,
     getAgentProviderCredentials,
+    getAgentSessions,
     validateAgentSession,
     type AgentMessageResponseDto,
     type AgentProviderCredentialResponseDto,
@@ -455,14 +456,44 @@
   };
 
   const handleDeleteSession = async (sessionId: string) => {
-    await deleteAgentSession({ id: sessionId });
+    try {
+      await deleteAgentSession({ id: sessionId });
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      if (status !== 400 && status !== 404) {
+        handleError(error, $t('assistant_session_delete_error'));
+        return;
+      }
+      // Already gone server-side — treat as success so the row can never dangle.
+    }
+
     localSessions = localSessions.filter((session) => session.id !== sessionId);
 
     if (selectedSessionId === sessionId) {
       selectedSessionId = null;
       void updateSessionUrl(null);
     }
+
+    // Converge with the server: a delete can race other list updates, so the
+    // authoritative list wins (skipped when it matches to avoid identity churn).
+    try {
+      const serverSessions = await getAgentSessions();
+      if (Array.isArray(serverSessions) && !sessionListsEquivalent(serverSessions, localSessions)) {
+        localSessions = serverSessions;
+      }
+    } catch {
+      // The local removal above already applied; the next page load reconciles.
+    }
   };
+
+  const sessionListsEquivalent = (first: AgentSessionResponseDto[], second: AgentSessionResponseDto[]) =>
+    first.length === second.length &&
+    first.every(
+      (session, index) =>
+        session.id === second[index].id &&
+        session.status === second[index].status &&
+        session.updatedAt === second[index].updatedAt,
+    );
 
   $effect(() => {
     if (requestedSessionId === lastRequestedSessionId) {
