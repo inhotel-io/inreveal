@@ -13,8 +13,8 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload({
-    this.albumName,
-    this.description,
+    this.albumName = const Optional.absent(),
+    this.description = const Optional.absent(),
   });
 
   ///
@@ -23,7 +23,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? albumName;
+  Optional<String?> albumName;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -31,7 +31,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? description;
+  Optional<String?> description;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload &&
@@ -49,15 +49,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.albumName != null) {
-      json[r'albumName'] = this.albumName;
-    } else {
-    //  json[r'albumName'] = null;
+    if (this.albumName.isPresent) {
+      final value = this.albumName.value;
+      json[r'albumName'] = value;
     }
-    if (this.description != null) {
-      json[r'description'] = this.description;
-    } else {
-    //  json[r'description'] = null;
+    if (this.description.isPresent) {
+      final value = this.description.value;
+      json[r'description'] = value;
     }
     return json;
   }
@@ -71,8 +69,8 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf3Payload(
-        albumName: mapValueOfType<String>(json, r'albumName'),
-        description: mapValueOfType<String>(json, r'description'),
+        albumName: json.containsKey(r'albumName') ? Optional.present(mapValueOfType<String>(json, r'albumName')) : const Optional.absent(),
+        description: json.containsKey(r'description') ? Optional.present(mapValueOfType<String>(json, r'description')) : const Optional.absent(),
       );
     }
     return null;

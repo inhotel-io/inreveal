@@ -13,13 +13,13 @@ part of openapi.api;
 class AgentReadAssetMetadataToolRequestDto {
   /// Returns a new [AgentReadAssetMetadataToolRequestDto] instance.
   AgentReadAssetMetadataToolRequestDto({
-    this.assetIds = const [],
-    this.detail,
-    this.fields = const [],
-    this.toolCallId,
+    this.assetIds = const Optional.present(const []),
+    this.detail = const Optional.absent(),
+    this.fields = const Optional.present(const []),
+    this.toolCallId = const Optional.absent(),
   });
 
-  List<String> assetIds;
+  Optional<List<String>?> assetIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -27,9 +27,9 @@ class AgentReadAssetMetadataToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentAssetMetadataDetail? detail;
+  Optional<AgentAssetMetadataDetail?> detail;
 
-  List<AgentAssetMetadataField> fields;
+  Optional<List<AgentAssetMetadataField>?> fields;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -37,7 +37,7 @@ class AgentReadAssetMetadataToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetMetadataToolRequestDto &&
@@ -59,17 +59,21 @@ class AgentReadAssetMetadataToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'assetIds'] = this.assetIds;
-    if (this.detail != null) {
-      json[r'detail'] = this.detail;
-    } else {
-    //  json[r'detail'] = null;
+    if (this.assetIds.isPresent) {
+      final value = this.assetIds.value;
+      json[r'assetIds'] = value;
     }
-      json[r'fields'] = this.fields;
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.detail.isPresent) {
+      final value = this.detail.value;
+      json[r'detail'] = value;
+    }
+    if (this.fields.isPresent) {
+      final value = this.fields.value;
+      json[r'fields'] = value;
+    }
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -83,12 +87,12 @@ class AgentReadAssetMetadataToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentReadAssetMetadataToolRequestDto(
-        assetIds: json[r'assetIds'] is Iterable
+        assetIds: json.containsKey(r'assetIds') ? Optional.present(json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        detail: AgentAssetMetadataDetail.fromJson(json[r'detail']),
-        fields: AgentAssetMetadataField.listFromJson(json[r'fields']),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+            : const []) : const Optional.absent(),
+        detail: json.containsKey(r'detail') ? Optional.present(AgentAssetMetadataDetail.fromJson(json[r'detail'])) : const Optional.absent(),
+        fields: json.containsKey(r'fields') ? Optional.present(AgentAssetMetadataField.listFromJson(json[r'fields'])) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

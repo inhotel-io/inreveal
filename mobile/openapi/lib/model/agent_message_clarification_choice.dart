@@ -14,9 +14,9 @@ class AgentMessageClarificationChoice {
   /// Returns a new [AgentMessageClarificationChoice] instance.
   AgentMessageClarificationChoice({
     required this.choiceRef,
-    this.description,
+    this.description = const Optional.absent(),
     required this.label,
-    this.thumbnailAssetId,
+    this.thumbnailAssetId = const Optional.absent(),
   });
 
   String choiceRef;
@@ -27,11 +27,11 @@ class AgentMessageClarificationChoice {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? description;
+  Optional<String?> description;
 
   String label;
 
-  String? thumbnailAssetId;
+  Optional<String?> thumbnailAssetId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentMessageClarificationChoice &&
@@ -54,16 +54,14 @@ class AgentMessageClarificationChoice {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'choiceRef'] = this.choiceRef;
-    if (this.description != null) {
-      json[r'description'] = this.description;
-    } else {
-    //  json[r'description'] = null;
+    if (this.description.isPresent) {
+      final value = this.description.value;
+      json[r'description'] = value;
     }
       json[r'label'] = this.label;
-    if (this.thumbnailAssetId != null) {
-      json[r'thumbnailAssetId'] = this.thumbnailAssetId;
-    } else {
-    //  json[r'thumbnailAssetId'] = null;
+    if (this.thumbnailAssetId.isPresent) {
+      final value = this.thumbnailAssetId.value;
+      json[r'thumbnailAssetId'] = value;
     }
     return json;
   }
@@ -78,9 +76,9 @@ class AgentMessageClarificationChoice {
 
       return AgentMessageClarificationChoice(
         choiceRef: mapValueOfType<String>(json, r'choiceRef')!,
-        description: mapValueOfType<String>(json, r'description'),
+        description: json.containsKey(r'description') ? Optional.present(mapValueOfType<String>(json, r'description')) : const Optional.absent(),
         label: mapValueOfType<String>(json, r'label')!,
-        thumbnailAssetId: mapValueOfType<String>(json, r'thumbnailAssetId'),
+        thumbnailAssetId: json.containsKey(r'thumbnailAssetId') ? Optional.present(mapValueOfType<String>(json, r'thumbnailAssetId')) : const Optional.absent(),
       );
     }
     return null;

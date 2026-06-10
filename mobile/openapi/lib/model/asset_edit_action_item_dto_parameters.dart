@@ -21,31 +21,35 @@ class AssetEditActionItemDtoParameters {
     required this.axis,
     required this.endTime,
     required this.startTime,
-    this.autoEnhance,
-    this.brightness,
-    this.contrast,
-    this.saturation,
+    this.autoEnhance = const Optional.absent(),
+    this.brightness = const Optional.absent(),
+    this.contrast = const Optional.absent(),
+    this.saturation = const Optional.absent(),
   });
 
   /// Height of the crop
   ///
   /// Minimum value: 1
-  num height;
+  /// Maximum value: 9007199254740991
+  int height;
 
   /// Width of the crop
   ///
   /// Minimum value: 1
-  num width;
+  /// Maximum value: 9007199254740991
+  int width;
 
   /// Top-Left X coordinate of crop
   ///
   /// Minimum value: 0
-  num x;
+  /// Maximum value: 9007199254740991
+  int x;
 
   /// Top-Left Y coordinate of crop
   ///
   /// Minimum value: 0
-  num y;
+  /// Maximum value: 9007199254740991
+  int y;
 
   /// Rotation angle in degrees
   num angle;
@@ -69,7 +73,7 @@ class AssetEditActionItemDtoParameters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? autoEnhance;
+  Optional<bool?> autoEnhance;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -77,7 +81,7 @@ class AssetEditActionItemDtoParameters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  TonalLevel? brightness;
+  Optional<TonalLevel?> brightness;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -85,7 +89,7 @@ class AssetEditActionItemDtoParameters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  TonalLevel? contrast;
+  Optional<TonalLevel?> contrast;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -93,7 +97,7 @@ class AssetEditActionItemDtoParameters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  TonalLevel? saturation;
+  Optional<TonalLevel?> saturation;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AssetEditActionItemDtoParameters &&
@@ -139,25 +143,21 @@ class AssetEditActionItemDtoParameters {
       json[r'axis'] = this.axis;
       json[r'endTime'] = this.endTime;
       json[r'startTime'] = this.startTime;
-    if (this.autoEnhance != null) {
-      json[r'autoEnhance'] = this.autoEnhance;
-    } else {
-    //  json[r'autoEnhance'] = null;
+    if (this.autoEnhance.isPresent) {
+      final value = this.autoEnhance.value;
+      json[r'autoEnhance'] = value;
     }
-    if (this.brightness != null) {
-      json[r'brightness'] = this.brightness;
-    } else {
-    //  json[r'brightness'] = null;
+    if (this.brightness.isPresent) {
+      final value = this.brightness.value;
+      json[r'brightness'] = value;
     }
-    if (this.contrast != null) {
-      json[r'contrast'] = this.contrast;
-    } else {
-    //  json[r'contrast'] = null;
+    if (this.contrast.isPresent) {
+      final value = this.contrast.value;
+      json[r'contrast'] = value;
     }
-    if (this.saturation != null) {
-      json[r'saturation'] = this.saturation;
-    } else {
-    //  json[r'saturation'] = null;
+    if (this.saturation.isPresent) {
+      final value = this.saturation.value;
+      json[r'saturation'] = value;
     }
     return json;
   }
@@ -171,18 +171,18 @@ class AssetEditActionItemDtoParameters {
       final json = value.cast<String, dynamic>();
 
       return AssetEditActionItemDtoParameters(
-        height: num.parse('${json[r'height']}'),
-        width: num.parse('${json[r'width']}'),
-        x: num.parse('${json[r'x']}'),
-        y: num.parse('${json[r'y']}'),
+        height: mapValueOfType<int>(json, r'height')!,
+        width: mapValueOfType<int>(json, r'width')!,
+        x: mapValueOfType<int>(json, r'x')!,
+        y: mapValueOfType<int>(json, r'y')!,
         angle: num.parse('${json[r'angle']}'),
         axis: MirrorAxis.fromJson(json[r'axis'])!,
         endTime: num.parse('${json[r'endTime']}'),
         startTime: num.parse('${json[r'startTime']}'),
-        autoEnhance: mapValueOfType<bool>(json, r'autoEnhance'),
-        brightness: TonalLevel.fromJson(json[r'brightness']),
-        contrast: TonalLevel.fromJson(json[r'contrast']),
-        saturation: TonalLevel.fromJson(json[r'saturation']),
+        autoEnhance: json.containsKey(r'autoEnhance') ? Optional.present(mapValueOfType<bool>(json, r'autoEnhance')) : const Optional.absent(),
+        brightness: json.containsKey(r'brightness') ? Optional.present(TonalLevel.fromJson(json[r'brightness'])) : const Optional.absent(),
+        contrast: json.containsKey(r'contrast') ? Optional.present(TonalLevel.fromJson(json[r'contrast'])) : const Optional.absent(),
+        saturation: json.containsKey(r'saturation') ? Optional.present(TonalLevel.fromJson(json[r'saturation'])) : const Optional.absent(),
       );
     }
     return null;

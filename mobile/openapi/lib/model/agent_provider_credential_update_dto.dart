@@ -13,29 +13,17 @@ part of openapi.api;
 class AgentProviderCredentialUpdateDto {
   /// Returns a new [AgentProviderCredentialUpdateDto] instance.
   AgentProviderCredentialUpdateDto({
-    this.baseUrl,
-    this.defaultModel,
-    this.label,
-    this.models = const [],
-    this.providerType,
-    this.secret,
+    this.baseUrl = const Optional.absent(),
+    this.defaultModel = const Optional.absent(),
+    this.label = const Optional.absent(),
+    this.models = const Optional.present(const []),
+    this.providerType = const Optional.absent(),
+    this.secret = const Optional.absent(),
   });
 
-  String? baseUrl;
+  Optional<String?> baseUrl;
 
-  String? defaultModel;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  String? label;
-
-  List<String> models;
-
-  AgentProviderCredentialUpdateDtoProviderTypeEnum? providerType;
+  Optional<String?> defaultModel;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -43,7 +31,19 @@ class AgentProviderCredentialUpdateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? secret;
+  Optional<String?> label;
+
+  Optional<List<String>?> models;
+
+  Optional<AgentProviderCredentialUpdateDtoProviderTypeEnum?> providerType;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<String?> secret;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProviderCredentialUpdateDto &&
@@ -69,31 +69,29 @@ class AgentProviderCredentialUpdateDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.baseUrl != null) {
-      json[r'baseUrl'] = this.baseUrl;
-    } else {
-    //  json[r'baseUrl'] = null;
+    if (this.baseUrl.isPresent) {
+      final value = this.baseUrl.value;
+      json[r'baseUrl'] = value;
     }
-    if (this.defaultModel != null) {
-      json[r'defaultModel'] = this.defaultModel;
-    } else {
-    //  json[r'defaultModel'] = null;
+    if (this.defaultModel.isPresent) {
+      final value = this.defaultModel.value;
+      json[r'defaultModel'] = value;
     }
-    if (this.label != null) {
-      json[r'label'] = this.label;
-    } else {
-    //  json[r'label'] = null;
+    if (this.label.isPresent) {
+      final value = this.label.value;
+      json[r'label'] = value;
     }
-      json[r'models'] = this.models;
-    if (this.providerType != null) {
-      json[r'providerType'] = this.providerType;
-    } else {
-    //  json[r'providerType'] = null;
+    if (this.models.isPresent) {
+      final value = this.models.value;
+      json[r'models'] = value;
     }
-    if (this.secret != null) {
-      json[r'secret'] = this.secret;
-    } else {
-    //  json[r'secret'] = null;
+    if (this.providerType.isPresent) {
+      final value = this.providerType.value;
+      json[r'providerType'] = value;
+    }
+    if (this.secret.isPresent) {
+      final value = this.secret.value;
+      json[r'secret'] = value;
     }
     return json;
   }
@@ -107,14 +105,14 @@ class AgentProviderCredentialUpdateDto {
       final json = value.cast<String, dynamic>();
 
       return AgentProviderCredentialUpdateDto(
-        baseUrl: mapValueOfType<String>(json, r'baseUrl'),
-        defaultModel: mapValueOfType<String>(json, r'defaultModel'),
-        label: mapValueOfType<String>(json, r'label'),
-        models: json[r'models'] is Iterable
+        baseUrl: json.containsKey(r'baseUrl') ? Optional.present(mapValueOfType<String>(json, r'baseUrl')) : const Optional.absent(),
+        defaultModel: json.containsKey(r'defaultModel') ? Optional.present(mapValueOfType<String>(json, r'defaultModel')) : const Optional.absent(),
+        label: json.containsKey(r'label') ? Optional.present(mapValueOfType<String>(json, r'label')) : const Optional.absent(),
+        models: json.containsKey(r'models') ? Optional.present(json[r'models'] is Iterable
             ? (json[r'models'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        providerType: AgentProviderCredentialUpdateDtoProviderTypeEnum.fromJson(json[r'providerType']),
-        secret: mapValueOfType<String>(json, r'secret'),
+            : const []) : const Optional.absent(),
+        providerType: json.containsKey(r'providerType') ? Optional.present(AgentProviderCredentialUpdateDtoProviderTypeEnum.fromJson(json[r'providerType'])) : const Optional.absent(),
+        secret: json.containsKey(r'secret') ? Optional.present(mapValueOfType<String>(json, r'secret')) : const Optional.absent(),
       );
     }
     return null;
@@ -205,7 +203,7 @@ class AgentProviderCredentialUpdateDtoProviderTypeEnum {
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentProviderCredentialUpdateDtoProviderTypeEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentProviderCredentialUpdateDtoProviderTypeEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentProviderCredentialUpdateDtoProviderTypeEnum].
 class AgentProviderCredentialUpdateDtoProviderTypeEnumTypeTransformer {
   factory AgentProviderCredentialUpdateDtoProviderTypeEnumTypeTransformer() => _instance ??= const AgentProviderCredentialUpdateDtoProviderTypeEnumTypeTransformer._();

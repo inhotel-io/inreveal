@@ -13,11 +13,11 @@ part of openapi.api;
 class AgentReadAssetOriginalsToolRequestDto {
   /// Returns a new [AgentReadAssetOriginalsToolRequestDto] instance.
   AgentReadAssetOriginalsToolRequestDto({
-    this.assetIds = const [],
-    this.toolCallId,
+    this.assetIds = const Optional.present(const []),
+    this.toolCallId = const Optional.absent(),
   });
 
-  List<String> assetIds;
+  Optional<List<String>?> assetIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -25,7 +25,7 @@ class AgentReadAssetOriginalsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentReadAssetOriginalsToolRequestDto &&
@@ -43,11 +43,13 @@ class AgentReadAssetOriginalsToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'assetIds'] = this.assetIds;
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.assetIds.isPresent) {
+      final value = this.assetIds.value;
+      json[r'assetIds'] = value;
+    }
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -61,10 +63,10 @@ class AgentReadAssetOriginalsToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentReadAssetOriginalsToolRequestDto(
-        assetIds: json[r'assetIds'] is Iterable
+        assetIds: json.containsKey(r'assetIds') ? Optional.present(json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+            : const []) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

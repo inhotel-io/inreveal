@@ -15,59 +15,83 @@ class AgentSearchAssetsToolResponseDto {
   AgentSearchAssetsToolResponseDto({
     required this.status,
     required this.toolCall,
-    this.reason,
-    this.summary,
-    this.detail,
-    this.returnedCount,
-    this.hasMore,
-    this.nextPage,
-    this.resultSize,
-    this.sample,
-    this.selectionHandle,
-    this.approximateTotal,
-    this.totalCount,
+    required this.reason,
+    this.approximateTotal = const Optional.absent(),
+    required this.detail,
+    required this.hasMore,
+    required this.nextPage,
+    required this.resultSize,
+    required this.returnedCount,
+    this.sample = const Optional.absent(),
+    required this.selectionHandle,
+    required this.summary,
+    this.totalCount = const Optional.absent(),
   });
 
   AgentSearchAssetsToolResponseDtoStatusEnum status;
 
   AgentToolCallResponseDto toolCall;
 
-  String? reason;
+  String reason;
 
-  String? summary;
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<int?> approximateTotal;
 
-  AgentSearchAssetsDetail? detail;
+  AgentSearchAssetsDetail detail;
 
-  int? returnedCount;
-
-  bool? hasMore;
+  bool hasMore;
 
   String? nextPage;
 
-  AgentToolResultSize? resultSize;
+  AgentToolResultSize resultSize;
 
-  AgentSearchAssetsSample? sample;
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  int returnedCount;
 
-  AgentSearchAssetsSelectionHandle? selectionHandle;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<AgentSearchAssetsSample?> sample;
 
-  int? approximateTotal;
+  AgentSearchAssetsSelectionHandle selectionHandle;
 
-  int? totalCount;
+  String summary;
+
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<int?> totalCount;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolResponseDto &&
     other.status == status &&
     other.toolCall == toolCall &&
     other.reason == reason &&
-    other.summary == summary &&
+    other.approximateTotal == approximateTotal &&
     other.detail == detail &&
-    other.returnedCount == returnedCount &&
     other.hasMore == hasMore &&
     other.nextPage == nextPage &&
     other.resultSize == resultSize &&
+    other.returnedCount == returnedCount &&
     other.sample == sample &&
     other.selectionHandle == selectionHandle &&
-    other.approximateTotal == approximateTotal &&
+    other.summary == summary &&
     other.totalCount == totalCount;
 
   @override
@@ -75,57 +99,48 @@ class AgentSearchAssetsToolResponseDto {
     // ignore: unnecessary_parenthesis
     (status.hashCode) +
     (toolCall.hashCode) +
-    (reason == null ? 0 : reason!.hashCode) +
-    (summary == null ? 0 : summary!.hashCode) +
-    (detail == null ? 0 : detail!.hashCode) +
-    (returnedCount == null ? 0 : returnedCount!.hashCode) +
-    (hasMore == null ? 0 : hasMore!.hashCode) +
-    (nextPage == null ? 0 : nextPage!.hashCode) +
-    (resultSize == null ? 0 : resultSize!.hashCode) +
-    (sample == null ? 0 : sample!.hashCode) +
-    (selectionHandle == null ? 0 : selectionHandle!.hashCode) +
+    (reason.hashCode) +
     (approximateTotal == null ? 0 : approximateTotal!.hashCode) +
+    (detail.hashCode) +
+    (hasMore.hashCode) +
+    (nextPage == null ? 0 : nextPage!.hashCode) +
+    (resultSize.hashCode) +
+    (returnedCount.hashCode) +
+    (sample == null ? 0 : sample!.hashCode) +
+    (selectionHandle.hashCode) +
+    (summary.hashCode) +
     (totalCount == null ? 0 : totalCount!.hashCode);
 
   @override
-  String toString() => 'AgentSearchAssetsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, summary=$summary, detail=$detail, returnedCount=$returnedCount, hasMore=$hasMore, nextPage=$nextPage, resultSize=$resultSize, sample=$sample, selectionHandle=$selectionHandle, approximateTotal=$approximateTotal, totalCount=$totalCount]';
+  String toString() => 'AgentSearchAssetsToolResponseDto[status=$status, toolCall=$toolCall, reason=$reason, approximateTotal=$approximateTotal, detail=$detail, hasMore=$hasMore, nextPage=$nextPage, resultSize=$resultSize, returnedCount=$returnedCount, sample=$sample, selectionHandle=$selectionHandle, summary=$summary, totalCount=$totalCount]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'status'] = this.status;
       json[r'toolCall'] = this.toolCall;
-    if (this.reason != null) {
       json[r'reason'] = this.reason;
+    if (this.approximateTotal.isPresent) {
+      final value = this.approximateTotal.value;
+      json[r'approximateTotal'] = value;
     }
-    if (this.summary != null) {
-      json[r'summary'] = this.summary;
-    }
-    if (this.detail != null) {
       json[r'detail'] = this.detail;
-    }
-    if (this.returnedCount != null) {
-      json[r'returnedCount'] = this.returnedCount;
-    }
-    if (this.hasMore != null) {
       json[r'hasMore'] = this.hasMore;
-    }
     if (this.nextPage != null) {
       json[r'nextPage'] = this.nextPage;
+    } else {
+    //  json[r'nextPage'] = null;
     }
-    if (this.resultSize != null) {
       json[r'resultSize'] = this.resultSize;
+      json[r'returnedCount'] = this.returnedCount;
+    if (this.sample.isPresent) {
+      final value = this.sample.value;
+      json[r'sample'] = value;
     }
-    if (this.sample != null) {
-      json[r'sample'] = this.sample;
-    }
-    if (this.selectionHandle != null) {
       json[r'selectionHandle'] = this.selectionHandle;
-    }
-    if (this.approximateTotal != null) {
-      json[r'approximateTotal'] = this.approximateTotal;
-    }
-    if (this.totalCount != null) {
-      json[r'totalCount'] = this.totalCount;
+      json[r'summary'] = this.summary;
+    if (this.totalCount.isPresent) {
+      final value = this.totalCount.value;
+      json[r'totalCount'] = value;
     }
     return json;
   }
@@ -141,17 +156,17 @@ class AgentSearchAssetsToolResponseDto {
       return AgentSearchAssetsToolResponseDto(
         status: AgentSearchAssetsToolResponseDtoStatusEnum.fromJson(json[r'status'])!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        reason: mapValueOfType<String>(json, r'reason'),
-        summary: mapValueOfType<String>(json, r'summary'),
-        detail: AgentSearchAssetsDetail.fromJson(json[r'detail']),
-        returnedCount: mapValueOfType<int>(json, r'returnedCount'),
-        hasMore: mapValueOfType<bool>(json, r'hasMore'),
+        reason: mapValueOfType<String>(json, r'reason')!,
+        approximateTotal: json.containsKey(r'approximateTotal') ? Optional.present(json[r'approximateTotal'] == null ? null : int.parse('${json[r'approximateTotal']}')) : const Optional.absent(),
+        detail: AgentSearchAssetsDetail.fromJson(json[r'detail'])!,
+        hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         nextPage: mapValueOfType<String>(json, r'nextPage'),
-        resultSize: AgentToolResultSize.fromJson(json[r'resultSize']),
-        sample: AgentSearchAssetsSample.fromJson(json[r'sample']),
-        selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle']),
-        approximateTotal: mapValueOfType<int>(json, r'approximateTotal'),
-        totalCount: mapValueOfType<int>(json, r'totalCount'),
+        resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
+        returnedCount: mapValueOfType<int>(json, r'returnedCount')!,
+        sample: json.containsKey(r'sample') ? Optional.present(AgentSearchAssetsSample.fromJson(json[r'sample'])) : const Optional.absent(),
+        selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle'])!,
+        summary: mapValueOfType<String>(json, r'summary')!,
+        totalCount: json.containsKey(r'totalCount') ? Optional.present(json[r'totalCount'] == null ? null : int.parse('${json[r'totalCount']}')) : const Optional.absent(),
       );
     }
     return null;
@@ -201,6 +216,14 @@ class AgentSearchAssetsToolResponseDto {
   static const requiredKeys = <String>{
     'status',
     'toolCall',
+    'reason',
+    'detail',
+    'hasMore',
+    'nextPage',
+    'resultSize',
+    'returnedCount',
+    'selectionHandle',
+    'summary',
   };
 }
 
@@ -217,14 +240,10 @@ class AgentSearchAssetsToolResponseDtoStatusEnum {
 
   String toJson() => value;
 
-  static const approvalRequired = AgentSearchAssetsToolResponseDtoStatusEnum._(r'approval-required');
-  static const denied = AgentSearchAssetsToolResponseDtoStatusEnum._(r'denied');
   static const success = AgentSearchAssetsToolResponseDtoStatusEnum._(r'success');
 
   /// List of all possible values in this [enum][AgentSearchAssetsToolResponseDtoStatusEnum].
   static const values = <AgentSearchAssetsToolResponseDtoStatusEnum>[
-    approvalRequired,
-    denied,
     success,
   ];
 
@@ -264,8 +283,6 @@ class AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer {
   AgentSearchAssetsToolResponseDtoStatusEnum? decode(dynamic data, {bool allowNull = true}) {
     if (data != null) {
       switch (data) {
-        case r'approval-required': return AgentSearchAssetsToolResponseDtoStatusEnum.approvalRequired;
-        case r'denied': return AgentSearchAssetsToolResponseDtoStatusEnum.denied;
         case r'success': return AgentSearchAssetsToolResponseDtoStatusEnum.success;
         default:
           if (!allowNull) {
@@ -279,4 +296,5 @@ class AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer {
   /// Singleton [AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer] instance.
   static AgentSearchAssetsToolResponseDtoStatusEnumTypeTransformer? _instance;
 }
+
 

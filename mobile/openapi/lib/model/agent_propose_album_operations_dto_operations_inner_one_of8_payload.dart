@@ -13,9 +13,9 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload({
-    this.spaceName,
-    this.description,
-    this.color,
+    this.spaceName = const Optional.absent(),
+    this.description = const Optional.absent(),
+    this.color = const Optional.absent(),
   });
 
   ///
@@ -24,7 +24,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? spaceName;
+  Optional<String?> spaceName;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -32,7 +32,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? description;
+  Optional<String?> description;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -40,7 +40,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  UserAvatarColor? color;
+  Optional<UserAvatarColor?> color;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload &&
@@ -60,20 +60,17 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.spaceName != null) {
-      json[r'spaceName'] = this.spaceName;
-    } else {
-    //  json[r'spaceName'] = null;
+    if (this.spaceName.isPresent) {
+      final value = this.spaceName.value;
+      json[r'spaceName'] = value;
     }
-    if (this.description != null) {
-      json[r'description'] = this.description;
-    } else {
-    //  json[r'description'] = null;
+    if (this.description.isPresent) {
+      final value = this.description.value;
+      json[r'description'] = value;
     }
-    if (this.color != null) {
-      json[r'color'] = this.color;
-    } else {
-    //  json[r'color'] = null;
+    if (this.color.isPresent) {
+      final value = this.color.value;
+      json[r'color'] = value;
     }
     return json;
   }
@@ -87,9 +84,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf8Payload(
-        spaceName: mapValueOfType<String>(json, r'spaceName'),
-        description: mapValueOfType<String>(json, r'description'),
-        color: UserAvatarColor.fromJson(json[r'color']),
+        spaceName: json.containsKey(r'spaceName') ? Optional.present(mapValueOfType<String>(json, r'spaceName')) : const Optional.absent(),
+        description: json.containsKey(r'description') ? Optional.present(mapValueOfType<String>(json, r'description')) : const Optional.absent(),
+        color: json.containsKey(r'color') ? Optional.present(UserAvatarColor.fromJson(json[r'color'])) : const Optional.absent(),
       );
     }
     return null;

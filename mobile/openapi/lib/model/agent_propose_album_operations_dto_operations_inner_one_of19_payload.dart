@@ -13,17 +13,17 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload({
-    this.brightness,
-    this.contrast,
-    this.saturation,
-    this.autoEnhance,
+    this.brightness = const Optional.absent(),
+    this.contrast = const Optional.absent(),
+    this.saturation = const Optional.absent(),
+    this.autoEnhance = const Optional.absent(),
   });
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum? brightness;
+  Optional<AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum?> brightness;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum? contrast;
+  Optional<AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum?> contrast;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum? saturation;
+  Optional<AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum?> saturation;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -31,7 +31,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? autoEnhance;
+  Optional<bool?> autoEnhance;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload &&
@@ -53,25 +53,21 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.brightness != null) {
-      json[r'brightness'] = this.brightness;
-    } else {
-    //  json[r'brightness'] = null;
+    if (this.brightness.isPresent) {
+      final value = this.brightness.value;
+      json[r'brightness'] = value;
     }
-    if (this.contrast != null) {
-      json[r'contrast'] = this.contrast;
-    } else {
-    //  json[r'contrast'] = null;
+    if (this.contrast.isPresent) {
+      final value = this.contrast.value;
+      json[r'contrast'] = value;
     }
-    if (this.saturation != null) {
-      json[r'saturation'] = this.saturation;
-    } else {
-    //  json[r'saturation'] = null;
+    if (this.saturation.isPresent) {
+      final value = this.saturation.value;
+      json[r'saturation'] = value;
     }
-    if (this.autoEnhance != null) {
-      json[r'autoEnhance'] = this.autoEnhance;
-    } else {
-    //  json[r'autoEnhance'] = null;
+    if (this.autoEnhance.isPresent) {
+      final value = this.autoEnhance.value;
+      json[r'autoEnhance'] = value;
     }
     return json;
   }
@@ -85,10 +81,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf19Payload(
-        brightness: AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum.fromJson(json[r'brightness']),
-        contrast: AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum.fromJson(json[r'contrast']),
-        saturation: AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum.fromJson(json[r'saturation']),
-        autoEnhance: mapValueOfType<bool>(json, r'autoEnhance'),
+        brightness: json.containsKey(r'brightness') ? Optional.present(AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum.fromJson(json[r'brightness'])) : const Optional.absent(),
+        contrast: json.containsKey(r'contrast') ? Optional.present(AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum.fromJson(json[r'contrast'])) : const Optional.absent(),
+        saturation: json.containsKey(r'saturation') ? Optional.present(AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum.fromJson(json[r'saturation'])) : const Optional.absent(),
+        autoEnhance: json.containsKey(r'autoEnhance') ? Optional.present(mapValueOfType<bool>(json, r'autoEnhance')) : const Optional.absent(),
       );
     }
     return null;
@@ -185,7 +181,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum 
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnum].
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnumTypeTransformer {
   factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadBrightnessEnumTypeTransformer._();
@@ -271,7 +267,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum {
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnum].
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnumTypeTransformer {
   factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadContrastEnumTypeTransformer._();
@@ -357,7 +353,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum 
   }
 }
 
-/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum] to String,
+/// Transformation class that can [encode] an instance of [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum] to Optional<String?>,
 /// and [decode] dynamic data back to [AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnum].
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnumTypeTransformer {
   factory AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnumTypeTransformer() => _instance ??= const AgentProposeAlbumOperationsDtoOperationsInnerOneOf19PayloadSaturationEnumTypeTransformer._();

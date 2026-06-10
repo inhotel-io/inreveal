@@ -13,20 +13,20 @@ part of openapi.api;
 class AgentAssetMetadataResult {
   /// Returns a new [AgentAssetMetadataResult] instance.
   AgentAssetMetadataResult({
-    this.exifInfo,
-    this.fileCreatedAt,
-    this.fileModifiedAt,
+    this.exifInfo = const Optional.absent(),
+    this.fileCreatedAt = const Optional.absent(),
+    this.fileModifiedAt = const Optional.absent(),
     required this.id,
-    this.isFavorite,
-    this.localDateTime,
-    this.originalFileName,
-    this.qualityInfo,
-    this.tags = const [],
-    this.type,
-    this.visibility,
+    this.isFavorite = const Optional.absent(),
+    this.localDateTime = const Optional.absent(),
+    this.originalFileName = const Optional.absent(),
+    this.qualityInfo = const Optional.absent(),
+    this.tags = const Optional.present(const []),
+    this.type = const Optional.absent(),
+    this.visibility = const Optional.absent(),
   });
 
-  AgentAssetMetadataResultExifInfo? exifInfo;
+  Optional<AgentAssetMetadataResultExifInfo?> exifInfo;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -34,7 +34,7 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? fileCreatedAt;
+  Optional<DateTime?> fileCreatedAt;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -42,7 +42,7 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? fileModifiedAt;
+  Optional<DateTime?> fileModifiedAt;
 
   String id;
 
@@ -52,7 +52,7 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isFavorite;
+  Optional<bool?> isFavorite;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -60,7 +60,7 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? localDateTime;
+  Optional<DateTime?> localDateTime;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -68,19 +68,11 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? originalFileName;
+  Optional<String?> originalFileName;
 
-  AgentAssetMetadataQuality? qualityInfo;
+  Optional<AgentAssetMetadataQuality?> qualityInfo;
 
-  List<AgentAssetMetadataTag> tags;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  AssetTypeEnum? type;
+  Optional<List<AgentAssetMetadataTag>?> tags;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -88,7 +80,15 @@ class AgentAssetMetadataResult {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AssetVisibility? visibility;
+  Optional<AssetTypeEnum?> type;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<AssetVisibility?> visibility;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentAssetMetadataResult &&
@@ -124,58 +124,52 @@ class AgentAssetMetadataResult {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.exifInfo != null) {
-      json[r'exifInfo'] = this.exifInfo;
-    } else {
-    //  json[r'exifInfo'] = null;
+    if (this.exifInfo.isPresent) {
+      final value = this.exifInfo.value;
+      json[r'exifInfo'] = value;
     }
-    if (this.fileCreatedAt != null) {
-      json[r'fileCreatedAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.fileCreatedAt!.millisecondsSinceEpoch
-        : this.fileCreatedAt!.toUtc().toIso8601String();
-    } else {
-    //  json[r'fileCreatedAt'] = null;
+    if (this.fileCreatedAt.isPresent) {
+      final value = this.fileCreatedAt.value;
+      json[r'fileCreatedAt'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.fileModifiedAt != null) {
-      json[r'fileModifiedAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.fileModifiedAt!.millisecondsSinceEpoch
-        : this.fileModifiedAt!.toUtc().toIso8601String();
-    } else {
-    //  json[r'fileModifiedAt'] = null;
+    if (this.fileModifiedAt.isPresent) {
+      final value = this.fileModifiedAt.value;
+      json[r'fileModifiedAt'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
       json[r'id'] = this.id;
-    if (this.isFavorite != null) {
-      json[r'isFavorite'] = this.isFavorite;
-    } else {
-    //  json[r'isFavorite'] = null;
+    if (this.isFavorite.isPresent) {
+      final value = this.isFavorite.value;
+      json[r'isFavorite'] = value;
     }
-    if (this.localDateTime != null) {
-      json[r'localDateTime'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.localDateTime!.millisecondsSinceEpoch
-        : this.localDateTime!.toUtc().toIso8601String();
-    } else {
-    //  json[r'localDateTime'] = null;
+    if (this.localDateTime.isPresent) {
+      final value = this.localDateTime.value;
+      json[r'localDateTime'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.originalFileName != null) {
-      json[r'originalFileName'] = this.originalFileName;
-    } else {
-    //  json[r'originalFileName'] = null;
+    if (this.originalFileName.isPresent) {
+      final value = this.originalFileName.value;
+      json[r'originalFileName'] = value;
     }
-    if (this.qualityInfo != null) {
-      json[r'qualityInfo'] = this.qualityInfo;
-    } else {
-    //  json[r'qualityInfo'] = null;
+    if (this.qualityInfo.isPresent) {
+      final value = this.qualityInfo.value;
+      json[r'qualityInfo'] = value;
     }
-      json[r'tags'] = this.tags;
-    if (this.type != null) {
-      json[r'type'] = this.type;
-    } else {
-    //  json[r'type'] = null;
+    if (this.tags.isPresent) {
+      final value = this.tags.value;
+      json[r'tags'] = value;
     }
-    if (this.visibility != null) {
-      json[r'visibility'] = this.visibility;
-    } else {
-    //  json[r'visibility'] = null;
+    if (this.type.isPresent) {
+      final value = this.type.value;
+      json[r'type'] = value;
+    }
+    if (this.visibility.isPresent) {
+      final value = this.visibility.value;
+      json[r'visibility'] = value;
     }
     return json;
   }
@@ -189,17 +183,17 @@ class AgentAssetMetadataResult {
       final json = value.cast<String, dynamic>();
 
       return AgentAssetMetadataResult(
-        exifInfo: AgentAssetMetadataResultExifInfo.fromJson(json[r'exifInfo']),
-        fileCreatedAt: mapDateTime(json, r'fileCreatedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        fileModifiedAt: mapDateTime(json, r'fileModifiedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
+        exifInfo: json.containsKey(r'exifInfo') ? Optional.present(AgentAssetMetadataResultExifInfo.fromJson(json[r'exifInfo'])) : const Optional.absent(),
+        fileCreatedAt: json.containsKey(r'fileCreatedAt') ? Optional.present(mapDateTime(json, r'fileCreatedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        fileModifiedAt: json.containsKey(r'fileModifiedAt') ? Optional.present(mapDateTime(json, r'fileModifiedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
         id: mapValueOfType<String>(json, r'id')!,
-        isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
-        localDateTime: mapDateTime(json, r'localDateTime', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        originalFileName: mapValueOfType<String>(json, r'originalFileName'),
-        qualityInfo: AgentAssetMetadataQuality.fromJson(json[r'qualityInfo']),
-        tags: AgentAssetMetadataTag.listFromJson(json[r'tags']),
-        type: AssetTypeEnum.fromJson(json[r'type']),
-        visibility: AssetVisibility.fromJson(json[r'visibility']),
+        isFavorite: json.containsKey(r'isFavorite') ? Optional.present(mapValueOfType<bool>(json, r'isFavorite')) : const Optional.absent(),
+        localDateTime: json.containsKey(r'localDateTime') ? Optional.present(mapDateTime(json, r'localDateTime', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        originalFileName: json.containsKey(r'originalFileName') ? Optional.present(mapValueOfType<String>(json, r'originalFileName')) : const Optional.absent(),
+        qualityInfo: json.containsKey(r'qualityInfo') ? Optional.present(AgentAssetMetadataQuality.fromJson(json[r'qualityInfo'])) : const Optional.absent(),
+        tags: json.containsKey(r'tags') ? Optional.present(AgentAssetMetadataTag.listFromJson(json[r'tags'])) : const Optional.absent(),
+        type: json.containsKey(r'type') ? Optional.present(AssetTypeEnum.fromJson(json[r'type'])) : const Optional.absent(),
+        visibility: json.containsKey(r'visibility') ? Optional.present(AssetVisibility.fromJson(json[r'visibility'])) : const Optional.absent(),
       );
     }
     return null;

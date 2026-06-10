@@ -18,7 +18,7 @@ class AgentMessageBlock {
     required this.summary,
     required this.toolCallId,
     required this.assetId,
-    this.label,
+    this.label = const Optional.absent(),
     required this.planId,
     this.choices = const [],
     required this.kind,
@@ -42,7 +42,7 @@ class AgentMessageBlock {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? label;
+  Optional<String?> label;
 
   String planId;
 
@@ -93,10 +93,9 @@ class AgentMessageBlock {
       json[r'summary'] = this.summary;
       json[r'toolCallId'] = this.toolCallId;
       json[r'assetId'] = this.assetId;
-    if (this.label != null) {
-      json[r'label'] = this.label;
-    } else {
-    //  json[r'label'] = null;
+    if (this.label.isPresent) {
+      final value = this.label.value;
+      json[r'label'] = value;
     }
       json[r'planId'] = this.planId;
       json[r'choices'] = this.choices;
@@ -120,7 +119,7 @@ class AgentMessageBlock {
         summary: mapValueOfType<String>(json, r'summary')!,
         toolCallId: mapValueOfType<String>(json, r'toolCallId')!,
         assetId: mapValueOfType<String>(json, r'assetId')!,
-        label: mapValueOfType<String>(json, r'label'),
+        label: json.containsKey(r'label') ? Optional.present(mapValueOfType<String>(json, r'label')) : const Optional.absent(),
         planId: mapValueOfType<String>(json, r'planId')!,
         choices: AgentMessageClarificationChoice.listFromJson(json[r'choices']),
         kind: AgentMessageBlockKindEnum.fromJson(json[r'kind'])!,
