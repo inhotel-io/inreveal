@@ -1,6 +1,11 @@
 // agent-onboarding.spec.ts
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { AgentApprovalMode, AgentPermissionPreset, ProviderType, type AgentProviderCredentialResponseDto } from '@immich/sdk';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  ProviderType,
+  type AgentProviderCredentialResponseDto,
+} from '@immich/sdk';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { readable } from 'svelte/store';
@@ -12,7 +17,10 @@ vi.mock('svelte-i18n', () => ({ t: readable((key: string) => key) }));
 describe('agent-onboarding orchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sdkMock.createAgentProviderCredential.mockResolvedValue({ id: 'cred-1', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto);
+    sdkMock.createAgentProviderCredential.mockResolvedValue({
+      id: 'cred-1',
+      providerType: ProviderType.OpenaiCompatible,
+    } as AgentProviderCredentialResponseDto);
     sdkMock.validateAgentSession.mockResolvedValue(undefined as never);
     sdkMock.deleteAgentProviderCredential.mockResolvedValue(undefined as never);
   });
@@ -84,8 +92,14 @@ describe('agent-onboarding orchestrator', () => {
 
   it('deletes the previous credential when the user edits from the Ready step and re-tests', async () => {
     sdkMock.createAgentProviderCredential
-      .mockResolvedValueOnce({ id: 'cred-1', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto)
-      .mockResolvedValueOnce({ id: 'cred-2', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto);
+      .mockResolvedValueOnce({
+        id: 'cred-1',
+        providerType: ProviderType.OpenaiCompatible,
+      } as AgentProviderCredentialResponseDto)
+      .mockResolvedValueOnce({
+        id: 'cred-2',
+        providerType: ProviderType.OpenaiCompatible,
+      } as AgentProviderCredentialResponseDto);
 
     const user = userEvent.setup();
     render(AgentOnboarding, { props: { onComplete: vi.fn() } });
@@ -111,8 +125,6 @@ describe('agent-onboarding orchestrator', () => {
     await user.click(screen.getByRole('button', { name: 'assistant_onboarding_test' }));
     await screen.findByText('assistant_onboarding_connected');
 
-    await waitFor(() =>
-      expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: 'cred-1' }),
-    );
+    await waitFor(() => expect(sdkMock.deleteAgentProviderCredential).toHaveBeenCalledWith({ id: 'cred-1' }));
   });
 });

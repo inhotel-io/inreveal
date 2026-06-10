@@ -41,9 +41,15 @@
 <div class="flex flex-col gap-5">
   <!-- Eyebrow + title + subtitle -->
   <div>
-    <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.09em] text-primary">{$t('assistant_onboarding_approval_eyebrow')}</p>
-    <h2 class="text-[30px] font-extrabold leading-[1.08] tracking-[-0.025em] text-gray-900 dark:text-white">{$t('assistant_onboarding_approval_title')}</h2>
-    <p class="mt-2.5 max-w-[46ch] text-[15.5px] leading-relaxed text-gray-500 dark:text-neutral-400">{$t('assistant_onboarding_approval_subtitle')}</p>
+    <p class="mb-3 text-[12px] font-bold uppercase tracking-[0.09em] text-primary">
+      {$t('assistant_onboarding_approval_eyebrow')}
+    </p>
+    <h2 class="text-[30px] font-extrabold leading-[1.08] tracking-[-0.025em] text-gray-900 dark:text-white">
+      {$t('assistant_onboarding_approval_title')}
+    </h2>
+    <p class="mt-2.5 max-w-[46ch] text-[15.5px] leading-relaxed text-gray-500 dark:text-neutral-400">
+      {$t('assistant_onboarding_approval_subtitle')}
+    </p>
   </div>
 
   <!-- 2-column approval card grid -->
@@ -62,9 +68,13 @@
       >
         <!-- title row + recommended badge -->
         <div class="flex items-center justify-between gap-2">
-          <span class="text-[14.5px] font-bold tracking-[-0.01em] text-gray-900 dark:text-white">{$t(mode.labelKey)}</span>
+          <span class="text-[14.5px] font-bold tracking-[-0.01em] text-gray-900 dark:text-white"
+            >{$t(mode.labelKey)}</span
+          >
           {#if mode.recommended}
-            <span class="rounded-full bg-primary/10 px-[7px] py-[3px] text-[10.5px] font-bold uppercase tracking-[0.04em] text-primary">
+            <span
+              class="rounded-full bg-primary/10 px-[7px] py-[3px] text-[10.5px] font-bold uppercase tracking-[0.04em] text-primary"
+            >
               {$t('assistant_onboarding_recommended')}
             </span>
           {/if}
@@ -81,12 +91,28 @@
           {#each mode.flow as node, i (i)}
             {#if node.type === 'arrow'}
               <!-- forward arrow -->
-              <svg class="h-[13px] w-[13px] flex-none text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="h-[13px] w-[13px] flex-none text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M5 12h14M13 6l6 6-6 6" />
               </svg>
             {:else if node.type === 'arrow-loop'}
               <!-- horizontal line (loop / repeating) -->
-              <svg class="h-[13px] w-[13px] flex-none text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                class="h-[13px] w-[13px] flex-none text-gray-400"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M6 12h12" />
               </svg>
             {:else}
