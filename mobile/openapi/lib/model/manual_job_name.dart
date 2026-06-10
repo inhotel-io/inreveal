@@ -38,6 +38,8 @@ class ManualJobName {
   static const integrityMissingFilesDeleteAll = ManualJobName._(r'integrity-missing-files-delete-all');
   static const integrityUntrackedFilesDeleteAll = ManualJobName._(r'integrity-untracked-files-delete-all');
   static const integrityChecksumMismatchDeleteAll = ManualJobName._(r'integrity-checksum-mismatch-delete-all');
+  static const faceIdentityBackfill = ManualJobName._(r'face-identity-backfill');
+  static const sharedSpacePersonMetadataBackfill = ManualJobName._(r'shared-space-person-metadata-backfill');
 
   /// List of all possible values in this [enum][ManualJobName].
   static const values = <ManualJobName>[
@@ -56,6 +58,8 @@ class ManualJobName {
     integrityMissingFilesDeleteAll,
     integrityUntrackedFilesDeleteAll,
     integrityChecksumMismatchDeleteAll,
+    faceIdentityBackfill,
+    sharedSpacePersonMetadataBackfill,
   ];
 
   static ManualJobName? fromJson(dynamic value) => ManualJobNameTypeTransformer().decode(value);
@@ -109,6 +113,8 @@ class ManualJobNameTypeTransformer {
         case r'integrity-missing-files-delete-all': return ManualJobName.integrityMissingFilesDeleteAll;
         case r'integrity-untracked-files-delete-all': return ManualJobName.integrityUntrackedFilesDeleteAll;
         case r'integrity-checksum-mismatch-delete-all': return ManualJobName.integrityChecksumMismatchDeleteAll;
+        case r'face-identity-backfill': return ManualJobName.faceIdentityBackfill;
+        case r'shared-space-person-metadata-backfill': return ManualJobName.sharedSpacePersonMetadataBackfill;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
