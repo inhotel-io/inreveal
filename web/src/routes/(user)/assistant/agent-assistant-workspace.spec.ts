@@ -75,7 +75,6 @@ vi.mock('svelte-i18n', () => {
     assistant_api_keys: 'API keys',
     assistant_api_keys_description: 'Save one key per provider account, then add all model IDs available for that key.',
     assistant_api_keys_menu: 'Manage API keys',
-    assistant_busy_ascii: 'pi is working...',
     assistant_existing_api_keys: 'Existing API keys',
     assistant_healthy: 'Healthy',
     assistant_hide_api_key: 'Hide API key',
