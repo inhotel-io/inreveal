@@ -56,6 +56,30 @@ const DatabaseBackupSchema = z
   })
   .meta({ id: 'DatabaseBackupConfig' });
 
+const SystemConfigIntegrityJobSchema = z
+  .object({
+    enabled: z.boolean().describe('Enabled'),
+    cronExpression: cronExpressionSchema.describe('Cron expression for when the integrity check should run'),
+  })
+  .describe('Integrity job config')
+  .meta({ id: 'SystemConfigIntegrityJob' });
+
+const SystemConfigIntegrityChecksumJobSchema = SystemConfigIntegrityJobSchema.extend({
+  timeLimit: z.int().nonnegative().describe('How long the integrity checksum job may run for'),
+  percentageLimit: z.int().nonnegative().describe('Percentage limit of the integrity checksum job'),
+})
+  .describe('Integrity checksum job config')
+  .meta({ id: 'SystemConfigIntegrityChecksumJob' });
+
+const SystemConfigIntegrityChecksSchema = z
+  .object({
+    missingFiles: SystemConfigIntegrityJobSchema,
+    untrackedFiles: SystemConfigIntegrityJobSchema,
+    checksumFiles: SystemConfigIntegrityChecksumJobSchema,
+  })
+  .describe('Integrity checks config')
+  .meta({ id: 'SystemConfigIntegrityChecks' });
+
 const SystemConfigBackupsSchema = z.object({ database: DatabaseBackupSchema }).meta({ id: 'SystemConfigBackupsDto' });
 
 const SystemConfigFFmpegSchema = z
@@ -107,6 +131,7 @@ const SystemConfigJobSchema = z
     petDetection: JobSettingsSchema,
     workflow: JobSettingsSchema,
     editor: JobSettingsSchema,
+    integrityCheck: JobSettingsSchema,
     classification: JobSettingsSchema,
   })
   .meta({ id: 'SystemConfigJobDto' });
@@ -431,6 +456,7 @@ export const SystemConfigSchema = z
     templates: SystemConfigTemplatesSchema,
     server: SystemConfigServerSchema,
     user: SystemConfigUserSchema,
+    integrityChecks: SystemConfigIntegrityChecksSchema,
     classification: SystemConfigClassificationSchema,
   })
   .describe('System configuration')
