@@ -152,7 +152,9 @@ describe(AgentToolController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['Provide assetIds for a new tool request or toolCallId for an approved request']),
+        factory.responses.validationError([
+          { path: expect.any(Array) as never, message: expect.stringContaining('Provide assetIds') as string },
+        ]),
       );
     });
   });
