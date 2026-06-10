@@ -47,6 +47,35 @@ export type AgentTurnTimeline = {
   rows: AgentTurnTimelineRow[];
 };
 
+// ── redaction ────────────────────────────────────────────────────────────────
+
+const technicalTextLimit = 500;
+const unsafePromptPattern = /\b(raw prompt|system prompt|chain-of-thought|reasoning trace)\s*:/i;
+const secretAssignmentPattern =
+  /\b(token|api_key|apikey|api-key|access_token|refresh_token|runner_token)=([^&\s,;]+)/gi;
+
+const redactTechnicalText = (value: string): string => {
+  if (unsafePromptPattern.test(value)) {
+    return '[redacted unsafe prompt/reasoning text]';
+  }
+
+  const redacted = value
+    .replaceAll(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]')
+    .replaceAll(/\bBasic\s+[^\s,;]+/gi, 'Basic [REDACTED]')
+    .replaceAll(secretAssignmentPattern, '$1=[REDACTED]')
+    .replaceAll(/\brunner\s+token\s+[^\s,;]+/gi, 'runner token [REDACTED]')
+    .replaceAll(/\bprovider\s+key\s+[^\s,;]+/gi, 'provider key [REDACTED]')
+    .replaceAll(/\bsk-[A-Za-z0-9_-]+/g, '[REDACTED]');
+
+  if (redacted.length <= technicalTextLimit) {
+    return redacted;
+  }
+
+  return `${redacted.slice(0, technicalTextLimit).trimEnd()} [truncated]`;
+};
+
+const redactOrNull = (value: string | null): string | null => (value === null ? null : redactTechnicalText(value));
+
 // ── constants ────────────────────────────────────────────────────────────────
 
 const ACTIVE_SESSION_STATUSES = new Set([
@@ -104,19 +133,21 @@ const buildRow = (toolCall: AgentToolCallResponseDto, turnIsRunning: boolean): A
   const durationMs =
     toolCall.completedAt === null ? null : Date.parse(toolCall.completedAt) - Date.parse(toolCall.startedAt);
 
+  const rawSummaryText = toolCall.responseSummary ?? toolCall.requestSummary ?? null;
+
   return {
     id: toolCall.id,
     toolName: toolCall.toolName,
     state,
-    summaryText: toolCall.responseSummary ?? toolCall.requestSummary ?? null,
+    summaryText: redactOrNull(rawSummaryText),
     durationMs,
     detail: {
-      requestSummary: toolCall.requestSummary ?? null,
-      responseSummary: toolCall.responseSummary ?? null,
+      requestSummary: redactOrNull(toolCall.requestSummary ?? null),
+      responseSummary: redactOrNull(toolCall.responseSummary ?? null),
       assetCount: toolCall.assetCount ?? null,
       albumCount: toolCall.albumCount ?? null,
       resultSize: toolCall.resultSize ?? null,
-      error: toolCall.error ?? null,
+      error: redactOrNull(toolCall.error ?? null),
       startedAt: toolCall.startedAt,
       completedAt: toolCall.completedAt ?? null,
     },
