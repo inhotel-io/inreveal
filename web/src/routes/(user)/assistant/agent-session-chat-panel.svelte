@@ -198,6 +198,20 @@
       activityEvents,
     }),
   );
+  const latestTurnRunning = $derived(turnTimelines.at(-1)?.state === 'running');
+  // Websocket delivery is best-effort (dev restarts, reconnect gaps, mount races on fast
+  // turns). While the latest turn is running, poll messages + activity events so the chat
+  // converges without events; the poll stops itself the moment the turn settles.
+  $effect(() => {
+    if (!latestTurnRunning) {
+      return;
+    }
+    const interval = setInterval(() => {
+      void loadMessages();
+      void loadActivityEvents();
+    }, 2500);
+    return () => clearInterval(interval);
+  });
   const coveredToolCallIds = $derived(
     new Set([
       ...turnTimelines.flatMap((timeline) => timeline.rows.map((row) => row.id)),
