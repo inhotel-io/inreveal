@@ -29,6 +29,8 @@ allowBuilds:
   '@tailwindcss/oxide': true
   core-js-pure: false
   postman-code-generators: false
+  '@google/genai': false
+  koffi: false
 dedupePeerDependents: false
 injectWorkspacePackages: true
 overrides:
