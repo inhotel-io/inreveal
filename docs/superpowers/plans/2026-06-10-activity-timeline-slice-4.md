@@ -16,6 +16,7 @@
 
 - [ ] **Step 1 — failing tests first.** In `agent-session-header.spec.ts`: replace the menu-driven tests (open menu → Details, mode radio tests) with: `'opens details from the header pill'` — `await user.click(screen.getByRole('button', { name: 'Details' }))` → `onOpenDetails` called; `'renders pill-shaped header actions'` — the Details button className contains `rounded-full`. Remove `activityVisibilityMode`/`onActivityVisibilityModeChange` from the spec's render props and i18n mock entries that are now dead (`assistant_session_menu`, `assistant_activity_visibility*`). Run → red (menu still renders; Details button name differs).
 - [ ] **Step 2 — implement header:** in `agent-session-header.svelte` remove the `AgentActivityVisibilityMenu` import/usage and the `activityVisibilityMode`/`onActivityVisibilityModeChange` props; render instead:
+
 ```svelte
 <button
   type="button"
@@ -27,7 +28,9 @@
   <Icon icon={mdiInformationOutline} size="18" />
 </button>
 ```
+
 (`Icon` may already be imported; `mdiInformationOutline` from `@mdi/js`.)
+
 - [ ] **Step 3 — pane:** in `agent-conversation-pane.svelte` remove: the `activityVisibilityMode` `$state`, `setActivityVisibilityMode`, the `readAgentActivityVisibilityMode`/`writeAgentActivityVisibilityMode` import/usage, and the two props passed to header and chat panel. Update `agent-conversation-pane.spec.ts` accordingly (its visibility-persistence tests are deleted; Details-forwarding test now goes through the pill).
 - [ ] **Step 4 — chat panel:** remove the retained-but-unused `activityVisibilityMode`/`onActivityVisibilityModeChange` props and their `void`/`_` suppressions from `agent-session-chat-panel.svelte`; fix its spec if it passed them.
 - [ ] **Step 5 — delete** `agent-activity-visibility-menu.svelte`, its spec, and `agent-activity-visibility-ui.ts` (+spec). Inventory first: `rg -l "agent-activity-visibility" web/src` must list ONLY the files being modified/deleted in this task.
