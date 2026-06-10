@@ -161,6 +161,20 @@ vi.mock('svelte-i18n', () => {
     delete: 'Delete',
     rename: 'Rename',
     save: 'Save',
+    assistant_timeline_understanding: 'Understanding request…',
+    assistant_timeline_thinking: 'Thinking…',
+    assistant_timeline_verb_searching: 'Searching photos…',
+    assistant_timeline_verb_browsing_albums: 'Browsing albums…',
+    assistant_timeline_steps_one: '1 step',
+    assistant_timeline_steps: '{steps} steps',
+    assistant_timeline_failed_count: '{count} failed',
+    assistant_timeline_cancelled: 'cancelled',
+    assistant_timeline_denied: 'denied',
+    assistant_timeline_request: 'Request',
+    assistant_timeline_response: 'Response',
+    assistant_timeline_error: 'Error',
+    assistant_timeline_router_matched: 'Matched workflow {workflow} via {via}',
+    assistant_timeline_router_none: 'No workflow matched (via {via})',
   };
 
   return {
@@ -515,7 +529,7 @@ describe(AgentAssistantWorkspace.name, () => {
     });
   });
 
-  it('shows Pi working in the selected chat while the first message is waiting for approval', async () => {
+  it('selects the new session and shows the chat after the first message is sent', async () => {
     const user = userEvent.setup();
     const createdSession = makeSession({
       id: '00000000-0000-4000-8000-000000000400',
@@ -542,11 +556,12 @@ describe(AgentAssistantWorkspace.name, () => {
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByTestId(`agent-session-row-${createdSession.id}`)).toHaveAttribute('aria-current', 'true');
-    expect(await screen.findByText('pi is working...')).toBeInTheDocument();
 
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
     resolveAppend!(makeUserMessage(createdSession.id, 'Make an album from last weekend'));
     expect(await within(transcript).findByText('Make an album from last weekend')).toBeInTheDocument();
+    // After message arrives, the running timeline is shown
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('uses permissions selected from the three-dot menu when creating the next session', async () => {
