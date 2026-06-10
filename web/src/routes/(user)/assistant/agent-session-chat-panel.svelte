@@ -634,12 +634,6 @@
       return;
     }
 
-    if (event.type === 'tool-approval-needed') {
-      isAssistantActive = false;
-      streamingText = '';
-      return;
-    }
-
     isAssistantActive = false;
     streamingText = '';
     errorMessage = event.message;

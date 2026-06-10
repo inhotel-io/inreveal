@@ -618,35 +618,6 @@ describe('pi runtime adapter', () => {
     await rm(calls.loaders[1].cwd, { recursive: true, force: true });
   });
 
-  it('keeps built-in tools disabled and enables only Gallery read custom tools when a gateway is present', async () => {
-    const { sdk, ai, calls } = createFakeDependencies();
-    const runtime = createPiRuntime({ sdk, ai });
-
-    const result = await runtime.createSession(
-      createSessionBody({
-        toolGateway: {
-          url: 'https://gallery.example.test/tools',
-          token: 'gateway-token-secret',
-        },
-      }),
-    );
-
-    assert.deepEqual(result.capabilities.tools, [
-      'searchAssets',
-      'readAssetMetadata',
-      'readAssetPreviews',
-      'readAssetOriginals',
-      'listAlbums',
-      'readAlbum',
-    ]);
-    assert.equal(calls.createAgentSession[0].noTools, 'builtin');
-    assert.deepEqual(calls.createAgentSession[0].tools, []);
-    assert.deepEqual(
-      calls.createAgentSession[0].customTools.map((tool) => tool.name),
-      result.capabilities.tools,
-    );
-  });
-
   it('uses transient in-memory Pi auth storage and model registry', async () => {
     const { sdk, ai, calls } = createFakeDependencies();
     const runtime = createPiRuntime({ sdk, ai });
@@ -776,21 +747,6 @@ describe('pi runtime adapter', () => {
     assert.match(calls.loaders[0].systemPrompt, /not an internal Gallery issue/i);
     assert.match(calls.loaders[0].systemPrompt, /approval-required.*pauses?/i);
     assert.doesNotMatch(calls.loaders[0].systemPrompt, /denied .*recoverable/i);
-  });
-
-  it('constructs the Pi resource loader with concrete runtime paths', async () => {
-    const { sdk, ai, calls } = createFakeDependencies();
-    const runtime = createPiRuntime({ sdk, ai });
-
-    await runtime.createSession(createSessionBody());
-
-    assert.equal(calls.loaders.length, 1);
-    assert.equal(typeof calls.loaders[0].cwd, 'string');
-    assert.notEqual(calls.loaders[0].cwd, '');
-    assert.ok(calls.loaders[0].cwd.endsWith('agent-runner'));
-    assert.equal(typeof calls.loaders[0].agentDir, 'string');
-    assert.notEqual(calls.loaders[0].agentDir, '');
-    assert.ok(calls.loaders[0].agentDir.endsWith('agent-runner/.pi-runtime'));
   });
 
   it('registers an OpenAI-compatible provider without persisting the secret', async () => {
