@@ -5,6 +5,7 @@ import {
   type AgentSessionResponseDto,
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
+import type { Translations } from 'svelte-i18n';
 import {
   activityEventBelongsToTurn,
   buildStableTurnAnchors,
@@ -28,7 +29,7 @@ export type AgentTurnTimelineRow = {
     responseSummary: string | null;
     assetCount: number | null;
     albumCount: number | null;
-    resultSize: AgentToolCallResponseDto['resultSize'] | null;
+    resultSize: NonNullable<AgentToolCallResponseDto['resultSize']> | null;
     error: string | null;
     startedAt: string;
     completedAt: string | null;
@@ -39,7 +40,7 @@ export type AgentTurnTimeline = {
   anchorMessageId: string;
   state: 'running' | 'settled';
   /** non-null only while state === 'running' */
-  oneLiner: { kind: 'key'; key: string } | { kind: 'raw'; toolName: string } | null;
+  oneLiner: { kind: 'key'; key: Translations } | { kind: 'raw'; toolName: string } | null;
   /** null when rows.length === 0 (E1) */
   summary: { steps: number; durationMs: number | null; failedCount: number; cancelled: boolean } | null;
   /** latest strict_router_decision in the turn, parsed from its key=value summary; null when absent (E11) */
@@ -85,7 +86,7 @@ const ACTIVE_SESSION_STATUSES = new Set([
   AgentSessionStatus.Applying,
 ]);
 
-const TOOL_VERB_KEYS: Record<string, string> = {
+const TOOL_VERB_KEYS: Record<string, Translations> = {
   searchAssets: 'assistant_timeline_verb_searching',
   resolveAssetSearchFilters: 'assistant_timeline_verb_filtering',
   readAssetMetadata: 'assistant_timeline_verb_reading_details',
@@ -159,7 +160,7 @@ const sortRows = (rows: AgentTurnTimelineRow[]): AgentTurnTimelineRow[] =>
 
 const buildOneLiner = (rows: AgentTurnTimelineRow[]): AgentTurnTimeline['oneLiner'] => {
   if (rows.length === 0) {
-    return { kind: 'key', key: 'assistant_timeline_understanding' };
+    return { kind: 'key', key: 'assistant_timeline_understanding' as Translations };
   }
 
   // newest in-flight row (last by sort = already sorted)
@@ -174,7 +175,7 @@ const buildOneLiner = (rows: AgentTurnTimelineRow[]): AgentTurnTimeline['oneLine
   }
 
   // rows exist but none in-flight — between calls
-  return { kind: 'key', key: 'assistant_timeline_thinking' };
+  return { kind: 'key', key: 'assistant_timeline_thinking' as Translations };
 };
 
 const buildSummary = (rows: AgentTurnTimelineRow[]): AgentTurnTimeline['summary'] => {
