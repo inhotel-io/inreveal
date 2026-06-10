@@ -62,22 +62,22 @@ A pure builder module, `agent-turn-timeline-ui.ts`: `buildAgentTurnTimeline({ me
 
 ## Edge cases (each is a named test in its slice)
 
-| #   | Edge case                                                     | Expected behavior                                                                                |
-| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| E1  | Turn with zero tool calls (pure chat)                         | No summary line, no timeline, no one-liner artifacts after settle                                |
-| E2  | Turn running, no tool call yet                                | One-liner "Understanding request…"                                                               |
-| E3  | Turn running, tool call in flight                             | One-liner = friendly verb for that tool; unknown tool → raw name                                 |
-| E4  | Cancel mid-turn                                               | In-flight rows grey "cancelled"; summary `N steps · cancelled`; server inserts `skipped` closers |
-| E5  | Runner death (session terminal, tool call stuck non-terminal) | Same rendering as E4 (derived from session terminal state)                                       |
-| E6  | Denied tool call                                              | Amber "denied" row; not counted as failed in summary line                                        |
-| E7  | Failed tool call                                              | `· 1 failed` in summary; error text in row detail                                                |
-| E8  | `completedAt` null on a completed-state anomaly               | Duration omitted for that row; turn duration uses last available `completedAt`                   |
-| E9  | Multiple lifecycle events of the same kind in one turn        | Effective status = latest by `createdAt`; no duplicate closers inserted (idempotency)            |
-| E10 | Long `requestSummary`/`responseSummary` (≤1000 chars)         | Row summary clamped to one line; full text in detail block                                       |
-| E11 | Router decision absent (open orchestration)                   | No annotation row                                                                                |
-| E12 | Out-of-order timestamps                                       | Rows sorted `startedAt` then id; grouping unchanged (existing window logic)                      |
-| E13 | Tool-call refresh for an unknown/other session                | Ignored — covered by the existing `mergeAgentTimelineToolCalls` session guard + its tests        |
-| E14 | Refresh arrives for an already-known tool call                | Upsert by id, stale states never regress — covered by the existing merge tests                   |
+| #   | Edge case                                                     | Expected behavior                                                                                                       |
+| --- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| E1  | Turn with zero tool calls (pure chat)                         | No summary line, no timeline, no one-liner artifacts after settle                                                       |
+| E2  | Turn running, no tool call yet                                | One-liner "Understanding request…"                                                                                      |
+| E3  | Turn running, tool call in flight                             | One-liner = friendly verb for that tool; unknown tool → raw name                                                        |
+| E4  | Cancel mid-turn                                               | In-flight rows grey "cancelled"; summary `N steps · cancelled`; server inserts `skipped` closers                        |
+| E5  | Runner death (session terminal, tool call stuck non-terminal) | Same rendering as E4 (derived from session terminal state)                                                              |
+| E6  | Denied tool call                                              | Amber "denied" row; not counted as failed in summary line                                                               |
+| E7  | Failed tool call                                              | `· 1 failed` in summary; error text in row detail                                                                       |
+| E8  | `completedAt` null on a completed-state anomaly               | Duration omitted for that row; turn duration uses last available `completedAt`                                          |
+| E9  | Multiple lifecycle events of the same kind in one turn        | Effective status = latest by `createdAt`; no duplicate closers inserted (idempotency)                                   |
+| E10 | Long `requestSummary`/`responseSummary` (≤1000 chars)         | Row summary clamped to one line (CSS); detail text redacted + safety-capped at 500 chars (parity with the old redactor) |
+| E11 | Router decision absent (open orchestration)                   | No annotation row                                                                                                       |
+| E12 | Out-of-order timestamps                                       | Rows sorted `startedAt` then id; grouping unchanged (existing window logic)                                             |
+| E13 | Tool-call refresh for an unknown/other session                | Ignored — covered by the existing `mergeAgentTimelineToolCalls` session guard + its tests                               |
+| E14 | Refresh arrives for an already-known tool call                | Upsert by id, stale states never regress — covered by the existing merge tests                                          |
 
 ## Implementation slices (impl-loop format — each slice is independently shippable, strict TDD)
 
