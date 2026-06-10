@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentMessagePlanBlock {
   /// Returns a new [AgentMessagePlanBlock] instance.
   AgentMessagePlanBlock({
-    this.label,
+    this.label = const Optional.absent(),
     required this.planId,
     required this.type,
   });
@@ -24,7 +24,7 @@ class AgentMessagePlanBlock {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? label;
+  Optional<String?> label;
 
   String planId;
 
@@ -48,10 +48,9 @@ class AgentMessagePlanBlock {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.label != null) {
-      json[r'label'] = this.label;
-    } else {
-    //  json[r'label'] = null;
+    if (this.label.isPresent) {
+      final value = this.label.value;
+      json[r'label'] = value;
     }
       json[r'planId'] = this.planId;
       json[r'type'] = this.type;
@@ -67,7 +66,7 @@ class AgentMessagePlanBlock {
       final json = value.cast<String, dynamic>();
 
       return AgentMessagePlanBlock(
-        label: mapValueOfType<String>(json, r'label'),
+        label: json.containsKey(r'label') ? Optional.present(mapValueOfType<String>(json, r'label')) : const Optional.absent(),
         planId: mapValueOfType<String>(json, r'planId')!,
         type: AgentMessagePlanBlockType.fromJson(json[r'type'])!,
       );

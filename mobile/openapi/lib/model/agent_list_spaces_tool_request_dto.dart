@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentListSpacesToolRequestDto {
   /// Returns a new [AgentListSpacesToolRequestDto] instance.
   AgentListSpacesToolRequestDto({
-    this.toolCallId,
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Approved tool call id when retrying after user approval
@@ -23,7 +23,7 @@ class AgentListSpacesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentListSpacesToolRequestDto &&
@@ -39,10 +39,9 @@ class AgentListSpacesToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -56,7 +55,7 @@ class AgentListSpacesToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentListSpacesToolRequestDto(
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

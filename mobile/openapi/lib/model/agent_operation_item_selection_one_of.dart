@@ -15,14 +15,14 @@ class AgentOperationItemSelectionOneOf {
   AgentOperationItemSelectionOneOf({
     required this.itemKind,
     required this.mode,
-    this.itemIds = const [],
+    this.itemIds = const Optional.present(const []),
   });
 
   AgentOperationItemKind itemKind;
 
   AgentOperationItemSelectionOneOfModeEnum mode;
 
-  List<String> itemIds;
+  Optional<List<String>?> itemIds;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentOperationItemSelectionOneOf &&
@@ -44,7 +44,10 @@ class AgentOperationItemSelectionOneOf {
     final json = <String, dynamic>{};
       json[r'itemKind'] = this.itemKind;
       json[r'mode'] = this.mode;
-      json[r'itemIds'] = this.itemIds;
+    if (this.itemIds.isPresent) {
+      final value = this.itemIds.value;
+      json[r'itemIds'] = value;
+    }
     return json;
   }
 
@@ -59,9 +62,9 @@ class AgentOperationItemSelectionOneOf {
       return AgentOperationItemSelectionOneOf(
         itemKind: AgentOperationItemKind.fromJson(json[r'itemKind'])!,
         mode: AgentOperationItemSelectionOneOfModeEnum.fromJson(json[r'mode'])!,
-        itemIds: json[r'itemIds'] is Iterable
+        itemIds: json.containsKey(r'itemIds') ? Optional.present(json[r'itemIds'] is Iterable
             ? (json[r'itemIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
       );
     }
     return null;

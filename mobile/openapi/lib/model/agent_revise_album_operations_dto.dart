@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentReviseAlbumOperationsDto {
   /// Returns a new [AgentReviseAlbumOperationsDto] instance.
   AgentReviseAlbumOperationsDto({
-    this.feedback,
+    this.feedback = const Optional.absent(),
     this.operations = const [],
     required this.summary,
   });
@@ -24,7 +24,7 @@ class AgentReviseAlbumOperationsDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? feedback;
+  Optional<String?> feedback;
 
   List<AgentProposeAlbumOperationsDtoOperationsInner> operations;
 
@@ -48,10 +48,9 @@ class AgentReviseAlbumOperationsDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.feedback != null) {
-      json[r'feedback'] = this.feedback;
-    } else {
-    //  json[r'feedback'] = null;
+    if (this.feedback.isPresent) {
+      final value = this.feedback.value;
+      json[r'feedback'] = value;
     }
       json[r'operations'] = this.operations;
       json[r'summary'] = this.summary;
@@ -67,7 +66,7 @@ class AgentReviseAlbumOperationsDto {
       final json = value.cast<String, dynamic>();
 
       return AgentReviseAlbumOperationsDto(
-        feedback: mapValueOfType<String>(json, r'feedback'),
+        feedback: json.containsKey(r'feedback') ? Optional.present(mapValueOfType<String>(json, r'feedback')) : const Optional.absent(),
         operations: AgentProposeAlbumOperationsDtoOperationsInner.listFromJson(json[r'operations']),
         summary: mapValueOfType<String>(json, r'summary')!,
       );

@@ -25,7 +25,7 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [AgentProviderCredentialCreateDto] agentProviderCredentialCreateDto (required):
-  Future<Response> createAgentProviderCredentialWithHttpInfo(AgentProviderCredentialCreateDto agentProviderCredentialCreateDto,) async {
+  Future<Response> createAgentProviderCredentialWithHttpInfo(AgentProviderCredentialCreateDto agentProviderCredentialCreateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/provider-credentials';
 
@@ -47,6 +47,7 @@ class AgentCredentialsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -57,8 +58,8 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [AgentProviderCredentialCreateDto] agentProviderCredentialCreateDto (required):
-  Future<AgentProviderCredentialResponseDto?> createAgentProviderCredential(AgentProviderCredentialCreateDto agentProviderCredentialCreateDto,) async {
-    final response = await createAgentProviderCredentialWithHttpInfo(agentProviderCredentialCreateDto,);
+  Future<AgentProviderCredentialResponseDto?> createAgentProviderCredential(AgentProviderCredentialCreateDto agentProviderCredentialCreateDto, { Future<void>? abortTrigger, }) async {
+    final response = await createAgentProviderCredentialWithHttpInfo(agentProviderCredentialCreateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -81,7 +82,7 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> deleteAgentProviderCredentialWithHttpInfo(String id,) async {
+  Future<Response> deleteAgentProviderCredentialWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/provider-credentials/{id}'
       .replaceAll('{id}', id);
@@ -104,6 +105,7 @@ class AgentCredentialsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -114,8 +116,8 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<void> deleteAgentProviderCredential(String id,) async {
-    final response = await deleteAgentProviderCredentialWithHttpInfo(id,);
+  Future<void> deleteAgentProviderCredential(String id, { Future<void>? abortTrigger, }) async {
+    final response = await deleteAgentProviderCredentialWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -130,7 +132,7 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getAgentProviderCredentialWithHttpInfo(String id,) async {
+  Future<Response> getAgentProviderCredentialWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/provider-credentials/{id}'
       .replaceAll('{id}', id);
@@ -153,6 +155,7 @@ class AgentCredentialsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -163,8 +166,8 @@ class AgentCredentialsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<AgentProviderCredentialResponseDto?> getAgentProviderCredential(String id,) async {
-    final response = await getAgentProviderCredentialWithHttpInfo(id,);
+  Future<AgentProviderCredentialResponseDto?> getAgentProviderCredential(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getAgentProviderCredentialWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -183,7 +186,7 @@ class AgentCredentialsApi {
   /// Retrieve all AI agent provider credentials owned by the current user.
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> getAgentProviderCredentialsWithHttpInfo() async {
+  Future<Response> getAgentProviderCredentialsWithHttpInfo({ Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/provider-credentials';
 
@@ -205,14 +208,15 @@ class AgentCredentialsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
   /// List agent provider credentials
   ///
   /// Retrieve all AI agent provider credentials owned by the current user.
-  Future<List<AgentProviderCredentialResponseDto>?> getAgentProviderCredentials() async {
-    final response = await getAgentProviderCredentialsWithHttpInfo();
+  Future<List<AgentProviderCredentialResponseDto>?> getAgentProviderCredentials({ Future<void>? abortTrigger, }) async {
+    final response = await getAgentProviderCredentialsWithHttpInfo(abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -240,7 +244,7 @@ class AgentCredentialsApi {
   /// * [String] id (required):
   ///
   /// * [AgentProviderCredentialUpdateDto] agentProviderCredentialUpdateDto (required):
-  Future<Response> updateAgentProviderCredentialWithHttpInfo(String id, AgentProviderCredentialUpdateDto agentProviderCredentialUpdateDto,) async {
+  Future<Response> updateAgentProviderCredentialWithHttpInfo(String id, AgentProviderCredentialUpdateDto agentProviderCredentialUpdateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/provider-credentials/{id}'
       .replaceAll('{id}', id);
@@ -263,6 +267,7 @@ class AgentCredentialsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -275,8 +280,8 @@ class AgentCredentialsApi {
   /// * [String] id (required):
   ///
   /// * [AgentProviderCredentialUpdateDto] agentProviderCredentialUpdateDto (required):
-  Future<AgentProviderCredentialResponseDto?> updateAgentProviderCredential(String id, AgentProviderCredentialUpdateDto agentProviderCredentialUpdateDto,) async {
-    final response = await updateAgentProviderCredentialWithHttpInfo(id, agentProviderCredentialUpdateDto,);
+  Future<AgentProviderCredentialResponseDto?> updateAgentProviderCredential(String id, AgentProviderCredentialUpdateDto agentProviderCredentialUpdateDto, { Future<void>? abortTrigger, }) async {
+    final response = await updateAgentProviderCredentialWithHttpInfo(id, agentProviderCredentialUpdateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

@@ -16,9 +16,9 @@ class AgentPermissionPlanLimits {
     required this.expiresInMinutes,
     required this.maxAssetsPerSession,
     required this.maxAssetsPerToolCall,
-    this.maxOriginalsPerSession,
+    this.maxOriginalsPerSession = const Optional.absent(),
     required this.maxOriginalsPerToolCall,
-    this.maxPreviewsPerSession,
+    this.maxPreviewsPerSession = const Optional.absent(),
     required this.maxPreviewsPerToolCall,
   });
 
@@ -42,7 +42,7 @@ class AgentPermissionPlanLimits {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxOriginalsPerSession;
+  Optional<int?> maxOriginalsPerSession;
 
   /// Minimum value: 0
   /// Maximum value: 1000
@@ -56,7 +56,7 @@ class AgentPermissionPlanLimits {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxPreviewsPerSession;
+  Optional<int?> maxPreviewsPerSession;
 
   /// Minimum value: 0
   /// Maximum value: 10000
@@ -95,16 +95,14 @@ class AgentPermissionPlanLimits {
     }
       json[r'maxAssetsPerSession'] = this.maxAssetsPerSession;
       json[r'maxAssetsPerToolCall'] = this.maxAssetsPerToolCall;
-    if (this.maxOriginalsPerSession != null) {
-      json[r'maxOriginalsPerSession'] = this.maxOriginalsPerSession;
-    } else {
-    //  json[r'maxOriginalsPerSession'] = null;
+    if (this.maxOriginalsPerSession.isPresent) {
+      final value = this.maxOriginalsPerSession.value;
+      json[r'maxOriginalsPerSession'] = value;
     }
       json[r'maxOriginalsPerToolCall'] = this.maxOriginalsPerToolCall;
-    if (this.maxPreviewsPerSession != null) {
-      json[r'maxPreviewsPerSession'] = this.maxPreviewsPerSession;
-    } else {
-    //  json[r'maxPreviewsPerSession'] = null;
+    if (this.maxPreviewsPerSession.isPresent) {
+      final value = this.maxPreviewsPerSession.value;
+      json[r'maxPreviewsPerSession'] = value;
     }
       json[r'maxPreviewsPerToolCall'] = this.maxPreviewsPerToolCall;
     return json;
@@ -122,9 +120,9 @@ class AgentPermissionPlanLimits {
         expiresInMinutes: mapValueOfType<int>(json, r'expiresInMinutes'),
         maxAssetsPerSession: mapValueOfType<int>(json, r'maxAssetsPerSession')!,
         maxAssetsPerToolCall: mapValueOfType<int>(json, r'maxAssetsPerToolCall')!,
-        maxOriginalsPerSession: mapValueOfType<int>(json, r'maxOriginalsPerSession'),
+        maxOriginalsPerSession: json.containsKey(r'maxOriginalsPerSession') ? Optional.present(json[r'maxOriginalsPerSession'] == null ? null : int.parse('${json[r'maxOriginalsPerSession']}')) : const Optional.absent(),
         maxOriginalsPerToolCall: mapValueOfType<int>(json, r'maxOriginalsPerToolCall')!,
-        maxPreviewsPerSession: mapValueOfType<int>(json, r'maxPreviewsPerSession'),
+        maxPreviewsPerSession: json.containsKey(r'maxPreviewsPerSession') ? Optional.present(json[r'maxPreviewsPerSession'] == null ? null : int.parse('${json[r'maxPreviewsPerSession']}')) : const Optional.absent(),
         maxPreviewsPerToolCall: mapValueOfType<int>(json, r'maxPreviewsPerToolCall')!,
       );
     }

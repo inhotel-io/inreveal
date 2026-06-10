@@ -14,7 +14,7 @@ class AgentToolApprovalDto {
   /// Returns a new [AgentToolApprovalDto] instance.
   AgentToolApprovalDto({
     required this.decision,
-    this.reason,
+    this.reason = const Optional.absent(),
   });
 
   AgentToolApprovalDecision decision;
@@ -25,7 +25,7 @@ class AgentToolApprovalDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? reason;
+  Optional<String?> reason;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentToolApprovalDto &&
@@ -44,10 +44,9 @@ class AgentToolApprovalDto {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'decision'] = this.decision;
-    if (this.reason != null) {
-      json[r'reason'] = this.reason;
-    } else {
-    //  json[r'reason'] = null;
+    if (this.reason.isPresent) {
+      final value = this.reason.value;
+      json[r'reason'] = value;
     }
     return json;
   }
@@ -62,7 +61,7 @@ class AgentToolApprovalDto {
 
       return AgentToolApprovalDto(
         decision: AgentToolApprovalDecision.fromJson(json[r'decision'])!,
-        reason: mapValueOfType<String>(json, r'reason'),
+        reason: json.containsKey(r'reason') ? Optional.present(mapValueOfType<String>(json, r'reason')) : const Optional.absent(),
       );
     }
     return null;

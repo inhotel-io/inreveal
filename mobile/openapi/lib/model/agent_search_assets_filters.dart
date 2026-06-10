@@ -13,39 +13,39 @@ part of openapi.api;
 class AgentSearchAssetsFilters {
   /// Returns a new [AgentSearchAssetsFilters] instance.
   AgentSearchAssetsFilters({
-    this.albumIds = const [],
-    this.albumMatchAny,
-    this.city,
-    this.country,
-    this.createdAfter,
-    this.createdBefore,
-    this.isFavorite,
-    this.isNotInAlbum,
-    this.isTrashed,
-    this.lensModel,
-    this.make,
-    this.maxBrightness,
-    this.maxQuality,
-    this.maxSharpness,
-    this.model,
-    this.personIds = const [],
-    this.personMatchAny,
-    this.rating,
-    this.spaceId,
-    this.spacePersonIds = const [],
-    this.state,
-    this.tagIds = const [],
-    this.tagMatchAny,
-    this.takenAfter,
-    this.takenBefore,
-    this.type,
-    this.updatedAfter,
-    this.updatedBefore,
-    this.visibility,
-    this.withSharedSpaces,
+    this.albumIds = const Optional.present(const []),
+    this.albumMatchAny = const Optional.absent(),
+    this.city = const Optional.absent(),
+    this.country = const Optional.absent(),
+    this.createdAfter = const Optional.absent(),
+    this.createdBefore = const Optional.absent(),
+    this.isFavorite = const Optional.absent(),
+    this.isNotInAlbum = const Optional.absent(),
+    this.isTrashed = const Optional.absent(),
+    this.lensModel = const Optional.absent(),
+    this.make = const Optional.absent(),
+    this.maxBrightness = const Optional.absent(),
+    this.maxQuality = const Optional.absent(),
+    this.maxSharpness = const Optional.absent(),
+    this.model = const Optional.absent(),
+    this.personIds = const Optional.present(const []),
+    this.personMatchAny = const Optional.absent(),
+    this.rating = const Optional.absent(),
+    this.spaceId = const Optional.absent(),
+    this.spacePersonIds = const Optional.present(const []),
+    this.state = const Optional.absent(),
+    this.tagIds = const Optional.present(const []),
+    this.tagMatchAny = const Optional.absent(),
+    this.takenAfter = const Optional.absent(),
+    this.takenBefore = const Optional.absent(),
+    this.type = const Optional.absent(),
+    this.updatedAfter = const Optional.absent(),
+    this.updatedBefore = const Optional.absent(),
+    this.visibility = const Optional.absent(),
+    this.withSharedSpaces = const Optional.absent(),
   });
 
-  List<String> albumIds;
+  Optional<List<String>?> albumIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -53,19 +53,11 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? albumMatchAny;
+  Optional<bool?> albumMatchAny;
 
-  String? city;
+  Optional<String?> city;
 
-  String? country;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  DateTime? createdAfter;
+  Optional<String?> country;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -73,7 +65,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? createdBefore;
+  Optional<DateTime?> createdAfter;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -81,7 +73,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isFavorite;
+  Optional<DateTime?> createdBefore;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -89,7 +81,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isNotInAlbum;
+  Optional<bool?> isFavorite;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -97,11 +89,19 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? isTrashed;
+  Optional<bool?> isNotInAlbum;
 
-  String? lensModel;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<bool?> isTrashed;
 
-  String? make;
+  Optional<String?> lensModel;
+
+  Optional<String?> make;
 
   /// Minimum value: 0
   /// Maximum value: 100
@@ -111,7 +111,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxBrightness;
+  Optional<int?> maxBrightness;
 
   /// Minimum value: 0
   /// Maximum value: 100
@@ -121,7 +121,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxQuality;
+  Optional<int?> maxQuality;
 
   /// Minimum value: 0
   /// Maximum value: 100
@@ -131,11 +131,11 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxSharpness;
+  Optional<int?> maxSharpness;
 
-  String? model;
+  Optional<String?> model;
 
-  List<String> personIds;
+  Optional<List<String>?> personIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -143,11 +143,11 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? personMatchAny;
+  Optional<bool?> personMatchAny;
 
   /// Minimum value: 1
   /// Maximum value: 5
-  int? rating;
+  Optional<int?> rating;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -155,21 +155,13 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? spaceId;
+  Optional<String?> spaceId;
 
-  List<String> spacePersonIds;
+  Optional<List<String>?> spacePersonIds;
 
-  String? state;
+  Optional<String?> state;
 
-  List<String> tagIds;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  bool? tagMatchAny;
+  Optional<List<String>?> tagIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -177,7 +169,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? takenAfter;
+  Optional<bool?> tagMatchAny;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -185,7 +177,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? takenBefore;
+  Optional<DateTime?> takenAfter;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -193,7 +185,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AssetTypeEnum? type;
+  Optional<DateTime?> takenBefore;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -201,7 +193,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? updatedAfter;
+  Optional<AssetTypeEnum?> type;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -209,7 +201,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? updatedBefore;
+  Optional<DateTime?> updatedAfter;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -217,7 +209,7 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AssetVisibility? visibility;
+  Optional<DateTime?> updatedBefore;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -225,7 +217,15 @@ class AgentSearchAssetsFilters {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? withSharedSpaces;
+  Optional<AssetVisibility?> visibility;
+
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<bool?> withSharedSpaces;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsFilters &&
@@ -299,151 +299,137 @@ class AgentSearchAssetsFilters {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'albumIds'] = this.albumIds;
-    if (this.albumMatchAny != null) {
-      json[r'albumMatchAny'] = this.albumMatchAny;
-    } else {
-    //  json[r'albumMatchAny'] = null;
+    if (this.albumIds.isPresent) {
+      final value = this.albumIds.value;
+      json[r'albumIds'] = value;
     }
-    if (this.city != null) {
-      json[r'city'] = this.city;
-    } else {
-    //  json[r'city'] = null;
+    if (this.albumMatchAny.isPresent) {
+      final value = this.albumMatchAny.value;
+      json[r'albumMatchAny'] = value;
     }
-    if (this.country != null) {
-      json[r'country'] = this.country;
-    } else {
-    //  json[r'country'] = null;
+    if (this.city.isPresent) {
+      final value = this.city.value;
+      json[r'city'] = value;
     }
-    if (this.createdAfter != null) {
-      json[r'createdAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.createdAfter!.millisecondsSinceEpoch
-        : this.createdAfter!.toUtc().toIso8601String();
-    } else {
-    //  json[r'createdAfter'] = null;
+    if (this.country.isPresent) {
+      final value = this.country.value;
+      json[r'country'] = value;
     }
-    if (this.createdBefore != null) {
-      json[r'createdBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.createdBefore!.millisecondsSinceEpoch
-        : this.createdBefore!.toUtc().toIso8601String();
-    } else {
-    //  json[r'createdBefore'] = null;
+    if (this.createdAfter.isPresent) {
+      final value = this.createdAfter.value;
+      json[r'createdAfter'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.isFavorite != null) {
-      json[r'isFavorite'] = this.isFavorite;
-    } else {
-    //  json[r'isFavorite'] = null;
+    if (this.createdBefore.isPresent) {
+      final value = this.createdBefore.value;
+      json[r'createdBefore'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.isNotInAlbum != null) {
-      json[r'isNotInAlbum'] = this.isNotInAlbum;
-    } else {
-    //  json[r'isNotInAlbum'] = null;
+    if (this.isFavorite.isPresent) {
+      final value = this.isFavorite.value;
+      json[r'isFavorite'] = value;
     }
-    if (this.isTrashed != null) {
-      json[r'isTrashed'] = this.isTrashed;
-    } else {
-    //  json[r'isTrashed'] = null;
+    if (this.isNotInAlbum.isPresent) {
+      final value = this.isNotInAlbum.value;
+      json[r'isNotInAlbum'] = value;
     }
-    if (this.lensModel != null) {
-      json[r'lensModel'] = this.lensModel;
-    } else {
-    //  json[r'lensModel'] = null;
+    if (this.isTrashed.isPresent) {
+      final value = this.isTrashed.value;
+      json[r'isTrashed'] = value;
     }
-    if (this.make != null) {
-      json[r'make'] = this.make;
-    } else {
-    //  json[r'make'] = null;
+    if (this.lensModel.isPresent) {
+      final value = this.lensModel.value;
+      json[r'lensModel'] = value;
     }
-    if (this.maxBrightness != null) {
-      json[r'maxBrightness'] = this.maxBrightness;
-    } else {
-    //  json[r'maxBrightness'] = null;
+    if (this.make.isPresent) {
+      final value = this.make.value;
+      json[r'make'] = value;
     }
-    if (this.maxQuality != null) {
-      json[r'maxQuality'] = this.maxQuality;
-    } else {
-    //  json[r'maxQuality'] = null;
+    if (this.maxBrightness.isPresent) {
+      final value = this.maxBrightness.value;
+      json[r'maxBrightness'] = value;
     }
-    if (this.maxSharpness != null) {
-      json[r'maxSharpness'] = this.maxSharpness;
-    } else {
-    //  json[r'maxSharpness'] = null;
+    if (this.maxQuality.isPresent) {
+      final value = this.maxQuality.value;
+      json[r'maxQuality'] = value;
     }
-    if (this.model != null) {
-      json[r'model'] = this.model;
-    } else {
-    //  json[r'model'] = null;
+    if (this.maxSharpness.isPresent) {
+      final value = this.maxSharpness.value;
+      json[r'maxSharpness'] = value;
     }
-      json[r'personIds'] = this.personIds;
-    if (this.personMatchAny != null) {
-      json[r'personMatchAny'] = this.personMatchAny;
-    } else {
-    //  json[r'personMatchAny'] = null;
+    if (this.model.isPresent) {
+      final value = this.model.value;
+      json[r'model'] = value;
     }
-    if (this.rating != null) {
-      json[r'rating'] = this.rating;
-    } else {
-    //  json[r'rating'] = null;
+    if (this.personIds.isPresent) {
+      final value = this.personIds.value;
+      json[r'personIds'] = value;
     }
-    if (this.spaceId != null) {
-      json[r'spaceId'] = this.spaceId;
-    } else {
-    //  json[r'spaceId'] = null;
+    if (this.personMatchAny.isPresent) {
+      final value = this.personMatchAny.value;
+      json[r'personMatchAny'] = value;
     }
-      json[r'spacePersonIds'] = this.spacePersonIds;
-    if (this.state != null) {
-      json[r'state'] = this.state;
-    } else {
-    //  json[r'state'] = null;
+    if (this.rating.isPresent) {
+      final value = this.rating.value;
+      json[r'rating'] = value;
     }
-      json[r'tagIds'] = this.tagIds;
-    if (this.tagMatchAny != null) {
-      json[r'tagMatchAny'] = this.tagMatchAny;
-    } else {
-    //  json[r'tagMatchAny'] = null;
+    if (this.spaceId.isPresent) {
+      final value = this.spaceId.value;
+      json[r'spaceId'] = value;
     }
-    if (this.takenAfter != null) {
-      json[r'takenAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.takenAfter!.millisecondsSinceEpoch
-        : this.takenAfter!.toUtc().toIso8601String();
-    } else {
-    //  json[r'takenAfter'] = null;
+    if (this.spacePersonIds.isPresent) {
+      final value = this.spacePersonIds.value;
+      json[r'spacePersonIds'] = value;
     }
-    if (this.takenBefore != null) {
-      json[r'takenBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.takenBefore!.millisecondsSinceEpoch
-        : this.takenBefore!.toUtc().toIso8601String();
-    } else {
-    //  json[r'takenBefore'] = null;
+    if (this.state.isPresent) {
+      final value = this.state.value;
+      json[r'state'] = value;
     }
-    if (this.type != null) {
-      json[r'type'] = this.type;
-    } else {
-    //  json[r'type'] = null;
+    if (this.tagIds.isPresent) {
+      final value = this.tagIds.value;
+      json[r'tagIds'] = value;
     }
-    if (this.updatedAfter != null) {
-      json[r'updatedAfter'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.updatedAfter!.millisecondsSinceEpoch
-        : this.updatedAfter!.toUtc().toIso8601String();
-    } else {
-    //  json[r'updatedAfter'] = null;
+    if (this.tagMatchAny.isPresent) {
+      final value = this.tagMatchAny.value;
+      json[r'tagMatchAny'] = value;
     }
-    if (this.updatedBefore != null) {
-      json[r'updatedBefore'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.updatedBefore!.millisecondsSinceEpoch
-        : this.updatedBefore!.toUtc().toIso8601String();
-    } else {
-    //  json[r'updatedBefore'] = null;
+    if (this.takenAfter.isPresent) {
+      final value = this.takenAfter.value;
+      json[r'takenAfter'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.visibility != null) {
-      json[r'visibility'] = this.visibility;
-    } else {
-    //  json[r'visibility'] = null;
+    if (this.takenBefore.isPresent) {
+      final value = this.takenBefore.value;
+      json[r'takenBefore'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.withSharedSpaces != null) {
-      json[r'withSharedSpaces'] = this.withSharedSpaces;
-    } else {
-    //  json[r'withSharedSpaces'] = null;
+    if (this.type.isPresent) {
+      final value = this.type.value;
+      json[r'type'] = value;
+    }
+    if (this.updatedAfter.isPresent) {
+      final value = this.updatedAfter.value;
+      json[r'updatedAfter'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
+    }
+    if (this.updatedBefore.isPresent) {
+      final value = this.updatedBefore.value;
+      json[r'updatedBefore'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
+    }
+    if (this.visibility.isPresent) {
+      final value = this.visibility.value;
+      json[r'visibility'] = value;
+    }
+    if (this.withSharedSpaces.isPresent) {
+      final value = this.withSharedSpaces.value;
+      json[r'withSharedSpaces'] = value;
     }
     return json;
   }
@@ -457,44 +443,44 @@ class AgentSearchAssetsFilters {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchAssetsFilters(
-        albumIds: json[r'albumIds'] is Iterable
+        albumIds: json.containsKey(r'albumIds') ? Optional.present(json[r'albumIds'] is Iterable
             ? (json[r'albumIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        albumMatchAny: mapValueOfType<bool>(json, r'albumMatchAny'),
-        city: mapValueOfType<String>(json, r'city'),
-        country: mapValueOfType<String>(json, r'country'),
-        createdAfter: mapDateTime(json, r'createdAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        createdBefore: mapDateTime(json, r'createdBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
-        isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
-        isTrashed: mapValueOfType<bool>(json, r'isTrashed'),
-        lensModel: mapValueOfType<String>(json, r'lensModel'),
-        make: mapValueOfType<String>(json, r'make'),
-        maxBrightness: mapValueOfType<int>(json, r'maxBrightness'),
-        maxQuality: mapValueOfType<int>(json, r'maxQuality'),
-        maxSharpness: mapValueOfType<int>(json, r'maxSharpness'),
-        model: mapValueOfType<String>(json, r'model'),
-        personIds: json[r'personIds'] is Iterable
+            : const []) : const Optional.absent(),
+        albumMatchAny: json.containsKey(r'albumMatchAny') ? Optional.present(mapValueOfType<bool>(json, r'albumMatchAny')) : const Optional.absent(),
+        city: json.containsKey(r'city') ? Optional.present(mapValueOfType<String>(json, r'city')) : const Optional.absent(),
+        country: json.containsKey(r'country') ? Optional.present(mapValueOfType<String>(json, r'country')) : const Optional.absent(),
+        createdAfter: json.containsKey(r'createdAfter') ? Optional.present(mapDateTime(json, r'createdAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        createdBefore: json.containsKey(r'createdBefore') ? Optional.present(mapDateTime(json, r'createdBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        isFavorite: json.containsKey(r'isFavorite') ? Optional.present(mapValueOfType<bool>(json, r'isFavorite')) : const Optional.absent(),
+        isNotInAlbum: json.containsKey(r'isNotInAlbum') ? Optional.present(mapValueOfType<bool>(json, r'isNotInAlbum')) : const Optional.absent(),
+        isTrashed: json.containsKey(r'isTrashed') ? Optional.present(mapValueOfType<bool>(json, r'isTrashed')) : const Optional.absent(),
+        lensModel: json.containsKey(r'lensModel') ? Optional.present(mapValueOfType<String>(json, r'lensModel')) : const Optional.absent(),
+        make: json.containsKey(r'make') ? Optional.present(mapValueOfType<String>(json, r'make')) : const Optional.absent(),
+        maxBrightness: json.containsKey(r'maxBrightness') ? Optional.present(json[r'maxBrightness'] == null ? null : int.parse('${json[r'maxBrightness']}')) : const Optional.absent(),
+        maxQuality: json.containsKey(r'maxQuality') ? Optional.present(json[r'maxQuality'] == null ? null : int.parse('${json[r'maxQuality']}')) : const Optional.absent(),
+        maxSharpness: json.containsKey(r'maxSharpness') ? Optional.present(json[r'maxSharpness'] == null ? null : int.parse('${json[r'maxSharpness']}')) : const Optional.absent(),
+        model: json.containsKey(r'model') ? Optional.present(mapValueOfType<String>(json, r'model')) : const Optional.absent(),
+        personIds: json.containsKey(r'personIds') ? Optional.present(json[r'personIds'] is Iterable
             ? (json[r'personIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        personMatchAny: mapValueOfType<bool>(json, r'personMatchAny'),
-        rating: mapValueOfType<int>(json, r'rating'),
-        spaceId: mapValueOfType<String>(json, r'spaceId'),
-        spacePersonIds: json[r'spacePersonIds'] is Iterable
+            : const []) : const Optional.absent(),
+        personMatchAny: json.containsKey(r'personMatchAny') ? Optional.present(mapValueOfType<bool>(json, r'personMatchAny')) : const Optional.absent(),
+        rating: json.containsKey(r'rating') ? Optional.present(json[r'rating'] == null ? null : int.parse('${json[r'rating']}')) : const Optional.absent(),
+        spaceId: json.containsKey(r'spaceId') ? Optional.present(mapValueOfType<String>(json, r'spaceId')) : const Optional.absent(),
+        spacePersonIds: json.containsKey(r'spacePersonIds') ? Optional.present(json[r'spacePersonIds'] is Iterable
             ? (json[r'spacePersonIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        state: mapValueOfType<String>(json, r'state'),
-        tagIds: json[r'tagIds'] is Iterable
+            : const []) : const Optional.absent(),
+        state: json.containsKey(r'state') ? Optional.present(mapValueOfType<String>(json, r'state')) : const Optional.absent(),
+        tagIds: json.containsKey(r'tagIds') ? Optional.present(json[r'tagIds'] is Iterable
             ? (json[r'tagIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        tagMatchAny: mapValueOfType<bool>(json, r'tagMatchAny'),
-        takenAfter: mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        takenBefore: mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        type: AssetTypeEnum.fromJson(json[r'type']),
-        updatedAfter: mapDateTime(json, r'updatedAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        updatedBefore: mapDateTime(json, r'updatedBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        visibility: AssetVisibility.fromJson(json[r'visibility']),
-        withSharedSpaces: mapValueOfType<bool>(json, r'withSharedSpaces'),
+            : const []) : const Optional.absent(),
+        tagMatchAny: json.containsKey(r'tagMatchAny') ? Optional.present(mapValueOfType<bool>(json, r'tagMatchAny')) : const Optional.absent(),
+        takenAfter: json.containsKey(r'takenAfter') ? Optional.present(mapDateTime(json, r'takenAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        takenBefore: json.containsKey(r'takenBefore') ? Optional.present(mapDateTime(json, r'takenBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        type: json.containsKey(r'type') ? Optional.present(AssetTypeEnum.fromJson(json[r'type'])) : const Optional.absent(),
+        updatedAfter: json.containsKey(r'updatedAfter') ? Optional.present(mapDateTime(json, r'updatedAfter', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        updatedBefore: json.containsKey(r'updatedBefore') ? Optional.present(mapDateTime(json, r'updatedBefore', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        visibility: json.containsKey(r'visibility') ? Optional.present(AssetVisibility.fromJson(json[r'visibility'])) : const Optional.absent(),
+        withSharedSpaces: json.containsKey(r'withSharedSpaces') ? Optional.present(mapValueOfType<bool>(json, r'withSharedSpaces')) : const Optional.absent(),
       );
     }
     return null;

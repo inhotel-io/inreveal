@@ -13,10 +13,10 @@ part of openapi.api;
 class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload({
-    this.password,
-    this.expiresAt,
-    this.showMetadata,
-    this.allowDownload,
+    this.password = const Optional.absent(),
+    this.expiresAt = const Optional.absent(),
+    this.showMetadata = const Optional.absent(),
+    this.allowDownload = const Optional.absent(),
   });
 
   ///
@@ -25,7 +25,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? password;
+  Optional<String?> password;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -33,7 +33,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? expiresAt;
+  Optional<String?> expiresAt;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -41,7 +41,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? showMetadata;
+  Optional<bool?> showMetadata;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -49,7 +49,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? allowDownload;
+  Optional<bool?> allowDownload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload &&
@@ -71,25 +71,21 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.password != null) {
-      json[r'password'] = this.password;
-    } else {
-    //  json[r'password'] = null;
+    if (this.password.isPresent) {
+      final value = this.password.value;
+      json[r'password'] = value;
     }
-    if (this.expiresAt != null) {
-      json[r'expiresAt'] = this.expiresAt;
-    } else {
-    //  json[r'expiresAt'] = null;
+    if (this.expiresAt.isPresent) {
+      final value = this.expiresAt.value;
+      json[r'expiresAt'] = value;
     }
-    if (this.showMetadata != null) {
-      json[r'showMetadata'] = this.showMetadata;
-    } else {
-    //  json[r'showMetadata'] = null;
+    if (this.showMetadata.isPresent) {
+      final value = this.showMetadata.value;
+      json[r'showMetadata'] = value;
     }
-    if (this.allowDownload != null) {
-      json[r'allowDownload'] = this.allowDownload;
-    } else {
-    //  json[r'allowDownload'] = null;
+    if (this.allowDownload.isPresent) {
+      final value = this.allowDownload.value;
+      json[r'allowDownload'] = value;
     }
     return json;
   }
@@ -103,10 +99,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload(
-        password: mapValueOfType<String>(json, r'password'),
-        expiresAt: mapValueOfType<String>(json, r'expiresAt'),
-        showMetadata: mapValueOfType<bool>(json, r'showMetadata'),
-        allowDownload: mapValueOfType<bool>(json, r'allowDownload'),
+        password: json.containsKey(r'password') ? Optional.present(mapValueOfType<String>(json, r'password')) : const Optional.absent(),
+        expiresAt: json.containsKey(r'expiresAt') ? Optional.present(mapValueOfType<String>(json, r'expiresAt')) : const Optional.absent(),
+        showMetadata: json.containsKey(r'showMetadata') ? Optional.present(mapValueOfType<bool>(json, r'showMetadata')) : const Optional.absent(),
+        allowDownload: json.containsKey(r'allowDownload') ? Optional.present(mapValueOfType<bool>(json, r'allowDownload')) : const Optional.absent(),
       );
     }
     return null;

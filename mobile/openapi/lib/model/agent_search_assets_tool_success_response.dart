@@ -13,18 +13,18 @@ part of openapi.api;
 class AgentSearchAssetsToolSuccessResponse {
   /// Returns a new [AgentSearchAssetsToolSuccessResponse] instance.
   AgentSearchAssetsToolSuccessResponse({
-    this.approximateTotal,
+    this.approximateTotal = const Optional.absent(),
     required this.detail,
     required this.hasMore,
     required this.nextPage,
     required this.resultSize,
     required this.returnedCount,
-    this.sample,
+    this.sample = const Optional.absent(),
     required this.selectionHandle,
     required this.status,
     required this.summary,
     required this.toolCall,
-    this.totalCount,
+    this.totalCount = const Optional.absent(),
   });
 
   /// Minimum value: 0
@@ -35,7 +35,7 @@ class AgentSearchAssetsToolSuccessResponse {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? approximateTotal;
+  Optional<int?> approximateTotal;
 
   AgentSearchAssetsDetail detail;
 
@@ -55,7 +55,7 @@ class AgentSearchAssetsToolSuccessResponse {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentSearchAssetsSample? sample;
+  Optional<AgentSearchAssetsSample?> sample;
 
   AgentSearchAssetsSelectionHandle selectionHandle;
 
@@ -73,7 +73,7 @@ class AgentSearchAssetsToolSuccessResponse {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? totalCount;
+  Optional<int?> totalCount;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchAssetsToolSuccessResponse &&
@@ -111,10 +111,9 @@ class AgentSearchAssetsToolSuccessResponse {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.approximateTotal != null) {
-      json[r'approximateTotal'] = this.approximateTotal;
-    } else {
-    //  json[r'approximateTotal'] = null;
+    if (this.approximateTotal.isPresent) {
+      final value = this.approximateTotal.value;
+      json[r'approximateTotal'] = value;
     }
       json[r'detail'] = this.detail;
       json[r'hasMore'] = this.hasMore;
@@ -125,19 +124,17 @@ class AgentSearchAssetsToolSuccessResponse {
     }
       json[r'resultSize'] = this.resultSize;
       json[r'returnedCount'] = this.returnedCount;
-    if (this.sample != null) {
-      json[r'sample'] = this.sample;
-    } else {
-    //  json[r'sample'] = null;
+    if (this.sample.isPresent) {
+      final value = this.sample.value;
+      json[r'sample'] = value;
     }
       json[r'selectionHandle'] = this.selectionHandle;
       json[r'status'] = this.status;
       json[r'summary'] = this.summary;
       json[r'toolCall'] = this.toolCall;
-    if (this.totalCount != null) {
-      json[r'totalCount'] = this.totalCount;
-    } else {
-    //  json[r'totalCount'] = null;
+    if (this.totalCount.isPresent) {
+      final value = this.totalCount.value;
+      json[r'totalCount'] = value;
     }
     return json;
   }
@@ -151,18 +148,18 @@ class AgentSearchAssetsToolSuccessResponse {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchAssetsToolSuccessResponse(
-        approximateTotal: mapValueOfType<int>(json, r'approximateTotal'),
+        approximateTotal: json.containsKey(r'approximateTotal') ? Optional.present(json[r'approximateTotal'] == null ? null : int.parse('${json[r'approximateTotal']}')) : const Optional.absent(),
         detail: AgentSearchAssetsDetail.fromJson(json[r'detail'])!,
         hasMore: mapValueOfType<bool>(json, r'hasMore')!,
         nextPage: mapValueOfType<String>(json, r'nextPage'),
         resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         returnedCount: mapValueOfType<int>(json, r'returnedCount')!,
-        sample: AgentSearchAssetsSample.fromJson(json[r'sample']),
+        sample: json.containsKey(r'sample') ? Optional.present(AgentSearchAssetsSample.fromJson(json[r'sample'])) : const Optional.absent(),
         selectionHandle: AgentSearchAssetsSelectionHandle.fromJson(json[r'selectionHandle'])!,
         status: AgentSearchAssetsToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         toolCall: AgentToolCallResponseDto.fromJson(json[r'toolCall'])!,
-        totalCount: mapValueOfType<int>(json, r'totalCount'),
+        totalCount: json.containsKey(r'totalCount') ? Optional.present(json[r'totalCount'] == null ? null : int.parse('${json[r'totalCount']}')) : const Optional.absent(),
       );
     }
     return null;

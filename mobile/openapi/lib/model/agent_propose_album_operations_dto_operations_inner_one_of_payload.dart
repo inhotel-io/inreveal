@@ -14,12 +14,12 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload {
   /// Returns a new [AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload] instance.
   AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload({
     required this.albumName,
-    this.description = '',
+    this.description = const Optional.present(''),
   });
 
   String albumName;
 
-  String description;
+  Optional<String?> description;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload &&
@@ -38,7 +38,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'albumName'] = this.albumName;
-      json[r'description'] = this.description;
+    if (this.description.isPresent) {
+      final value = this.description.value;
+      json[r'description'] = value;
+    }
     return json;
   }
 
@@ -52,7 +55,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload {
 
       return AgentProposeAlbumOperationsDtoOperationsInnerOneOfPayload(
         albumName: mapValueOfType<String>(json, r'albumName')!,
-        description: mapValueOfType<String>(json, r'description') ?? '',
+        description: json.containsKey(r'description') ? Optional.present(mapValueOfType<String>(json, r'description')) : const Optional.absent(),
       );
     }
     return null;

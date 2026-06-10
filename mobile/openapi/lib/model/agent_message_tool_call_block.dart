@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentMessageToolCallBlock {
   /// Returns a new [AgentMessageToolCallBlock] instance.
   AgentMessageToolCallBlock({
-    this.summary,
+    this.summary = const Optional.absent(),
     required this.toolCallId,
     required this.type,
   });
@@ -24,7 +24,7 @@ class AgentMessageToolCallBlock {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? summary;
+  Optional<String?> summary;
 
   String toolCallId;
 
@@ -48,10 +48,9 @@ class AgentMessageToolCallBlock {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.summary != null) {
-      json[r'summary'] = this.summary;
-    } else {
-    //  json[r'summary'] = null;
+    if (this.summary.isPresent) {
+      final value = this.summary.value;
+      json[r'summary'] = value;
     }
       json[r'toolCallId'] = this.toolCallId;
       json[r'type'] = this.type;
@@ -67,7 +66,7 @@ class AgentMessageToolCallBlock {
       final json = value.cast<String, dynamic>();
 
       return AgentMessageToolCallBlock(
-        summary: mapValueOfType<String>(json, r'summary'),
+        summary: json.containsKey(r'summary') ? Optional.present(mapValueOfType<String>(json, r'summary')) : const Optional.absent(),
         toolCallId: mapValueOfType<String>(json, r'toolCallId')!,
         type: AgentMessageToolCallBlockType.fromJson(json[r'type'])!,
       );

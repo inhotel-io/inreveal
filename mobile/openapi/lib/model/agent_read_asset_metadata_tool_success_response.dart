@@ -14,7 +14,7 @@ class AgentReadAssetMetadataToolSuccessResponse {
   /// Returns a new [AgentReadAssetMetadataToolSuccessResponse] instance.
   AgentReadAssetMetadataToolSuccessResponse({
     this.assets = const [],
-    this.detail,
+    this.detail = const Optional.absent(),
     this.fields = const [],
     required this.resultSize,
     required this.status,
@@ -30,7 +30,7 @@ class AgentReadAssetMetadataToolSuccessResponse {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentAssetMetadataDetail? detail;
+  Optional<AgentAssetMetadataDetail?> detail;
 
   List<AgentAssetMetadataField> fields;
 
@@ -69,10 +69,9 @@ class AgentReadAssetMetadataToolSuccessResponse {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'assets'] = this.assets;
-    if (this.detail != null) {
-      json[r'detail'] = this.detail;
-    } else {
-    //  json[r'detail'] = null;
+    if (this.detail.isPresent) {
+      final value = this.detail.value;
+      json[r'detail'] = value;
     }
       json[r'fields'] = this.fields;
       json[r'resultSize'] = this.resultSize;
@@ -92,7 +91,7 @@ class AgentReadAssetMetadataToolSuccessResponse {
 
       return AgentReadAssetMetadataToolSuccessResponse(
         assets: AgentAssetMetadataResult.listFromJson(json[r'assets']),
-        detail: AgentAssetMetadataDetail.fromJson(json[r'detail']),
+        detail: json.containsKey(r'detail') ? Optional.present(AgentAssetMetadataDetail.fromJson(json[r'detail'])) : const Optional.absent(),
         fields: AgentAssetMetadataField.listFromJson(json[r'fields']),
         resultSize: AgentToolResultSize.fromJson(json[r'resultSize'])!,
         status: AgentReadAssetMetadataToolSuccessResponseStatusEnum.fromJson(json[r'status'])!,

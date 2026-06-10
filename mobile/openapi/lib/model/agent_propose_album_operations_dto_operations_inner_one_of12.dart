@@ -16,10 +16,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
     required this.type,
     required this.summary,
     required this.targetKind,
-    this.targetId,
-    this.temporaryTargetId,
-    this.riskLevel,
-    this.enabled = true,
+    this.targetId = const Optional.absent(),
+    this.temporaryTargetId = const Optional.absent(),
+    this.riskLevel = const Optional.absent(),
+    this.enabled = const Optional.present(true),
     required this.payload,
   });
 
@@ -35,7 +35,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? targetId;
+  Optional<String?> targetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -43,7 +43,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? temporaryTargetId;
+  Optional<String?> temporaryTargetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -51,9 +51,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationRiskLevel? riskLevel;
+  Optional<AgentOperationRiskLevel?> riskLevel;
 
-  bool enabled;
+  Optional<bool?> enabled;
 
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload payload;
 
@@ -88,22 +88,22 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
       json[r'type'] = this.type;
       json[r'summary'] = this.summary;
       json[r'targetKind'] = this.targetKind;
-    if (this.targetId != null) {
-      json[r'targetId'] = this.targetId;
-    } else {
-    //  json[r'targetId'] = null;
+    if (this.targetId.isPresent) {
+      final value = this.targetId.value;
+      json[r'targetId'] = value;
     }
-    if (this.temporaryTargetId != null) {
-      json[r'temporaryTargetId'] = this.temporaryTargetId;
-    } else {
-    //  json[r'temporaryTargetId'] = null;
+    if (this.temporaryTargetId.isPresent) {
+      final value = this.temporaryTargetId.value;
+      json[r'temporaryTargetId'] = value;
     }
-    if (this.riskLevel != null) {
-      json[r'riskLevel'] = this.riskLevel;
-    } else {
-    //  json[r'riskLevel'] = null;
+    if (this.riskLevel.isPresent) {
+      final value = this.riskLevel.value;
+      json[r'riskLevel'] = value;
     }
-      json[r'enabled'] = this.enabled;
+    if (this.enabled.isPresent) {
+      final value = this.enabled.value;
+      json[r'enabled'] = value;
+    }
       json[r'payload'] = this.payload;
     return json;
   }
@@ -120,10 +120,10 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf12 {
         type: AgentAlbumAddUsersOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationExistingAlbumTargetKind.fromJson(json[r'targetKind'])!,
-        targetId: mapValueOfType<String>(json, r'targetId'),
-        temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
-        riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
-        enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
+        targetId: json.containsKey(r'targetId') ? Optional.present(mapValueOfType<String>(json, r'targetId')) : const Optional.absent(),
+        temporaryTargetId: json.containsKey(r'temporaryTargetId') ? Optional.present(mapValueOfType<String>(json, r'temporaryTargetId')) : const Optional.absent(),
+        riskLevel: json.containsKey(r'riskLevel') ? Optional.present(AgentOperationRiskLevel.fromJson(json[r'riskLevel'])) : const Optional.absent(),
+        enabled: json.containsKey(r'enabled') ? Optional.present(mapValueOfType<bool>(json, r'enabled')) : const Optional.absent(),
         payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf12Payload.fromJson(json[r'payload'])!,
       );
     }

@@ -13,39 +13,39 @@ part of openapi.api;
 class AgentAssetMetadataResultExifInfo {
   /// Returns a new [AgentAssetMetadataResultExifInfo] instance.
   AgentAssetMetadataResultExifInfo({
-    this.city,
-    this.country,
-    this.dateTimeOriginal,
-    this.latitude,
-    this.lensModel,
-    this.longitude,
-    this.make,
-    this.model,
-    this.rating,
-    this.state,
+    this.city = const Optional.absent(),
+    this.country = const Optional.absent(),
+    this.dateTimeOriginal = const Optional.absent(),
+    this.latitude = const Optional.absent(),
+    this.lensModel = const Optional.absent(),
+    this.longitude = const Optional.absent(),
+    this.make = const Optional.absent(),
+    this.model = const Optional.absent(),
+    this.rating = const Optional.absent(),
+    this.state = const Optional.absent(),
   });
 
-  String? city;
+  Optional<String?> city;
 
-  String? country;
+  Optional<String?> country;
 
-  DateTime? dateTimeOriginal;
+  Optional<DateTime?> dateTimeOriginal;
 
-  num? latitude;
+  Optional<num?> latitude;
 
-  String? lensModel;
+  Optional<String?> lensModel;
 
-  num? longitude;
+  Optional<num?> longitude;
 
-  String? make;
+  Optional<String?> make;
 
-  String? model;
+  Optional<String?> model;
 
   /// Minimum value: -9007199254740991
   /// Maximum value: 9007199254740991
-  int? rating;
+  Optional<int?> rating;
 
-  String? state;
+  Optional<String?> state;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentAssetMetadataResultExifInfo &&
@@ -79,57 +79,47 @@ class AgentAssetMetadataResultExifInfo {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.city != null) {
-      json[r'city'] = this.city;
-    } else {
-    //  json[r'city'] = null;
+    if (this.city.isPresent) {
+      final value = this.city.value;
+      json[r'city'] = value;
     }
-    if (this.country != null) {
-      json[r'country'] = this.country;
-    } else {
-    //  json[r'country'] = null;
+    if (this.country.isPresent) {
+      final value = this.country.value;
+      json[r'country'] = value;
     }
-    if (this.dateTimeOriginal != null) {
-      json[r'dateTimeOriginal'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
-        ? this.dateTimeOriginal!.millisecondsSinceEpoch
-        : this.dateTimeOriginal!.toUtc().toIso8601String();
-    } else {
-    //  json[r'dateTimeOriginal'] = null;
+    if (this.dateTimeOriginal.isPresent) {
+      final value = this.dateTimeOriginal.value;
+      json[r'dateTimeOriginal'] = value == null ? null : (_isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')
+        ? value.millisecondsSinceEpoch
+        : value.toUtc().toIso8601String());
     }
-    if (this.latitude != null) {
-      json[r'latitude'] = this.latitude;
-    } else {
-    //  json[r'latitude'] = null;
+    if (this.latitude.isPresent) {
+      final value = this.latitude.value;
+      json[r'latitude'] = value;
     }
-    if (this.lensModel != null) {
-      json[r'lensModel'] = this.lensModel;
-    } else {
-    //  json[r'lensModel'] = null;
+    if (this.lensModel.isPresent) {
+      final value = this.lensModel.value;
+      json[r'lensModel'] = value;
     }
-    if (this.longitude != null) {
-      json[r'longitude'] = this.longitude;
-    } else {
-    //  json[r'longitude'] = null;
+    if (this.longitude.isPresent) {
+      final value = this.longitude.value;
+      json[r'longitude'] = value;
     }
-    if (this.make != null) {
-      json[r'make'] = this.make;
-    } else {
-    //  json[r'make'] = null;
+    if (this.make.isPresent) {
+      final value = this.make.value;
+      json[r'make'] = value;
     }
-    if (this.model != null) {
-      json[r'model'] = this.model;
-    } else {
-    //  json[r'model'] = null;
+    if (this.model.isPresent) {
+      final value = this.model.value;
+      json[r'model'] = value;
     }
-    if (this.rating != null) {
-      json[r'rating'] = this.rating;
-    } else {
-    //  json[r'rating'] = null;
+    if (this.rating.isPresent) {
+      final value = this.rating.value;
+      json[r'rating'] = value;
     }
-    if (this.state != null) {
-      json[r'state'] = this.state;
-    } else {
-    //  json[r'state'] = null;
+    if (this.state.isPresent) {
+      final value = this.state.value;
+      json[r'state'] = value;
     }
     return json;
   }
@@ -143,20 +133,16 @@ class AgentAssetMetadataResultExifInfo {
       final json = value.cast<String, dynamic>();
 
       return AgentAssetMetadataResultExifInfo(
-        city: mapValueOfType<String>(json, r'city'),
-        country: mapValueOfType<String>(json, r'country'),
-        dateTimeOriginal: mapDateTime(json, r'dateTimeOriginal', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/'),
-        latitude: json[r'latitude'] == null
-            ? null
-            : num.parse('${json[r'latitude']}'),
-        lensModel: mapValueOfType<String>(json, r'lensModel'),
-        longitude: json[r'longitude'] == null
-            ? null
-            : num.parse('${json[r'longitude']}'),
-        make: mapValueOfType<String>(json, r'make'),
-        model: mapValueOfType<String>(json, r'model'),
-        rating: mapValueOfType<int>(json, r'rating'),
-        state: mapValueOfType<String>(json, r'state'),
+        city: json.containsKey(r'city') ? Optional.present(mapValueOfType<String>(json, r'city')) : const Optional.absent(),
+        country: json.containsKey(r'country') ? Optional.present(mapValueOfType<String>(json, r'country')) : const Optional.absent(),
+        dateTimeOriginal: json.containsKey(r'dateTimeOriginal') ? Optional.present(mapDateTime(json, r'dateTimeOriginal', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$/')) : const Optional.absent(),
+        latitude: json.containsKey(r'latitude') ? Optional.present(json[r'latitude'] == null ? null : num.parse('${json[r'latitude']}')) : const Optional.absent(),
+        lensModel: json.containsKey(r'lensModel') ? Optional.present(mapValueOfType<String>(json, r'lensModel')) : const Optional.absent(),
+        longitude: json.containsKey(r'longitude') ? Optional.present(json[r'longitude'] == null ? null : num.parse('${json[r'longitude']}')) : const Optional.absent(),
+        make: json.containsKey(r'make') ? Optional.present(mapValueOfType<String>(json, r'make')) : const Optional.absent(),
+        model: json.containsKey(r'model') ? Optional.present(mapValueOfType<String>(json, r'model')) : const Optional.absent(),
+        rating: json.containsKey(r'rating') ? Optional.present(json[r'rating'] == null ? null : int.parse('${json[r'rating']}')) : const Optional.absent(),
+        state: json.containsKey(r'state') ? Optional.present(mapValueOfType<String>(json, r'state')) : const Optional.absent(),
       );
     }
     return null;

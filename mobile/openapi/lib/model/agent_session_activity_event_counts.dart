@@ -13,10 +13,10 @@ part of openapi.api;
 class AgentSessionActivityEventCounts {
   /// Returns a new [AgentSessionActivityEventCounts] instance.
   AgentSessionActivityEventCounts({
-    this.applied,
-    this.failed,
-    this.skipped,
-    this.total,
+    this.applied = const Optional.absent(),
+    this.failed = const Optional.absent(),
+    this.skipped = const Optional.absent(),
+    this.total = const Optional.absent(),
   });
 
   /// Minimum value: 0
@@ -27,7 +27,7 @@ class AgentSessionActivityEventCounts {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? applied;
+  Optional<int?> applied;
 
   /// Minimum value: 0
   /// Maximum value: 10000
@@ -37,7 +37,7 @@ class AgentSessionActivityEventCounts {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? failed;
+  Optional<int?> failed;
 
   /// Minimum value: 0
   /// Maximum value: 10000
@@ -47,7 +47,7 @@ class AgentSessionActivityEventCounts {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? skipped;
+  Optional<int?> skipped;
 
   /// Minimum value: 0
   /// Maximum value: 10000
@@ -57,7 +57,7 @@ class AgentSessionActivityEventCounts {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? total;
+  Optional<int?> total;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSessionActivityEventCounts &&
@@ -79,25 +79,21 @@ class AgentSessionActivityEventCounts {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.applied != null) {
-      json[r'applied'] = this.applied;
-    } else {
-    //  json[r'applied'] = null;
+    if (this.applied.isPresent) {
+      final value = this.applied.value;
+      json[r'applied'] = value;
     }
-    if (this.failed != null) {
-      json[r'failed'] = this.failed;
-    } else {
-    //  json[r'failed'] = null;
+    if (this.failed.isPresent) {
+      final value = this.failed.value;
+      json[r'failed'] = value;
     }
-    if (this.skipped != null) {
-      json[r'skipped'] = this.skipped;
-    } else {
-    //  json[r'skipped'] = null;
+    if (this.skipped.isPresent) {
+      final value = this.skipped.value;
+      json[r'skipped'] = value;
     }
-    if (this.total != null) {
-      json[r'total'] = this.total;
-    } else {
-    //  json[r'total'] = null;
+    if (this.total.isPresent) {
+      final value = this.total.value;
+      json[r'total'] = value;
     }
     return json;
   }
@@ -111,10 +107,10 @@ class AgentSessionActivityEventCounts {
       final json = value.cast<String, dynamic>();
 
       return AgentSessionActivityEventCounts(
-        applied: mapValueOfType<int>(json, r'applied'),
-        failed: mapValueOfType<int>(json, r'failed'),
-        skipped: mapValueOfType<int>(json, r'skipped'),
-        total: mapValueOfType<int>(json, r'total'),
+        applied: json.containsKey(r'applied') ? Optional.present(json[r'applied'] == null ? null : int.parse('${json[r'applied']}')) : const Optional.absent(),
+        failed: json.containsKey(r'failed') ? Optional.present(json[r'failed'] == null ? null : int.parse('${json[r'failed']}')) : const Optional.absent(),
+        skipped: json.containsKey(r'skipped') ? Optional.present(json[r'skipped'] == null ? null : int.parse('${json[r'skipped']}')) : const Optional.absent(),
+        total: json.containsKey(r'total') ? Optional.present(json[r'total'] == null ? null : int.parse('${json[r'total']}')) : const Optional.absent(),
       );
     }
     return null;

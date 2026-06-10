@@ -22,7 +22,7 @@ class AgentOperationResponseDto {
     this.payload = const {},
     required this.planId,
     this.result = const {},
-    this.reviewMetadata,
+    this.reviewMetadata = const Optional.absent(),
     required this.riskLevel,
     required this.status,
     required this.summary,
@@ -57,7 +57,7 @@ class AgentOperationResponseDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationResponseDtoReviewMetadata? reviewMetadata;
+  Optional<AgentOperationResponseDtoReviewMetadata?> reviewMetadata;
 
   AgentOperationRiskLevel riskLevel;
 
@@ -142,10 +142,9 @@ class AgentOperationResponseDto {
     } else {
     //  json[r'result'] = null;
     }
-    if (this.reviewMetadata != null) {
-      json[r'reviewMetadata'] = this.reviewMetadata;
-    } else {
-    //  json[r'reviewMetadata'] = null;
+    if (this.reviewMetadata.isPresent) {
+      final value = this.reviewMetadata.value;
+      json[r'reviewMetadata'] = value;
     }
       json[r'riskLevel'] = this.riskLevel;
       json[r'status'] = this.status;
@@ -190,7 +189,7 @@ class AgentOperationResponseDto {
         payload: mapCastOfType<String, Object>(json, r'payload')!,
         planId: mapValueOfType<String>(json, r'planId')!,
         result: mapCastOfType<String, Object>(json, r'result'),
-        reviewMetadata: AgentOperationResponseDtoReviewMetadata.fromJson(json[r'reviewMetadata']),
+        reviewMetadata: json.containsKey(r'reviewMetadata') ? Optional.present(AgentOperationResponseDtoReviewMetadata.fromJson(json[r'reviewMetadata'])) : const Optional.absent(),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel'])!,
         status: AgentOperationStatus.fromJson(json[r'status'])!,
         summary: mapValueOfType<String>(json, r'summary')!,

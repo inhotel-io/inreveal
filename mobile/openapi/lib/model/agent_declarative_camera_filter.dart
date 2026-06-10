@@ -13,9 +13,9 @@ part of openapi.api;
 class AgentDeclarativeCameraFilter {
   /// Returns a new [AgentDeclarativeCameraFilter] instance.
   AgentDeclarativeCameraFilter({
-    this.lensModel,
-    this.make,
-    this.model,
+    this.lensModel = const Optional.absent(),
+    this.make = const Optional.absent(),
+    this.model = const Optional.absent(),
   });
 
   ///
@@ -24,7 +24,7 @@ class AgentDeclarativeCameraFilter {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? lensModel;
+  Optional<String?> lensModel;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -32,7 +32,7 @@ class AgentDeclarativeCameraFilter {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? make;
+  Optional<String?> make;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -40,7 +40,7 @@ class AgentDeclarativeCameraFilter {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? model;
+  Optional<String?> model;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentDeclarativeCameraFilter &&
@@ -60,20 +60,17 @@ class AgentDeclarativeCameraFilter {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.lensModel != null) {
-      json[r'lensModel'] = this.lensModel;
-    } else {
-    //  json[r'lensModel'] = null;
+    if (this.lensModel.isPresent) {
+      final value = this.lensModel.value;
+      json[r'lensModel'] = value;
     }
-    if (this.make != null) {
-      json[r'make'] = this.make;
-    } else {
-    //  json[r'make'] = null;
+    if (this.make.isPresent) {
+      final value = this.make.value;
+      json[r'make'] = value;
     }
-    if (this.model != null) {
-      json[r'model'] = this.model;
-    } else {
-    //  json[r'model'] = null;
+    if (this.model.isPresent) {
+      final value = this.model.value;
+      json[r'model'] = value;
     }
     return json;
   }
@@ -87,9 +84,9 @@ class AgentDeclarativeCameraFilter {
       final json = value.cast<String, dynamic>();
 
       return AgentDeclarativeCameraFilter(
-        lensModel: mapValueOfType<String>(json, r'lensModel'),
-        make: mapValueOfType<String>(json, r'make'),
-        model: mapValueOfType<String>(json, r'model'),
+        lensModel: json.containsKey(r'lensModel') ? Optional.present(mapValueOfType<String>(json, r'lensModel')) : const Optional.absent(),
+        make: json.containsKey(r'make') ? Optional.present(mapValueOfType<String>(json, r'make')) : const Optional.absent(),
+        model: json.containsKey(r'model') ? Optional.present(mapValueOfType<String>(json, r'model')) : const Optional.absent(),
       );
     }
     return null;

@@ -16,11 +16,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
     required this.type,
     required this.summary,
     required this.targetKind,
-    this.targetId,
-    this.temporaryTargetId,
-    this.riskLevel,
-    this.enabled = true,
-    this.payload,
+    this.targetId = const Optional.absent(),
+    this.temporaryTargetId = const Optional.absent(),
+    this.riskLevel = const Optional.absent(),
+    this.enabled = const Optional.present(true),
+    this.payload = const Optional.absent(),
   });
 
   AgentSpaceDeleteOperationType type;
@@ -35,7 +35,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? targetId;
+  Optional<String?> targetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -43,7 +43,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? temporaryTargetId;
+  Optional<String?> temporaryTargetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -51,9 +51,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationRiskLevel? riskLevel;
+  Optional<AgentOperationRiskLevel?> riskLevel;
 
-  bool enabled;
+  Optional<bool?> enabled;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -61,7 +61,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  Object? payload;
+  Optional<Object?> payload;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 &&
@@ -94,26 +94,25 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
       json[r'type'] = this.type;
       json[r'summary'] = this.summary;
       json[r'targetKind'] = this.targetKind;
-    if (this.targetId != null) {
-      json[r'targetId'] = this.targetId;
-    } else {
-    //  json[r'targetId'] = null;
+    if (this.targetId.isPresent) {
+      final value = this.targetId.value;
+      json[r'targetId'] = value;
     }
-    if (this.temporaryTargetId != null) {
-      json[r'temporaryTargetId'] = this.temporaryTargetId;
-    } else {
-    //  json[r'temporaryTargetId'] = null;
+    if (this.temporaryTargetId.isPresent) {
+      final value = this.temporaryTargetId.value;
+      json[r'temporaryTargetId'] = value;
     }
-    if (this.riskLevel != null) {
-      json[r'riskLevel'] = this.riskLevel;
-    } else {
-    //  json[r'riskLevel'] = null;
+    if (this.riskLevel.isPresent) {
+      final value = this.riskLevel.value;
+      json[r'riskLevel'] = value;
     }
-      json[r'enabled'] = this.enabled;
-    if (this.payload != null) {
-      json[r'payload'] = this.payload;
-    } else {
-    //  json[r'payload'] = null;
+    if (this.enabled.isPresent) {
+      final value = this.enabled.value;
+      json[r'enabled'] = value;
+    }
+    if (this.payload.isPresent) {
+      final value = this.payload.value;
+      json[r'payload'] = value;
     }
     return json;
   }
@@ -130,11 +129,11 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf16 {
         type: AgentSpaceDeleteOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationExistingSpaceTargetKind.fromJson(json[r'targetKind'])!,
-        targetId: mapValueOfType<String>(json, r'targetId'),
-        temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
-        riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
-        enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: mapValueOfType<Object>(json, r'payload'),
+        targetId: json.containsKey(r'targetId') ? Optional.present(mapValueOfType<String>(json, r'targetId')) : const Optional.absent(),
+        temporaryTargetId: json.containsKey(r'temporaryTargetId') ? Optional.present(mapValueOfType<String>(json, r'temporaryTargetId')) : const Optional.absent(),
+        riskLevel: json.containsKey(r'riskLevel') ? Optional.present(AgentOperationRiskLevel.fromJson(json[r'riskLevel'])) : const Optional.absent(),
+        enabled: json.containsKey(r'enabled') ? Optional.present(mapValueOfType<bool>(json, r'enabled')) : const Optional.absent(),
+        payload: json.containsKey(r'payload') ? Optional.present(mapValueOfType<Object>(json, r'payload')) : const Optional.absent(),
       );
     }
     return null;

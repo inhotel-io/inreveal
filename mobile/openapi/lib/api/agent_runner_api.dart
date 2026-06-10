@@ -21,7 +21,7 @@ class AgentRunnerApi {
   /// Retrieve AI agent runner configuration, health, and capability status.
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> getAgentRunnerStatusWithHttpInfo() async {
+  Future<Response> getAgentRunnerStatusWithHttpInfo({ Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/runner/status';
 
@@ -43,14 +43,15 @@ class AgentRunnerApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
   /// Get agent runner status
   ///
   /// Retrieve AI agent runner configuration, health, and capability status.
-  Future<AgentRunnerStatusDto?> getAgentRunnerStatus() async {
-    final response = await getAgentRunnerStatusWithHttpInfo();
+  Future<AgentRunnerStatusDto?> getAgentRunnerStatus({ Future<void>? abortTrigger, }) async {
+    final response = await getAgentRunnerStatusWithHttpInfo(abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
