@@ -31,6 +31,7 @@ class QueueName {
   static const smartSearch = QueueName._(r'smartSearch');
   static const duplicateDetection = QueueName._(r'duplicateDetection');
   static const backgroundTask = QueueName._(r'backgroundTask');
+  static const peopleBackfill = QueueName._(r'peopleBackfill');
   static const storageTemplateMigration = QueueName._(r'storageTemplateMigration');
   static const migration = QueueName._(r'migration');
   static const search = QueueName._(r'search');
@@ -39,9 +40,12 @@ class QueueName {
   static const notifications = QueueName._(r'notifications');
   static const backupDatabase = QueueName._(r'backupDatabase');
   static const ocr = QueueName._(r'ocr');
+  static const petDetection = QueueName._(r'petDetection');
   static const workflow = QueueName._(r'workflow');
   static const integrityCheck = QueueName._(r'integrityCheck');
   static const editor = QueueName._(r'editor');
+  static const storageBackendMigration = QueueName._(r'storageBackendMigration');
+  static const classification = QueueName._(r'classification');
 
   /// List of all possible values in this [enum][QueueName].
   static const values = <QueueName>[
@@ -53,6 +57,7 @@ class QueueName {
     smartSearch,
     duplicateDetection,
     backgroundTask,
+    peopleBackfill,
     storageTemplateMigration,
     migration,
     search,
@@ -61,9 +66,12 @@ class QueueName {
     notifications,
     backupDatabase,
     ocr,
+    petDetection,
     workflow,
     integrityCheck,
     editor,
+    storageBackendMigration,
+    classification,
   ];
 
   static QueueName? fromJson(dynamic value) => QueueNameTypeTransformer().decode(value);
@@ -110,6 +118,7 @@ class QueueNameTypeTransformer {
         case r'smartSearch': return QueueName.smartSearch;
         case r'duplicateDetection': return QueueName.duplicateDetection;
         case r'backgroundTask': return QueueName.backgroundTask;
+        case r'peopleBackfill': return QueueName.peopleBackfill;
         case r'storageTemplateMigration': return QueueName.storageTemplateMigration;
         case r'migration': return QueueName.migration;
         case r'search': return QueueName.search;
@@ -118,9 +127,12 @@ class QueueNameTypeTransformer {
         case r'notifications': return QueueName.notifications;
         case r'backupDatabase': return QueueName.backupDatabase;
         case r'ocr': return QueueName.ocr;
+        case r'petDetection': return QueueName.petDetection;
         case r'workflow': return QueueName.workflow;
         case r'integrityCheck': return QueueName.integrityCheck;
         case r'editor': return QueueName.editor;
+        case r'storageBackendMigration': return QueueName.storageBackendMigration;
+        case r'classification': return QueueName.classification;
         default:
           if (!allowNull) {
             throw ArgumentError('Unknown enum value to decode: $data');
