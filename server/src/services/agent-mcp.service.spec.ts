@@ -1,6 +1,7 @@
 import { serverVersion } from 'src/constants';
 import type { AuthDto } from 'src/dtos/auth.dto';
 import { AgentOperationRiskLevel, AgentOperationTargetKind, AgentOperationType, AgentToolName } from 'src/enum';
+import { AgentMcpDocsService } from 'src/services/agent-mcp-docs.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
@@ -322,6 +323,55 @@ describe(AgentMcpService.name, () => {
         expect.objectContaining({ name: 'operation-plan', requiredFields: ['summary', 'operations'] }),
       ]),
     );
+  });
+
+  describe('generated docs JSON-RPC examples', () => {
+    let docsService: AgentMcpDocsService;
+
+    beforeEach(() => {
+      docsService = new AgentMcpDocsService(contractService);
+    });
+
+    it.each(['initialize', 'tools-list'] as const)('handles the documented %s JSON-RPC example', async (name) => {
+      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === name)!;
+      const response = await sut.handle(auth, sessionId, example.request);
+
+      expect(response).toMatchObject({
+        jsonrpc: '2.0',
+        id: example.request.id,
+      });
+    });
+
+    it('handles the documented read tools/call JSON-RPC example without wrapper errors', async () => {
+      const serviceResult = { status: 'success', toolCall: null, assets: [] };
+      toolService.readAssetMetadata.mockResolvedValue(serviceResult as never);
+      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-read')!;
+
+      const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
+
+      expect(toolService.readAssetMetadata).toHaveBeenCalledWith(auth, sessionId, {
+        assetIds: ['00000000-0000-4000-8000-000000000001'],
+      });
+      expectToolResult(response, 'read-1', serviceResult);
+    });
+
+    it('handles the documented planning tools/call JSON-RPC example without wrapper errors', async () => {
+      const serviceResult = makePlanningServiceResult();
+      operationPlanService.proposeAlbumOperations.mockResolvedValue(serviceResult as never);
+      const example = docsService.listJsonRpcExamples().find((candidate) => candidate.name === 'tools-call-plan')!;
+
+      const response = (await sut.handle(auth, sessionId, example.request)) as AgentMcpSuccessResponse;
+
+      expect(operationPlanService.proposeAlbumOperations).toHaveBeenCalledWith(
+        auth,
+        sessionId,
+        expect.objectContaining({
+          summary: 'Create today test album.',
+          operations: expect.any(Array),
+        }),
+      );
+      expectToolResult(response, 'plan-1', serviceResult);
+    });
   });
 
   it.each([
