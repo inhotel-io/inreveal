@@ -19,6 +19,7 @@
 
   interface Props {
     session: AgentSessionResponseDto;
+    turnRunning?: boolean;
     onSessionUpdated?: (session: AgentSessionResponseDto) => void;
     onPendingApprovalCountChange?: (count: number) => void;
     onApprovalResumePendingChange?: (pending: boolean) => void;
@@ -27,6 +28,7 @@
 
   let {
     session,
+    turnRunning = false,
     onSessionUpdated,
     onPendingApprovalCountChange,
     onApprovalResumePendingChange,
@@ -46,8 +48,12 @@
   let activeSessionId: string | undefined;
 
   const pendingToolCalls = $derived(getPendingToolCalls(toolCalls));
+  // Sessions rest at Running between turns — poll only while a turn is actually in
+  // progress (signalled by the chat panel) or while approvals/apply work is pending.
   const shouldPoll = $derived(
-    session.status === AgentSessionStatus.Running || session.status === AgentSessionStatus.WaitingForToolApproval,
+    turnRunning ||
+      session.status === AgentSessionStatus.WaitingForToolApproval ||
+      session.status === AgentSessionStatus.Applying,
   );
   const canShowPlanReview = $derived((!loading || loadErrorMessage !== null) && pendingToolCalls.length === 0);
 
