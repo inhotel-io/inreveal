@@ -7,6 +7,7 @@ import z from 'zod';
 
 const expectedToolNames = [
   AgentToolName.ResolveLocation,
+  AgentToolName.SearchPeople,
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.FindTripCandidates,
@@ -35,6 +36,7 @@ const expectedToolNames = [
 
 const expectedReadToolNames = [
   AgentToolName.ResolveLocation,
+  AgentToolName.SearchPeople,
   AgentToolName.ResolveAssetSearchFilters,
   AgentToolName.SearchAssets,
   AgentToolName.FindTripCandidates,

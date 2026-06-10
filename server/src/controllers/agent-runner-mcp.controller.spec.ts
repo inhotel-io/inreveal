@@ -273,6 +273,7 @@ describe(AgentRunnerMcpController.name, () => {
       });
       expect(body.result.tools.map((tool: { name: string }) => tool.name)).toEqual([
         AgentToolName.ResolveLocation,
+        AgentToolName.SearchPeople,
         AgentToolName.ResolveAssetSearchFilters,
         AgentToolName.SearchAssets,
         AgentToolName.FindTripCandidates,

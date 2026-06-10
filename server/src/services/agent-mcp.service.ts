@@ -15,6 +15,7 @@ import type {
   AgentReadSpaceToolRequestDto,
   AgentResolveAssetSearchFiltersToolRequestDto,
   AgentSearchAssetsToolRequestDto,
+  AgentSearchPeopleToolRequestDto,
   AgentSearchUsersToolRequestDto,
 } from 'src/dtos/agent-tool.dto';
 import { AgentReadToolRequestSchemas } from 'src/dtos/agent-tool.dto';
@@ -76,6 +77,7 @@ export class AgentMcpService {
     AgentToolName.ReadSpace,
     AgentToolName.SearchUsers,
     AgentToolName.ListDuplicateGroups,
+    AgentToolName.SearchPeople,
   ]);
 
   private readonly planningToolNames = new Set<AgentToolName>([
@@ -592,6 +594,9 @@ export class AgentMcpService {
       }
       case AgentToolName.ListDuplicateGroups: {
         return this.toolService.listDuplicateGroups(auth, sessionId, dto as AgentListDuplicateGroupsToolRequestDto);
+      }
+      case AgentToolName.SearchPeople: {
+        return this.toolService.searchPeople(auth, sessionId, dto as AgentSearchPeopleToolRequestDto);
       }
     }
   }
