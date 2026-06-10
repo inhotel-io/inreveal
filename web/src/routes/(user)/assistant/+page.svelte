@@ -1,5 +1,5 @@
 <script lang="ts">
-  import UserPageLayout from '$lib/components/layouts/user-page-layout.svelte';
+  import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
   import type { PageData } from './$types';
   import AgentAssistantWorkspace from './agent-assistant-workspace.svelte';
 
