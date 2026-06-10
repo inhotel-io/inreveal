@@ -113,3 +113,5 @@ abstract class DriftPerson with _$DriftPerson {
     DateTime? birthDate,
   }) = _DriftPerson;
 }
+
+enum PeopleSortBy { photoCount, name }
