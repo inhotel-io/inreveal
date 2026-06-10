@@ -97,6 +97,10 @@ const isAlbumOwned = (ownerId: string) => (eb: ExpressionBuilder<DB, 'album'>) =
       .where('album_user.userId', '=', ownerId),
   );
 
+const albumOwnerId = () =>
+  sql<string>`(select "album_user"."userId" from "album_user"
+     where "album_user"."albumId" = "album"."id" and "album_user"."role" = ${AlbumUserRole.Owner} limit 1)`;
+
 @Injectable()
 export class AlbumRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -366,14 +370,15 @@ export class AlbumRepository {
             .as('metadata'),
         (join) => join.onRef('metadata.albumId', '=', 'album.id'),
       )
-      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId'])
+      .select(['album.id', 'album.albumName', 'album.description'])
+      .select(albumOwnerId().as('ownerId'))
       .select(withAgentAlbumThumbnail)
       .select((eb) => sql<number>`coalesce(${eb.ref('metadata.assetCount')}, 0)::int`.as('assetCount'))
       .select(['metadata.startDate as startDate', 'metadata.endDate as endDate'])
       .where('album.deletedAt', 'is', null)
       .where((eb) =>
         eb.or([
-          eb('album.ownerId', '=', userId),
+          isAlbumOwned(userId)(eb),
           eb.exists(
             eb
               .selectFrom('album_user')
@@ -410,7 +415,8 @@ export class AlbumRepository {
             .as('metadata'),
         (join) => join.onRef('metadata.albumId', '=', 'album.id'),
       )
-      .select(['album.id', 'album.albumName', 'album.description', 'album.ownerId'])
+      .select(['album.id', 'album.albumName', 'album.description'])
+      .select(albumOwnerId().as('ownerId'))
       .select(withAgentAlbumThumbnail)
       .select((eb) => sql<number>`coalesce(${eb.ref('metadata.assetCount')}, 0)::int`.as('assetCount'))
       .select(['metadata.startDate as startDate', 'metadata.endDate as endDate'])
@@ -418,7 +424,7 @@ export class AlbumRepository {
       .where('album.deletedAt', 'is', null)
       .where((eb) =>
         eb.or([
-          eb('album.ownerId', '=', userId),
+          isAlbumOwned(userId)(eb),
           eb.exists(
             eb
               .selectFrom('album_user')
