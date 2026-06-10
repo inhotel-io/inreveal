@@ -27,7 +27,6 @@
   import { onDestroy, onMount, type Snippet } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
-  import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
   import { type AgentActivityEvent } from './agent-session-activity-turns-ui';
   import {
     areAgentTimelineToolCallListsEquivalent,
@@ -61,8 +60,6 @@
     onMessageSent?: (sessionId: string) => void | Promise<void>;
     onRunnerError?: (sessionId: string) => void | Promise<void>;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
-    activityVisibilityMode?: AgentActivityVisibilityMode;
-    onActivityVisibilityModeChange?: (mode: AgentActivityVisibilityMode) => void;
   }
 
   type AssistantMarkdownInlineSegment =
@@ -112,10 +109,7 @@
     onMessageSent,
     onRunnerError,
     onTitleDiscovered,
-    activityVisibilityMode: _,
-    onActivityVisibilityModeChange,
   }: Props = $props();
-  void onActivityVisibilityModeChange;
 
   let messages = $state<AgentMessageResponseDto[]>([]);
   let appliedPlans = $state<AgentOperationPlanResponseDto[]>([]);
