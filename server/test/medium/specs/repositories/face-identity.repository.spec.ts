@@ -1613,12 +1613,7 @@ describe(FaceIdentityRepository.name, () => {
         }),
       ]);
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1659,12 +1654,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, name: 'Ina', birthDate: '2014-02-14' }),
       );
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1709,12 +1699,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, birthDate: '1990-01-01' }),
       ]);
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1779,10 +1764,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
       ]);
     } finally {
-      await ctx.database
-        .deleteFrom('shared_space_person')
-        .where('id', 'in', [newerWinner.id, olderLoser.id])
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1846,10 +1828,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
       ]);
     } finally {
-      await ctx.database
-        .deleteFrom('shared_space_person')
-        .where('id', 'in', [manualWinner.id, inheritedLoser.id])
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1880,12 +1859,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, name: 'Ina', birthDate: null }),
       ]);
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1931,12 +1905,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
       ]);
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
@@ -1978,12 +1947,7 @@ describe(FaceIdentityRepository.name, () => {
         expect.objectContaining({ id: person.id, birthDate: null }),
       ]);
     } finally {
-      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
-      await ctx.database
-        .deleteFrom('shared_space_asset')
-        .where('spaceId', '=', space.id)
-        .where('assetId', '=', asset.id)
-        .execute();
+      await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
   });
 
