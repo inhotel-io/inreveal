@@ -52,9 +52,14 @@ rolling batches land.
 
 ### 2. State model
 
-- **Base marker:** git tag `rolling-base/<branch>` pointing at the rolling-tip SHA the
-  branch currently sits on. Pushed to origin for recovery.
-- **Backups:** before every force-push, create `backup/<branch>-YYYYMMDD` (remote ref).
+- **Base marker:** lightweight git tag `rolling-base/<branch>` pointing at the rolling-tip
+  SHA the branch currently sits on (resolve via `rev-parse <tag>^{commit}`). Pushed to
+  origin for recovery; moving it needs a forced tag push. The tag also pins the old —
+  otherwise unreachable — base commits against GC after the rolling branch force-moves,
+  which is what keeps future `--onto` invocations possible.
+- **Backups:** before every force-push, create `backup/<branch>-YYYYMMDD-<short-sha>`
+  (remote ref; SHA suffix avoids same-day collisions). Delete backups a few days after the
+  sync proves stable, matching the `push-rebase` family convention.
 - **Canonical rolling ref** is a named constant at the top of the skill
   (`origin/rebase/upstream-rolling-complete-20260604`), with an explicit instruction to
   update the constant if the rolling branch is restarted under a new name (stale
@@ -66,30 +71,49 @@ rolling batches land.
 
 Tag `rolling-base/<branch>` **missing → onboard**:
 
-1. Base = `git merge-base origin/main <branch>` (verify it is an ancestor of the rolling
-   branch's `integratedForkHead`; if origin/main is ahead of integratedForkHead, wait for
-   the next fork-sync or flag).
+1. Base = `git merge-base origin/main <branch>`. Onboarding precondition:
+   `git merge-base --is-ancestor <base> <integratedForkHead>` — rolling must already
+   contain everything the branch was built on. If the branch forked from a main commit
+   newer than `integratedForkHead`, stop and wait until the rolling flow next runs
+   `upstream-sync-fork-main`.
 2. **Collision-surface audit → user checkpoint** (mini version of
    `rebase-upstream-report` step 2): changed-file intersection table with per-file risk;
    migration timestamp-collision check (server `migrations/` + `migrations-gallery/`,
    mobile Drift if touched); pattern-propagation check (upstream refactors in rolling that
    the branch's fork-only code should adopt, e.g. PUT→PATCH, dependency majors).
 3. **rerere seeding**: if the branch contains "merge origin/main" commits, run
-   `contrib/rerere-train.sh` over them so their conflict resolutions are pre-cached before
-   the flattening rebase.
-4. **Segmented replay**: `git rebase --onto <pinned-rolling-tip> <segment-base> <segment-tip>`
-   per epoch (merge-commit boundaries; sub-gate very large epochs at feature-milestone
-   SHAs). Build/type gate per segment (`make check-server` + direct `tsc --noEmit`).
-   Conflict resolutions documented in the `rebase-upstream-report` entry format.
+   `rerere-train.sh` over them (Homebrew git ships it at
+   `/opt/homebrew/share/git-core/contrib/rerere-train.sh`; verified present, git 2.54.0).
+   This pre-caches resolutions where the same conflict text recurs during the flattening
+   rebase — helpful, not a guarantee. It temporarily checks out commits, so it needs a
+   clean worktree.
+4. **Segmented replay** at merge-commit epoch boundaries (sub-gate very large epochs at
+   feature-milestone SHAs). Only the FIRST segment rebases onto the pinned rolling tip;
+   every later segment chains onto the previous segment's rebased result:
+
+   ```bash
+   git rebase --onto <pinned-rolling-tip> <merge-base> <epoch1-tip>   # → H1 (detached HEAD)
+   git rebase --onto H1 <epoch1-tip> <epoch2-tip>                     # → H2
+   # ...repeat per epoch; after the final segment, create the publish-target branch
+   # (the original <branch> stays frozen at its main-based head — see section 6):
+   git switch -c <branch>-rolling
+   ```
+
+   Build/type gate per segment (`make check-server` + direct `tsc --noEmit`). Conflict
+   resolutions documented in the `rebase-upstream-report` entry format. Commits whose
+   content already exists in rolling (e.g. fork-synced via origin/main) are auto-dropped
+   by rebase — expected, and the final range-diff accounts for them.
+
 5. Regen pass, verification tiers, publish (sections 5–6).
 
 Tag **present → maintain**:
 
 1. `NEW = rev-parse <canonical rolling ref>` after fetch; if the tip's batch is not yet
-   CI-green, use the last green batch SHA instead (from the rolling worktree's state or by
-   checking `gh run list` on the rebase branch).
-2. `git rebase --onto NEW $(git rev-parse rolling-base/<branch>) <branch>` — replays only
-   the branch's own commits; near-zero conflicts expected thanks to rerere.
+   CI-green, use the last green batch SHA instead. Authoritative source: `appendHistory`
+   in `rolling-state.json` on the rolling branch (read-only), which records each batch's
+   CI runs; fallback `gh --repo open-noodle/gallery run list` on the batch branch.
+2. `git rebase --onto NEW $(git rev-parse 'rolling-base/<branch>^{commit}') <branch>` —
+   replays only the branch's own commits; near-zero conflicts expected thanks to rerere.
 3. Gate, retag, push (sections 5–6).
 
 ### 4. Bundled script (`sync.sh` in the skill directory)
@@ -110,7 +134,10 @@ Deterministic mechanics only. Inputs: branch name, optional explicit new-base re
 
 - **Tier 1 — every sync:** `make check-server` + direct `tsc --noEmit` + the profile's
   fast suites.
-- **Tier 2 — conflicts occurred or overlap files changed:** full regen pass (OpenAPI
+- **Tier 2 — conflicts occurred, or the computed overlap is non-empty** (per sync,
+  intersect `git diff --name-only OLD NEW` with the branch's own touched files; the
+  profile's hotspot list is advisory context, not the trigger, since each batch changes
+  the overlap): full regen pass (OpenAPI
   TypeScript **and** Dart, `make sql`, generated manifests, lockfile, i18n format) + full
   local suites + dispatch `test.yml` (`gh --repo open-noodle/gallery`).
 - **Tier 3 — before an RC deploy or after jumping many batches:** the full workflow
@@ -129,9 +156,14 @@ rolling-suffixed branch name (see section 6), RC tag convention for live L3.
   must exist.
 - Publish target is per-profile: a rolling-based branch must **not** be force-pushed over
   the head of a PR that targets `main` (merge-base becomes ancient; diff explodes). For
-  pi-agent: keep PR #574 frozen on the main-based head; push the rolling-based branch as
+  pi-agent: keep PR #574 frozen on the main-based head; push the rolling-based line as
   `explore/pi-agent-brainstorm-rolling` until the rolling branch lands on main, then
   force-push over the PR branch (diff snaps back to clean).
+- To make accidental pushes structurally impossible, onboarding **renames the local
+  branch to match the publish target** (e.g. local `explore/pi-agent-brainstorm-rolling`),
+  leaving the old local name frozen at the main-based head alongside the backup ref. A
+  habitual `git push` then targets the rolling-suffixed remote branch, never the PR head.
+  The profile records both names.
 - Always `git rev-parse` full SHAs before use (mistyped-SHA burn from the rolling work).
 - If the canonical rolling branch was restarted/renamed, stop and verify lineage before
   trusting any `rolling-base/*` tag.
@@ -157,8 +189,9 @@ rolling-suffixed branch name (see section 6), RC tag convention for live L3.
 For the skill's first onboard run; re-measure before executing if days have passed.
 
 - Branch: `explore/pi-agent-brainstorm` @ `50e5bf3818`; merge-base with origin/main:
-  `ca92ca6598`; 1403 own commits; main-merge epoch boundaries: `77ed209fdd` (1148),
-  `85678669a1` (1251), `16774a22ca` (1333), `c3b434fa4a` (1349), tip (1403).
+  `ca92ca6598`; 1403 own commits; main-merge epoch boundaries (cumulative own-commit
+  counts from base): `77ed209fdd` (1148), `85678669a1` (1251), `16774a22ca` (1333),
+  `c3b434fa4a` (1349), tip (1403).
 - Rolling canonical: `rebase/upstream-rolling-complete-20260604` @ `e21f9d73` (batch 227,
   2026-06-10) — pin only a CI-green batch tip.
 - 88 overlapping files; hand-resolution hotspots: `asset.service/controller`,
