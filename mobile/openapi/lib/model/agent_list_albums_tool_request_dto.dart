@@ -13,7 +13,7 @@ part of openapi.api;
 class AgentListAlbumsToolRequestDto {
   /// Returns a new [AgentListAlbumsToolRequestDto] instance.
   AgentListAlbumsToolRequestDto({
-    this.toolCallId,
+    this.toolCallId = const Optional.absent(),
   });
 
   ///
@@ -22,7 +22,7 @@ class AgentListAlbumsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentListAlbumsToolRequestDto &&
@@ -38,10 +38,9 @@ class AgentListAlbumsToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -55,7 +54,7 @@ class AgentListAlbumsToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentListAlbumsToolRequestDto(
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

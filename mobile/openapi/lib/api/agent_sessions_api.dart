@@ -27,7 +27,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentMessageCreateDto] agentMessageCreateDto (required):
-  Future<Response> appendAgentSessionMessageWithHttpInfo(String id, AgentMessageCreateDto agentMessageCreateDto,) async {
+  Future<Response> appendAgentSessionMessageWithHttpInfo(String id, AgentMessageCreateDto agentMessageCreateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/messages'
       .replaceAll('{id}', id);
@@ -50,6 +50,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -62,8 +63,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentMessageCreateDto] agentMessageCreateDto (required):
-  Future<AgentMessageResponseDto?> appendAgentSessionMessage(String id, AgentMessageCreateDto agentMessageCreateDto,) async {
-    final response = await appendAgentSessionMessageWithHttpInfo(id, agentMessageCreateDto,);
+  Future<AgentMessageResponseDto?> appendAgentSessionMessage(String id, AgentMessageCreateDto agentMessageCreateDto, { Future<void>? abortTrigger, }) async {
+    final response = await appendAgentSessionMessageWithHttpInfo(id, agentMessageCreateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -90,7 +91,7 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentOperationPlanApplyRequestDto] agentOperationPlanApplyRequestDto (required):
-  Future<Response> applyApprovedOperationsWithHttpInfo(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto,) async {
+  Future<Response> applyApprovedOperationsWithHttpInfo(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan/{planId}/apply'
       .replaceAll('{id}', id)
@@ -114,6 +115,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -128,8 +130,8 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentOperationPlanApplyRequestDto] agentOperationPlanApplyRequestDto (required):
-  Future<AgentOperationPlanApplyResponseDto?> applyApprovedOperations(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto,) async {
-    final response = await applyApprovedOperationsWithHttpInfo(id, planId, agentOperationPlanApplyRequestDto,);
+  Future<AgentOperationPlanApplyResponseDto?> applyApprovedOperations(String id, String planId, AgentOperationPlanApplyRequestDto agentOperationPlanApplyRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await applyApprovedOperationsWithHttpInfo(id, planId, agentOperationPlanApplyRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -156,7 +158,7 @@ class AgentSessionsApi {
   /// * [String] toolCallId (required):
   ///
   /// * [AgentToolApprovalDto] agentToolApprovalDto (required):
-  Future<Response> approveToolCallWithHttpInfo(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto,) async {
+  Future<Response> approveToolCallWithHttpInfo(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tool-calls/{toolCallId}/approval'
       .replaceAll('{id}', id)
@@ -180,6 +182,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -194,8 +197,8 @@ class AgentSessionsApi {
   /// * [String] toolCallId (required):
   ///
   /// * [AgentToolApprovalDto] agentToolApprovalDto (required):
-  Future<AgentToolCallResponseDto?> approveToolCall(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto,) async {
-    final response = await approveToolCallWithHttpInfo(id, toolCallId, agentToolApprovalDto,);
+  Future<AgentToolCallResponseDto?> approveToolCall(String id, String toolCallId, AgentToolApprovalDto agentToolApprovalDto, { Future<void>? abortTrigger, }) async {
+    final response = await approveToolCallWithHttpInfo(id, toolCallId, agentToolApprovalDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -218,7 +221,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> cancelAgentSessionWithHttpInfo(String id,) async {
+  Future<Response> cancelAgentSessionWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/cancel'
       .replaceAll('{id}', id);
@@ -241,6 +244,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -251,8 +255,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<AgentSessionResponseDto?> cancelAgentSession(String id,) async {
-    final response = await cancelAgentSessionWithHttpInfo(id,);
+  Future<AgentSessionResponseDto?> cancelAgentSession(String id, { Future<void>? abortTrigger, }) async {
+    final response = await cancelAgentSessionWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -275,7 +279,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
-  Future<Response> createAgentSessionWithHttpInfo(AgentSessionCreateDto agentSessionCreateDto,) async {
+  Future<Response> createAgentSessionWithHttpInfo(AgentSessionCreateDto agentSessionCreateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions';
 
@@ -297,6 +301,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -307,8 +312,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
-  Future<AgentSessionResponseDto?> createAgentSession(AgentSessionCreateDto agentSessionCreateDto,) async {
-    final response = await createAgentSessionWithHttpInfo(agentSessionCreateDto,);
+  Future<AgentSessionResponseDto?> createAgentSession(AgentSessionCreateDto agentSessionCreateDto, { Future<void>? abortTrigger, }) async {
+    final response = await createAgentSessionWithHttpInfo(agentSessionCreateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -331,7 +336,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> deleteAgentSessionWithHttpInfo(String id,) async {
+  Future<Response> deleteAgentSessionWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}'
       .replaceAll('{id}', id);
@@ -354,6 +359,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -364,8 +370,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<void> deleteAgentSession(String id,) async {
-    final response = await deleteAgentSessionWithHttpInfo(id,);
+  Future<void> deleteAgentSession(String id, { Future<void>? abortTrigger, }) async {
+    final response = await deleteAgentSessionWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -382,7 +388,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<Response> executeAgentSearchAssetsWithHttpInfo(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
+  Future<Response> executeAgentSearchAssetsWithHttpInfo(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/search-assets'
       .replaceAll('{id}', id);
@@ -405,6 +411,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -417,8 +424,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchAssetsToolRequestDto] agentSearchAssetsToolRequestDto (required):
-  Future<AgentSearchAssetsToolResponseDto?> executeAgentSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto,) async {
-    final response = await executeAgentSearchAssetsWithHttpInfo(id, agentSearchAssetsToolRequestDto,);
+  Future<AgentSearchAssetsToolResponseDto?> executeAgentSearchAssets(String id, AgentSearchAssetsToolRequestDto agentSearchAssetsToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await executeAgentSearchAssetsWithHttpInfo(id, agentSearchAssetsToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -443,7 +450,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentFindTripCandidatesToolRequestDto] agentFindTripCandidatesToolRequestDto (required):
-  Future<Response> findTripCandidatesWithHttpInfo(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto,) async {
+  Future<Response> findTripCandidatesWithHttpInfo(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/find-trip-candidates'
       .replaceAll('{id}', id);
@@ -466,6 +473,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -478,8 +486,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentFindTripCandidatesToolRequestDto] agentFindTripCandidatesToolRequestDto (required):
-  Future<AgentFindTripCandidatesToolResponseDto?> findTripCandidates(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto,) async {
-    final response = await findTripCandidatesWithHttpInfo(id, agentFindTripCandidatesToolRequestDto,);
+  Future<AgentFindTripCandidatesToolResponseDto?> findTripCandidates(String id, AgentFindTripCandidatesToolRequestDto agentFindTripCandidatesToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await findTripCandidatesWithHttpInfo(id, agentFindTripCandidatesToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -502,7 +510,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getAgentSessionWithHttpInfo(String id,) async {
+  Future<Response> getAgentSessionWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}'
       .replaceAll('{id}', id);
@@ -525,6 +533,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -535,8 +544,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<AgentSessionResponseDto?> getAgentSession(String id,) async {
-    final response = await getAgentSessionWithHttpInfo(id,);
+  Future<AgentSessionResponseDto?> getAgentSession(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getAgentSessionWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -559,7 +568,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getAgentSessionActivityEventsWithHttpInfo(String id,) async {
+  Future<Response> getAgentSessionActivityEventsWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/activity-events'
       .replaceAll('{id}', id);
@@ -582,6 +591,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -592,8 +602,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<List<AgentSessionActivityEventResponseDto>?> getAgentSessionActivityEvents(String id,) async {
-    final response = await getAgentSessionActivityEventsWithHttpInfo(id,);
+  Future<List<AgentSessionActivityEventResponseDto>?> getAgentSessionActivityEvents(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getAgentSessionActivityEventsWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -619,7 +629,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getAgentSessionMessagesWithHttpInfo(String id,) async {
+  Future<Response> getAgentSessionMessagesWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/messages'
       .replaceAll('{id}', id);
@@ -642,6 +652,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -652,8 +663,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<List<AgentMessageResponseDto>?> getAgentSessionMessages(String id,) async {
-    final response = await getAgentSessionMessagesWithHttpInfo(id,);
+  Future<List<AgentMessageResponseDto>?> getAgentSessionMessages(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getAgentSessionMessagesWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -675,7 +686,7 @@ class AgentSessionsApi {
   /// Retrieve all AI agent sessions owned by the current user.
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> getAgentSessionsWithHttpInfo() async {
+  Future<Response> getAgentSessionsWithHttpInfo({ Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions';
 
@@ -697,14 +708,15 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
   /// List agent sessions
   ///
   /// Retrieve all AI agent sessions owned by the current user.
-  Future<List<AgentSessionResponseDto>?> getAgentSessions() async {
-    final response = await getAgentSessionsWithHttpInfo();
+  Future<List<AgentSessionResponseDto>?> getAgentSessions({ Future<void>? abortTrigger, }) async {
+    final response = await getAgentSessionsWithHttpInfo(abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -730,7 +742,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getAppliedOperationPlansWithHttpInfo(String id,) async {
+  Future<Response> getAppliedOperationPlansWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan/applied'
       .replaceAll('{id}', id);
@@ -753,6 +765,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -763,8 +776,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<List<AgentOperationPlanResponseDto>?> getAppliedOperationPlans(String id,) async {
-    final response = await getAppliedOperationPlansWithHttpInfo(id,);
+  Future<List<AgentOperationPlanResponseDto>?> getAppliedOperationPlans(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getAppliedOperationPlansWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -790,7 +803,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getCurrentOperationPlanWithHttpInfo(String id,) async {
+  Future<Response> getCurrentOperationPlanWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan'
       .replaceAll('{id}', id);
@@ -813,6 +826,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -823,8 +837,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<AgentOperationPlanResponseDto?> getCurrentOperationPlan(String id,) async {
-    final response = await getCurrentOperationPlanWithHttpInfo(id,);
+  Future<AgentOperationPlanResponseDto?> getCurrentOperationPlan(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getCurrentOperationPlanWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -847,7 +861,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> getToolCallsWithHttpInfo(String id,) async {
+  Future<Response> getToolCallsWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tool-calls'
       .replaceAll('{id}', id);
@@ -870,6 +884,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -880,8 +895,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<List<AgentToolCallResponseDto>?> getToolCalls(String id,) async {
-    final response = await getToolCallsWithHttpInfo(id,);
+  Future<List<AgentToolCallResponseDto>?> getToolCalls(String id, { Future<void>? abortTrigger, }) async {
+    final response = await getToolCallsWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -907,7 +922,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<Response> handleWithHttpInfo(String id,) async {
+  Future<Response> handleWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/internal/mcp/sessions/{id}'
       .replaceAll('{id}', id);
@@ -930,6 +945,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -940,8 +956,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [String] id (required):
-  Future<void> handle(String id,) async {
-    final response = await handleWithHttpInfo(id,);
+  Future<void> handle(String id, { Future<void>? abortTrigger, }) async {
+    final response = await handleWithHttpInfo(id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -958,7 +974,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<Response> listAlbumsWithHttpInfo(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
+  Future<Response> listAlbumsWithHttpInfo(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/list-albums'
       .replaceAll('{id}', id);
@@ -981,6 +997,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -993,8 +1010,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListAlbumsToolRequestDto] agentListAlbumsToolRequestDto (required):
-  Future<AgentListAlbumsToolResponseDto?> listAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto,) async {
-    final response = await listAlbumsWithHttpInfo(id, agentListAlbumsToolRequestDto,);
+  Future<AgentListAlbumsToolResponseDto?> listAlbums(String id, AgentListAlbumsToolRequestDto agentListAlbumsToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await listAlbumsWithHttpInfo(id, agentListAlbumsToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1019,7 +1036,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListDuplicateGroupsToolRequestDto] agentListDuplicateGroupsToolRequestDto (required):
-  Future<Response> listDuplicateGroupsWithHttpInfo(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto,) async {
+  Future<Response> listDuplicateGroupsWithHttpInfo(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/list-duplicate-groups'
       .replaceAll('{id}', id);
@@ -1042,6 +1059,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1054,8 +1072,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListDuplicateGroupsToolRequestDto] agentListDuplicateGroupsToolRequestDto (required):
-  Future<AgentListDuplicateGroupsToolResponseDto?> listDuplicateGroups(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto,) async {
-    final response = await listDuplicateGroupsWithHttpInfo(id, agentListDuplicateGroupsToolRequestDto,);
+  Future<AgentListDuplicateGroupsToolResponseDto?> listDuplicateGroups(String id, AgentListDuplicateGroupsToolRequestDto agentListDuplicateGroupsToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await listDuplicateGroupsWithHttpInfo(id, agentListDuplicateGroupsToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1080,7 +1098,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListSpacesToolRequestDto] agentListSpacesToolRequestDto (required):
-  Future<Response> listSpacesWithHttpInfo(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto,) async {
+  Future<Response> listSpacesWithHttpInfo(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/list-spaces'
       .replaceAll('{id}', id);
@@ -1103,6 +1121,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1115,8 +1134,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentListSpacesToolRequestDto] agentListSpacesToolRequestDto (required):
-  Future<AgentListSpacesToolResponseDto?> listSpaces(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto,) async {
-    final response = await listSpacesWithHttpInfo(id, agentListSpacesToolRequestDto,);
+  Future<AgentListSpacesToolResponseDto?> listSpaces(String id, AgentListSpacesToolRequestDto agentListSpacesToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await listSpacesWithHttpInfo(id, agentListSpacesToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1141,7 +1160,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentProposeAlbumOperationsDto] agentProposeAlbumOperationsDto (required):
-  Future<Response> proposeAlbumOperationsWithHttpInfo(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto,) async {
+  Future<Response> proposeAlbumOperationsWithHttpInfo(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan/proposals'
       .replaceAll('{id}', id);
@@ -1164,6 +1183,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1176,8 +1196,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentProposeAlbumOperationsDto] agentProposeAlbumOperationsDto (required):
-  Future<AgentOperationPlanToolResponseDto?> proposeAlbumOperations(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto,) async {
-    final response = await proposeAlbumOperationsWithHttpInfo(id, agentProposeAlbumOperationsDto,);
+  Future<AgentOperationPlanToolResponseDto?> proposeAlbumOperations(String id, AgentProposeAlbumOperationsDto agentProposeAlbumOperationsDto, { Future<void>? abortTrigger, }) async {
+    final response = await proposeAlbumOperationsWithHttpInfo(id, agentProposeAlbumOperationsDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1202,7 +1222,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<Response> readAlbumWithHttpInfo(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
+  Future<Response> readAlbumWithHttpInfo(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/read-album'
       .replaceAll('{id}', id);
@@ -1225,6 +1245,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1237,8 +1258,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAlbumToolRequestDto] agentReadAlbumToolRequestDto (required):
-  Future<AgentReadAlbumToolResponseDto?> readAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto,) async {
-    final response = await readAlbumWithHttpInfo(id, agentReadAlbumToolRequestDto,);
+  Future<AgentReadAlbumToolResponseDto?> readAlbum(String id, AgentReadAlbumToolRequestDto agentReadAlbumToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await readAlbumWithHttpInfo(id, agentReadAlbumToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1263,7 +1284,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<Response> readAssetMetadataWithHttpInfo(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
+  Future<Response> readAssetMetadataWithHttpInfo(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/read-asset-metadata'
       .replaceAll('{id}', id);
@@ -1286,6 +1307,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1298,8 +1320,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetMetadataToolRequestDto] agentReadAssetMetadataToolRequestDto (required):
-  Future<AgentReadAssetMetadataToolResponseDto?> readAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto,) async {
-    final response = await readAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto,);
+  Future<AgentReadAssetMetadataToolResponseDto?> readAssetMetadata(String id, AgentReadAssetMetadataToolRequestDto agentReadAssetMetadataToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await readAssetMetadataWithHttpInfo(id, agentReadAssetMetadataToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1324,7 +1346,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<Response> readAssetOriginalsWithHttpInfo(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
+  Future<Response> readAssetOriginalsWithHttpInfo(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/read-asset-originals'
       .replaceAll('{id}', id);
@@ -1347,6 +1369,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1359,8 +1382,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetOriginalsToolRequestDto] agentReadAssetOriginalsToolRequestDto (required):
-  Future<AgentReadAssetOriginalsToolResponseDto?> readAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto,) async {
-    final response = await readAssetOriginalsWithHttpInfo(id, agentReadAssetOriginalsToolRequestDto,);
+  Future<AgentReadAssetOriginalsToolResponseDto?> readAssetOriginals(String id, AgentReadAssetOriginalsToolRequestDto agentReadAssetOriginalsToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await readAssetOriginalsWithHttpInfo(id, agentReadAssetOriginalsToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1385,7 +1408,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<Response> readAssetPreviewsWithHttpInfo(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
+  Future<Response> readAssetPreviewsWithHttpInfo(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/read-asset-previews'
       .replaceAll('{id}', id);
@@ -1408,6 +1431,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1420,8 +1444,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadAssetPreviewsToolRequestDto] agentReadAssetPreviewsToolRequestDto (required):
-  Future<AgentReadAssetPreviewsToolResponseDto?> readAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto,) async {
-    final response = await readAssetPreviewsWithHttpInfo(id, agentReadAssetPreviewsToolRequestDto,);
+  Future<AgentReadAssetPreviewsToolResponseDto?> readAssetPreviews(String id, AgentReadAssetPreviewsToolRequestDto agentReadAssetPreviewsToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await readAssetPreviewsWithHttpInfo(id, agentReadAssetPreviewsToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1446,7 +1470,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadSpaceToolRequestDto] agentReadSpaceToolRequestDto (required):
-  Future<Response> readSpaceWithHttpInfo(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto,) async {
+  Future<Response> readSpaceWithHttpInfo(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/read-space'
       .replaceAll('{id}', id);
@@ -1469,6 +1493,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1481,8 +1506,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentReadSpaceToolRequestDto] agentReadSpaceToolRequestDto (required):
-  Future<AgentReadSpaceToolResponseDto?> readSpace(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto,) async {
-    final response = await readSpaceWithHttpInfo(id, agentReadSpaceToolRequestDto,);
+  Future<AgentReadSpaceToolResponseDto?> readSpace(String id, AgentReadSpaceToolRequestDto agentReadSpaceToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await readSpaceWithHttpInfo(id, agentReadSpaceToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1509,7 +1534,7 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentReviseAlbumOperationsDto] agentReviseAlbumOperationsDto (required):
-  Future<Response> reviseProposedOperationsWithHttpInfo(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto,) async {
+  Future<Response> reviseProposedOperationsWithHttpInfo(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan/{planId}/revisions'
       .replaceAll('{id}', id)
@@ -1533,6 +1558,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1547,8 +1573,8 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentReviseAlbumOperationsDto] agentReviseAlbumOperationsDto (required):
-  Future<AgentOperationPlanToolResponseDto?> reviseProposedOperations(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto,) async {
-    final response = await reviseProposedOperationsWithHttpInfo(id, planId, agentReviseAlbumOperationsDto,);
+  Future<AgentOperationPlanToolResponseDto?> reviseProposedOperations(String id, String planId, AgentReviseAlbumOperationsDto agentReviseAlbumOperationsDto, { Future<void>? abortTrigger, }) async {
+    final response = await reviseProposedOperationsWithHttpInfo(id, planId, agentReviseAlbumOperationsDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1573,7 +1599,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchPeopleToolRequestDto] agentSearchPeopleToolRequestDto (required):
-  Future<Response> searchAgentPeopleWithHttpInfo(String id, AgentSearchPeopleToolRequestDto agentSearchPeopleToolRequestDto,) async {
+  Future<Response> searchAgentPeopleWithHttpInfo(String id, AgentSearchPeopleToolRequestDto agentSearchPeopleToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/search-people'
       .replaceAll('{id}', id);
@@ -1596,6 +1622,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1608,8 +1635,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchPeopleToolRequestDto] agentSearchPeopleToolRequestDto (required):
-  Future<AgentSearchPeopleToolResponseDto?> searchAgentPeople(String id, AgentSearchPeopleToolRequestDto agentSearchPeopleToolRequestDto,) async {
-    final response = await searchAgentPeopleWithHttpInfo(id, agentSearchPeopleToolRequestDto,);
+  Future<AgentSearchPeopleToolResponseDto?> searchAgentPeople(String id, AgentSearchPeopleToolRequestDto agentSearchPeopleToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await searchAgentPeopleWithHttpInfo(id, agentSearchPeopleToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1634,7 +1661,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchUsersToolRequestDto] agentSearchUsersToolRequestDto (required):
-  Future<Response> searchAgentUsersWithHttpInfo(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto,) async {
+  Future<Response> searchAgentUsersWithHttpInfo(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/tools/search-users'
       .replaceAll('{id}', id);
@@ -1657,6 +1684,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1669,8 +1697,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSearchUsersToolRequestDto] agentSearchUsersToolRequestDto (required):
-  Future<AgentSearchUsersToolResponseDto?> searchAgentUsers(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto,) async {
-    final response = await searchAgentUsersWithHttpInfo(id, agentSearchUsersToolRequestDto,);
+  Future<AgentSearchUsersToolResponseDto?> searchAgentUsers(String id, AgentSearchUsersToolRequestDto agentSearchUsersToolRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await searchAgentUsersWithHttpInfo(id, agentSearchUsersToolRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1697,7 +1725,7 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentOperationPlanSummaryRequestDto] agentOperationPlanSummaryRequestDto (required):
-  Future<Response> summarizePlanWithHttpInfo(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto,) async {
+  Future<Response> summarizePlanWithHttpInfo(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}/operation-plan/{planId}/summary'
       .replaceAll('{id}', id)
@@ -1721,6 +1749,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1735,8 +1764,8 @@ class AgentSessionsApi {
   /// * [String] planId (required):
   ///
   /// * [AgentOperationPlanSummaryRequestDto] agentOperationPlanSummaryRequestDto (required):
-  Future<AgentOperationPlanToolResponseDto?> summarizePlan(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto,) async {
-    final response = await summarizePlanWithHttpInfo(id, planId, agentOperationPlanSummaryRequestDto,);
+  Future<AgentOperationPlanToolResponseDto?> summarizePlan(String id, String planId, AgentOperationPlanSummaryRequestDto agentOperationPlanSummaryRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await summarizePlanWithHttpInfo(id, planId, agentOperationPlanSummaryRequestDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1761,7 +1790,7 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSessionUpdateDto] agentSessionUpdateDto (required):
-  Future<Response> updateAgentSessionWithHttpInfo(String id, AgentSessionUpdateDto agentSessionUpdateDto,) async {
+  Future<Response> updateAgentSessionWithHttpInfo(String id, AgentSessionUpdateDto agentSessionUpdateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/{id}'
       .replaceAll('{id}', id);
@@ -1784,6 +1813,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1796,8 +1826,8 @@ class AgentSessionsApi {
   /// * [String] id (required):
   ///
   /// * [AgentSessionUpdateDto] agentSessionUpdateDto (required):
-  Future<AgentSessionResponseDto?> updateAgentSession(String id, AgentSessionUpdateDto agentSessionUpdateDto,) async {
-    final response = await updateAgentSessionWithHttpInfo(id, agentSessionUpdateDto,);
+  Future<AgentSessionResponseDto?> updateAgentSession(String id, AgentSessionUpdateDto agentSessionUpdateDto, { Future<void>? abortTrigger, }) async {
+    final response = await updateAgentSessionWithHttpInfo(id, agentSessionUpdateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1820,7 +1850,7 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
-  Future<Response> validateAgentSessionWithHttpInfo(AgentSessionCreateDto agentSessionCreateDto,) async {
+  Future<Response> validateAgentSessionWithHttpInfo(AgentSessionCreateDto agentSessionCreateDto, { Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/agent/sessions/validate';
 
@@ -1842,6 +1872,7 @@ class AgentSessionsApi {
       headerParams,
       formParams,
       contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
     );
   }
 
@@ -1852,8 +1883,8 @@ class AgentSessionsApi {
   /// Parameters:
   ///
   /// * [AgentSessionCreateDto] agentSessionCreateDto (required):
-  Future<void> validateAgentSession(AgentSessionCreateDto agentSessionCreateDto,) async {
-    final response = await validateAgentSessionWithHttpInfo(agentSessionCreateDto,);
+  Future<void> validateAgentSession(AgentSessionCreateDto agentSessionCreateDto, { Future<void>? abortTrigger, }) async {
+    final response = await validateAgentSessionWithHttpInfo(agentSessionCreateDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

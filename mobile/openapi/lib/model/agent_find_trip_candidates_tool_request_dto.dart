@@ -13,11 +13,11 @@ part of openapi.api;
 class AgentFindTripCandidatesToolRequestDto {
   /// Returns a new [AgentFindTripCandidatesToolRequestDto] instance.
   AgentFindTripCandidatesToolRequestDto({
-    this.lookbackDays,
-    this.maxCandidates,
-    this.placeHint,
-    this.targetDate,
-    this.toolCallId,
+    this.lookbackDays = const Optional.absent(),
+    this.maxCandidates = const Optional.absent(),
+    this.placeHint = const Optional.absent(),
+    this.targetDate = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Minimum value: 1
@@ -28,7 +28,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? lookbackDays;
+  Optional<int?> lookbackDays;
 
   /// Minimum value: 1
   /// Maximum value: 10
@@ -38,7 +38,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxCandidates;
+  Optional<int?> maxCandidates;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -46,7 +46,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? placeHint;
+  Optional<String?> placeHint;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -54,7 +54,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? targetDate;
+  Optional<String?> targetDate;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -62,7 +62,7 @@ class AgentFindTripCandidatesToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentFindTripCandidatesToolRequestDto &&
@@ -86,30 +86,25 @@ class AgentFindTripCandidatesToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.lookbackDays != null) {
-      json[r'lookbackDays'] = this.lookbackDays;
-    } else {
-    //  json[r'lookbackDays'] = null;
+    if (this.lookbackDays.isPresent) {
+      final value = this.lookbackDays.value;
+      json[r'lookbackDays'] = value;
     }
-    if (this.maxCandidates != null) {
-      json[r'maxCandidates'] = this.maxCandidates;
-    } else {
-    //  json[r'maxCandidates'] = null;
+    if (this.maxCandidates.isPresent) {
+      final value = this.maxCandidates.value;
+      json[r'maxCandidates'] = value;
     }
-    if (this.placeHint != null) {
-      json[r'placeHint'] = this.placeHint;
-    } else {
-    //  json[r'placeHint'] = null;
+    if (this.placeHint.isPresent) {
+      final value = this.placeHint.value;
+      json[r'placeHint'] = value;
     }
-    if (this.targetDate != null) {
-      json[r'targetDate'] = this.targetDate;
-    } else {
-    //  json[r'targetDate'] = null;
+    if (this.targetDate.isPresent) {
+      final value = this.targetDate.value;
+      json[r'targetDate'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -123,11 +118,11 @@ class AgentFindTripCandidatesToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentFindTripCandidatesToolRequestDto(
-        lookbackDays: mapValueOfType<int>(json, r'lookbackDays'),
-        maxCandidates: mapValueOfType<int>(json, r'maxCandidates'),
-        placeHint: mapValueOfType<String>(json, r'placeHint'),
-        targetDate: mapValueOfType<String>(json, r'targetDate'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        lookbackDays: json.containsKey(r'lookbackDays') ? Optional.present(json[r'lookbackDays'] == null ? null : int.parse('${json[r'lookbackDays']}')) : const Optional.absent(),
+        maxCandidates: json.containsKey(r'maxCandidates') ? Optional.present(json[r'maxCandidates'] == null ? null : int.parse('${json[r'maxCandidates']}')) : const Optional.absent(),
+        placeHint: json.containsKey(r'placeHint') ? Optional.present(mapValueOfType<String>(json, r'placeHint')) : const Optional.absent(),
+        targetDate: json.containsKey(r'targetDate') ? Optional.present(mapValueOfType<String>(json, r'targetDate')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

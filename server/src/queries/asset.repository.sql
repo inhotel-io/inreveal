@@ -99,7 +99,7 @@ delete from "asset_metadata"
 where
   "assetId" = $1
   and "key" = $2
-commit
+rollback
 
 -- AssetRepository.getByDayOfYear
 with
@@ -777,138 +777,6 @@ where
   and "asset"."isOffline" = $2
   and "asset"."visibility" in ($3, $4, $5)
 
--- AssetRepository.searchAgentMetadata
-select
-  "asset"."id",
-  "asset"."ownerId",
-  "asset"."type",
-  "asset"."originalFileName",
-  "asset"."localDateTime",
-  "asset"."fileCreatedAt",
-  "asset"."fileModifiedAt",
-  "asset"."isFavorite",
-  "asset"."visibility",
-  (
-    select
-      coalesce(json_agg(agg), '[]')
-    from
-      (
-        select
-          "tag"."id",
-          "tag"."value",
-          "tag"."createdAt",
-          "tag"."updatedAt",
-          "tag"."color",
-          "tag"."parentId"
-        from
-          "tag"
-          inner join "tag_asset" on "tag"."id" = "tag_asset"."tagId"
-        where
-          "asset"."id" = "tag_asset"."assetId"
-      ) as agg
-  ) as "tags",
-  (
-    select
-      to_json(obj)
-    from
-      (
-        select
-          "asset_exif"."dateTimeOriginal",
-          "asset_exif"."city",
-          "asset_exif"."state",
-          "asset_exif"."country",
-          "asset_exif"."make",
-          "asset_exif"."model",
-          "asset_exif"."lensModel",
-          "asset_exif"."latitude",
-          "asset_exif"."longitude",
-          "asset_exif"."rating"
-        from
-          "asset_exif"
-        where
-          "asset_exif"."assetId" = "asset"."id"
-      ) as obj
-  ) as "exifInfo"
-from
-  "asset"
-where
-  "asset"."deletedAt" is null
-  and "asset"."isOffline" = $1
-  and "asset"."visibility" in ($2, $3)
-  and (
-    "asset"."ownerId" = $4
-    or exists (
-      select
-      from
-        "shared_space_asset"
-        inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
-      where
-        "shared_space_asset"."assetId" = "asset"."id"
-        and "shared_space_member"."userId" = $5
-    )
-    or exists (
-      select
-      from
-        "shared_space_library"
-        inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
-      where
-        "shared_space_library"."libraryId" = "asset"."libraryId"
-        and "shared_space_member"."userId" = $6
-    )
-  )
-  and exists (
-    select
-    from
-      "asset_exif"
-    where
-      "asset_exif"."assetId" = "asset"."id"
-      and "asset_exif"."city" = $7
-  )
-  and exists (
-    select
-    from
-      "asset_exif"
-    where
-      "asset_exif"."assetId" = "asset"."id"
-      and "asset_exif"."country" = $8
-  )
-order by
-  "asset"."localDateTime" desc,
-  "asset"."id" desc
-limit
-  $9
-
--- AssetRepository.getAgentPreviewReferencesByIds
-select
-  "asset"."id" as "assetId",
-  "asset"."originalFileName" as "fileName",
-  "asset_file"."path" as "previewPath",
-  "asset_exif"."exifImageWidth" as "width",
-  "asset_exif"."exifImageHeight" as "height"
-from
-  "asset"
-  inner join "asset_file" on "asset_file"."assetId" = "asset"."id"
-  left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
-where
-  "asset"."id" = any ($1::uuid[])
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $2
-  and "asset_file"."type" = $3
-
--- AssetRepository.getAgentOriginalReferencesByIds
-select
-  "asset"."id" as "assetId",
-  "asset"."originalFileName" as "fileName",
-  "asset_exif"."exifImageWidth" as "width",
-  "asset_exif"."exifImageHeight" as "height"
-from
-  "asset"
-  left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
-where
-  "asset"."id" = any ($1::uuid[])
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $2
-
 -- AssetRepository.deleteAll
 delete from "asset"
 where
@@ -1028,6 +896,8 @@ from
 where
   "ownerId" = $1::uuid
   and "checksum" in ($2)
+
+-- AssetRepository.getUploadAssetIdByChecksum
 select
   "assetId" as "id",
   "checksum"
@@ -1036,8 +906,6 @@ from
 where
   "ownerId" = $1::uuid
   and "checksum" in ($2)
-
--- AssetRepository.getUploadAssetIdByChecksum
 select
   "id"
 from
@@ -1046,15 +914,6 @@ where
   "ownerId" = $1::uuid
   and "checksum" = $2
   and "libraryId" is null
-limit
-  $3
-select
-  "assetId"
-from
-  "asset_duplicate_checksum"
-where
-  "ownerId" = $1::uuid
-  and "checksum" = $2
 limit
   $3
 
