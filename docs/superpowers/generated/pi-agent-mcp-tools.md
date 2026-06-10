@@ -278,6 +278,59 @@ Retry an approved read request by id.
 }
 ```
 
+### Search people
+
+MCP tool name: `searchPeople`
+
+Resolve a person by name to an id. Returns matched (single clear result), ambiguous (up to 5 candidate people), or not_found. Scrubbed: id, name, thumbnail asset id — no face data.
+
+Use when a user refers to a person by name and you need their person id. If the result is ambiguous, present the choices to the user and ask them to pick one. If not_found, tell the user the person was not recognised and ask for a more specific name.
+
+Argument modes:
+
+- `search-by-name`: Use when you have a person name from the user that needs to be resolved to a person id.
+  Required fields: `name`.
+  Forbidden fields: `toolCallId`.
+- `approved-retry`: Use only after Gallery resumes the assistant from an approved search-people request.
+  Required fields: `toolCallId`.
+  Forbidden fields: `name`.
+
+#### search-alice-matched
+
+Search for a person named "Alice" — likely returns matched with person id.
+
+<!-- mcp-docs:tool-arguments tool="searchPeople" example="search-alice-matched" -->
+
+```json
+{
+  "name": "Alice"
+}
+```
+
+#### search-john-ambiguous
+
+Search for "John" — may return ambiguous if multiple people named John exist.
+
+<!-- mcp-docs:tool-arguments tool="searchPeople" example="search-john-ambiguous" -->
+
+```json
+{
+  "name": "John"
+}
+```
+
+#### approved-retry
+
+Retry an approved read request by id.
+
+<!-- mcp-docs:tool-arguments tool="searchPeople" example="approved-retry" -->
+
+```json
+{
+  "toolCallId": "<approved-toolCallId>"
+}
+```
+
 ### Resolve asset search filters
 
 MCP tool name: `resolveAssetSearchFilters`
@@ -3283,6 +3336,10 @@ Summarize plan risks and selected changes.
 ### Resolve location
 
 - `resolve-location-missing-query`: Provide the query field with the place name string to forward-geocode.
+
+### Search people
+
+- `search-people-missing-name`: Provide the name field with the person name string to search for.
 
 ### Resolve asset search filters
 

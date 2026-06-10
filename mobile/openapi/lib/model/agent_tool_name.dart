@@ -29,6 +29,7 @@ class AgentToolName {
   static const curateSelection = AgentToolName._(r'curateSelection');
   static const resolveAssetSearchFilters = AgentToolName._(r'resolveAssetSearchFilters');
   static const resolveLocation = AgentToolName._(r'resolveLocation');
+  static const searchPeople = AgentToolName._(r'searchPeople');
   static const readAssetMetadata = AgentToolName._(r'readAssetMetadata');
   static const readAssetPreviews = AgentToolName._(r'readAssetPreviews');
   static const readAssetOriginals = AgentToolName._(r'readAssetOriginals');
@@ -57,6 +58,7 @@ class AgentToolName {
     curateSelection,
     resolveAssetSearchFilters,
     resolveLocation,
+    searchPeople,
     readAssetMetadata,
     readAssetPreviews,
     readAssetOriginals,
@@ -120,6 +122,7 @@ class AgentToolNameTypeTransformer {
         case r'curateSelection': return AgentToolName.curateSelection;
         case r'resolveAssetSearchFilters': return AgentToolName.resolveAssetSearchFilters;
         case r'resolveLocation': return AgentToolName.resolveLocation;
+        case r'searchPeople': return AgentToolName.searchPeople;
         case r'readAssetMetadata': return AgentToolName.readAssetMetadata;
         case r'readAssetPreviews': return AgentToolName.readAssetPreviews;
         case r'readAssetOriginals': return AgentToolName.readAssetOriginals;

@@ -30,6 +30,8 @@ import {
   AgentResolveLocationToolResponseDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchAssetsToolResponseDto,
+  AgentSearchPeopleToolRequestDto,
+  AgentSearchPeopleToolResponseDto,
   AgentSearchUsersToolRequestDto,
   AgentSearchUsersToolResponseDto,
   AgentToolApprovalDto,
@@ -59,6 +61,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { MapRepository } from 'src/repositories/map.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -102,6 +105,7 @@ import {
   AgentSearchAssetsSampleItem,
   AgentSearchAssetsSelectionHandle,
   AgentSearchAssetsSelectionHandleResult,
+  AgentSearchPeopleResult,
   AgentSpaceDetail,
   AgentSpaceMemberSummary,
   AgentSpaceSummary,
@@ -231,6 +235,8 @@ type MaterializedAgentTripCandidate = Omit<AgentTripCandidateToolResult, 'select
   assetIds: string[];
 };
 
+const normName = (s: string) => s.trim().toLowerCase();
+
 @Injectable()
 export class AgentToolService {
   private static readonly activeStatuses = [
@@ -261,6 +267,7 @@ export class AgentToolService {
     private readonly userService: UserService,
     private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
     private readonly mapRepository: MapRepository,
+    private readonly personRepository: PersonRepository,
   ) {
     this.tripCandidateService = new TripCandidateService(assetRepository);
   }
@@ -311,6 +318,14 @@ export class AgentToolService {
     dto: AgentResolveLocationToolRequestDto,
   ): Promise<AgentResolveLocationToolResponseDto> {
     return this.runReadTool(auth, sessionId, dto, this.resolveLocationDescriptor());
+  }
+
+  async searchPeople(
+    auth: AuthDto,
+    sessionId: string,
+    dto: AgentSearchPeopleToolRequestDto,
+  ): Promise<AgentSearchPeopleToolResponseDto> {
+    return this.runReadTool(auth, sessionId, dto, this.searchPeopleDescriptor());
   }
 
   async readAssetMetadata(
@@ -493,6 +508,9 @@ export class AgentToolService {
       }
       case AgentToolName.ResolveLocation: {
         return this.resolveLocation(auth, session.id, { toolCallId: toolCall.id });
+      }
+      case AgentToolName.SearchPeople: {
+        return this.searchPeople(auth, session.id, { toolCallId: toolCall.id });
       }
       case AgentToolName.ReadAssetMetadata: {
         return this.readAssetMetadata(auth, session.id, { toolCallId: toolCall.id });
@@ -1619,6 +1637,71 @@ export class AgentToolService {
 
   private buildLocationLabel(name: string, admin1Name: string | null, countryCode: string): string {
     return admin1Name ? `${name}, ${admin1Name}, ${countryCode}` : `${name}, ${countryCode}`;
+  }
+
+  private searchPeopleDescriptor(): AgentReadToolDescriptor<
+    AgentSearchPeopleToolRequestDto,
+    { people: AgentSearchPeopleResult }
+  > {
+    return {
+      toolName: AgentToolName.SearchPeople,
+      dataClass: AgentToolDataClass.Metadata,
+      requestSummary: (request) => `Search people: ${request.name ?? '(retry)'}`,
+      requestMetadata: (request) => ({ name: request.name ?? '' }) as AgentToolCall['redactedRequestMetadata'],
+      requestedAssetCount: () => 0,
+      requestedAlbumCount: () => 0,
+      perToolLimit: () => Number.MAX_SAFE_INTEGER,
+      perSessionLimit: () => Number.MAX_SAFE_INTEGER,
+      validateAccess: () => Promise.resolve(null),
+      execute: async (auth, _session, request) => {
+        const name = request.name ?? '';
+        if (!name) {
+          return { people: { status: 'not_found' } };
+        }
+        const rows = await this.personRepository.getByName(auth.user.id, name, { withHidden: false });
+        return { people: this.decidePeople(rows, name) };
+      },
+      responseSummary: (result) => {
+        const p = result.people;
+        if (p.status === 'matched') {
+          return `Resolved person: ${p.name}`;
+        }
+        if (p.status === 'ambiguous') {
+          return `Ambiguous person — ${p.choices?.length ?? 0} choice(s)`;
+        }
+        return 'Person not found';
+      },
+      responseMetadata: (result) =>
+        ({ peopleStatus: result.people.status }) as AgentToolCall['redactedResponseMetadata'],
+      resultAssetCount: () => 0,
+      resultAlbumCount: () => 0,
+      resultSize: () => ({ returnedItems: 1, hasMore: false, nextPage: null }),
+      failedReason: 'People search failed',
+    };
+  }
+
+  private decidePeople(
+    rows: Awaited<ReturnType<PersonRepository['getByName']>>,
+    query: string,
+  ): AgentSearchPeopleResult {
+    if (rows.length === 0) {
+      return { status: 'not_found' };
+    }
+
+    const exact = rows.filter((r) => normName(r.name) === normName(query));
+
+    const ambiguous = (list: typeof rows) => ({
+      status: 'ambiguous' as const,
+      choices: list.slice(0, 5).map((r) => ({ personId: r.id, name: r.name, thumbnailAssetId: r.faceAssetId })),
+    });
+
+    if (exact.length === 1) {
+      return { status: 'matched', personId: exact[0].id, name: exact[0].name, thumbnailAssetId: exact[0].faceAssetId };
+    }
+    if (exact.length > 1) {
+      return ambiguous(exact);
+    }
+    return ambiguous(rows);
   }
 
   private getResolverTermCount(request: AgentResolveAssetSearchFiltersToolRequestDto): number {
