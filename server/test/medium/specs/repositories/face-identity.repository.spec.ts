@@ -1852,6 +1852,141 @@ describe(FaceIdentityRepository.name, () => {
         .execute();
     }
   });
+
+  it('returns the person with a null birthday when no profile has one', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Ina' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({ spaceId: space.id, identityId: identity.id, name: '', representativeFaceId: assetFace.id, type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+      .execute();
+
+    try {
+      const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+      expect(result.people).toEqual([
+        expect.objectContaining({ id: person.id, name: 'Ina', birthDate: null }),
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
+    }
+  });
+
+  it('does not surface a birthday from a hidden space profile unless withHidden is set', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Ina' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        isHidden: true,
+        birthDate: '2014-02-14',
+        birthDateSource: 'manual',
+        birthDateSourceUpdatedAt: new Date('2026-06-10T20:41:12.000Z'),
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+      .execute();
+
+    try {
+      const hiddenExcluded = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+      expect(hiddenExcluded.people).toEqual([
+        expect.objectContaining({ id: person.id, birthDate: null }),
+      ]);
+
+      const hiddenIncluded = await sut.getAccessiblePeople(user.id, { withHidden: true, page: 1, size: 50 });
+      expect(hiddenIncluded.people).toEqual([
+        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
+    }
+  });
+
+  it('does not leak a birthday from a space hidden from the viewer timeline', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Ina' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    const identity = await sut.ensurePersonIdentity(person.id);
+    await sut.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+    const spacePerson = await ctx.database
+      .insertInto('shared_space_person')
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+        birthDate: '2014-02-14',
+        birthDateSource: 'manual',
+        birthDateSourceUpdatedAt: new Date('2026-06-10T20:41:12.000Z'),
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: spacePerson.id, assetFaceId: assetFace.id })
+      .execute();
+    // Hide the space from the viewer's timeline -> excluded from timeline_spaces.
+    await setMemberTimeline(ctx, { spaceId: space.id, userId: user.id, showInTimeline: false });
+
+    try {
+      const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
+      expect(result.people).toEqual([
+        expect.objectContaining({ id: person.id, birthDate: null }),
+      ]);
+    } finally {
+      await ctx.database.deleteFrom('shared_space_person').where('id', '=', spacePerson.id).execute();
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
+    }
+  });
+
   it('filters unnamed identity-grouped people below the configured minimum face count', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
