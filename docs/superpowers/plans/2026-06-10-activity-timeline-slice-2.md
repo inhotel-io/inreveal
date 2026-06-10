@@ -113,7 +113,7 @@ const TOOL_VERB_KEYS: Record<string, string> = {
 
 - [ ] **Step 1:** Read the file; add `export` to `buildStableTurnAnchors`, `toolCallBelongsToTurn`, `activityEventBelongsToTurn` and the anchor type they use (export it as `UserTurnAnchor` if unnamed/internal). NO logic changes.
 - [ ] **Step 2:** Run its spec + the panel spec to prove no behavior change:
-  `pnpm test -- --run "src/routes/(user)/assistant/agent-session-activity-turns-ui.spec.ts"` → PASS.
+      `pnpm test -- --run "src/routes/(user)/assistant/agent-session-activity-turns-ui.spec.ts"` → PASS.
 - [ ] **Step 3:** Commit: `git add <file> && git commit -m "refactor(assistant): export turn-anchor helpers for the timeline builder"`.
 
 ### Task 2: The builder, TDD
@@ -122,26 +122,26 @@ const TOOL_VERB_KEYS: Record<string, string> = {
 
 - [ ] **Step 1: Write the failing spec.** Local factories (`makeSession(status)`, `makeUserMessage(id, createdAt)`, `makeAssistantMessage`, `makeToolCall({...})`, `makeActivityEvent({...})`) modeled on the shapes used in `agent-session-activity-turns-ui.spec.ts` (read it; reuse its fixture idioms so anchors behave). Then table-driven tests — every named case below is REQUIRED:
 
-| Test | Arrange | Assert |
-| --- | --- | --- |
-| E1 zero tool calls | 1 user msg, session Completed, no tool calls | one timeline, `summary === null`, `rows: []`, `oneLiner === null` |
-| E2 running, no tool call yet | 1 user msg, session Running | `state:'running'`, `oneLiner = {kind:'key', key:'assistant_timeline_understanding'}` |
-| E3 running, in-flight known tool | + toolCall executing `searchAssets` | `oneLiner = {kind:'key', key:'assistant_timeline_verb_searching'}` |
-| E3b running, in-flight unknown tool | toolCall executing `someNewTool` | `oneLiner = {kind:'raw', toolName:'someNewTool'}` |
-| E3c running, between calls | one completed call only | `oneLiner = {kind:'key', key:'assistant_timeline_thinking'}` |
-| mapping: completed | completed call w/ completedAt | row `state:'completed'`, durationMs computed |
-| mapping: failed + E7 | failed call w/ error 'boom' | row `'failed'`, `detail.error:'boom'`, `summary.failedCount:1` |
-| mapping: denied + E6 | denied call | row `'denied'`, `summary.failedCount:0` |
-| mapping: in-flight | executing call, session Running, last turn | row `'in-flight'` |
-| E4/E5 cancelled | executing call, session Cancelled | row `'cancelled'`, `summary.cancelled:true`, `state:'settled'` |
-| E5b interrupted | same but session Interrupted (skip with note if enum lacks it) | same as E4 |
-| E8 null completedAt anomaly | 2 completed calls, second completedAt null | second row `durationMs:null`; `summary.durationMs` = first call's span |
-| E9-adjacent: multi-turn split | 2 user msgs, calls timestamped in each window | two timelines, rows grouped correctly; earlier turn `'settled'` even while session Running |
-| E10 long summaries pass through | 600-char responseSummary | `summaryText` full string; `detail.responseSummary` identical |
-| E11 no router event | no activity events | `routerAnnotation === null` |
-| router annotation parse | strict_router_decision event in window, summary `'matched=true workflow=create_recent_trip_album via=regex'` | `{matched:true, workflow:'create_recent_trip_album', via:'regex'}`; with two such events the LAST wins |
-| E12 sort | two calls, second has earlier startedAt | rows sorted by startedAt then id |
-| summary line numbers | 3 calls (2 completed 1 failed), known timestamps | `steps:3`, `durationMs` = last completedAt − first startedAt, `failedCount:1`, `cancelled:false` |
+| Test                                | Arrange                                                                                                      | Assert                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| E1 zero tool calls                  | 1 user msg, session Completed, no tool calls                                                                 | one timeline, `summary === null`, `rows: []`, `oneLiner === null`                                      |
+| E2 running, no tool call yet        | 1 user msg, session Running                                                                                  | `state:'running'`, `oneLiner = {kind:'key', key:'assistant_timeline_understanding'}`                   |
+| E3 running, in-flight known tool    | + toolCall executing `searchAssets`                                                                          | `oneLiner = {kind:'key', key:'assistant_timeline_verb_searching'}`                                     |
+| E3b running, in-flight unknown tool | toolCall executing `someNewTool`                                                                             | `oneLiner = {kind:'raw', toolName:'someNewTool'}`                                                      |
+| E3c running, between calls          | one completed call only                                                                                      | `oneLiner = {kind:'key', key:'assistant_timeline_thinking'}`                                           |
+| mapping: completed                  | completed call w/ completedAt                                                                                | row `state:'completed'`, durationMs computed                                                           |
+| mapping: failed + E7                | failed call w/ error 'boom'                                                                                  | row `'failed'`, `detail.error:'boom'`, `summary.failedCount:1`                                         |
+| mapping: denied + E6                | denied call                                                                                                  | row `'denied'`, `summary.failedCount:0`                                                                |
+| mapping: in-flight                  | executing call, session Running, last turn                                                                   | row `'in-flight'`                                                                                      |
+| E4/E5 cancelled                     | executing call, session Cancelled                                                                            | row `'cancelled'`, `summary.cancelled:true`, `state:'settled'`                                         |
+| E5b interrupted                     | same but session Interrupted (skip with note if enum lacks it)                                               | same as E4                                                                                             |
+| E8 null completedAt anomaly         | 2 completed calls, second completedAt null                                                                   | second row `durationMs:null`; `summary.durationMs` = first call's span                                 |
+| E9-adjacent: multi-turn split       | 2 user msgs, calls timestamped in each window                                                                | two timelines, rows grouped correctly; earlier turn `'settled'` even while session Running             |
+| E10 long summaries pass through     | 600-char responseSummary                                                                                     | `summaryText` full string; `detail.responseSummary` identical                                          |
+| E11 no router event                 | no activity events                                                                                           | `routerAnnotation === null`                                                                            |
+| router annotation parse             | strict_router_decision event in window, summary `'matched=true workflow=create_recent_trip_album via=regex'` | `{matched:true, workflow:'create_recent_trip_album', via:'regex'}`; with two such events the LAST wins |
+| E12 sort                            | two calls, second has earlier startedAt                                                                      | rows sorted by startedAt then id                                                                       |
+| summary line numbers                | 3 calls (2 completed 1 failed), known timestamps                                                             | `steps:3`, `durationMs` = last completedAt − first startedAt, `failedCount:1`, `cancelled:false`       |
 
 - [ ] **Step 2: Red** — `pnpm test -- --run "src/routes/(user)/assistant/agent-turn-timeline-ui.spec.ts"` → FAIL (module not found).
 - [ ] **Step 3: Implement** the contract + decision rules above, importing the Task-1 exports. Pure functions only — no svelte, no fetch, no Date.now().
