@@ -104,7 +104,9 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest([expect.stringContaining('baseUrl is required for openai-compatible providers')]),
+        factory.responses.validationError([
+          { path: expect.any(Array) as never, message: expect.stringContaining('baseUrl is required for openai-compatible providers') as string },
+        ]),
       );
     });
 
@@ -116,7 +118,7 @@ describe(AgentProviderCredentialController.name, () => {
 
       expect(status).toBe(400);
       expect(result).toEqual(
-        factory.responses.badRequest(['[secret] Invalid input: expected string, received undefined']),
+        factory.responses.validationError([{ path: ['secret'], message: expect.stringContaining('Invalid input') as string }]),
       );
     });
 
@@ -128,7 +130,9 @@ describe(AgentProviderCredentialController.name, () => {
       });
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest([expect.stringContaining('[label] Too small')]));
+      expect(result).toEqual(
+        factory.responses.validationError([{ path: ['label'], message: expect.stringContaining('Too small') as string }]),
+      );
     });
   });
 
@@ -168,7 +172,7 @@ describe(AgentProviderCredentialController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).get('/agent/provider-credentials/123');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the service with auth and id, and redact the response', async () => {
@@ -200,7 +204,7 @@ describe(AgentProviderCredentialController.name, () => {
         .send(body);
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the service with auth, id, and body, and redact the response', async () => {
@@ -230,7 +234,7 @@ describe(AgentProviderCredentialController.name, () => {
       const { status, body: result } = await request(ctx.getHttpServer()).delete('/agent/provider-credentials/123');
 
       expect(status).toBe(400);
-      expect(result).toEqual(factory.responses.badRequest(['[id] Invalid UUID']));
+      expect(result).toEqual(factory.responses.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
     });
 
     it('should call the service with auth and id, and return 204 with an empty body', async () => {

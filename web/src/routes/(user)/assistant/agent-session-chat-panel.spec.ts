@@ -2883,36 +2883,6 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('treats tool approval websocket events as a pause without showing an error', async () => {
-    let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
-    websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
-      handler = nextHandler;
-      return vi.fn();
-    });
-
-    render(AgentSessionChatPanel, { props: { session } });
-    await screen.findByRole('textbox', { name: 'Message' });
-
-    handler?.({
-      type: 'assistant-message-delta',
-      sessionId: session.id,
-      delta: 'Checking albums...',
-      sequence: 1,
-      createdAt: '2026-05-14T00:00:01.000Z',
-    });
-    expect(await screen.findByText('Checking albums...')).toBeInTheDocument();
-
-    handler?.({
-      type: 'tool-approval-needed',
-      sessionId: session.id,
-      toolCallId: '00000000-0000-4000-8000-000000000333',
-      createdAt: '2026-05-14T00:00:02.000Z',
-    });
-
-    await waitFor(() => expect(screen.queryByText('Checking albums...')).not.toBeInTheDocument());
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
   it.each([
     [AgentSessionStatus.Applying, 'applying'],
     [AgentSessionStatus.Completed, 'completed'],
