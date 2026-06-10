@@ -16,13 +16,13 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
     required this.type,
     required this.summary,
     required this.targetKind,
-    this.targetId,
-    this.temporaryTargetId,
-    this.assetSource,
-    this.assetIds = const [],
-    this.assetSelectionHandleId,
-    this.riskLevel,
-    this.enabled = true,
+    this.targetId = const Optional.absent(),
+    this.temporaryTargetId = const Optional.absent(),
+    this.assetSource = const Optional.absent(),
+    this.assetIds = const Optional.present(const []),
+    this.assetSelectionHandleId = const Optional.absent(),
+    this.riskLevel = const Optional.absent(),
+    this.enabled = const Optional.present(true),
     required this.payload,
   });
 
@@ -38,7 +38,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? targetId;
+  Optional<String?> targetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -46,7 +46,7 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? temporaryTargetId;
+  Optional<String?> temporaryTargetId;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -54,17 +54,9 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationPlanningAssetSourceInput? assetSource;
+  Optional<AgentOperationPlanningAssetSourceInput?> assetSource;
 
-  List<String> assetIds;
-
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  String? assetSelectionHandleId;
+  Optional<List<String>?> assetIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -72,9 +64,17 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  AgentOperationRiskLevel? riskLevel;
+  Optional<String?> assetSelectionHandleId;
 
-  bool enabled;
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<AgentOperationRiskLevel?> riskLevel;
+
+  Optional<bool?> enabled;
 
   AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload payload;
 
@@ -115,33 +115,34 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
       json[r'type'] = this.type;
       json[r'summary'] = this.summary;
       json[r'targetKind'] = this.targetKind;
-    if (this.targetId != null) {
-      json[r'targetId'] = this.targetId;
-    } else {
-    //  json[r'targetId'] = null;
+    if (this.targetId.isPresent) {
+      final value = this.targetId.value;
+      json[r'targetId'] = value;
     }
-    if (this.temporaryTargetId != null) {
-      json[r'temporaryTargetId'] = this.temporaryTargetId;
-    } else {
-    //  json[r'temporaryTargetId'] = null;
+    if (this.temporaryTargetId.isPresent) {
+      final value = this.temporaryTargetId.value;
+      json[r'temporaryTargetId'] = value;
     }
-    if (this.assetSource != null) {
-      json[r'assetSource'] = this.assetSource;
-    } else {
-    //  json[r'assetSource'] = null;
+    if (this.assetSource.isPresent) {
+      final value = this.assetSource.value;
+      json[r'assetSource'] = value;
     }
-      json[r'assetIds'] = this.assetIds;
-    if (this.assetSelectionHandleId != null) {
-      json[r'assetSelectionHandleId'] = this.assetSelectionHandleId;
-    } else {
-    //  json[r'assetSelectionHandleId'] = null;
+    if (this.assetIds.isPresent) {
+      final value = this.assetIds.value;
+      json[r'assetIds'] = value;
     }
-    if (this.riskLevel != null) {
-      json[r'riskLevel'] = this.riskLevel;
-    } else {
-    //  json[r'riskLevel'] = null;
+    if (this.assetSelectionHandleId.isPresent) {
+      final value = this.assetSelectionHandleId.value;
+      json[r'assetSelectionHandleId'] = value;
     }
-      json[r'enabled'] = this.enabled;
+    if (this.riskLevel.isPresent) {
+      final value = this.riskLevel.value;
+      json[r'riskLevel'] = value;
+    }
+    if (this.enabled.isPresent) {
+      final value = this.enabled.value;
+      json[r'enabled'] = value;
+    }
       json[r'payload'] = this.payload;
     return json;
   }
@@ -158,15 +159,15 @@ class AgentProposeAlbumOperationsDtoOperationsInnerOneOf31 {
         type: AgentShareLinkCreateOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
-        targetId: mapValueOfType<String>(json, r'targetId'),
-        temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
-        assetSource: AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource']),
-        assetIds: json[r'assetIds'] is Iterable
+        targetId: json.containsKey(r'targetId') ? Optional.present(mapValueOfType<String>(json, r'targetId')) : const Optional.absent(),
+        temporaryTargetId: json.containsKey(r'temporaryTargetId') ? Optional.present(mapValueOfType<String>(json, r'temporaryTargetId')) : const Optional.absent(),
+        assetSource: json.containsKey(r'assetSource') ? Optional.present(AgentOperationPlanningAssetSourceInput.fromJson(json[r'assetSource'])) : const Optional.absent(),
+        assetIds: json.containsKey(r'assetIds') ? Optional.present(json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        assetSelectionHandleId: mapValueOfType<String>(json, r'assetSelectionHandleId'),
-        riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
-        enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
+            : const []) : const Optional.absent(),
+        assetSelectionHandleId: json.containsKey(r'assetSelectionHandleId') ? Optional.present(mapValueOfType<String>(json, r'assetSelectionHandleId')) : const Optional.absent(),
+        riskLevel: json.containsKey(r'riskLevel') ? Optional.present(AgentOperationRiskLevel.fromJson(json[r'riskLevel'])) : const Optional.absent(),
+        enabled: json.containsKey(r'enabled') ? Optional.present(mapValueOfType<bool>(json, r'enabled')) : const Optional.absent(),
         payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf31Payload.fromJson(json[r'payload'])!,
       );
     }

@@ -13,9 +13,9 @@ part of openapi.api;
 class AgentSearchPeopleToolRequestDto {
   /// Returns a new [AgentSearchPeopleToolRequestDto] instance.
   AgentSearchPeopleToolRequestDto({
-    this.includeHidden,
-    this.name,
-    this.toolCallId,
+    this.includeHidden = const Optional.absent(),
+    this.name = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Set to true to include hidden people in results (for unhide flows)
@@ -25,7 +25,7 @@ class AgentSearchPeopleToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? includeHidden;
+  Optional<bool?> includeHidden;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -33,7 +33,7 @@ class AgentSearchPeopleToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? name;
+  Optional<String?> name;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -41,7 +41,7 @@ class AgentSearchPeopleToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentSearchPeopleToolRequestDto &&
@@ -61,20 +61,17 @@ class AgentSearchPeopleToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.includeHidden != null) {
-      json[r'includeHidden'] = this.includeHidden;
-    } else {
-    //  json[r'includeHidden'] = null;
+    if (this.includeHidden.isPresent) {
+      final value = this.includeHidden.value;
+      json[r'includeHidden'] = value;
     }
-    if (this.name != null) {
-      json[r'name'] = this.name;
-    } else {
-    //  json[r'name'] = null;
+    if (this.name.isPresent) {
+      final value = this.name.value;
+      json[r'name'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -88,9 +85,9 @@ class AgentSearchPeopleToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentSearchPeopleToolRequestDto(
-        includeHidden: mapValueOfType<bool>(json, r'includeHidden'),
-        name: mapValueOfType<String>(json, r'name'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        includeHidden: json.containsKey(r'includeHidden') ? Optional.present(mapValueOfType<bool>(json, r'includeHidden')) : const Optional.absent(),
+        name: json.containsKey(r'name') ? Optional.present(mapValueOfType<String>(json, r'name')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;

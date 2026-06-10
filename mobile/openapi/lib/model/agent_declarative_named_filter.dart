@@ -13,12 +13,12 @@ part of openapi.api;
 class AgentDeclarativeNamedFilter {
   /// Returns a new [AgentDeclarativeNamedFilter] instance.
   AgentDeclarativeNamedFilter({
-    this.choiceRefs = const [],
+    this.choiceRefs = const Optional.present(const []),
     required this.match,
     this.names = const [],
   });
 
-  List<String> choiceRefs;
+  Optional<List<String>?> choiceRefs;
 
   AgentDeclarativeNameMatch match;
 
@@ -42,7 +42,10 @@ class AgentDeclarativeNamedFilter {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'choiceRefs'] = this.choiceRefs;
+    if (this.choiceRefs.isPresent) {
+      final value = this.choiceRefs.value;
+      json[r'choiceRefs'] = value;
+    }
       json[r'match'] = this.match;
       json[r'names'] = this.names;
     return json;
@@ -57,9 +60,9 @@ class AgentDeclarativeNamedFilter {
       final json = value.cast<String, dynamic>();
 
       return AgentDeclarativeNamedFilter(
-        choiceRefs: json[r'choiceRefs'] is Iterable
+        choiceRefs: json.containsKey(r'choiceRefs') ? Optional.present(json[r'choiceRefs'] is Iterable
             ? (json[r'choiceRefs'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
         match: AgentDeclarativeNameMatch.fromJson(json[r'match'])!,
         names: json[r'names'] is Iterable
             ? (json[r'names'] as Iterable).cast<String>().toList(growable: false)

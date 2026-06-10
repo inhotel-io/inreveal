@@ -13,10 +13,10 @@ part of openapi.api;
 class AgentProviderCredentialCreateDto {
   /// Returns a new [AgentProviderCredentialCreateDto] instance.
   AgentProviderCredentialCreateDto({
-    this.baseUrl,
-    this.defaultModel,
+    this.baseUrl = const Optional.absent(),
+    this.defaultModel = const Optional.absent(),
     required this.label,
-    this.models = const [],
+    this.models = const Optional.present(const []),
     required this.providerType,
     required this.secret,
   });
@@ -27,7 +27,7 @@ class AgentProviderCredentialCreateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? baseUrl;
+  Optional<String?> baseUrl;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -35,11 +35,11 @@ class AgentProviderCredentialCreateDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? defaultModel;
+  Optional<String?> defaultModel;
 
   String label;
 
-  List<String> models;
+  Optional<List<String>?> models;
 
   AgentProviderCredentialCreateDtoProviderTypeEnum providerType;
 
@@ -69,18 +69,19 @@ class AgentProviderCredentialCreateDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.baseUrl != null) {
-      json[r'baseUrl'] = this.baseUrl;
-    } else {
-    //  json[r'baseUrl'] = null;
+    if (this.baseUrl.isPresent) {
+      final value = this.baseUrl.value;
+      json[r'baseUrl'] = value;
     }
-    if (this.defaultModel != null) {
-      json[r'defaultModel'] = this.defaultModel;
-    } else {
-    //  json[r'defaultModel'] = null;
+    if (this.defaultModel.isPresent) {
+      final value = this.defaultModel.value;
+      json[r'defaultModel'] = value;
     }
       json[r'label'] = this.label;
-      json[r'models'] = this.models;
+    if (this.models.isPresent) {
+      final value = this.models.value;
+      json[r'models'] = value;
+    }
       json[r'providerType'] = this.providerType;
       json[r'secret'] = this.secret;
     return json;
@@ -95,12 +96,12 @@ class AgentProviderCredentialCreateDto {
       final json = value.cast<String, dynamic>();
 
       return AgentProviderCredentialCreateDto(
-        baseUrl: mapValueOfType<String>(json, r'baseUrl'),
-        defaultModel: mapValueOfType<String>(json, r'defaultModel'),
+        baseUrl: json.containsKey(r'baseUrl') ? Optional.present(mapValueOfType<String>(json, r'baseUrl')) : const Optional.absent(),
+        defaultModel: json.containsKey(r'defaultModel') ? Optional.present(mapValueOfType<String>(json, r'defaultModel')) : const Optional.absent(),
         label: mapValueOfType<String>(json, r'label')!,
-        models: json[r'models'] is Iterable
+        models: json.containsKey(r'models') ? Optional.present(json[r'models'] is Iterable
             ? (json[r'models'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
         providerType: AgentProviderCredentialCreateDtoProviderTypeEnum.fromJson(json[r'providerType'])!,
         secret: mapValueOfType<String>(json, r'secret')!,
       );

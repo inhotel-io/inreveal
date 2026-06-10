@@ -13,8 +13,8 @@ part of openapi.api;
 class AgentListDuplicateGroupsToolRequestDto {
   /// Returns a new [AgentListDuplicateGroupsToolRequestDto] instance.
   AgentListDuplicateGroupsToolRequestDto({
-    this.maxGroups,
-    this.toolCallId,
+    this.maxGroups = const Optional.absent(),
+    this.toolCallId = const Optional.absent(),
   });
 
   /// Maximum number of duplicate groups to return (default 50)
@@ -27,7 +27,7 @@ class AgentListDuplicateGroupsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? maxGroups;
+  Optional<int?> maxGroups;
 
   /// Approved tool call id when retrying after user approval
   ///
@@ -36,7 +36,7 @@ class AgentListDuplicateGroupsToolRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  String? toolCallId;
+  Optional<String?> toolCallId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is AgentListDuplicateGroupsToolRequestDto &&
@@ -54,15 +54,13 @@ class AgentListDuplicateGroupsToolRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.maxGroups != null) {
-      json[r'maxGroups'] = this.maxGroups;
-    } else {
-    //  json[r'maxGroups'] = null;
+    if (this.maxGroups.isPresent) {
+      final value = this.maxGroups.value;
+      json[r'maxGroups'] = value;
     }
-    if (this.toolCallId != null) {
-      json[r'toolCallId'] = this.toolCallId;
-    } else {
-    //  json[r'toolCallId'] = null;
+    if (this.toolCallId.isPresent) {
+      final value = this.toolCallId.value;
+      json[r'toolCallId'] = value;
     }
     return json;
   }
@@ -76,8 +74,8 @@ class AgentListDuplicateGroupsToolRequestDto {
       final json = value.cast<String, dynamic>();
 
       return AgentListDuplicateGroupsToolRequestDto(
-        maxGroups: mapValueOfType<int>(json, r'maxGroups'),
-        toolCallId: mapValueOfType<String>(json, r'toolCallId'),
+        maxGroups: json.containsKey(r'maxGroups') ? Optional.present(json[r'maxGroups'] == null ? null : int.parse('${json[r'maxGroups']}')) : const Optional.absent(),
+        toolCallId: json.containsKey(r'toolCallId') ? Optional.present(mapValueOfType<String>(json, r'toolCallId')) : const Optional.absent(),
       );
     }
     return null;
