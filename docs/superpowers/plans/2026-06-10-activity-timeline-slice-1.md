@@ -4,7 +4,7 @@
 
 **Goal:** Lifecycle activity events (`start-processing`, `plan-composing`, `apply-progress`, `runner-recovery`) can never be left `running` forever: a successful turn closes them with `completed`, cancel closes them with `skipped` (the existing failure path already writes `failed`).
 
-**Architecture:** Activity events are append-only — "closing" inserts a terminal sibling of the same kind. A new `closeOpenLifecycleEvents(userId, sessionId, terminalStatus)` on `AgentSessionActivityEventService` computes latest-status-per-lifecycle-kind and inserts closers (+ websocket `activity` emit). It deliberately bypasses `create()`'s terminal-session guard because cancel flips the session status *before* closing. Called from `AgentRunnerService` on successful stream settle and from `AgentSessionService.cancel()`.
+**Architecture:** Activity events are append-only — "closing" inserts a terminal sibling of the same kind. A new `closeOpenLifecycleEvents(userId, sessionId, terminalStatus)` on `AgentSessionActivityEventService` computes latest-status-per-lifecycle-kind and inserts closers (+ websocket `activity` emit). It deliberately bypasses `create()`'s terminal-session guard because cancel flips the session status _before_ closing. Called from `AgentRunnerService` on successful stream settle and from `AgentSessionService.cancel()`.
 
 **Tech Stack:** NestJS server, Kysely, Vitest. Spec: `docs/superpowers/specs/2026-06-10-assistant-activity-timeline-design.md` (Server changes A; edge case E9).
 
@@ -15,6 +15,7 @@
 ### Task 1: `closeOpenLifecycleEvents` on the activity-event service
 
 **Files:**
+
 - Modify: `server/src/services/agent-session-activity-event.service.ts`
 - Test: `server/src/services/agent-session-activity-event.service.spec.ts`
 
@@ -26,13 +27,25 @@ describe('closeOpenLifecycleEvents', () => {
     const session = makeSession();
     sessionRepository.getById.mockResolvedValue(session);
     repository.getBySessionId.mockResolvedValue([
-      makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
-      makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.PlanComposing, status: AgentSessionActivityEventStatus.Running }),
+      makeEvent({
+        sessionId: session.id,
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Running,
+      }),
+      makeEvent({
+        sessionId: session.id,
+        kind: AgentSessionActivityEventKind.PlanComposing,
+        status: AgentSessionActivityEventStatus.Running,
+      }),
     ]);
     const closer = makeEvent({ sessionId: session.id, status: AgentSessionActivityEventStatus.Completed });
     repository.create.mockResolvedValue(closer);
 
-    const result = await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
+    const result = await sut.closeOpenLifecycleEvents(
+      session.userId,
+      session.id,
+      AgentSessionActivityEventStatus.Completed,
+    );
 
     expect(repository.create).toHaveBeenCalledTimes(2);
     expect(repository.create).toHaveBeenCalledWith({
@@ -55,8 +68,14 @@ describe('closeOpenLifecycleEvents', () => {
     const session = makeSession();
     sessionRepository.getById.mockResolvedValue(session);
     repository.getBySessionId.mockResolvedValue([
-      makeEvent({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
-      makeEvent({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Completed }),
+      makeEvent({
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Running,
+      }),
+      makeEvent({
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Completed,
+      }),
     ]);
 
     await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
@@ -68,7 +87,10 @@ describe('closeOpenLifecycleEvents', () => {
     const session = makeSession();
     sessionRepository.getById.mockResolvedValue(session);
     repository.getBySessionId.mockResolvedValue([
-      makeEvent({ kind: AgentSessionActivityEventKind.StrictRouterDecision, status: AgentSessionActivityEventStatus.Running }),
+      makeEvent({
+        kind: AgentSessionActivityEventKind.StrictRouterDecision,
+        status: AgentSessionActivityEventStatus.Running,
+      }),
     ]);
 
     await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Completed);
@@ -80,21 +102,32 @@ describe('closeOpenLifecycleEvents', () => {
     const session = makeSession({ status: AgentSessionStatus.Cancelled });
     sessionRepository.getById.mockResolvedValue(session);
     repository.getBySessionId.mockResolvedValue([
-      makeEvent({ sessionId: session.id, kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Running }),
+      makeEvent({
+        sessionId: session.id,
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Running,
+      }),
     ]);
     repository.create.mockResolvedValue(makeEvent({ status: AgentSessionActivityEventStatus.Skipped }));
 
     await sut.closeOpenLifecycleEvents(session.userId, session.id, AgentSessionActivityEventStatus.Skipped);
 
     expect(repository.create).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: AgentSessionActivityEventKind.StartProcessing, status: AgentSessionActivityEventStatus.Skipped }),
+      expect.objectContaining({
+        kind: AgentSessionActivityEventKind.StartProcessing,
+        status: AgentSessionActivityEventStatus.Skipped,
+      }),
     );
   });
 
   it('returns empty and inserts nothing when the session is not found', async () => {
     sessionRepository.getById.mockResolvedValue(null);
 
-    const result = await sut.closeOpenLifecycleEvents(factory.uuid(), factory.uuid(), AgentSessionActivityEventStatus.Completed);
+    const result = await sut.closeOpenLifecycleEvents(
+      factory.uuid(),
+      factory.uuid(),
+      AgentSessionActivityEventStatus.Completed,
+    );
 
     expect(result).toEqual([]);
     expect(repository.create).not.toHaveBeenCalled();
@@ -105,7 +138,7 @@ describe('closeOpenLifecycleEvents', () => {
 (Import `AgentSessionActivityEventKind` already present in the spec imports; add any missing enum imports.)
 
 - [ ] **Step 2: Run to verify red** — `pnpm test -- --run src/services/agent-session-activity-event.service.spec.ts`
-Expected: FAIL — `sut.closeOpenLifecycleEvents is not a function`.
+      Expected: FAIL — `sut.closeOpenLifecycleEvents is not a function`.
 
 - [ ] **Step 3: Implement** — in `agent-session-activity-event.service.ts`, add `AgentSessionActivityEventKind` to the `src/enum` import and:
 
@@ -185,6 +218,7 @@ git commit -m "feat(server): closeOpenLifecycleEvents inserts terminal siblings 
 ### Task 2: Runner closes lifecycle events on successful settle
 
 **Files:**
+
 - Modify: `server/src/services/agent-runner.service.ts`
 - Test: `server/src/services/agent-runner.service.spec.ts`
 
@@ -218,10 +252,11 @@ it('does not close lifecycle events on runner failure (failure event already rec
 The implementer copies the exact arrangement blocks from the neighbouring tests in this spec file — do not invent new stream fixtures.
 
 - [ ] **Step 2: Run to verify red** — `pnpm test -- --run src/services/agent-runner.service.spec.ts`
-Expected: FAIL — `closeOpenLifecycleEvents` never called (assertion), others pass.
+      Expected: FAIL — `closeOpenLifecycleEvents` never called (assertion), others pass.
 
 - [ ] **Step 3: Implement.**
   1. Extend the local type (line ~33):
+
 ```ts
 type AgentSessionActivityServiceLike = {
   createSystemEvent: (userId: string, sessionId: string, event: Record<string, unknown>) => Promise<unknown>;
@@ -233,7 +268,9 @@ type AgentSessionActivityServiceLike = {
   ) => Promise<unknown>;
 };
 ```
-  2. Private helper next to `createActivityEvent` (same defensive pattern):
+
+2. Private helper next to `createActivityEvent` (same defensive pattern):
+
 ```ts
   private closeLifecycleEvents(userId: string, sessionId: string, terminalStatus: AgentSessionActivityEventStatus) {
     try {
@@ -249,11 +286,14 @@ type AgentSessionActivityServiceLike = {
     }
   }
 ```
-  3. Call site: at the END of `processRunnerStream`'s success path, immediately after `await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, cleanupContext);`:
+
+3. Call site: at the END of `processRunnerStream`'s success path, immediately after `await this.cleanupSameTurnToolFailure(userId, sessionId, session.status, cleanupContext);`:
+
 ```ts
-    this.closeLifecycleEvents(userId, sessionId, AgentSessionActivityEventStatus.Completed);
+this.closeLifecycleEvents(userId, sessionId, AgentSessionActivityEventStatus.Completed);
 ```
-  Do NOT call it on the `tool-approval-needed` early return, on the inactive-session early return, or in `emitRunnerFailure`.
+
+Do NOT call it on the `tool-approval-needed` early return, on the inactive-session early return, or in `emitRunnerFailure`.
 
 - [ ] **Step 4: Run to verify green** — same command. Expected: PASS.
 
@@ -269,6 +309,7 @@ git commit -m "feat(server): close open lifecycle activity events when a runner 
 ### Task 3: Cancel marks open lifecycle events skipped
 
 **Files:**
+
 - Modify: `server/src/services/agent-session.service.ts`
 - Test: `server/src/services/agent-session.service.spec.ts`
 
@@ -299,10 +340,11 @@ it('does not close lifecycle events when the session is already cancelled', asyn
 ```
 
 - [ ] **Step 2: Run to verify red** — `pnpm test -- --run src/services/agent-session.service.spec.ts`
-Expected: FAIL — `closeOpenLifecycleEvents` not called / ctor arg unused (assertions fail; esbuild does not type-check, so the extra ctor arg runs).
+      Expected: FAIL — `closeOpenLifecycleEvents` not called / ctor arg unused (assertions fail; esbuild does not type-check, so the extra ctor arg runs).
 
 - [ ] **Step 3: Implement.** In `agent-session.service.ts`:
   1. Import `AgentSessionActivityEventService` and `AgentSessionActivityEventStatus`; extend the constructor:
+
 ```ts
   constructor(
     private readonly repository: AgentSessionRepository,
@@ -311,15 +353,18 @@ Expected: FAIL — `closeOpenLifecycleEvents` not called / ctor arg unused (asse
     private readonly activityEventService: AgentSessionActivityEventService,
   ) {}
 ```
-  2. In `cancel()`, after `await this.cancelRunnerSession(session);` and before `return this.map(updated);`:
+
+2. In `cancel()`, after `await this.cancelRunnerSession(session);` and before `return this.map(updated);`:
+
 ```ts
-    try {
-      await this.activityEventService.closeOpenLifecycleEvents(auth.user.id, id, AgentSessionActivityEventStatus.Skipped);
-    } catch {
-      // Closing activity events is best-effort; the database cancellation is authoritative.
-    }
+try {
+  await this.activityEventService.closeOpenLifecycleEvents(auth.user.id, id, AgentSessionActivityEventStatus.Skipped);
+} catch {
+  // Closing activity events is best-effort; the database cancellation is authoritative.
+}
 ```
-  3. Verify there is no manual construction of `AgentSessionService` outside Nest DI and specs: `rg -n "new AgentSessionService\(" server/src --glob '!**/*.spec.ts'` must return nothing (if it returns a site, update that site's argument list too and note it in the report).
+
+3. Verify there is no manual construction of `AgentSessionService` outside Nest DI and specs: `rg -n "new AgentSessionService\(" server/src --glob '!**/*.spec.ts'` must return nothing (if it returns a site, update that site's argument list too and note it in the report).
 
 - [ ] **Step 4: Run to verify green** — same command, then the neighbours: `pnpm test -- --run src/services/agent-session.service.spec.ts src/services/agent-session-activity-event.service.spec.ts src/services/agent-runner.service.spec.ts`. Expected: PASS.
 

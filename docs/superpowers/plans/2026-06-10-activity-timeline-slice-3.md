@@ -9,6 +9,7 @@
 **Design language:** match the recent onboarding/chat components — quiet one-liner `text-sm italic text-gray-500 dark:text-neutral-400`; summary line same muted style non-italic, `· N failed` in `text-red-600 dark:text-red-400`, `· cancelled` muted; rows `rounded-xl border border-gray-200 dark:border-gray-800` with status dot `h-1.5 w-1.5 rounded-full` (green `bg-green-500`, red `bg-red-500`, amber `bg-amber-500` denied, blue `bg-blue-500 animate-pulse` in-flight, grey `bg-gray-400` cancelled); raw tool name `font-mono text-xs`; summary truncate via `truncate`; detail block `rounded-lg bg-gray-50 dark:bg-neutral-900 px-3 py-2 text-xs` with full (non-truncated) text. All interactive elements are `<button type="button">` with `aria-expanded`.
 
 **Verified wiring facts (do not re-derive):**
+
 - Old block renders in `agent-session-chat-panel.svelte` at lines ~1053-1058 inside the `chatTimelineItems` loop (`{:else if item.type === 'activity'}`); import at line 49.
 - `activityTurns` derived at ~202 (`buildAgentSessionActivityTurns`); `chatTimelineItems` derived at ~229 calls `buildChatTimelineItems(messages, timelineToolCalls, appliedPlans, activityTurns, coveredToolCallIds, activityVisibilityMode, …)`; inside it, activity items are produced at ~284-293 gated on visibility mode.
 - Busy indicator: `showAssistantBusyIndicator` derived ~220-225; rendered ~1147-1156 (`assistant_busy_ascii`).
@@ -22,6 +23,7 @@
 **Files:** Modify `web/src/routes/(user)/assistant/agent-turn-timeline-ui.ts`; extend `agent-turn-timeline-ui.spec.ts`.
 
 - [ ] **Step 1 — failing tests:**
+
 ```ts
 describe('formatAgentTimelineDuration', () => {
   it('formats sub-minute durations with one decimal', () => {
@@ -36,7 +38,9 @@ describe('formatAgentTimelineDuration', () => {
   });
 });
 ```
+
 - [ ] **Step 2 — red** (function missing). **Step 3 — implement:**
+
 ```ts
 export const formatAgentTimelineDuration = (durationMs: number): string => {
   const clamped = Math.max(0, durationMs);
@@ -46,6 +50,7 @@ export const formatAgentTimelineDuration = (durationMs: number): string => {
   return `${Math.floor(clamped / 60_000)}m ${Math.round((clamped % 60_000) / 1000)}s`;
 };
 ```
+
 - [ ] **Step 4 — green**, then commit: `feat(assistant): timeline duration formatter`.
 
 ### Task 2: Row component (TDD)
@@ -68,6 +73,7 @@ Props: `{ row: AgentTurnTimelineRow }`. Renders: status dot (class per state, ex
 **Files:** Create `web/src/routes/(user)/assistant/agent-turn-timeline.svelte` + `agent-turn-timeline.spec.ts`.
 
 Props: `{ timeline: AgentTurnTimeline }`. Behavior:
+
 - `state==='running'`: render the one-liner button — text `$t(oneLiner.key)` for `kind:'key'` or raw `toolName` — italic muted, with a small pulsing dot; `aria-expanded` reflects expansion; clicking toggles the expanded list (live timeline).
 - `state==='settled'` and `summary !== null`: render the summary-line button: `[N steps] · [duration]` built from `assistant_timeline_steps_one`/`assistant_timeline_steps` (`{steps}` interpolation) + `formatAgentTimelineDuration(summary.durationMs)` when non-null; append `assistant_timeline_failed_count` (`{count}` interpolation) in red when `failedCount > 0`; append `assistant_timeline_cancelled` when `summary.cancelled`. Clicking toggles expansion.
 - `state==='settled'` and `summary === null`: render NOTHING (E1) — `{#if}` around the whole component content.
@@ -97,11 +103,12 @@ Props: `{ timeline: AgentTurnTimeline }`. Behavior:
 - [ ] **Step 3 — implement panel changes:**
   1. Import `AgentTurnTimeline` component + `buildAgentTurnTimelines`.
   2. New derived: `const turnTimelines = $derived(buildAgentTurnTimelines({ session: activitySession, messages, toolCalls: activityToolCalls, activityEvents }));` (same inputs the old activityTurns derived uses — reuse `activitySession`/`activityToolCalls` exactly).
-  3. In `buildChatTimelineItems` (same file): replace the activity-item production (the `timelineActivityVisibilityMode === 'off' ? [] : …` block) with one item per timeline whose `summary !== null || state === 'running'`: `{ type: 'turn-timeline' as const, id: \`turn-timeline-${timeline.anchorMessageId}\`, occurredAt: <the anchor user message's createdAt: look it up in the `messages` argument by `timeline.anchorMessageId`; if the old activity branch used a different occurredAt convention (e.g. a Date vs string), mirror THAT convention so timeline ordering semantics are unchanged>, timeline }`. Drop the `activityVisibilityMode` parameter from the function and its call site; remove now-unused imports/args. KEEP the `activityVisibilityMode`/`onActivityVisibilityModeChange` props on the panel (unused; Slice 4 removes them) — add `// removed in slice 4` is NOT needed; just leave them accepted.
+  3. In `buildChatTimelineItems` (same file): replace the activity-item production (the `timelineActivityVisibilityMode === 'off' ? [] : …` block) with one item per timeline whose `summary !== null || state === 'running'`: `{ type: 'turn-timeline' as const, id: \`turn-timeline-${timeline.anchorMessageId}\`, occurredAt: <the anchor user message's createdAt: look it up in the `messages` argument by `timeline.anchorMessageId`; if the old activity branch used a different occurredAt convention (e.g. a Date vs string), mirror THAT convention so timeline ordering semantics are unchanged>, timeline }`. Drop the `activityVisibilityMode`parameter from the function and its call site; remove now-unused imports/args. KEEP the`activityVisibilityMode`/`onActivityVisibilityModeChange`props on the panel (unused; Slice 4 removes them) — add`// removed in slice 4` is NOT needed; just leave them accepted.
   4. Replace the `{:else if item.type === 'activity'}` template branch with `{:else if item.type === 'turn-timeline'}<AgentTurnTimeline timeline={item.timeline} />`.
   5. Delete the `showAssistantBusyIndicator` derived, the busy-frame animation state tied to it, and the ascii-article template block (the one-liner replaces it). Remove the old `AgentActivityBlock` import + the old activity item type from the items union. Do NOT delete `agent-activity-block.svelte` itself (Slice 4).
   6. `buildAgentSessionActivityTurns`/`activityTurns`: if now unused by the panel, remove the derived + import here (the module itself stays for Slice 2 reuse of its helpers).
 - [ ] **Step 4 — i18n:** add to `i18n/en.json` (then `pnpm --filter immich-i18n format:fix`; only en.json may change):
+
 ```
 assistant_timeline_understanding: "Understanding request…"
 assistant_timeline_thinking: "Thinking…"
@@ -131,6 +138,7 @@ assistant_timeline_error: "Error"
 assistant_timeline_router_matched: "Matched workflow {workflow} via {via}"
 assistant_timeline_router_none: "No workflow matched (via {via})"
 ```
+
 - [ ] **Step 5 — green + gates:** full assistant suite `pnpm test -- --run "src/routes/(user)/assistant"`; `pnpm exec prettier --write` then `--check` on every touched file (svelte+ts+spec); `pnpm exec eslint --max-warnings 0` on touched files; from repo root `make check-web`.
 - [ ] **Step 6 — commit:** `feat(assistant): render per-turn activity timelines in the chat (replaces activity block + busy indicator)`.
 
