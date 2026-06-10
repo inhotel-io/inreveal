@@ -28,12 +28,7 @@
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
   import type { AgentActivityVisibilityMode } from './agent-activity-visibility-ui';
-  import type { AgentActivityModel } from './agent-activity-ui';
-  import {
-    buildAgentSessionActivityTurns,
-    getCoveredToolCallIdsForActivityTurns,
-    type AgentActivityEvent,
-  } from './agent-session-activity-turns-ui';
+  import { type AgentActivityEvent } from './agent-session-activity-turns-ui';
   import {
     areAgentTimelineToolCallListsEquivalent,
     mergeAgentTimelineToolCalls,
@@ -46,7 +41,8 @@
   } from './agent-tool-approval-ui';
   import { buildAgentClarificationChoiceReply, getAgentClarificationInitials } from './agent-message-clarification-ui';
   import { deriveAgentSessionTitleFromMessages } from './agent-session-workspace-ui';
-  import AgentActivityBlock from './agent-activity-block.svelte';
+  import { buildAgentTurnTimelines, type AgentTurnTimeline } from './agent-turn-timeline-ui';
+  import AgentTurnTimelineComponent from './agent-turn-timeline.svelte';
   import AgentAppliedPlanTimelineCard from './agent-applied-plan-timeline-card.svelte';
 
   interface Props {
@@ -96,7 +92,7 @@
 
   type ChatTimelineItem =
     | { type: 'message'; id: string; occurredAt: string; message: AgentMessageResponseDto }
-    | { type: 'activity'; id: string; occurredAt: string; model: AgentActivityModel }
+    | { type: 'turn-timeline'; id: string; occurredAt: string; timeline: AgentTurnTimeline }
     | { type: 'tool-call'; id: string; occurredAt: string; toolCall: AgentToolCallResponseDto }
     | { type: 'applied-plan'; id: string; occurredAt: string; plan: AgentOperationPlanResponseDto };
 
@@ -116,9 +112,10 @@
     onMessageSent,
     onRunnerError,
     onTitleDiscovered,
-    activityVisibilityMode = 'compact',
+    activityVisibilityMode: _,
     onActivityVisibilityModeChange,
   }: Props = $props();
+  void onActivityVisibilityModeChange;
 
   let messages = $state<AgentMessageResponseDto[]>([]);
   let appliedPlans = $state<AgentOperationPlanResponseDto[]>([]);
@@ -128,7 +125,6 @@
   let errorMessage = $state<string | null>(null);
   let messagesLoaded = $state(false);
   let streamingText = $state('');
-  let busyFrameIndex = $state(0);
   let expandedToolCallIds = $state<Record<string, boolean>>({});
   let currentPlan = $state<AgentOperationPlanResponseDto | null>(null);
   let activityEvents = $state<AgentActivityEvent[]>([]);
@@ -199,41 +195,27 @@
       ? timelineToolCalls.filter((toolCall) => toolCall.status !== AgentToolCallStatus.PendingApproval)
       : timelineToolCalls,
   );
-  const activityTurns = $derived(
-    buildAgentSessionActivityTurns({
-      session: activitySession,
-      messages,
-      toolCalls: activityToolCalls,
-      currentPlan,
-      appliedPlans,
-      activityEvents,
-      streamingText,
-      isAssistantActive: isResponsePending,
-    }),
-  );
   const coveredToolCallIds = $derived(
     new Set([
-      ...getCoveredToolCallIdsForActivityTurns(activityTurns),
+      ...turnTimelines.flatMap((timeline) => timeline.rows.map((row) => row.id)),
       ...pendingApprovalToolCallIdsSuppressedForResume,
     ]),
   );
-  const showAssistantBusyIndicator = $derived(
-    isResponsePending &&
-      streamingText.length === 0 &&
-      !composerDisabled &&
-      (activityVisibilityMode === 'off' || activityTurns.every((turn) => turn.model.items.length === 0)),
+  const turnTimelines = $derived(
+    buildAgentTurnTimelines({
+      session: activitySession,
+      messages,
+      toolCalls: activityToolCalls,
+      activityEvents,
+    }),
   );
-  const busyFrames = ['-', '\\', '|', '/'];
-  const busyFrame = $derived(busyFrames[busyFrameIndex]);
-  const prefersReducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   const chatTimelineItems = $derived(
     buildChatTimelineItems(
       messages,
       timelineToolCalls,
       appliedPlans,
-      activityTurns,
+      turnTimelines,
       coveredToolCallIds,
-      activityVisibilityMode,
       messagesLoaded || messages.length > 0,
     ),
   );
@@ -262,16 +244,21 @@
     timelineMessages: AgentMessageResponseDto[],
     timelineToolCalls: AgentToolCallResponseDto[],
     timelineAppliedPlans: AgentOperationPlanResponseDto[],
-    timelineActivityTurns: ReturnType<typeof buildAgentSessionActivityTurns>,
+    timelineTurnTimelines: AgentTurnTimeline[],
     timelineCoveredToolCallIds: Set<string>,
-    timelineActivityVisibilityMode: AgentActivityVisibilityMode,
     renderUncoveredToolCalls: boolean,
   ): ChatTimelineItem[] {
     const typePriority: Record<ChatTimelineItem['type'], number> = {
       message: 0,
-      activity: 1,
+      'turn-timeline': 1,
       'tool-call': 2,
       'applied-plan': 3,
+    };
+
+    // find the anchor user message createdAt for a timeline by its anchorMessageId
+    const anchorCreatedAt = (anchorMessageId: string): string => {
+      const msg = timelineMessages.find((m) => m.id === anchorMessageId);
+      return msg?.createdAt ?? anchorMessageId;
     };
 
     return [
@@ -281,16 +268,14 @@
         occurredAt: message.createdAt,
         message,
       })),
-      ...(timelineActivityVisibilityMode === 'off'
-        ? []
-        : timelineActivityTurns
-            .filter((turn) => turn.model.items.length > 0)
-            .map((turn) => ({
-              type: 'activity' as const,
-              id: `activity-${turn.id}`,
-              occurredAt: turn.occurredAt,
-              model: turn.model,
-            }))),
+      ...timelineTurnTimelines
+        .filter((timeline) => timeline.summary !== null || timeline.state === 'running')
+        .map((timeline) => ({
+          type: 'turn-timeline' as const,
+          id: `turn-timeline-${timeline.anchorMessageId}`,
+          occurredAt: anchorCreatedAt(timeline.anchorMessageId),
+          timeline,
+        })),
       ...(renderUncoveredToolCalls
         ? timelineToolCalls
             .filter((toolCall) => !timelineCoveredToolCallIds.has(toolCall.id))
@@ -854,19 +839,6 @@
     streamingText = '';
   });
 
-  $effect(() => {
-    if (!showAssistantBusyIndicator || prefersReducedMotion()) {
-      busyFrameIndex = 0;
-      return;
-    }
-
-    const interval = globalThis.setInterval(() => {
-      busyFrameIndex = (busyFrameIndex + 1) % busyFrames.length;
-    }, 160);
-
-    return () => globalThis.clearInterval(interval);
-  });
-
   onDestroy(() => {
     appliedPlanLoadSequence += 1;
     currentPlanLoadSequence += 1;
@@ -974,7 +946,7 @@
     </div>
   {/if}
 
-  <div class="h-full overflow-y-auto" aria-live={showAssistantBusyIndicator ? 'off' : 'polite'}>
+  <div class="h-full overflow-y-auto" aria-live="polite">
     <div
       class="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-4 px-4 pb-36 pt-6 md:px-0"
       data-testid="agent-session-chat-transcript"
@@ -1056,12 +1028,8 @@
               </div>
             </article>
           {/if}
-        {:else if item.type === 'activity'}
-          <AgentActivityBlock
-            model={item.model}
-            visibilityMode={activityVisibilityMode === 'expanded' ? 'expanded' : 'compact'}
-            onVisibilityModeChange={onActivityVisibilityModeChange}
-          />
+        {:else if item.type === 'turn-timeline'}
+          <AgentTurnTimelineComponent timeline={item.timeline} />
         {:else if item.type === 'applied-plan'}
           <AgentAppliedPlanTimelineCard plan={item.plan} />
         {:else}
@@ -1149,17 +1117,6 @@
           </article>
         {/if}
       {/each}
-
-      {#if showAssistantBusyIndicator}
-        <article
-          class="mr-auto max-w-[min(80%,48rem)] px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"
-          role="status"
-          aria-live="polite"
-        >
-          <span>{$t('assistant_busy_ascii')}</span>
-          <span aria-hidden="true"> {busyFrame}</span>
-        </article>
-      {/if}
 
       {#if streamingText}
         <article
