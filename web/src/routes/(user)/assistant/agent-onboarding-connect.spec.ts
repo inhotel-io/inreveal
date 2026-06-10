@@ -1,10 +1,10 @@
 // agent-onboarding-connect.spec.ts
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { ProviderType, type AgentProviderCredentialResponseDto } from '@immich/sdk';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { readable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import AgentOnboardingConnect from './agent-onboarding-connect.svelte';
 
 vi.mock('svelte-i18n', () => ({ t: readable((key: string) => key) }));

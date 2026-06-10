@@ -1,4 +1,3 @@
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import {
   AgentApprovalMode,
   AgentMessageRole,
@@ -13,11 +12,12 @@ import {
   type AgentRunnerStatusDto,
   type AgentSessionResponseDto,
 } from '@immich/sdk';
-import { websocketMock } from '@test-data/mocks/websocket.mock';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
 import { readable } from 'svelte/store';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { websocketMock } from '@test-data/mocks/websocket.mock';
 import AgentAssistantWorkspace from './agent-assistant-workspace.svelte';
 
 const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn() }));

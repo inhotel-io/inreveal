@@ -12,7 +12,6 @@ import sharp from 'sharp';
 import { ORIENTATION_TO_SHARP_ROTATION } from 'src/constants';
 import { Exif } from 'src/database';
 import { AdjustParameters, AssetEditAction, AssetEditActionItem } from 'src/dtos/editing.dto';
-import { BRIGHTNESS_FACTOR, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import {
   AacProfile,
   Av1Profile,
@@ -38,6 +37,7 @@ import {
   VideoInfo,
   VideoPacketInfo,
 } from 'src/types';
+import { BRIGHTNESS_FACTOR, contrastLinear, SATURATION_FACTOR } from 'src/utils/editor-adjust';
 import { handlePromiseError } from 'src/utils/misc';
 import { createAffineMatrix } from 'src/utils/transform';
 
@@ -214,11 +214,11 @@ export class MediaRepository {
   async generateThumbnail(input: string | Buffer, options: GenerateThumbnailOptions, output: string): Promise<void> {
     const pipeline = await this.getImageDecodingPipeline(input, options);
     const decoded = pipeline.toFormat(options.format, {
-        quality: options.quality,
-        // this is default in libvips (except the threshold is 90), but we need to set it manually in sharp
-        chromaSubsampling: options.quality >= 80 ? '4:4:4' : '4:2:0',
-        progressive: options.progressive,
-      });
+      quality: options.quality,
+      // this is default in libvips (except the threshold is 90), but we need to set it manually in sharp
+      chromaSubsampling: options.quality >= 80 ? '4:4:4' : '4:2:0',
+      progressive: options.progressive,
+    });
 
     await decoded.toFile(output);
   }
