@@ -78,7 +78,10 @@ void main() {
       expect((selectorMaterial.shape! as StadiumBorder).side, BorderSide.none);
     });
 
-    testWidgets('tapping a segment writes Setting.groupAssetsBy', (tester) async {
+    // Hosted at root (no TimelineRouteScope): pins the ROOT grouping fallback, where segment
+    // taps persist the setting. The pill's production contract (route-local, store untouched)
+    // is covered by the route-scope and favorites page tests.
+    testWidgets('tapping a segment outside a route scope writes Setting.groupAssetsBy', (tester) async {
       await tester.pumpConsumerWidget(host());
       await tester.pumpAndSettle();
 
@@ -200,7 +203,7 @@ void main() {
       expect(find.byKey(const Key('timeline-grouping-bottom-pill')), findsOneWidget);
     });
 
-    testWidgets('RTL: renders and segment taps still write the setting', (tester) async {
+    testWidgets('RTL: renders and segment taps still update the grouping', (tester) async {
       await tester.pumpConsumerWidget(Directionality(textDirection: TextDirection.rtl, child: host()));
       await tester.pumpAndSettle();
 

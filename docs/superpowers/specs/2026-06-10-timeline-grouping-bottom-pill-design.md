@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-10
 **Status:** Design — approved in brainstorm, spec reviewed against source
+**Addendum (2026-06-10, on-device review):** two behaviors changed after this spec was written: the pill hosts a `bare` selector variant (the selector no longer paints its own surface/border inside the pill — fixes a double border), and grouping on detail timelines is **route-local via `timelineGroupingProvider`**, opening at "All" instead of following the persisted `Setting.groupAssetsBy` (segment taps inside a detail route no longer write the setting; the main Photos page opts into the persisted behavior with `persistGrouping: true`).
 **Related:** [2026-05-22-mobile-timeline-overview-design.md](./2026-05-22-mobile-timeline-overview-design.md) (PR #625), [2026-06-08-timeline-grouping-fixes-design.md](./2026-06-08-timeline-grouping-fixes-design.md) (#670/#674), [2026-06-09-mobile-filter-grouping-fix-design.md](./2026-06-09-mobile-filter-grouping-fix-design.md) (PR #679, merged), [2026-06-09-timeline-overview-flicker-and-roundtrip-design.md](./2026-06-09-timeline-overview-flicker-and-roundtrip-design.md) (PR #680, merged)
 
 ## Context
