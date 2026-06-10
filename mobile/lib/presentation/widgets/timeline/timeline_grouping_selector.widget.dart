@@ -44,10 +44,12 @@ class TimelineGroupingSelector extends ConsumerWidget {
   final bool enabled;
   final bool compact;
 
-  /// When true the full-variant selector renders with a transparent Material and no stadium border,
+  /// When true the full-variant selector renders with a transparent Material and no stadium side,
   /// because the host widget (e.g. [TimelineGroupingBottomPill]) already paints the pill surface
   /// and outline ring. Keeping both would produce a double border on device. Defaults to false so
-  /// the standalone app-bar usage retains its own surface and border.
+  /// the standalone app-bar usage retains its own surface and border. The transparent Material and
+  /// stadium shape must stay even when bare: the segments' InkWells need a Material ancestor, and
+  /// the shape clips their ripples to the pill.
   final bool bare;
 
   @override
@@ -88,9 +90,9 @@ class TimelineGroupingSelector extends ConsumerWidget {
                     : colors.surfaceContainerHighest.withValues(
                         alpha: theme.brightness == Brightness.dark ? 0.74 : 0.9,
                       ),
-                shape: bare
-                    ? const StadiumBorder()
-                    : StadiumBorder(side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7))),
+                shape: StadiumBorder(
+                  side: bare ? BorderSide.none : BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: Row(
                   children: [
