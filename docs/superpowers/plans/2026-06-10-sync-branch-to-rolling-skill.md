@@ -4,14 +4,14 @@
 
 **Goal:** Build the `sync-branch-to-rolling` user-level Claude Code skill (per spec `docs/superpowers/specs/2026-06-10-sync-branch-to-rolling-skill-design.md`): a guided flow + deterministic script that onboards long-running feature branches onto the rolling upstream rebase branch and keeps them in sync as it force-moves.
 
-**Architecture:** Three files in `~/.claude/skills/sync-branch-to-rolling/` (a git repo — commit there): `SKILL.md` (judgment flow: onboard/maintain modes, verification tiers, branch profiles, safety rules), `sync.sh` (deterministic maintain-mode mechanics: refusals, backup, `rebase --onto`, tag bookkeeping, conflict hand-off), `test-sync.sh` (self-contained sandbox regression harness in a temp dir — never touches the real repo). Final validation is a dry run on a scratch branch in the real gallery repo.
+**Architecture:** Three files in `~/.claude/skills/sync-branch-to-rolling/` (backed by the `/Users/pierre/dev/claude-skills` git repo — commit there): `SKILL.md` (judgment flow: onboard/maintain modes, verification tiers, branch profiles, safety rules), `sync.sh` (deterministic maintain-mode mechanics: refusals, backup, `rebase --onto`, tag bookkeeping, conflict hand-off), `test-sync.sh` (self-contained sandbox regression harness in a temp dir — never touches the real repo). Final validation is a dry run on a scratch branch in the real gallery repo.
 
 **Tech Stack:** bash + git (2.54), no other dependencies. Gallery-repo paths only appear in `SKILL.md` content, never in `sync.sh` logic.
 
 **Plan-wide conventions:**
 
 - `SKILL_DIR=~/.claude/skills/sync-branch-to-rolling`
-- Commits for skill files happen in `~/.claude` (it is a git repo). Commits for the spec/plan happen in the gallery worktree `/Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm`.
+- `~/.claude/skills` is a **symlink** to `/Users/pierre/dev/claude-skills/skills`; `~/.claude` itself belongs to the dotfiles repo. Commits for skill files happen in `/Users/pierre/dev/claude-skills` (never in `~/.claude`). Commits for the spec/plan happen in the gallery worktree `/Users/pierre/dev/gallery/.worktrees/explore-pi-agent-brainstorm`.
 - The test harness must stay runnable at any point: `bash $SKILL_DIR/test-sync.sh` — it builds a toy repo under `mktemp -d`, uses `ROLLING_REF=origin/rolling` to override the canonical ref, and cleans up via trap.
 
 ---
@@ -36,8 +36,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYNC="$SCRIPT_DIR/sync.sh"
 export ROLLING_REF=origin/rolling
-# Isolate from user/system git config (rerere, hooks, defaults)
+# Isolate from user/system git config (rerere, hooks, defaults) and any
+# inherited git env (e.g. when run from a hook) that could escape the sandbox
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -52,7 +54,7 @@ expect_fail() {
   if out="$("$@" 2>&1)"; then
     fail "expected failure, got success: $* :: $out"
   fi
-  grep -q "$needle" <<<"$out" || fail "expected '$needle' in output: $out"
+  grep -qF -- "$needle" <<<"$out" || fail "expected '$needle' in output: $out"
 }
 
 # ---- fixture: origin with main, rolling v1, onboarded feature branch ----
@@ -135,20 +137,21 @@ new_base_ref="${2:-$CANONICAL_ROLLING_REF}"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git worktree"
 
-current="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "$current" != "$branch" ]]; then
-  die "$branch is not checked out in this worktree (HEAD=$current)"
-fi
-
 gd="$(git rev-parse --git-dir)"
 if [[ -d "$gd/rebase-merge" || -d "$gd/rebase-apply" ]]; then
-  die "a rebase is already in progress"
+  die "a rebase is already in progress — resolve it (or run sync.sh --finish) first"
 fi
 if [[ -f "$gd/CHERRY_PICK_HEAD" ]]; then
   die "a cherry-pick is in progress"
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
+current="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$current" != "$branch" ]]; then
+  die "$branch is not checked out in this worktree (HEAD=$current)"
+fi
+
+# -uno: untracked files don't impede a rebase; only tracked changes block
+if [[ -n "$(git status --porcelain -uno)" ]]; then
   die "worktree is dirty — commit or stash first"
 fi
 
@@ -166,10 +169,10 @@ Then: `chmod +x ~/.claude/skills/sync-branch-to-rolling/sync.sh ~/.claude/skills
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
 Expected: three `ok:` lines, then `ALL PHASE-A TESTS PASSED`.
 
-- [ ] **Step 5: Commit (in ~/.claude)**
+- [ ] **Step 5: Commit (in the skills repo)**
 
 ```bash
-cd ~/.claude
+cd /Users/pierre/dev/claude-skills
 git add skills/sync-branch-to-rolling/sync.sh skills/sync-branch-to-rolling/test-sync.sh
 git commit -m "feat(skills): sync-branch-to-rolling scaffold — refusal logic + sandbox harness"
 ```
@@ -198,6 +201,7 @@ git add upstream2.txt && git commit -qm "upstream batch 2"
 ROLL_V2="$(git rev-parse HEAD)"
 git push -qf origin "HEAD:refs/heads/rolling"
 git checkout -q feat
+touch stray-untracked.txt # untracked files must not block a sync
 
 "$SYNC" feat
 [[ -f upstream2.txt ]] || fail "upstream batch 2 content missing after sync"
@@ -261,10 +265,10 @@ echo "  git push --force-with-lease origin $branch"
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
 Expected: five `ok:` lines, then `ALL TESTS PASSED (phases A-B)`.
 
-- [ ] **Step 5: Commit (in ~/.claude)**
+- [ ] **Step 5: Commit (in the skills repo)**
 
 ```bash
-cd ~/.claude
+cd /Users/pierre/dev/claude-skills
 git add skills/sync-branch-to-rolling/sync.sh skills/sync-branch-to-rolling/test-sync.sh
 git commit -m "feat(skills): sync-branch-to-rolling happy-path maintain sync"
 ```
@@ -432,20 +436,21 @@ new_base_ref="${2:-$CANONICAL_ROLLING_REF}"
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git worktree"
 
-current="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "$current" != "$branch" ]]; then
-  die "$branch is not checked out in this worktree (HEAD=$current)"
-fi
-
 gd="$(git rev-parse --git-dir)"
 if [[ -d "$gd/rebase-merge" || -d "$gd/rebase-apply" ]]; then
-  die "a rebase is already in progress"
+  die "a rebase is already in progress — resolve it (or run sync.sh --finish) first"
 fi
 if [[ -f "$gd/CHERRY_PICK_HEAD" ]]; then
   die "a cherry-pick is in progress"
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
+current="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$current" != "$branch" ]]; then
+  die "$branch is not checked out in this worktree (HEAD=$current)"
+fi
+
+# -uno: untracked files don't impede a rebase; only tracked changes block
+if [[ -n "$(git status --porcelain -uno)" ]]; then
   die "worktree is dirty — commit or stash first"
 fi
 
@@ -497,10 +502,10 @@ finish
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
 Expected: nine `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
 
-- [ ] **Step 9: Commit (in ~/.claude)**
+- [ ] **Step 9: Commit (in the skills repo)**
 
 ```bash
-cd ~/.claude
+cd /Users/pierre/dev/claude-skills
 git add skills/sync-branch-to-rolling/sync.sh skills/sync-branch-to-rolling/test-sync.sh
 git commit -m "feat(skills): sync-branch-to-rolling merge guard + conflict hand-off via --finish"
 ```
@@ -672,10 +677,10 @@ Expected: frontmatter opens with `name: sync-branch-to-rolling`.
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
 Expected: `ALL TESTS PASSED (phases A-D)`.
 
-- [ ] **Step 4: Commit (in ~/.claude)**
+- [ ] **Step 4: Commit (in the skills repo)**
 
 ```bash
-cd ~/.claude
+cd /Users/pierre/dev/claude-skills
 git add skills/sync-branch-to-rolling/SKILL.md
 git commit -m "feat(skills): sync-branch-to-rolling SKILL.md — modes, tiers, pi-agent profile"
 ```
