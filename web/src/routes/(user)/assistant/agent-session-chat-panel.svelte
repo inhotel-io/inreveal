@@ -58,6 +58,7 @@
     submitLabel?: string;
     terminalActionLabel?: string;
     onTerminalAction?: () => void;
+    onTurnRunningChange?: (turnRunning: boolean) => void;
     onMessageSent?: (sessionId: string) => void | Promise<void>;
     onRunnerError?: (sessionId: string) => void | Promise<void>;
     onTitleDiscovered?: (sessionId: string, title: string) => void;
@@ -107,6 +108,7 @@
     submitLabel,
     terminalActionLabel,
     onTerminalAction,
+    onTurnRunningChange,
     onMessageSent,
     onRunnerError,
     onTitleDiscovered,
@@ -199,6 +201,9 @@
     }),
   );
   const latestTurnRunning = $derived(turnTimelines.at(-1)?.state === 'running');
+  $effect(() => {
+    onTurnRunningChange?.(latestTurnRunning);
+  });
   // Websocket delivery is best-effort (dev restarts, reconnect gaps, mount races on fast
   // turns). While the latest turn is running, poll messages + activity events so the chat
   // converges without events; the poll stops itself the moment the turn settles.
