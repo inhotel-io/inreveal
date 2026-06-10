@@ -47,6 +47,7 @@
   let pendingApprovalCount = $state(0);
   let approvalResumePending = $state(false);
   let recentToolCalls = $state<AgentToolCallResponseDto[]>([]);
+  let turnRunning = $state(false);
   let cancelBusy = $state(false);
   let lifecycleError = $state<string | null>(null);
   let refreshSequence = 0;
@@ -161,6 +162,7 @@
       {#snippet actionDock()}
         <AgentSessionActionDock
           {session}
+          {turnRunning}
           {onSessionUpdated}
           onPendingApprovalCountChange={(count) => (pendingApprovalCount = count)}
           onApprovalResumePendingChange={(pending) => (approvalResumePending = pending)}
@@ -181,6 +183,7 @@
         submitLabel={$t(composerState.submitLabelKey)}
         {terminalActionLabel}
         onTerminalAction={terminalActionLabel ? onNewChat : undefined}
+        onTurnRunningChange={(active) => (turnRunning = active)}
         onMessageSent={refreshSelectedSession}
         onRunnerError={refreshSelectedSession}
         {onTitleDiscovered}
