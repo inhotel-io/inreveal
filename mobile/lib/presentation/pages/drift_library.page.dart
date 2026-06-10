@@ -1,6 +1,7 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/extensions/asyncvalue_extensions.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
@@ -243,7 +244,7 @@ class _PeopleCollectionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final people = ref.watch(driftGetAllPeopleProvider);
+    final people = ref.watch(driftGetAllPeopleProvider(PeopleSortBy.photoCount));
 
     return LayoutBuilder(
       builder: (context, constraints) {
