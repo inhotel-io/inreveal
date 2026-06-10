@@ -23,7 +23,7 @@ import {
   type AgentToolCallResponseDto,
 } from '@immich/sdk';
 import { websocketMock } from '@test-data/mocks/websocket.mock';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import AgentConversationPane from './agent-conversation-pane.svelte';
 
@@ -121,16 +121,32 @@ vi.mock('svelte-i18n', () => {
     assistant_updated_at: 'Updated',
     assistant_yes: 'yes',
     status: 'Status',
+    assistant_timeline_understanding: 'Understanding request…',
+    assistant_timeline_thinking: 'Thinking…',
+    assistant_timeline_verb_searching: 'Searching photos…',
+    assistant_timeline_verb_browsing_albums: 'Browsing albums…',
+    assistant_timeline_steps_one: '1 step',
+    assistant_timeline_steps: '{steps} steps',
+    assistant_timeline_failed_count: '{count} failed',
+    assistant_timeline_cancelled: 'cancelled',
+    assistant_timeline_denied: 'denied',
+    assistant_timeline_request: 'Request',
+    assistant_timeline_response: 'Response',
+    assistant_timeline_error: 'Error',
+    assistant_timeline_router_matched: 'Matched workflow {workflow} via {via}',
+    assistant_timeline_router_none: 'No workflow matched (via {via})',
   };
 
   return {
-    t: readable((key: string, options?: { values?: Record<string, string | number> }) =>
-      (messages[key] ?? key)
-        .replace('{count}', String(options?.values?.count ?? ''))
-        .replace('{applied}', String(options?.values?.applied ?? ''))
-        .replace('{failed}', String(options?.values?.failed ?? ''))
-        .replace('{dependencies}', String(options?.values?.dependencies ?? '')),
-    ),
+    t: readable((key: string, options?: { values?: Record<string, string | number> }) => {
+      let message = messages[key] ?? key;
+
+      for (const [name, value] of Object.entries(options?.values ?? {})) {
+        message = message.replaceAll(`{${name}}`, String(value));
+      }
+
+      return message;
+    }),
   };
 });
 
@@ -414,7 +430,7 @@ describe(AgentConversationPane.name, () => {
   });
 
   it('renders handled tool calls inline in the chat instead of a recent activity pile', async () => {
-    const session = makeSession();
+    const session = makeSession({ status: AgentSessionStatus.Completed });
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       makeMessage(session.id, 'Find my beach photos', AgentMessageRole.User),
       {
@@ -443,21 +459,21 @@ describe(AgentConversationPane.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Activity summary' });
-    expect(activity).toHaveTextContent('Searching photos');
-    expect(activity).toHaveTextContent('4 items');
-    expect(activity).not.toHaveTextContent('Search recent favorites');
-
-    await fireEvent.click(within(activity).getByRole('button', { name: 'Show activity' }));
-
-    expect(activity).toHaveTextContent('Found matching photos');
-    expect(activity).not.toHaveTextContent('Search recent favorites');
+    // Settled timeline: "1 step" summary button
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    expect(screen.getByRole('button', { name: /1 step/i })).toBeInTheDocument();
+    expect(timeline).not.toHaveTextContent('Search recent favorites');
     expect(screen.queryByText('Recent activity (1)')).not.toBeInTheDocument();
+
+    // Expand the timeline to see the tool call row
+    await fireEvent.click(screen.getByRole('button', { name: /1 step/i }));
+    await fireEvent.click(screen.getByRole('button', { name: 'searchAssets' }));
+    expect(timeline).toHaveTextContent('Found matching photos');
 
     const transcript = screen.getByTestId('agent-session-chat-transcript');
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Find my beach photos'),
-      expect.stringContaining('Searching photos'),
+      expect.stringContaining('1 step'),
       expect.stringContaining('I found the best candidates.'),
     ]);
   });
@@ -494,13 +510,9 @@ describe(AgentConversationPane.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Approval request' })).not.toBeInTheDocument());
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Searching photos');
-
-    await fireEvent.click(within(activity).getByRole('button', { name: 'Show activity' }));
-
-    expect(activity).toHaveTextContent('Found matching photos');
-    expect(activity).not.toHaveTextContent('Search recent favorites');
+    // After approval + refresh (Running session with completed tool call): timeline shown
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    expect(timeline).toBeInTheDocument();
   });
 
   it('shows Pi working while an approved tool call resumes the assistant', async () => {
@@ -527,7 +539,8 @@ describe(AgentConversationPane.name, () => {
     expect(await screen.findByText('Pi wants to search your photos.')).toBeInTheDocument();
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    // After approval click while approval is in-flight: timeline shows (pending tool → in-flight row)
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     resolveApproval!({
       ...pendingToolCall,
@@ -568,7 +581,8 @@ describe(AgentConversationPane.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: session.id }));
-    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    // Still running with a completed tool call → running timeline shown (oneLiner "Thinking…")
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('shows Pi working for a running resumed session loaded after an approved tool call', async () => {
@@ -594,7 +608,8 @@ describe(AgentConversationPane.name, () => {
     });
 
     expect(await screen.findByText('Find recent photos')).toBeInTheDocument();
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    // Running session with completed tool call → running timeline shown
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('shows Pi working while an approved tool call resumes the assistant', async () => {
