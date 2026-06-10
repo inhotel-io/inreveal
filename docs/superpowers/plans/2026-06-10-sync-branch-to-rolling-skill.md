@@ -425,6 +425,11 @@ finish() {
   fi
   [[ "$(git rev-parse --abbrev-ref HEAD)" == "$BRANCH" ]] || die "expected $BRANCH checked out"
 
+  # Refuse to finish if the rebase never landed on NEW (e.g. after 'git rebase --abort'):
+  # moving the tag then would silently record a sync that never happened.
+  git merge-base --is-ancestor "$NEW" "$BRANCH" ||
+    die "$BRANCH is not based on $NEW — rebase was aborted or incomplete; nothing to finish"
+
   # Record the fact first — the rebase completed onto NEW. The report below is
   # advisory and can be slow at real scale; review gates the branch PUSH, not the tag.
   git tag -f "rolling-base/$BRANCH" "$NEW"
@@ -530,6 +535,81 @@ Expected: ten `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
 cd /Users/pierre/dev/claude-skills
 git add skills/sync-branch-to-rolling/sync.sh skills/sync-branch-to-rolling/test-sync.sh
 git commit -m "feat(skills): sync-branch-to-rolling merge guard + conflict hand-off via --finish"
+```
+
+---
+
+### Task 3b: Refuse `--finish` after an aborted rebase (quality-review fix)
+
+Found in Task 3's quality review: after a conflict, `git rebase --abort` leaves the branch at OLD_HEAD with the state file present and no rebase in progress — `finish()`'s three checks all pass, so it moved the tag to NEW and the next sync false-no-op'd ("Already up to date") while the branch silently stayed behind. The fix asserts the rebase actually landed on NEW.
+
+**Files:**
+
+- Modify: `~/.claude/skills/sync-branch-to-rolling/test-sync.sh` (append Phase E)
+- Modify: `~/.claude/skills/sync-branch-to-rolling/sync.sh` (one guard in `finish()`)
+
+- [ ] **Step 1: Append the Phase E test (abort → --finish must refuse)**
+
+In `test-sync.sh`, replace the final line `echo "ALL TESTS PASSED (phases A-D)"` with:
+
+```bash
+# ---- Phase E: --finish after 'git rebase --abort' must refuse (tag must not move) ----
+git checkout -q rollwork
+git reset -q --hard "$ROLL_V3"
+echo up3 > upstream3.txt
+git add upstream3.txt && git commit -qm "upstream batch 4"
+echo "upstream edit v4" > shared.txt
+git commit -qam "upstream batch 5: edits shared.txt again"
+ROLL_V4="$(git rev-parse HEAD)"
+git push -qf origin "HEAD:refs/heads/rolling"
+git checkout -q feat
+
+echo "feat edit 2" > shared.txt
+git commit -qam "feat: edit shared.txt again"
+FEAT_PRE_ABORT="$(git rev-parse feat)"
+
+set +e
+"$SYNC" feat >/dev/null 2>&1
+rc=$?
+set -e
+[[ "$rc" == "3" ]] || fail "expected conflict exit code 3 in phase E, got $rc"
+git rebase --abort
+
+expect_fail "aborted or incomplete" -- "$SYNC" --finish
+[[ "$(git rev-parse 'refs/tags/rolling-base/feat^{commit}')" == "$ROLL_V3" ]] || fail "tag moved despite aborted rebase"
+[[ "$(git rev-parse feat)" == "$FEAT_PRE_ABORT" ]] || fail "branch moved despite abort"
+pass "--finish refuses after rebase --abort; tag untouched"
+
+echo "ALL TESTS PASSED (phases A-E)"
+```
+
+- [ ] **Step 2: Run tests to verify the Phase E case fails**
+
+Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
+Expected: phases A-D pass, then FAIL with `expected failure, got success` — current `finish()` happily moves the tag after an abort.
+
+- [ ] **Step 3: Implement the landed-on-NEW guard in finish()**
+
+In `sync.sh`, inside `finish()`, insert after the `[[ "$(git rev-parse --abbrev-ref HEAD)" == "$BRANCH" ]] || die "expected $BRANCH checked out"` line:
+
+```bash
+  # Refuse to finish if the rebase never landed on NEW (e.g. after 'git rebase --abort'):
+  # moving the tag then would silently record a sync that never happened.
+  git merge-base --is-ancestor "$NEW" "$BRANCH" ||
+    die "$BRANCH is not based on $NEW — rebase was aborted or incomplete; nothing to finish"
+```
+
+- [ ] **Step 4: Run tests to verify phases A-E pass**
+
+Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
+Expected: eleven `ok:` lines, then `ALL TESTS PASSED (phases A-E)`.
+
+- [ ] **Step 5: Commit (in the skills repo)**
+
+```bash
+cd /Users/pierre/dev/claude-skills
+git add skills/sync-branch-to-rolling/sync.sh skills/sync-branch-to-rolling/test-sync.sh
+git commit -m "fix(skills): refuse --finish after an aborted rebase"
 ```
 
 ---
@@ -701,7 +781,7 @@ Expected: frontmatter opens with `name: sync-branch-to-rolling`.
 - [ ] **Step 3: Re-run the sandbox harness (regression)**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: `ALL TESTS PASSED (phases A-D)`.
+Expected: `ALL TESTS PASSED (phases A-E)`.
 
 - [ ] **Step 4: Commit (in the skills repo)**
 
@@ -794,7 +874,7 @@ git commit -m "docs: mark sync-branch-to-rolling spec implemented"
 - [ ] **Step 3: Final regression run**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: `ALL TESTS PASSED (phases A-D)`.
+Expected: `ALL TESTS PASSED (phases A-E)`.
 
 ---
 
