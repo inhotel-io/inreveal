@@ -1650,9 +1650,7 @@ describe(FaceIdentityRepository.name, () => {
     try {
       const result = await sut.getAccessiblePersonByProfileId(user.id, spacePerson.id);
 
-      expect(result).toEqual(
-        expect.objectContaining({ id: person.id, name: 'Ina', birthDate: '2014-02-14' }),
-      );
+      expect(result).toEqual(expect.objectContaining({ id: person.id, name: 'Ina', birthDate: '2014-02-14' }));
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1695,9 +1693,7 @@ describe(FaceIdentityRepository.name, () => {
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
 
-      expect(result.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: '1990-01-01' }),
-      ]);
+      expect(result.people).toEqual([expect.objectContaining({ id: person.id, birthDate: '1990-01-01' })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1760,9 +1756,7 @@ describe(FaceIdentityRepository.name, () => {
 
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
-      expect(result.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
-      ]);
+      expect(result.people).toEqual([expect.objectContaining({ id: person.id, birthDate: '2014-02-14' })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1824,9 +1818,7 @@ describe(FaceIdentityRepository.name, () => {
 
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
-      expect(result.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
-      ]);
+      expect(result.people).toEqual([expect.objectContaining({ id: person.id, birthDate: '2014-02-14' })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1845,7 +1837,13 @@ describe(FaceIdentityRepository.name, () => {
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
     const spacePerson = await ctx.database
       .insertInto('shared_space_person')
-      .values({ spaceId: space.id, identityId: identity.id, name: '', representativeFaceId: assetFace.id, type: 'person' })
+      .values({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: assetFace.id,
+        type: 'person',
+      })
       .returningAll()
       .executeTakeFirstOrThrow();
     await ctx.database
@@ -1855,9 +1853,7 @@ describe(FaceIdentityRepository.name, () => {
 
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
-      expect(result.people).toEqual([
-        expect.objectContaining({ id: person.id, name: 'Ina', birthDate: null }),
-      ]);
+      expect(result.people).toEqual([expect.objectContaining({ id: person.id, name: 'Ina', birthDate: null })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1896,14 +1892,10 @@ describe(FaceIdentityRepository.name, () => {
 
     try {
       const hiddenExcluded = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
-      expect(hiddenExcluded.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: null }),
-      ]);
+      expect(hiddenExcluded.people).toEqual([expect.objectContaining({ id: person.id, birthDate: null })]);
 
       const hiddenIncluded = await sut.getAccessiblePeople(user.id, { withHidden: true, page: 1, size: 50 });
-      expect(hiddenIncluded.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: '2014-02-14' }),
-      ]);
+      expect(hiddenIncluded.people).toEqual([expect.objectContaining({ id: person.id, birthDate: '2014-02-14' })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
@@ -1943,9 +1935,7 @@ describe(FaceIdentityRepository.name, () => {
 
     try {
       const result = await sut.getAccessiblePeople(user.id, { withHidden: false, page: 1, size: 50 });
-      expect(result.people).toEqual([
-        expect.objectContaining({ id: person.id, birthDate: null }),
-      ]);
+      expect(result.people).toEqual([expect.objectContaining({ id: person.id, birthDate: null })]);
     } finally {
       await ctx.database.deleteFrom('user').where('id', '=', user.id).execute();
     }
