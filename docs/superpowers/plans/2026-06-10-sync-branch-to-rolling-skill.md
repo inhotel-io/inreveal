@@ -284,7 +284,7 @@ The conflict path needs state to survive between `sync.sh <branch>` (which stops
 - Modify: `~/.claude/skills/sync-branch-to-rolling/test-sync.sh` (append Phases C-D)
 - Modify: `~/.claude/skills/sync-branch-to-rolling/sync.sh` (merge check, state file, `finish()`)
 
-- [ ] **Step 1: Append the Phase C test (merge-commit refusal)**
+- [ ] **Step 1: Append the Phase C tests (stale-tag + merge-commit refusals)**
 
 In `test-sync.sh`, replace the final line `echo "ALL TESTS PASSED (phases A-B)"` with:
 
@@ -301,6 +301,13 @@ git commit -qam "upstream batch 3: edits shared.txt"
 ROLL_V3="$(git rev-parse HEAD)"
 git push -qf origin "HEAD:refs/heads/rolling"
 git checkout -q feat
+
+# stale/foreign tag (non-ancestor of the branch) must be refused before any rebase
+# (ROLL_V1 is no longer in feat's ancestry after the Phase B rebase)
+git tag -f "rolling-base/feat" "$ROLL_V1"
+expect_fail "not an ancestor" -- "$SYNC" feat
+pass "refuses stale/foreign rolling-base tag"
+git tag -f "rolling-base/feat" "$ROLL_V2"
 
 # merge commit in replay range must be refused
 git checkout -qb side "$(git rev-parse feat)"
@@ -319,23 +326,28 @@ echo "ALL TESTS PASSED (phases A-C)"
 - [ ] **Step 2: Run tests to verify the Phase C case fails**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: phases A-B pass, then FAIL with `expected failure, got success` — without the guard, the merge case proceeds (in this fixture the rebase flattens the merge cleanly and even moves the tag). The sandbox is rebuilt fresh on every run, so that stray state is harmless.
+Expected: phases A-B pass, then FAIL with `expected failure, got success` at the stale-tag case — without the ancestor guard, the script happily replays foreign history (in this small fixture the garbage replay even completes cleanly and moves the tag). The sandbox is rebuilt fresh on every run, so that stray state is harmless.
 
-- [ ] **Step 3: Implement the merge-commit guard**
+- [ ] **Step 3: Implement the ancestor and merge-commit guards**
 
 In `sync.sh`, insert immediately after the `if [[ "$OLD" == "$NEW" ]] ... fi` block (before the `own_before=` line):
 
 ```bash
+git merge-base --is-ancestor "$OLD" "$branch" ||
+  die "rolling-base/$branch ($OLD) is not an ancestor of $branch — stale/foreign tag; verify lineage per SKILL.md before syncing"
+
 merges="$(git rev-list --merges --count "$OLD..$branch")"
 if [[ "$merges" -gt 0 ]]; then
   die "$merges merge commit(s) in $OLD..$branch — new 'merge origin/main' merges need judgment; see SKILL.md failure modes"
 fi
 ```
 
+(The ancestor guard is the single highest-value line in the script given the force-moving base: without it, a stale or mistyped tag silently replays foreign history — at real scale a 1400-commit garbage replay whose conflicts look real enough to start resolving.)
+
 - [ ] **Step 4: Run tests to verify phases A-C pass**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: six `ok:` lines, then `ALL TESTS PASSED (phases A-C)`.
+Expected: seven `ok:` lines, then `ALL TESTS PASSED (phases A-C)`.
 
 - [ ] **Step 5: Append the Phase D test (conflict → resolve → --finish)**
 
@@ -364,8 +376,10 @@ GIT_EDITOR=true git rebase --continue >/dev/null 2>&1
 
 "$SYNC" --finish
 [[ "$(git rev-parse 'refs/tags/rolling-base/feat^{commit}')" == "$ROLL_V3" ]] || fail "tag not moved by --finish"
+[[ "$(git ls-remote origin refs/tags/rolling-base/feat | cut -f1)" == "$ROLL_V3" ]] || fail "remote tag not moved to ROLL_V3"
 [[ "$(git rev-list --count "$ROLL_V3..feat")" == "3" ]] || fail "expected 3 own commits after conflict sync"
 [[ "$(cat shared.txt)" == "merged content" ]] || fail "resolution content lost"
+grep -q f2 feat.txt || fail "branch's own content lost in replay"
 [[ ! -f "$(git rev-parse --git-dir)/sync-rolling.state" ]] || fail "state file not cleaned up"
 pass "conflict resolution completed via --finish"
 
@@ -411,14 +425,17 @@ finish() {
   fi
   [[ "$(git rev-parse --abbrev-ref HEAD)" == "$BRANCH" ]] || die "expected $BRANCH checked out"
 
+  # Record the fact first — the rebase completed onto NEW. The report below is
+  # advisory and can be slow at real scale; review gates the branch PUSH, not the tag.
+  git tag -f "rolling-base/$BRANCH" "$NEW"
+  git push --force origin "refs/tags/rolling-base/$BRANCH"
+
   local own_after
   own_after="$(git rev-list --count "$NEW..$BRANCH")"
   echo "== range-diff (old vs new) =="
   git --no-pager range-diff "$OLD..$OLD_HEAD" "$NEW..$BRANCH" || true
   echo "== own commits: before=$OWN_BEFORE after=$own_after (drops = already in rolling) =="
 
-  git tag -f "rolling-base/$BRANCH" "$NEW"
-  git push --force origin "refs/tags/rolling-base/$BRANCH"
   rm -f "$sf"
   echo "Tag rolling-base/$BRANCH -> $NEW (pushed). Backup: origin/$BACKUP"
   echo "NEXT: run Tier-1 gates per SKILL.md, then push per the branch profile:"
@@ -466,8 +483,13 @@ OLD_HEAD="$(git rev-parse "$branch")"
 
 if [[ "$OLD" == "$NEW" ]]; then
   echo "Already up to date ($NEW)."
+  # heal a previously failed tag push (the local tag is authoritative)
+  git push --force origin "refs/tags/rolling-base/$branch" || true
   exit 0
 fi
+
+git merge-base --is-ancestor "$OLD" "$branch" ||
+  die "rolling-base/$branch ($OLD) is not an ancestor of $branch — stale/foreign tag; verify lineage per SKILL.md before syncing"
 
 merges="$(git rev-list --merges --count "$OLD..$branch")"
 if [[ "$merges" -gt 0 ]]; then
@@ -500,7 +522,7 @@ finish
 - [ ] **Step 8: Run tests to verify phases A-D pass**
 
 Run: `bash ~/.claude/skills/sync-branch-to-rolling/test-sync.sh`
-Expected: nine `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
+Expected: ten `ok:` lines, then `ALL TESTS PASSED (phases A-D)`.
 
 - [ ] **Step 9: Commit (in the skills repo)**
 
@@ -562,7 +584,7 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
    ~/.claude/skills/sync-branch-to-rolling/sync.sh <branch> [green-base-sha]
    ```
    The script refuses on: dirty worktree, rebase/cherry-pick in progress, branch not checked
-   out here, missing tag, merge commits in the replay range. It backs up the branch to
+   out here, missing or stale (non-ancestor) tag, merge commits in the replay range. It backs up the branch to
    `origin/backup/<branch>-YYYYMMDD-<sha>`, runs `git rebase --onto NEW OLD <branch>`, and on
    clean completion prints a range-diff + own-commit-count comparison and moves + pushes the tag.
 3. **On conflict (exit 3):** resolve per the `rebase-upstream-report` conflict discipline —
@@ -662,6 +684,10 @@ $(git rev-parse 'rolling-base/<branch>^{commit}') <new-tip>` will fail — re-on
   branch's current state (its base = old rolling tip, still pinned by the tag).
 - **Backups accumulate:** delete `origin/backup/<branch>-*` refs a few days after a sync
   proves stable.
+- **Local tag is authoritative; `git fetch` never updates an existing local tag.** On a new
+  machine, fetch it explicitly first:
+  `git fetch origin "refs/tags/rolling-base/<branch>:refs/tags/rolling-base/<branch>" --force`.
+  The script's ancestor guard refuses stale/foreign tags before any rebase.
 - **Mistyped SHAs:** never hand-paste; always `git rev-parse` and verify with `git log -1`.
 ````
 
