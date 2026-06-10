@@ -1541,6 +1541,45 @@ describe(AgentSessionChatPanel.name, () => {
     expect(timeline).toHaveTextContent('Provider failed');
   });
 
+  it('renders expanded row details with secrets redacted', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Inspect metadata'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'secret-tool',
+            toolName: AgentToolName.ReadAssetMetadata,
+            status: AgentToolCallStatus.Completed,
+            requestSummary: 'List albums',
+            responseSummary: 'Authorization: Bearer supersecrettoken999',
+            error: null,
+            completedAt: '2026-05-16T10:00:06.000Z',
+          }),
+        ],
+      },
+    });
+
+    // Wait for the timeline to appear (settled: 1 step)
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    const summaryBtn = within(timeline).getByRole('button', { name: /1 step/i });
+    await fireEvent.click(summaryBtn);
+
+    // Now the row button is visible; click it to expand detail
+    const rowBtn = within(timeline).getByRole('button', { name: AgentToolName.ReadAssetMetadata });
+    await fireEvent.click(rowBtn);
+
+    // Redacted token must appear as [REDACTED]; raw secret must not be present anywhere
+    expect(timeline).toHaveTextContent('[REDACTED]');
+    expect(timeline).not.toHaveTextContent('supersecrettoken999');
+  });
+
   it('renders assistant markdown headings and inline code as formatted content', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       makeMessage(

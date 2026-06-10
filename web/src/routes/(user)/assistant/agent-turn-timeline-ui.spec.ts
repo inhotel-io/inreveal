@@ -388,8 +388,9 @@ describe('buildAgentTurnTimelines', () => {
     expect(timelines[1].state).toBe('running');
   });
 
-  it('E10 long summaries pass through — summaryText full string, detail.responseSummary identical', () => {
+  it('E10 long summaries are truncated at 500 chars via redaction pipeline', () => {
     const longText = 'x'.repeat(600);
+    const truncated = `${'x'.repeat(500)} [truncated]`;
     const timelines = build(
       makeSession(AgentSessionStatus.Completed),
       [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
@@ -404,8 +405,8 @@ describe('buildAgentTurnTimelines', () => {
       ],
     );
 
-    expect(timelines[0].rows[0].summaryText).toBe(longText);
-    expect(timelines[0].rows[0].detail.responseSummary).toBe(longText);
+    expect(timelines[0].rows[0].summaryText).toBe(truncated);
+    expect(timelines[0].rows[0].detail.responseSummary).toBe(truncated);
   });
 
   it('E11 no router event — routerAnnotation null', () => {
@@ -566,6 +567,79 @@ describe('buildAgentTurnTimelines', () => {
     );
 
     expect(timelines[0].rows[0].summaryText).toBe('request text');
+  });
+
+  it('redacts Bearer token in requestSummary from summaryText and detail fields', () => {
+    const timelines = build(
+      makeSession(AgentSessionStatus.Completed),
+      [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
+      [
+        makeToolCall({
+          id: 'tc-secret',
+          status: AgentToolCallStatus.Completed,
+          startedAt: '2026-05-18T10:00:05.000Z',
+          completedAt: '2026-05-18T10:00:07.000Z',
+          requestSummary: 'Authorization: Bearer abc123token',
+          responseSummary: null,
+          error: null,
+        }),
+      ],
+    );
+
+    const row = timelines[0].rows[0];
+    expect(row.summaryText).toContain('[REDACTED]');
+    expect(row.summaryText).not.toContain('abc123token');
+    expect(row.detail.requestSummary).toContain('[REDACTED]');
+    expect(row.detail.requestSummary).not.toContain('abc123token');
+  });
+
+  it('redacts api_key in responseSummary and error from summaryText and detail fields', () => {
+    const timelines = build(
+      makeSession(AgentSessionStatus.Completed),
+      [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
+      [
+        makeToolCall({
+          id: 'tc-secret-2',
+          status: AgentToolCallStatus.Failed,
+          startedAt: '2026-05-18T10:00:05.000Z',
+          completedAt: '2026-05-18T10:00:07.000Z',
+          requestSummary: null,
+          responseSummary: 'api_key=sk-proj-supersecret123',
+          error: 'provider key sk-live-456 rejected',
+        }),
+      ],
+    );
+
+    const row = timelines[0].rows[0];
+    expect(row.summaryText).toContain('[REDACTED]');
+    expect(row.summaryText).not.toContain('sk-proj-supersecret123');
+    expect(row.detail.responseSummary).toContain('[REDACTED]');
+    expect(row.detail.responseSummary).not.toContain('sk-proj-supersecret123');
+    expect(row.detail.error).toContain('[REDACTED]');
+    expect(row.detail.error).not.toContain('sk-live-456');
+  });
+
+  it('passes clean summaries through unchanged', () => {
+    const timelines = build(
+      makeSession(AgentSessionStatus.Completed),
+      [makeUserMessage('user-1', '2026-05-18T10:00:00.000Z')],
+      [
+        makeToolCall({
+          id: 'tc-clean',
+          status: AgentToolCallStatus.Completed,
+          startedAt: '2026-05-18T10:00:05.000Z',
+          completedAt: '2026-05-18T10:00:07.000Z',
+          requestSummary: 'Search for beach photos',
+          responseSummary: 'Found 12 beach photos',
+          error: null,
+        }),
+      ],
+    );
+
+    const row = timelines[0].rows[0];
+    expect(row.summaryText).toBe('Found 12 beach photos');
+    expect(row.detail.requestSummary).toBe('Search for beach photos');
+    expect(row.detail.responseSummary).toBe('Found 12 beach photos');
   });
 
   it('pending_approval in running last turn is in-flight', () => {
