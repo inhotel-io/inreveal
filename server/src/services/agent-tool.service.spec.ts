@@ -31,6 +31,7 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpRecoverableToolError } from 'src/services/agent-mcp-recoverable-tool-error';
 import { AgentToolService } from 'src/services/agent-tool.service';
 import { UserService } from 'src/services/user.service';
@@ -297,6 +298,7 @@ describe(AgentToolService.name, () => {
   let selectionHandleRepository: ReturnType<typeof automock<AgentSelectionHandleRepository>>;
   let toolCallRepository: ReturnType<typeof automock<AgentToolCallRepository>>;
   let agentRunnerService: ReturnType<typeof automock<AgentRunnerService>>;
+  let assetSearchFilterResolverService: AgentAssetSearchFilterResolverService;
   let userService: { search: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
@@ -314,6 +316,11 @@ describe(AgentToolService.name, () => {
     selectionHandleRepository = automock(AgentSelectionHandleRepository, { args: [{} as never] });
     toolCallRepository = automock(AgentToolCallRepository, { args: [{} as never] });
     agentRunnerService = automock(AgentRunnerService, { args: [] as never });
+    assetSearchFilterResolverService = new AgentAssetSearchFilterResolverService(
+      searchRepository,
+      albumRepository,
+      sharedSpaceRepository,
+    );
     userService = { search: vi.fn() };
     sut = new AgentToolService(
       accessRepository as unknown as AccessRepository,
@@ -330,6 +337,7 @@ describe(AgentToolService.name, () => {
       toolCallRepository,
       agentRunnerService,
       userService as unknown as UserService,
+      assetSearchFilterResolverService,
     );
 
     sessionRepository.update.mockImplementation((_userId, _id, dto) =>
