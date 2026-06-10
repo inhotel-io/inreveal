@@ -1062,6 +1062,7 @@
   "assistant_session_cancel_error": "Unable to cancel assistant session",
   "assistant_session_create_error": "Unable to start assistant session",
   "assistant_session_created": "Assistant session started",
+  "assistant_session_delete_error": "Unable to delete the chat",
   "assistant_session_details": "Session details",
   "assistant_session_setup": "Session setup",
   "assistant_session_status_applying": "Applying",
