@@ -21,7 +21,10 @@ describe('agent-onboarding-connect', () => {
 
   it('defaults to the local provider with its base url prefilled', () => {
     render(AgentOnboardingConnect, { props: { onConnected: vi.fn() } });
-    expect(screen.getByRole('button', { name: /assistant_onboarding_provider_local/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /assistant_onboarding_provider_local/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByLabelText('assistant_onboarding_base_url')).toHaveValue('http://localhost:11434/v1');
   });
 
