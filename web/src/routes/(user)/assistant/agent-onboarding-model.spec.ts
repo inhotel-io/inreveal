@@ -2,14 +2,14 @@
 import { AgentApprovalMode, AgentPermissionPreset, ProviderType } from '@immich/sdk';
 import { describe, expect, it } from 'vitest';
 import {
-  ONBOARDING_DEFAULT_APPROVAL,
-  ONBOARDING_DEFAULT_PRESET,
-  ONBOARDING_PROVIDER_ORDER,
-  ONBOARDING_PROVIDERS,
   buildCredentialCreateDto,
   buildValidateDto,
   isCloudProvider,
   isConnectComplete,
+  ONBOARDING_DEFAULT_APPROVAL,
+  ONBOARDING_DEFAULT_PRESET,
+  ONBOARDING_PROVIDER_ORDER,
+  ONBOARDING_PROVIDERS,
 } from './agent-onboarding-model';
 
 const base = { provider: 'local' as const, label: '', secret: '', baseUrl: '', model: '' };
@@ -41,15 +41,19 @@ describe('agent-onboarding-model', () => {
   });
 
   it('builds a credential DTO: local key optional uses placeholder, model becomes the single+default model', () => {
-    expect(buildCredentialCreateDto({ ...base, provider: 'local', baseUrl: 'http://x/v1 ', model: ' llama ' })).toEqual({
-      providerType: ProviderType.OpenaiCompatible,
-      label: 'Local model',
-      secret: 'local',
-      baseUrl: 'http://x/v1',
-      models: ['llama'],
-      defaultModel: 'llama',
-    });
-    expect(buildCredentialCreateDto({ ...base, provider: 'openai', label: 'Work', secret: ' sk ', model: 'gpt' })).toEqual({
+    expect(buildCredentialCreateDto({ ...base, provider: 'local', baseUrl: 'http://x/v1 ', model: ' llama ' })).toEqual(
+      {
+        providerType: ProviderType.OpenaiCompatible,
+        label: 'Local model',
+        secret: 'local',
+        baseUrl: 'http://x/v1',
+        models: ['llama'],
+        defaultModel: 'llama',
+      },
+    );
+    expect(
+      buildCredentialCreateDto({ ...base, provider: 'openai', label: 'Work', secret: ' sk ', model: 'gpt' }),
+    ).toEqual({
       providerType: ProviderType.Openai,
       label: 'Work',
       secret: 'sk',
