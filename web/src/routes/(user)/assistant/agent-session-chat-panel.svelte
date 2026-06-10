@@ -189,12 +189,6 @@
       ? timelineToolCalls.filter((toolCall) => toolCall.status !== AgentToolCallStatus.PendingApproval)
       : timelineToolCalls,
   );
-  const coveredToolCallIds = $derived(
-    new Set([
-      ...turnTimelines.flatMap((timeline) => timeline.rows.map((row) => row.id)),
-      ...pendingApprovalToolCallIdsSuppressedForResume,
-    ]),
-  );
   const turnTimelines = $derived(
     buildAgentTurnTimelines({
       session: activitySession,
@@ -202,6 +196,12 @@
       toolCalls: activityToolCalls,
       activityEvents,
     }),
+  );
+  const coveredToolCallIds = $derived(
+    new Set([
+      ...turnTimelines.flatMap((timeline) => timeline.rows.map((row) => row.id)),
+      ...pendingApprovalToolCallIdsSuppressedForResume,
+    ]),
   );
   const chatTimelineItems = $derived(
     buildChatTimelineItems(
