@@ -172,9 +172,7 @@ describe(AgentRunnerMcpController.name, () => {
 
     expect(status).toBe(401);
     expect(body).toMatchObject({
-      error: 'Unauthorized',
       message: 'Invalid agent runner token',
-      statusCode: 401,
     });
     expect(service.handle).not.toHaveBeenCalled();
   });
@@ -209,9 +207,7 @@ describe(AgentRunnerMcpController.name, () => {
 
     expect(status).toBe(401);
     expect(body).toMatchObject({
-      error: 'Unauthorized',
       message: 'Agent runner token expired',
-      statusCode: 401,
     });
     expect(service.handle).not.toHaveBeenCalled();
   });

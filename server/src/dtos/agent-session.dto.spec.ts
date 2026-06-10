@@ -351,7 +351,7 @@ describe('Generated agent permission contracts', () => {
   });
 
   it('exposes expanded write-scope fields and operation enums in the generated TypeScript SDK', () => {
-    const sdk = readFileSync(resolve(process.cwd(), '../open-api/typescript-sdk/src/fetch-client.ts'), 'utf8');
+    const sdk = readFileSync(resolve(process.cwd(), '../packages/sdk/src/fetch-client.ts'), 'utf8');
 
     for (const key of expandedWriteScopeKeys) {
       expect(sdk).toContain(`${key}: boolean`);
