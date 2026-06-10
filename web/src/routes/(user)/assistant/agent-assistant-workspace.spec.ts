@@ -45,6 +45,7 @@ vi.mock('svelte-i18n', () => {
     assistant_approval_request: 'Approval request',
     assistant_approval_tool_calls_error: 'Unable to load approval requests',
     assistant_close_session: 'Close session',
+    assistant_session_delete_error: 'Unable to delete the chat',
     assistant_change: 'Change',
     assistant_chat: 'Chat',
     assistant_chat_menu: 'Chat options',
@@ -880,6 +881,70 @@ describe(AgentAssistantWorkspace.name, () => {
     expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeInTheDocument();
     expect(gotoMock).toHaveBeenLastCalledWith('/assistant', expect.objectContaining({ replaceState: false }));
+  });
+
+  it('removes the chat locally when the server reports it already deleted', async () => {
+    const user = userEvent.setup();
+    sdkMock.deleteAgentSession.mockRejectedValue({ status: 400, message: 'Agent session not found' });
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    const row = screen.getByTestId(`agent-session-row-${actionableSession.id}`);
+    await user.click(within(row.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Delete/ }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument(),
+    );
+  });
+
+  it('keeps the chat when deletion genuinely fails', async () => {
+    const user = userEvent.setup();
+    sdkMock.deleteAgentSession.mockRejectedValue({ status: 500, message: 'boom' });
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    const row = screen.getByTestId(`agent-session-row-${actionableSession.id}`);
+    await user.click(within(row.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Delete/ }));
+
+    await waitFor(() => expect(sdkMock.deleteAgentSession).toHaveBeenCalled());
+    expect(screen.getByTestId(`agent-session-row-${actionableSession.id}`)).toBeInTheDocument();
+  });
+
+  it('re-syncs the session list from the server after a delete', async () => {
+    const user = userEvent.setup();
+    sdkMock.getAgentSessions.mockResolvedValue([requestedSession]);
+
+    render(AgentAssistantWorkspace, {
+      props: {
+        runnerStatus: healthyRunner,
+        credentials,
+        sessions: [actionableSession, requestedSession],
+        requestedSessionId: actionableSession.id,
+      },
+    });
+
+    const row = screen.getByTestId(`agent-session-row-${actionableSession.id}`);
+    await user.click(within(row.parentElement as HTMLElement).getByRole('button', { name: 'Chat options' }));
+    await user.click(screen.getByRole('menuitem', { name: /Delete/ }));
+
+    await waitFor(() => expect(sdkMock.getAgentSessions).toHaveBeenCalled());
+    expect(screen.queryByTestId(`agent-session-row-${actionableSession.id}`)).not.toBeInTheDocument();
   });
 
   it('keeps the explicit new-chat state when the URL query is cleared', async () => {
