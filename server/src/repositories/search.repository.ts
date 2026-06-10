@@ -111,6 +111,7 @@ export interface SearchTagOptions {
 
 export interface SearchAlbumOptions {
   albumIds?: string[];
+  albumMatchAny?: boolean;
 }
 
 export interface SearchSpaceOptions {

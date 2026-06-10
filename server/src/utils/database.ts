@@ -476,6 +476,19 @@ export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: st
   );
 }
 
+export function inAnyAlbum<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
+  return qb.innerJoin(
+    (eb) =>
+      eb
+        .selectFrom('album_asset')
+        .select('assetId')
+        .where('albumId', '=', anyUuid(albumIds))
+        .groupBy('assetId')
+        .as('has_any_album'),
+    (join) => join.onRef('has_any_album.assetId', '=', 'asset.id'),
+  );
+}
+
 export function hasTags<O>(qb: SelectQueryBuilder<DB, 'asset', O>, tagIds: string[]) {
   return qb.innerJoin(
     (eb) =>
@@ -609,7 +622,9 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .selectFrom('asset')
     .where('asset.visibility', '=', visibility)
     .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
-    .$if(!!options.albumIds && options.albumIds.length > 0, (qb) => inAlbums(qb, options.albumIds!))
+    .$if(!!options.albumIds && options.albumIds.length > 0, (qb) =>
+      options.albumMatchAny ? inAnyAlbum(qb, options.albumIds!) : inAlbums(qb, options.albumIds!),
+    )
     .$if(!!options.spaceId && !options.timelineSpaceIds, (qb) =>
       qb.where((eb) =>
         eb.or([

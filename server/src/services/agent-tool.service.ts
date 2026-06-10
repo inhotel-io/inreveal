@@ -50,6 +50,7 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import {
   isAgentMcpRecoverableToolError,
   wrongIdDomainError,
@@ -66,8 +67,6 @@ import {
   AgentAssetMetadataDetail,
   AgentAssetMetadataField,
   AgentAssetMetadataResult,
-  AgentResolvedAssetSearchFilterChoice,
-  AgentResolvedAssetSearchFilterKind,
   AgentResolvedAssetSearchFilterResult,
   AgentSearchAssetResult,
   AgentSearchAssetsDetail,
@@ -172,6 +171,7 @@ export class AgentToolService {
     private readonly toolCallRepository: AgentToolCallRepository,
     private readonly agentRunnerService: AgentRunnerService,
     private readonly userService: UserService,
+    private readonly assetSearchFilterResolverService: AgentAssetSearchFilterResolverService,
   ) {}
 
   async searchAssets(
@@ -822,8 +822,9 @@ export class AgentToolService {
       requestedAlbumCount: () => 0,
       perToolLimit: () => Number.MAX_SAFE_INTEGER,
       perSessionLimit: () => Number.MAX_SAFE_INTEGER,
-      validateAccess: (auth, session, request) => this.validateResolveAssetSearchFiltersAccess(auth, session, request),
-      execute: (auth, session, request) => this.executeResolveAssetSearchFilters(auth, session, request),
+      validateAccess: (auth, session, request) =>
+        this.assetSearchFilterResolverService.validateToolAccess(auth, session, request),
+      execute: (auth, session, request) => this.assetSearchFilterResolverService.resolveToolFilters(auth, session, request),
       responseSummary: (result) =>
         `Resolved ${result.results.filter((item) => item.status === 'matched').length} search filter(s)`,
       responseMetadata: (result) => ({
@@ -846,350 +847,6 @@ export class AgentToolService {
     };
   }
 
-  private async validateResolveAssetSearchFiltersAccess(
-    auth: AuthDto,
-    session: AgentSession,
-    request: AgentResolveAssetSearchFiltersToolRequestDto,
-  ): Promise<string | null> {
-    const requiresSharedSpaces =
-      request.scope?.withSharedSpaces === true || request.scope?.spaceId || (request.spaces?.length ?? 0) > 0;
-    if (requiresSharedSpaces && !session.permissionPlanSnapshot.assetScope.sharedSpaces) {
-      return 'Shared spaces are not accessible for this session';
-    }
-
-    if (request.scope?.spaceId) {
-      return this.validateSharedSpaceAccess(auth, session, request.scope.spaceId);
-    }
-
-    return null;
-  }
-
-  private async executeResolveAssetSearchFilters(
-    auth: AuthDto,
-    session: AgentSession,
-    request: AgentResolveAssetSearchFiltersToolRequestDto,
-  ): Promise<{
-    resolvedFilters: AgentSearchAssetsFilters;
-    results: AgentResolvedAssetSearchFilterResult[];
-  }> {
-    const resolvedFilters: AgentSearchAssetsFilters = {};
-    const results: AgentResolvedAssetSearchFilterResult[] = [];
-    const scope = request.scope ?? {};
-    if (scope.spaceId) {
-      resolvedFilters.spaceId = scope.spaceId;
-    }
-
-    if (request.spaces?.length) {
-      const visibleSpaces = await this.sharedSpaceRepository.getAllByUserId(auth.user.id);
-      const spaces = visibleSpaces.map((space) => ({
-        id: space.id,
-        value: space.name,
-      }));
-      for (const query of request.spaces) {
-        const matched = this.matchVisibleCandidates(spaces, query, 'space', (candidate) => ({
-          spaceId: candidate.id,
-        }));
-        if (matched.status === 'matched') {
-          if (resolvedFilters.spaceId && resolvedFilters.spaceId !== matched.id) {
-            results.push({
-              ...matched,
-              status: 'ambiguous',
-              searchFilter: undefined,
-              choices: [
-                this.choiceForIdCandidate({ id: matched.id!, value: matched.value! }, 'space', { spaceId: matched.id }),
-              ],
-              message: 'Only one spaceId can be used in searchAssets',
-            });
-          } else {
-            resolvedFilters.spaceId = matched.id;
-            results.push(matched);
-          }
-        } else {
-          results.push(matched);
-        }
-      }
-    }
-
-    const needsRepositoryCandidates =
-      (request.people?.length ?? 0) > 0 ||
-      (request.tags?.length ?? 0) > 0 ||
-      (request.cameraMakes?.length ?? 0) > 0 ||
-      (request.cameraModels?.length ?? 0) > 0 ||
-      (request.lensModels?.length ?? 0) > 0;
-    const resolverScope = { ...scope, ...(resolvedFilters.spaceId ? { spaceId: resolvedFilters.spaceId } : {}) };
-    const canUseRepositoryCandidates = this.canUseResolverRepositoryCandidates(session, resolverScope);
-    const shouldLoadTimelineSpaceIds =
-      !resolvedFilters.spaceId &&
-      (scope.withSharedSpaces === true ||
-        (needsRepositoryCandidates &&
-          !canUseRepositoryCandidates &&
-          session.permissionPlanSnapshot.assetScope.sharedSpaces));
-    const timelineSpaceRows = shouldLoadTimelineSpaceIds
-      ? await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id)
-      : [];
-    const timelineSpaceIds = timelineSpaceRows.map((row) => row.spaceId);
-    const repositoryScope = resolvedFilters.spaceId
-      ? { spaceId: resolvedFilters.spaceId }
-      : {
-          ...scope,
-          ...(shouldLoadTimelineSpaceIds ? { timelineSpaceIds } : {}),
-        };
-    const needsSuggestions =
-      (request.people?.length ?? 0) > 0 || (request.tags?.length ?? 0) > 0 || (request.cameraMakes?.length ?? 0) > 0;
-    const suggestions =
-      needsSuggestions && canUseRepositoryCandidates
-        ? await this.searchRepository.getFilterSuggestions([auth.user.id], repositoryScope)
-        : null;
-
-    if (request.people?.length) {
-      this.resolvePersonFilters(results, resolvedFilters, request.people, suggestions?.people ?? []);
-    }
-
-    if (request.tags?.length) {
-      this.resolveIdFilters(
-        results,
-        resolvedFilters,
-        'tag',
-        request.tags,
-        suggestions?.tags.map((tag) => ({ id: tag.id, value: tag.value })) ?? [],
-        'tagIds',
-      );
-    }
-
-    if (request.albums?.length) {
-      const visibleAlbums = await this.albumRepository.getAgentAlbums(auth.user.id);
-      const albums = visibleAlbums
-        .filter((album) => {
-          const isOwned = album.ownerId === auth.user.id;
-          return isOwned
-            ? session.permissionPlanSnapshot.assetScope.owned
-            : session.permissionPlanSnapshot.assetScope.sharedSpaces;
-        })
-        .map((album) => ({ id: album.id, value: album.albumName }));
-      this.resolveIdFilters(results, resolvedFilters, 'album', request.albums, albums, 'albumIds');
-    }
-
-    if (request.cameraMakes?.length) {
-      for (const query of request.cameraMakes) {
-        const matched = this.matchVisibleCandidates(
-          (suggestions?.cameraMakes ?? []).map((value) => ({ value })),
-          query,
-          'cameraMake',
-          (candidate) => ({ make: candidate.value }),
-        );
-        if (matched.status === 'matched') {
-          resolvedFilters.make = matched.value;
-          const models = await this.searchRepository.getCameraModels([auth.user.id], {
-            ...repositoryScope,
-            make: matched.value,
-          });
-          matched.choices = models.slice(0, 5).map((model) => ({
-            value: model,
-            label: model,
-            searchFilter: { make: matched.value, model },
-          }));
-        }
-        results.push(matched);
-      }
-    }
-
-    if (request.cameraModels?.length) {
-      const models = canUseRepositoryCandidates
-        ? await this.searchRepository.getCameraModels([auth.user.id], {
-            ...repositoryScope,
-            ...(resolvedFilters.make ? { make: resolvedFilters.make } : {}),
-          })
-        : [];
-      for (const query of request.cameraModels) {
-        const matched = this.matchVisibleCandidates(
-          models.map((value) => ({ value })),
-          query,
-          'cameraModel',
-          (candidate) => ({ model: candidate.value }),
-        );
-        if (matched.status === 'matched') {
-          resolvedFilters.model = matched.value;
-        }
-        results.push(matched);
-      }
-    }
-
-    if (request.lensModels?.length) {
-      const lensModels = canUseRepositoryCandidates
-        ? await this.searchRepository.getCameraLensModels([auth.user.id], {
-            ...repositoryScope,
-            ...(resolvedFilters.make ? { make: resolvedFilters.make } : {}),
-            ...(resolvedFilters.model ? { model: resolvedFilters.model } : {}),
-          })
-        : [];
-      for (const query of request.lensModels) {
-        const matched = this.matchVisibleCandidates(
-          lensModels.map((value) => ({ value })),
-          query,
-          'lensModel',
-          (candidate) => ({ lensModel: candidate.value }),
-        );
-        if (matched.status === 'matched') {
-          resolvedFilters.lensModel = matched.value;
-        }
-        results.push(matched);
-      }
-    }
-
-    return { resolvedFilters, results };
-  }
-
-  private canUseResolverRepositoryCandidates(
-    session: AgentSession,
-    scope: AgentResolveAssetSearchFiltersToolRequestDto['scope'],
-  ): boolean {
-    return session.permissionPlanSnapshot.assetScope.owned || !!scope?.spaceId;
-  }
-
-  private resolvePersonFilters(
-    results: AgentResolvedAssetSearchFilterResult[],
-    resolvedFilters: AgentSearchAssetsFilters,
-    queries: string[],
-    people: Array<{
-      id: string;
-      name: string;
-      primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
-    }>,
-  ) {
-    const candidates = people.map((person) => ({
-      id: person.primaryProfile?.id ?? person.id,
-      value: person.name,
-      searchFilter: this.getPersonSearchFilter(person, resolvedFilters.spaceId),
-    }));
-
-    for (const query of queries) {
-      const matched = this.matchVisibleCandidates(candidates, query, 'person', (candidate) => candidate.searchFilter);
-      if (matched.status === 'matched') {
-        this.mergeResolvedPersonFilter(resolvedFilters, matched.searchFilter);
-      }
-      results.push(matched);
-    }
-  }
-
-  private getPersonSearchFilter(
-    person: {
-      id: string;
-      primaryProfile?: { type: 'user-person' | 'space-person'; id: string; spaceId?: string };
-    },
-    resolvedSpaceId?: string,
-  ): Partial<AgentSearchAssetsFilters> {
-    const profile = person.primaryProfile;
-    if (resolvedSpaceId) {
-      if (!profile || (profile.type === 'space-person' && (!profile.spaceId || profile.spaceId === resolvedSpaceId))) {
-        return { spaceId: resolvedSpaceId, spacePersonIds: [profile?.id ?? person.id] };
-      }
-
-      return {};
-    }
-
-    if (!profile || profile.type === 'user-person') {
-      return { personIds: [profile?.id ?? person.id] };
-    }
-
-    if (profile.type === 'space-person' && profile.spaceId) {
-      return { spaceId: profile.spaceId, spacePersonIds: [profile.id] };
-    }
-
-    return {};
-  }
-
-  private mergeResolvedPersonFilter(
-    resolvedFilters: AgentSearchAssetsFilters,
-    searchFilter: Partial<AgentSearchAssetsFilters> | undefined,
-  ) {
-    if (!searchFilter) {
-      return;
-    }
-
-    if (searchFilter.spaceId && searchFilter.spacePersonIds?.length) {
-      resolvedFilters.spaceId = searchFilter.spaceId;
-      resolvedFilters.spacePersonIds = [
-        ...new Set([...(resolvedFilters.spacePersonIds ?? []), ...searchFilter.spacePersonIds]),
-      ];
-      return;
-    }
-
-    if (searchFilter.personIds?.length) {
-      resolvedFilters.personIds = [...new Set([...(resolvedFilters.personIds ?? []), ...searchFilter.personIds])];
-    }
-  }
-
-  private resolveIdFilters(
-    results: AgentResolvedAssetSearchFilterResult[],
-    resolvedFilters: AgentSearchAssetsFilters,
-    kind: Extract<AgentResolvedAssetSearchFilterKind, 'person' | 'tag' | 'album'>,
-    queries: string[],
-    candidates: Array<{ id: string; value: string }>,
-    filterKey: 'personIds' | 'tagIds' | 'albumIds',
-  ) {
-    for (const query of queries) {
-      const matched = this.matchVisibleCandidates(candidates, query, kind, (candidate) => ({
-        [filterKey]: [candidate.id],
-      }));
-      if (matched.status === 'matched' && matched.id) {
-        resolvedFilters[filterKey] = [...new Set([...(resolvedFilters[filterKey] ?? []), matched.id])];
-      }
-      results.push(matched);
-    }
-  }
-
-  private matchVisibleCandidates<T extends { id?: string; value: string }>(
-    candidates: T[],
-    query: string,
-    kind: AgentResolvedAssetSearchFilterKind,
-    getSearchFilter: (candidate: T) => Partial<AgentSearchAssetsFilters>,
-  ): AgentResolvedAssetSearchFilterResult {
-    const exactMatches = candidates.filter((candidate) => this.isExactMatch(candidate.value, query));
-    if (exactMatches.length === 1) {
-      const candidate = exactMatches[0];
-      return {
-        kind,
-        query,
-        status: 'matched',
-        id: candidate.id,
-        value: candidate.value,
-        searchFilter: getSearchFilter(candidate),
-        choices: [],
-        message: `Matched ${kind} "${query}"`,
-      };
-    }
-
-    if (exactMatches.length > 1) {
-      return {
-        kind,
-        query,
-        status: 'ambiguous',
-        choices: exactMatches.flatMap((candidate) => {
-          const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
-        }),
-        message: `Multiple visible ${kind} matches found`,
-      };
-    }
-
-    return {
-      kind,
-      query,
-      status: 'not_found',
-      choices: this.getNotFoundSuggestionCandidates(candidates, query)
-        .flatMap((candidate) => {
-          const searchFilter = getSearchFilter(candidate);
-          return this.hasSearchFilter(searchFilter) ? [this.choiceForIdCandidate(candidate, kind, searchFilter)] : [];
-        })
-        .slice(0, 5),
-      message: `No visible ${kind} match found`,
-    };
-  }
-
-  private hasSearchFilter(searchFilter: Partial<AgentSearchAssetsFilters>): boolean {
-    return Object.keys(searchFilter).length > 0;
-  }
-
   private getResolverTermCount(request: AgentResolveAssetSearchFiltersToolRequestDto): number {
     return [
       request.people,
@@ -1200,36 +857,6 @@ export class AgentToolService {
       request.cameraModels,
       request.lensModels,
     ].reduce((total, terms) => total + (terms?.length ?? 0), 0);
-  }
-
-  private getNotFoundSuggestionCandidates<T extends { value: string }>(candidates: T[], query: string): T[] {
-    const normalizedQuery = this.normalizeResolverTerm(query);
-    const related = candidates.filter((candidate) => {
-      const normalizedCandidate = this.normalizeResolverTerm(candidate.value);
-      return normalizedCandidate.includes(normalizedQuery) || normalizedQuery.includes(normalizedCandidate);
-    });
-    return related.length > 0 ? related : candidates;
-  }
-
-  private choiceForIdCandidate<T extends { id?: string; value: string }>(
-    candidate: T,
-    _kind: AgentResolvedAssetSearchFilterKind,
-    searchFilter: Partial<AgentSearchAssetsFilters>,
-  ): AgentResolvedAssetSearchFilterChoice {
-    return {
-      ...(candidate.id ? { id: candidate.id } : {}),
-      value: candidate.value,
-      label: candidate.value,
-      searchFilter,
-    };
-  }
-
-  private isExactMatch(candidate: string, query: string): boolean {
-    return this.normalizeResolverTerm(candidate) === this.normalizeResolverTerm(query);
-  }
-
-  private normalizeResolverTerm(term: string): string {
-    return term.trim().toLocaleLowerCase();
   }
 
   private readAssetMetadataDescriptor(): AgentReadToolDescriptor<

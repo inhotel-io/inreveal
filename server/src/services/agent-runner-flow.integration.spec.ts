@@ -49,6 +49,7 @@ import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-toke
 import { AgentRunnerService } from 'src/services/agent-runner.service';
 import { AgentSessionService } from 'src/services/agent-session.service';
 import { AgentToolService } from 'src/services/agent-tool.service';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpSuccessResponse, AgentMcpToolCallResult } from 'src/types/agent-mcp.types';
 import { AgentMessageContent } from 'src/types/agent-message.types';
 import { AgentAlbumOperationInput } from 'src/types/agent-operation.types';
@@ -766,6 +767,11 @@ const setup = () => {
     toolCalls as unknown as AgentToolCallRepository,
     runnerService,
     { search: vi.fn(() => Promise.resolve([])) } as never,
+    new AgentAssetSearchFilterResolverService(
+      searchRepository as never,
+      albumRepository as unknown as AlbumRepository,
+      sharedSpaceRepository as unknown as SharedSpaceRepository,
+    ),
   );
   toolServiceContainer.current = toolService;
   const mcpToolContractService = new AgentMcpToolContractService();

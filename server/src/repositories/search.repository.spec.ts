@@ -537,6 +537,26 @@ describe(SearchRepository.name, () => {
     });
   });
 
+  describe('searchAssetBuilder album match semantics', () => {
+    it('keeps albumIds as all-match by default', () => {
+      const sql = buildAssetSearchSql({
+        albumIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
+      });
+
+      expect(sql).toMatch(/having\s+count\(distinct\s+"albumId"\)/i);
+    });
+
+    it('uses any-match album filtering when albumMatchAny is true', () => {
+      const sql = buildAssetSearchSql({
+        albumIds: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
+        albumMatchAny: true,
+      });
+
+      expect(sql).toMatch(/"albumId"\s*=\s*any\(\$\d+::uuid\[\]\)/i);
+      expect(sql).not.toMatch(/having\s+count\(distinct\s+"albumId"\)/i);
+    });
+  });
+
   describe('searchAssetBuilder people semantics', () => {
     it('uses AND semantics for space person filters by default', () => {
       const sql = buildAssetSearchSql({
