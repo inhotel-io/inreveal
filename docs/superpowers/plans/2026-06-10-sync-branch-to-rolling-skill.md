@@ -666,7 +666,8 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
    The script refuses on: dirty worktree, rebase/cherry-pick in progress, branch not checked
    out here, missing or stale (non-ancestor) tag, merge commits in the replay range. It backs up the branch to
    `origin/backup/<branch>-YYYYMMDD-<sha>`, runs `git rebase --onto NEW OLD <branch>`, and on
-   clean completion prints a range-diff + own-commit-count comparison and moves + pushes the tag.
+   clean completion moves + pushes the tag, then prints a range-diff + own-commit-count
+   comparison.
 3. **On conflict (exit 3):** resolve per the `rebase-upstream-report` conflict discipline —
    read the full file, prefer upstream/rolling for upstream-owned code, preserve branch
    additions, record a Conflict Resolution Entry per file (fork side / upstream side /
@@ -674,6 +675,8 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
    ```bash
    ~/.claude/skills/sync-branch-to-rolling/sync.sh --finish
    ```
+   (If you `git rebase --abort` instead, `--finish` refuses — the tag stays at the old base
+   and the sync simply never happened; rerun later.)
 4. Review the range-diff output. Own-commit drops are expected only when the same change
    reached rolling via origin/main fork-sync — verify each drop is explainable.
 5. Run verification tiers (below), then push per the branch profile:
@@ -730,8 +733,8 @@ missing → **ONBOARD** (first transfer), present → **MAINTAIN**.
 
 ## Verification tiers
 
-- **Tier 1 — every sync:** `make check-server` + `cd server && pnpm exec tsc --noEmit`
-  - the profile's fast suites.
+- **Tier 1 — every sync:** `make check-server`, direct `cd server && pnpm exec tsc --noEmit`,
+  and the profile's fast suites.
 - **Tier 2 — conflicts occurred, or computed overlap non-empty**
   (`git diff --name-only OLD NEW` ∩ branch's own touched files — compute per sync; the
   profile hotspot list is advisory only): full regen pass + profile full suites +
