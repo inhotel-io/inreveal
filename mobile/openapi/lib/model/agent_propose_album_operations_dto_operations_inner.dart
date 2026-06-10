@@ -24,7 +24,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
     this.assetIds = const [],
   });
 
-  AgentAssetRemoveTagOperationType type;
+  AgentAlbumSetCoverOperationType type;
 
   String summary;
 
@@ -48,7 +48,7 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
 
   bool enabled;
 
-  AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload payload;
+  Object payload;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -123,13 +123,13 @@ class AgentProposeAlbumOperationsDtoOperationsInner {
       final json = value.cast<String, dynamic>();
 
       return AgentProposeAlbumOperationsDtoOperationsInner(
-        type: AgentAssetRemoveTagOperationType.fromJson(json[r'type'])!,
+        type: AgentAlbumSetCoverOperationType.fromJson(json[r'type'])!,
         summary: mapValueOfType<String>(json, r'summary')!,
         targetKind: AgentOperationTargetKind.fromJson(json[r'targetKind'])!,
         temporaryTargetId: mapValueOfType<String>(json, r'temporaryTargetId'),
         riskLevel: AgentOperationRiskLevel.fromJson(json[r'riskLevel']),
         enabled: mapValueOfType<bool>(json, r'enabled') ?? true,
-        payload: AgentProposeAlbumOperationsDtoOperationsInnerOneOf13Payload.fromJson(json[r'payload'])!,
+        payload: mapValueOfType<Object>(json, r'payload')!,
         targetId: mapValueOfType<String>(json, r'targetId'),
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
