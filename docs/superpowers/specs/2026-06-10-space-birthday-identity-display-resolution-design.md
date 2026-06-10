@@ -21,18 +21,18 @@ the same identity.
 
 ### Observed data (one identity, 4 spaces)
 
-| Profile                       | birthDate    | birthDateSource | note                          |
-| ----------------------------- | ------------ | --------------- | ----------------------------- |
-| `shared_space_person` (Karolin) | `2014-02-14` | `manual`        | set today by an editor        |
-| `shared_space_person`          | `NULL`       | `none`          |                               |
-| `shared_space_person`          | `NULL`       | `none`          |                               |
-| `shared_space_person`          | `2013-02-14` | `manual`        | set earlier by a different user (wrong year) |
-| `person` (owner library)      | `NULL`       | n/a             | never touched by space edits  |
+| Profile                         | birthDate    | birthDateSource | note                                         |
+| ------------------------------- | ------------ | --------------- | -------------------------------------------- |
+| `shared_space_person` (Karolin) | `2014-02-14` | `manual`        | set today by an editor                       |
+| `shared_space_person`           | `NULL`       | `none`          |                                              |
+| `shared_space_person`           | `NULL`       | `none`          |                                              |
+| `shared_space_person`           | `2013-02-14` | `manual`        | set earlier by a different user (wrong year) |
+| `person` (owner library)        | `NULL`       | n/a             | never touched by space edits                 |
 
 ## Root cause
 
 Person metadata is **resolved at read time**, not written back to `person`. The owner
-seeing a space-set *name* is not a write — it is a query-time `COALESCE` in
+seeing a space-set _name_ is not a write — it is a query-time `COALESCE` in
 `FaceIdentityRepository.hydrateAccessiblePeople` (`face-identity.repository.ts`, the
 `profiles` → `ranked_profiles` → final `SELECT` CTE chain). This same path serves both
 the people list (`getAccessiblePeople`) and the single-person view
@@ -138,15 +138,15 @@ unchanged. `name` continues to resolve via `display_profiles` exactly as today.
 ## Scope / non-goals
 
 - **No write-back to `person`.** The owner's library `person.birthDate` stays editor-immutable;
-  the owner simply *sees* the resolved identity birthday, identically to how they see a
+  the owner simply _sees_ the resolved identity birthday, identically to how they see a
   space-set name today.
 - **No change to the write-time backfill** (`inheritSpacePersonMetadata`) or to the
   diverging stored `shared_space_person` rows. Space D's stale `2013-02-14` remains in the
-  DB; it would only surface if it were the most-recent manual value *and* no owner value
+  DB; it would only surface if it were the most-recent manual value _and_ no owner value
   existed — consistent and acceptable.
 - **Search path is unaffected (verified).** `SearchRepository.searchFaces` /
   `getFilteredIdentityPeople` return only `id/name/profileType/profileId/spaceId` — no
-  `birthDate`. (`minBirthDate` there is an age *filter*, not a displayed value.) No change.
+  `birthDate`. (`minBirthDate` there is an age _filter_, not a displayed value.) No change.
 - **`getMetadataInheritanceCandidates` is unchanged.** It feeds the write-time backfill,
   which is out of scope (above).
 - **No schema migration.** All columns used already exist (`person.birthDate`;
@@ -185,7 +185,7 @@ is caught.
 ### TDD cadence (one test at a time; red → green → next)
 
 **Behavior-driving tests** — each must be written and confirmed to fail before the
-implementation step that makes it pass. They are constructed so a *partial* implementation
+implementation step that makes it pass. They are constructed so a _partial_ implementation
 cannot pass by accident:
 
 1. **Repro — space-only birthday (the bug).** Owner `person`: named, NULL birthday. One
@@ -196,7 +196,7 @@ cannot pass by accident:
 2. **Single-person view parity.** Same fixture via `getAccessiblePersonByProfileId` → same
    `2014-02-14`. **Red today.** Confirms the shared SQL covers both entry points.
 3. **Owner precedence over a space value.** Owner `person`: manual `1990-01-01`. A space:
-   manual `2014-02-14` (with a *newer* `birthDateSourceUpdatedAt`). → owner's `1990-01-01`
+   manual `2014-02-14` (with a _newer_ `birthDateSourceUpdatedAt`). → owner's `1990-01-01`
    wins. Drives the `user-person`-first ORDER BY term (a recency-only ranking would pick the
    space value and fail this test).
 4. **Most-recent-manual tiebreak (recency is the deciding factor).** Owner: no birthday. Two
@@ -205,7 +205,7 @@ cannot pass by accident:
    selects it — a naive `profileId`/`updatedAt` ordering would pick the wrong one. Asserts
    the newer-manual date.
 5. **Manual beats inherited.** Owner: no birthday. One space `manual` = date A, another space
-   `inherited` = date B with a *newer* `birthDateSourceUpdatedAt`. → date A (manual) wins,
+   `inherited` = date B with a _newer_ `birthDateSourceUpdatedAt`. → date A (manual) wins,
    proving the `manual < inherited` source tier outranks pure recency.
 
 **Boundary / regression guards** — assert behavior that must be preserved:
