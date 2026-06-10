@@ -679,7 +679,6 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session: { ...session, status: AgentSessionStatus.Running },
-        activityVisibilityMode: 'compact',
         toolCalls: [
           makeToolCall({
             id: 'early-tool',
@@ -935,7 +934,6 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session: { ...session, status: AgentSessionStatus.Completed },
-        activityVisibilityMode: 'off',
         toolCalls: [
           makeToolCall({
             id: 'covered-tool',
@@ -971,9 +969,7 @@ describe(AgentSessionChatPanel.name, () => {
       }),
     ]);
 
-    render(AgentSessionChatPanel, {
-      props: { session, activityVisibilityMode: 'off' },
-    });
+    render(AgentSessionChatPanel, { props: { session } });
 
     expect(await screen.findByText('Apply plan')).toBeInTheDocument();
     // Activity events no longer drive timeline rendering — only tool calls do
@@ -1042,7 +1038,6 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'expanded',
         seedMessages: [
           {
             ...makeMessage('message-user', AgentMessageRole.User, 'Find my photos'),
@@ -1123,7 +1118,6 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session: { ...session, status: AgentSessionStatus.WaitingForToolApproval },
-        activityVisibilityMode: 'off',
         actionDock: createRawSnippet(() => ({
           render: () => '<section aria-label="Approval request">Approve?</section>',
         })),
@@ -1164,7 +1158,6 @@ describe(AgentSessionChatPanel.name, () => {
     const view = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'compact',
         seedMessages,
         toolCalls: runningBurst,
       },
@@ -1202,7 +1195,6 @@ describe(AgentSessionChatPanel.name, () => {
     const view = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'expanded',
         seedMessages,
         toolCalls: initialToolCalls,
       },
