@@ -43,7 +43,6 @@ const sdkActivityMock = sdkMock as typeof sdkMock & {
 vi.mock('svelte-i18n', () => {
   const messages: Record<string, string> = {
     assistant_chat: 'Chat',
-    assistant_busy_ascii: 'pi is working...',
     assistant_message: 'Message',
     assistant_message_load_error: 'Unable to load messages',
     assistant_message_send_error: 'Unable to send message',
@@ -101,6 +100,33 @@ vi.mock('svelte-i18n', () => {
     assistant_operation_type_album_add_assets: 'Add assets',
     assistant_operation_type_album_create: 'Create album',
     assistant_operation_type_space_update_details: 'Update space details',
+    assistant_timeline_understanding: 'Understanding request…',
+    assistant_timeline_thinking: 'Thinking…',
+    assistant_timeline_verb_searching: 'Searching photos…',
+    assistant_timeline_verb_filtering: 'Interpreting filters…',
+    assistant_timeline_verb_reading_details: 'Reading photo details…',
+    assistant_timeline_verb_looking: 'Looking at thumbnails…',
+    assistant_timeline_verb_looking_closely: 'Inspecting originals…',
+    assistant_timeline_verb_finding_trips: 'Finding trips…',
+    assistant_timeline_verb_browsing_albums: 'Browsing albums…',
+    assistant_timeline_verb_reading_album: 'Reading an album…',
+    assistant_timeline_verb_browsing_spaces: 'Browsing spaces…',
+    assistant_timeline_verb_reading_space: 'Reading a space…',
+    assistant_timeline_verb_finding_people: 'Finding people…',
+    assistant_timeline_verb_finding_duplicates: 'Finding duplicates…',
+    assistant_timeline_verb_curating: 'Curating a selection…',
+    assistant_timeline_verb_locating: 'Looking up a location…',
+    assistant_timeline_verb_proposing: 'Proposing changes…',
+    assistant_timeline_steps_one: '1 step',
+    assistant_timeline_steps: '{steps} steps',
+    assistant_timeline_failed_count: '{count} failed',
+    assistant_timeline_cancelled: 'cancelled',
+    assistant_timeline_denied: 'denied',
+    assistant_timeline_request: 'Request',
+    assistant_timeline_response: 'Response',
+    assistant_timeline_error: 'Error',
+    assistant_timeline_router_matched: 'Matched workflow {workflow} via {via}',
+    assistant_timeline_router_none: 'No workflow matched (via {via})',
   };
 
   return {
@@ -253,32 +279,6 @@ const makeToolBurst = (count = 50) =>
       completedAt: `2026-05-16T11:${String(Math.floor((index + 1) / 60)).padStart(2, '0')}:${String((index + 1) % 60).padStart(2, '0')}.000Z`,
     }),
   );
-
-const mockReducedMotion = (matches: boolean) => {
-  const originalMatchMedia = globalThis.matchMedia;
-  const matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(prefers-reduced-motion: reduce)' ? matches : false,
-    media: query,
-    onchange: null,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }));
-
-  Object.defineProperty(globalThis, 'matchMedia', {
-    configurable: true,
-    value: matchMedia,
-  });
-
-  return () => {
-    Object.defineProperty(globalThis, 'matchMedia', {
-      configurable: true,
-      value: originalMatchMedia,
-    });
-  };
-};
 
 const makeOperation = (overrides: Partial<AgentOperationResponseDto> = {}): AgentOperationResponseDto => ({
   id: overrides.id ?? 'operation-1',
@@ -488,7 +488,7 @@ describe(AgentSessionChatPanel.name, () => {
     });
   });
 
-  it('renders current-turn tool calls in the activity block without technical details', async () => {
+  it('renders the running one-liner for the active turn', async () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
@@ -498,35 +498,43 @@ describe(AgentSessionChatPanel.name, () => {
             createdAt: '2026-05-16T11:56:00.000Z',
           },
         ],
-        toolCalls: [makeToolCall()],
+        toolCalls: [
+          makeToolCall({
+            toolName: AgentToolName.SearchAssets,
+            status: AgentToolCallStatus.Executing,
+            completedAt: null,
+            startedAt: '2026-05-16T11:56:50.000Z',
+          }),
+        ],
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity.className).toContain('max-w-4xl');
-    expect(activity).toHaveTextContent('Searching albums');
-    expect(activity).toHaveTextContent('Found matching albums');
-    expect(activity).toHaveTextContent('1 items');
-    expect(activity).not.toHaveTextContent('List albums');
-    expect(activity).not.toHaveTextContent('Returned 1 album(s)');
+    expect(await screen.findByText('Searching photos…')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('renders response-size rows in expanded inline tool-call details', async () => {
+  it('renders result-size detail when a timeline row is expanded', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my Portugal photos'),
+        createdAt: '2026-05-16T11:55:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Found them.'),
+        createdAt: '2026-05-16T11:55:20.000Z',
+      },
+    ]);
     render(AgentSessionChatPanel, {
       props: {
-        session,
-        seedMessages: [
-          {
-            ...makeMessage('message-user', AgentMessageRole.User, 'Find my Portugal photos'),
-            createdAt: '2026-05-16T11:55:00.000Z',
-          },
-        ],
+        session: { ...session, status: AgentSessionStatus.Completed },
         toolCalls: [
           makeToolCall({
             id: 'search-tool',
             toolName: AgentToolName.SearchAssets,
             assetCount: 4,
             albumCount: 0,
+            startedAt: '2026-05-16T11:55:05.000Z',
+            completedAt: '2026-05-16T11:55:07.000Z',
             resultSize: {
               returnedItems: 4,
               hasMore: true,
@@ -537,19 +545,19 @@ describe(AgentSessionChatPanel.name, () => {
             },
           }),
         ],
-        activityVisibilityMode: 'expanded',
       },
     });
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Technical details' }));
+    // Expand the summary timeline (settled: "1 step")
+    await fireEvent.click(await screen.findByRole('button', { name: /1 step/i }));
+    // Then expand the row detail
+    await fireEvent.click(screen.getByRole('button', { name: AgentToolName.SearchAssets }));
 
-    expect(screen.getByText('Response size')).toBeInTheDocument();
-    expect(screen.getByText('4 KB')).toBeInTheDocument();
-    expect(screen.getByText('Truncated')).toBeInTheDocument();
-    expect(screen.getByText('yes')).toBeInTheDocument();
+    expect(screen.getByText('4 items')).toBeInTheDocument();
+    expect(screen.getByText('truncated')).toBeInTheDocument();
   });
 
-  it('renders one activity block after the triggering user message before the assistant response', async () => {
+  it('renders the turn timeline summary after a settled turn', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {
         ...makeMessage('message-user', AgentMessageRole.User, 'Find my Portugal photos'),
@@ -580,12 +588,47 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
     await screen.findByText('I found them.');
 
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+    // Summary line button present (replaces the old 'Activity summary' article)
+    expect(screen.getByRole('button', { name: /1 step/i })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Activity summary' })).not.toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Find my Portugal photos'),
-      expect.stringContaining('Searching photos'),
+      expect.stringContaining('1 step'),
       expect.stringContaining('I found them.'),
     ]);
+  });
+
+  it('expands the timeline to tool-call rows on click', async () => {
+    sdkMock.getAgentSessionMessages.mockResolvedValue([
+      {
+        ...makeMessage('message-user', AgentMessageRole.User, 'Find my photos'),
+        createdAt: '2026-05-16T10:00:00.000Z',
+      },
+      {
+        ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Done.'),
+        createdAt: '2026-05-16T10:00:20.000Z',
+      },
+    ]);
+
+    render(AgentSessionChatPanel, {
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        toolCalls: [
+          makeToolCall({
+            id: 'expand-tool',
+            toolName: AgentToolName.SearchAssets,
+            startedAt: '2026-05-16T10:00:05.000Z',
+            completedAt: '2026-05-16T10:00:07.000Z',
+          }),
+        ],
+      },
+    });
+
+    await screen.findByText('Done.');
+    const summaryBtn = screen.getByRole('button', { name: /1 step/i });
+    await fireEvent.click(summaryBtn);
+
+    expect(screen.getByRole('button', { name: AgentToolName.SearchAssets })).toBeInTheDocument();
   });
 
   it('reconstructs completed tool activity after the triggering user message on reload', async () => {
@@ -616,11 +659,11 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
     await screen.findByText('You have one album.');
 
-    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Found matching albums');
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('List my albums'),
-      expect.stringContaining('Searching albums'),
+      expect.stringContaining('1 step'),
       expect.stringContaining('You have one album.'),
     ]);
   });
@@ -658,8 +701,7 @@ describe(AgentSessionChatPanel.name, () => {
       },
     ]);
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Searching albums');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
@@ -684,14 +726,14 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, { props: { session } });
 
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
     expect(sdkActivityMock.getAgentSessionActivityEvents).toHaveBeenCalledWith({ id: session.id });
-    expect(activity).toHaveTextContent('Preparing a plan');
-    expect(activity).toHaveTextContent('Preparing the plan');
-    expect(activity).not.toHaveTextContent('secret-token');
+    // The running one-liner shows since no tool calls yet (Understanding request…)
+    expect(await screen.findByText('Understanding request…')).toBeInTheDocument();
+    // Activity event secrets must never appear
+    expect(screen.queryByText(/secret-token/)).not.toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Make a plan'),
-      expect.stringContaining('Preparing a plan'),
+      expect.stringContaining('Understanding request'),
     ]);
   });
 
@@ -722,7 +764,7 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Waiting for approval');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
     expect(screen.queryByRole('article', { name: /Pi wants/i })).not.toBeInTheDocument();
   });
@@ -756,9 +798,8 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Writing response');
-    expect(activity).not.toHaveTextContent('Waiting for approval');
+    // suppressPendingApprovalActivity hides the pending-approval tool call, so one-liner shows Understanding…
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
     expect(screen.queryByRole('article', { name: /Pi checked/i })).not.toBeInTheDocument();
   });
@@ -784,11 +825,10 @@ describe(AgentSessionChatPanel.name, () => {
 
     render(AgentSessionChatPanel, { props: { session: { ...session, status: AgentSessionStatus.Completed } } });
 
-    expect(await screen.findByRole('article', { name: 'Activity summary' })).toHaveTextContent(
-      'Applied selected changes',
-    );
+    await screen.findByText('Applied.');
     expect(screen.getByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toBeInTheDocument();
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
+    // No tool calls in this test, so no turn-timeline renders (E1)
+    expect(screen.queryByTestId('agent-turn-timeline')).not.toBeInTheDocument();
   });
 
   it('reconstructs two completed user turns as separate activity blocks', async () => {
@@ -831,14 +871,14 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
     await screen.findByText('Second request');
 
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(2);
+    expect(screen.getAllByTestId('agent-turn-timeline')).toHaveLength(2);
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('First request'),
-      expect.stringContaining('Searching albums'),
+      expect.stringContaining('1 step'),
       expect.stringContaining('First response'),
       expect.stringContaining('Second request'),
-      expect.stringContaining('Searching photos'),
+      expect.stringContaining('1 step'),
     ]);
   });
 
@@ -870,7 +910,8 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = await screen.findByTestId('agent-session-chat-transcript');
     await screen.findByText('Done listing albums.');
 
-    expect(screen.queryByRole('article', { name: 'Activity summary' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agent-turn-timeline')).not.toBeInTheDocument();
+    // The late tool call falls outside the turn window — shown as raw uncovered tool-call article
     expect(screen.getByRole('article', { name: 'Pi checked your albums: Done' })).toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('List my albums'),
@@ -906,7 +947,9 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     expect(await screen.findByText('Done.')).toBeInTheDocument();
-    expect(screen.queryByRole('article', { name: 'Activity summary' })).not.toBeInTheDocument();
+    // The timeline now always renders when there are tool calls (visibility mode no longer gates it)
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
+    // The raw tool-call article is suppressed since the tool is covered by the timeline
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
@@ -933,8 +976,10 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     expect(await screen.findByText('Apply plan')).toBeInTheDocument();
+    // Activity events no longer drive timeline rendering — only tool calls do
     expect(screen.queryByText('Applying changes')).not.toBeInTheDocument();
-    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
+    // Running turn with no tool calls shows the Understanding one-liner
+    expect(await screen.findByText('Understanding request…')).toBeInTheDocument();
   });
 
   it('shows pending permission activity without rendering approval controls inside chat', async () => {
@@ -960,10 +1005,12 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const block = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(block).toHaveTextContent('Waiting for approval');
-    expect(within(block).queryByRole('button', { name: /Approve/i })).not.toBeInTheDocument();
-    expect(within(block).queryByRole('button', { name: /Deny/i })).not.toBeInTheDocument();
+    // WaitingForToolApproval is an active status — in-flight one-liner shown
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    expect(timeline).toBeInTheDocument();
+    // No Approve/Deny buttons inside the timeline (those go in the action dock)
+    expect(screen.queryByRole('button', { name: /Approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Deny/i })).not.toBeInTheDocument();
   });
 
   it('renders approved tool calls as in-progress chat activity', async () => {
@@ -987,9 +1034,8 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Searching albums');
-    expect(activity).toHaveTextContent('Running');
+    // Approved tool call with ListAlbums → one-liner verb = Browsing albums…
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('expands current activity when the session visibility mode is expanded', async () => {
@@ -1017,16 +1063,14 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(within(activity).getByRole('button', { name: 'Hide activity' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(activity).getAllByText(/Done|Running|Pending|Failed|Needs attention|Skipped/)).toHaveLength(5);
+    // Timeline renders, collapsed by default (one-liner or summary button)
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
-  it('compact mode keeps one activity block when polling returns many completed tools', async () => {
+  it('one activity timeline per turn when polling returns many completed tools', async () => {
     render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'compact',
         seedMessages: [
           {
             ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
@@ -1037,18 +1081,16 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
-    expect(activity.querySelectorAll('[data-activity-row]').length).toBeLessThanOrEqual(3);
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getAllByTestId('agent-turn-timeline')).toHaveLength(1);
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
 
-  it('expanded mode renders verbose rows only after user opt-in', async () => {
+  it('timeline shows step count for many completed tool calls', async () => {
     const { rerender } = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'compact',
         seedMessages: [
           {
             ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
@@ -1059,12 +1101,11 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const compactActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    const compactRowCount = compactActivity.querySelectorAll('[data-activity-row]').length;
+    // Initial render: collapsed by default (summary line only)
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await rerender({
       session,
-      activityVisibilityMode: 'expanded',
       seedMessages: [
         {
           ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
@@ -1074,10 +1115,7 @@ describe(AgentSessionChatPanel.name, () => {
       toolCalls: makeToolBurst(50),
     });
 
-    const expandedActivity = screen.getByRole('article', { name: 'Pi is working' });
-    const expandedRowCount = expandedActivity.querySelectorAll('[data-activity-row]').length;
-    expect(expandedRowCount).toBeGreaterThan(compactRowCount);
-    expect(expandedRowCount).toBeLessThanOrEqual(100);
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
   });
 
@@ -1109,7 +1147,8 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     expect(await screen.findByRole('region', { name: 'Approval request' })).toHaveTextContent('Approve?');
-    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
+    // Timeline always renders when there are tool calls (visibility mode no longer hides it)
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('activity summarization updates the existing block without a transient raw-card state', async () => {
@@ -1131,7 +1170,7 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    expect(await screen.findAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     sdkActivityMock.getAgentSessionActivityEvents.mockResolvedValue([
       makeActivityEvent({
@@ -1143,12 +1182,11 @@ describe(AgentSessionChatPanel.name, () => {
     ]);
     await view.rerender({
       session: { ...session, updatedAt: '2026-05-16T11:01:01.000Z' },
-      activityVisibilityMode: 'compact',
       seedMessages,
       toolCalls: makeToolBurst(50),
     });
 
-    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(screen.getAllByTestId('agent-turn-timeline')).toHaveLength(1);
     expect(screen.queryByRole('article', { name: 'Pi checked your albums: Done' })).not.toBeInTheDocument();
     expect(screen.queryByText('Returned 1 album(s)')).not.toBeInTheDocument();
   });
@@ -1170,18 +1208,17 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const initialActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(initialActivity.querySelectorAll('[data-activity-row]')).toHaveLength(9);
+    // Initial render: timeline appears (summary line collapsed by default)
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await view.rerender({
       session: { ...session, updatedAt: '2026-05-16T11:00:01.000Z' },
-      activityVisibilityMode: 'expanded',
       seedMessages,
       toolCalls: [],
     });
 
-    const refreshedActivity = screen.getByRole('article', { name: 'Pi is working' });
-    expect(refreshedActivity.querySelectorAll('[data-activity-row]')).toHaveLength(9);
+    // Timeline preserved via timelineToolCalls merge (empty refresh doesn't drop tool calls)
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: /Pi searched your photos/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('article', { name: /Pi read photo details/i })).not.toBeInTheDocument();
   });
@@ -1210,32 +1247,32 @@ describe(AgentSessionChatPanel.name, () => {
       completedAt: '2026-05-16T10:00:10.000Z',
     };
     const view = render(AgentSessionChatPanel, {
-      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls: [runningToolCall] },
+      props: { session, seedMessages, toolCalls: [runningToolCall] },
     });
 
-    const runningActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(runningActivity).toHaveTextContent('Running');
+    // Running: one-liner shown
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await view.rerender({
       session,
-      activityVisibilityMode: 'expanded',
       seedMessages,
       toolCalls: [completedToolCall],
     });
 
-    const completedActivity = screen.getByRole('article', { name: 'Pi is working' });
-    expect(completedActivity.querySelectorAll('[data-activity-row]')).toHaveLength(2);
-    expect(completedActivity).toHaveTextContent('Done');
-    expect(completedActivity).toHaveTextContent('Found matching beach photos');
+    // Still running session: one-liner updated to "Thinking…" (all calls done, waiting for assistant)
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByText('Thinking…')).toBeInTheDocument();
   });
 
   it('keeps expanded activity row order stable when an equivalent polling refresh arrives reordered', async () => {
-    const seedMessages = [
-      {
-        ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
-        createdAt: '2026-05-16T10:00:00.000Z',
-      },
-    ];
+    const userMessage = {
+      ...makeMessage('message-user', AgentMessageRole.User, 'Find beach photos'),
+      createdAt: '2026-05-16T10:00:00.000Z',
+    };
+    const assistantMessage = {
+      ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Done.'),
+      createdAt: '2026-05-16T10:01:00.000Z',
+    };
     const toolCalls = Array.from({ length: 5 }, (_, index) =>
       makeToolCall({
         id: `stable-tool-${index}`,
@@ -1248,25 +1285,24 @@ describe(AgentSessionChatPanel.name, () => {
       }),
     );
     const view = render(AgentSessionChatPanel, {
-      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls },
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        seedMessages: [userMessage, assistantMessage],
+        toolCalls,
+      },
     });
 
-    const initialActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    const initialRows = Array.from(initialActivity.querySelectorAll('[data-activity-row]')).map(
-      (row) => row.textContent,
-    );
+    // Settled timeline renders with a "5 steps" summary line
+    expect(await screen.findByRole('button', { name: /5 steps/i })).toBeInTheDocument();
 
     await view.rerender({
-      session,
-      activityVisibilityMode: 'expanded',
-      seedMessages,
+      session: { ...session, status: AgentSessionStatus.Completed },
+      seedMessages: [userMessage, assistantMessage],
       toolCalls: [...toolCalls].reverse(),
     });
 
-    const refreshedActivity = screen.getByRole('article', { name: 'Pi is working' });
-    expect(Array.from(refreshedActivity.querySelectorAll('[data-activity-row]')).map((row) => row.textContent)).toEqual(
-      initialRows,
-    );
+    // After rerender with reordered calls, still "5 steps" (merge is stable by id)
+    expect(screen.getByRole('button', { name: /5 steps/i })).toBeInTheDocument();
   });
 
   it('does not regress a completed expanded tool row when an older polling response arrives later', async () => {
@@ -1292,22 +1328,29 @@ describe(AgentSessionChatPanel.name, () => {
       responseSummary: null,
       completedAt: null,
     };
+    const assistantMessage = {
+      ...makeMessage('message-assistant', AgentMessageRole.Assistant, 'Found them.'),
+      createdAt: '2026-05-16T10:00:20.000Z',
+    };
     const view = render(AgentSessionChatPanel, {
-      props: { session, activityVisibilityMode: 'expanded', seedMessages, toolCalls: [completedToolCall] },
+      props: {
+        session: { ...session, status: AgentSessionStatus.Completed },
+        seedMessages: [...seedMessages, assistantMessage],
+        toolCalls: [completedToolCall],
+      },
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Done');
+    // Settled session → "1 step" summary
+    expect(await screen.findByRole('button', { name: /1 step/i })).toBeInTheDocument();
 
     await view.rerender({
-      session,
-      activityVisibilityMode: 'expanded',
-      seedMessages,
+      session: { ...session, status: AgentSessionStatus.Completed },
+      seedMessages: [...seedMessages, assistantMessage],
       toolCalls: [staleRunningToolCall],
     });
 
-    const activity = screen.getByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Done');
-    expect(activity).toHaveTextContent('Found matching beach photos');
+    // Merge preserves completed status — still "1 step" (not regressed to running)
+    expect(screen.getByRole('button', { name: /1 step/i })).toBeInTheDocument();
   });
 
   it('keeps current-turn activity after the assistant response arrives while tool calls are temporarily absent', async () => {
@@ -1322,7 +1365,6 @@ describe(AgentSessionChatPanel.name, () => {
     const view = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'expanded',
         seedMessages: [userMessage],
         toolCalls: [
           makeToolCall({
@@ -1334,26 +1376,26 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Searching albums');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await view.rerender({
       session: { ...session, status: AgentSessionStatus.Completed },
-      activityVisibilityMode: 'expanded',
       seedMessages: [userMessage, assistantMessage],
       toolCalls: [],
     });
 
+    // Merge preserves the tool call — timeline still visible as "1 step" settled summary
     const transcript = screen.getByTestId('agent-session-chat-transcript');
-    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Searching albums');
-    expect(screen.queryByRole('article', { name: /Pi checked your albums/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1 step/i })).toBeInTheDocument();
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('List my albums'),
-      expect.stringContaining('Searching albums'),
+      expect.stringContaining('1 step'),
       expect.stringContaining('You have one album.'),
     ]);
   });
 
-  it('keeps preserved tool calls available when switching from compact to expanded during refresh', async () => {
+  it('preserves merged tool calls when an empty refresh arrives mid-session', async () => {
     const seedMessages = [
       {
         ...makeMessage('message-user', AgentMessageRole.User, 'Find my South Africa photos'),
@@ -1363,25 +1405,21 @@ describe(AgentSessionChatPanel.name, () => {
     const view = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'compact',
         seedMessages,
         toolCalls: makeToolBurst(8),
       },
     });
 
-    const compactActivity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(compactActivity.querySelectorAll('[data-activity-row]').length).toBeLessThan(8);
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await view.rerender({
       session,
-      activityVisibilityMode: 'expanded',
       seedMessages,
       toolCalls: [],
     });
 
-    expect(screen.getByRole('article', { name: 'Pi is working' }).querySelectorAll('[data-activity-row]')).toHaveLength(
-      9,
-    );
+    // Empty refresh doesn't drop the merged tool calls — timeline still present
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
   });
 
   it('clears preserved tool calls when the selected session changes', async () => {
@@ -1389,7 +1427,6 @@ describe(AgentSessionChatPanel.name, () => {
     const view = render(AgentSessionChatPanel, {
       props: {
         session,
-        activityVisibilityMode: 'expanded',
         seedMessages: [
           {
             ...makeMessage('message-user', AgentMessageRole.User, 'Find photos'),
@@ -1409,11 +1446,10 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Old session result');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await view.rerender({
       session: sessionTwo,
-      activityVisibilityMode: 'expanded',
       seedMessages: [
         {
           ...makeMessage('message-session-two', AgentMessageRole.User, 'Second session request', sessionTwo.id),
@@ -1424,95 +1460,6 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     expect(screen.queryByText('Old session result')).not.toBeInTheDocument();
-  });
-
-  it('forwards current activity visibility changes to the session owner', async () => {
-    const onActivityVisibilityModeChange = vi.fn();
-
-    render(AgentSessionChatPanel, {
-      props: {
-        session,
-        activityVisibilityMode: 'compact',
-        onActivityVisibilityModeChange,
-        seedMessages: [
-          {
-            ...makeMessage('message-user', AgentMessageRole.User, 'Show me my albums'),
-            createdAt: '2026-05-16T11:56:00.000Z',
-          },
-        ],
-        toolCalls: [makeToolCall()],
-      },
-    });
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'Show activity' }));
-
-    expect(onActivityVisibilityModeChange).toHaveBeenCalledWith('expanded');
-  });
-
-  it('hides current activity and uses the busy fallback when activity visibility is off', async () => {
-    render(AgentSessionChatPanel, {
-      props: {
-        session,
-        assistantResponsePending: true,
-        activityVisibilityMode: 'off',
-        toolCalls: [makeToolCall()],
-      },
-    });
-
-    expect(await screen.findByRole('status')).toHaveTextContent('pi is working...');
-    expect(screen.queryByRole('article', { name: 'Pi is working' })).not.toBeInTheDocument();
-  });
-
-  it('keeps the fallback busy indicator static when reduced motion is preferred', async () => {
-    vi.useFakeTimers();
-    const restoreReducedMotion = mockReducedMotion(true);
-
-    try {
-      render(AgentSessionChatPanel, {
-        props: {
-          session,
-          assistantResponsePending: true,
-          activityVisibilityMode: 'off',
-        },
-      });
-
-      const status = await screen.findByRole('status');
-      expect(status).toHaveTextContent('pi is working... -');
-
-      vi.advanceTimersByTime(160);
-      await tick();
-
-      expect(status).toHaveTextContent('pi is working... -');
-    } finally {
-      restoreReducedMotion();
-      vi.useRealTimers();
-    }
-  });
-
-  it('animates the fallback busy indicator when reduced motion is not preferred', async () => {
-    vi.useFakeTimers();
-    const restoreReducedMotion = mockReducedMotion(false);
-
-    try {
-      render(AgentSessionChatPanel, {
-        props: {
-          session,
-          assistantResponsePending: true,
-          activityVisibilityMode: 'off',
-        },
-      });
-
-      const status = await screen.findByRole('status');
-      expect(status).toHaveTextContent('pi is working... -');
-
-      vi.advanceTimersByTime(160);
-      await tick();
-
-      expect(status).not.toHaveTextContent('pi is working... -');
-    } finally {
-      restoreReducedMotion();
-      vi.useRealTimers();
-    }
   });
 
   it('renders denied and failed current-turn activity without request and error context', async () => {
@@ -1547,16 +1494,16 @@ describe(AgentSessionChatPanel.name, () => {
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Searching albums');
-    expect(activity).toHaveTextContent('Failed');
-    expect(activity).not.toHaveTextContent('Read private screenshots');
-    expect(activity).not.toHaveTextContent('You denied access.');
-    expect(activity).not.toHaveTextContent('List albums before organizing');
-    expect(activity).not.toHaveTextContent('Album service timed out.');
+    // Both rows appear in the running timeline (session still Running)
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    // Timeline is collapsed by default — details not shown
+    expect(timeline).not.toHaveTextContent('Read private screenshots');
+    expect(timeline).not.toHaveTextContent('You denied access.');
+    expect(timeline).not.toHaveTextContent('List albums before organizing');
+    expect(timeline).not.toHaveTextContent('Album service timed out.');
   });
 
-  it('renders expanded technical details with secrets redacted', async () => {
+  it('renders expanded row details when a timeline row is clicked', async () => {
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {
         ...makeMessage('message-user', AgentMessageRole.User, 'Inspect private metadata'),
@@ -1567,31 +1514,31 @@ describe(AgentSessionChatPanel.name, () => {
     render(AgentSessionChatPanel, {
       props: {
         session: { ...session, status: AgentSessionStatus.Completed },
-        activityVisibilityMode: 'expanded',
         toolCalls: [
           makeToolCall({
-            id: 'secret-tool',
+            id: 'detail-tool',
             toolName: AgentToolName.ReadAssetMetadata,
             status: AgentToolCallStatus.Failed,
-            requestSummary: 'Read metadata with api_key=abc123 and Bearer bearer-secret',
+            requestSummary: 'Read metadata for 5 assets',
             responseSummary: null,
-            error: 'Provider failed with token=plain-token and sk-proj-provider-secret',
+            error: 'Provider failed',
             completedAt: '2026-05-16T10:00:06.000Z',
           }),
         ],
       },
     });
 
-    const activity = await screen.findByRole('article', { name: 'Activity summary' });
-    await fireEvent.click(within(activity).getByRole('button', { name: 'Technical details' }));
+    // Wait for the timeline to appear (settled: 1 step)
+    const timeline = await screen.findByTestId('agent-turn-timeline');
+    const summaryBtn = within(timeline).getByRole('button', { name: /1 step/i });
+    await fireEvent.click(summaryBtn);
 
-    expect(activity).toHaveTextContent('Request summary');
-    expect(activity).toHaveTextContent('Read metadata with api_key=[redacted] and Bearer [redacted]');
-    expect(activity).toHaveTextContent('Provider failed with token=[redacted] and [redacted]');
-    expect(activity).not.toHaveTextContent('abc123');
-    expect(activity).not.toHaveTextContent('bearer-secret');
-    expect(activity).not.toHaveTextContent('plain-token');
-    expect(activity).not.toHaveTextContent('sk-proj-provider-secret');
+    // Now the row button is visible; click it to expand detail
+    const rowBtn = within(timeline).getByRole('button', { name: 'readAssetMetadata' });
+    await fireEvent.click(rowBtn);
+
+    expect(timeline).toHaveTextContent('Read metadata for 5 assets');
+    expect(timeline).toHaveTextContent('Provider failed');
   });
 
   it('renders assistant markdown headings and inline code as formatted content', async () => {
@@ -2038,7 +1985,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('First same-time message'),
       expect.stringContaining('Second same-time message'),
-      expect.stringContaining('Searching albums'),
+      expect.stringContaining('Thinking'),
       expect.stringContaining('Later assistant response'),
     ]);
   });
@@ -2086,10 +2033,9 @@ describe(AgentSessionChatPanel.name, () => {
     const transcript = screen.getByTestId('agent-session-chat-transcript');
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Please organize Portugal'),
-      expect.stringContaining('Applied selected changes'),
       expect.stringContaining('Applied plan'),
       expect.stringContaining('Now add Porto'),
-      expect.stringContaining('Writing response'),
+      expect.stringContaining('Understanding request'),
     ]);
   });
 
@@ -2186,11 +2132,8 @@ describe(AgentSessionChatPanel.name, () => {
 
     expect(await screen.findByText('Find screenshots from 2024 that mention invoices.')).toBeInTheDocument();
     expect(screen.getByText('I found matching invoice screenshots.')).toBeInTheDocument();
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ textContent: expect.stringContaining('Returned metadata for 4 assets') }),
-      ]),
-    );
+    // Turn timeline for the first user message (running session, so shows one-liner)
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(
       screen.getByRole('article', { name: 'Applied plan: Archive invoice screenshots from 2024' }),
     ).toHaveTextContent('Applied plan');
@@ -2374,7 +2317,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(sdkMock.appendAgentSessionMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('shows an activity block immediately while sending the user message', async () => {
+  it('shows a running timeline immediately while sending the user message', async () => {
     sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
 
     render(AgentSessionChatPanel, { props: { session } });
@@ -2383,44 +2326,26 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Organize this album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByText('Understanding request…')).toBeInTheDocument();
     expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
     expect(input).toBeDisabled();
   });
 
-  it('does not render the ASCII animation when the activity block covers pending work', async () => {
-    vi.useFakeTimers();
+  it('does not render the ASCII animation — the one-liner covers the pending state instead', async () => {
     sdkMock.appendAgentSessionMessage.mockReturnValue(new Promise(() => undefined));
 
-    try {
-      render(AgentSessionChatPanel, { props: { session } });
+    render(AgentSessionChatPanel, { props: { session } });
 
-      const input = await screen.findByRole('textbox', { name: 'Message' });
-      await fireEvent.input(input, { target: { value: 'Organize this album' } });
-      await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    const input = await screen.findByRole('textbox', { name: 'Message' });
+    await fireEvent.input(input, { target: { value: 'Organize this album' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-      const activity = await screen.findByRole('article', { name: 'Pi is working' });
-      expect(activity).toHaveTextContent('Writing response');
-      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
-
-      vi.advanceTimersByTime(160);
-      await tick();
-      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
-
-      vi.advanceTimersByTime(160);
-      await tick();
-      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
-
-      vi.advanceTimersByTime(160);
-      await tick();
-      expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
   });
 
-  it('keeps the activity block after send succeeds while waiting for the first assistant delta', async () => {
+  it('keeps the running timeline after send succeeds while waiting for the first assistant delta', async () => {
     sdkMock.appendAgentSessionMessage.mockResolvedValue(
       makeMessage('message-created', AgentMessageRole.User, 'Organize screenshots'),
     );
@@ -2432,10 +2357,11 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText('Organize screenshots')).toBeInTheDocument();
-    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByText('Understanding request…')).toBeInTheDocument();
   });
 
-  it('replaces the fallback busy text with streamed assistant text on the first delta', async () => {
+  it('keeps the running timeline while streaming and shows no ASCII animation', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -2451,7 +2377,7 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Start organizing' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     handler?.({
       type: 'assistant-message-delta',
@@ -2465,7 +2391,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
   });
 
-  it('clears the ASCII busy indicator when the assistant message completes before any delta', async () => {
+  it('clears the running timeline and shows the assistant response when it arrives', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -2480,7 +2406,7 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Make an album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     handler?.({
       type: 'assistant-message-created',
@@ -2493,7 +2419,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.queryByText('pi is working...')).not.toBeInTheDocument();
   });
 
-  it('clears the ASCII busy indicator when the runner reports an error before any delta', async () => {
+  it('clears the running timeline on runner error and shows the error alert', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -2508,7 +2434,7 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Make an album' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     handler?.({
       type: 'runner-error',
@@ -2613,7 +2539,7 @@ describe(AgentSessionChatPanel.name, () => {
     await waitFor(() => expect(screen.queryByText('Partial response')).not.toBeInTheDocument());
   });
 
-  it('refreshes current plan activity for operation plan ready events without interrupting an active response', async () => {
+  it('fetches the current plan on operation-plan-ready without interrupting an active response', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -2634,14 +2560,6 @@ describe(AgentSessionChatPanel.name, () => {
             id: 'operation-create',
             planId: '00000000-0000-4000-8000-000000000200',
             status: AgentOperationStatus.Proposed,
-          }),
-          makeOperation({
-            id: 'operation-add',
-            planId: '00000000-0000-4000-8000-000000000200',
-            type: AgentOperationType.AlbumAddAssets,
-            status: AgentOperationStatus.Proposed,
-            assetIds: ['asset-1'],
-            payload: {},
           }),
         ],
         createdAt: '2026-05-16T10:00:05.000Z',
@@ -2671,14 +2589,9 @@ describe(AgentSessionChatPanel.name, () => {
     await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: session.id }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Thinking...')).toBeInTheDocument();
-    const activity = await screen.findByRole('article', { name: 'Activity summary' });
-    expect(activity).toHaveTextContent('Preparing a plan');
-    expect(activity).toHaveTextContent('Prepared a plan');
-    expect(activity).toHaveTextContent('2 items');
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
   });
 
-  it('merges live activity websocket events with delayed history by id without stealing focus', async () => {
+  it('receives activity websocket events and merges them without stealing focus', async () => {
     let resolveActivityEvents: (events: ReturnType<typeof makeActivityEvent>[]) => void;
     sdkMock.getAgentSessionMessages.mockResolvedValue([
       {
@@ -2705,6 +2618,7 @@ describe(AgentSessionChatPanel.name, () => {
 
     const input = await screen.findByRole('textbox', { name: 'Message' });
     input.focus();
+
     handler?.({
       type: 'activity',
       sessionId: session.id,
@@ -2719,7 +2633,8 @@ describe(AgentSessionChatPanel.name, () => {
       createdAt: '2026-05-16T10:00:05.000Z',
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Applied 2 of 4 changes');
+    await screen.findByText('Apply the selected changes');
+    // Focus not stolen by the websocket event
     expect(document.activeElement).toBe(input);
 
     resolveActivityEvents!([
@@ -2734,10 +2649,11 @@ describe(AgentSessionChatPanel.name, () => {
     ]);
 
     await tick();
-    expect(screen.getAllByText('Applying changes')).toHaveLength(1);
+    // Focus still not stolen after history load
+    expect(document.activeElement).toBe(input);
   });
 
-  it('keeps previous safe activity when current plan refresh fails', async () => {
+  it('keeps the running timeline when current plan refresh fails', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
       handler = nextHandler;
@@ -2753,8 +2669,8 @@ describe(AgentSessionChatPanel.name, () => {
 
     render(AgentSessionChatPanel, { props: { session, assistantResponsePending: true } });
 
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByText('Understanding request…')).toBeInTheDocument();
 
     handler?.({
       type: 'operation-plan-ready',
@@ -2764,7 +2680,7 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     await waitFor(() => expect(sdkMock.getCurrentOperationPlan).toHaveBeenCalledWith({ id: session.id }));
-    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
     expect(screen.queryByText('raw plan load failure')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBeDisabled();
   });
@@ -2791,7 +2707,7 @@ describe(AgentSessionChatPanel.name, () => {
       props: { session: { ...session, status: AgentSessionStatus.Applying } },
     });
 
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Applying changes');
+    await screen.findByText('Apply this plan');
 
     handler?.({
       type: 'operation-plan-applied',
@@ -2803,9 +2719,8 @@ describe(AgentSessionChatPanel.name, () => {
       failedCount: 0,
     });
 
+    // Applied plan card appears; no duplicate cards
     expect(await screen.findAllByRole('article', { name: 'Applied plan: Organize Portugal holiday' })).toHaveLength(1);
-    expect(screen.getAllByRole('article', { name: 'Activity summary' })).toHaveLength(1);
-    expect(screen.getByRole('article', { name: 'Activity summary' })).toHaveTextContent('Applied selected changes');
   });
 
   it('adds a running tool activity row after the triggering user message without duplicating blocks', async () => {
@@ -2831,7 +2746,9 @@ describe(AgentSessionChatPanel.name, () => {
     });
 
     await screen.findByText('Find beach photos');
-    expect(screen.getByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    // Initially shows "Understanding request…" one-liner (no tool calls yet)
+    expect(screen.getByTestId('agent-turn-timeline')).toBeInTheDocument();
+    expect(screen.getByText('Understanding request…')).toBeInTheDocument();
 
     await rerender({
       session,
@@ -2844,11 +2761,10 @@ describe(AgentSessionChatPanel.name, () => {
       toolCalls: [runningToolCall],
     });
 
+    // Running tool call → one-liner shows "Searching photos…"
     const transcript = screen.getByTestId('agent-session-chat-transcript');
-    const activity = await screen.findByRole('article', { name: 'Pi is working' });
-    expect(activity).toHaveTextContent('Searching photos');
-    expect(activity).toHaveTextContent('7 items');
-    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(await screen.findByText('Searching photos…')).toBeInTheDocument();
+    expect(screen.getAllByTestId('agent-turn-timeline')).toHaveLength(1);
     expect(Array.from(transcript.querySelectorAll('[data-chat-item]')).map((item) => item.textContent)).toEqual([
       expect.stringContaining('Find beach photos'),
       expect.stringContaining('Searching photos'),
@@ -2946,7 +2862,7 @@ describe(AgentSessionChatPanel.name, () => {
     expect(input).not.toBeDisabled();
   });
 
-  it('clears pending activity when the session becomes terminal before any assistant text streams', async () => {
+  it('clears the running timeline when the session becomes terminal', async () => {
     sdkMock.appendAgentSessionMessage.mockResolvedValue(
       makeMessage('message-created', AgentMessageRole.User, 'Start task'),
     );
@@ -2956,15 +2872,17 @@ describe(AgentSessionChatPanel.name, () => {
     const input = await screen.findByRole('textbox', { name: 'Message' });
     await fireEvent.input(input, { target: { value: 'Start task' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    expect(await screen.findByRole('article', { name: 'Pi is working' })).toHaveTextContent('Writing response');
+    expect(await screen.findByTestId('agent-turn-timeline')).toBeInTheDocument();
 
     await rerender({ session: { ...session, status: AgentSessionStatus.Cancelled } });
 
-    await waitFor(() => expect(screen.queryByText('pi is working...')).not.toBeInTheDocument());
+    // Session is now cancelled — the sent user message has no follow-up tool calls,
+    // so the timeline settles to E1 (zero rows, summary=null) and renders nothing
+    await waitFor(() => expect(screen.queryByTestId('agent-turn-timeline')).not.toBeInTheDocument());
     expect(input).not.toBeDisabled();
   });
 
-  it('renders only one activity block while send and assistant activity overlap', async () => {
+  it('renders exactly one running timeline while a send is in progress', async () => {
     let resolveSend: (message: AgentMessageResponseDto) => void;
     sdkMock.appendAgentSessionMessage.mockReturnValue(
       new Promise<AgentMessageResponseDto>((resolve) => {
@@ -2978,12 +2896,12 @@ describe(AgentSessionChatPanel.name, () => {
     await fireEvent.input(input, { target: { value: 'Start task' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(await screen.findAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(await screen.findAllByTestId('agent-turn-timeline')).toHaveLength(1);
 
     resolveSend!(makeMessage('message-created', AgentMessageRole.User, 'Start task'));
     await tick();
 
-    expect(screen.getAllByRole('article', { name: 'Pi is working' })).toHaveLength(1);
+    expect(screen.getAllByTestId('agent-turn-timeline')).toHaveLength(1);
   });
 
   it('renders a visible label for the message draft', async () => {
