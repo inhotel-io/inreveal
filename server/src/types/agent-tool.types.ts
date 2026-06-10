@@ -209,8 +209,11 @@ export type AgentSearchAssetsFilters = {
   type?: AssetType;
   rating?: number | null;
   tagIds?: string[];
+  tagMatchAny?: boolean;
   albumIds?: string[];
+  albumMatchAny?: boolean;
   personIds?: string[];
+  personMatchAny?: boolean;
   spaceId?: string;
   spacePersonIds?: string[];
   withSharedSpaces?: boolean;
