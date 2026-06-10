@@ -1577,6 +1577,32 @@ describe(AgentSessionChatPanel.name, () => {
     expect(screen.getByText('Then save it.')).toBeInTheDocument();
   });
 
+  it('converges on the assistant response by polling while the latest turn is running (no websocket needed)', async () => {
+    vi.useFakeTimers();
+    try {
+      // websocket delivers nothing at all in this scenario
+      websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
+      sdkMock.getAgentSessionMessages.mockResolvedValueOnce([
+        makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+      ]);
+
+      render(AgentSessionChatPanel, { props: { session } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText('make an album of my recent trip')).toBeInTheDocument();
+      expect(screen.queryByText('Which date range should I use?')).not.toBeInTheDocument();
+
+      sdkMock.getAgentSessionMessages.mockResolvedValue([
+        makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+        makeMessage('message-assistant', AgentMessageRole.Assistant, 'Which date range should I use?'),
+      ]);
+      await vi.advanceTimersByTimeAsync(2600);
+
+      expect(screen.getByText('Which date range should I use?')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refetches messages when a terminal activity event lands (self-heal for missed message events)', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
