@@ -291,7 +291,7 @@ describe(AgentSessionActionDock.name, () => {
     sdkMock.getAgentSession.mockResolvedValue(interruptedSession);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onSessionUpdated },
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), onSessionUpdated, turnRunning: true },
     });
 
     await waitFor(() => expect(sdkMock.getAgentSession).toHaveBeenCalledWith({ id: 'session-1' }));
@@ -459,7 +459,9 @@ describe(AgentSessionActionDock.name, () => {
       return vi.fn();
     });
 
-    render(AgentSessionActionDock, { props: { session: makeSession({ status: AgentSessionStatus.Running }) } });
+    render(AgentSessionActionDock, {
+      props: { session: makeSession({ status: AgentSessionStatus.Running }), turnRunning: true },
+    });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
     for (const handler of handlers) {
@@ -488,6 +490,19 @@ describe(AgentSessionActionDock.name, () => {
     vi.useRealTimers();
   });
 
+  it('does not poll an idle running session without an active turn', async () => {
+    vi.useFakeTimers();
+    try {
+      render(AgentSessionActionDock, { props: { session: makeSession({ status: AgentSessionStatus.Running }) } });
+      await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
+
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('publishes completed tool calls after a same-session websocket refresh', async () => {
     const handlers: Array<Parameters<typeof websocketMock.websocketEvents.on>[1]> = [];
     const onRecentToolCallsChange = vi.fn();
@@ -506,7 +521,11 @@ describe(AgentSessionActionDock.name, () => {
       ]);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
@@ -540,7 +559,11 @@ describe(AgentSessionActionDock.name, () => {
       ]);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
@@ -566,7 +589,11 @@ describe(AgentSessionActionDock.name, () => {
     ]);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
 
     await waitFor(() =>
@@ -587,7 +614,11 @@ describe(AgentSessionActionDock.name, () => {
     sdkMock.getToolCalls.mockResolvedValue([completedToolCall]);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() =>
       expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([expect.objectContaining({ id: completedToolCall.id })]),
@@ -632,7 +663,11 @@ describe(AgentSessionActionDock.name, () => {
       .mockResolvedValueOnce([richerCompletedToolCall]);
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() =>
       expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([
@@ -683,7 +718,11 @@ describe(AgentSessionActionDock.name, () => {
       );
 
     render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() => expect(sdkMock.getToolCalls).toHaveBeenCalledTimes(1));
 
@@ -819,7 +858,11 @@ describe(AgentSessionActionDock.name, () => {
       .mockRejectedValueOnce(new Error('refresh failed'));
 
     const { container } = render(AgentSessionActionDock, {
-      props: { session: makeSession({ status: AgentSessionStatus.Running }), onRecentToolCallsChange },
+      props: {
+        session: makeSession({ status: AgentSessionStatus.Running }),
+        onRecentToolCallsChange,
+        turnRunning: true,
+      },
     });
     await waitFor(() =>
       expect(onRecentToolCallsChange).toHaveBeenLastCalledWith([

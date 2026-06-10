@@ -1603,6 +1603,32 @@ describe(AgentSessionChatPanel.name, () => {
     }
   });
 
+  it('stops polling once the turn settles', async () => {
+    vi.useFakeTimers();
+    try {
+      websocketMock.websocketEvents.on.mockReturnValue(vi.fn());
+      sdkMock.getAgentSessionMessages.mockResolvedValueOnce([
+        makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+      ]);
+
+      render(AgentSessionChatPanel, { props: { session } });
+      await vi.advanceTimersByTimeAsync(0);
+
+      sdkMock.getAgentSessionMessages.mockResolvedValue([
+        makeMessage('message-user', AgentMessageRole.User, 'make an album of my recent trip'),
+        makeMessage('message-assistant', AgentMessageRole.Assistant, 'Which date range should I use?'),
+      ]);
+      await vi.advanceTimersByTimeAsync(2600);
+      expect(screen.getByText('Which date range should I use?')).toBeInTheDocument();
+
+      const callsAfterSettle = sdkMock.getAgentSessionMessages.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sdkMock.getAgentSessionMessages.mock.calls.length).toBe(callsAfterSettle);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refetches messages when a terminal activity event lands (self-heal for missed message events)', async () => {
     let handler: Parameters<typeof websocketMock.websocketEvents.on>[1] | undefined;
     websocketMock.websocketEvents.on.mockImplementation((_eventName, nextHandler) => {
