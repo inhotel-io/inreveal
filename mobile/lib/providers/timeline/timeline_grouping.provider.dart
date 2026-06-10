@@ -5,19 +5,21 @@ import 'package:immich_mobile/providers/infrastructure/setting.provider.dart';
 
 /// Clamps a grouping value to the three options the timeline grouping selector
 /// exposes (Years / Months / All). Legacy `auto`/`none` values map to All.
-GroupAssetsBy normalizeTimelineGrouping(GroupAssetsBy groupBy) {
+GroupAssetsBy _normalizeTimelineGrouping(GroupAssetsBy groupBy) {
   return switch (groupBy) {
     GroupAssetsBy.year || GroupAssetsBy.month || GroupAssetsBy.day => groupBy,
     GroupAssetsBy.auto || GroupAssetsBy.none => GroupAssetsBy.day,
   };
 }
 
-GroupAssetsBy timelineGroupingFromSettingIndex(int index) {
+/// Decodes a persisted [Setting.groupAssetsBy] index, normalizing out-of-range
+/// and legacy values to All.
+GroupAssetsBy _timelineGroupingFromSettingIndex(int index) {
   if (index < 0 || index >= GroupAssetsBy.values.length) {
     return GroupAssetsBy.day;
   }
 
-  return normalizeTimelineGrouping(GroupAssetsBy.values[index]);
+  return _normalizeTimelineGrouping(GroupAssetsBy.values[index]);
 }
 
 /// Root behavior — used by the main Photos timeline: the active grouping follows
@@ -25,7 +27,7 @@ GroupAssetsBy timelineGroupingFromSettingIndex(int index) {
 /// survives restarts and stays in sync with the settings screen.
 class TimelineGroupingNotifier extends Notifier<GroupAssetsBy> {
   @override
-  GroupAssetsBy build() => timelineGroupingFromSettingIndex(
+  GroupAssetsBy build() => _timelineGroupingFromSettingIndex(
     ref.watch(settingsProvider.select((settings) => settings.get(Setting.groupAssetsBy))),
   );
 
@@ -45,10 +47,17 @@ class RouteTimelineGroupingNotifier extends TimelineGroupingNotifier {
 
   @override
   Future<void> set(GroupAssetsBy groupBy) async {
-    state = normalizeTimelineGrouping(groupBy);
+    state = _normalizeTimelineGrouping(groupBy);
   }
 }
 
+/// The active timeline grouping for the current scope.
+///
+/// Overridden per-route by `TimelineRouteScope` (with [RouteTimelineGroupingNotifier])
+/// unless the route opts into `persistGrouping`. Widgets resolve the nearest scope
+/// automatically, but any PROVIDER that reads this must list it in its own
+/// `dependencies:` — otherwise its auto-scoped copy silently resolves the root
+/// (persisted) grouping inside detail routes.
 final timelineGroupingProvider = NotifierProvider<TimelineGroupingNotifier, GroupAssetsBy>(
   TimelineGroupingNotifier.new,
 );
