@@ -1,5 +1,6 @@
 import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import { ActivityService } from 'src/services/activity.service';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
 import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
 import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
 import { AgentMcpService } from 'src/services/agent-mcp.service';
@@ -83,6 +84,7 @@ export const services = [
   AgentRunnerToolTokenService,
   AgentSessionActivityEventService,
   AgentSessionService,
+  AgentAssetSearchFilterResolverService,
   AgentToolService,
   AlbumService,
   ApiService,
