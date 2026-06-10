@@ -24,27 +24,28 @@
 
 ## File Structure
 
-| File | Responsibility |
-|------|----------------|
-| `web/src/routes/(user)/assistant/agent-onboarding-model.ts` (create) | Pure logic: provider catalog, defaults, `isConnectComplete`, `buildCredentialCreateDto`, `buildValidateDto`, `isCloudProvider`. |
-| `web/src/routes/(user)/assistant/agent-onboarding-model.spec.ts` (create) | Unit tests for the helper. |
-| `web/src/routes/(user)/assistant/agent-onboarding-connect.svelte` (create) | Step 1: provider cards (local hero + cloud row + Other), provider-aware fields, Test connection (create→validate→delete-on-retry). |
-| `web/src/routes/(user)/assistant/agent-onboarding-connect.spec.ts` (create) | Connect step behavior + SDK wiring. |
-| `web/src/routes/(user)/assistant/agent-onboarding-access.svelte` (create) | Step 2: 3 preset cards + visibility meter + chips + cloud-power-user caution. |
-| `web/src/routes/(user)/assistant/agent-onboarding-access.spec.ts` (create) | Access step (default VisualOrganizer, caution logic). |
-| `web/src/routes/(user)/assistant/agent-onboarding-approval.svelte` (create) | Step 3: PlanOnly + Strict cards. |
-| `web/src/routes/(user)/assistant/agent-onboarding-approval.spec.ts` (create) | Approval step. |
-| `web/src/routes/(user)/assistant/agent-onboarding.svelte` (create) | Orchestrator: stepper, Welcome, Ready/summary, nav, final `onComplete`. |
-| `web/src/routes/(user)/assistant/agent-onboarding.spec.ts` (create) | Full happy-path flow. |
-| `web/src/routes/(user)/assistant/agent-assistant-workspace.svelte` (modify ~lines 848–921) | Render onboarding in empty state when `localCredentials.length === 0`. |
-| `web/src/routes/(user)/assistant/agent-assistant-workspace.spec.ts` (create or extend) | Integration: onboarding shown when no credentials. |
-| `i18n/en.json` (modify) | New `assistant_onboarding_*` keys. |
+| File                                                                                       | Responsibility                                                                                                                     |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `web/src/routes/(user)/assistant/agent-onboarding-model.ts` (create)                       | Pure logic: provider catalog, defaults, `isConnectComplete`, `buildCredentialCreateDto`, `buildValidateDto`, `isCloudProvider`.    |
+| `web/src/routes/(user)/assistant/agent-onboarding-model.spec.ts` (create)                  | Unit tests for the helper.                                                                                                         |
+| `web/src/routes/(user)/assistant/agent-onboarding-connect.svelte` (create)                 | Step 1: provider cards (local hero + cloud row + Other), provider-aware fields, Test connection (create→validate→delete-on-retry). |
+| `web/src/routes/(user)/assistant/agent-onboarding-connect.spec.ts` (create)                | Connect step behavior + SDK wiring.                                                                                                |
+| `web/src/routes/(user)/assistant/agent-onboarding-access.svelte` (create)                  | Step 2: 3 preset cards + visibility meter + chips + cloud-power-user caution.                                                      |
+| `web/src/routes/(user)/assistant/agent-onboarding-access.spec.ts` (create)                 | Access step (default VisualOrganizer, caution logic).                                                                              |
+| `web/src/routes/(user)/assistant/agent-onboarding-approval.svelte` (create)                | Step 3: PlanOnly + Strict cards.                                                                                                   |
+| `web/src/routes/(user)/assistant/agent-onboarding-approval.spec.ts` (create)               | Approval step.                                                                                                                     |
+| `web/src/routes/(user)/assistant/agent-onboarding.svelte` (create)                         | Orchestrator: stepper, Welcome, Ready/summary, nav, final `onComplete`.                                                            |
+| `web/src/routes/(user)/assistant/agent-onboarding.spec.ts` (create)                        | Full happy-path flow.                                                                                                              |
+| `web/src/routes/(user)/assistant/agent-assistant-workspace.svelte` (modify ~lines 848–921) | Render onboarding in empty state when `localCredentials.length === 0`.                                                             |
+| `web/src/routes/(user)/assistant/agent-assistant-workspace.spec.ts` (create or extend)     | Integration: onboarding shown when no credentials.                                                                                 |
+| `i18n/en.json` (modify)                                                                    | New `assistant_onboarding_*` keys.                                                                                                 |
 
 ---
 
 ### Task 1: Onboarding logic module (pure, TDD)
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-onboarding-model.ts`
 - Test: `web/src/routes/(user)/assistant/agent-onboarding-model.spec.ts`
 
@@ -94,15 +95,19 @@ describe('agent-onboarding-model', () => {
   });
 
   it('builds a credential DTO: local key optional uses placeholder, model becomes the single+default model', () => {
-    expect(buildCredentialCreateDto({ ...base, provider: 'local', baseUrl: 'http://x/v1 ', model: ' llama ' })).toEqual({
-      providerType: ProviderType.OpenaiCompatible,
-      label: 'Local model',
-      secret: 'local',
-      baseUrl: 'http://x/v1',
-      models: ['llama'],
-      defaultModel: 'llama',
-    });
-    expect(buildCredentialCreateDto({ ...base, provider: 'openai', label: 'Work', secret: ' sk ', model: 'gpt' })).toEqual({
+    expect(buildCredentialCreateDto({ ...base, provider: 'local', baseUrl: 'http://x/v1 ', model: ' llama ' })).toEqual(
+      {
+        providerType: ProviderType.OpenaiCompatible,
+        label: 'Local model',
+        secret: 'local',
+        baseUrl: 'http://x/v1',
+        models: ['llama'],
+        defaultModel: 'llama',
+      },
+    );
+    expect(
+      buildCredentialCreateDto({ ...base, provider: 'openai', label: 'Work', secret: ' sk ', model: 'gpt' }),
+    ).toEqual({
       providerType: ProviderType.Openai,
       label: 'Work',
       secret: 'sk',
@@ -263,10 +268,12 @@ git commit -m "feat(assistant): onboarding provider catalog + dto builders"
 ### Task 2: Connect step component (provider + key + test)
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-onboarding-connect.svelte`
 - Test: `web/src/routes/(user)/assistant/agent-onboarding-connect.spec.ts`
 
 **Behavior contract** (drives both test and impl):
+
 - Props: `{ onConnected: (credentialId: string, model: string) => void }`.
 - Local state seeded local-first: `provider='local'`, `baseUrl=ONBOARDING_PROVIDERS.local.baseUrlPrefill`, `label/secret/model=''`, `status: 'idle' | 'testing' | 'connected' | 'error'`, `createdCredentialId: string | null = null`, `errorMessage`.
 - Selecting a provider resets `status='idle'`, clears `createdCredentialId` (deleting any prior test credential), and applies that provider's `baseUrlPrefill`.
@@ -304,7 +311,10 @@ describe('agent-onboarding-connect', () => {
 
   it('defaults to the local provider with its base url prefilled', () => {
     render(AgentOnboardingConnect, { props: { onConnected: vi.fn() } });
-    expect(screen.getByRole('button', { name: /assistant_onboarding_provider_local/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /assistant_onboarding_provider_local/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByLabelText('assistant_onboarding_base_url')).toHaveValue('http://localhost:11434/v1');
   });
 
@@ -481,6 +491,7 @@ git commit -m "feat(assistant): onboarding connect step (provider + test connect
 ### Task 3: Access step component (permission presets)
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-onboarding-access.svelte`
 - Test: `web/src/routes/(user)/assistant/agent-onboarding-access.spec.ts`
 
@@ -513,7 +524,9 @@ describe('agent-onboarding-access', () => {
   it('emits onChange when a preset is clicked', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(AgentOnboardingAccess, { props: { provider: 'local', preset: AgentPermissionPreset.VisualOrganizer, onChange } });
+    render(AgentOnboardingAccess, {
+      props: { provider: 'local', preset: AgentPermissionPreset.VisualOrganizer, onChange },
+    });
     await user.click(screen.getByRole('button', { name: /assistant_permission_preset_careful/ }));
     expect(onChange).toHaveBeenCalledWith(AgentPermissionPreset.Careful);
   });
@@ -585,6 +598,7 @@ git commit -m "feat(assistant): onboarding access-level step with cloud caution"
 ### Task 4: Approval step component
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-onboarding-approval.svelte`
 - Test: `web/src/routes/(user)/assistant/agent-onboarding-approval.spec.ts`
 
@@ -608,7 +622,10 @@ describe('agent-onboarding-approval', () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
     render(AgentOnboardingApproval, { props: { approval: AgentApprovalMode.PlanOnly, onChange } });
-    expect(screen.getByRole('button', { name: /assistant_onboarding_approval_plan/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /assistant_onboarding_approval_plan/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await user.click(screen.getByRole('button', { name: /assistant_onboarding_approval_strict/ }));
     expect(onChange).toHaveBeenCalledWith(AgentApprovalMode.Strict);
   });
@@ -641,10 +658,12 @@ git commit -m "feat(assistant): onboarding approval-style step"
 ### Task 5: Orchestrator (welcome → steps → ready → complete)
 
 **Files:**
+
 - Create: `web/src/routes/(user)/assistant/agent-onboarding.svelte`
 - Test: `web/src/routes/(user)/assistant/agent-onboarding.spec.ts`
 
 **Contract:**
+
 - Props: `{ onComplete: (result: { credentialId: string; model: string; permissionPreset: AgentPermissionPreset; approvalMode: AgentApprovalMode }) => void }`.
 - State: `step: 0..4` (0 welcome, 1 connect, 2 access, 3 approval, 4 ready); `connectedCredentialId`/`connectedModel` (set by connect `onConnected`; cleared to `''` on dirty); `preset = ONBOARDING_DEFAULT_PRESET`; `approval = ONBOARDING_DEFAULT_APPROVAL`.
 - Stepper shows on steps 1–4. Continue on step 1 is disabled until `connectedCredentialId !== ''`. Access/Approval always have a default selected so Continue is enabled.
@@ -655,7 +674,12 @@ git commit -m "feat(assistant): onboarding approval-style step"
 ```ts
 // agent-onboarding.spec.ts
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { AgentApprovalMode, AgentPermissionPreset, ProviderType, type AgentProviderCredentialResponseDto } from '@immich/sdk';
+import {
+  AgentApprovalMode,
+  AgentPermissionPreset,
+  ProviderType,
+  type AgentProviderCredentialResponseDto,
+} from '@immich/sdk';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { readable } from 'svelte/store';
@@ -667,7 +691,10 @@ vi.mock('svelte-i18n', () => ({ t: readable((key: string) => key) }));
 describe('agent-onboarding orchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    sdkMock.createAgentProviderCredential.mockResolvedValue({ id: 'cred-1', providerType: ProviderType.OpenaiCompatible } as AgentProviderCredentialResponseDto);
+    sdkMock.createAgentProviderCredential.mockResolvedValue({
+      id: 'cred-1',
+      providerType: ProviderType.OpenaiCompatible,
+    } as AgentProviderCredentialResponseDto);
     sdkMock.validateAgentSession.mockResolvedValue(undefined as never);
     sdkMock.deleteAgentProviderCredential.mockResolvedValue(undefined as never);
   });
@@ -737,6 +764,7 @@ git commit -m "feat(assistant): onboarding orchestrator (welcome → ready)"
 ### Task 6: Wire onboarding into the workspace empty state
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/assistant/agent-assistant-workspace.svelte` (empty-state block ~848–921; imports ~21–31)
 - Test: `web/src/routes/(user)/assistant/agent-assistant-workspace.spec.ts` (create)
 
@@ -747,7 +775,11 @@ git commit -m "feat(assistant): onboarding orchestrator (welcome → ready)"
 ```ts
 // agent-assistant-workspace.spec.ts
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import { AgentRunnerStatusReason, type AgentProviderCredentialResponseDto, type AgentRunnerStatusDto } from '@immich/sdk';
+import {
+  AgentRunnerStatusReason,
+  type AgentProviderCredentialResponseDto,
+  type AgentRunnerStatusDto,
+} from '@immich/sdk';
 import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -755,7 +787,11 @@ import AgentAssistantWorkspace from './agent-assistant-workspace.svelte';
 
 vi.mock('svelte-i18n', () => ({ t: readable((key: string) => key) }));
 
-const healthyRunner = { configured: true, healthy: true, reason: AgentRunnerStatusReason.Healthy } as AgentRunnerStatusDto;
+const healthyRunner = {
+  configured: true,
+  healthy: true,
+  reason: AgentRunnerStatusReason.Healthy,
+} as AgentRunnerStatusDto;
 const baseProps = { runnerStatus: healthyRunner, sessions: [], requestedSessionId: null };
 
 describe('agent-assistant-workspace empty state', () => {
@@ -768,7 +804,9 @@ describe('agent-assistant-workspace empty state', () => {
   });
 
   it('shows the normal composer when a credential exists', () => {
-    const credentials = [{ id: 'c1', label: 'Local', models: ['m'], defaultModel: 'm' } as AgentProviderCredentialResponseDto];
+    const credentials = [
+      { id: 'c1', label: 'Local', models: ['m'], defaultModel: 'm' } as AgentProviderCredentialResponseDto,
+    ];
     render(AgentAssistantWorkspace, { props: { ...baseProps, credentials } });
     expect(screen.getByText('assistant_new_chat_prompt')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'assistant_onboarding_get_started' })).not.toBeInTheDocument();
