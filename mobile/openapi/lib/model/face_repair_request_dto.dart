@@ -26,6 +26,7 @@ class FaceRepairRequestDto {
 
   Optional<bool?> dryRun;
 
+  /// Minimum value: 0
   /// Maximum value: 2
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -35,6 +36,7 @@ class FaceRepairRequestDto {
   ///
   Optional<num?> maxAttributionDistance;
 
+  /// Minimum value: 0
   /// Maximum value: 2
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
