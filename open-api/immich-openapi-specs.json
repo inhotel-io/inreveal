@@ -2943,6 +2943,85 @@
         "x-immich-state": "Internal"
       }
     },
+    "/agent/sessions/{id}/operation-plan/{planId}/apply": {
+      "post": {
+        "description": "Apply selected album operations from the current proposed agent operation plan.",
+        "operationId": "applyApprovedOperations",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "x-nestjs_zod-parent-additional-properties": false,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "planId",
+            "required": true,
+            "in": "path",
+            "x-nestjs_zod-parent-additional-properties": false,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentOperationPlanApplyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentOperationPlanApplyResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Apply approved agent album operations",
+        "tags": [
+          "Agent sessions"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v2.7.5",
+            "state": "Added"
+          },
+          {
+            "version": "v2.7.5",
+            "state": "Alpha"
+          }
+        ],
+        "x-immich-permission": "agentSession.update",
+        "x-immich-state": "Alpha"
+      }
+    },
     "/agent/sessions/{id}/operation-plan/{planId}/revisions": {
       "post": {
         "description": "Internal route for replacing a proposed operation plan with a new revision.",
@@ -22663,6 +22742,14 @@
         ],
         "type": "object"
       },
+      "AgentOperationApplyStatus": {
+        "enum": [
+          "applied",
+          "partially_applied",
+          "failed"
+        ],
+        "type": "string"
+      },
       "AgentOperationExistingAlbumTargetKind": {
         "enum": [
           "existing_album"
@@ -22674,6 +22761,73 @@
           "new_album"
         ],
         "type": "string"
+      },
+      "AgentOperationPlanApplyRequestDto": {
+        "additionalProperties": false,
+        "properties": {
+          "operationIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "operationIds"
+        ],
+        "type": "object"
+      },
+      "AgentOperationPlanApplyResponseDto": {
+        "properties": {
+          "appliedOperationIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failedOperationIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/AgentOperationPlanResponseDto"
+          },
+          "skippedOperationIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentOperationApplyStatus"
+          },
+          "summary": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "appliedOperationIds",
+          "failedOperationIds",
+          "plan",
+          "skippedOperationIds",
+          "status",
+          "summary"
+        ],
+        "type": "object"
       },
       "AgentOperationPlanResponseDto": {
         "properties": {

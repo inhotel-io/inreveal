@@ -254,10 +254,16 @@ class ApiClient {
           return AgentMessageToolCallBlockTypeTypeTransformer().decode(value);
         case 'AgentModelSnapshot':
           return AgentModelSnapshot.fromJson(value);
+        case 'AgentOperationApplyStatus':
+          return AgentOperationApplyStatusTypeTransformer().decode(value);
         case 'AgentOperationExistingAlbumTargetKind':
           return AgentOperationExistingAlbumTargetKindTypeTransformer().decode(value);
         case 'AgentOperationNewAlbumTargetKind':
           return AgentOperationNewAlbumTargetKindTypeTransformer().decode(value);
+        case 'AgentOperationPlanApplyRequestDto':
+          return AgentOperationPlanApplyRequestDto.fromJson(value);
+        case 'AgentOperationPlanApplyResponseDto':
+          return AgentOperationPlanApplyResponseDto.fromJson(value);
         case 'AgentOperationPlanResponseDto':
           return AgentOperationPlanResponseDto.fromJson(value);
         case 'AgentOperationPlanStatus':
