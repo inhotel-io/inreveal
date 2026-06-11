@@ -541,7 +541,7 @@
           </p>
           <div class="flex flex-col gap-2">
             <button
-              class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:-translate-x-0 hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
+              class="flex w-full items-center gap-2.5 rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-left text-[13.5px] text-gray-900 transition-all hover:translate-x-0.5 hover:border-primary hover:bg-primary/5 dark:border-gray-700 dark:bg-immich-dark-gray dark:text-white"
               type="button"
               onclick={() => finish($t('assistant_onboarding_prompt_album'))}
             >
