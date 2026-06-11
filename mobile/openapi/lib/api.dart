@@ -178,6 +178,7 @@ part 'model/agent_search_assets_tool_success_response.dart';
 part 'model/agent_session_create_dto.dart';
 part 'model/agent_session_response_dto.dart';
 part 'model/agent_session_status.dart';
+part 'model/agent_session_update_dto.dart';
 part 'model/agent_tool_approval_decision.dart';
 part 'model/agent_tool_approval_dto.dart';
 part 'model/agent_tool_call_response_dto.dart';
