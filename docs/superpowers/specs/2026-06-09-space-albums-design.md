@@ -205,9 +205,15 @@ shared_space_album_user
 
 ### Read (Phase 1)
 
-A space member can read an asset if it is in an album linked to a space they belong to. New predicate,
-following `accessibleSpaces` (`sync.repository.ts:832`) and the `ownedOrSpaceAccessible` predicates
-added in PR #646/#651:
+A space member can read an asset if it is in an album linked to a space they belong to. New branch,
+mirroring the existing **`shared_space_library`** branch already present in the per-asset access
+predicates in `server/src/repositories/access.repository.ts` (the asset namespace — the broad
+`EXISTS` union around line 633, plus the scoped variants near lines 236 / 290 / 346, each of which
+already carries both a `shared_space_asset` and a `shared_space_library` path). `accessibleSpaces`
+(`sync.repository.ts:857`) is the analogous helper on the **sync** side. (Note: `ownedOrSpaceAccessible`
+is _not_ a single shared helper — it exists as private, duplicated methods in `view-repository.ts`
+and `tag.repository.ts`; the album branch follows the `access.repository.ts` asset-predicate shape,
+not those.) The SQL shape:
 
 ```sql
 -- asset is readable via a space-linked album
@@ -221,10 +227,13 @@ EXISTS (
 )
 ```
 
-This is OR'd into the existing asset-access predicate alongside ownership, `album_user`,
-`shared_space_asset`, and `shared_space_library` paths. Applied wherever space content is read
-(timeline buckets, asset detail, download, thumbnails) — the same call sites the library predicate
-already touches.
+This branch (an `EXISTS` over `album_asset ⋈ shared_space_album ⋈ shared_space_member`) is added
+**everywhere** the `shared_space_library` branch currently appears — there are **multiple** such
+predicates in the asset namespace (the broad union + the scoped/role-filtered variants), one per read
+surface (asset detail, download, thumbnails, and the equivalents). The album branch must be added to
+each; a test asserts read access through every surface, not just one. Unlike the library branch (which
+joins the single `asset.libraryId` column), the album branch joins through the `album_asset` membership
+table.
 
 ### Write (Phase 1)
 
@@ -262,6 +271,14 @@ Linking/unlinking requires **space role ≥ Editor** _and_ the actor must **own 
 album** (you may not re-share into a space an album that was only shared _to_ you read-only). Toggling
 `showInTimeline` requires space role ≥ Editor.
 
+> **Deliberate divergence from the library endpoints.** `linkLibrary`/`unlinkLibrary`
+> (`shared-space.service.ts:603-605, 633-635`) additionally require `auth.user.isAdmin`, because an
+> external library is an **admin-scoped server resource**. Albums are **user-owned**, so album
+> link/unlink is gated on space role (≥ Editor) + album ownership/edit rights and is **NOT** admin-gated
+> — a non-admin space Editor who owns the album can link it. The spec mirrors the library link _shape_
+> (link table, triggers, sync), but intentionally **not** its admin gate. Grid 3/4 below pin this: the
+> Editor actors are non-admins and must be ALLOWED.
+
 ## Space timeline composition (Phase 1)
 
 The space timeline = `shared_space_asset` assets ∪ linked-library assets ∪ **linked-album assets
@@ -276,13 +293,23 @@ section — they are simply excluded from the aggregated timeline.
 ## Face recognition (Phase 1)
 
 When a space has `faceRecognitionEnabled`, linking an album queues an album face-sync job
-(`SharedSpaceAlbumFaceSync`, modeled on `SharedSpaceLibraryFaceSync`) that runs the linked album's
-assets through `processSpaceFaceMatch` to create/match space persons. No face sync when the space
-has recognition disabled. On unlink, faces contributed solely by that album's assets are reconciled
-out (mirroring library unlink), while faces also reachable via another linked album/library/direct
-asset are retained. (Detailed face-cleanup-on-unlink behavior reuses the existing space-person
-reconciliation jobs; see the recognition pipeline spec
-`2026-05-07-shared-space-recognition-pipeline-design.md`.)
+(`SharedSpaceAlbumFaceSync`, modeled on `SharedSpaceLibraryFaceSync` at `shared-space.service.ts:1617`)
+that runs the linked album's assets through `processSpaceFaceMatch` (`shared-space.service.ts:2026`)
+to create/match space persons. No face sync when the space has recognition disabled.
+
+> **⚠️ Unlink face-cleanup is genuinely harder for albums than for libraries — call this out in the
+> plan.** Library unlink (`unlinkLibrary`, `shared-space.service.ts:632-643`) removes contributed
+> faces in bulk via `removePersonFacesByLibrary(libraryId)` + `deleteOrphanedPersons()` +
+> `SharedSpacePersonMetadataBackfill`. That clean bulk key works because **a library asset belongs to
+> exactly one library**. Album assets are **individual photos that may also be direct-added to the
+> space, owned, or members of another linked album/library** — so there is no single key to bulk-remove
+> by. Album unlink must remove space-person faces **only for the unlinked album's assets that retain no
+> other space path**, then `deleteOrphanedPersons()` + metadata backfill. This per-asset,
+> multi-path-aware removal is new work (not a drop-in reuse of `removePersonFacesByLibrary`) and is the
+> highest-risk part of Phase 1's face handling; it gets its own dedicated medium test (see Testing). The
+> downstream reconciliation/dedup jobs (`SharedSpaceIdentityReconciliation`, `SharedSpacePersonDedup`)
+> are reusable as-is once the correct faces are removed. See the recognition pipeline spec
+> `docs/superpowers/specs/2026-05-07-shared-space-recognition-pipeline-design.md`.
 
 ## Offline sync delivery (Phase 2)
 
@@ -353,7 +380,8 @@ no new endpoint. OpenAPI clients (TS SDK + Dart) regenerated.
 - **`showInTimeline` toggle**: true ⇒ in space timeline; false ⇒ excluded from timeline but still
   accessible/browsable; per-member personal-timeline toggle composes on top.
 - **Face recognition**: link with recognition on ⇒ album assets matched into space persons; off ⇒ no
-  sync; unlink ⇒ album-only faces reconciled out, multi-path faces retained.
+  sync; unlink ⇒ faces removed only for the album's assets that retain no other space path
+  (per-asset, multi-path-aware — _not_ a bulk `removePersonFacesByLibrary`); multi-path faces retained.
 - **Revocation (Phase 2)**: member leaves / album unlinked / space deleted ⇒ grant removed iff no
   other path; **manual `album_user` share never touched**; owner-of-album-who-leaves keeps access.
 - **Concurrency race (Phase 2)**: simultaneous member-insert + album-link may miss a grant — the same
@@ -392,13 +420,20 @@ exact outcome; `DENY` at the HTTP boundary asserts the correct status with the
 `401 < 403 < 404` precedence preserved (unauthenticated → 401; authenticated-but-forbidden →
 403; absent/invisible resource → 404).
 
+> **Status-code realism.** Immich's `requireAccess` (`src/utils/access.ts`) frequently throws
+> `400 BadRequest` ("…no … access") for the no-path case rather than 403/404. The tests assert the
+> **actual** status the existing album/asset endpoints return for each denial (do not assume 403 — pin
+> what the code does, and keep the relative precedence consistent). The `403/404` entries below mean
+> "a denial in the 400/403/404 family"; the test records the exact code.
+
 **Fixture world (seeded once per suite):**
 
 - Space `S` links album `A`. Space `S2` links album `C`.
 - Album `B` is linked to **no** space.
 - Actors:
-  - `spaceOwner` — Owner of `S`, no independent album rights.
-  - `spaceEditor` — Editor of `S`, no independent album rights.
+  - `spaceOwner` — Owner of `S`, **non-admin**, no independent album rights.
+  - `spaceEditor` — Editor of `S`, **non-admin**, no independent album rights. (Non-admin is load-bearing:
+    it proves album link/unlink is _not_ admin-gated, unlike libraries.)
   - `spaceViewer` — Viewer of `S`, no independent album rights.
   - `nonMember` — not in `S`/`S2`, no album rights.
   - `albumOwner` — owns `A`, **not** a member of `S`.
@@ -437,7 +472,9 @@ exact outcome; `DENY` at the HTTP boundary asserts the correct status with the
 
 #### Grid 3 — LINK an album into `S` (`PUT /shared-spaces/:id/albums/:albumId`)
 
-Requires space role ≥ Editor **AND** actor owns or can edit the album.
+Requires space role ≥ Editor **AND** actor owns or can edit the album. **Not admin-gated** — the
+`spaceOwner`/`spaceEditor` actors below are non-admins and must be ALLOWED (the deliberate divergence
+from `linkLibrary`, which requires `isAdmin`).
 
 | Actor                      | Album                              | Expected                                                  |
 | -------------------------- | ---------------------------------- | --------------------------------------------------------- |
@@ -519,9 +556,15 @@ Use the `immich-postgres` image (vchord) and the medium factory; register any ne
 - **Timeline buckets** — space timeline includes/excludes linked-album assets per `showInTimeline`;
   per-member `showInTimeline` composition; removed-from-album asset disappears from the space.
 - **Face sync** — linking into a recognition-enabled space matches album faces into space persons;
-  disabled space does nothing; unlink reconciles album-only faces while retaining multi-path faces.
-  (Engine-compat: exercise on the vchord medium harness; if any centroid/`avg(vector)` path is
-  touched, also cover the pgvecto.rs harness per `feedback_pgvecto_rs_no_avg_vector`.)
+  disabled space does nothing. **Unlink (the high-risk path — see the face-recognition section):**
+  - album-only assets → their faces are removed from the space person(s);
+  - **asset in the album AND direct-added to the space** → unlink must **NOT** remove its faces (the
+    asset still has a space path) — this is the per-asset multi-path case libraries never hit;
+  - **asset in the album AND in a second linked album/library** → faces retained;
+  - person reachable only through the unlinked album → orphan-cleaned; person still reachable through a
+    retained asset → kept.
+    (Engine-compat: exercise on the vchord medium harness; if any centroid/`avg(vector)` path is
+    touched, also cover the pgvecto.rs harness per `feedback_pgvecto_rs_no_avg_vector`.)
 
 ### Medium tests — triggers & sync (Phase 2)
 
