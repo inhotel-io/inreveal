@@ -85,6 +85,16 @@ class JobName {
   static const imageQualityQueueAll = JobName._(r'ImageQualityQueueAll');
   static const imageQuality = JobName._(r'ImageQuality');
   static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
+  static const integrityUntrackedFilesQueueAll = JobName._(r'IntegrityUntrackedFilesQueueAll');
+  static const integrityUntrackedFiles = JobName._(r'IntegrityUntrackedFiles');
+  static const integrityUntrackedRefresh = JobName._(r'IntegrityUntrackedRefresh');
+  static const integrityMissingFilesQueueAll = JobName._(r'IntegrityMissingFilesQueueAll');
+  static const integrityMissingFiles = JobName._(r'IntegrityMissingFiles');
+  static const integrityMissingFilesRefresh = JobName._(r'IntegrityMissingFilesRefresh');
+  static const integrityChecksumFiles = JobName._(r'IntegrityChecksumFiles');
+  static const integrityChecksumFilesRefresh = JobName._(r'IntegrityChecksumFilesRefresh');
+  static const integrityDeleteReportType = JobName._(r'IntegrityDeleteReportType');
+  static const integrityDeleteReports = JobName._(r'IntegrityDeleteReports');
   static const storageBackendMigrationQueueAll = JobName._(r'StorageBackendMigrationQueueAll');
   static const storageBackendMigrationSingle = JobName._(r'StorageBackendMigrationSingle');
   static const sharedSpaceFaceMatch = JobName._(r'SharedSpaceFaceMatch');
@@ -163,6 +173,16 @@ class JobName {
     imageQualityQueueAll,
     imageQuality,
     workflowAssetTrigger,
+    integrityUntrackedFilesQueueAll,
+    integrityUntrackedFiles,
+    integrityUntrackedRefresh,
+    integrityMissingFilesQueueAll,
+    integrityMissingFiles,
+    integrityMissingFilesRefresh,
+    integrityChecksumFiles,
+    integrityChecksumFilesRefresh,
+    integrityDeleteReportType,
+    integrityDeleteReports,
     storageBackendMigrationQueueAll,
     storageBackendMigrationSingle,
     sharedSpaceFaceMatch,
@@ -276,6 +296,16 @@ class JobNameTypeTransformer {
         case r'ImageQualityQueueAll': return JobName.imageQualityQueueAll;
         case r'ImageQuality': return JobName.imageQuality;
         case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
+        case r'IntegrityUntrackedFilesQueueAll': return JobName.integrityUntrackedFilesQueueAll;
+        case r'IntegrityUntrackedFiles': return JobName.integrityUntrackedFiles;
+        case r'IntegrityUntrackedRefresh': return JobName.integrityUntrackedRefresh;
+        case r'IntegrityMissingFilesQueueAll': return JobName.integrityMissingFilesQueueAll;
+        case r'IntegrityMissingFiles': return JobName.integrityMissingFiles;
+        case r'IntegrityMissingFilesRefresh': return JobName.integrityMissingFilesRefresh;
+        case r'IntegrityChecksumFiles': return JobName.integrityChecksumFiles;
+        case r'IntegrityChecksumFilesRefresh': return JobName.integrityChecksumFilesRefresh;
+        case r'IntegrityDeleteReportType': return JobName.integrityDeleteReportType;
+        case r'IntegrityDeleteReports': return JobName.integrityDeleteReports;
         case r'StorageBackendMigrationQueueAll': return JobName.storageBackendMigrationQueueAll;
         case r'StorageBackendMigrationSingle': return JobName.storageBackendMigrationSingle;
         case r'SharedSpaceFaceMatch': return JobName.sharedSpaceFaceMatch;
