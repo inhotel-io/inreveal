@@ -326,7 +326,7 @@
         <div>
           <p class="break-all flex place-items-center gap-2 whitespace-pre-wrap">
             {asset.originalFileName}
-            {#if isOwner}
+            {#if asset.originalPath}
               <IconButton
                 icon={mdiInformationOutline}
                 aria-label={$t('show_file_location')}
