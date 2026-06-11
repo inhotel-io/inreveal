@@ -22483,7 +22483,9 @@
         "type": "string"
       },
       "AgentOperationFieldOverride": {
-        "additionalProperties": {},
+        "additionalProperties": {
+          "type": "string"
+        },
         "type": "object"
       },
       "AgentOperationItemKind": {
@@ -23735,12 +23737,9 @@
                       "type": "object",
                       "properties": {
                         "angle": {
-                          "type": "number",
-                          "enum": [
-                            90,
-                            180,
-                            270
-                          ]
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -25154,12 +25153,9 @@
                       "type": "object",
                       "properties": {
                         "angle": {
-                          "type": "number",
-                          "enum": [
-                            90,
-                            180,
-                            270
-                          ]
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
