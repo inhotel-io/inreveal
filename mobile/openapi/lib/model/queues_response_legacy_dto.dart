@@ -21,6 +21,7 @@ class QueuesResponseLegacyDto {
     required this.faceDetection,
     required this.facialRecognition,
     required this.imageQuality,
+    required this.integrityCheck,
     required this.library_,
     required this.metadataExtraction,
     required this.migration,
@@ -53,6 +54,8 @@ class QueuesResponseLegacyDto {
   QueueResponseLegacyDto facialRecognition;
 
   QueueResponseLegacyDto imageQuality;
+
+  QueueResponseLegacyDto integrityCheck;
 
   QueueResponseLegacyDto library_;
 
@@ -94,6 +97,7 @@ class QueuesResponseLegacyDto {
     other.faceDetection == faceDetection &&
     other.facialRecognition == facialRecognition &&
     other.imageQuality == imageQuality &&
+    other.integrityCheck == integrityCheck &&
     other.library_ == library_ &&
     other.metadataExtraction == metadataExtraction &&
     other.migration == migration &&
@@ -121,6 +125,7 @@ class QueuesResponseLegacyDto {
     (faceDetection.hashCode) +
     (facialRecognition.hashCode) +
     (imageQuality.hashCode) +
+    (integrityCheck.hashCode) +
     (library_.hashCode) +
     (metadataExtraction.hashCode) +
     (migration.hashCode) +
@@ -138,7 +143,7 @@ class QueuesResponseLegacyDto {
     (workflow.hashCode);
 
   @override
-  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, classification=$classification, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageQuality=$imageQuality, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageBackendMigration=$storageBackendMigration, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
+  String toString() => 'QueuesResponseLegacyDto[backgroundTask=$backgroundTask, backupDatabase=$backupDatabase, classification=$classification, duplicateDetection=$duplicateDetection, editor=$editor, faceDetection=$faceDetection, facialRecognition=$facialRecognition, imageQuality=$imageQuality, integrityCheck=$integrityCheck, library_=$library_, metadataExtraction=$metadataExtraction, migration=$migration, notifications=$notifications, ocr=$ocr, peopleBackfill=$peopleBackfill, petDetection=$petDetection, search=$search, sidecar=$sidecar, smartSearch=$smartSearch, storageBackendMigration=$storageBackendMigration, storageTemplateMigration=$storageTemplateMigration, thumbnailGeneration=$thumbnailGeneration, videoConversion=$videoConversion, workflow=$workflow]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -150,6 +155,7 @@ class QueuesResponseLegacyDto {
       json[r'faceDetection'] = this.faceDetection;
       json[r'facialRecognition'] = this.facialRecognition;
       json[r'imageQuality'] = this.imageQuality;
+      json[r'integrityCheck'] = this.integrityCheck;
       json[r'library'] = this.library_;
       json[r'metadataExtraction'] = this.metadataExtraction;
       json[r'migration'] = this.migration;
@@ -185,6 +191,7 @@ class QueuesResponseLegacyDto {
         faceDetection: QueueResponseLegacyDto.fromJson(json[r'faceDetection'])!,
         facialRecognition: QueueResponseLegacyDto.fromJson(json[r'facialRecognition'])!,
         imageQuality: QueueResponseLegacyDto.fromJson(json[r'imageQuality'])!,
+        integrityCheck: QueueResponseLegacyDto.fromJson(json[r'integrityCheck'])!,
         library_: QueueResponseLegacyDto.fromJson(json[r'library'])!,
         metadataExtraction: QueueResponseLegacyDto.fromJson(json[r'metadataExtraction'])!,
         migration: QueueResponseLegacyDto.fromJson(json[r'migration'])!,
@@ -255,6 +262,7 @@ class QueuesResponseLegacyDto {
     'faceDetection',
     'facialRecognition',
     'imageQuality',
+    'integrityCheck',
     'library',
     'metadataExtraction',
     'migration',
