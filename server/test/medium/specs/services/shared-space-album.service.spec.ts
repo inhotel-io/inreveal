@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { JobName, JobStatus } from 'src/enum';
+import { AssetVisibility, JobName, JobStatus, TimeBucketSize } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -9,6 +9,7 @@ import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PartnerRepository } from 'src/repositories/partner.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -17,6 +18,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
 import { SharedSpaceService } from 'src/services/shared-space.service';
+import { TimelineService } from 'src/services/timeline.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
@@ -316,5 +318,146 @@ describe('SharedSpaceService — handleSharedSpaceAlbumFaceSync', () => {
     expect(jobs.queue).toHaveBeenCalledWith(
       expect.objectContaining({ name: JobName.SharedSpacePersonDedup, data: { spaceId: space.id } }),
     );
+  });
+});
+
+const setupTimeline = () =>
+  newMediumService(TimelineService, {
+    database: defaultDatabase,
+    real: [AccessRepository, AssetRepository, PartnerRepository, SharedSpaceRepository],
+    mock: [LoggingRepository],
+  });
+
+describe('SharedSpaceService — linked-album assets in space timeline', () => {
+  it('includes album assets when showInTimeline is true, excludes them when false', async () => {
+    const { sut, ctx } = setupTimeline();
+
+    // Owner creates the space and album
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    // Both owner and viewer are members with showInTimeline=true (default)
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    // Create album owned by owner, link it to the space (showInTimeline defaults true)
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'SpaceAlbum' });
+    const { asset: assetInA } = await ctx.newAsset({
+      ownerId: owner.id,
+      localDateTime: new Date('2024-03-15T12:00:00.000Z'),
+      fileCreatedAt: new Date('2024-03-15T12:00:00.000Z'),
+      visibility: AssetVisibility.Timeline,
+    });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetInA.id });
+    await ctx.newExif({ assetId: assetInA.id, make: 'Canon' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    // Viewer reads the space timeline — asset should appear (showInTimeline=true)
+    const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });
+    const bucketsOn = await sut.getTimeBuckets(viewerAuth, {
+      userId: viewer.id,
+      withSharedSpaces: true,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketOn = bucketsOn.find((b) => b.timeBucket === '2024-03-01');
+    expect(bucketOn?.count).toBe(1);
+
+    const bucketRawOn = await sut.getTimeBucket(viewerAuth, {
+      timeBucket: '2024-03-01',
+      userId: viewer.id,
+      withSharedSpaces: true,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const idsOn: string[] = JSON.parse(bucketRawOn).id;
+    expect(idsOn).toContain(assetInA.id);
+
+    // Toggle showInTimeline off for the album
+    await ctx.get(SharedSpaceRepository).setAlbumShowInTimeline(space.id, album.id, false);
+
+    // Viewer reads again — asset should no longer appear
+    const bucketsOff = await sut.getTimeBuckets(viewerAuth, {
+      userId: viewer.id,
+      withSharedSpaces: true,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketOff = bucketsOff.find((b) => b.timeBucket === '2024-03-01');
+    expect(bucketOff?.count ?? 0).toBe(0);
+
+    const bucketRawOff = await sut.getTimeBucket(viewerAuth, {
+      timeBucket: '2024-03-01',
+      userId: viewer.id,
+      withSharedSpaces: true,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const idsOff: string[] = JSON.parse(bucketRawOff).id;
+    expect(idsOff).not.toContain(assetInA.id);
+  });
+});
+
+describe('SharedSpaceService — linked-album assets via direct spaceId timeline', () => {
+  it('includes album assets when spaceId used directly and showInTimeline=true, excludes when false', async () => {
+    const { sut, ctx } = setupTimeline();
+
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'DirectSpaceAlbum' });
+    const { asset: assetInA } = await ctx.newAsset({
+      ownerId: owner.id,
+      localDateTime: new Date('2024-05-10T12:00:00.000Z'),
+      fileCreatedAt: new Date('2024-05-10T12:00:00.000Z'),
+      visibility: AssetVisibility.Timeline,
+    });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetInA.id });
+    await ctx.newExif({ assetId: assetInA.id, make: 'Nikon' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });
+
+    // --- showInTimeline=true: asset MUST appear via spaceId path ---
+    const bucketsOn = await sut.getTimeBuckets(viewerAuth, {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketOn = bucketsOn.find((b) => b.timeBucket === '2024-05-01');
+    expect(bucketOn?.count).toBe(1);
+
+    const bucketRawOn = await sut.getTimeBucket(viewerAuth, {
+      timeBucket: '2024-05-01',
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const idsOn: string[] = JSON.parse(bucketRawOn).id;
+    expect(idsOn).toContain(assetInA.id);
+
+    // Toggle showInTimeline off
+    await ctx.get(SharedSpaceRepository).setAlbumShowInTimeline(space.id, album.id, false);
+
+    // --- showInTimeline=false: asset MUST be absent ---
+    const bucketsOff = await sut.getTimeBuckets(viewerAuth, {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketOff = bucketsOff.find((b) => b.timeBucket === '2024-05-01');
+    expect(bucketOff?.count ?? 0).toBe(0);
+
+    const bucketRawOff = await sut.getTimeBucket(viewerAuth, {
+      timeBucket: '2024-05-01',
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const idsOff: string[] = JSON.parse(bucketRawOff).id;
+    expect(idsOff).not.toContain(assetInA.id);
   });
 });
