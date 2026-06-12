@@ -7858,6 +7858,93 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('updateAlbumLink', () => {
+    it('should call setAlbumShowInTimeline with the dto value when user is Editor', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace();
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Editor,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.setAlbumShowInTimeline.mockResolvedValue(void 0 as any);
+
+      await sut.updateAlbumLink(auth, space.id, albumId, { showInTimeline: false });
+
+      expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(space.id, albumId, false);
+    });
+
+    it('should reject when user is a Viewer (insufficient space role)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Viewer,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+
+      await expect(sut.updateAlbumLink(auth, space.id, newUuid(), { showInTimeline: false })).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe('getLinkedAlbums', () => {
+    it('should return mapped DTOs with assetCount from the repo', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace();
+      const albumId = newUuid();
+      const addedById = newUuid();
+      const createdAt = new Date('2025-01-01T00:00:00.000Z');
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Viewer,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.getLinkedAlbums.mockResolvedValue([
+        {
+          spaceId: space.id,
+          albumId,
+          addedById,
+          showInTimeline: true,
+          createdAt,
+          albumName: 'My Album',
+          albumThumbnailAssetId: null,
+        } as any,
+      ]);
+      mocks.sharedSpace.getAlbumAssetCount.mockResolvedValue(7);
+
+      const result = await sut.getLinkedAlbums(auth, space.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        albumId,
+        albumName: 'My Album',
+        addedById,
+        showInTimeline: true,
+        albumThumbnailAssetId: null,
+        assetCount: 7,
+        createdAt: createdAt.toISOString(),
+      });
+      expect(mocks.sharedSpace.getAlbumAssetCount).toHaveBeenCalledWith(albumId);
+    });
+
+    it('should reject non-member with ForbiddenException', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(void 0 as any);
+
+      await expect(sut.getLinkedAlbums(auth, newUuid())).rejects.toThrow(ForbiddenException);
+    });
+  });
+
   describe('get (linked libraries)', () => {
     it('should include linked libraries in response when user is admin', async () => {
       const auth = factory.auth({ user: { isAdmin: true } });

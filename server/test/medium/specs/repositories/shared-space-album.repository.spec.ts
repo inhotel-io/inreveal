@@ -144,3 +144,26 @@ describe('getAlbumAssetIdsWithoutOtherSpacePath', () => {
     expect(new Set(result)).toEqual(new Set([a1.id]));
   });
 });
+
+describe('getAlbumAssetCount', () => {
+  it('returns 3 for an album with 3 live assets, then 2 after one is soft-deleted', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'CountAlbum' });
+
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a3 } = await ctx.newAsset({ ownerId: user.id });
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a3.id });
+
+    expect(await sut.getAlbumAssetCount(album.id)).toBe(3);
+
+    // Soft-delete one asset — count must exclude it
+    await ctx.softDeleteAsset(a3.id);
+
+    expect(await sut.getAlbumAssetCount(album.id)).toBe(2);
+  });
+});
