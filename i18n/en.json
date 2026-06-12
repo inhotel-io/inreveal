@@ -2695,7 +2695,6 @@
   "source": "Source",
   "space_album_add_photos": "Add photos",
   "space_album_in_space": "in {space}",
-  "space_album_not_linked": "That album isn't part of this space.",
   "space_albums_count": "{count, plural, one {# album} other {# albums}}",
   "space_albums_empty": "No albums linked yet",
   "space_albums_empty_editor_cta": "Link an album",
