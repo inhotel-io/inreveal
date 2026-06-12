@@ -369,6 +369,74 @@ describe('SharedSpaceService — space-album permission matrix', () => {
   });
 
   // =========================================================================
+  // Grid 4b — TOGGLE showInTimeline on a linked album (Editor+; no admin gate)
+  // =========================================================================
+
+  describe('Grid 4b — TOGGLE showInTimeline on linked album (Editor+; no admin gate)', () => {
+    it('spaceOwner → ALLOW (flag persists, verified via getLinkedAlbums)', async () => {
+      const { ctx, sut } = setup();
+      const { user: o } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: o.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: o.id, role: 'owner' });
+      const { result: album } = await ctx.newAlbum({ ownerId: o.id, albumName: 'G4b-toggle-owner' });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: o.id });
+
+      await expect(
+        sut.updateAlbumLink(authFromUser(o), space.id, album.id, { showInTimeline: false }),
+      ).resolves.toBeUndefined();
+
+      const links = await sut.getLinkedAlbums(authFromUser(o), space.id);
+      expect(links).toHaveLength(1);
+      expect(links[0].albumId).toBe(album.id);
+      expect(links[0].showInTimeline).toBe(false);
+    });
+
+    it('spaceEditor → ALLOW', async () => {
+      const { ctx, sut } = setup();
+      const { user: o } = await ctx.newUser();
+      const { user: e } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: o.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: o.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: e.id, role: 'editor' });
+      const { result: album } = await ctx.newAlbum({ ownerId: o.id, albumName: 'G4b-toggle-editor' });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: o.id });
+
+      await expect(
+        sut.updateAlbumLink(authFromUser(e), space.id, album.id, { showInTimeline: false }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('spaceViewer → DENY', async () => {
+      const { ctx, sut } = setup();
+      const { user: o } = await ctx.newUser();
+      const { user: v } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: o.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: o.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: v.id, role: 'viewer' });
+      const { result: album } = await ctx.newAlbum({ ownerId: o.id, albumName: 'G4b-toggle-viewer' });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: o.id });
+
+      await expect(
+        sut.updateAlbumLink(authFromUser(v), space.id, album.id, { showInTimeline: false }),
+      ).rejects.toThrow();
+    });
+
+    it('nonMember → DENY', async () => {
+      const { ctx, sut } = setup();
+      const { user: o } = await ctx.newUser();
+      const { user: nm } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: o.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: o.id, role: 'owner' });
+      const { result: album } = await ctx.newAlbum({ ownerId: o.id, albumName: 'G4b-toggle-nonmember' });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: o.id });
+
+      await expect(
+        sut.updateAlbumLink(authFromUser(nm), space.id, album.id, { showInTimeline: false }),
+      ).rejects.toThrow();
+    });
+  });
+
+  // =========================================================================
   // Grid 6 — multi-path READ (direct asset + album paths, unlink behaviour)
   // =========================================================================
 

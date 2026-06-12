@@ -461,6 +461,18 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getAlbumAssetCount(albumId: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('album_asset')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where('album_asset.albumId', '=', albumId)
+      .where('asset.deletedAt', 'is', null)
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID, 4] })
   getRecentAssets(spaceId: string, limit = 4) {
     return this.db
