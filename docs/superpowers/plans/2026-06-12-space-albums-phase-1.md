@@ -104,11 +104,10 @@ export class SharedSpaceLibraryTable {
 
 ```ts
 import {
+  Column,
   CreateDateColumn,
-  ColumnType, // only if needed; otherwise omit
   ForeignKeyColumn,
   Generated,
-  Column,
   Table,
   Timestamp,
   UpdateDateColumn,
@@ -148,15 +147,25 @@ export class SharedSpaceAlbumTable {
 }
 ```
 
-> Confirm the exact `@Column` import + boolean-default decorator form against a sibling that has a boolean default, e.g. `shared-space-member.table.ts` `showInTimeline` (line ~74). Match that decorator exactly.
+> Decorator form verified against `shared-space-member.table.ts:74` (`@Column({ type: 'boolean', default: true }) showInTimeline!: Generated<boolean>;`) — exact match.
 
-- [ ] **Step 2: Register the table** in `server/src/schema/index.ts` — add, alphabetically near the other `SharedSpace*` imports (mirror line 83):
+- [ ] **Step 2: Register the table in `server/src/schema/index.ts` — THREE edits.** `SharedSpaceLibraryTable` appears in three places; the new table must mirror all three or downstream code won't type-check.
+
+1. **Import** (alphabetically near line 83):
 
 ```ts
 import { SharedSpaceAlbumTable } from 'src/schema/tables/shared-space-album.table';
 ```
 
-…and add `SharedSpaceAlbumTable` to whatever array/export the file uses to collect tables (match how `SharedSpaceLibraryTable` is included).
+2. **Tables array** (the schema's table list, near line 171 where `SharedSpaceLibraryTable,` is listed) — add `SharedSpaceAlbumTable,`.
+
+3. **Kysely `DB` interface map** (near line 310 where `shared_space_library: SharedSpaceLibraryTable;` is declared) — add:
+
+```ts
+shared_space_album: SharedSpaceAlbumTable;
+```
+
+> ⚠️ Edit 3 is **load-bearing**: without it the `DB` type has no `shared_space_album` key, so every `selectFrom('shared_space_album')` in Tasks 3–10 fails to compile. Verify with `grep -n "SharedSpaceLibraryTable\|shared_space_library:" server/src/schema/index.ts` → mirror each hit.
 
 - [ ] **Step 3: Write the migration** `server/src/schema/migrations-gallery/1775300000000-AddSharedSpaceAlbumTable.ts` (mirrors `1774215658876-AddSharedSpaceLibraryTable.ts` + the sync-columns/trigger/override pattern from `1778210000000-AddLibrarySyncColumns.ts`):
 
@@ -253,19 +262,13 @@ In the `JobName` enum, after `SharedSpaceLibraryFaceSync = 'SharedSpaceLibraryFa
   SharedSpaceAlbumFaceSync = 'SharedSpaceAlbumFaceSync',
 ```
 
-> If `Permission` values are also enumerated in a "all permissions" grant list or `@ApiKey` scope catalog, add the three there too. Find with: `grep -rn "SharedSpaceLibraryCreate" server/src --include=*.ts | grep -v spec`. Mirror every non-spec reference.
+> **Verified:** `Permission.SharedSpaceLibraryCreate` is referenced **only** in `enum.ts` (definition) and `shared-space.controller.ts` — there is **no** separate "all permissions" grant list or API-key scope catalog to update. Adding the three enum values is sufficient. (Confirm with `grep -rln "SharedSpaceLibraryCreate" server/src | grep -v spec` → expect only those two files.)
 
-- [ ] **Step 2: Add the job to the BullMQ queue registration** if jobs are registered in a central map. Find with `grep -rn "SharedSpaceLibraryFaceSync" server/src --include=*.ts | grep -v spec` and add `SharedSpaceAlbumFaceSync` to the same place(s) (queue concurrency config / job-data type map). Confirm the `JobOf<JobName.SharedSpaceAlbumFaceSync>` data type resolves to `{ spaceId: string; albumId: string }` — add that to the job-data interface map exactly where `SharedSpaceLibraryFaceSync: { spaceId: string; libraryId: string }` is declared.
+- [ ] **Step 2: Wire the job-data type.** The `JobOf<JobName.SharedSpaceAlbumFaceSync>` type must resolve to `{ spaceId: string; albumId: string }`. Find the job-data interface map and the queue registration with `grep -rln "SharedSpaceLibraryFaceSync" server/src | grep -v spec` (the library job declares `SharedSpaceLibraryFaceSync: { spaceId: string; libraryId: string }`). Add `SharedSpaceAlbumFaceSync: { spaceId: string; albumId: string }` in the **same** interface, and register the job in the **same** queue/concurrency map as the library face-sync job. Type-check after (`pnpm exec tsc --noEmit`) — a missing entry surfaces as a `JobOf` resolution error in Task 9.
 
-- [ ] **Step 3: Add DTOs to `server/src/dtos/shared-space.dto.ts`.** After `SharedSpaceLibraryLinkSchema` (124–128):
+- [ ] **Step 3: Add DTOs to `server/src/dtos/shared-space.dto.ts`.** Only the **update** and **response** DTOs are needed — the link endpoint takes `albumId` from the **path** (per the spec's API surface `PUT /shared-spaces/:id/albums/:albumId`), so there is no link body DTO. After `SharedSpaceLibraryLinkSchema` (124–128):
 
 ```ts
-const SharedSpaceAlbumLinkSchema = z
-  .object({
-    albumId: z.uuidv4().describe('Album ID'),
-  })
-  .meta({ id: 'SharedSpaceAlbumLinkDto' });
-
 const SharedSpaceAlbumLinkUpdateSchema = z
   .object({
     showInTimeline: z.boolean().describe('Include this album in the space timeline'),
@@ -288,7 +291,6 @@ const SharedSpaceLinkedAlbumSchema = z
 At the bottom export block (near 177):
 
 ```ts
-export class SharedSpaceAlbumLinkDto extends createZodDto(SharedSpaceAlbumLinkSchema) {}
 export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbumLinkUpdateSchema) {}
 export class SharedSpaceLinkedAlbumDto extends createZodDto(SharedSpaceLinkedAlbumSchema) {}
 ```
@@ -459,36 +461,62 @@ A space member can read an album-linked asset. Add a `shared_space_album` `.unio
 - Test: `server/test/medium/specs/shared-space-album-permissions.spec.ts` (new — **authoritative matrix**, Grid 1 first)
 - Modify: `server/src/repositories/access.repository.ts` (`checkSpaceAccess` ~246; `checkSpaceAccessForSpace` ~301)
 
-- [ ] **Step 1: Scaffold the matrix spec + the fixture world, then write Grid 1 (READ) cells as failing tests.** Create `server/test/medium/specs/shared-space-album-permissions.spec.ts`. Build the spec's fixture world once: space `S` links album `A`; space `S2` links album `C`; album `B` linked to nothing; actors `spaceOwner`, `spaceEditor` (**non-admin**), `spaceViewer`, `nonMember`, `albumOwner`, `albumEditor` (album_user editor), `albumViewer` (album_user viewer), `crossEditor` (Editor of `S2`, owns `B`), `admin`. Each album has ≥1 asset.
+- [ ] **Step 1: Scaffold the matrix spec + the fixture world, then write Grid 1 (READ) cells as failing tests.** Create `server/test/medium/specs/shared-space-album-permissions.spec.ts`. In `beforeAll`, bootstrap with `SharedSpaceService` as the **primary** service: `const { sut: svc, ctx } = newMediumService(SharedSpaceService, { ... })` (model: `server/test/medium/specs/repositories/shared-space-face-matching.spec.ts`, which uses `newMediumService(BaseService, {...})` then `ctx.get(...)`). `svc` (the `sut`) gives `linkAlbum`/`unlinkAlbum`/`updateAlbumLink`; `ctx.get(AccessRepository)` / `ctx.get(SharedSpaceRepository)` give the repos. Build the spec's fixture world once: space `S` links album `A`; space `S2` links album `C`; album `B` linked to nothing; actors `spaceOwner`, `spaceEditor` (**non-admin**), `spaceViewer`, `nonMember`, `albumOwner`, `albumEditor` (album_user editor), `albumViewer` (album_user viewer), `crossEditor` (Editor of `S2`, owns `B`), `admin`; plus albums `ownedByOwner`/`ownedByEditor`/`ownedByViewer`/`viewerOnlyAlbum` for Grid 3. Each album has ≥1 asset. Provide module-scope `svc`, `ctx`, `world`, and helpers `authOf(actor)` (→ `AuthDto`) + seed accessors on `world`.
 
 ```ts
+import { Permission } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
-import { describe, expect, it } from 'vitest';
-// medium bootstrapping mirrors shared-space-album.spec.ts
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SharedSpaceService } from 'src/services/shared-space.service';
+import { checkAccess } from 'src/utils/access';
+import { newMediumService } from 'test/medium.factory';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('Space albums — permission matrix (Grids 1–7)', () => {
   // world: built in beforeAll → { S, S2, A, B, C, assetInA, actors{...} }
 
-  describe('Grid 1 — READ asset in album A linked to space S', () => {
+  describe('Grid 1 — READ asset in album A linked to space S (full AssetRead authorization)', () => {
+    // checkAccess is the real entrypoint backing BaseService.requireAccess — it unions
+    // ownership ∪ album_user ∪ partner ∪ space (asset/library/NEW album) paths, so it gives
+    // the TRUE allow/deny for every actor, including the album-path actors.
     it.each([
-      ['spaceOwner', true],
-      ['spaceEditor', true],
-      ['spaceViewer', true],
-      ['nonMember', false],
-      ['albumOwner', true],
-      ['albumEditor', true],
-      ['albumViewer', true],
-      ['crossEditor', false], // edits S2, A not linked there
+      ['spaceOwner', true], // space membership → A linked to S
+      ['spaceEditor', true], // space membership
+      ['spaceViewer', true], // space membership (the absorbed read)
+      ['nonMember', false], // no path
+      ['albumOwner', true], // album ownership (independent of S)
+      ['albumEditor', true], // manual album_user editor (independent)
+      ['albumViewer', true], // manual album_user viewer (independent)
+      ['crossEditor', false], // edits S2; A not linked to S2
     ])('%s read A.asset → allowed=%s', async (actor, allowed) => {
+      const allowedIds = await checkAccess(ctx.get(AccessRepository), {
+        auth: authOf(actor),
+        permission: Permission.AssetRead,
+        ids: new Set([world.assetInA]),
+      });
+      expect(allowedIds.has(world.assetInA)).toBe(allowed);
+    });
+
+    // Supplementary raw-predicate assertion: the NEW space-album branch in isolation
+    // (proves the branch — not just an album_user path — grants the space actors).
+    it('checkSpaceAccess (space-album branch) grants space members, denies non/cross', async () => {
       const access = ctx.get(AccessRepository);
-      const result = await access.asset.checkSpaceAccess(world.actors[actor].id, new Set([world.assetInA]));
-      expect(result.has(world.assetInA)).toBe(allowed);
+      for (const [actor, expected] of [
+        ['spaceOwner', true],
+        ['spaceEditor', true],
+        ['spaceViewer', true],
+        ['nonMember', false],
+        ['crossEditor', false],
+      ] as const) {
+        const r = await access.asset.checkSpaceAccess(world.actors[actor].id, new Set([world.assetInA]));
+        expect(r.has(world.assetInA)).toBe(expected);
+      }
     });
   });
 });
 ```
 
-> `albumOwner`/`albumEditor`/`albumViewer` are allowed via their **own** album paths, which `checkSpaceAccess` does **not** model (it only models space paths). Those cells pass through the higher-level `requireAccess` union (owner/`album_user`) and are asserted at the HTTP layer in Task 11. For this medium predicate test, assert the **space-derived** truth: split Grid 1 into (a) `checkSpaceAccess` cells for the space actors (owner/editor/viewer ALLOW, nonMember/crossEditor DENY) here, and (b) the album-path actors via the full `requireAccess(AssetRead)` union — add those in the same file using `newTestService`/access util once Task 5 wires it, or assert at E2E (Task 11). Keep the predicate-level cells (space actors) here.
+> Import `checkAccess` from `src/utils/access` and `Permission` from `src/enum`. `checkAccess(repos, { auth, permission, ids })` returns the allowed `Set<string>` (it's what `requireAccess` calls before throwing). `authOf(actor)` builds an `AuthDto` for the fixture user. This authorization-level assertion is the authoritative contract; the raw-predicate `it` is a supplement that pins the new branch specifically.
 
 - [ ] **Step 2: Run → confirm RED.** Run: `cd server && pnpm test:medium -- --run test/medium/specs/shared-space-album-permissions.spec.ts` → Expected: FAIL (space members denied — no album branch yet; `spaceOwner read A.asset` returns `allowed=false`).
 
@@ -663,34 +691,26 @@ Linking requires **space role ≥ Editor** (non-admin — the divergence from `l
 
 ```ts
 describe('Grid 3 — LINK album into S (Editor+ AND owns/edits album; NOT admin-gated)', () => {
+  // service signature: linkAlbum(auth, spaceId, albumId) — albumId is a string (path param)
   it('spaceOwner who owns the album → ALLOW', async () => {
-    const svc = ctx.get(SharedSpaceService);
-    await expect(
-      svc.linkAlbum(authOf('spaceOwnerOwnsB'), world.S, { albumId: world.ownedByOwner }),
-    ).resolves.toBeUndefined();
+    await expect(svc.linkAlbum(authOf('spaceOwner'), world.S, world.ownedByOwner)).resolves.toBeUndefined();
   });
   it('non-admin spaceEditor who owns the album → ALLOW (divergence from libraries)', async () => {
-    const svc = ctx.get(SharedSpaceService);
     expect(world.actors.spaceEditor.isAdmin).toBe(false);
-    await expect(
-      svc.linkAlbum(authOf('spaceEditor'), world.S, { albumId: world.ownedByEditor }),
-    ).resolves.toBeUndefined();
+    await expect(svc.linkAlbum(authOf('spaceEditor'), world.S, world.ownedByEditor)).resolves.toBeUndefined();
   });
   it('spaceEditor who is only album_user-VIEWER on the album → DENY (cannot re-share read-only)', async () => {
-    const svc = ctx.get(SharedSpaceService);
-    await expect(svc.linkAlbum(authOf('spaceEditor'), world.S, { albumId: world.viewerOnlyAlbum })).rejects.toThrow();
+    await expect(svc.linkAlbum(authOf('spaceEditor'), world.S, world.viewerOnlyAlbum)).rejects.toThrow();
   });
   it('spaceViewer who owns the album → DENY (Viewer cannot manage links)', async () => {
-    const svc = ctx.get(SharedSpaceService);
-    await expect(svc.linkAlbum(authOf('spaceViewer'), world.S, { albumId: world.ownedByViewer })).rejects.toThrow();
+    await expect(svc.linkAlbum(authOf('spaceViewer'), world.S, world.ownedByViewer)).rejects.toThrow();
   });
   it('re-link already-linked A → idempotent no-op (no throw, no duplicate row)', async () => {
-    const svc = ctx.get(SharedSpaceService);
-    await svc.linkAlbum(authOf('spaceOwner'), world.S, { albumId: world.A });
+    await svc.linkAlbum(authOf('spaceOwner'), world.S, world.A);
+    await svc.linkAlbum(authOf('spaceOwner'), world.S, world.A); // second call: no throw, no dup
     const repo = ctx.get(SharedSpaceRepository);
-    expect(await repo.getLinkedAlbums(world.S)).toEqual(
-      expect.arrayContaining([expect.objectContaining({ albumId: world.A })]),
-    );
+    const links = await repo.getLinkedAlbums(world.S);
+    expect(links.filter((l) => l.albumId === world.A)).toHaveLength(1);
   });
 });
 ```
@@ -700,15 +720,15 @@ describe('Grid 3 — LINK album into S (Editor+ AND owns/edits album; NOT admin-
 - [ ] **Step 3: Implement `linkAlbum`** in `shared-space.service.ts` after `unlinkLibrary` (643). Mirror `linkLibrary` **minus the admin gate**, plus the album-edit-rights check:
 
 ```ts
-  async linkAlbum(auth: AuthDto, spaceId: string, dto: SharedSpaceAlbumLinkDto): Promise<void> {
+  async linkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     // Actor must own or be an editor of the album (cannot re-share a read-only album).
     // AlbumUpdate = owner ∪ album_user-editor and is NOT extended by the space grant → no circularity.
-    await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [dto.albumId] });
+    await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [albumId] });
 
     const result = await this.sharedSpaceRepository.addAlbum({
       spaceId,
-      albumId: dto.albumId,
+      albumId,
       addedById: auth.user.id,
     });
 
@@ -718,14 +738,14 @@ describe('Grid 3 — LINK album into S (Editor+ AND owns/edits album; NOT admin-
       if (space?.faceRecognitionEnabled) {
         await this.jobRepository.queue({
           name: JobName.SharedSpaceAlbumFaceSync,
-          data: { spaceId, albumId: dto.albumId },
+          data: { spaceId, albumId },
         });
       }
     }
   }
 ```
 
-Add imports: `SharedSpaceAlbumLinkDto` (from `src/dtos/shared-space.dto`) and confirm `Permission`, `JobName`, `SharedSpaceRole` already imported.
+`Permission`, `JobName`, `SharedSpaceRole` are already imported in this file (used by `linkLibrary`). No new DTO import needed — `albumId` is a plain string from the path param.
 
 - [ ] **Step 4: Run → GREEN.** Run the matrix spec → Expected: PASS (Grid 3). `pnpm exec tsc --noEmit` → PASS.
 
@@ -734,7 +754,7 @@ Add imports: `SharedSpaceAlbumLinkDto` (from `src/dtos/shared-space.dto`) and co
 ```ts
 it('linkAlbum does not require admin and queues face sync only for new links with recognition on', async () => {
   // mocks: requireRole resolves; access mocked allow; repo.addAlbum → returns a row; getById → { faceRecognitionEnabled: true }
-  await sut.linkAlbum(editorAuth, 'space-1', { albumId: 'album-1' });
+  await sut.linkAlbum(editorAuth, 'space-1', 'album-1');
   expect(mocks.job.queue).toHaveBeenCalledWith({
     name: JobName.SharedSpaceAlbumFaceSync,
     data: { spaceId: 'space-1', albumId: 'album-1' },
@@ -1209,9 +1229,8 @@ it('linking A to S does not surface A in any member’s personal album list (abs
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Param('albumId') albumId: string,
-    @Body() _dto: SharedSpaceAlbumLinkDto, // albumId comes from the path; keep body for symmetry/extension
   ): Promise<void> {
-    return this.service.linkAlbum(auth, id, { albumId });
+    return this.service.linkAlbum(auth, id, albumId);
   }
 
   @Patch(':id/albums/:albumId')
@@ -1236,7 +1255,7 @@ it('linking A to S does not surface A in any member’s personal album list (abs
   }
 ```
 
-> Decide path-vs-body for `albumId`: the library endpoint takes `libraryId` in the body for `PUT`. Here `albumId` is in the path for REST symmetry with `DELETE`/`PATCH`. Keep `SharedSpaceAlbumLinkDto` registered (used by the OpenAPI surface / future fields) but read `albumId` from the path. Add the DTO/permission imports at the top of the controller.
+> `albumId` is a **path** param on all of `PUT`/`PATCH`/`DELETE` (per the spec's API surface) — there is **no** link body DTO. `PUT` is the idempotent "create-or-ensure the link resource at this path" verb (re-link → 204, no dup). Add the permission + `SharedSpaceAlbumLinkUpdateDto`/`SharedSpaceLinkedAlbumDto` imports at the top of the controller (no `SharedSpaceAlbumLinkDto` — it doesn't exist).
 
 - [ ] **Step 4: Run → GREEN.** Run the e2e spec → Expected: PASS. Record any status-code assertions to the actual returned codes.
 
@@ -1247,6 +1266,90 @@ it('linking A to S does not surface A in any member’s personal album list (abs
 ```bash
 git add server/src/controllers/shared-space.controller.ts e2e/src/specs/server/api/shared-space-album.e2e-spec.ts
 git commit -m "feat(server): space-album endpoints (PUT/PATCH/DELETE/GET) + e2e role matrix"
+```
+
+---
+
+## Task 11.5: Lifecycle & visibility edge-case medium tests
+
+Pins the spec's [Lifecycle & edge cases] rows not covered by the grids — TDD each (write → confirm RED/GREEN). All in `server/test/medium/specs/shared-space-album.spec.ts`. Most pass with **no** new production code (they verify existing behavior — FK cascade, `deletedAt` filters, the read/timeline predicates) — for those, the test IS the deliverable; if one fails, that's a real bug to fix before moving on.
+
+**Files:**
+
+- Modify: `server/test/medium/specs/shared-space-album.spec.ts`
+- (only if a test fails) Modify the relevant predicate/repo from earlier tasks.
+
+- [ ] **Step 1: Remove single asset from album → leaves the space (unless another path).** Distinct from unlinking the whole album:
+
+```ts
+it('removing an asset from a linked album removes it from the space (no other path)', async () => {
+  // album A linked to S; asset a1 only-in-A. remove a1 from album_asset.
+  const access = ctx.get(AccessRepository);
+  expect((await access.asset.checkSpaceAccess(viewer.id, new Set([a1]))).has(a1)).toBe(true);
+  await removeAlbumAsset(A, a1); // album.repository / direct delete from album_asset
+  expect((await access.asset.checkSpaceAccess(viewer.id, new Set([a1]))).has(a1)).toBe(false);
+});
+it('removing an asset that is also direct-added keeps it in the space', async () => {
+  // a2 in A and shared_space_asset(S). remove from A → still readable via direct path.
+});
+```
+
+- [ ] **Step 2: Delete the whole album → link cascades, photos leave the space.** Verifies the `ON DELETE CASCADE` FK + read predicate:
+
+```ts
+it('hard-deleting the album cascades the link and removes its assets from the space', async () => {
+  const repo = ctx.get(SharedSpaceRepository);
+  const access = ctx.get(AccessRepository);
+  await hardDeleteAlbum(A); // deleteFrom('album') — FK cascade drops shared_space_album row
+  expect(await repo.hasAlbumLink(S, A)).toBe(false);
+  expect((await access.asset.checkSpaceAccess(viewer.id, new Set([assetInA]))).has(assetInA)).toBe(false);
+});
+```
+
+- [ ] **Step 3: Soft-deleted album asset is excluded from read + timeline.** The read branch and timeline branch both filter `asset.deletedAt is null`:
+
+```ts
+it('a soft-deleted (trashed) album asset is not readable via the space and not in its timeline', async () => {
+  await trashAsset(assetInA); // set asset.deletedAt
+  const access = ctx.get(AccessRepository);
+  expect((await access.asset.checkSpaceAccess(viewer.id, new Set([assetInA]))).has(assetInA)).toBe(false);
+  expect(await fetchSpaceTimelineAssetIds(S, viewer)).not.toContain(assetInA);
+});
+```
+
+- [ ] **Step 4: Live-photo / stacked assets.** The read branch selects `livePhotoVideoId`, so the motion part of a live photo in a linked album is reachable when its still is requested:
+
+```ts
+it('live-photo video part of a linked-album asset is readable via the space', async () => {
+  // assetInA has livePhotoVideoId = motionId; query for motionId → allowed via the album branch
+  const access = ctx.get(AccessRepository);
+  expect((await access.asset.checkSpaceAccess(viewer.id, new Set([motionId]))).has(motionId)).toBe(true);
+});
+```
+
+- [ ] **Step 5: Visibility (archived/hidden/locked) — document + pin actual behavior.** `checkSpaceAccess` (album, library, AND direct branches) does **not** filter `asset.visibility`; the timeline query applies its own visibility filters. Assert what the code actually does and **flag** the boundary:
+
+```ts
+it('visibility of album assets in the space follows the same rules as direct/library space assets', async () => {
+  // archived asset in A: assert checkSpaceAccess result == the result for the SAME asset direct-added (parity, not a new rule).
+  // locked asset (AssetVisibility.Locked): NOTE — checkSpaceAccess does not gate Locked for ANY space path today.
+  //   This is pre-existing behavior inherited from libraries/direct, NOT introduced by albums.
+  //   If locked-asset exclusion is desired it is a separate cross-cutting change (out of scope here) — record the
+  //   current behavior so a future change is a deliberate, test-visible decision.
+});
+```
+
+> ⚠️ **Surface to reviewers:** linking an album whose owner placed a **Locked** asset in it would expose that asset to space members via `checkSpaceAccess`, exactly as direct-adding or library-linking a locked asset does today. Not a regression and not introduced by this feature, but call it out in the PR description so the team can decide whether locked-asset exclusion across all space paths is wanted.
+
+- [ ] **Step 6: Empty album link is a clean no-op.** Linking an album with zero assets: link succeeds, timeline unchanged, face-sync (if recognition on) processes nothing and returns `Success`. Assert no throw + no rows.
+
+- [ ] **Step 7: Run → all GREEN** (fix any real bug a failing test exposes). Run: `cd server && pnpm test:medium -- --run test/medium/specs/shared-space-album.spec.ts` → PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add server/test/medium/specs/shared-space-album.spec.ts server/src
+git commit -m "test(server): lifecycle + visibility edge cases for space albums"
 ```
 
 ---
@@ -1291,7 +1394,7 @@ git commit -m "test(server): consolidate space-album permission matrix + set-equ
 cd server && pnpm build && pnpm sync:open-api
 ```
 
-Expected: `open-api/immich-openapi-specs.json` gains the new paths (`/shared-spaces/{id}/albums...`) and DTOs (`SharedSpaceAlbumLinkDto`, `SharedSpaceAlbumLinkUpdateDto`, `SharedSpaceLinkedAlbumDto`).
+Expected: `open-api/immich-openapi-specs.json` gains the new paths (`/shared-spaces/{id}/albums...`) and DTOs (`SharedSpaceAlbumLinkUpdateDto`, `SharedSpaceLinkedAlbumDto`).
 
 - [ ] **Step 2: Regenerate both clients.** Run (Java required for Dart):
 
@@ -1402,8 +1505,9 @@ Read the run results (`gh --repo open-noodle/gallery run list`); fix any **real*
 
 ## Self-review checklist (run before handing off)
 
-- **Spec coverage:** Goals → Tasks: link/unlink (6,7,11), read all-members (4), write Editor-only (5), absorbed/no-`album_user` (11 Grid 7), removal propagates (4 Grid 6, 7), clean revocation Phase-2 (N/A here), face recognition (9) + unlink cleanup (7), timeline `showInTimeline` (10), Albums section (14). Non-goals respected (no grant table, no triggers, no mobile, no admin-gate, no album-delete-via-space — Grid 5). ✅
-- **Permission matrix:** Grids 1–7 mapped to Tasks 4,5,6,7,8,11,12. ✅
-- **TDD:** every task RED→GREEN→commit; matrix accreted grid-by-grid, consolidated in 12. ✅
-- **Type consistency:** method names stable across tasks — `addAlbum`/`removeAlbum`/`getLinkedAlbums`/`hasAlbumLink`/`setAlbumShowInTimeline`/`getAlbumAssetIdsWithoutOtherSpacePath`/`getAlbumAssetCount` (repo); `linkAlbum`/`unlinkAlbum`/`updateAlbumLink`/`getLinkedAlbums`/`handleSharedSpaceAlbumFaceSync` (service); `checkSpaceLinkedAlbumAccess` (access); `getByAlbumIdWithFaces` (asset repo). DTOs: `SharedSpaceAlbumLinkDto`/`SharedSpaceAlbumLinkUpdateDto`/`SharedSpaceLinkedAlbumDto`. ✅
-- **Verify-before-implement anchors:** several steps say "confirm exact column/decorator against sibling" (album column names, boolean-default decorator, job-data type map, permission grant lists) — these are real lookups, not placeholders; the surrounding code is fully specified.
+- **Spec coverage:** Goals → Tasks: link/unlink (6,7,11), read all-members (4), write Editor-only (5), absorbed/no-`album_user` (11 Grid 7), removal propagates (4 Grid 6 + 11.5 remove-asset/delete-album), clean revocation Phase-2 (N/A here), face recognition (9) + unlink cleanup (7), timeline `showInTimeline` (10), Albums section (14). **Lifecycle/edge rows** (soft-delete, album hard-delete cascade, remove-single-asset, live-photo, visibility/locked, empty-link) → Task 11.5. Non-goals respected (no grant table, no triggers, no mobile, no admin-gate, no album-delete-via-space — Grid 5). ✅
+- **Permission matrix:** Grids 1–7 mapped to Tasks 4,5,6,7,8,11,12; lifecycle edges to 11.5. ✅
+- **TDD:** every task RED→GREEN→commit; matrix accreted grid-by-grid, consolidated in 12; edge cases pinned in 11.5. ✅
+- **Type consistency:** method names stable across tasks — `addAlbum`/`removeAlbum`/`getLinkedAlbums`/`hasAlbumLink`/`setAlbumShowInTimeline`/`getAlbumAssetIdsWithoutOtherSpacePath`/`getAlbumAssetCount` (repo); `linkAlbum(auth, spaceId, albumId)`/`unlinkAlbum`/`updateAlbumLink`/`getLinkedAlbums`/`handleSharedSpaceAlbumFaceSync` (service); `checkSpaceLinkedAlbumAccess` (access); `getByAlbumIdWithFaces` (asset repo). DTOs: `SharedSpaceAlbumLinkUpdateDto`/`SharedSpaceLinkedAlbumDto` (no link DTO — link is path-only). ✅
+- **Schema registration:** `schema/index.ts` requires 3 edits (import + tables array + `DB` interface map) — the `DB` map is load-bearing for type-checking. ✅
+- **Verify-before-implement anchors:** the remaining "confirm against sibling" notes (album column names ✓ verified, boolean decorator ✓ verified, job-data type map) are real lookups with fully-specified surrounding code — not placeholders.
