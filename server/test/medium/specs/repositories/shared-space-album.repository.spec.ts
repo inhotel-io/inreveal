@@ -90,3 +90,57 @@ describe('SharedSpaceRepository — Album Link CRUD', () => {
     expect(spaces.map((s) => s.spaceId)).toContain(space.id);
   });
 });
+
+describe('getAlbumAssetIdsWithoutOtherSpacePath', () => {
+  it('excludes assets with a direct, another-album, or library path to the space', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: user.id, albumName: 'AlbumA' });
+
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a3 } = await ctx.newAsset({ ownerId: user.id });
+
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a2.id });
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a3.id });
+
+    await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: user.id });
+
+    // a2: direct-add to space
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: a2.id });
+
+    // a3: in another album D linked to space
+    const { result: albumD } = await ctx.newAlbum({ ownerId: user.id, albumName: 'AlbumD' });
+    await ctx.newAlbumAsset({ albumId: albumD.id, assetId: a3.id });
+    await sut.addAlbum({ spaceId: space.id, albumId: albumD.id, addedById: user.id });
+
+    const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
+    expect(new Set(result)).toEqual(new Set([a1.id]));
+  });
+
+  it('excludes assets whose library is linked to the space', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { result: library } = await ctx.newLibrary({ ownerId: user.id });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: user.id, albumName: 'LibAlbumA' });
+
+    // a1: normal asset, only in album A
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id });
+    // a4: asset belonging to linked library
+    const { asset: a4 } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id });
+
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a4.id });
+
+    await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
+    expect(new Set(result)).toEqual(new Set([a1.id]));
+  });
+});
