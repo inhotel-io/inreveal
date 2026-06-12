@@ -393,6 +393,30 @@ describe('Space album detail page', () => {
     expect(screen.queryByTestId('add-photos-button')).not.toBeInTheDocument();
   });
 
+  it('in add mode, the full-screen overlay renders with the picker timeline inside', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
+    });
+    const overlay = screen.getByTestId('add-photos-overlay');
+    const main = screen.getByTestId('add-photos-timeline-main');
+    expect(overlay).toContainElement(main);
+    expect(main.className).toContain('pt-(--navbar-height)');
+  });
+
+  it('in browse mode, the add-photos overlay is NOT rendered', () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    expect(screen.queryByTestId('add-photos-overlay')).not.toBeInTheDocument();
+  });
+
+  it('in browse mode, the browse timeline renders (not in the overlay)', () => {
+    renderPage({ album: makeAlbum({ id: 'album-1' }) });
+    expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'browse');
+    expect(screen.queryByTestId('add-photos-overlay')).not.toBeInTheDocument();
+  });
+
   it('firing AddAssets action in add mode returns to browse and refreshes album', async () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
