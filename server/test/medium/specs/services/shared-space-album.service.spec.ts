@@ -41,6 +41,65 @@ beforeAll(async () => {
 const authFromUser = (actor: { id: string; email: string }) =>
   factory.auth({ user: { id: actor.id, email: actor.email } });
 
+describe('SharedSpaceService — getLinkedAlbums', () => {
+  it('returns linked album DTO with correct assetCount for a member', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'Linked Album' });
+
+    // Add 3 assets to the album
+    const { asset: a1 } = await ctx.newAsset({ ownerId: owner.id });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: owner.id });
+    const { asset: a3 } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a3.id });
+
+    // Link album to space
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const viewerAuth = authFromUser(viewer);
+    const links = await sut.getLinkedAlbums(viewerAuth, space.id);
+
+    expect(links).toHaveLength(1);
+    const link = links[0];
+    expect(link.albumId).toBe(album.id);
+    expect(link.albumName).toBe('Linked Album');
+    expect(link.showInTimeline).toBe(true);
+    expect(link.assetCount).toBe(3);
+    expect(link.addedById).toBe(owner.id);
+    expect(typeof link.createdAt).toBe('string');
+  });
+
+  it('returns empty array when no albums are linked', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const ownerAuth = authFromUser(owner);
+    const links = await sut.getLinkedAlbums(ownerAuth, space.id);
+
+    expect(links).toHaveLength(0);
+  });
+
+  it('rejects non-member with ForbiddenException', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: nonMember } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const nonMemberAuth = authFromUser(nonMember);
+    await expect(sut.getLinkedAlbums(nonMemberAuth, space.id)).rejects.toThrow();
+  });
+});
+
 describe('SharedSpaceService — unlinkAlbum face retention', () => {
   it('removes faces for album-only assets but retains faces for assets with another space path', async () => {
     const { ctx, sut } = setup();

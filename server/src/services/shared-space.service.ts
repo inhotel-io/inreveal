@@ -22,10 +22,12 @@ import {
 } from 'src/dtos/shared-space-person.dto';
 import {
   SharedSpaceActivityResponseDto,
+  SharedSpaceAlbumLinkUpdateDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetRemoveDto,
   SharedSpaceCreateDto,
   SharedSpaceLibraryLinkDto,
+  SharedSpaceLinkedAlbumDto,
   SharedSpaceLinkedLibraryDto,
   SharedSpaceMemberCreateDto,
   SharedSpaceMemberMetadataContributionDto,
@@ -663,6 +665,34 @@ export class SharedSpaceService extends BaseService {
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       await this.queueSpacePersonMetadataBackfill();
     }
+  }
+
+  async updateAlbumLink(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    dto: SharedSpaceAlbumLinkUpdateDto,
+  ): Promise<void> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    await this.sharedSpaceRepository.setAlbumShowInTimeline(spaceId, albumId, dto.showInTimeline);
+  }
+
+  async getLinkedAlbums(auth: AuthDto, spaceId: string): Promise<SharedSpaceLinkedAlbumDto[]> {
+    await this.requireMembership(auth, spaceId);
+    const links = await this.sharedSpaceRepository.getLinkedAlbums(spaceId);
+    const result: SharedSpaceLinkedAlbumDto[] = [];
+    for (const link of links) {
+      result.push({
+        albumId: link.albumId,
+        albumName: link.albumName,
+        addedById: link.addedById,
+        showInTimeline: link.showInTimeline,
+        albumThumbnailAssetId: link.albumThumbnailAssetId,
+        assetCount: await this.sharedSpaceRepository.getAlbumAssetCount(link.albumId),
+        createdAt: (link.createdAt as unknown as Date).toISOString(),
+      });
+    }
+    return result;
   }
 
   async unlinkLibrary(auth: AuthDto, spaceId: string, libraryId: string): Promise<void> {
