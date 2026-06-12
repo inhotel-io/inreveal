@@ -63,21 +63,18 @@
   );
   const canManage = $derived(isSpaceEditor || isAlbumEditor);
 
-  const options = $derived.by(() => {
-    if (mode === 'add') {
-      return buildAlbumAssetPickerOptions(album.id, createFilterState());
-    }
+  const browseOptions = $derived({
+    ...buildAlbumTimelineOptions(
+      album.id,
+      album.order ?? authManager.preferences.albums.defaultAssetOrder,
+      createFilterState(),
+    ),
     // The grouping MUST live in the options object — that is what the TimelineManager reads to
     // build buckets. The top-level <Timeline grouping={...}> prop alone does not re-group.
-    return {
-      ...buildAlbumTimelineOptions(
-        album.id,
-        album.order ?? authManager.preferences.albums.defaultAssetOrder,
-        createFilterState(),
-      ),
-      grouping: timelineGrouping,
-    };
+    grouping: timelineGrouping,
   });
+
+  const pickerOptions = $derived(buildAlbumAssetPickerOptions(album.id, createFilterState()));
 
   const refreshAlbum = async () => {
     album = await getAlbumInfo({ id: album.id });
@@ -168,8 +165,57 @@
     </AssetSelectControlBar>
   {/if}
 
-  <!-- Add-mode control bar -->
-  {#if mode === 'add'}
+  {#if mode === 'browse' && !assetMultiSelectManager.selectionActive}
+    <div
+      class="hidden shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 md:flex dark:border-gray-700 dark:bg-gray-900"
+      data-testid="timeline-desktop-grouping-control"
+    >
+      <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
+    </div>
+  {/if}
+
+  {#if mode === 'browse'}
+    <Timeline
+      enableRouting={false}
+      options={browseOptions}
+      bind:timelineManager
+      assetInteraction={assetMultiSelectManager}
+      isSelectionMode={false}
+      singleSelect={false}
+      grouping={timelineGrouping}
+      onGroupingChange={handleTimelineGroupingChange}
+      onTimelineBucketActivate={handleTimelineBucketActivate}
+      {temporalAnchor}
+      onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+    >
+      {#snippet empty()}
+        <section class="mt-50 flex place-content-center place-items-center">
+          <div class="flex flex-col items-center gap-4 text-center">
+            <Icon icon={mdiImageOutline} size="3.5em" class="text-gray-400" />
+            <p class="text-lg text-gray-500 dark:text-gray-400">{$t('no_assets_to_show')}</p>
+            {#if canManage}
+              <button
+                type="button"
+                data-testid="empty-add-photos-button"
+                class="text-sm text-(--primary)"
+                onclick={() => {
+                  timelineGrouping = 'day';
+                  temporalAnchor = undefined;
+                  mode = 'add';
+                }}
+              >
+                {$t('add_photos')}
+              </button>
+            {/if}
+          </div>
+        </section>
+      {/snippet}
+    </Timeline>
+  {/if}
+</UserPageLayout>
+
+{#if mode === 'add'}
+  <section class="fixed inset-0 z-40 bg-immich-bg dark:bg-immich-dark-bg" data-testid="add-photos-overlay">
     <ControlAppBar onClose={handleExitAddMode}>
       {#snippet leading()}
         <p class="text-lg dark:text-immich-dark-fg">
@@ -191,51 +237,17 @@
         />
       {/snippet}
     </ControlAppBar>
-  {/if}
-
-  {#if mode === 'browse' && !assetMultiSelectManager.selectionActive}
-    <div
-      class="hidden shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 md:flex dark:border-gray-700 dark:bg-gray-900"
-      data-testid="timeline-desktop-grouping-control"
+    <main
+      class="relative h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6"
+      data-testid="add-photos-timeline-main"
     >
-      <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
-    </div>
-  {/if}
-
-  <Timeline
-    enableRouting={false}
-    {options}
-    bind:timelineManager
-    assetInteraction={mode === 'add' ? pickerMultiSelectManager : assetMultiSelectManager}
-    isSelectionMode={mode === 'add'}
-    singleSelect={false}
-    grouping={mode === 'add' ? 'day' : timelineGrouping}
-    onGroupingChange={mode === 'add' ? undefined : handleTimelineGroupingChange}
-    onTimelineBucketActivate={mode === 'add' ? undefined : handleTimelineBucketActivate}
-    temporalAnchor={mode === 'add' ? undefined : temporalAnchor}
-    onTemporalAnchorResolved={mode === 'add' ? undefined : () => (temporalAnchor = undefined)}
-  >
-    {#snippet empty()}
-      <section class="mt-50 flex place-content-center place-items-center">
-        <div class="flex flex-col items-center gap-4 text-center">
-          <Icon icon={mdiImageOutline} size="3.5em" class="text-gray-400" />
-          <p class="text-lg text-gray-500 dark:text-gray-400">{$t('no_assets_to_show')}</p>
-          {#if canManage}
-            <button
-              type="button"
-              data-testid="empty-add-photos-button"
-              class="text-sm text-(--primary)"
-              onclick={() => {
-                timelineGrouping = 'day';
-                temporalAnchor = undefined;
-                mode = 'add';
-              }}
-            >
-              {$t('add_photos')}
-            </button>
-          {/if}
-        </div>
-      </section>
-    {/snippet}
-  </Timeline>
-</UserPageLayout>
+      <Timeline
+        enableRouting={false}
+        options={pickerOptions}
+        assetInteraction={pickerMultiSelectManager}
+        isSelectionMode={true}
+        singleSelect={false}
+      />
+    </main>
+  </section>
+{/if}
