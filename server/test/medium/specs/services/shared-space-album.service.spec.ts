@@ -1,19 +1,26 @@
 import { Kysely } from 'kysely';
+import { JobName, JobStatus } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
+import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { newMediumService } from 'test/medium.factory';
-import { factory } from 'test/small.factory';
+import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
+import { Mocked } from 'vitest';
 
 let defaultDatabase: Kysely<DB>;
 
@@ -32,6 +39,32 @@ const setup = () => {
   });
   result.ctx.getMock(JobRepository).queue.mockResolvedValue();
   return result;
+};
+
+/** Full setup with face-matching repos wired in (mirrors shared-space-face-identity-repair.spec.ts) */
+const setupWithFaceMatch = () => {
+  const result = newMediumService(SharedSpaceService, {
+    database: defaultDatabase,
+    real: [
+      AccessRepository,
+      AlbumRepository,
+      AlbumUserRepository,
+      AssetRepository,
+      SharedSpaceRepository,
+      UserRepository,
+      FaceIdentityRepository,
+      PersonRepository,
+      ConfigRepository,
+      SystemMetadataRepository,
+      SearchRepository,
+    ],
+    mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
+  });
+  const jobs = result.ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  jobs.queue.mockResolvedValue();
+  jobs.queueAll.mockResolvedValue();
+  jobs.hasInFlightDedupChain.mockResolvedValue(false);
+  return { ...result, jobs, faceIdentityRepository: result.ctx.get(FaceIdentityRepository) };
 };
 
 beforeAll(async () => {
@@ -192,5 +225,96 @@ describe('SharedSpaceService — unlinkAlbum face retention', () => {
       .where('id', '=', spacePerson.id)
       .execute();
     expect(remaining).toHaveLength(0);
+  });
+});
+
+describe('SharedSpaceService — handleSharedSpaceAlbumFaceSync', () => {
+  it('returns Skipped when face recognition is disabled', async () => {
+    const { ctx, sut } = setupWithFaceMatch();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+
+    const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: space.id, albumId: 'any-album-id' });
+
+    expect(result).toBe(JobStatus.Skipped);
+  });
+
+  it('returns Skipped when album not linked to space', async () => {
+    const { ctx, sut } = setupWithFaceMatch();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Unlinked' });
+
+    // Album is NOT linked to the space
+    const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: space.id, albumId: album.id });
+
+    expect(result).toBe(JobStatus.Skipped);
+  });
+
+  it('matches album faces into space persons when recognition enabled', async () => {
+    const { ctx, sut, faceIdentityRepository, jobs } = setupWithFaceMatch();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'FaceSyncAlbum' });
+
+    // Create a person + identity for Layer 1 matching
+    const { result: person } = await ctx.newPerson({ ownerId: user.id, name: 'AlbumPerson' });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+
+    // Create asset, add to album, seed face + identity link
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: newEmbedding() }).execute();
+    await faceIdentityRepository.linkFace({
+      assetFaceId: assetFace.id,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
+
+    // Link album to space
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: space.id, albumId: album.id });
+
+    expect(result).toBe(JobStatus.Success);
+
+    const spacePersons = await defaultDatabase
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('spaceId', '=', space.id)
+      .execute();
+    expect(spacePersons.length).toBeGreaterThan(0);
+
+    expect(jobs.queue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: JobName.SharedSpaceIdentityReconciliation, data: { spaceId: space.id } }),
+    );
+    expect(jobs.queue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: JobName.SharedSpacePersonDedup, data: { spaceId: space.id } }),
+    );
+  });
+
+  it('returns Success and queues dedup when album has assets but no matchable faces', async () => {
+    const { ctx, sut, jobs } = setupWithFaceMatch();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'NoFaceAlbum' });
+    // Asset with a raw face (no personId, no identity link) — not matchable
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await ctx.newAssetFace({ assetId: asset.id }); // no personId
+
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: space.id, albumId: album.id });
+
+    expect(result).toBe(JobStatus.Success);
+    expect(jobs.queue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: JobName.SharedSpacePersonDedup, data: { spaceId: space.id } }),
+    );
   });
 });

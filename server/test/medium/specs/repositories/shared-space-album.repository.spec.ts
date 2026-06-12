@@ -167,3 +167,32 @@ describe('getAlbumAssetCount', () => {
     expect(await sut.getAlbumAssetCount(album.id)).toBe(2);
   });
 });
+
+describe('isFaceInSpace — album leg', () => {
+  it('returns true when face belongs to an asset in a linked album', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'FaceAlbum' });
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+
+    expect(await sut.isFaceInSpace(space.id, faceId)).toBe(true);
+  });
+
+  it('returns false when face belongs to an asset not in any linked album, library, or direct-add', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+    // Unrelated asset — not in any space path
+    const { asset: unrelatedAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { result: faceId } = await ctx.newAssetFace({ assetId: unrelatedAsset.id });
+
+    expect(await sut.isFaceInSpace(space.id, faceId)).toBe(false);
+  });
+});
