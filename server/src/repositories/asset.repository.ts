@@ -321,6 +321,14 @@ export function withTimeBucketAssetFilters<O>(
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
           ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('shared_space_album.spaceId', '=', asUuid(options.spaceId!))
+              .where('shared_space_album.showInTimeline', '=', true),
+          ),
         ]),
       ),
     )
@@ -352,6 +360,14 @@ export function withTimeBucketAssetFilters<O>(
               .selectFrom('shared_space_library')
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('shared_space_album.spaceId', '=', anyUuid(options.timelineSpaceIds!))
+              .where('shared_space_album.showInTimeline', '=', true),
           ),
         ]),
       ),
@@ -1375,6 +1391,14 @@ export class AssetRepository {
                     .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
                     .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
                 ),
+                eb.exists(
+                  eb
+                    .selectFrom('shared_space_album')
+                    .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_album.spaceId', '=', asUuid(options.spaceId!))
+                    .where('shared_space_album.showInTimeline', '=', true),
+                ),
               ]),
             ),
           )
@@ -1404,6 +1428,14 @@ export class AssetRepository {
                     .selectFrom('shared_space_library')
                     .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
                     .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
+                ),
+                eb.exists(
+                  eb
+                    .selectFrom('shared_space_album')
+                    .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_album.spaceId', '=', anyUuid(options.timelineSpaceIds!))
+                    .where('shared_space_album.showInTimeline', '=', true),
                 ),
               ]),
             ),
