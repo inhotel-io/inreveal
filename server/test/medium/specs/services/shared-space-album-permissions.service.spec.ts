@@ -437,6 +437,114 @@ describe('SharedSpaceService — space-album permission matrix', () => {
   });
 
   // =========================================================================
+  // Grid 5 — DELETE the album (album owner only; space link does NOT grant)
+  // =========================================================================
+
+  describe('Grid 5 — DELETE the album (album owner only; space does NOT grant)', () => {
+    it.each([
+      // albumOwner has an album_user row with role=Owner on album A → ALLOW
+      ['albumOwner', true],
+      // album_user non-owner roles do NOT grant AlbumDelete
+      ['albumEditor', false],
+      ['albumViewer', false],
+      // Space members are NOT album owners → DENY even for owner/editor of S
+      ['spaceOwner', false],
+      ['spaceEditor', false],
+      ['spaceViewer', false],
+      ['nonMember', false],
+    ] as const)('%s AlbumDelete for albumA → allowed=%s', async (actor, allowed) => {
+      const allowedIds = await checkAccess(accessRepo, {
+        auth: authOf(actor),
+        permission: Permission.AlbumDelete,
+        ids: new Set([world.albumA]),
+      });
+      expect(allowedIds.has(world.albumA)).toBe(allowed);
+    });
+  });
+
+  // =========================================================================
+  // Grid 7 — linking album writes NO album_user rows for space members
+  // =========================================================================
+
+  describe('Grid 7 — space-album link writes no album_user rows for space members', () => {
+    it('spaceOwner/spaceEditor/spaceViewer have no album_user rows for albumA after linking', async () => {
+      // After the fixture setup (album A already linked to S), query album_user
+      // and confirm no space-member user ids appear — only genuine album_user actors.
+      const spaceActorIds = [world.actors.spaceOwner.id, world.actors.spaceEditor.id, world.actors.spaceViewer.id];
+
+      const rows = await defaultDatabase
+        .selectFrom('album_user')
+        .select('userId')
+        .where('albumId', '=', world.albumA)
+        .where('userId', 'in', spaceActorIds)
+        .execute();
+
+      expect(rows).toHaveLength(0);
+    });
+
+    it('only genuine album_user actors appear in album_user for albumA', async () => {
+      const rows = await defaultDatabase
+        .selectFrom('album_user')
+        .select(['userId', 'role'])
+        .where('albumId', '=', world.albumA)
+        .orderBy('role')
+        .execute();
+
+      const userIds = rows.map((r) => r.userId).sort();
+      const expectedIds = [world.actors.albumOwner.id, world.actors.albumEditor.id, world.actors.albumViewer.id].sort();
+
+      expect(userIds).toEqual(expectedIds);
+    });
+  });
+
+  // =========================================================================
+  // Cross-layer SET-EQUALITY GUARD
+  // (pins checkSpaceAccess output against independently-derived expected set)
+  // =========================================================================
+
+  describe('Set-equality guard — checkSpaceAccess returns exactly the fixture-seeded asset set', () => {
+    it('spaceViewer checkSpaceAccess returns exactly {assetInA} and excludes out-of-space asset', async () => {
+      // Create an extra asset that is NOT in any space S path — never added to space
+      // or any linked album. This strengthens the guard: if the predicate drifts and
+      // returns too many, the assertion catches it.
+      const { ctx: guardCtx } = setup();
+      const { user: outsideOwner } = await guardCtx.newUser();
+      const { asset: outsideAsset } = await guardCtx.newAsset({ ownerId: outsideOwner.id });
+
+      // The independently-derived expected set: only assetInA is reachable by
+      // spaceViewer via S → shared_space_album link → album A → album_asset.
+      // outsideAsset has no path into S.
+      const allCandidates = new Set([world.assetInA, outsideAsset.id]);
+
+      const result = await accessRepo.asset.checkSpaceAccess(world.actors.spaceViewer.id, allCandidates);
+
+      expect([...result].sort()).toEqual([world.assetInA]);
+    });
+
+    it('spaceOwner checkSpaceAccess for all fixture assets returns exactly {assetInA}', async () => {
+      // Same predicate, different actor (spaceOwner). Expected set is the same
+      // since album A is linked to S and assetInA is in album A.
+      const result = await accessRepo.asset.checkSpaceAccess(world.actors.spaceOwner.id, new Set([world.assetInA]));
+
+      expect([...result].sort()).toEqual([world.assetInA]);
+    });
+
+    it('nonMember checkSpaceAccess returns empty set (no drift toward public access)', async () => {
+      const result = await accessRepo.asset.checkSpaceAccess(world.actors.nonMember.id, new Set([world.assetInA]));
+
+      expect([...result]).toHaveLength(0);
+    });
+
+    it('crossEditor (member of S2 only) cannot reach assetInA via checkSpaceAccess', async () => {
+      // crossEditor is editor of S2 (which links album C), but NOT a member of S.
+      // assetInA is only in album A which is linked to S. No path exists.
+      const result = await accessRepo.asset.checkSpaceAccess(world.actors.crossEditor.id, new Set([world.assetInA]));
+
+      expect([...result]).toHaveLength(0);
+    });
+  });
+
+  // =========================================================================
   // Grid 6 — multi-path READ (direct asset + album paths, unlink behaviour)
   // =========================================================================
 
