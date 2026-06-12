@@ -195,8 +195,13 @@ inside the space.
 - **Viewer:** browse + open + download only — no Add/Remove.
 - **Empty album:** `Timeline` `empty` snippet → centered icon + "No photos yet"; Editors also get
   "Add photos".
-- **Loading / not-found:** `LoadingSpinner` while loading; if the album isn't linked to this space or
-  the member lacks access, `getAlbumInfo` 4xx → redirect back to `/spaces/:id/albums` with a toast.
+- **Loading / not-found / linkage check:** `LoadingSpinner` while loading. The view MUST explicitly
+  verify the album is **linked to _this_ space** — i.e. `:albumId` appears in `getSharedSpaceAlbums(:id)`
+  — and **not** rely on `getAlbumInfo` returning 4xx. (A user who independently _owns_ an album would
+  pass `getAlbumInfo` even when that album is not linked to this space; the "in {space}" framing would
+  then be wrong.) If the album is not linked to this space, or `getAlbumInfo` 4xx (no access), redirect
+  back to `/spaces/:id/albums` with a toast. Load order: resolve `getSharedSpaceAlbums(:id)` (or a
+  membership+linkage check) first; only then load `getAlbumInfo`.
 
 ## Removed / changed
 
@@ -215,31 +220,74 @@ inside the space.
 | Link / unlink / show-in-timeline       | ❌     | ✅                      | Phase-1 `linkAlbum`/`unlinkAlbum`/`updateAlbumLink` |
 | Rename / delete album / album settings | ❌     | ❌ (unless album owner) | unchanged — album owner only                        |
 
-## Testing strategy (TDD)
+## Development methodology: TDD (mandatory)
 
-**Backend (medium + matrix):**
+**This feature is implemented test-first, following `superpowers:test-driven-development`.** Every
+unit of behavior is built RED → GREEN → REFACTOR:
 
-- Extend `shared-space-album-permissions.service.spec.ts`: a **READ-album-entity** grid — space
-  Owner/Editor/Viewer can `checkAccess(AlbumRead, [linkedAlbum])` (and the album-filtered timeline);
-  non-member and cross-space member are **denied**; a non-linked album `B` is denied. Confirm the
-  existing write/Editor matrix is unchanged.
-- A `checkSpaceLinkedAlbumReadAccess` repo medium test (any member allowed; non-member denied;
-  not-linked denied).
-- Regenerate `access.repository.sql` against a complete DB; verify a **scoped** diff
-  (the new predicate only — no unrelated churn).
+1. **RED** — write a failing test pinning the behavior (predicate allow/deny, route loads/redirects,
+   component renders/gates a control, SDK called with the right args). Run it; confirm it fails for
+   the right reason.
+2. **GREEN** — minimum code to pass.
+3. **REFACTOR** — clean up with tests green.
+
+The backend read grant is **access-control / security-relevant**, so its permission-matrix cells are
+written **before** the predicate code (mirroring Phase 1's matrix discipline). Web behavior (route
+gating, role-gated controls, the linkage check) is pinned by component tests written before the
+component code. No production code is written before a failing test exists for it.
+
+## Testing strategy (full coverage)
+
+Coverage targets **every** capability in the [Permissions & roles](#permissions--roles-summary) table
+and every edge case below.
+
+**Backend (medium + matrix), written FIRST:**
+
+- Extend `shared-space-album-permissions.service.spec.ts` with a **READ-album-entity** grid — space
+  Owner/Editor/Viewer can `checkAccess(AlbumRead, [linkedAlbum])` (and likewise `AlbumDownload`);
+  `nonMember` and `crossEditor` (member of another space) are **denied**; the unlinked album `B` is
+  **denied**; a `showInTimeline = false` linked album is **still readable** (the toggle gates only
+  aggregate surfaces, never album-entity read). Confirm the existing Phase-1 write/Editor matrix is
+  unchanged (the read grant must not widen write).
+- A `checkSpaceLinkedAlbumReadAccess` repo medium test (any member allowed incl. Viewer; non-member
+  denied; not-linked denied; **dual-path** — a user who is BOTH a space member AND an `album_user`
+  resolves to allowed via either path with no duplication).
+- Album-filtered timeline access: a space Viewer can fetch `getTimeBuckets`/`getTimeBucket` with
+  `albumId` of a linked album (now passes `timeBucketChecks`' `AlbumRead`); non-member denied.
+- Regenerate `access.repository.sql` against a **complete** DB; verify a **scoped** diff (the new
+  predicate + the two union branches only — no unrelated churn, per the Phase-1 regen lesson).
 
 **Web (component + e2e):**
 
 - Grid page: renders linked album cards linking to `/spaces/:id/albums/:albumId`; Editor sees
-  "Link album" + card ⋯ (toggle/unlink) and Viewer does not; empty state; the `showInTimeline=false`
-  dim + sublabel; link-picker offers only owned/editable, not-yet-linked albums.
-- In-space album view: renders the album timeline; `canManage` shows Add/Remove, Viewer does not;
-  not-linked/forbidden album redirects back with a toast.
-- `space-album-card.svelte` unit test (link href, editor menu gating, hidden-from-timeline state).
-- e2e: a space **Viewer** can `GET /albums/:id` (album info) for a linked album (proves the read
-  grant) and a **non-member** cannot; a space **Editor** can add+remove the linked album's assets via
-  the existing endpoints (already covered by Phase 1, re-assert in the album-view flow).
+  "Link album" + card ⋯ (toggle/unlink) and Viewer does **not**; empty state (Editor CTA vs Viewer
+  text); the `showInTimeline = false` dim + "hidden from timeline" sublabel; link-picker offers only
+  owned/editable, not-yet-linked albums; unlink fires a confirm dialog before `unlinkAlbum`.
+- In-space album view: renders the album timeline; `canManage` (space-Editor who is **not** an
+  `album_user`) shows Add/Remove and a Viewer does **not**; a `showInTimeline = false` album is still
+  fully browsable here; **linkage check** — an album NOT linked to this space (incl. one the user
+  independently owns) redirects back to `/spaces/:id/albums` with a toast (does not render with a wrong
+  "in {space}" header).
+- `space-album-card.svelte` unit test (link href targets the in-space route, editor-menu gating,
+  hidden-from-timeline visual state).
+- Header button renders for all members and navigates to `/spaces/:id/albums`.
+- e2e: a space **Viewer** can `GET /albums/:id` (album info) **and** the album-filtered timeline for a
+  linked album (proves the read grant) while a **non-member** is denied both; a space **Editor**
+  add+removes the linked album's assets via the existing endpoints in the album-view flow.
 - Web gates: `pnpm build`, `pnpm check`, `pnpm lint` (0 warnings on new files), component tests.
+
+**Edge cases (each a test):**
+
+- `showInTimeline = false` album → excluded from the space timeline/search/map (Phase 1) but **still**
+  listed in the grid and **fully browsable** in the in-space view.
+- Album **unlinked while open** → next load redirects to the grid with a toast.
+- Album **soft-deleted** → absent from the grid (`getSharedSpaceAlbums` filters `deletedAt`); the
+  in-space view 404s → redirect.
+- **Non-member** navigating to `/spaces/:id/albums(/:albumId)` → the `getSpace`/`getMembers` load is
+  denied (`SharedSpaceRead`) → handled (redirect/403), no album data leaked.
+- **URL-tampering** linkage case (above): own-but-not-linked album → redirect, not render.
+- **Dual-path** member (space member + `album_user`) → read works; collaboration follows the higher of
+  the two (space-Editor or album-editor).
 
 ## Rollback
 
@@ -248,13 +296,15 @@ inside the space.
 - **Web** is additive routes + a header button + the panel-tab removal. Reverting restores the
   Phase-1 panel-tab management. No data involved.
 
-## Open questions for the implementation plan
+## Resolved during design / open questions for the implementation plan
 
-- Confirm the exact album-timeline option-builder the global album page uses (`buildAlbumTimeline
-options`-equivalent) and reuse it verbatim scoped to `albumId`, rather than re-deriving filters.
-- Confirm `AlbumDownload` should also receive the space-member grant (recommended — a member who can
-  view should be able to download), or keep download album-membership-only (stricter). Lean: grant it
-  for parity with the asset-level download already permitted via `checkSpaceAccess`.
-- Whether the link-picker should reuse a shared album-selection modal if one exists, vs the bespoke
-  Phase-1 picker relocated into the grid page (lean: relocate Phase-1 picker; adopt a shared modal
-  only if it cleanly supports "owned/editable, exclude-linked").
+- **Album-timeline builder (resolved):** the global album page builds its timeline via
+  `buildAlbumTimelineOptions(album.id, …)` + `buildAlbumDetailFilterConfig(album.id)` from
+  `web/src/lib/utils/album-filter-options.ts` / `album-filter-config.ts`. The in-space album view
+  reuses these verbatim scoped to `albumId` (plus the space chrome) rather than re-deriving filters.
+- **`AlbumDownload` grant (resolved → grant it):** the space-member read predicate is unioned into
+  both `AlbumRead` and `AlbumDownload`, for parity with the asset-level download `checkSpaceAccess`
+  already permits. (If a reviewer wants stricter whole-album-zip behavior, it's a one-line removal.)
+- **Open — link-picker modal:** reuse a shared album-selection modal if one cleanly supports
+  "albums I own/can edit, excluding already-linked"; otherwise relocate the Phase-1 bespoke picker into
+  the grid page. Lean: relocate the Phase-1 picker.
