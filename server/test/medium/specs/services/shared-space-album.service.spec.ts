@@ -197,6 +197,58 @@ describe('SharedSpaceService — unlinkAlbum face retention', () => {
     expect(facesAfter.map((f) => f.assetFaceId)).toContain(face2Id);
   });
 
+  it('retains faces for assets that are in a second album also linked to the space (two-album path)', async () => {
+    // Asset `a` is in album A AND album B, both linked to space S.
+    // A shared_space_person_face exists for `a`'s face.
+    // Unlinking album A must NOT remove the face because album B still links `a`
+    // into the space — getAlbumAssetIdsWithoutOtherSpacePath excludes it.
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: user.id, albumName: 'TwoAlbum-A' });
+    const { result: albumB } = await ctx.newAlbum({ ownerId: user.id, albumName: 'TwoAlbum-B' });
+
+    const { asset: a } = await ctx.newAsset({ ownerId: user.id });
+    // `a` belongs to BOTH albums
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: a.id });
+    await ctx.newAlbumAsset({ albumId: albumB.id, assetId: a.id });
+
+    // Link BOTH albums to the space
+    const spacePersonRepo = ctx.get(SharedSpaceRepository);
+    await spacePersonRepo.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: user.id });
+    await spacePersonRepo.addAlbum({ spaceId: space.id, albumId: albumB.id, addedById: user.id });
+
+    // Seed an asset face for `a` and link it to a space person
+    const { result: faceId } = await ctx.newAssetFace({ assetId: a.id });
+    const spacePerson = await spacePersonRepo.createPerson({
+      spaceId: space.id,
+      name: 'TwoAlbumPerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await spacePersonRepo.addPersonFaces([{ personId: spacePerson.id, assetFaceId: faceId }]);
+
+    // Verify face exists before unlink
+    const facesBefore = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceId);
+
+    // Unlink album A — album B still links `a` so the face must be retained
+    await sut.unlinkAlbum(authFromUser(user), space.id, albumA.id);
+
+    const facesAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesAfter.map((f) => f.assetFaceId)).toContain(faceId);
+  });
+
   it('deletes space persons that have no remaining faces after unlink', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
