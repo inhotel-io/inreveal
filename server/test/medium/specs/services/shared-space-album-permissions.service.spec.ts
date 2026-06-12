@@ -156,6 +156,54 @@ describe('SharedSpaceService — space-album permission matrix', () => {
   });
 
   // =========================================================================
+  // Grid R — READ album entity (AlbumRead) via space membership
+  // =========================================================================
+
+  describe('Grid R — READ album entity (AlbumRead) via space membership', () => {
+    it.each([
+      ['spaceOwner', true],
+      ['spaceEditor', true],
+      ['spaceViewer', true],
+      ['nonMember', false],
+      ['crossEditor', false], // member of S2; A not linked to S2
+    ] as const)('%s checkAccess(AlbumRead, A) → %s', async (actor, allowed) => {
+      const result = await checkAccess(accessRepo, {
+        auth: authOf(actor),
+        permission: Permission.AlbumRead,
+        ids: new Set([world.albumA]),
+      });
+      expect(result.has(world.albumA)).toBe(allowed);
+    });
+
+    it('unlinked album B is NOT readable via the space grant', async () => {
+      const result = await checkAccess(accessRepo, {
+        auth: authOf('spaceViewer'),
+        permission: Permission.AlbumRead,
+        ids: new Set([world.albumB]),
+      });
+      expect(result.has(world.albumB)).toBe(false);
+    });
+
+    it('read grant does NOT widen write: spaceViewer cannot AlbumAssetCreate on A', async () => {
+      const result = await checkAccess(accessRepo, {
+        auth: authOf('spaceViewer'),
+        permission: Permission.AlbumAssetCreate,
+        ids: new Set([world.albumA]),
+      });
+      expect(result.has(world.albumA)).toBe(false);
+    });
+
+    it('AlbumDownload is granted to a space viewer for a linked album', async () => {
+      const result = await checkAccess(accessRepo, {
+        auth: authOf('spaceViewer'),
+        permission: Permission.AlbumDownload,
+        ids: new Set([world.albumA]),
+      });
+      expect(result.has(world.albumA)).toBe(true);
+    });
+  });
+
+  // =========================================================================
   // Grid 1 — READ asset in album A via full AssetRead authorization chain
   // =========================================================================
 

@@ -1,4 +1,6 @@
 import { Kysely } from 'kysely';
+import { AccessRepository } from 'src/repositories/access.repository';
+import { AlbumUserRole } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
@@ -15,6 +17,15 @@ const setup = () => {
     mock: [LoggingRepository],
   });
   return { ctx, sut: ctx.get(SharedSpaceRepository) };
+};
+
+const setupRead = () => {
+  const { ctx } = newMediumService(BaseService, {
+    database: defaultDatabase,
+    real: [AccessRepository],
+    mock: [LoggingRepository],
+  });
+  return { ctx, accessRepo: ctx.get(AccessRepository) };
 };
 
 const seedSpaceAndAlbum = async (ctx: ReturnType<typeof setup>['ctx']) => {
@@ -165,6 +176,81 @@ describe('getAlbumAssetCount', () => {
     await ctx.softDeleteAsset(a3.id);
 
     expect(await sut.getAlbumAssetCount(album.id)).toBe(2);
+  });
+});
+
+describe('AccessRepository.album.checkSpaceLinkedAlbumReadAccess', () => {
+  it('viewer member is allowed to read a linked album', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ReadAccess-viewer' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const result = await accessRepo.album.checkSpaceLinkedAlbumReadAccess(viewer.id, new Set([album.id]));
+    expect(result.has(album.id)).toBe(true);
+  });
+
+  it('editor member is allowed to read a linked album', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: editor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ReadAccess-editor' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const result = await accessRepo.album.checkSpaceLinkedAlbumReadAccess(editor.id, new Set([album.id]));
+    expect(result.has(album.id)).toBe(true);
+  });
+
+  it('non-member is denied read on a linked album', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: nonMember } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ReadAccess-nonmember' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const result = await accessRepo.album.checkSpaceLinkedAlbumReadAccess(nonMember.id, new Set([album.id]));
+    expect(result.has(album.id)).toBe(false);
+  });
+
+  it('a not-linked album is denied even for a space member', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+    // Album B is NOT linked to the space
+    const { result: albumB } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ReadAccess-notlinked' });
+
+    const result = await accessRepo.album.checkSpaceLinkedAlbumReadAccess(viewer.id, new Set([albumB.id]));
+    expect(result.has(albumB.id)).toBe(false);
+  });
+
+  it('dual-path: user who is BOTH a space member AND an album_user returns album once', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: dual } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: dual.id, role: 'viewer' });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ReadAccess-dual' });
+    // dual is also an album_user on the album
+    await ctx.newAlbumUser({ albumId: album.id, userId: dual.id, role: AlbumUserRole.Viewer });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const result = await accessRepo.album.checkSpaceLinkedAlbumReadAccess(dual.id, new Set([album.id]));
+    // DISTINCT ensures the album appears exactly once
+    expect([...result]).toHaveLength(1);
+    expect(result.has(album.id)).toBe(true);
   });
 });
 
