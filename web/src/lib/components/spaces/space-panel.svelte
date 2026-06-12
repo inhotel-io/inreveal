@@ -2,6 +2,7 @@
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import RoleBadge from '$lib/components/spaces/role-badge.svelte';
   import SpaceActivityFeed from '$lib/components/spaces/space-activity-feed.svelte';
+  import SpaceLinkedAlbums from '$lib/components/spaces/space-linked-albums.svelte';
 
   import { getAssetMediaUrl } from '$lib/utils';
   import { formatTimeAgo } from '$lib/utils/timesince';
@@ -27,6 +28,7 @@
     activities: SharedSpaceActivityResponseDto[];
     currentUserId: string;
     isOwner: boolean;
+    isEditor: boolean;
     open: boolean;
     onClose: () => void;
     onMembersChanged: () => void;
@@ -41,6 +43,7 @@
     activities,
     currentUserId: _,
     isOwner,
+    isEditor,
     open,
     onClose,
     onMembersChanged,
@@ -48,7 +51,7 @@
     hasMoreActivities,
   }: Props = $props();
 
-  let activeTab = $state<'activity' | 'members'>('activity');
+  let activeTab = $state<'activity' | 'members' | 'albums'>('activity');
 
   const tabBgClasses: Record<string, string> = {
     [UserAvatarColor.Primary]: 'bg-primary text-white',
@@ -167,6 +170,16 @@
       >
         Members ({members.length})
       </button>
+      <button
+        type="button"
+        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {activeTab === 'albums'
+          ? activeTabClass
+          : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
+        onclick={() => (activeTab = 'albums')}
+        data-testid="tab-albums"
+      >
+        {$t('albums')}
+      </button>
     </div>
 
     <IconButton
@@ -189,6 +202,8 @@
         onLoadMore={onLoadMoreActivities}
         hasMore={hasMoreActivities}
       />
+    {:else if activeTab === 'albums'}
+      <SpaceLinkedAlbums {space} canManage={isEditor} />
     {:else}
       <!-- Members content -->
       {#if isOwner}
