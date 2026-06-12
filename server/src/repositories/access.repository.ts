@@ -154,6 +154,26 @@ class AlbumAccess {
       .execute()
       .then((albums) => new Set(albums.map((album) => album.id)));
   }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSpaceLinkedAlbumReadAccess(userId: string, albumIds: Set<string>) {
+    if (albumIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('album')
+      .select('album.id')
+      .distinct()
+      .innerJoin('shared_space_album', 'shared_space_album.albumId', 'album.id')
+      .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+      .where('album.id', 'in', [...albumIds])
+      .where('album.deletedAt', 'is', null)
+      .where('shared_space_member.userId', '=', userId)
+      .execute()
+      .then((albums) => new Set(albums.map((album) => album.id)));
+  }
 }
 
 class AssetAccess {
