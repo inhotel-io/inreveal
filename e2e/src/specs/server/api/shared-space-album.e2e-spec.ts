@@ -304,6 +304,102 @@ describe('/shared-spaces/:id/albums (T18)', () => {
     });
   });
 
+  // ─── Read grant: AlbumRead + album-filtered timeline (Phase 1.5 T19) ───────
+  //
+  // checkSpaceLinkedAlbumReadAccess (access.repository.ts) unions into
+  // Permission.AlbumRead and Permission.AlbumDownload so that ANY space member
+  // — including Viewer — can:
+  //   • GET /albums/:id            → 200  (album entity)
+  //   • GET /timeline/buckets?albumId=…  → 200  (access-gate path)
+  //   • GET /timeline/bucket?albumId=…&timeBucket=… → 200  (content path)
+  //
+  // Non-members and members requesting a NON-LINKED album still get 400
+  // (requireAccess throws BadRequestException with "Not found or no album.read access").
+
+  describe('read grant: space viewer can GET /albums/:id and album-filtered timeline', () => {
+    // Pre-condition: ownerAlbum is linked (from PUT suite above). ownerAlbumViewerOnly
+    // is NOT linked to the space at any point — used for the "not linked" boundary test.
+
+    it('space viewer can GET /albums/:id for a linked album → 200', async () => {
+      // viewer has no album_user row on ownerAlbum, but ownerAlbum is linked to the
+      // space and viewer is a space member → checkSpaceLinkedAlbumReadAccess grants access.
+      const { status, body } = await request(app)
+        .get(`/albums/${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${viewer.accessToken}`);
+      expect(status).toBe(200);
+      expect((body as { id: string }).id).toBe(ownerAlbum.id);
+    });
+
+    it('non-member cannot GET /albums/:id for a linked album → 400', async () => {
+      // nonMember has no space membership → access.repository returns empty set →
+      // requireAccess throws BadRequestException (status 400), same invariant as
+      // all other access-gate failures in the Immich codebase.
+      const { status } = await request(app)
+        .get(`/albums/${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${nonMember.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('space member cannot GET /albums/:id for an album NOT linked to their space → 400', async () => {
+      // ownerAlbumViewerOnly is never linked to the space. viewer has no album_user
+      // row on it either. The read grant is scoped to linked albums only.
+      const { status } = await request(app)
+        .get(`/albums/${ownerAlbumViewerOnly.id}`)
+        .set('Authorization', `Bearer ${viewer.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('space viewer can GET /timeline/buckets?albumId for a linked album → 200', async () => {
+      // The timeline service calls timeBucketChecks → requireAccess(AlbumRead, [albumId]).
+      // checkSpaceLinkedAlbumReadAccess now unions into AlbumRead, so Viewer passes.
+      const { status } = await request(app)
+        .get(`/timeline/buckets?albumId=${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${viewer.accessToken}`);
+      expect(status).toBe(200);
+    });
+
+    it('space viewer can GET /timeline/bucket?albumId for a linked album → 200', async () => {
+      // Step 1: fetch buckets to discover the timeBucket identifier for ownerAlbum.
+      // albumAsset was created by owner and sits in ownerAlbum, so at least one bucket exists.
+      const bucketsRes = await request(app)
+        .get(`/timeline/buckets?albumId=${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+      expect(bucketsRes.status).toBe(200);
+      const buckets = bucketsRes.body as Array<{ timeBucket: string }>;
+      expect(buckets.length).toBeGreaterThan(0);
+
+      // Step 2: viewer fetches the singular bucket — proves the content path is also granted.
+      const { status, body } = await request(app)
+        .get(`/timeline/bucket?albumId=${ownerAlbum.id}&timeBucket=${buckets[0].timeBucket}`)
+        .set('Authorization', `Bearer ${viewer.accessToken}`);
+      expect(status).toBe(200);
+      // Response is a parallel-array TimeBucketAssetResponseDto; pin the shape.
+      expect(body).toHaveProperty('id');
+      expect(Array.isArray((body as { id: string[] }).id)).toBe(true);
+    });
+
+    it('non-member cannot GET /timeline/buckets?albumId for a linked album → 400', async () => {
+      // Mirror of the GET /albums/:id non-member case: requireAccess fires before
+      // any data is returned, so non-members get 400 regardless of which timeline
+      // endpoint they hit (same BadRequestException invariant).
+      const { status } = await request(app)
+        .get(`/timeline/buckets?albumId=${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${nonMember.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('space editor can PUT /albums/:id/assets (add) to a linked album → 200', async () => {
+      // Re-assert Phase-1 write grant still works after the AlbumRead union was added.
+      // editor is an album_user-editor on ownerAlbum, so AlbumAssetCreate is satisfied.
+      const editorAsset2 = await utils.createAsset(editor.accessToken);
+      const { status } = await request(app)
+        .put(`/albums/${ownerAlbum.id}/assets`)
+        .set('Authorization', `Bearer ${editor.accessToken}`)
+        .send({ ids: [editorAsset2.id] });
+      expect(status).toBe(200);
+    });
+  });
+
   // ─── Album delete via /albums/:id ─────────────────────────────────────────
 
   describe('album delete via /albums/:id', () => {
