@@ -629,6 +629,30 @@ export class SharedSpaceService extends BaseService {
     }
   }
 
+  async linkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // Actor must own or be an editor of the album (cannot re-share a read-only album).
+    // AlbumUpdate = owner ∪ album_user-editor and is NOT extended by the space grant → no circularity.
+    await this.requireAccess({ auth, permission: Permission.AlbumUpdate, ids: [albumId] });
+
+    const result = await this.sharedSpaceRepository.addAlbum({
+      spaceId,
+      albumId,
+      addedById: auth.user.id,
+    });
+
+    // Only queue face sync for newly created links (not idempotent re-links).
+    if (result) {
+      const space = await this.sharedSpaceRepository.getById(spaceId);
+      if (space?.faceRecognitionEnabled) {
+        await this.jobRepository.queue({
+          name: JobName.SharedSpaceAlbumFaceSync,
+          data: { spaceId, albumId },
+        });
+      }
+    }
+  }
+
   async unlinkLibrary(auth: AuthDto, spaceId: string, libraryId: string): Promise<void> {
     if (!auth.user.isAdmin) {
       throw new ForbiddenException('Only admins can unlink libraries from spaces');
