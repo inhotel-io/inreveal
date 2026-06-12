@@ -85,6 +85,16 @@ describe('SpaceLinkedAlbums component', () => {
     });
   });
 
+  it('should render each linked album as a link to the album route', async () => {
+    sdkMock.getSharedSpaceAlbums.mockResolvedValue([
+      makeLinkedAlbum({ albumId: 'album-42', albumName: 'Clickable Album' }),
+    ]);
+    render(SpaceLinkedAlbums, { space: makeSpace(), canManage: false });
+    const link = await screen.findByTestId('linked-album-link');
+    expect(link.tagName).toBe('A');
+    expect(link).toHaveAttribute('href', '/albums/album-42');
+  });
+
   it('should render multiple linked albums', async () => {
     sdkMock.getSharedSpaceAlbums.mockResolvedValue([
       makeLinkedAlbum({ albumId: 'album-1', albumName: 'Album One' }),
