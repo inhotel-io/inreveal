@@ -256,6 +256,10 @@ export enum Permission {
   SharedSpaceLibraryCreate = 'sharedSpaceLibrary.create',
   SharedSpaceLibraryDelete = 'sharedSpaceLibrary.delete',
 
+  SharedSpaceAlbumCreate = 'sharedSpaceAlbum.create',
+  SharedSpaceAlbumUpdate = 'sharedSpaceAlbum.update',
+  SharedSpaceAlbumDelete = 'sharedSpaceAlbum.delete',
+
   UserGroupCreate = 'userGroup.create',
   UserGroupRead = 'userGroup.read',
   UserGroupUpdate = 'userGroup.update',
@@ -982,6 +986,7 @@ export enum JobName {
   SharedSpaceFaceMatchPage = 'SharedSpaceFaceMatchPage',
   SharedSpaceFaceMatchFromBackfill = 'SharedSpaceFaceMatchFromBackfill',
   SharedSpaceLibraryFaceSync = 'SharedSpaceLibraryFaceSync',
+  SharedSpaceAlbumFaceSync = 'SharedSpaceAlbumFaceSync',
   SharedSpaceIdentityReconciliation = 'SharedSpaceIdentityReconciliation',
   SharedSpacePersonDedup = 'SharedSpacePersonDedup',
   SharedSpacePersonMetadataBackfill = 'SharedSpacePersonMetadataBackfill',
