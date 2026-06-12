@@ -703,6 +703,8 @@ class ApiClient {
           return SharedLinksUpdate.fromJson(value);
         case 'SharedSpaceActivityResponseDto':
           return SharedSpaceActivityResponseDto.fromJson(value);
+        case 'SharedSpaceAlbumLinkUpdateDto':
+          return SharedSpaceAlbumLinkUpdateDto.fromJson(value);
         case 'SharedSpaceAssetAddDto':
           return SharedSpaceAssetAddDto.fromJson(value);
         case 'SharedSpaceAssetRemoveDto':
@@ -711,6 +713,8 @@ class ApiClient {
           return SharedSpaceCreateDto.fromJson(value);
         case 'SharedSpaceLibraryLinkDto':
           return SharedSpaceLibraryLinkDto.fromJson(value);
+        case 'SharedSpaceLinkedAlbumDto':
+          return SharedSpaceLinkedAlbumDto.fromJson(value);
         case 'SharedSpaceLinkedLibraryDto':
           return SharedSpaceLinkedLibraryDto.fromJson(value);
         case 'SharedSpaceMemberCreateDto':
