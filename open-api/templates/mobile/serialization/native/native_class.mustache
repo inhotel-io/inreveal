@@ -82,10 +82,10 @@ class {{{classname}}} {
         {{#pattern}}
       json[r'{{{baseName}}}'] = value == null ? null : (_isEpochMarker(r'{{{pattern}}}')
         ? value.millisecondsSinceEpoch
-        : _dateFormatter.format(value.toUtc()));
+        : _dateFormatter.format(value));
         {{/pattern}}
         {{^pattern}}
-      json[r'{{{baseName}}}'] = value == null ? null : _dateFormatter.format(value.toUtc());
+      json[r'{{{baseName}}}'] = value == null ? null : _dateFormatter.format(value);
         {{/pattern}}
       {{/isDate}}
       {{^isDateTime}}
