@@ -14402,6 +14402,244 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/albums": {
+      "get": {
+        "operationId": "getSharedSpaceAlbums",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SharedSpaceLinkedAlbumDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List albums linked to a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/albums/{albumId}": {
+      "delete": {
+        "description": "Remove an album link. Album assets will no longer appear in the space.",
+        "operationId": "unlinkAlbum",
+        "parameters": [
+          {
+            "name": "albumId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Unlink an album from a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceAlbum.delete",
+        "x-immich-state": "Beta"
+      },
+      "patch": {
+        "operationId": "updateSharedSpaceAlbum",
+        "parameters": [
+          {
+            "name": "albumId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceAlbumLinkUpdateDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Update a space-album link (showInTimeline)",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceAlbum.update",
+        "x-immich-state": "Beta"
+      },
+      "put": {
+        "description": "Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor.",
+        "operationId": "linkAlbum",
+        "parameters": [
+          {
+            "name": "albumId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Link an album to a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpaceAlbum.create",
+        "x-immich-state": "Beta"
+      }
+    },
     "/shared-spaces/{id}/assets": {
       "delete": {
         "description": "Remove one or more assets from a shared space.",
@@ -24735,6 +24973,7 @@
           "SharedSpaceFaceMatchPage",
           "SharedSpaceFaceMatchFromBackfill",
           "SharedSpaceLibraryFaceSync",
+          "SharedSpaceAlbumFaceSync",
           "SharedSpaceIdentityReconciliation",
           "SharedSpacePersonDedup",
           "SharedSpacePersonMetadataBackfill",
@@ -26491,6 +26730,9 @@
           "sharedSpaceAsset.delete",
           "sharedSpaceLibrary.create",
           "sharedSpaceLibrary.delete",
+          "sharedSpaceAlbum.create",
+          "sharedSpaceAlbum.update",
+          "sharedSpaceAlbum.delete",
           "userGroup.create",
           "userGroup.read",
           "userGroup.update",
@@ -29122,6 +29364,18 @@
         ],
         "type": "object"
       },
+      "SharedSpaceAlbumLinkUpdateDto": {
+        "properties": {
+          "showInTimeline": {
+            "description": "Include this album in the space timeline",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "showInTimeline"
+        ],
+        "type": "object"
+      },
       "SharedSpaceAssetAddDto": {
         "properties": {
           "assetIds": {
@@ -29193,6 +29447,45 @@
         },
         "required": [
           "libraryId"
+        ],
+        "type": "object"
+      },
+      "SharedSpaceLinkedAlbumDto": {
+        "properties": {
+          "addedById": {
+            "nullable": true,
+            "type": "string"
+          },
+          "albumId": {
+            "type": "string"
+          },
+          "albumName": {
+            "type": "string"
+          },
+          "albumThumbnailAssetId": {
+            "nullable": true,
+            "type": "string"
+          },
+          "assetCount": {
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "Link creation timestamp",
+            "format": "date-time",
+            "type": "string"
+          },
+          "showInTimeline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "addedById",
+          "albumId",
+          "albumName",
+          "albumThumbnailAssetId",
+          "assetCount",
+          "createdAt",
+          "showInTimeline"
         ],
         "type": "object"
       },
