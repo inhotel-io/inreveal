@@ -545,10 +545,46 @@ describe('SharedSpaceService — space-album permission matrix', () => {
   });
 
   // =========================================================================
-  // Grid 6 — multi-path READ (direct asset + album paths, unlink behaviour)
+  // Grid 6 — combined write-wins: album_user editor + space-viewer → WRITE
   // =========================================================================
 
-  describe('Grid 6 — multi-path READ (direct-add vs album-link)', () => {
+  describe('Grid 6 — combined paths: album_user editor AND space-viewer → write wins', () => {
+    it('user who is album_user Editor on A AND a Viewer of S gets AlbumAssetCreate (editor path wins)', async () => {
+      // A user who holds BOTH an album_user Editor row on album A AND is a
+      // space-Viewer of space S must get AlbumAssetCreate — the album-editor
+      // path grants write; the space-viewer status does NOT subtract.
+      const { ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: combinedUser } = await ctx.newUser();
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+      // combinedUser is a Viewer of the space
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: combinedUser.id, role: 'viewer' });
+
+      const { result: albumA } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'G6-combined-album' });
+      // combinedUser is also an Editor on the album
+      await ctx.newAlbumUser({ albumId: albumA.id, userId: combinedUser.id, role: AlbumUserRole.Editor });
+
+      // Link the album to the space
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: owner.id });
+
+      const combinedAuth = factory.auth({ user: { id: combinedUser.id, email: combinedUser.email } });
+
+      const allowedIds = await checkAccess(ctx.get(AccessRepository), {
+        auth: combinedAuth,
+        permission: Permission.AlbumAssetCreate,
+        ids: new Set([albumA.id]),
+      });
+      expect(allowedIds.has(albumA.id)).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // Grid 6b — multi-path READ (direct asset + album paths, unlink behaviour)
+  // =========================================================================
+
+  describe('Grid 6b — multi-path READ (direct-add vs album-link)', () => {
     it('asset directly in S stays readable after removing its album link from S', async () => {
       const { ctx } = setup();
       const spaceAccessRepo = ctx.get(AccessRepository);
