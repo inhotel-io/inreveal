@@ -7,10 +7,15 @@
   import RemoveFromAlbum from '$lib/components/timeline/actions/RemoveFromAlbumAction.svelte';
   import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
+  import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
   import { assetMultiSelectManager, AssetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
+  import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAlbumAssetsActions } from '$lib/services/album.service';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
+  import { type ActivatableTimelineBucket, getTimelineBucketZoomTarget } from '$lib/utils/timeline-zoom-navigation';
   import {
     AlbumUserRole,
     getAlbumInfo,
@@ -38,6 +43,11 @@
   // Mode: 'browse' shows the album timeline; 'add' shows the asset picker
   let mode = $state<'browse' | 'add'>('browse');
 
+  // Timeline grouping state — default 'day' gives the flat "All" grid (fixes stuck-cover bug)
+  let timelineGrouping = $state<TimelineGrouping>('day');
+  let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
+  let timelineManager = $state<TimelineManager>() as TimelineManager;
+
   // Picker multi-select manager (mirrors global album page's timelineMultiSelectManager)
   const pickerMultiSelectManager = new AssetMultiSelectManager();
 
@@ -57,14 +67,11 @@
     if (mode === 'add') {
       return buildAlbumAssetPickerOptions(album.id, createFilterState());
     }
-    return {
-      ...buildAlbumTimelineOptions(
-        album.id,
-        album.order ?? authManager.preferences.albums.defaultAssetOrder,
-        createFilterState(),
-      ),
-      grouping: 'month' as const,
-    };
+    return buildAlbumTimelineOptions(
+      album.id,
+      album.order ?? authManager.preferences.albums.defaultAssetOrder,
+      createFilterState(),
+    );
   });
 
   const refreshAlbum = async () => {
@@ -79,14 +86,36 @@
 
   const handleExitAddMode = () => {
     pickerMultiSelectManager.clear();
+    timelineGrouping = 'day';
+    temporalAnchor = undefined;
     mode = 'browse';
   };
 
   const handleAddAssetsSuccess = async () => {
     pickerMultiSelectManager.clear();
+    timelineGrouping = 'day';
+    temporalAnchor = undefined;
     mode = 'browse';
     await refreshAlbum();
   };
+
+  function handleTimelineGroupingChange(grouping: TimelineGrouping) {
+    const anchor = getTimelineTopVisibleAnchor(timelineManager);
+    timelineGrouping = grouping;
+    temporalAnchor = anchor;
+  }
+
+  function handleTimelineBucketActivate(bucket: ActivatableTimelineBucket) {
+    if (mode !== 'browse' || assetMultiSelectManager.selectionActive) {
+      return;
+    }
+    const result = getTimelineBucketZoomTarget(bucket);
+    if (!result) {
+      return;
+    }
+    timelineGrouping = result.grouping;
+    temporalAnchor = result.anchor;
+  }
 
   const { AddAssets, Upload } = $derived(getAlbumAssetsActions($t, album, pickerMultiSelectManager.assets));
 </script>
@@ -114,7 +143,11 @@
         color="secondary"
         aria-label={$t('space_album_add_photos')}
         data-testid="add-photos-button"
-        onclick={() => (mode = 'add')}
+        onclick={() => {
+          timelineGrouping = 'day';
+          temporalAnchor = undefined;
+          mode = 'add';
+        }}
         icon={mdiImagePlusOutline}
       />
     {/if}
@@ -155,12 +188,27 @@
     </ControlAppBar>
   {/if}
 
+  {#if mode === 'browse' && !assetMultiSelectManager.selectionActive}
+    <div
+      class="hidden shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 md:flex dark:border-gray-700 dark:bg-gray-900"
+      data-testid="timeline-desktop-grouping-control"
+    >
+      <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
+    </div>
+  {/if}
+
   <Timeline
     enableRouting={false}
     {options}
+    bind:timelineManager
     assetInteraction={mode === 'add' ? pickerMultiSelectManager : assetMultiSelectManager}
     isSelectionMode={mode === 'add'}
     singleSelect={false}
+    grouping={mode === 'add' ? 'day' : timelineGrouping}
+    onGroupingChange={mode === 'add' ? undefined : handleTimelineGroupingChange}
+    onTimelineBucketActivate={mode === 'add' ? undefined : handleTimelineBucketActivate}
+    temporalAnchor={mode === 'add' ? undefined : temporalAnchor}
+    onTemporalAnchorResolved={mode === 'add' ? undefined : () => (temporalAnchor = undefined)}
   >
     {#snippet empty()}
       <section class="mt-50 flex place-content-center place-items-center">
@@ -172,7 +220,11 @@
               type="button"
               data-testid="empty-add-photos-button"
               class="text-sm text-(--primary)"
-              onclick={() => (mode = 'add')}
+              onclick={() => {
+                timelineGrouping = 'day';
+                temporalAnchor = undefined;
+                mode = 'add';
+              }}
             >
               {$t('add_photos')}
             </button>

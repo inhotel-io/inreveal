@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
+  import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
 
   interface Props {
     options?: Record<string, unknown>;
@@ -7,6 +9,12 @@
     isSelectionMode?: boolean;
     singleSelect?: boolean;
     assetInteraction?: unknown;
+    timelineManager?: Record<string, unknown>;
+    grouping?: TimelineGrouping;
+    onGroupingChange?: (grouping: TimelineGrouping) => void;
+    onTimelineBucketActivate?: (bucket: ActivatableTimelineBucket) => void;
+    temporalAnchor?: TimelineTemporalAnchor;
+    onTemporalAnchorResolved?: () => void;
     empty?: Snippet;
   }
 
@@ -16,8 +24,23 @@
     isSelectionMode = false,
     singleSelect = false,
     assetInteraction,
+    timelineManager = $bindable(),
+    grouping = 'day',
     empty,
+    // remaining props accepted but not used in mock rendering
+    ...rest
   }: Props = $props();
+
+  void rest;
+
+  $effect(() => {
+    const stub = { isInitialized: true, scrollTop: 0, grouping: 'day', months: [] };
+    if (timelineManager) {
+      Object.assign(timelineManager, stub);
+    } else {
+      timelineManager = stub;
+    }
+  });
 
   const serializedOptions = $derived(JSON.stringify(options));
   // Detect which mode the page is in from the options shape
@@ -31,6 +54,7 @@
   data-is-selection-mode={String(isSelectionMode)}
   data-single-select={String(singleSelect)}
   data-mode={derivedMode}
+  data-grouping={grouping}
 >
   <div data-testid="timeline-options">{serializedOptions}</div>
   {@render empty?.()}
