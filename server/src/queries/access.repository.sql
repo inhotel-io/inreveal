@@ -71,6 +71,19 @@ where
   "shared_link"."id" = $1
   and "shared_link"."albumId" in ($2)
 
+-- AccessRepository.album.checkSpaceLinkedAlbumAccess
+select distinct
+  "album"."id"
+from
+  "album"
+  inner join "shared_space_album" on "shared_space_album"."albumId" = "album"."id"
+  inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+where
+  "album"."id" in ($1)
+  and "album"."deletedAt" is null
+  and "shared_space_member"."userId" = $2
+  and "shared_space_member"."role" in ($3, $4)
+
 -- AccessRepository.asset.checkAlbumAccess
 with
   "target" as (
@@ -160,6 +173,22 @@ from
         "asset"."id" in ($6)
         or "asset"."livePhotoVideoId" in ($7)
       )
+    union
+    select
+      "asset"."id",
+      "asset"."livePhotoVideoId"
+    from
+      "shared_space_album"
+      inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+      inner join "asset" on "asset"."id" = "album_asset"."assetId"
+      and "asset"."deletedAt" is null
+    where
+      "shared_space_member"."userId" = $8
+      and (
+        "asset"."id" in ($9)
+        or "asset"."livePhotoVideoId" in ($10)
+      )
   ) as "combined"
 
 -- AccessRepository.asset.checkSpaceAccessForSpace
@@ -199,6 +228,23 @@ from
       and (
         "asset"."id" in ($8)
         or "asset"."livePhotoVideoId" in ($9)
+      )
+    union
+    select
+      "asset"."id",
+      "asset"."livePhotoVideoId"
+    from
+      "shared_space_album"
+      inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+      inner join "asset" on "asset"."id" = "album_asset"."assetId"
+      and "asset"."deletedAt" is null
+    where
+      "shared_space_member"."userId" = $10
+      and "shared_space_album"."spaceId" = $11
+      and (
+        "asset"."id" in ($12)
+        or "asset"."livePhotoVideoId" in ($13)
       )
   ) as "combined"
 
