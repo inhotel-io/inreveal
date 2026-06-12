@@ -259,6 +259,20 @@ class AssetAccess {
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', (join) =>
+                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+              )
+              .select(['asset.id', 'asset.livePhotoVideoId'])
+              .where('shared_space_member.userId', '=', userId)
+              .where((eb) =>
+                eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
+              ),
+          )
           .as('combined'),
       )
       .select(['combined.id', 'combined.livePhotoVideoId'])
@@ -311,6 +325,21 @@ class AssetAccess {
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
               .where('shared_space_library.spaceId', '=', spaceId)
+              .where((eb) =>
+                eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
+              ),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', (join) =>
+                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+              )
+              .select(['asset.id', 'asset.livePhotoVideoId'])
+              .where('shared_space_member.userId', '=', userId)
+              .where('shared_space_album.spaceId', '=', spaceId)
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),
