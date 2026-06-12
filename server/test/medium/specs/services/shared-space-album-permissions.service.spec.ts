@@ -42,6 +42,9 @@ beforeAll(async () => {
 // Permission-matrix spec: Space Albums Phase 1 — READ
 // ---------------------------------------------------------------------------
 
+const authFromUser = (actor: { id: string; email: string }) =>
+  factory.auth({ user: { id: actor.id, email: actor.email } });
+
 describe('SharedSpaceService — space-album permission matrix', () => {
   /**
    * Fixture world (created once in beforeAll, shared across all Grid tests):
@@ -225,6 +228,92 @@ describe('SharedSpaceService — space-album permission matrix', () => {
         ids: new Set([world.albumA]),
       });
       expect(allowedIds.has(world.albumA)).toBe(true);
+    });
+  });
+
+  // =========================================================================
+  // Grid 3 — LINK album into a space (Editor+, non-admin; owns/edits album)
+  // =========================================================================
+
+  describe('Grid 3 — LINK album into a space (Editor+ AND owns/edits album; NOT admin-gated)', () => {
+    let ctx3: ReturnType<typeof setup>['ctx'];
+    let sut3: ReturnType<typeof setup>['sut'];
+    let spaceS3: string;
+    let spaceOwner3: { id: string; email: string };
+    let spaceEditor3: { id: string; email: string };
+    let spaceViewer3: { id: string; email: string };
+    let ownedByOwner3: string;
+    let ownedByEditor3: string;
+    let ownedByViewer3: string;
+    let viewerOnlyAlbum3: string;
+    let albumAlreadyLinked3: string;
+
+    beforeAll(async () => {
+      const { ctx, sut } = setup();
+      ctx3 = ctx;
+      sut3 = sut;
+
+      const { user: ownerUser } = await ctx3.newUser();
+      const { user: editorUser } = await ctx3.newUser();
+      const { user: viewerUser } = await ctx3.newUser();
+      const { user: otherUser } = await ctx3.newUser();
+
+      spaceOwner3 = ownerUser;
+      spaceEditor3 = editorUser;
+      spaceViewer3 = viewerUser;
+
+      const { space } = await ctx3.newSharedSpace({ createdById: ownerUser.id, faceRecognitionEnabled: false });
+      spaceS3 = space.id;
+
+      await ctx3.newSharedSpaceMember({ spaceId: spaceS3, userId: ownerUser.id, role: 'owner' });
+      await ctx3.newSharedSpaceMember({ spaceId: spaceS3, userId: editorUser.id, role: 'editor' });
+      await ctx3.newSharedSpaceMember({ spaceId: spaceS3, userId: viewerUser.id, role: 'viewer' });
+
+      const { result: alb1 } = await ctx3.newAlbum({ ownerId: ownerUser.id, albumName: 'G3-owner-album' });
+      ownedByOwner3 = alb1.id;
+
+      const { result: alb2 } = await ctx3.newAlbum({ ownerId: editorUser.id, albumName: 'G3-editor-album' });
+      ownedByEditor3 = alb2.id;
+
+      const { result: alb3 } = await ctx3.newAlbum({ ownerId: viewerUser.id, albumName: 'G3-viewer-album' });
+      ownedByViewer3 = alb3.id;
+
+      // An album owned by otherUser; spaceEditor3 is only a Viewer on it
+      const { result: alb4 } = await ctx3.newAlbum({ ownerId: otherUser.id, albumName: 'G3-viewer-only-album' });
+      viewerOnlyAlbum3 = alb4.id;
+      await ctx3.newAlbumUser({ albumId: viewerOnlyAlbum3, userId: editorUser.id, role: AlbumUserRole.Viewer });
+
+      // An album pre-linked to the space (for idempotency test)
+      const { result: alb5 } = await ctx3.newAlbum({ ownerId: ownerUser.id, albumName: 'G3-pre-linked-album' });
+      albumAlreadyLinked3 = alb5.id;
+      await ctx3
+        .get(SharedSpaceRepository)
+        .addAlbum({ spaceId: spaceS3, albumId: albumAlreadyLinked3, addedById: ownerUser.id });
+    });
+
+    it('non-admin spaceOwner who owns the album → ALLOW', async () => {
+      expect(spaceOwner3).toBeDefined();
+      // ctx3.newUser() always creates non-admin users (isAdmin: false)
+      await expect(sut3.linkAlbum(authFromUser(spaceOwner3), spaceS3, ownedByOwner3)).resolves.toBeUndefined();
+    });
+
+    it('non-admin spaceEditor who owns the album → ALLOW (divergence from libraries)', async () => {
+      await expect(sut3.linkAlbum(authFromUser(spaceEditor3), spaceS3, ownedByEditor3)).resolves.toBeUndefined();
+    });
+
+    it('spaceEditor who is only album_user-VIEWER on the album → DENY (cannot re-share read-only)', async () => {
+      await expect(sut3.linkAlbum(authFromUser(spaceEditor3), spaceS3, viewerOnlyAlbum3)).rejects.toThrow();
+    });
+
+    it('spaceViewer who owns the album → DENY (Viewer cannot manage links)', async () => {
+      await expect(sut3.linkAlbum(authFromUser(spaceViewer3), spaceS3, ownedByViewer3)).rejects.toThrow();
+    });
+
+    it('re-link already-linked album → idempotent no-op (no throw, no duplicate row)', async () => {
+      await sut3.linkAlbum(authFromUser(spaceOwner3), spaceS3, albumAlreadyLinked3);
+      await sut3.linkAlbum(authFromUser(spaceOwner3), spaceS3, albumAlreadyLinked3);
+      const links = await ctx3.get(SharedSpaceRepository).getLinkedAlbums(spaceS3);
+      expect(links.filter((l) => l.albumId === albumAlreadyLinked3)).toHaveLength(1);
     });
   });
 
