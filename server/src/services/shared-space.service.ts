@@ -1730,6 +1730,56 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
+  @OnJob({ name: JobName.SharedSpaceAlbumFaceSync, queue: QueueName.FacialRecognition })
+  async handleSharedSpaceAlbumFaceSync(job: JobOf<JobName.SharedSpaceAlbumFaceSync>): Promise<JobStatus> {
+    const space = await this.sharedSpaceRepository.getById(job.spaceId);
+    if (!space || !space.faceRecognitionEnabled) {
+      return JobStatus.Skipped;
+    }
+
+    const linkExists = await this.sharedSpaceRepository.hasAlbumLink(job.spaceId, job.albumId);
+    if (!linkExists) {
+      return JobStatus.Skipped;
+    }
+
+    const batchSize = 1000;
+    let offset = 0;
+    let affectedAny = false;
+
+    while (true) {
+      // Re-check link each batch to handle concurrent unlink
+      const stillLinked = await this.sharedSpaceRepository.hasAlbumLink(job.spaceId, job.albumId);
+      if (!stillLinked) {
+        this.logger.log(`Album ${job.albumId} was unlinked from space ${job.spaceId} during sync, stopping`);
+        break;
+      }
+
+      const assets = await this.assetRepository.getByAlbumIdWithFaces(job.albumId, batchSize, offset);
+      if (assets.length === 0) {
+        break;
+      }
+
+      for (const asset of assets) {
+        const affectedPersonIds = await this.processSpaceFaceMatch(job.spaceId, asset.id);
+        affectedAny ||= affectedPersonIds.length > 0;
+      }
+
+      offset += assets.length;
+    }
+
+    if (affectedAny) {
+      await this.queueSpaceIdentityReconciliation({ spaceId: job.spaceId });
+    }
+
+    // Queue dedup pass after album sync completes
+    await this.jobRepository.queue({
+      name: JobName.SharedSpacePersonDedup,
+      data: { spaceId: job.spaceId },
+    });
+
+    return JobStatus.Success;
+  }
+
   @OnJob({ name: JobName.SharedSpaceFaceMatchAll, queue: QueueName.FacialRecognition })
   async handleSharedSpaceFaceMatchAll({ spaceId }: JobOf<JobName.SharedSpaceFaceMatchAll>): Promise<JobStatus> {
     const space = await this.sharedSpaceRepository.getById(spaceId);

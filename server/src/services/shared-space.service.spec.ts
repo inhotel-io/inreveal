@@ -8347,6 +8347,97 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('handleSharedSpaceAlbumFaceSync', () => {
+    it('should skip when space does not exist', async () => {
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: newUuid(), albumId: newUuid() });
+      expect(result).toBe(JobStatus.Skipped);
+    });
+
+    it('should skip when face recognition is disabled on the space', async () => {
+      const spaceId = newUuid();
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false }));
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId: newUuid() });
+      expect(result).toBe(JobStatus.Skipped);
+    });
+
+    it('should skip when album link was removed before job runs', async () => {
+      const spaceId = newUuid();
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId: newUuid() });
+      expect(result).toBe(JobStatus.Skipped);
+    });
+
+    it('should succeed with no work when album has no assets with faces', async () => {
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+      mocks.asset.getByAlbumIdWithFaces.mockResolvedValue([]);
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId });
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonDedup,
+        data: { spaceId },
+      });
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceIdentityReconciliation }),
+      );
+    });
+
+    it('should process album assets with faces in batches', async () => {
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const assetId1 = newUuid();
+      const assetId2 = newUuid();
+
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+      mocks.asset.getByAlbumIdWithFaces
+        .mockResolvedValueOnce([{ id: assetId1 }, { id: assetId2 }])
+        .mockResolvedValueOnce([]);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, 1000, 0);
+      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, 1000, 2);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpacePersonDedup,
+        data: { spaceId },
+      });
+    });
+
+    it('should stop syncing when album is unlinked during iteration', async () => {
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const assetId1 = newUuid();
+      const assetId2 = newUuid();
+
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.hasAlbumLink
+        .mockResolvedValueOnce(true) // initial check
+        .mockResolvedValueOnce(true) // first batch check inside loop
+        .mockResolvedValueOnce(false); // second batch check — unlinked
+      mocks.asset.getByAlbumIdWithFaces
+        .mockResolvedValueOnce([{ id: assetId1 }])
+        .mockResolvedValueOnce([{ id: assetId2 }]);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId });
+
+      expect(result).toBe(JobStatus.Success);
+      // Only first batch should be processed
+      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledTimes(1);
+      expect(mocks.sharedSpace.getAssetFacesForMatching).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('handleSharedSpacePersonDedup', () => {
     beforeEach(() => {
       mocks.sharedSpace.recountPersons.mockResolvedValue(void 0 as any);

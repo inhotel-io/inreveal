@@ -858,6 +858,23 @@ export class AssetRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, 1000, 0] })
+  getByAlbumIdWithFaces(albumId: string, limit = 1000, offset = 0) {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+      .select('asset.id')
+      .where('album_asset.albumId', '=', albumId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .groupBy('asset.id')
+      .orderBy('asset.id')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
   getByLibraryIdAndOriginalPath(libraryId: string, originalPath: string) {
     return this.db
