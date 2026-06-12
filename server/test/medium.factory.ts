@@ -370,6 +370,25 @@ export class MediumTestContext<S extends BaseService = BaseService> {
       .executeTakeFirstOrThrow();
     return { spaceAsset: result, result };
   }
+
+  async newSharedSpaceAlbum(dto: {
+    spaceId: string;
+    albumId: string;
+    showInTimeline?: boolean;
+    addedById?: string | null;
+  }) {
+    const result = await this.database
+      .insertInto('shared_space_album')
+      .values({
+        spaceId: dto.spaceId,
+        albumId: dto.albumId,
+        showInTimeline: dto.showInTimeline ?? true,
+        addedById: dto.addedById ?? null,
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    return { spaceAlbum: result, result };
+  }
 }
 
 export class SyncTestContext extends MediumTestContext<SyncService> {

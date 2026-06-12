@@ -378,4 +378,48 @@ describe(SearchService.name, () => {
       expect(result.people.map((p) => p.name)).toEqual(['Alice Space', 'Zelda Space']);
     });
   });
+
+  describe('album-linked space assets', () => {
+    it('should include album-linked assets in searchMetadata when filtering by spaceId (showInTimeline=true)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+
+      const { album } = await ctx.newAlbum({ ownerId: owner.id });
+      const { asset: albumAsset } = await ctx.newAsset({ ownerId: owner.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: albumAsset.id });
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: true });
+
+      const auth = factory.auth({ user: { id: member.id } });
+
+      const result = await sut.searchMetadata(auth, { spaceId: space.id });
+
+      expect(result.assets.items).toEqual([expect.objectContaining({ id: albumAsset.id })]);
+    });
+
+    it('should NOT include album-linked assets in searchMetadata when showInTimeline=false', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+
+      const { album } = await ctx.newAlbum({ ownerId: owner.id });
+      const { asset: albumAsset } = await ctx.newAsset({ ownerId: owner.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: albumAsset.id });
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: false });
+
+      const auth = factory.auth({ user: { id: member.id } });
+
+      const result = await sut.searchMetadata(auth, { spaceId: space.id });
+
+      expect(result.assets.items.find((a) => a.id === albumAsset.id)).toBeUndefined();
+    });
+  });
 });
