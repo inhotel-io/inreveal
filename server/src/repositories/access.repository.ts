@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, NotNull, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AlbumUserRole, AssetVisibility } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
 
@@ -132,6 +132,27 @@ class AlbumAccess {
       .then(
         (sharedLinks) => new Set(sharedLinks.flatMap((sharedLink) => (sharedLink.albumId ? [sharedLink.albumId] : []))),
       );
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSpaceLinkedAlbumAccess(userId: string, albumIds: Set<string>) {
+    if (albumIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('album')
+      .select('album.id')
+      .distinct()
+      .innerJoin('shared_space_album', 'shared_space_album.albumId', 'album.id')
+      .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+      .where('album.id', 'in', [...albumIds])
+      .where('album.deletedAt', 'is', null)
+      .where('shared_space_member.userId', '=', userId)
+      .where('shared_space_member.role', 'in', [SharedSpaceRole.Owner, SharedSpaceRole.Editor])
+      .execute()
+      .then((albums) => new Set(albums.map((album) => album.id)));
   }
 }
 
