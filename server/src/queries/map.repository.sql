@@ -55,6 +55,16 @@ where
         "asset"."libraryId" = "shared_space_library"."libraryId"
         and "shared_space_library"."spaceId" in ($4)
     )
+    or exists (
+      select
+      from
+        "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+      where
+        "asset"."id" = "album_asset"."assetId"
+        and "shared_space_album"."spaceId" in ($5)
+        and "shared_space_album"."showInTimeline" = $6
+    )
   )
 order by
   "fileCreatedAt" desc
