@@ -653,6 +653,18 @@ export class SharedSpaceService extends BaseService {
     }
   }
 
+  async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+
+    const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
+    await this.sharedSpaceRepository.removeAlbum(spaceId, albumId);
+    if (orphanedAssetIds.length > 0) {
+      await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
+      await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+      await this.queueSpacePersonMetadataBackfill();
+    }
+  }
+
   async unlinkLibrary(auth: AuthDto, spaceId: string, libraryId: string): Promise<void> {
     if (!auth.user.isAdmin) {
       throw new ForbiddenException('Only admins can unlink libraries from spaces');
