@@ -2,8 +2,6 @@
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import RoleBadge from '$lib/components/spaces/role-badge.svelte';
   import SpaceActivityFeed from '$lib/components/spaces/space-activity-feed.svelte';
-  import SpaceLinkedAlbums from '$lib/components/spaces/space-linked-albums.svelte';
-
   import { getAssetMediaUrl } from '$lib/utils';
   import { formatTimeAgo } from '$lib/utils/timesince';
   import { handleError } from '$lib/utils/handle-error';
@@ -28,7 +26,6 @@
     activities: SharedSpaceActivityResponseDto[];
     currentUserId: string;
     isOwner: boolean;
-    isEditor: boolean;
     open: boolean;
     onClose: () => void;
     onMembersChanged: () => void;
@@ -43,7 +40,6 @@
     activities,
     currentUserId: _,
     isOwner,
-    isEditor,
     open,
     onClose,
     onMembersChanged,
@@ -51,7 +47,7 @@
     hasMoreActivities,
   }: Props = $props();
 
-  let activeTab = $state<'activity' | 'members' | 'albums'>('activity');
+  let activeTab = $state<'activity' | 'members'>('activity');
 
   const tabBgClasses: Record<string, string> = {
     [UserAvatarColor.Primary]: 'bg-primary text-white',
@@ -140,8 +136,8 @@
 
 <!-- Panel -->
 <aside
-  class="fixed right-0 top-0 z-50 flex h-full w-full flex-col border-l border-gray-200 bg-white shadow-xl
-    transition-transform duration-300 ease-out dark:border-gray-800 dark:bg-immich-dark-bg sm:w-[380px]"
+  class="fixed top-0 right-0 z-50 flex size-full flex-col border-l border-gray-200 bg-white shadow-xl
+    transition-transform duration-300 ease-out sm:w-[380px] dark:border-gray-800 dark:bg-immich-dark-bg"
   class:translate-x-0={open}
   class:translate-x-full={!open}
   data-testid="space-panel"
@@ -170,16 +166,6 @@
       >
         Members ({members.length})
       </button>
-      <button
-        type="button"
-        class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {activeTab === 'albums'
-          ? activeTabClass
-          : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
-        onclick={() => (activeTab = 'albums')}
-        data-testid="tab-albums"
-      >
-        {$t('albums')}
-      </button>
     </div>
 
     <IconButton
@@ -202,8 +188,6 @@
         onLoadMore={onLoadMoreActivities}
         hasMore={hasMoreActivities}
       />
-    {:else if activeTab === 'albums'}
-      <SpaceLinkedAlbums {space} canManage={isEditor} />
     {:else}
       <!-- Members content -->
       {#if isOwner}
@@ -248,7 +232,7 @@
                   <img
                     alt=""
                     src={getAssetMediaUrl({ id: member.recentAssetId })}
-                    class="h-12 w-12 rounded-lg object-cover"
+                    class="size-12 rounded-lg object-cover"
                     loading="lazy"
                     draggable="false"
                   />
@@ -262,7 +246,7 @@
                 </div>
               </div>
             {:else}
-              <p class="mt-1 text-xs italic text-gray-400">No photos added yet</p>
+              <p class="mt-1 text-xs text-gray-400 italic">No photos added yet</p>
             {/if}
           </div>
         {/each}
