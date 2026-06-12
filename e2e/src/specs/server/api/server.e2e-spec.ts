@@ -95,7 +95,8 @@ describe('/server', () => {
         major: expect.any(Number),
         minor: expect.any(Number),
         patch: expect.any(Number),
-        prerelease: null,
+        // null on stable releases, the prerelease number on -rc.N builds
+        prerelease: body.prerelease === null ? null : expect.any(Number),
       });
     });
   });
