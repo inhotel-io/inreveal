@@ -1894,6 +1894,49 @@ export class SharedSpaceRepository {
     }
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async getAlbumAssetIdsWithoutOtherSpacePath(spaceId: string, albumId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('album_asset')
+      .select('album_asset.assetId')
+      .where('album_asset.albumId', '=', albumId)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'album_asset.assetId')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album_asset as other', 'other.albumId', 'shared_space_album.albumId')
+              .whereRef('other.assetId', '=', 'album_asset.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('asset.id', '=', 'album_asset.assetId')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+    return rows.map((r) => r.assetId);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   async deleteOrphanedPersons(spaceId: string) {
     await this.db
