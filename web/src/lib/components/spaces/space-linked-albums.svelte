@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Route } from '$lib/route';
   import { getAssetMediaUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import {
@@ -141,34 +142,41 @@
     <div class="flex flex-col gap-2" data-testid="linked-album-list">
       {#each linkedAlbums as album (album.albumId)}
         <div
-          class="flex items-center gap-3 rounded-lg border border-gray-200 p-2 dark:border-gray-700"
+          class="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700"
           data-testid="linked-album-item"
         >
-          <!-- Thumbnail -->
-          <div class="size-10 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
-            {#if album.albumThumbnailAssetId}
-              <img
-                alt={album.albumName}
-                src={getAssetMediaUrl({ id: album.albumThumbnailAssetId })}
-                class="size-full object-cover"
-                loading="lazy"
-              />
-            {:else}
-              <div class="flex size-full items-center justify-center">
-                <Icon icon={mdiImageAlbum} size="16" class="text-gray-400" />
-              </div>
-            {/if}
-          </div>
+          <!-- Clickable area: navigates to album -->
+          <a
+            href={Route.viewAlbum({ id: album.albumId })}
+            class="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+            data-testid="linked-album-link"
+          >
+            <!-- Thumbnail -->
+            <div class="size-10 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
+              {#if album.albumThumbnailAssetId}
+                <img
+                  alt={album.albumName}
+                  src={getAssetMediaUrl({ id: album.albumThumbnailAssetId })}
+                  class="size-full object-cover"
+                  loading="lazy"
+                />
+              {:else}
+                <div class="flex size-full items-center justify-center">
+                  <Icon icon={mdiImageAlbum} size="16" class="text-gray-400" />
+                </div>
+              {/if}
+            </div>
 
-          <!-- Info -->
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium" data-testid="linked-album-name">{album.albumName}</p>
-            <p class="text-xs text-gray-500">{$t('items_count', { values: { count: album.assetCount } })}</p>
-          </div>
+            <!-- Info -->
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-sm font-medium" data-testid="linked-album-name">{album.albumName}</p>
+              <p class="text-xs text-gray-500">{$t('items_count', { values: { count: album.assetCount } })}</p>
+            </div>
+          </a>
 
           {#if canManage}
-            <!-- Timeline toggle -->
-            <div class="flex shrink-0 items-center gap-1" title={$t('spaces_linked_albums_show_in_timeline')}>
+            <!-- Timeline toggle (outside anchor to avoid nested interactive elements) -->
+            <div class="flex shrink-0 items-center gap-1 pr-1" title={$t('spaces_linked_albums_show_in_timeline')}>
               <Switch
                 checked={album.showInTimeline}
                 onCheckedChange={() => handleToggleTimeline(album.albumId, album.showInTimeline)}
@@ -177,17 +185,19 @@
               />
             </div>
 
-            <!-- Unlink button -->
-            <Button
-              size="tiny"
-              variant="ghost"
-              color="danger"
-              leadingIcon={mdiLinkVariantOff}
-              onclick={() => handleUnlink(album.albumId, album.albumName)}
-              data-testid="album-unlink-button"
-            >
-              {$t('spaces_linked_albums_unlink')}
-            </Button>
+            <!-- Unlink button (outside anchor to avoid nested interactive elements) -->
+            <div class="shrink-0 pr-1">
+              <Button
+                size="tiny"
+                variant="ghost"
+                color="danger"
+                leadingIcon={mdiLinkVariantOff}
+                onclick={() => handleUnlink(album.albumId, album.albumName)}
+                data-testid="album-unlink-button"
+              >
+                {$t('spaces_linked_albums_unlink')}
+              </Button>
+            </div>
           {/if}
         </div>
       {/each}
