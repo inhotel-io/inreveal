@@ -34,7 +34,7 @@
 - `server/src/utils/access.ts` — union into `AlbumRead` + `AlbumDownload`
 - `server/test/repositories/access.repository.mock.ts` — mock the new method
 - `server/src/queries/access.repository.sql` — regenerated
-- `web/i18n/en.json` — new keys
+- `i18n/en.json` — new keys
 - `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte` — header "Albums" button
 - `web/src/lib/components/spaces/space-panel.svelte` — remove the "Albums" tab
 - `web/src/lib/components/spaces/space-panel.spec.ts` — drop the Albums-tab test
@@ -158,7 +158,7 @@ Apply the identical transformation to the **auth** branch of `Permission.AlbumDo
 
 ## Task 2: i18n keys for the in-space albums UI
 
-**Files:** Modify `web/i18n/en.json`
+**Files:** Modify `i18n/en.json`
 
 - [ ] **Step 1: Add keys** (alphabetical position; the `space_albums_*` Phase-1 keys exist — reuse them where possible). Add the new ones used by the grid page + album view + header:
 
@@ -173,9 +173,9 @@ Apply the identical transformation to the **auth** branch of `Permission.AlbumDo
   "space_album_add_photos": "Add photos"
 ```
 
-(Verify the exact existing Phase-1 keys with `grep -n "spaces_linked_albums" web/i18n/en.json` and reuse `spaces_linked_albums_link_album`, `_unlink`, `_unlink_confirmation`, `_show_in_timeline`, `_error_*`, `_pick_album`, `_no_albums` rather than duplicating.)
+(Verify the exact existing Phase-1 keys with `grep -n "spaces_linked_albums" i18n/en.json` and reuse `spaces_linked_albums_link_album`, `_unlink`, `_unlink_confirmation`, `_show_in_timeline`, `_error_*`, `_pick_album`, `_no_albums` rather than duplicating.)
 
-- [ ] **Step 2: Format + commit.** Run: `cd web && pnpm --filter immich-i18n format:fix` (or the repo's i18n format step) so `en.json` stays sorted; confirm `git diff web/i18n/en.json` shows only the added keys. Commit `web/i18n/en.json` with message `i18n: keys for in-space albums experience`.
+- [ ] **Step 2: Format + commit.** The i18n source lives at the **repo-root `i18n/` package** (NOT under `web/`). Run from repo root: `pnpm --filter immich-i18n format:fix` so `i18n/en.json` stays alphabetically sorted; confirm `git diff i18n/en.json` shows only the added keys. Commit `i18n/en.json` with message `i18n: keys for in-space albums experience`.
 
 ---
 
@@ -334,17 +334,26 @@ export const load = (async ({ url, params }) => {
 }) satisfies PageLoad;
 ```
 
-- [ ] **Step 2: Write the failing test.** Assert: the view renders the album's `Timeline`; header shows the album name + `space_album_in_space`; `canManage` (space-Editor) shows the Add-photos affordance, Viewer does not. (The linkage redirect is covered by an e2e/integration assertion in Task 8 since it's `+page.ts` redirect behavior.)
+- [ ] **Step 2: Write the failing tests.** Component test: the view renders the album's `Timeline`; header shows the album name + the "in {space}" context; `canManage` (space-Editor) shows the Add-photos affordance, Viewer does not; a `showInTimeline = false` album **still renders fully** (the toggle gates only the aggregate space surfaces, never this view). `+page.ts` **linkage tests** (unit-test the `load` with mocked SDK): (a) an album present in `getSharedSpaceAlbums(:id)` → loads `getAlbumInfo` and returns it; (b) an album **NOT** in `getSharedSpaceAlbums(:id)` — **even when `getAlbumInfo` would succeed** (a user who independently owns it) — throws the `redirect(302, /spaces/:id/albums)` (assert via the thrown redirect); (c) a `getSpace` rejection (non-member) propagates (no album data). Mock `@immich/sdk` so `getAlbumInfo` is NOT called when the album isn't linked.
 
 - [ ] **Step 3: Run → RED.**
 
 - [ ] **Step 4: Implement `+page.svelte` (browse).** `UserPageLayout`:
-  - `currentMember`/`isEditor` from members; `canManage = isEditor || album.albumUsers.some(au => au.user.id === authManager.user.id && au.role ∈ {Owner, Editor})`.
-  - `leading()` = back `IconButton` → `goto(`/spaces/${space.id}/albums`)`. `title = album.albumName`, `description = `${count} ${$t('items')} · ${$t('space_album_in_space', { space: space.name })}``.
-  - Content: `Timeline` with `options = buildAlbumTimelineOptions(album.id, …)` (reuse `web/src/lib/utils/album-filter-options.ts`), `enableRouting`, month grouping, an `AssetMultiSelectManager`; `empty` snippet → centered icon + "No photos yet" (Editor also "Add photos").
-  - (Collaboration affordances are wired in Task 7 — this task delivers browse + the `canManage` flag + the Add button placeholder gated on `canManage`.)
+  - `currentMember`/`isEditor` from members; `canManage = isEditor || album.albumUsers.some(au => au.user.id === authManager.user.id && (au.role === AlbumUserRole.Owner || au.role === AlbumUserRole.Editor))`.
+  - `leading()` = back `IconButton mdiArrowLeft` → `goto(`/spaces/${space.id}/albums`)`. `title = album.albumName`; `description = `${$t('items_count', { values: { count: album.assetCount } })} · ${$t('space_album_in_space', { values: { space: space.name } })}``.
+  - Content: `Timeline` with the album options built exactly as the global album page does (reuse `buildAlbumTimelineOptions` from `web/src/lib/utils/album-filter-options.ts`):
+    ```ts
+    const albumOptions = buildAlbumTimelineOptions(
+      album.id,
+      album.order ?? authManager.preferences.albums.defaultAssetOrder,
+      clearFilters(/* empty FilterState */),
+    );
+    const options = { ...albumOptions, grouping: 'month' };
+    ```
+    `enableRouting={false}` (the asset viewer opens as an overlay on click; the route deliberately omits the `[[photos=photos]]/[[assetId=id]]` deep-link segments to stay focused — deep-linkable album photos are a future nicety, not Phase 1.5), an `AssetMultiSelectManager`; `empty` snippet → centered icon + "No photos yet" (Editor also "Add photos"). (`clearFilters`/`FilterState` are the album page's filter utilities; verify the exact empty-state constructor it uses and mirror it.)
+  - (Collaboration affordances are wired in Task 7 — this task delivers browse + the `canManage` flag + the Add button gated on `canManage`.)
 
-- [ ] **Step 5: Run → GREEN.** Test passes; `pnpm run check:typescript && pnpm run check:svelte` clean.
+- [ ] **Step 5: Run → GREEN.** Tests pass; `pnpm run check:typescript && pnpm run check:svelte` clean.
 
 - [ ] **Step 6: Lint + commit.** eslint --fix (0 warnings) + prettier. Commit with message `feat(web): in-space album view (browse) with linkage check`.
 
@@ -358,10 +367,10 @@ export const load = (async ({ url, params }) => {
 
 - [ ] **Step 2: Run → RED.**
 
-- [ ] **Step 3: Implement collaboration**, reusing the global album page's mechanism but gated on `canManage`:
-  - **Add:** when `canManage`, a header "Add photos" `IconButton mdiImagePlusOutline` that enters a select-assets mode using `buildAlbumAssetPickerOptions(album.id, …)` + `getAlbumAssetsActions($t, album, selectedAssets)` (the `AddAssets`/`Upload` actions) — mirror how the album page toggles `AlbumPageViewMode.SELECT_ASSETS` and renders the picker `Timeline` + an `AssetSelectControlBar` with the AddAssets action. Keep it focused (no album-settings/sharing UI).
-  - **Remove:** in browse mode, selecting album photos shows `AssetSelectControlBar` containing `RemoveFromAlbumAction` (bind `album`, `onRemove` → reload), shown only when `canManage`. Other multiselect actions (download, favorite) follow the album-page defaults.
-  - The server already authorizes add/remove for space Editors (Phase-1 write predicate) and for album owners/editors — so `canManage` purely controls affordance visibility.
+- [ ] **Step 3: Implement collaboration**, reusing the global album page's two-mode mechanism but gated on `canManage`. Add a local `let mode = $state<'browse' | 'add'>('browse')` and a second `AssetMultiSelectManager` for the picker (mirror the album page's `assetMultiSelectManager` vs `timelineMultiSelectManager` split):
+  - **Browse mode** (default): `options = { ...buildAlbumTimelineOptions(album.id, order, emptyFilters), grouping: 'month' }` (from Task 6); selecting album photos shows `AssetSelectControlBar` containing `RemoveFromAlbumAction` (`bind:album`, `onRemove` → reload/invalidate) — rendered **only when `canManage`** — plus the album-page default multiselect actions (download, favorite).
+  - **Add mode** (`canManage` only; entered via the header "Add photos" `IconButton mdiImagePlusOutline`): swap `options = buildAlbumAssetPickerOptions(album.id, emptyFilters)` and render the picker `Timeline` + an `AssetSelectControlBar` whose action is `getAlbumAssetsActions($t, album, pickerMultiSelectManager.assets).AddAssets` (and `Upload`). On add success, return to browse mode and reload. Use `enableRouting={false}` in both modes (consistent with the browse route omitting deep-link segments); mirror the album page's `isSelectionMode`/`singleSelect` wiring. Keep it focused — no album title-edit / sharing / settings / map.
+  - The server already authorizes add/remove for space Editors (Phase-1 write predicate) and for album owners/editors — so `canManage` purely controls affordance visibility; the server is the actual gate.
 
 - [ ] **Step 4: Run → GREEN.** Test passes; `pnpm run check:typescript && pnpm run check:svelte` clean; `cd web && pnpm build` succeeds.
 
@@ -388,7 +397,8 @@ export const load = (async ({ url, params }) => {
 
 ## Self-review checklist (run before handoff)
 
-- **Spec coverage:** backend read grant (T1) → `AlbumRead`/`AlbumDownload`; header button (T5); grid page + management consolidation + panel-tab removal (T4, T5); in-space album view browse (T6) + collaborate (T7); SQL regen (T8); permissions table rows all covered; edge cases — `showInTimeline=false` browsable (T1 read + T6/T7 browse), unlinked/own-but-not-linked redirect (T6 `+page.ts` + T8 e2e), soft-deleted (getSharedSpaceAlbums filters; T6 redirect), non-member route denied (T6 load + T8 e2e), dual-path (T1 repo test). ✅
-- **TDD:** every task RED→GREEN→commit; the access grant's matrix is written first. ✅
-- **Type/name consistency:** `checkSpaceLinkedAlbumReadAccess` (repo+mock+access.ts+tests); `SpaceAlbumCard` props `{ spaceId, album, canManage, onUnlink, onToggleTimeline }`; routes `/spaces/:id/albums` + `/spaces/:id/albums/[albumId=id]`; `canManage = spaceEditor || albumOwnerEditor`; reuse `buildAlbumTimelineOptions`/`buildAlbumAssetPickerOptions`/`getAlbumAssetsActions`/`AssetSelectControlBar`/`RemoveFromAlbumAction`. ✅
-- **No placeholders:** backend code is exact; web tasks give concrete skeletons + the exact reuse utilities + test code (Svelte UI assembled from verified components, matching how Phase-1 Task 14 was specified). The one judgement area — the add-photos select mode — names the exact utilities to mirror (`buildAlbumAssetPickerOptions` + `getAlbumAssetsActions`).
+- **Spec coverage:** backend read grant (T1) → `AlbumRead`/`AlbumDownload`; header button (T5); grid page + management consolidation + panel-tab removal (T4, T5); in-space album view browse (T6) + collaborate (T7); SQL regen (T8); permissions table rows all covered. Edge cases each have an explicit test — `showInTimeline=false` **still browsable in-space** (T6 component test) and excluded from aggregate surfaces (Phase-1); **own-but-not-linked redirect** (T6 `+page.ts` unit test asserting `getAlbumInfo` is NOT consulted for the decision); unlinked → redirect (T6); soft-deleted (subsumed: absent from `getSharedSpaceAlbums` → not in grid + T6 redirect); non-member route denied (T6 load + T8 e2e); dual-path (T1 repo test); read-grant-does-not-widen-write (T1). ✅
+- **TDD:** every task RED→GREEN→commit; the access grant's matrix + the `+page.ts` linkage logic are written test-first. (T2 i18n and the T5 header button are mechanical; T5's panel-tab removal is guarded by the updated `space-panel.spec.ts`.) ✅
+- **Type/name consistency:** `checkSpaceLinkedAlbumReadAccess` (repo+mock+access.ts+tests); `SpaceAlbumCard` props `{ spaceId, album, canManage, onUnlink, onToggleTimeline }`; routes `/spaces/:id/albums` + `/spaces/:id/albums/[albumId=id]`; `canManage = spaceEditor || albumOwnerEditor`; reuse `buildAlbumTimelineOptions(albumId, order, filters)` / `buildAlbumAssetPickerOptions(albumId, filters)` / `getAlbumAssetsActions($t, album, assets)` / `AssetSelectControlBar` / `RemoveFromAlbumAction`. ✅
+- **Verified anchors (corrected during review):** i18n source is repo-root `i18n/en.json` (NOT `web/i18n/`); count key is `items_count`; `buildAlbumTimelineOptions` is a 3-arg `(albumId, order, filters)` call + `{ ...opts, grouping }`; the `id` route-param matcher exists (`web/src/params/id.ts`); `enableRouting={false}` so the route needs no `[[photos]]/[[assetId]]` deep-link segments. ✅
+- **No placeholders:** backend code is exact; web tasks give concrete skeletons + the exact reuse utilities + test code (Svelte UI assembled from verified components, matching how Phase-1 Task 14 was specified). The add-photos select mode is now spelled out as a two-mode (`'browse' | 'add'`) options-swap reusing `buildAlbumAssetPickerOptions` + `getAlbumAssetsActions`.
