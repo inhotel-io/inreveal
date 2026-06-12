@@ -429,6 +429,7 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // Reserved for Phase 2 (album sync fan-out); mirrors getSpacesLinkedToLibrary.
   @GenerateSql({ params: [DummyValue.UUID] })
   getSpacesLinkedToAlbum(albumId: string) {
     return this.db
