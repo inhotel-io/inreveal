@@ -1221,6 +1221,7 @@
   {activities}
   currentUserId={authManager.user.id}
   {isOwner}
+  {isEditor}
   open={panelOpen}
   onClose={() => (panelOpen = false)}
   onMembersChanged={async () => {
