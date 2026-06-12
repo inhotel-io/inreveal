@@ -50,7 +50,7 @@ vi.mock('$lib/components/shared-components/ControlAppBar.svelte', async () => {
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
 vi.mock('$lib/components/timeline/TimelineGroupingControl.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  const { default: MockComponent } = await import('./mock-grouping-control.test-wrapper.svelte');
   return { default: MockComponent };
 });
 
@@ -284,6 +284,23 @@ describe('Space album detail page', () => {
   it('timeline receives grouping="day" by default (not "month")', () => {
     renderPage();
     expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-grouping', 'day');
+  });
+
+  it('browse timeline OPTIONS carry the current grouping (default day) so the manager actually groups', () => {
+    renderPage({ album: makeAlbum({ id: 'album-1' }) });
+    const options = JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}');
+    expect(options.grouping).toBe('day');
+  });
+
+  it('changing the grouping control updates the timeline OPTIONS grouping (not just the prop)', async () => {
+    renderPage({ album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('set-grouping-month'));
+    await waitFor(() => {
+      const options = JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}');
+      expect(options.grouping).toBe('month');
+    });
+    // and the prop stays in sync
+    expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-grouping', 'month');
   });
 
   it('timeline-desktop-grouping-control is hidden when selection is active in browse mode', () => {
