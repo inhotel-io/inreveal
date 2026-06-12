@@ -49,6 +49,19 @@ vi.mock('$lib/components/shared-components/ControlAppBar.svelte', async () => {
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 
+vi.mock('$lib/components/timeline/TimelineGroupingControl.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/managers/timeline-manager/timeline-anchor', () => ({
+  getTimelineTopVisibleAnchor: vi.fn().mockReturnValue(undefined),
+}));
+
+vi.mock('$lib/utils/timeline-zoom-navigation', () => ({
+  getTimelineBucketZoomTarget: vi.fn(),
+}));
+
 const { mockAssetMultiSelectManager } = vi.hoisted(() => ({
   mockAssetMultiSelectManager: {
     selectionActive: false,
@@ -261,6 +274,31 @@ describe('Space album detail page', () => {
   it('timeline has enableRouting=false', () => {
     renderPage();
     expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-enable-routing', 'false');
+  });
+
+  it('in browse mode, the timeline-desktop-grouping-control renders', () => {
+    renderPage();
+    expect(screen.getByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
+  });
+
+  it('timeline receives grouping="day" by default (not "month")', () => {
+    renderPage();
+    expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-grouping', 'day');
+  });
+
+  it('timeline-desktop-grouping-control is hidden when selection is active in browse mode', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+    renderPage();
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
+  });
+
+  it('timeline-desktop-grouping-control is hidden in add mode', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'add');
+    });
+    expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
   });
 
   it('timeline options include albumId in browse mode', () => {
