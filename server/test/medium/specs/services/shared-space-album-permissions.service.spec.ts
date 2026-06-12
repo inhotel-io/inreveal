@@ -190,6 +190,45 @@ describe('SharedSpaceService — space-album permission matrix', () => {
   });
 
   // =========================================================================
+  // Grid 2 — WRITE add/remove assets in album A (space-linked write)
+  // =========================================================================
+
+  describe('Grid 2 — WRITE add/remove assets in album A (space-linked write)', () => {
+    it.each([
+      ['spaceOwner', true],
+      ['spaceEditor', true],
+      ['spaceViewer', false], // Viewer is read-only
+      ['nonMember', false],
+      ['crossEditor', false], // edits S2; A not linked there
+      ['albumOwner', false], // album membership ⊥ space membership
+      ['albumViewer', false], // album membership ⊥ space membership
+    ] as const)('%s space-linked write to A → allowed=%s', async (actor, allowed) => {
+      const result = await accessRepo.album.checkSpaceLinkedAlbumAccess(
+        world.actors[actor].id,
+        new Set([world.albumA]),
+      );
+      expect(result.has(world.albumA)).toBe(allowed);
+    });
+
+    it('spaceEditor cannot space-link-write to unlinked album B', async () => {
+      const result = await accessRepo.album.checkSpaceLinkedAlbumAccess(
+        world.actors.spaceEditor.id,
+        new Set([world.albumB]),
+      );
+      expect(result.has(world.albumB)).toBe(false);
+    });
+
+    it('albumEditor gets AlbumAssetCreate via album_user path (independent of space membership)', async () => {
+      const allowedIds = await checkAccess(accessRepo, {
+        auth: authOf('albumEditor'),
+        permission: Permission.AlbumAssetCreate,
+        ids: new Set([world.albumA]),
+      });
+      expect(allowedIds.has(world.albumA)).toBe(true);
+    });
+  });
+
+  // =========================================================================
   // Grid 6 — multi-path READ (direct asset + album paths, unlink behaviour)
   // =========================================================================
 
