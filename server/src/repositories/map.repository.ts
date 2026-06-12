@@ -107,6 +107,14 @@ export class MapRepository {
                 .whereRef('asset.libraryId', '=', 'shared_space_library.libraryId')
                 .where('shared_space_library.spaceId', 'in', options.timelineSpaceIds!),
             ),
+            eb.exists((eb) =>
+              eb
+                .selectFrom('shared_space_album')
+                .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                .whereRef('asset.id', '=', 'album_asset.assetId')
+                .where('shared_space_album.spaceId', 'in', options.timelineSpaceIds!)
+                .where('shared_space_album.showInTimeline', '=', true),
+            ),
           );
         }
 
@@ -159,6 +167,14 @@ export class MapRepository {
                   .whereRef('asset.libraryId', '=', 'shared_space_library.libraryId')
                   .where('shared_space_library.spaceId', 'in', timelineSpaceIds),
               ),
+              eb.exists((eb) =>
+                eb
+                  .selectFrom('shared_space_album')
+                  .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                  .whereRef('asset.id', '=', 'album_asset.assetId')
+                  .where('shared_space_album.spaceId', 'in', timelineSpaceIds)
+                  .where('shared_space_album.showInTimeline', '=', true),
+              ),
             );
           }
 
@@ -193,6 +209,17 @@ export class MapRepository {
                   .selectFrom('shared_space_library')
                   .whereRef('asset.libraryId', '=', 'shared_space_library.libraryId')
                   .where('shared_space_library.spaceId', 'in', timelineSpaceIds),
+              ),
+            ]),
+            eb.and([
+              eb('asset.visibility', '=', AssetVisibility.Timeline),
+              eb.exists((eb) =>
+                eb
+                  .selectFrom('shared_space_album')
+                  .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                  .whereRef('asset.id', '=', 'album_asset.assetId')
+                  .where('shared_space_album.spaceId', 'in', timelineSpaceIds)
+                  .where('shared_space_album.showInTimeline', '=', true),
               ),
             ]),
           );
