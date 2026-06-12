@@ -971,6 +971,16 @@
         <SpaceMap spaceId={space.id} />
 
         <IconButton
+          icon={mdiImageMultipleOutline}
+          aria-label={$t('space_albums_page_title')}
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          onclick={() => void goto(`/spaces/${space.id}/albums`)}
+          data-testid="space-albums-button"
+        />
+
+        <IconButton
           variant="ghost"
           shape="round"
           color="secondary"
@@ -1092,8 +1102,8 @@
       {#if !showSearchResults}
         {#if isFilteredTimelineEmpty}
           <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="empty-state-message">
-            <p class="text-sm text-[var(--fg-muted)]">No photos match your filters</p>
-            <button type="button" class="text-sm text-[var(--primary)]" onclick={handleClearAllFilters}>
+            <p class="text-sm text-(--fg-muted)">No photos match your filters</p>
+            <button type="button" class="text-sm text-(--primary)" onclick={handleClearAllFilters}>
               Clear all filters
             </button>
           </div>
@@ -1215,7 +1225,6 @@
   {activities}
   currentUserId={authManager.user.id}
   {isOwner}
-  {isEditor}
   open={panelOpen}
   onClose={() => (panelOpen = false)}
   onMembersChanged={async () => {

@@ -7,7 +7,6 @@ import {
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import '$lib/__mocks__/sdk.mock';
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import SpacePanel from '$lib/components/spaces/space-panel.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -52,8 +51,6 @@ const makeSpace = (overrides: Partial<SharedSpaceResponseDto> = {}): SharedSpace
 describe('SpacePanel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
-    sdkMock.getAllAlbums.mockResolvedValue([]);
   });
 
   const defaultProps = {
@@ -65,7 +62,6 @@ describe('SpacePanel', () => {
     activities: [],
     currentUserId: 'u1',
     isOwner: true,
-    isEditor: true,
     open: true,
     onClose: vi.fn(),
     onMembersChanged: vi.fn(),
@@ -128,27 +124,24 @@ describe('SpacePanel', () => {
     expect(membersTab).toHaveTextContent('Members (2)');
   });
 
-  it('should render Activity, Members, and Albums tabs', () => {
+  it('should render Activity and Members tabs only', () => {
     authManager.setUser({ id: 'u1', isAdmin: true, name: 'Admin', email: 'admin@test.com' } as UserAdminResponseDto);
     renderPanel(defaultProps);
     const tabSwitcher = screen.getByTestId('tab-switcher');
     const tabs = tabSwitcher.querySelectorAll('button');
-    expect(tabs).toHaveLength(3);
+    expect(tabs).toHaveLength(2);
     expect(tabs[0]).toHaveTextContent('Activity');
     expect(tabs[1]).toHaveTextContent(/^Members/);
-    expect(tabs[2]).toHaveTextContent(/albums/i);
+  });
+
+  it('should not render an Albums tab', () => {
+    renderPanel(defaultProps);
+    expect(screen.queryByTestId('tab-albums')).not.toBeInTheDocument();
   });
 
   it('should not render a Libraries tab', () => {
     authManager.setUser({ id: 'u1', isAdmin: true, name: 'Admin', email: 'admin@test.com' } as UserAdminResponseDto);
     renderPanel(defaultProps);
     expect(screen.queryByTestId('tab-libraries')).not.toBeInTheDocument();
-  });
-
-  it('should show linked-albums content when Albums tab is clicked', async () => {
-    renderPanel(defaultProps);
-    const albumsTab = screen.getByTestId('tab-albums');
-    await fireEvent.click(albumsTab);
-    expect(screen.getByTestId('linked-albums')).toBeInTheDocument();
   });
 });
