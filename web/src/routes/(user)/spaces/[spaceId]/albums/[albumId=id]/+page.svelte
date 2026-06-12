@@ -2,17 +2,24 @@
   import { goto } from '$app/navigation';
   import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
   import { createFilterState } from '$lib/components/filter-panel/filter-panel';
+  import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
+  import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
+  import RemoveFromAlbum from '$lib/components/timeline/actions/RemoveFromAlbumAction.svelte';
+  import AssetSelectControlBar from '$lib/components/timeline/AssetSelectControlBar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
-  import { AssetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
+  import { assetMultiSelectManager, AssetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
-  import { buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
+  import { getAlbumAssetsActions } from '$lib/services/album.service';
+  import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import {
     AlbumUserRole,
+    getAlbumInfo,
     SharedSpaceRole,
     type AlbumResponseDto,
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
+  import HeaderActionButton from '$lib/components/HeaderActionButton.svelte';
   import { Icon, IconButton } from '@immich/ui';
   import { mdiArrowLeft, mdiImageOutline, mdiImagePlusOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -28,6 +35,12 @@
   const members: SharedSpaceMemberResponseDto[] = $derived(data.members);
   let album = $state<AlbumResponseDto>(data.album);
 
+  // Mode: 'browse' shows the album timeline; 'add' shows the asset picker
+  let mode = $state<'browse' | 'add'>('browse');
+
+  // Picker multi-select manager (mirrors global album page's timelineMultiSelectManager)
+  const pickerMultiSelectManager = new AssetMultiSelectManager();
+
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isSpaceEditor = $derived(
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
@@ -40,16 +53,42 @@
   );
   const canManage = $derived(isSpaceEditor || isAlbumEditor);
 
-  const options = $derived({
-    ...buildAlbumTimelineOptions(
-      album.id,
-      album.order ?? authManager.preferences.albums.defaultAssetOrder,
-      createFilterState(),
-    ),
-    grouping: 'month' as const,
+  const options = $derived.by(() => {
+    if (mode === 'add') {
+      return buildAlbumAssetPickerOptions(album.id, createFilterState());
+    }
+    return {
+      ...buildAlbumTimelineOptions(
+        album.id,
+        album.order ?? authManager.preferences.albums.defaultAssetOrder,
+        createFilterState(),
+      ),
+      grouping: 'month' as const,
+    };
   });
 
-  const localMultiSelectManager = new AssetMultiSelectManager();
+  const refreshAlbum = async () => {
+    album = await getAlbumInfo({ id: album.id });
+  };
+
+  const handleRemoveAssets = (_: string[]) => {
+    // RemoveFromAlbumAction already re-fetches the album via bind:album and clears the
+    // selection internally before firing onRemove, so we only need to defensively clear here.
+    assetMultiSelectManager.clear();
+  };
+
+  const handleExitAddMode = () => {
+    pickerMultiSelectManager.clear();
+    mode = 'browse';
+  };
+
+  const handleAddAssetsSuccess = async () => {
+    pickerMultiSelectManager.clear();
+    mode = 'browse';
+    await refreshAlbum();
+  };
+
+  const { AddAssets, Upload } = $derived(getAlbumAssetsActions($t, album, pickerMultiSelectManager.assets));
 </script>
 
 <UserPageLayout
@@ -68,19 +107,61 @@
   {/snippet}
 
   {#snippet buttons()}
-    {#if canManage}
+    {#if canManage && mode === 'browse'}
       <IconButton
         variant="ghost"
         shape="round"
         color="secondary"
         aria-label={$t('space_album_add_photos')}
         data-testid="add-photos-button"
+        onclick={() => (mode = 'add')}
         icon={mdiImagePlusOutline}
       />
     {/if}
   {/snippet}
 
-  <Timeline enableRouting={false} {options} assetInteraction={localMultiSelectManager}>
+  <!-- Browse selection control bar (shows when assets are selected in browse mode) -->
+  {#if mode === 'browse' && assetMultiSelectManager.selectionActive}
+    <AssetSelectControlBar>
+      <DownloadAction filename="{album.albumName}.zip" />
+      {#if canManage}
+        <RemoveFromAlbum bind:album onRemove={handleRemoveAssets} />
+      {/if}
+    </AssetSelectControlBar>
+  {/if}
+
+  <!-- Add-mode control bar -->
+  {#if mode === 'add'}
+    <ControlAppBar onClose={handleExitAddMode}>
+      {#snippet leading()}
+        <p class="text-lg dark:text-immich-dark-fg">
+          {#if !pickerMultiSelectManager.selectionActive}
+            {$t('add_to_album')}
+          {:else}
+            {$t('selected_count', { values: { count: pickerMultiSelectManager.assets.length } })}
+          {/if}
+        </p>
+      {/snippet}
+
+      {#snippet trailing()}
+        <HeaderActionButton action={Upload} />
+        <HeaderActionButton
+          action={{
+            ...AddAssets,
+            onAction: () => void AddAssets.onAction().then(handleAddAssetsSuccess),
+          }}
+        />
+      {/snippet}
+    </ControlAppBar>
+  {/if}
+
+  <Timeline
+    enableRouting={false}
+    {options}
+    assetInteraction={mode === 'add' ? pickerMultiSelectManager : assetMultiSelectManager}
+    isSelectionMode={mode === 'add'}
+    singleSelect={false}
+  >
     {#snippet empty()}
       <section class="mt-50 flex place-content-center place-items-center">
         <div class="flex flex-col items-center gap-4 text-center">
@@ -91,7 +172,7 @@
               type="button"
               data-testid="empty-add-photos-button"
               class="text-sm text-(--primary)"
-              onclick={() => {}}
+              onclick={() => (mode = 'add')}
             >
               {$t('add_photos')}
             </button>
