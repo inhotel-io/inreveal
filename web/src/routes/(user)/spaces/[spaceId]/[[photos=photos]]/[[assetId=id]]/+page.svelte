@@ -972,6 +972,16 @@
         <SpaceMap spaceId={space.id} />
 
         <IconButton
+          icon={mdiImageMultipleOutline}
+          aria-label={$t('space_albums_page_title')}
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          onclick={() => void goto(`/spaces/${space.id}/albums`)}
+          data-testid="space-albums-button"
+        />
+
+        <IconButton
           variant="ghost"
           shape="round"
           color="secondary"
@@ -1221,7 +1231,6 @@
   {activities}
   currentUserId={authManager.user.id}
   {isOwner}
-  {isEditor}
   open={panelOpen}
   onClose={() => (panelOpen = false)}
   onMembersChanged={async () => {
