@@ -67,11 +67,16 @@
     if (mode === 'add') {
       return buildAlbumAssetPickerOptions(album.id, createFilterState());
     }
-    return buildAlbumTimelineOptions(
-      album.id,
-      album.order ?? authManager.preferences.albums.defaultAssetOrder,
-      createFilterState(),
-    );
+    // The grouping MUST live in the options object — that is what the TimelineManager reads to
+    // build buckets. The top-level <Timeline grouping={...}> prop alone does not re-group.
+    return {
+      ...buildAlbumTimelineOptions(
+        album.id,
+        album.order ?? authManager.preferences.albums.defaultAssetOrder,
+        createFilterState(),
+      ),
+      grouping: timelineGrouping,
+    };
   });
 
   const refreshAlbum = async () => {
