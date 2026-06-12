@@ -84,6 +84,18 @@ where
   and "shared_space_member"."userId" = $2
   and "shared_space_member"."role" in ($3, $4)
 
+-- AccessRepository.album.checkSpaceLinkedAlbumReadAccess
+select distinct
+  "album"."id"
+from
+  "album"
+  inner join "shared_space_album" on "shared_space_album"."albumId" = "album"."id"
+  inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+where
+  "album"."id" in ($1)
+  and "album"."deletedAt" is null
+  and "shared_space_member"."userId" = $2
+
 -- AccessRepository.asset.checkAlbumAccess
 with
   "target" as (
