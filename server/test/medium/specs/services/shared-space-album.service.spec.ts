@@ -461,3 +461,263 @@ describe('SharedSpaceService — linked-album assets via direct spaceId timeline
     expect(idsOff).not.toContain(assetInA.id);
   });
 });
+
+describe('SharedSpaceService — space access lifecycle via album branch', () => {
+  it('Test 1: removing asset from album revokes space access', async () => {
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'AccessTestAlbum' });
+    const { asset: a1 } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const accessRepo = ctx.get(AccessRepository);
+
+    // Before removal: a1 is accessible
+    const before = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([a1.id]));
+    expect(before).toContain(a1.id);
+
+    // Remove a1 from the album
+    await ctx.get(AlbumRepository).removeAssetIds(album.id, [a1.id]);
+
+    // After removal: a1 is no longer accessible
+    const after = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([a1.id]));
+    expect(after).not.toContain(a1.id);
+  });
+
+  it('Test 2: removing from album does NOT revoke access when asset is also directly added', async () => {
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'DualPathAlbum' });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+
+    // Link album AND directly add the asset to the space
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: a2.id });
+
+    const accessRepo = ctx.get(AccessRepository);
+
+    // Confirm accessible before removal
+    const before = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([a2.id]));
+    expect(before).toContain(a2.id);
+
+    // Remove from album — direct path should preserve access
+    await ctx.get(AlbumRepository).removeAssetIds(album.id, [a2.id]);
+
+    const after = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([a2.id]));
+    expect(after).toContain(a2.id);
+  });
+
+  it('Test 3: hard-deleting album cascades link removal and revokes access', async () => {
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'HardDeleteAlbum' });
+    const { asset: assetInA } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetInA.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const accessRepo = ctx.get(AccessRepository);
+
+    // Confirm link and access exist before deletion
+    const linkBefore = await ctx.get(SharedSpaceRepository).hasAlbumLink(space.id, album.id);
+    expect(linkBefore).toBe(true);
+    const accessBefore = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([assetInA.id]));
+    expect(accessBefore).toContain(assetInA.id);
+
+    // Hard-delete the album (FK ON DELETE CASCADE removes shared_space_album row)
+    await defaultDatabase.deleteFrom('album').where('id', '=', album.id).execute();
+
+    // Link should be gone (cascaded)
+    const linkAfter = await ctx.get(SharedSpaceRepository).hasAlbumLink(space.id, album.id);
+    expect(linkAfter).toBe(false);
+
+    // Access should be revoked
+    const accessAfter = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([assetInA.id]));
+    expect(accessAfter).not.toContain(assetInA.id);
+  });
+
+  it('Test 4: soft-deleted asset is excluded from space access and timeline', async () => {
+    const { sut: timelineSut, ctx } = setupTimeline();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'SoftDeleteAlbum' });
+    const { asset: assetInA } = await ctx.newAsset({
+      ownerId: owner.id,
+      localDateTime: new Date('2024-07-20T12:00:00.000Z'),
+      fileCreatedAt: new Date('2024-07-20T12:00:00.000Z'),
+      visibility: AssetVisibility.Timeline,
+    });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetInA.id });
+    await ctx.newExif({ assetId: assetInA.id, make: 'Sony' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });
+
+    // Access and timeline should include the asset before soft-delete
+    const accessBefore = await ctx.get(AccessRepository).asset.checkSpaceAccess(viewer.id, new Set([assetInA.id]));
+    expect(accessBefore).toContain(assetInA.id);
+
+    const bucketsBefore = await timelineSut.getTimeBuckets(viewerAuth, {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketBefore = bucketsBefore.find((b) => b.timeBucket === '2024-07-01');
+    expect(bucketBefore?.count).toBe(1);
+
+    // Soft-delete the asset
+    await ctx.softDeleteAsset(assetInA.id);
+
+    // Access should be revoked
+    const accessAfter = await ctx.get(AccessRepository).asset.checkSpaceAccess(viewer.id, new Set([assetInA.id]));
+    expect(accessAfter).not.toContain(assetInA.id);
+
+    // Asset should no longer appear in timeline
+    const bucketsAfter = await timelineSut.getTimeBuckets(viewerAuth, {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    const bucketAfter = bucketsAfter.find((b) => b.timeBucket === '2024-07-01');
+    expect(bucketAfter?.count ?? 0).toBe(0);
+  });
+
+  it('Test 5: live-photo video part is reachable via album branch', async () => {
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    // Create the motion video asset first (no livePhotoVideoId itself)
+    const { asset: motion } = await ctx.newAsset({ ownerId: owner.id });
+    // Create the still image that references the motion video
+    const { asset: still } = await ctx.newAsset({ ownerId: owner.id, livePhotoVideoId: motion.id });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'LivePhotoAlbum' });
+    // Only the still is added to the album; motion is reachable via livePhotoVideoId
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: still.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const accessRepo = ctx.get(AccessRepository);
+
+    // The motion video should be accessible via the still's livePhotoVideoId
+    const accessedIds = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([motion.id]));
+    expect(accessedIds).toContain(motion.id);
+  });
+
+  it('Test 6: locked (Visibility.Locked) asset in linked album — checkSpaceAccess does NOT filter by visibility', async () => {
+    // checkSpaceAccess does NOT filter asset.visibility for ANY space path (album/library/direct) —
+    // this is pre-existing behavior inherited from libraries/direct adds, NOT introduced by space albums;
+    // locked-asset exclusion across all space paths would be a separate cross-cutting change (out of scope)
+    //
+    // PARITY: album-linked Locked assets and direct-added Locked assets must behave identically —
+    // both are returned by checkSpaceAccess with no visibility filtering applied on either path.
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'LockedAssetAlbum' });
+
+    // album-linked Locked asset
+    const { asset: albumLockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: albumLockedAsset.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    // direct-added Locked asset (no album involvement)
+    const { asset: directLockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: directLockedAsset.id });
+
+    const accessRepo = ctx.get(AccessRepository);
+    const accessedIds = await accessRepo.asset.checkSpaceAccess(
+      viewer.id,
+      new Set([albumLockedAsset.id, directLockedAsset.id]),
+    );
+
+    // Pinned: both locked assets are returned — visibility is NOT filtered on either the album-branch or the direct-add path
+    expect(accessedIds).toContain(albumLockedAsset.id);
+    expect(accessedIds).toContain(directLockedAsset.id);
+  });
+
+  it('Test 7: empty album link is a no-op (zero assets, timeline unchanged)', async () => {
+    // Use setupTimeline which includes SharedSpaceRepository needed for direct repo checks
+    const { sut: timelineSut, ctx } = setupTimeline();
+
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    // Link an empty album
+    const { result: emptyAlbum } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'EmptyLinkedAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: emptyAlbum.id, addedById: owner.id });
+
+    // getLinkedAlbums (via SharedSpaceRepository, same DB) should return the link with assetCount=0
+    const linkedAlbums = await ctx.get(SharedSpaceRepository).getLinkedAlbums(space.id);
+    const link = linkedAlbums.find((l) => l.albumId === emptyAlbum.id);
+    expect(link).toBeDefined();
+    const assetCount = await ctx.get(SharedSpaceRepository).getAlbumAssetCount(emptyAlbum.id);
+    expect(assetCount).toBe(0);
+
+    // Space timeline should have no assets
+    const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });
+    const buckets = await timelineSut.getTimeBuckets(viewerAuth, {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Month,
+    });
+    expect(buckets).toHaveLength(0);
+  });
+
+  it('Test 8: face-sync on empty album returns Success with zero space persons created', async () => {
+    // handleSharedSpaceAlbumFaceSync on an album with no assets must complete successfully
+    // and must not create any shared_space_person rows for the space.
+    const { ctx, sut } = setupWithFaceMatch();
+    const { user: owner } = await ctx.newUser();
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    // Link an empty album (no assets)
+    const { result: emptyAlbum } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'EmptyFaceSyncAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: emptyAlbum.id, addedById: owner.id });
+
+    const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId: space.id, albumId: emptyAlbum.id });
+
+    expect(result).toBe(JobStatus.Success);
+
+    // No space persons should have been created for this space
+    const spacePersons = await defaultDatabase
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('spaceId', '=', space.id)
+      .execute();
+    expect(spacePersons).toHaveLength(0);
+  });
+});
