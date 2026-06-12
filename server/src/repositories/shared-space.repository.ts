@@ -7,6 +7,7 @@ import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics } from 'src/repositories/person.repository';
 import type { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
 import { DB } from 'src/schema';
+import { SharedSpaceAlbumTable } from 'src/schema/tables/shared-space-album.table';
 import { SharedSpaceAssetTable } from 'src/schema/tables/shared-space-asset.table';
 import { SharedSpaceLibraryTable } from 'src/schema/tables/shared-space-library.table';
 import { SharedSpaceMemberTable } from 'src/schema/tables/shared-space-member.table';
@@ -385,6 +386,79 @@ export class SharedSpaceRepository {
       .select('spaceId')
       .executeTakeFirst()
       .then((row) => !!row);
+  }
+
+  // ==========================================
+  // Shared Space Album Link CRUD
+  // ==========================================
+
+  addAlbum(values: Insertable<SharedSpaceAlbumTable>) {
+    return this.db
+      .insertInto('shared_space_album')
+      .values(values)
+      .onConflict((oc) => oc.doNothing())
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  removeAlbum(spaceId: string, albumId: string) {
+    return this.db
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getLinkedAlbums(spaceId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+      .select([
+        'shared_space_album.spaceId',
+        'shared_space_album.albumId',
+        'shared_space_album.addedById',
+        'shared_space_album.showInTimeline',
+        'shared_space_album.createdAt',
+        'album.albumName',
+        'album.albumThumbnailAssetId',
+      ])
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('album.deletedAt', 'is', null)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getSpacesLinkedToAlbum(albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+      .selectAll('shared_space_album')
+      .select('shared_space.faceRecognitionEnabled')
+      .where('shared_space_album.albumId', '=', albumId)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  hasAlbumLink(spaceId: string, albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .select('spaceId')
+      .executeTakeFirst()
+      .then((row) => !!row);
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, true] })
+  setAlbumShowInTimeline(spaceId: string, albumId: string, showInTimeline: boolean) {
+    return this.db
+      .updateTable('shared_space_album')
+      .set({ showInTimeline })
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .execute();
   }
 
   @GenerateSql({ params: [DummyValue.UUID, 4] })
