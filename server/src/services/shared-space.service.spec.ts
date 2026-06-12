@@ -7603,6 +7603,261 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('linkAlbum', () => {
+    it('should link an album when non-admin spaceOwner who owns the album', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Owner,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.sharedSpace.addAlbum).toHaveBeenCalledWith({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+      });
+    });
+
+    it('should link album when actor is album_user editor (not owner)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Editor,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      // Actor is not the album owner but is a shared-album editor
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.sharedSpace.addAlbum).toHaveBeenCalledWith({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+      });
+    });
+
+    it('should link an album when non-admin spaceEditor who owns the album (no admin gate)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Editor,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.sharedSpace.addAlbum).toHaveBeenCalled();
+    });
+
+    it('should reject when user is a Viewer (insufficient space role)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Viewer,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+
+      await expect(sut.linkAlbum(auth, space.id, newUuid())).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject when user is not a space member', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(void 0);
+
+      await expect(sut.linkAlbum(auth, newUuid(), newUuid())).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject when user is not album owner or editor (AlbumUpdate denied)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace();
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Editor,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      // Neither owner nor album_user-editor → empty sets from both checks → requireAccess throws BadRequestException
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+
+      await expect(sut.linkAlbum(auth, space.id, albumId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should call requireAccess with Permission.AlbumUpdate and the albumId', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Owner,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.access.album.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([albumId]));
+    });
+
+    it('should queue AlbumFaceSync when addAlbum returns a row and face recognition is enabled', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: true });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Owner,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumFaceSync,
+        data: { spaceId: space.id, albumId },
+      });
+    });
+
+    it('should NOT queue AlbumFaceSync when face recognition is disabled', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: false });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Owner,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({
+        spaceId: space.id,
+        albumId,
+        addedById: auth.user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createId: newUuid(),
+        updateId: newUuid(),
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+
+      await sut.linkAlbum(auth, space.id, albumId);
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceAlbumFaceSync }),
+      );
+    });
+
+    it('should NOT queue AlbumFaceSync when addAlbum returns undefined (duplicate / idempotent re-link)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const space = factory.sharedSpace({ faceRecognitionEnabled: true });
+      const albumId = newUuid();
+      const member = makeMemberResult({
+        spaceId: space.id,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Owner,
+      });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue(void 0 as any);
+
+      await expect(sut.linkAlbum(auth, space.id, albumId)).resolves.not.toThrow();
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceAlbumFaceSync }),
+      );
+    });
+  });
+
   describe('get (linked libraries)', () => {
     it('should include linked libraries in response when user is admin', async () => {
       const auth = factory.auth({ user: { isAdmin: true } });
