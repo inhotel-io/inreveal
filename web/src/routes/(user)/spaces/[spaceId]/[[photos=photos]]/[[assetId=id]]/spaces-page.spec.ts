@@ -115,11 +115,6 @@ vi.mock('$lib/components/shared-components/context-menu/ButtonContextMenu.svelte
   return { default: MockComponent };
 });
 
-vi.mock('$lib/components/spaces/space-panel.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
-  return { default: MockComponent };
-});
-
 vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
   const { default: MockComponent } = await import('./mock-timeline.test-wrapper.svelte');
   return { default: MockComponent };
