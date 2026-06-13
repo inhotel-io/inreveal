@@ -119,6 +119,15 @@ describe('space [spaceId] +layout.svelte', () => {
     expect(gotoMock).toHaveBeenCalledWith('/spaces/s1');
   });
 
+  it('records an add-photos intent but does NOT navigate when already on the Photos base route', async () => {
+    const { spaceUiManager } = await import('$lib/managers/space-ui-manager.svelte');
+    mockPage.url = new URL('https://gallery.test/spaces/s1');
+    renderLayout(SharedSpaceRole.Editor);
+    screen.getByTestId('space-add-photos').click();
+    expect(spaceUiManager.intent).toBe('add-assets');
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+
   describe('overflow handlers', () => {
     it('handleToggleTimeline: hides the space from the timeline and revalidates', async () => {
       renderLayout(SharedSpaceRole.Owner, { member: member({ role: SharedSpaceRole.Owner, showInTimeline: true }) });
