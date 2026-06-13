@@ -32,6 +32,9 @@ test.describe('Spaces — tabbed navigation', () => {
     ]);
 
     space = await utils.createSpace(owner.accessToken, { name: 'Tabs Space' });
+    // New spaces default to faceRecognitionEnabled: true, so the People-gating
+    // tests below need it explicitly disabled to exercise the "off" branch.
+    await utils.updateSpace(owner.accessToken, space.id, { faceRecognitionEnabled: false });
 
     await utils.addSpaceMember(owner.accessToken, space.id, {
       userId: editor.userId,
