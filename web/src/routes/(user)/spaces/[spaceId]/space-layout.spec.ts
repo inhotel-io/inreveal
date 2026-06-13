@@ -277,6 +277,11 @@ describe('space [spaceId] +layout.svelte', () => {
     expect(screen.getByTestId('space-tab-photos')).toHaveTextContent('35');
   });
 
+  it('renders the cover (SpaceHero) when chrome is shown', () => {
+    renderLayout(SharedSpaceRole.Owner);
+    expect(screen.getByTestId('hero-title')).toHaveTextContent('Trip');
+  });
+
   it('suppresses the tab bar on a person/album detail route', () => {
     mockPage.url = new URL('https://gallery.test/spaces/s1/albums/al-1');
     renderLayout(SharedSpaceRole.Owner);
