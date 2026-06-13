@@ -216,6 +216,24 @@
 
 {#if mode === 'add'}
   <section class="fixed inset-0 z-40 bg-immich-bg dark:bg-immich-dark-bg" data-testid="add-photos-overlay">
+    <!--
+      The picker Timeline lives in <main> and the ControlAppBar is rendered AFTER it. The bar is
+      `position: absolute` with auto z-index, so it would be painted under the full-height <main>
+      (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it last —
+      as the global album page does — lets it paint on top while staying pinned to the top.
+    -->
+    <main
+      class="relative h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6"
+      data-testid="add-photos-timeline-main"
+    >
+      <Timeline
+        enableRouting={false}
+        options={pickerOptions}
+        assetInteraction={pickerMultiSelectManager}
+        isSelectionMode={true}
+        singleSelect={false}
+      />
+    </main>
     <ControlAppBar onClose={handleExitAddMode}>
       {#snippet leading()}
         <p class="text-lg dark:text-immich-dark-fg">
@@ -237,17 +255,5 @@
         />
       {/snippet}
     </ControlAppBar>
-    <main
-      class="relative h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6"
-      data-testid="add-photos-timeline-main"
-    >
-      <Timeline
-        enableRouting={false}
-        options={pickerOptions}
-        assetInteraction={pickerMultiSelectManager}
-        isSelectionMode={true}
-        singleSelect={false}
-      />
-    </main>
   </section>
 {/if}
