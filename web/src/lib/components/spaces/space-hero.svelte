@@ -163,8 +163,8 @@
             align="top-right"
             direction="left"
           >
-            <MenuOption text={$t('change_cover_photo')} icon={mdiImageEditOutline} onClick={onChangeCover} />
-            <MenuOption text={$t('reposition')} icon={mdiCursorMove} onClick={onReposition} />
+            <MenuOption text={$t('change_cover_photo')} icon={mdiImageEditOutline} onClick={() => onChangeCover?.()} />
+            <MenuOption text={$t('reposition')} icon={mdiCursorMove} onClick={() => onReposition?.()} />
           </ButtonContextMenu>
         </div>
       {/if}
