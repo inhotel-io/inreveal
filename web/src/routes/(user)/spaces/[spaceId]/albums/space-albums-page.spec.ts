@@ -107,7 +107,7 @@ function renderPage(albums: SharedSpaceLinkedAlbumDto[], role: SharedSpaceRole =
       data: {
         space: BASE_SPACE,
         members: [makeMember(role)],
-        albums,
+        linkedAlbums: albums,
         meta: { title: 'Test Space - Albums' },
       },
     },
