@@ -15,7 +15,7 @@
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { getAlbumAssetsActions } from '$lib/services/album.service';
+  import { addAssetsToAlbums, getAlbumAssetsActions } from '$lib/services/album.service';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
@@ -393,7 +393,12 @@
         <HeaderActionButton
           action={{
             ...AddAssets,
-            onAction: () => void AddAssets.onAction().then(handleAddAssetsSuccess),
+            onAction: () =>
+              void addAssetsToAlbums(
+                [album.id],
+                pickerMultiSelectManager.assets.map(({ id }) => id),
+                { notify: true },
+              ).then(handleAddAssetsSuccess),
           }}
         />
       {/snippet}
