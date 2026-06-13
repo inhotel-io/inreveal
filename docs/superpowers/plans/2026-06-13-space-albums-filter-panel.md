@@ -790,22 +790,12 @@ Implements the FilterPanel sidebar, ActiveFiltersBar, filtered-empty state, and 
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/+page.svelte`
 - Test: `web/src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts`
 
-- [ ] **Step 1: Update the existing overlay test that asserts `pt-(--navbar-height)` on `<main>`**
+> Layout note: `<main>` keeps `pt-(--navbar-height)` and the FilterPanel sidebar lives INSIDE
+> `<main>` (exactly how the global album page nests it: `main.pt-navbar > div.flex.h-full >
+[FilterPanel, content]`). This preserves the existing `main.className` pt assertion and the
+> paint-order (ControlAppBar stays after `<main>`), so no existing test needs editing.
 
-The pt offset moves from `<main>` to the new flex body wrapper. In the test
-`'in add mode, the full-screen overlay renders with the picker timeline inside'`, replace:
-
-```ts
-expect(main.className).toContain('pt-(--navbar-height)');
-```
-
-with:
-
-```ts
-expect(screen.getByTestId('add-photos-body').className).toContain('pt-(--navbar-height)');
-```
-
-- [ ] **Step 2: Write the failing picker tests**
+- [ ] **Step 1: Write the failing picker tests**
 
 Append inside the `describe(...)` block:
 
@@ -816,7 +806,7 @@ it('add mode renders the picker FilterPanel', async () => {
   await waitFor(() => expect(screen.getByTestId('filter-panel')).toBeInTheDocument());
 });
 
-it('pickerOptions carry filter fields once a picker filter is set', async () => {
+it('pickerOptions carry filter fields once a picker filter is set, and show ActiveFiltersBar', async () => {
   renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
   await fireEvent.click(screen.getByTestId('add-photos-button'));
   await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
@@ -825,6 +815,7 @@ it('pickerOptions carry filter fields once a picker filter is set', async () => 
     expect(options.personIds).toEqual(['person-1']);
     expect(options.timelineAlbumId).toBe('album-1');
   });
+  expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument();
 });
 
 it('add mode: filtered-empty replaces the picker timeline; clear restores it', async () => {
@@ -868,73 +859,79 @@ it('add mode: control bar still comes AFTER the timeline-main in DOM (paint orde
 });
 ```
 
-- [ ] **Step 3: Run the picker tests to verify they fail**
+- [ ] **Step 2: Run the picker tests to verify they fail**
 
-Run: `cd web && pnpm exec vitest run "src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts" -t "add mode|picker|paint order"`
-Expected: FAIL (no `add-photos-body` / picker FilterPanel yet).
+Run: `cd web && pnpm exec vitest run "src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts" -t "add mode|picker"`
+Expected: FAIL (no picker FilterPanel / filtered-empty yet).
 
-- [ ] **Step 4: Replace the add-overlay template**
+- [ ] **Step 3: Replace the add-overlay template**
 
-Replace the whole `{#if mode === 'add'} ... {/if}` block (lines 217-259) with:
+Replace the whole `{#if mode === 'add'} ... {/if}` block (lines 217-259) with the following. Note `<main>`
+keeps `pt-(--navbar-height)` and the FilterPanel sidebar lives inside it (mirrors the global album
+page); `ControlAppBar` stays after `<main>` so its absolute bar paints on top:
 
 ```svelte
 {#if mode === 'add'}
   <section class="fixed inset-0 z-40 bg-immich-bg dark:bg-immich-dark-bg" data-testid="add-photos-overlay">
     <!--
-      The sidebar + picker Timeline live in this flex body; the ControlAppBar is rendered AFTER it.
-      The bar is `position: absolute` with auto z-index, so it would be painted under a full-height
-      sibling (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it
-      last lets it paint on top while staying pinned to the top. The body carries pt-(--navbar-height)
-      so both the sidebar and the timeline clear the bar.
+      The sidebar + picker Timeline live inside <main>; the ControlAppBar is rendered AFTER it. The
+      bar is `position: absolute` with auto z-index, so it would be painted under the full-height
+      <main> (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it last
+      — as the global album page does — lets it paint on top while staying pinned to the top.
     -->
-    <div class="flex h-full pt-(--navbar-height)" data-testid="add-photos-body">
-      {#key `space-album-picker-${album.id}`}
-        <FilterPanel
-          config={pickerFilterConfig}
-          bind:filters={pickerFilters}
-          timeBuckets={pickerTimeBuckets}
-          storageKey="gallery-filter-visible-sections-space-album-picker"
-          hidden={isPickerEmpty}
-        />
-      {/key}
-      <main class="relative h-full flex-1 overflow-hidden px-2 md:px-6" data-testid="add-photos-timeline-main">
-        {#if pickerActive > 0}
-          <div class="mb-4 shrink-0">
-            <ActiveFiltersBar
-              filters={pickerFilters}
-              resultCount={pickerTotal}
-              personNames={pickerPersonNames}
-              tagNames={pickerTagNames}
-              onRemoveFilter={(type, id) => (pickerFilters = handlePhotosRemoveFilter(pickerFilters, type, id))}
-              onClearAll={() => (pickerFilters = clearFilters(pickerFilters))}
-            />
-          </div>
-        {/if}
-
-        {#if showPickerFilteredEmpty}
-          <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="picker-filtered-empty">
-            <p class="text-sm text-gray-500 dark:text-gray-400">{$t('space_album_no_photos_to_add_match_filters')}</p>
-            <button
-              type="button"
-              data-testid="picker-clear-filters"
-              class="text-sm text-(--primary)"
-              onclick={() => (pickerFilters = clearFilters(pickerFilters))}
-            >
-              {$t('space_album_clear_all_filters')}
-            </button>
-          </div>
-        {:else}
-          <Timeline
-            enableRouting={false}
-            options={pickerOptions}
-            bind:timelineManager={pickerTimelineManager}
-            assetInteraction={pickerMultiSelectManager}
-            isSelectionMode={true}
-            singleSelect={false}
+    <main
+      class="relative h-dvh overflow-hidden pt-(--navbar-height)"
+      data-testid="add-photos-timeline-main"
+    >
+      <div class="flex h-full">
+        {#key `space-album-picker-${album.id}`}
+          <FilterPanel
+            config={pickerFilterConfig}
+            bind:filters={pickerFilters}
+            timeBuckets={pickerTimeBuckets}
+            storageKey="gallery-filter-visible-sections-space-album-picker"
+            hidden={isPickerEmpty}
           />
-        {/if}
-      </main>
-    </div>
+        {/key}
+        <div class="flex flex-1 flex-col overflow-hidden px-2 md:px-6">
+          {#if pickerActive > 0}
+            <div class="mb-4 shrink-0">
+              <ActiveFiltersBar
+                filters={pickerFilters}
+                resultCount={pickerTotal}
+                personNames={pickerPersonNames}
+                tagNames={pickerTagNames}
+                onRemoveFilter={(type, id) => (pickerFilters = handlePhotosRemoveFilter(pickerFilters, type, id))}
+                onClearAll={() => (pickerFilters = clearFilters(pickerFilters))}
+              />
+            </div>
+          {/if}
+
+          {#if showPickerFilteredEmpty}
+            <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="picker-filtered-empty">
+              <p class="text-sm text-gray-500 dark:text-gray-400">{$t('space_album_no_photos_to_add_match_filters')}</p>
+              <button
+                type="button"
+                data-testid="picker-clear-filters"
+                class="text-sm text-(--primary)"
+                onclick={() => (pickerFilters = clearFilters(pickerFilters))}
+              >
+                {$t('space_album_clear_all_filters')}
+              </button>
+            </div>
+          {:else}
+            <Timeline
+              enableRouting={false}
+              options={pickerOptions}
+              bind:timelineManager={pickerTimelineManager}
+              assetInteraction={pickerMultiSelectManager}
+              isSelectionMode={true}
+              singleSelect={false}
+            />
+          {/if}
+        </div>
+      </div>
+    </main>
     <ControlAppBar onClose={handleExitAddMode}>
       {#snippet leading()}
         <p class="text-lg dark:text-immich-dark-fg">
@@ -960,17 +957,17 @@ Replace the whole `{#if mode === 'add'} ... {/if}` block (lines 217-259) with:
 {/if}
 ```
 
-- [ ] **Step 5: Run the picker tests to verify they pass**
+- [ ] **Step 4: Run the picker tests to verify they pass**
 
-Run: `cd web && pnpm exec vitest run "src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts" -t "add mode|picker|paint order"`
+Run: `cd web && pnpm exec vitest run "src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts" -t "add mode|picker"`
 Expected: PASS.
 
-- [ ] **Step 6: Run the FULL spec**
+- [ ] **Step 5: Run the FULL spec**
 
 Run: `cd web && pnpm exec vitest run "src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/space-album-detail-page.spec.ts"`
-Expected: PASS (all tests, including the updated `add-photos-body` assertion and the existing add-mode tests).
+Expected: PASS (all tests — existing add-mode tests, including the unchanged `main.className` pt assertion, plus the new picker tests).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add "web/src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/+page.svelte" \
