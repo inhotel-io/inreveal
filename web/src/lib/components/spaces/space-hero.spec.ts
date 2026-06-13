@@ -92,9 +92,31 @@ describe('SpaceHero component', () => {
     expect(screen.queryByTestId('hero-collapse-toggle')).not.toBeInTheDocument();
   });
 
-  // --- Hover edit control (✎) ---
+  // --- Photo count on the cover ---
 
-  it('shows the hover edit control only when canEdit', async () => {
+  it('renders the photo count on the cover when assetCount is provided', () => {
+    render(SpaceHero, { space: makeSpace(), assetCount: 35 });
+    expect(screen.getByTestId('hero-photo-count')).toHaveTextContent('35');
+  });
+
+  it('does not render a photo count when assetCount is not provided', () => {
+    render(SpaceHero, { space: makeSpace() });
+    expect(screen.queryByTestId('hero-photo-count')).not.toBeInTheDocument();
+  });
+
+  // --- Edit control (✎) ---
+
+  it('shows the edit control without requiring hover (always visible for editors with a cover)', () => {
+    render(SpaceHero, {
+      space: makeSpace({ thumbnailAssetId: 'a1' }),
+      canEdit: true,
+      onChangeCover: () => {},
+      onReposition: () => {},
+    });
+    expect(screen.getByTestId('hero-edit-cover')).not.toHaveClass('opacity-0');
+  });
+
+  it('shows the edit control only when canEdit', async () => {
     const { rerender } = render(SpaceHero, { space: makeSpace({ thumbnailAssetId: 'a1' }), canEdit: false });
     expect(screen.queryByTestId('hero-edit-cover')).not.toBeInTheDocument();
     await rerender({

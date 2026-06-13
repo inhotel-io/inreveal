@@ -4,7 +4,7 @@
   import { getAssetMediaUrl } from '$lib/utils';
   import { AssetMediaSize, type SharedSpaceResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
-  import { mdiCursorMove, mdiImageEditOutline, mdiPencilOutline } from '@mdi/js';
+  import { mdiCameraOutline, mdiCursorMove, mdiImageEditOutline, mdiPencilOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -17,6 +17,7 @@
     repositioning?: boolean;
     onSavePosition?: (cropY: number) => void;
     onCancelReposition?: () => void;
+    assetCount?: number;
     compact?: boolean;
     collapsed?: boolean;
   }
@@ -31,6 +32,7 @@
     repositioning = false,
     onSavePosition,
     onCancelReposition,
+    assetCount,
     compact = false,
     collapsed = false,
   }: Props = $props();
@@ -150,12 +152,22 @@
           {space.description}
         </p>
       {/if}
+      {#if assetCount != null}
+        <span
+          class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-xs font-medium backdrop-blur-sm"
+          data-testid="hero-photo-count"
+        >
+          <Icon icon={mdiCameraOutline} size="14" />
+          {assetCount}
+          {$t('photos')}
+        </span>
+      {/if}
     </div>
 
     <!-- Mockup: hover ✎ (editors) + role badge grouped at the top-right of the cover. -->
     <div class="absolute top-3 right-3 flex items-center gap-2">
       {#if canEdit && hasCover}
-        <div class="opacity-0 transition group-hover:opacity-100" data-testid="hero-edit-cover">
+        <div class="transition" data-testid="hero-edit-cover">
           <ButtonContextMenu
             icon={mdiPencilOutline}
             title={$t('edit')}
@@ -181,7 +193,7 @@
     {#if canEdit && !hasCover}
       <button
         type="button"
-        class="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white opacity-0 backdrop-blur-sm transition group-hover:opacity-100 hover:bg-black/60"
+        class="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-black/60"
         onclick={onChangeCover}
         data-testid="hero-set-cover-button"
       >
