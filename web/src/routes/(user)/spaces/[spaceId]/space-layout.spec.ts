@@ -1,18 +1,34 @@
 import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
 import { SharedSpaceRole } from '@immich/sdk';
+import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
 import SpaceLayout from './+layout.svelte';
 
-const { mockPage, mockAuthManager, gotoMock } = vi.hoisted(() => ({
+const { mockPage, mockAuthManager, gotoMock, invalidateAllMock } = vi.hoisted(() => ({
   mockPage: { url: new URL('https://gallery.test/spaces/s1'), route: { id: '/(user)/spaces/[spaceId]' } },
   mockAuthManager: { user: { id: 'u1', isAdmin: false } },
   gotoMock: vi.fn().mockResolvedValue(undefined),
+  invalidateAllMock: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('$app/state', () => ({ page: mockPage }));
-vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
 vi.mock('$lib/managers/auth-manager.svelte', () => ({ authManager: mockAuthManager }));
+
+// The overflow handlers call into @immich/ui's modalManager (confirm dialogs, link-libraries modal)
+// and toastManager — mock those while keeping the real Button/IconButton/Icon/TooltipProvider so the
+// rendered overflow menu and its MenuOptions stay interactive (mirrors space-people-page.spec).
+vi.mock('@immich/ui', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@immich/ui')>();
+  return {
+    ...original,
+    modalManager: { show: vi.fn(), showDialog: vi.fn() },
+    toastManager: { danger: vi.fn(), primary: vi.fn(), success: vi.fn(), warning: vi.fn() },
+  };
+});
 
 // The real UserPageLayout mounts the NavigationBar (which needs a Tooltip provider); the shared
 // mock renders the leading/buttons/children snippets inside a TooltipProvider — matching the other
@@ -23,22 +39,64 @@ vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
 });
 
 const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto =>
-  ({ id: 's1', name: 'Trip', assetCount: 35, memberCount: 1, faceRecognitionEnabled: false, ...o }) as never;
+  ({
+    id: 's1',
+    name: 'Trip',
+    assetCount: 35,
+    memberCount: 1,
+    faceRecognitionEnabled: false,
+    hasPets: false,
+    petsEnabled: false,
+    ...o,
+  }) as never;
 const member = (o: Partial<SharedSpaceMemberResponseDto> = {}): SharedSpaceMemberResponseDto =>
-  ({ userId: 'u1', role: SharedSpaceRole.Owner, name: 'Me', email: 'me@x.io', ...o }) as never;
+  ({
+    userId: 'u1',
+    role: SharedSpaceRole.Owner,
+    name: 'Me',
+    email: 'me@x.io',
+    showInTimeline: true,
+    sharePersonMetadata: true,
+    ...o,
+  }) as never;
 
-function renderLayout(role: SharedSpaceRole, isAdmin = false) {
+function renderLayout(
+  role: SharedSpaceRole,
+  options: { isAdmin?: boolean; space?: SharedSpaceResponseDto; member?: SharedSpaceMemberResponseDto } = {},
+) {
+  const { isAdmin = false } = options;
   mockAuthManager.user = { id: 'u1', isAdmin };
   // `children` is optional; the layout renders `{@render children?.()}`, so omitting it is fine.
   return render(SpaceLayout, {
-    data: { space: space(), members: [member({ role })], linkedAlbums: [] } as never,
+    data: {
+      space: options.space ?? space(),
+      members: [options.member ?? member({ role })],
+      linkedAlbums: [],
+    } as never,
   });
 }
 
+// The overflow lives in the shell layout's app bar; open it, then click a MenuOption by its label.
+// `svelte-i18n` returns raw keys in the test setup, so the labels match the i18n keys verbatim.
+async function openOverflow() {
+  const overflow = screen.getByTestId('space-overflow');
+  // The trigger is the IconButton inside the overflow wrapper, labelled with the `more` key.
+  await fireEvent.click(within(overflow).getByLabelText('more'));
+}
+
+async function clickOverflowOption(label: string) {
+  await openOverflow();
+  await fireEvent.click(await screen.findByText(label));
+}
+
 describe('space [spaceId] +layout.svelte', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    invalidateAllMock.mockResolvedValue(undefined);
+    gotoMock.mockResolvedValue(undefined);
     mockPage.url = new URL('https://gallery.test/spaces/s1');
+    const { spaceUiManager } = await import('$lib/managers/space-ui-manager.svelte');
+    spaceUiManager.reset();
   });
 
   it('shows ＋ Add photos and the overflow for an editor', () => {
@@ -54,11 +112,153 @@ describe('space [spaceId] +layout.svelte', () => {
 
   it('records an add-photos intent and navigates to the Photos route when ＋ is clicked', async () => {
     const { spaceUiManager } = await import('$lib/managers/space-ui-manager.svelte');
-    spaceUiManager.reset();
     mockPage.url = new URL('https://gallery.test/spaces/s1/members');
     renderLayout(SharedSpaceRole.Editor);
     screen.getByTestId('space-add-photos').click();
     expect(spaceUiManager.intent).toBe('add-assets');
     expect(gotoMock).toHaveBeenCalledWith('/spaces/s1');
+  });
+
+  describe('overflow handlers', () => {
+    it('handleToggleTimeline: hides the space from the timeline and revalidates', async () => {
+      renderLayout(SharedSpaceRole.Owner, { member: member({ role: SharedSpaceRole.Owner, showInTimeline: true }) });
+
+      await clickOverflowOption('spaces_hide_from_timeline');
+
+      expect(sdkMock.updateMemberTimeline).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceMemberTimelineDto: { showInTimeline: false },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleToggleTimeline: shows the space on the timeline when currently hidden', async () => {
+      renderLayout(SharedSpaceRole.Owner, { member: member({ role: SharedSpaceRole.Owner, showInTimeline: false }) });
+
+      await clickOverflowOption('spaces_show_on_timeline');
+
+      expect(sdkMock.updateMemberTimeline).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceMemberTimelineDto: { showInTimeline: true },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleTogglePersonMetadataSharing: stops sharing person metadata and revalidates', async () => {
+      renderLayout(SharedSpaceRole.Owner, {
+        member: member({ role: SharedSpaceRole.Owner, sharePersonMetadata: true }),
+      });
+
+      await clickOverflowOption('spaces_stop_sharing_person_metadata');
+
+      expect(sdkMock.updateMemberPreferences).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceMemberPreferencesDto: { sharePersonMetadata: false },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleTogglePersonMetadataSharing: resumes sharing person metadata when currently off', async () => {
+      renderLayout(SharedSpaceRole.Owner, {
+        member: member({ role: SharedSpaceRole.Owner, sharePersonMetadata: false }),
+      });
+
+      await clickOverflowOption('spaces_share_person_metadata');
+
+      expect(sdkMock.updateMemberPreferences).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceMemberPreferencesDto: { sharePersonMetadata: true },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleDelete: removes the space and navigates to the spaces route when confirmed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(true);
+      renderLayout(SharedSpaceRole.Owner);
+
+      await clickOverflowOption('spaces_delete');
+
+      await waitFor(() => expect(sdkMock.removeSpace).toHaveBeenCalledWith({ id: 's1' }));
+      expect(gotoMock).toHaveBeenCalledWith('/spaces');
+    });
+
+    it('handleDelete: does nothing when the confirm dialog is dismissed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(false);
+      renderLayout(SharedSpaceRole.Owner);
+
+      await clickOverflowOption('spaces_delete');
+
+      await waitFor(() => expect(modalManager.showDialog).toHaveBeenCalled());
+      expect(sdkMock.removeSpace).not.toHaveBeenCalled();
+      expect(gotoMock).not.toHaveBeenCalled();
+    });
+
+    it('handleToggleFaceRecognition: enables face recognition for an owner and revalidates', async () => {
+      renderLayout(SharedSpaceRole.Owner, { space: space({ faceRecognitionEnabled: false }) });
+
+      await clickOverflowOption('spaces_show_people');
+
+      expect(sdkMock.updateSpace).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceUpdateDto: { faceRecognitionEnabled: true },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleBulkAddAssets: bulk-adds assets for an editor when confirmed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(true);
+      renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
+
+      await clickOverflowOption('add_all_photos');
+
+      await waitFor(() => expect(sdkMock.bulkAddAssets).toHaveBeenCalledWith({ id: 's1' }));
+      expect(toastManager.success).toHaveBeenCalled();
+    });
+
+    it('handleBulkAddAssets: does nothing when the confirm dialog is dismissed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(false);
+      renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
+
+      await clickOverflowOption('add_all_photos');
+
+      await waitFor(() => expect(modalManager.showDialog).toHaveBeenCalled());
+      expect(sdkMock.bulkAddAssets).not.toHaveBeenCalled();
+    });
+
+    it('handleLinkLibraries: opens the link-libraries modal for an admin and revalidates on change', async () => {
+      vi.mocked(modalManager.show).mockResolvedValue(true as never);
+      renderLayout(SharedSpaceRole.Owner, { isAdmin: true });
+
+      await clickOverflowOption('spaces_link_libraries');
+
+      await waitFor(() =>
+        expect(modalManager.show).toHaveBeenCalledWith(SpaceLinkedLibrariesModal, { space: expect.anything() }),
+      );
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
+
+    it('handleLinkLibraries: does not revalidate when the modal reports no change', async () => {
+      vi.mocked(modalManager.show).mockResolvedValue(false as never);
+      renderLayout(SharedSpaceRole.Owner, { isAdmin: true });
+
+      await clickOverflowOption('spaces_link_libraries');
+
+      await waitFor(() => expect(modalManager.show).toHaveBeenCalled());
+      expect(invalidateAllMock).not.toHaveBeenCalled();
+    });
+
+    it('handleTogglePets: toggles pet visibility for an owner when face recognition is on and pets exist', async () => {
+      renderLayout(SharedSpaceRole.Owner, {
+        space: space({ faceRecognitionEnabled: true, hasPets: true, petsEnabled: false }),
+      });
+
+      await clickOverflowOption('spaces_show_pets');
+
+      expect(sdkMock.updateSpace).toHaveBeenCalledWith({
+        id: 's1',
+        sharedSpaceUpdateDto: { petsEnabled: true },
+      });
+      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+    });
   });
 });
