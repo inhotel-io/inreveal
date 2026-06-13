@@ -15,7 +15,7 @@ import { getAlbumAssetsActions } from '$lib/services/album.service';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumDetailPage from './+page.svelte';
-import { resetMockTimelineState } from './mock-timeline-state';
+import { resetMockTimelineState, setMockTimelineEmpty } from './mock-timeline-state';
 
 vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
   const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
@@ -71,6 +71,7 @@ vi.mock('$lib/managers/timeline-manager/timeline-anchor', () => ({
 
 vi.mock('$lib/utils/timeline-zoom-navigation', () => ({
   getTimelineBucketZoomTarget: vi.fn(),
+  getTimelineManagerTimeBuckets: vi.fn().mockReturnValue([]),
 }));
 
 const { mockAssetMultiSelectManager } = vi.hoisted(() => ({
@@ -501,5 +502,76 @@ describe('Space album detail page', () => {
     await waitFor(() => {
       expect(screen.getByTestId('add-photos-button')).toBeInTheDocument();
     });
+  });
+
+  it('browse mode renders the FilterPanel', () => {
+    renderPage();
+    expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+  });
+
+  it('does not render the FilterPanel while a browse selection is active', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+    renderPage();
+    expect(screen.queryByTestId('filter-panel')).not.toBeInTheDocument();
+  });
+
+  it('browseOptions carry filter fields once a browse filter is set', async () => {
+    renderPage({ album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => {
+      const options = JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}');
+      expect(options.personIds).toEqual(['person-1']);
+    });
+  });
+
+  it('shows ActiveFiltersBar only when a browse filter is active', async () => {
+    renderPage();
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
+  });
+
+  it('browse: when filtered to empty, the filtered-empty block replaces the timeline; clear restores it', async () => {
+    setMockTimelineEmpty();
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => {
+      expect(screen.getByTestId('browse-filtered-empty')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-timeline')).not.toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId('browse-clear-filters'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('browse-filtered-empty')).not.toBeInTheDocument();
+      expect(screen.getByTestId('space-album-timeline')).toBeInTheDocument();
+    });
+  });
+
+  it('browse: the FilterPanel is hidden when the album is genuinely empty (no assets, no filters)', async () => {
+    setMockTimelineEmpty();
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('filter-panel').dataset.hidden).toBe('true'));
+  });
+
+  it('browse: the FilterPanel stays visible when filtered to empty (so it can be cleared)', async () => {
+    setMockTimelineEmpty();
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('filter-panel').dataset.hidden).toBe('false'));
+  });
+
+  it('browse: removing the temporal chip clears the temporal filter (ActiveFiltersBar disappears)', async () => {
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-year'));
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('active-filters-remove-timeline'));
+    await waitFor(() => expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument());
+  });
+
+  it('browse: clear-all in ActiveFiltersBar removes all filters', async () => {
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('active-filters-clear-all'));
+    await waitFor(() => expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument());
   });
 });
