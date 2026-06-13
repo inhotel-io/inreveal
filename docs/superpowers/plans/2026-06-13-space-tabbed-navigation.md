@@ -527,6 +527,12 @@ describe('space [spaceId] +layout.ts load', () => {
     expect(result.members).toHaveLength(1);
     expect(result.linkedAlbums).toHaveLength(2);
   });
+
+  it('redirects to the spaces list when the space is gone or access was revoked (404/403)', async () => {
+    sdkMock.getSpace.mockRejectedValue({ status: 404 });
+    const url = new URL('https://gallery.test/spaces/s1');
+    await expect(load({ url, params: { spaceId: 's1' } } as never)).rejects.toMatchObject({ status: 302 });
+  });
 });
 ```
 
@@ -541,23 +547,28 @@ Create `web/src/routes/(user)/spaces/[spaceId]/+layout.ts`:
 
 ```ts
 import { getMembers, getSharedSpaceAlbums, getSpace } from '@immich/sdk';
+import { redirect } from '@sveltejs/kit';
 import { authenticate } from '$lib/utils/auth';
+import { Route } from '$lib/route';
 import type { LayoutLoad } from './$types';
 
 export const load = (async ({ url, params }) => {
   await authenticate(url);
-  const [space, members, linkedAlbums] = await Promise.all([
-    getSpace({ id: params.spaceId }),
-    getMembers({ id: params.spaceId }),
-    getSharedSpaceAlbums({ id: params.spaceId }),
-  ]);
-
-  return {
-    space,
-    members,
-    linkedAlbums,
-    meta: { title: space.name },
-  };
+  try {
+    const [space, members, linkedAlbums] = await Promise.all([
+      getSpace({ id: params.spaceId }),
+      getMembers({ id: params.spaceId }),
+      getSharedSpaceAlbums({ id: params.spaceId }),
+    ]);
+    return { space, members, linkedAlbums, meta: { title: space.name } };
+  } catch (error) {
+    // Space deleted or access revoked mid-session → return to the spaces list rather than erroring.
+    const status = (error as { status?: number })?.status;
+    if (status === 403 || status === 404) {
+      redirect(302, Route.spaces());
+    }
+    throw error;
+  }
 }) satisfies LayoutLoad;
 ```
 
@@ -606,12 +617,17 @@ Replace `.../people/+page.ts` with (drops `getSpace`/`getMembers`, keeps people 
 
 ```ts
 import { getSpacePeople, getSpacePeopleStatistics } from '@immich/sdk';
+import { redirect } from '@sveltejs/kit';
 import { authenticate } from '$lib/utils/auth';
 import type { PageLoad } from './$types';
 
 export const load = (async ({ url, params, parent }) => {
   await authenticate(url);
-  await parent();
+  const { space } = await parent();
+  // The People tab is hidden when face recognition is off; a direct/bookmarked nav redirects to Photos.
+  if (!space.faceRecognitionEnabled) {
+    redirect(307, `/spaces/${params.spaceId}`);
+  }
   const [people, peopleStatistics] = await Promise.all([
     getSpacePeople({ id: params.spaceId, limit: 100 }),
     getSpacePeopleStatistics({ id: params.spaceId }).catch(() => null),
@@ -711,13 +727,11 @@ const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto 
 const member = (o: Partial<SharedSpaceMemberResponseDto> = {}): SharedSpaceMemberResponseDto =>
   ({ userId: 'u1', role: SharedSpaceRole.Owner, name: 'Me', email: 'me@x.io' }) as never;
 
-const childSnippet = (() => {}) as never; // children snippet stub
-
 function renderLayout(role: SharedSpaceRole, isAdmin = false) {
   mockAuthManager.user = { id: 'u1', isAdmin };
+  // `children` is optional; the layout renders `{@render children?.()}`, so omitting it is fine.
   return render(SpaceLayout, {
     data: { space: space(), members: [member({ role })], linkedAlbums: [] } as never,
-    children: childSnippet,
   });
 }
 
@@ -779,7 +793,7 @@ Create `.../[spaceId]/+layout.svelte`. This moves the back button + ＋Add photo
     updateMemberTimeline,
     updateSpace,
   } from '@immich/sdk';
-  import { IconButton, modalManager, toastManager } from '@immich/ui';
+  import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
   import {
     mdiArrowLeft,
     mdiBookshelf,
@@ -923,15 +937,16 @@ Create `.../[spaceId]/+layout.svelte`. This moves the back button + ＋Add photo
     {#if !spaceUiManager.chromeHidden}
       <div class="flex items-center gap-1">
         {#if isEditor}
-          <IconButton
-            variant="ghost"
-            shape="round"
-            color="secondary"
-            aria-label={$t('add_photos')}
+          <!-- Mockup: a labeled primary "＋ Add photos" button; text hides on narrow widths → icon only. -->
+          <Button
+            size="small"
+            leadingIcon={mdiImagePlusOutline}
             onclick={handleAddPhotos}
-            icon={mdiImagePlusOutline}
+            aria-label={$t('add_photos')}
             data-testid="space-add-photos"
-          />
+          >
+            <span class="hidden sm:inline">{$t('add_photos')}</span>
+          </Button>
         {/if}
         <ButtonContextMenu
           direction="left"
@@ -1153,12 +1168,18 @@ it('renders the tab bar with badge counts when chrome is shown', () => {
   expect(screen.getByTestId('space-tabs')).toBeInTheDocument();
   expect(screen.getByTestId('space-tab-photos')).toHaveTextContent('35');
 });
+
+it('suppresses the tab bar on a person/album detail route', () => {
+  mockPage.url = new URL('https://gallery.test/spaces/s1/albums/al-1');
+  renderLayout(SharedSpaceRole.Owner);
+  expect(screen.queryByTestId('space-tabs')).not.toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `pnpm test -- --run "src/routes/(user)/spaces/[spaceId]/space-layout.spec.ts"`
-Expected: FAIL — no `space-tabs` element.
+Expected: FAIL — no `space-tabs` element (the first assertion). The detail-route test already passes against Task 6's `showChrome`/`isDetailRoute` guard.
 
 - [ ] **Step 3: Implement**
 
@@ -1307,50 +1328,44 @@ Keep the cover image / gradient / reposition drag logic (verbatim from the curre
       {/if}
     </div>
 
-    {#if currentRole}
-      <span
-        class="absolute right-3 top-3 inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium capitalize text-white backdrop-blur-sm"
-        data-testid="hero-role-badge"
-      >
-        {currentRole}
-      </span>
-    {/if}
+    <!-- Mockup: hover ✎ (editors) + role badge grouped at the top-right of the cover. -->
+    <div class="absolute right-3 top-3 flex items-center gap-2">
+      {#if canEdit && !repositioning && hasCover}
+        <div class="opacity-0 transition group-hover:opacity-100" data-testid="hero-edit-cover">
+          <ButtonContextMenu icon={mdiPencilOutline} title={$t('edit')} color="secondary" align="top-right" direction="left">
+            <MenuOption text={$t('change_cover_photo')} icon={mdiImageEditOutline} onClick={onChangeCover} />
+            <MenuOption text={$t('reposition')} icon={mdiCursorMove} onClick={onReposition} />
+          </ButtonContextMenu>
+        </div>
+      {/if}
+      {#if currentRole}
+        <span
+          class="inline-flex items-center rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium capitalize text-white backdrop-blur-sm"
+          data-testid="hero-role-badge"
+        >
+          {currentRole}
+        </span>
+      {/if}
+    </div>
 ```
 
-Replace the old top-right cover buttons with a hover-revealed ✎ (editors only). Wrap the hero root with `class="group"` and add:
+For the no-cover case (editors), show a hover-revealed "Set cover photo" prompt (top-left, so it doesn't collide with the role badge):
 
 ```svelte
-    {#if canEdit && !repositioning}
-      {#if !hasCover}
-        <button
-          type="button"
-          class="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white opacity-0 backdrop-blur-sm transition hover:bg-black/60 group-hover:opacity-100"
-          onclick={onChangeCover}
-          data-testid="hero-set-cover-button"
-        >
-          <Icon icon={mdiImageEditOutline} size="14" />
-          {$t('set_cover_photo')}
-        </button>
-      {:else}
-        <ButtonContextMenu
-          icon={mdiPencilOutline}
-          title={$t('edit')}
-          color="secondary"
-          align="top-right"
-          direction="left"
-          class="absolute left-3 top-3 opacity-0 transition group-hover:opacity-100"
-          data-testid="hero-edit-cover"
-        >
-          <MenuOption text={$t('change_cover_photo')} icon={mdiImageEditOutline} onClick={onChangeCover} />
-          <MenuOption text={$t('reposition')} icon={mdiCursorMove} onClick={onReposition} />
-        </ButtonContextMenu>
-      {/if}
+    {#if canEdit && !repositioning && !hasCover}
+      <button
+        type="button"
+        class="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 text-xs font-medium text-white opacity-0 backdrop-blur-sm transition hover:bg-black/60 group-hover:opacity-100"
+        onclick={onChangeCover}
+        data-testid="hero-set-cover-button"
+      >
+        <Icon icon={mdiImageEditOutline} size="14" />
+        {$t('set_cover_photo')}
+      </button>
     {/if}
 ```
 
-Add imports for `ButtonContextMenu`, `MenuOption`, and `mdiPencilOutline` (keep `mdiImageEditOutline`, `mdiCursorMove`). Update the root element height style to use `effectiveHeight` and keep the `transition: height 300ms ease`. Add `class="group"` to the root.
-
-> If `ButtonContextMenu` does not accept a `class` prop, wrap it in a `<div class="absolute left-3 top-3 opacity-0 transition group-hover:opacity-100">` instead and give the `div` the `data-testid`.
+Add imports for `ButtonContextMenu`, `MenuOption`, and `mdiPencilOutline` (keep `Icon`, `mdiImageEditOutline`, `mdiCursorMove`). Update the root element height style to use `effectiveHeight`, keep the `transition: height 300ms ease`, and add `class="group"` to the root element so the hover-reveal works.
 
 - [ ] **Step 4: Run the component spec to verify it passes**
 
@@ -1420,6 +1435,15 @@ Render above `<SpaceTabs>`:
       />
       <SpaceTabs … />
     {/if}
+```
+
+Append a cover-render assertion to `space-layout.spec.ts` and run it (FAIL before, PASS after mounting the cover):
+
+```ts
+it('renders the cover (SpaceHero) when chrome is shown', () => {
+  renderLayout(SharedSpaceRole.Owner);
+  expect(screen.getByTestId('hero-title')).toHaveTextContent('Trip');
+});
 ```
 
 - [ ] **Step 2: Remove the hero + people strip from the Photos page and wire scroll**
@@ -1872,6 +1896,13 @@ test.describe('Spaces — tabbed navigation', () => {
     await page.goto(`/spaces/${spaceId}`);
     await expect(page.getByTestId('space-panel')).toHaveCount(0);
   });
+
+  test('a direct People deep-link redirects to Photos when face recognition is off', async ({ context, page }) => {
+    await utils.setAuthCookies(context, owner.accessToken);
+    await page.goto(`/spaces/${spaceId}/people`);
+    await page.waitForURL(`/spaces/${spaceId}`);
+    await expect(page.getByTestId('space-tabs')).toBeVisible();
+  });
 });
 ```
 
@@ -1932,14 +1963,15 @@ git commit -m "chore(web): lint/cleanup for space tabbed navigation"
 ## Spec coverage check
 
 - Shared `+layout` shell → Tasks 4, 6, 7, 9.
-- Five-tab routing + gating + badges → Task 2 (+ wired in 7); People-hidden-when-face-rec-off → Tasks 2, 13.
+- Five-tab routing + gating + badges → Task 2 (+ wired in 7); People-hidden-when-face-rec-off → Tasks 2, 13; People deep-link redirect → Task 5 (load redirect) + Task 13 (e2e).
+- Space deleted / access revoked mid-session → Task 4 (`+layout.ts` 403/404 redirect + test).
 - Album badge without server change (layout `linkedAlbums`) → Tasks 4, 5, 7.
 - App-bar actions only (＋Add + ⋮ overflow); role gating relocated → Task 6.
 - Cover button-free + hover ✎ + Set-cover prompt → Task 8.
 - Cover scroll-collapse via Timeline `onScroll`; tabs always pinned → Tasks 3, 8, 9.
 - Cross-route intents (add-photos / change-cover) consumed once → Tasks 1, 6, 9.
 - Selection-mode chrome hiding (`chromeHidden`) + reset on leave → Tasks 1, 6.
-- Detail-route chrome suppression → Task 6 (`isDetailRoute`), verified in Task 13 smoke.
+- Detail-route chrome suppression → Task 6 (`isDetailRoute`) + Task 7 unit test, verified in Task 14 smoke.
 - Members tab from the panel (list + roles + invite + activity); panel removed → Tasks 5, 10, 12.
 - People/Albums toolbars relocated into content → Task 6.
 - Map reuses existing back affordance → Task 2 (link), Task 14 smoke.
