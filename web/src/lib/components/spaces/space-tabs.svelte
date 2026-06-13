@@ -29,38 +29,40 @@
   const photosActive = $derived(path === base || path.startsWith(`${base}/photos`));
 
   const tabs = $derived<Tab[]>(
-    [
-      { key: 'photos', label: $t('photos'), href: base, badge: photoCount, active: photosActive },
-      faceRecognitionEnabled
-        ? {
-            key: 'people',
-            label: $t('people'),
-            href: `${base}/people`,
-            active: path.startsWith(`${base}/people`),
-          }
-        : undefined,
-      {
-        key: 'albums',
-        label: $t('albums'),
-        href: `${base}/albums`,
-        badge: albumCount,
-        active: path.startsWith(`${base}/albums`),
-      },
-      {
-        key: 'map',
-        label: $t('map'),
-        href: `/map?${QueryParameter.SPACE_ID}=${spaceId}`,
-        external: true,
-        active: false,
-      },
-      {
-        key: 'members',
-        label: $t('members'),
-        href: `${base}/members`,
-        badge: memberCount,
-        active: path.startsWith(`${base}/members`),
-      },
-    ].filter((tab): tab is Tab => tab !== undefined),
+    (
+      [
+        { key: 'photos', label: $t('photos'), href: base, badge: photoCount, active: photosActive },
+        faceRecognitionEnabled
+          ? {
+              key: 'people',
+              label: $t('people'),
+              href: `${base}/people`,
+              active: path.startsWith(`${base}/people`),
+            }
+          : undefined,
+        {
+          key: 'albums',
+          label: $t('albums'),
+          href: `${base}/albums`,
+          badge: albumCount,
+          active: path.startsWith(`${base}/albums`),
+        },
+        {
+          key: 'map',
+          label: $t('map'),
+          href: `/map?${QueryParameter.SPACE_ID}=${spaceId}`,
+          external: true,
+          active: false,
+        },
+        {
+          key: 'members',
+          label: $t('members'),
+          href: `${base}/members`,
+          badge: memberCount,
+          active: path.startsWith(`${base}/members`),
+        },
+      ] as (Tab | undefined)[]
+    ).filter((tab): tab is Tab => tab !== undefined),
   );
 </script>
 
