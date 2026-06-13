@@ -153,18 +153,6 @@
     }
   };
 
-  const handleToggleFaceRecognition = async () => {
-    try {
-      await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { faceRecognitionEnabled: !space.faceRecognitionEnabled },
-      });
-      await invalidateAll();
-    } catch (error) {
-      handleError(error, $t('spaces_toggle_people_failed'));
-    }
-  };
-
   const handleTogglePets = async () => {
     try {
       await updateSpace({ id: space.id, sharedSpaceUpdateDto: { petsEnabled: !space.petsEnabled } });
@@ -187,114 +175,118 @@
   };
 </script>
 
-<UserPageLayout hideNavbar={spaceUiManager.chromeHidden} title={space.name} scrollbar={false}>
-  {#snippet leading()}
-    {#if !spaceUiManager.chromeHidden}
-      <IconButton
-        variant="ghost"
-        shape="round"
-        color="secondary"
-        aria-label={$t('back')}
-        onclick={() => goto(Route.spaces())}
-        icon={mdiArrowLeft}
-      />
-    {/if}
-  {/snippet}
-
-  {#snippet buttons()}
-    {#if !spaceUiManager.chromeHidden}
-      <div class="flex items-center gap-1">
-        {#if isEditor}
-          <!-- Mockup: a labeled primary "＋ Add photos" button; text hides on narrow widths → icon only. -->
-          <Button
-            size="small"
-            leadingIcon={mdiImagePlusOutline}
-            onclick={handleAddPhotos}
-            aria-label={$t('add_photos')}
-            data-testid="space-add-photos"
-          >
-            <span class="hidden sm:inline">{$t('add_photos')}</span>
-          </Button>
-        {/if}
-        <ButtonContextMenu
-          direction="left"
-          align="top-right"
+{#if isDetailRoute}
+  <!-- Person/album detail pages render their OWN UserPageLayout; the shell defers to them
+       entirely so the app doesn't nest inside itself. -->
+  {@render children?.()}
+{:else}
+  <UserPageLayout hideNavbar={spaceUiManager.chromeHidden} title={space.name} scrollbar={false}>
+    {#snippet leading()}
+      {#if !spaceUiManager.chromeHidden}
+        <IconButton
+          variant="ghost"
+          shape="round"
           color="secondary"
-          title={$t('more')}
-          icon={mdiDotsVertical}
-          data-testid="space-overflow"
-        >
-          <MenuOption
-            text={showInTimeline ? $t('spaces_hide_from_timeline') : $t('spaces_show_on_timeline')}
-            icon={showInTimeline ? mdiEyeOutline : mdiEyeOffOutline}
-            onClick={handleToggleTimeline}
-          />
-          <MenuOption
-            text={sharePersonMetadata ? $t('spaces_stop_sharing_person_metadata') : $t('spaces_share_person_metadata')}
-            icon={mdiFaceRecognition}
-            onClick={handleTogglePersonMetadataSharing}
-          />
-          {#if isEditor || authManager.user?.isAdmin}
-            <hr class="my-1 border-gray-300" />
-          {/if}
+          aria-label={$t('back')}
+          onclick={() => goto(Route.spaces())}
+          icon={mdiArrowLeft}
+        />
+      {/if}
+    {/snippet}
+
+    {#snippet buttons()}
+      {#if !spaceUiManager.chromeHidden}
+        <div class="flex items-center gap-1">
           {#if isEditor}
-            <MenuOption text={$t('add_all_photos')} icon={mdiImageMultipleOutline} onClick={handleBulkAddAssets} />
+            <!-- Mockup: a labeled primary "＋ Add photos" button; text hides on narrow widths → icon only. -->
+            <Button
+              size="small"
+              leadingIcon={mdiImagePlusOutline}
+              onclick={handleAddPhotos}
+              aria-label={$t('add_photos')}
+              data-testid="space-add-photos"
+            >
+              <span class="hidden sm:inline">{$t('add_photos')}</span>
+            </Button>
           {/if}
-          {#if authManager.user?.isAdmin}
-            <MenuOption text={$t('spaces_link_libraries')} icon={mdiBookshelf} onClick={handleLinkLibraries} />
-          {/if}
-          {#if isOwner}
-            <hr class="my-1 border-gray-300" />
+          <ButtonContextMenu
+            direction="left"
+            align="top-right"
+            color="secondary"
+            title={$t('more')}
+            icon={mdiDotsVertical}
+            data-testid="space-overflow"
+          >
             <MenuOption
-              text={space.faceRecognitionEnabled ? $t('spaces_hide_people') : $t('spaces_show_people')}
-              icon={mdiFaceRecognition}
-              onClick={handleToggleFaceRecognition}
+              text={showInTimeline ? $t('spaces_hide_from_timeline') : $t('spaces_show_on_timeline')}
+              icon={showInTimeline ? mdiEyeOutline : mdiEyeOffOutline}
+              onClick={handleToggleTimeline}
             />
-            {#if space.faceRecognitionEnabled && space.hasPets}
+            <MenuOption
+              text={sharePersonMetadata
+                ? $t('spaces_stop_sharing_person_metadata')
+                : $t('spaces_share_person_metadata')}
+              icon={mdiFaceRecognition}
+              onClick={handleTogglePersonMetadataSharing}
+            />
+            {#if isEditor || authManager.user?.isAdmin}
+              <hr class="my-1 border-gray-300" />
+            {/if}
+            {#if isEditor}
+              <MenuOption text={$t('add_all_photos')} icon={mdiImageMultipleOutline} onClick={handleBulkAddAssets} />
+            {/if}
+            {#if authManager.user?.isAdmin}
+              <MenuOption text={$t('spaces_link_libraries')} icon={mdiBookshelf} onClick={handleLinkLibraries} />
+            {/if}
+            {#if isOwner}
+              {#if space.faceRecognitionEnabled && space.hasPets}
+                <hr class="my-1 border-gray-300" />
+                <MenuOption
+                  text={space.petsEnabled ? $t('spaces_hide_pets') : $t('spaces_show_pets')}
+                  icon={mdiPaw}
+                  onClick={handleTogglePets}
+                />
+              {/if}
+              <hr class="my-1 border-gray-300" />
               <MenuOption
-                text={space.petsEnabled ? $t('spaces_hide_pets') : $t('spaces_show_pets')}
-                icon={mdiPaw}
-                onClick={handleTogglePets}
+                text={$t('spaces_delete')}
+                icon={mdiDeleteOutline}
+                textColor="text-red-500"
+                onClick={handleDelete}
               />
             {/if}
-            <hr class="my-1 border-gray-300" />
-            <MenuOption
-              text={$t('spaces_delete')}
-              icon={mdiDeleteOutline}
-              textColor="text-red-500"
-              onClick={handleDelete}
-            />
-          {/if}
-        </ButtonContextMenu>
-      </div>
-    {/if}
-  {/snippet}
+          </ButtonContextMenu>
+        </div>
+      {/if}
+    {/snippet}
 
-  <div class="flex h-full flex-col">
-    {#if showChrome}
-      <SpaceHero
-        {space}
-        gradientClass={spaceGradient}
-        currentRole={currentMember?.role}
-        canEdit={isEditor}
-        onChangeCover={handleChangeCover}
-        onReposition={() => (repositioning = true)}
-        {repositioning}
-        onSavePosition={handleSavePosition}
-        onCancelReposition={() => (repositioning = false)}
-        compact={!onPhotosTab}
-        collapsed={onPhotosTab && spaceUiManager.coverCollapsed}
-      />
-      <SpaceTabs
-        spaceId={space.id}
-        faceRecognitionEnabled={space.faceRecognitionEnabled}
-        photoCount={space.assetCount ?? 0}
-        albumCount={data.linkedAlbums.length}
-        memberCount={members.length}
-      />
-    {/if}
-    <div class="min-h-0 flex-1">
-      {@render children?.()}
+    <div class="flex h-full flex-col">
+      {#if showChrome}
+        <SpaceHero
+          {space}
+          assetCount={space.assetCount ?? 0}
+          gradientClass={spaceGradient}
+          currentRole={currentMember?.role}
+          canEdit={isEditor}
+          onChangeCover={handleChangeCover}
+          onReposition={() => (repositioning = true)}
+          {repositioning}
+          onSavePosition={handleSavePosition}
+          onCancelReposition={() => (repositioning = false)}
+          compact={!onPhotosTab}
+          collapsed={onPhotosTab && spaceUiManager.coverCollapsed}
+        />
+        <SpaceTabs
+          spaceId={space.id}
+          faceRecognitionEnabled={space.faceRecognitionEnabled}
+          photoCount={space.assetCount ?? 0}
+          albumCount={data.linkedAlbums.length}
+          memberCount={members.length}
+        />
+      {/if}
+      <div class="min-h-0 flex-1">
+        {@render children?.()}
+      </div>
     </div>
-  </div>
-</UserPageLayout>
+  </UserPageLayout>
+{/if}
