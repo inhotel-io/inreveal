@@ -292,4 +292,14 @@ describe('space [spaceId] +layout.svelte', () => {
     renderLayout(SharedSpaceRole.Owner);
     expect(screen.queryByTestId('space-tabs')).not.toBeInTheDocument();
   });
+
+  it('suppresses the app bar, tabs and cover when chrome is hidden (full-screen selection mode)', async () => {
+    const { spaceUiManager } = await import('$lib/managers/space-ui-manager.svelte');
+    spaceUiManager.setChromeHidden(true);
+    renderLayout(SharedSpaceRole.Owner);
+    expect(screen.queryByTestId('space-tabs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('space-add-photos')).not.toBeInTheDocument();
+    // The cover (SpaceHero) is gated by the same showChrome flag.
+    expect(screen.queryByTestId('hero-title')).not.toBeInTheDocument();
+  });
 });
