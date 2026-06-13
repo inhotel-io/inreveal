@@ -8,18 +8,15 @@ import {
 } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import type { Component } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { albumFactory } from '@test-data/factories/album-factory';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumsPage from './+page.svelte';
-
-vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
-  const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
-  return { default: MockComponent };
-});
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('$app/stores', () => ({
@@ -102,15 +99,20 @@ function makeAvailableAlbum(overrides: Partial<AlbumResponseDto> = {}): AlbumRes
 }
 
 function renderPage(albums: SharedSpaceLinkedAlbumDto[], role: SharedSpaceRole = SharedSpaceRole.Editor) {
-  return render(SpaceAlbumsPage, {
-    props: {
-      data: {
-        space: BASE_SPACE,
-        members: [makeMember(role)],
-        linkedAlbums: albums,
-        meta: { title: 'Test Space - Albums' },
-      },
+  const props = {
+    data: {
+      space: BASE_SPACE,
+      members: [makeMember(role)],
+      linkedAlbums: albums,
+      meta: { title: 'Test Space - Albums' },
     },
+  };
+
+  // The page no longer renders UserPageLayout (which provided the Tooltip context); the shell layout
+  // does. TestWrapper supplies the TooltipProvider the album cards' menus rely on.
+  return render(TestWrapper as Component<{ component: typeof SpaceAlbumsPage; componentProps: typeof props }>, {
+    component: SpaceAlbumsPage,
+    componentProps: props,
   });
 }
 
