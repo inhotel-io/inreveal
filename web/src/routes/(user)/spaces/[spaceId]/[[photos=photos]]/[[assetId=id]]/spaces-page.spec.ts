@@ -17,6 +17,7 @@ const OVER_SPACE_ASSET_LIMIT = 10_001;
 
 const {
   gotoMock,
+  invalidateAllMock,
   mockPage,
   mockAssetMultiSelectManager,
   mockAuthManager,
@@ -26,6 +27,7 @@ const {
   mockRegisterSearchablePageFilters,
 } = vi.hoisted(() => ({
   gotoMock: vi.fn().mockResolvedValue(undefined),
+  invalidateAllMock: vi.fn().mockResolvedValue(undefined),
   mockPage: {
     url: new URL('https://gallery.test/spaces/space-1/photos'),
     route: { id: '/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]' },
@@ -50,7 +52,7 @@ const {
   mockRegisterSearchablePageFilters: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('$app/navigation', () => ({ goto: gotoMock }));
+vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
 vi.mock('$app/state', () => ({ page: mockPage }));
 
 vi.mock('@immich/ui', async (importOriginal) => {
@@ -232,6 +234,7 @@ describe('Spaces page search URL state', () => {
     vi.resetAllMocks();
     spaceUiManager.reset();
     gotoMock.mockResolvedValue(undefined);
+    invalidateAllMock.mockResolvedValue(undefined);
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
