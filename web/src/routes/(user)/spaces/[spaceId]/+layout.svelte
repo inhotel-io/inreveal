@@ -5,6 +5,7 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
+  import SpaceTabs from '$lib/components/spaces/space-tabs.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { spaceUiManager } from '$lib/managers/space-ui-manager.svelte';
   import { Route } from '$lib/route';
@@ -230,7 +231,16 @@
   {/snippet}
 
   <div class="flex h-full flex-col">
-    <!-- SpaceTabs added in Task 7; SpaceHero (cover) added in Task 9 -->
+    {#if showChrome}
+      <!-- cover (SpaceHero) is inserted above the tabs in Task 9 -->
+      <SpaceTabs
+        spaceId={space.id}
+        faceRecognitionEnabled={space.faceRecognitionEnabled}
+        photoCount={space.assetCount ?? 0}
+        albumCount={data.linkedAlbums.length}
+        memberCount={members.length}
+      />
+    {/if}
     <div class="min-h-0 flex-1">
       {@render children?.()}
     </div>
