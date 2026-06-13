@@ -13,7 +13,7 @@
 **Conventions:**
 
 - All web unit tests run from `web/`: `pnpm test -- --run <path>` (one file) — vitest.
-- Type/lint gate: `make check-web` (svelte-check + tsc) from the repo root. Defer the full `pnpm lint` to the final task.
+- Type/lint gate: `cd web && pnpm check:typescript && pnpm check:svelte` (svelte-check + tsc) from the repo root. Defer the full `pnpm lint` to the final task.
 - e2e web specs live in `e2e/src/specs/web/`; run via `make e2e-web-dev` against a running `make dev` stack, or a single spec from `e2e/` with `pnpm exec playwright test src/specs/web/<file> --project=web`.
 - No relative server imports rule does not apply to web; web uses `$lib/...` aliases.
 - Prettier on any touched markdown before committing.
@@ -474,7 +474,7 @@ Change the `onscroll` expression to also invoke the callback:
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `pnpm test -- --run src/lib/components/timeline/timeline-onscroll.spec.ts`
-Expected: PASS (2 tests). Then `make check-web` — expect no type errors.
+Expected: PASS (2 tests). Then `cd web && pnpm check:typescript && pnpm check:svelte` — expect no type errors.
 
 - [ ] **Step 6: Commit**
 
@@ -678,7 +678,7 @@ export const load = (async ({ url, params, parent }) => {
 
 - [ ] **Step 5: Type-check**
 
-Run: `make check-web`
+Run: `cd web && pnpm check:typescript && pnpm check:svelte`
 Expected: passes. (The Photos/People/Albums page specs may now fail because their `data` no longer includes locally-fetched `space` — they will be fixed in Task 6 where the components change. If a spec fails purely on a missing `albums` key, fix it in Task 6.)
 
 - [ ] **Step 6: Commit**
@@ -1016,7 +1016,7 @@ Expected: PASS. (The `more` i18n key already exists as `$t('more')`? If not, rep
 In `.../[[photos=photos]]/[[assetId=id]]/+page.svelte`:
 
 1. Delete the entire opening `<UserPageLayout ...>` tag and its `{#snippet leading()}` and `{#snippet buttons()}` blocks (verbatim current lines 937-1045), and the matching closing `</UserPageLayout>` (line 1186). Keep the inner content (the `<div class="flex h-full" data-testid="discovery-timeline">…</div>`) as the page's top-level markup.
-2. Delete the handler definitions now living in the layout: `handleToggleTimeline`, `handleTogglePersonMetadataSharing`, `handleBulkAddAssets`, `handleLinkLibraries`, `handleToggleFaceRecognition`, `handleTogglePets`, `handleDelete`. Remove their now-unused imports (`bulkAddAssets`, `removeSpace`, `updateMemberPreferences`, `updateMemberTimeline`, `mdiBookshelf`, `mdiPaw`, etc.) — `make check-web` will flag leftovers. **Keep** `handleShowMembers`, `openSelectCover`, `handleReposition`, `handleSavePosition`, `handleCancelReposition`, `heroCollapsed`, `repositioning`, `spacePeople` for now — the hero + people strip (still inside the Timeline until Task 9) and the `SpacePanel` (until Task 10) still reference them. Removing them now would fail `check:svelte` (`--fail-on-warnings` flags unused, and the live references would break).
+2. Delete the handler definitions now living in the layout: `handleToggleTimeline`, `handleTogglePersonMetadataSharing`, `handleBulkAddAssets`, `handleLinkLibraries`, `handleToggleFaceRecognition`, `handleTogglePets`, `handleDelete`. Remove their now-unused imports (`bulkAddAssets`, `removeSpace`, `updateMemberPreferences`, `updateMemberTimeline`, `mdiBookshelf`, `mdiPaw`, etc.) — `cd web && pnpm check:typescript && pnpm check:svelte` will flag leftovers. **Keep** `handleShowMembers`, `openSelectCover`, `handleReposition`, `handleSavePosition`, `handleCancelReposition`, `heroCollapsed`, `repositioning`, `spacePeople` for now — the hero + people strip (still inside the Timeline until Task 9) and the `SpacePanel` (until Task 10) still reference them. Removing them now would fail `check:svelte` (`--fail-on-warnings` flags unused, and the live references would break).
 3. Add the intent consumer. Near the other `$effect`s add:
 
 ```ts
@@ -1128,7 +1128,7 @@ In `spaces-page.spec.ts`, `space-people-page.spec.ts`, `space-albums-page.spec.t
 - [ ] **Step 9: Type-check and run the affected unit tests**
 
 ```bash
-make check-web
+cd web && pnpm check:typescript && pnpm check:svelte
 ```
 
 Then from `web/`:
@@ -1223,7 +1223,7 @@ git commit -m "feat(web): render SpaceTabs in the space shell"
 
 ## Task 8: Refactor `SpaceHero` (button-free cover, hover ✎, tall/compact, scroll-collapse)
 
-> **Coupling note:** Tasks 8 and 9 share one commit. Changing `SpaceHero`'s props here makes the Photos page's old `<SpaceHero …>` call site (removed in Task 9) stop type-checking, so the app-level `make check-web` will not pass until Task 9 is done. In Task 8, run only the component spec; do the single combined commit at the end of Task 9.
+> **Coupling note:** Tasks 8 and 9 share one commit. Changing `SpaceHero`'s props here makes the Photos page's old `<SpaceHero …>` call site (removed in Task 9) stop type-checking, so the app-level `cd web && pnpm check:typescript && pnpm check:svelte` will not pass until Task 9 is done. In Task 8, run only the component spec; do the single combined commit at the end of Task 9.
 
 **Files:**
 
@@ -1370,11 +1370,11 @@ Add imports for `ButtonContextMenu`, `MenuOption`, and `mdiPencilOutline` (keep 
 - [ ] **Step 4: Run the component spec to verify it passes**
 
 Run: `pnpm test -- --run src/lib/components/spaces/space-hero.spec.ts`
-Expected: PASS. Do **not** run `make check-web` yet — the Photos page still renders the old hero API and won't type-check until Task 9.
+Expected: PASS. Do **not** run `cd web && pnpm check:typescript && pnpm check:svelte` yet — the Photos page still renders the old hero API and won't type-check until Task 9.
 
 - [ ] **Step 5: No commit yet**
 
-Continue straight to Task 9. The combined commit (SpaceHero refactor + cover relocation) lands at the end of Task 9, once `make check-web` is green again.
+Continue straight to Task 9. The combined commit (SpaceHero refactor + cover relocation) lands at the end of Task 9, once `cd web && pnpm check:typescript && pnpm check:svelte` is green again.
 
 ---
 
@@ -1485,7 +1485,7 @@ Add `import { invalidateAll } from '$app/navigation';` (alongside the existing `
 - [ ] **Step 3: Type-check + manual smoke**
 
 ```bash
-make check-web
+cd web && pnpm check:typescript && pnpm check:svelte
 ```
 
 Then run the dev stack (`make dev`) and verify, on a space: Photos tab shows the tall cover; scrolling the grid collapses it and the tabs stay; People/Albums/Members show a compact cover; a detail route (open an album) shows no cover/tabs.
@@ -1731,11 +1731,11 @@ Create `.../members/+page.svelte` (ports `space-panel.svelte`'s member list + th
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `pnpm test -- --run "src/routes/(user)/spaces/[spaceId]/members/space-members-page.spec.ts"`
-Expected: PASS (4 tests). Then `make check-web`.
+Expected: PASS (4 tests). Then `cd web && pnpm check:typescript && pnpm check:svelte`.
 
 - [ ] **Step 5: Remove the slide-in panel from the Photos page**
 
-In `.../[[photos=photos]]/[[assetId=id]]/+page.svelte`: delete the `<SpacePanel … />` block (verbatim current lines 1222-1237), its `SpacePanel` import, the `panelOpen` state (and the `panelOpen = false` line in the space-switch `$effect`), and the activity-loading code that fed it (`activities`, `hasMoreActivities`, `activityOffset`, `loadActivities`, `loadMoreActivities`, `getSpaceActivities` import) — the activity feed now lives on the Members tab. (`handleShowMembers` was already removed in Task 9.) Run `make check-web` to catch leftovers.
+In `.../[[photos=photos]]/[[assetId=id]]/+page.svelte`: delete the `<SpacePanel … />` block (verbatim current lines 1222-1237), its `SpacePanel` import, the `panelOpen` state (and the `panelOpen = false` line in the space-switch `$effect`), and the activity-loading code that fed it (`activities`, `hasMoreActivities`, `activityOffset`, `loadActivities`, `loadMoreActivities`, `getSpaceActivities` import) — the activity feed now lives on the Members tab. (`handleShowMembers` was already removed in Task 9.) Run `cd web && pnpm check:typescript && pnpm check:svelte` to catch leftovers.
 
 - [ ] **Step 6: Commit**
 
@@ -1774,7 +1774,7 @@ Add to `i18n/en.json`:
 - [ ] **Step 2: Verify usage compiles + format**
 
 ```bash
-make check-web
+cd web && pnpm check:typescript && pnpm check:svelte
 npx prettier --write i18n/en.json
 ```
 
@@ -1815,7 +1815,7 @@ git rm web/src/lib/components/spaces/space-panel.svelte web/src/lib/components/s
 
 - [ ] **Step 3: Type-check**
 
-Run: `make check-web`
+Run: `cd web && pnpm check:typescript && pnpm check:svelte`
 Expected: passes (no dangling imports).
 
 - [ ] **Step 4: Commit**
@@ -1929,7 +1929,7 @@ git commit -m "test(e2e): web coverage for space tabbed navigation + role gating
 
 - [ ] **Step 1: Full type + svelte check**
 
-Run: `make check-web`
+Run: `cd web && pnpm check:typescript && pnpm check:svelte`
 Expected: zero errors.
 
 - [ ] **Step 2: Full web unit suite**
@@ -1939,7 +1939,7 @@ Expected: all green (including the new specs; deleted-component specs are gone).
 
 - [ ] **Step 3: Lint (deferred full pass)**
 
-Run: `make lint-web`
+Run: `cd web && pnpm lint`
 Expected: zero warnings. Fix any unused imports left over from the refactors.
 
 - [ ] **Step 4: e2e web suite**
