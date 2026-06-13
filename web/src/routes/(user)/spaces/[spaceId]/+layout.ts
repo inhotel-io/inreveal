@@ -1,7 +1,7 @@
 import { getMembers, getSharedSpaceAlbums, getSpace } from '@immich/sdk';
 import { redirect } from '@sveltejs/kit';
-import { authenticate } from '$lib/utils/auth';
 import { Route } from '$lib/route';
+import { authenticate } from '$lib/utils/auth';
 import type { LayoutLoad } from './$types';
 
 export const load = (async ({ url, params }) => {

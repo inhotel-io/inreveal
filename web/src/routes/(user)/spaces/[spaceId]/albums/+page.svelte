@@ -31,7 +31,7 @@
 
   const space = $derived<SharedSpaceResponseDto>(data.space);
   const members = $derived<SharedSpaceMemberResponseDto[]>(data.members);
-  let albums = $state<SharedSpaceLinkedAlbumDto[]>(data.albums);
+  let albums = $state<SharedSpaceLinkedAlbumDto[]>(data.linkedAlbums);
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isEditor = $derived(
