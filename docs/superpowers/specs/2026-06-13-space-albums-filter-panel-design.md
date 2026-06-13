@@ -162,25 +162,30 @@ only to `ActiveFiltersBar`).
 
 Layout — **add overlay** (inside the existing `fixed inset-0 z-40` section):
 
+`<main>` keeps `pt-(--navbar-height)` and the sidebar lives INSIDE it (mirrors the global album
+page's select-assets nesting); `ControlAppBar` stays after `<main>` so its absolute bar paints on top:
+
 ```svelte
 <section ... data-testid="add-photos-overlay">
-  <div class="flex h-full">
-    {#key `space-album-picker-${album.id}`}
-      <FilterPanel config={pickerFilterConfig} bind:filters={pickerFilters}
-        timeBuckets={pickerTimeBuckets}
-        storageKey="gallery-filter-visible-sections-space-album-picker"
-        hidden={isPickerEmpty} />
-    {/key}
-    <main ... data-testid="add-photos-timeline-main">
-      <!-- ActiveFiltersBar when pickerActive > 0 -->
-      {#if showPickerFilteredEmpty}
-        <!-- filtered-empty block (REPLACES the picker Timeline): message + clear-all -->
-      {:else}
-        <Timeline ...pickerOptions bind:timelineManager={pickerTimelineManager} />
-      {/if}
-    </main>
-  </div>
-  <ControlAppBar .../>   <!-- stays AFTER the flex so it paints on top (paint-order fix) -->
+  <main class="relative h-dvh overflow-hidden pt-(--navbar-height)" data-testid="add-photos-timeline-main">
+    <div class="flex h-full">
+      {#key `space-album-picker-${album.id}`}
+        <FilterPanel config={pickerFilterConfig} bind:filters={pickerFilters}
+          timeBuckets={pickerTimeBuckets}
+          storageKey="gallery-filter-visible-sections-space-album-picker"
+          hidden={isPickerEmpty} />
+      {/key}
+      <div class="flex flex-1 flex-col overflow-hidden px-2 md:px-6">
+        <!-- ActiveFiltersBar when pickerActive > 0 -->
+        {#if showPickerFilteredEmpty}
+          <!-- filtered-empty block (REPLACES the picker Timeline): message + clear-all -->
+        {:else}
+          <Timeline ...pickerOptions bind:timelineManager={pickerTimelineManager} />
+        {/if}
+      </div>
+    </div>
+  </main>
+  <ControlAppBar .../>   <!-- stays AFTER <main> so it paints on top (paint-order fix) -->
 </section>
 ```
 
