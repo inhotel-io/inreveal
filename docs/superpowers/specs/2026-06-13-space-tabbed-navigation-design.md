@@ -42,15 +42,15 @@ between cover-pills and header-icons.
 
 ## Decisions (from brainstorming)
 
-| Question         | Decision                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| Navigation model | **Labeled tab bar** — `Photos · People · Albums · Map · Members`                            |
-| Scope            | **Web only**, no server changes                                                             |
-| Cover treatment  | Keep the cover (it's liked); make it button-free identity (Direction A)                     |
-| Members          | **Fifth tab** (new `/members` route), replacing the slide-in panel                          |
-| Scroll behavior  | Moderate cover (~220px) **scrolls away; tab bar sticks** to top. No manual collapse chevron |
-| Map tab          | **Routes out** to the existing `/map?spaceId=` (which already has a back-to-space button)   |
-| Face strip       | **Dropped** — People tab is the single people surface                                       |
+| Question         | Decision                                                                                                                                                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation model | **Labeled tab bar** — `Photos · People · Albums · Map · Members`                                                                                                                                                                                               |
+| Scope            | **Web only**, no server changes                                                                                                                                                                                                                                |
+| Cover treatment  | Keep the cover (it's liked); make it button-free identity (Direction A)                                                                                                                                                                                        |
+| Members          | **Fifth tab** (new `/members` route), replacing the slide-in panel                                                                                                                                                                                             |
+| Scroll behavior  | Tab bar always pinned above the Timeline; cover **auto-collapses on scroll** (no manual chevron). See note — the virtualized Timeline owns its scroller, so this is a height-collapse via a new `Timeline` `onScroll` callback, not a single-scroller parallax |
+| Map tab          | **Routes out** to the existing `/map?spaceId=` (which already has a back-to-space button)                                                                                                                                                                      |
+| Face strip       | **Dropped** — People tab is the single people surface                                                                                                                                                                                                          |
 
 ## Data model facts (verified)
 
@@ -108,12 +108,30 @@ cover + `SpaceTabs` only for the five top-level tab routes; on detail routes it 
 back header (or defers entirely to the child's existing header). This keeps the tab shell from
 leaking into detail views.
 
-### Sticky scroll behavior
+### Scroll behavior (constrained by the virtualized Timeline)
 
-On the Photos tab the cover (~220px) scrolls away under a **sticky tab bar** that pins to the top
-of the scroll container, showing a condensed title + the same app-bar actions. This replaces the
-current manual expand/collapse chevron and the `collapsed`/`onToggleCollapse` machinery in
-`space-hero.svelte`. On the other tabs the cover is shorter (identity only) and tabs stay pinned.
+Verified constraint: `Timeline.svelte` owns its own `overflow-y-auto` scroller (`#asset-grid`),
+exposes **no** external-scroll prop, and positions month buckets with `transform: translate3d`,
+which creates stacking contexts that **break `position: sticky` inside it**. So a single-scroller
+"cover parallax-scrolls away under sticky tabs" is not achievable without re-architecting Timeline
+(out of scope). Instead:
+
+- **Tab bar** is rendered by the layout **directly above** the Timeline's scroller, so it is
+  _always visible_ — structurally pinned, no `sticky` needed. This is the same end state the mockup
+  shows after scrolling.
+- **Cover** (`SpaceHero`) is rendered by the layout above the tab bar. On the **Photos** tab it
+  starts tall (~220px) and **auto-collapses** (height → 0, animated) once the Timeline scrolls past
+  a threshold (~64px). The collapse is driven by a new optional `onScroll?: (scrollTop: number) =>
+void` callback added to `Timeline.svelte` (the component already has an internal `onscroll`
+  handler; we additionally invoke the callback). The Photos page wires it to
+  `spaceUiManager.setCoverCollapsed(scrollTop > 64)`.
+- On **non-Photos** tabs the cover is a **compact** fixed height (identity only, as the Members
+  mockup shows) and does not collapse.
+
+This replaces the current manual expand/collapse chevron and the `collapsed`/`onToggleCollapse`
+machinery in `space-hero.svelte`. **Known deviation from the mockup:** the cover height-collapses
+rather than parallax-scrolling off-screen — a forced consequence of the Timeline owning its
+scroller. Everything else matches the mockup.
 
 ## Tabs & routing
 
@@ -266,6 +284,9 @@ those now route to the Members tab. **i18n note:** the panel's tab labels were h
   reposition.
 - `web/src/lib/components/spaces/space-map.svelte` — URL logic folded into the Map tab entry
   (the global map page's existing back-to-space button is reused, not re-added).
+- `web/src/lib/components/timeline/Timeline.svelte` — add an optional `onScroll?: (scrollTop:
+number) => void` prop, invoked from the existing internal `onscroll` handler (no behavior change
+  when the prop is absent). Used by the Photos tab to drive cover collapse.
 - `i18n/en.json` — add `spaces_link_libraries`, `spaces_toggle_people`, `spaces_toggle_pets`, and
   `spaces_recent_activity` (only the ones not already present).
 
