@@ -270,4 +270,16 @@ describe('space [spaceId] +layout.svelte', () => {
       await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
     });
   });
+
+  it('renders the tab bar with badge counts when chrome is shown', () => {
+    renderLayout(SharedSpaceRole.Owner);
+    expect(screen.getByTestId('space-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('space-tab-photos')).toHaveTextContent('35');
+  });
+
+  it('suppresses the tab bar on a person/album detail route', () => {
+    mockPage.url = new URL('https://gallery.test/spaces/s1/albums/al-1');
+    renderLayout(SharedSpaceRole.Owner);
+    expect(screen.queryByTestId('space-tabs')).not.toBeInTheDocument();
+  });
 });
