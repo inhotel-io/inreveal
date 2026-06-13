@@ -85,7 +85,7 @@
   }
 </script>
 
-<div class="mx-auto w-full max-w-3xl px-4 py-4">
+<div class="mx-auto w-full max-w-3xl p-4">
   <div class="mb-3 flex items-center justify-between">
     <h2 class="text-base font-semibold">{$t('members')} ({members.length})</h2>
     {#if isOwner}
@@ -143,7 +143,7 @@
     {/each}
   </div>
 
-  <h3 class="mt-6 mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">{$t('spaces_recent_activity')}</h3>
+  <h3 class="mt-6 mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase">{$t('spaces_recent_activity')}</h3>
   <div data-testid="members-activity">
     <SpaceActivityFeed
       {activities}

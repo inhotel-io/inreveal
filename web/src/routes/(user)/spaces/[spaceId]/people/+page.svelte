@@ -459,7 +459,7 @@
         <div class="flex shrink-0 items-center justify-center gap-2">
           {#if hasSearchablePeople}
             <div class="hidden sm:block">
-              <div class="w-40 lg:w-80 h-10">
+              <div class="h-10 w-40 lg:w-80">
                 <SearchBar
                   bind:name={searchName}
                   {showLoadingSpinner}
@@ -563,7 +563,7 @@
 {#if selectHidden}
   <dialog
     transition:fly={{ y: 500, duration: 150, easing: quintOut, opacity: 0 }}
-    class="fixed inset-0 h-full w-full max-w-none max-h-none bg-light"
+    class="fixed inset-0 size-full max-h-none max-w-none bg-light"
     aria-labelledby="manage-visibility-title"
     {@attach (dialog) => dialog.showModal()}
   >
