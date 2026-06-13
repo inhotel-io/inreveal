@@ -113,7 +113,7 @@
                   { label: $t('role_viewer'), value: SharedSpaceRole.Viewer },
                   { label: $t('remove'), value: 'remove' },
                 ] as SelectOption<SharedSpaceRole | 'remove'>[]}
-                onChange={(value) => handleRoleChange(member, value)}
+                onChange={(value) => void handleRoleChange(member, value)}
               />
             </Field>
           {:else}
