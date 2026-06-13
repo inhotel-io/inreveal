@@ -55,4 +55,24 @@ describe('SpaceAlbumCard', () => {
     });
     expect(screen.getByText(/hidden from timeline/i)).toBeInTheDocument();
   });
+
+  it('when canManage=true, both the unlink and the toggle menu options are present', () => {
+    renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album,
+      canManage: true,
+      onUnlink: vi.fn(),
+      onToggleTimeline: vi.fn(),
+    });
+    // album.showInTimeline=true → toggle option reads "Hide from timeline"
+    expect(screen.getByText('Hide from timeline')).toBeInTheDocument();
+    expect(screen.getByText('Unlink album')).toBeInTheDocument();
+  });
+
+  it('when canManage=false, neither the unlink nor the toggle menu option is present', () => {
+    renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: false });
+    expect(screen.queryByText('Hide from timeline')).not.toBeInTheDocument();
+    expect(screen.queryByText('Show in timeline')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unlink album')).not.toBeInTheDocument();
+  });
 });

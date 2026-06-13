@@ -663,4 +663,84 @@ describe('Space album detail page', () => {
     await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
     await waitFor(() => expect(screen.getByTestId('filter-panel').dataset.hidden).toBe('false'));
   });
+
+  // ── empty-add-photos-button gating ──────────────────────────────────────────
+
+  it('empty-add-photos-button is present for a space editor (empty album)', () => {
+    setMockTimelineEmpty();
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)] });
+    expect(screen.getByTestId('empty-add-photos-button')).toBeInTheDocument();
+  });
+
+  it('empty-add-photos-button is absent for a space viewer with album-viewer role', () => {
+    setMockTimelineEmpty();
+    renderPage({
+      members: [makeMember(SharedSpaceRole.Viewer)],
+      album: makeAlbum({
+        albumUsers: [
+          {
+            user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+            role: AlbumUserRole.Viewer,
+          },
+        ],
+      }),
+    });
+    expect(screen.queryByTestId('empty-add-photos-button')).not.toBeInTheDocument();
+  });
+
+  // ── header add-photos-button role-combo coverage ─────────────────────────────
+
+  it('space=Editor + album role=Viewer: add-photos-button present (canManage via isSpaceEditor)', () => {
+    renderPage({
+      members: [makeMember(SharedSpaceRole.Editor)],
+      album: makeAlbum({
+        albumUsers: [
+          {
+            user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+            role: AlbumUserRole.Viewer,
+          },
+        ],
+      }),
+    });
+    expect(screen.getByTestId('add-photos-button')).toBeInTheDocument();
+  });
+
+  it('space=Viewer + album role=Owner: add-photos-button present (canManage via isAlbumEditor)', () => {
+    renderPage({
+      members: [makeMember(SharedSpaceRole.Viewer)],
+      album: makeAlbum({
+        albumUsers: [
+          {
+            user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+            role: AlbumUserRole.Owner,
+          },
+        ],
+      }),
+    });
+    expect(screen.getByTestId('add-photos-button')).toBeInTheDocument();
+  });
+
+  // ── RemoveFromAlbum gating — additional role combos ──────────────────────────
+
+  it('space=Viewer + album=Editor + selection active: RemoveFromAlbum is present', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+    renderPage({
+      members: [makeMember(SharedSpaceRole.Viewer)],
+      album: makeAlbum({
+        albumUsers: [
+          {
+            user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+            role: AlbumUserRole.Editor,
+          },
+        ],
+      }),
+    });
+    expect(screen.getByTestId('noop-component')).toBeInTheDocument();
+  });
+
+  it('space=Owner + default album + selection active: RemoveFromAlbum is present', () => {
+    mockAssetMultiSelectManager.selectionActive = true;
+    renderPage({ members: [makeMember(SharedSpaceRole.Owner)] });
+    expect(screen.getByTestId('noop-component')).toBeInTheDocument();
+  });
 });
