@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-
-vi.mock('$lib/utils/auth', () => ({ authenticate: vi.fn().mockResolvedValue(undefined) }));
-
 import { authenticate } from '$lib/utils/auth';
 import { load } from './+layout';
+
+vi.mock('$lib/utils/auth', () => ({ authenticate: vi.fn().mockResolvedValue(undefined) }));
 
 describe('space [spaceId] +layout.ts load', () => {
   beforeEach(() => {
