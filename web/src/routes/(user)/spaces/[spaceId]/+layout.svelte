@@ -18,6 +18,7 @@
     updateMemberPreferences,
     updateMemberTimeline,
     updateSpace,
+    UserAvatarColor,
   } from '@immich/sdk';
   import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
   import {
@@ -63,6 +64,22 @@
   // The cover (SpaceHero) is tall + scroll-collapsible on the Photos route, compact on other tabs.
   let repositioning = $state(false);
   const onPhotosTab = $derived(page.url.pathname === base || page.url.pathname.startsWith(`${base}/photos`));
+
+  // No-cover spaces fall back to a per-space colored gradient derived from space.color.
+  const gradientClasses: Record<string, string> = {
+    [UserAvatarColor.Primary]: 'from-immich-primary/60 to-immich-primary',
+    [UserAvatarColor.Pink]: 'from-pink-300 to-pink-500',
+    [UserAvatarColor.Red]: 'from-red-400 to-red-600',
+    [UserAvatarColor.Yellow]: 'from-yellow-300 to-yellow-500',
+    [UserAvatarColor.Blue]: 'from-blue-400 to-blue-600',
+    [UserAvatarColor.Green]: 'from-green-400 to-green-700',
+    [UserAvatarColor.Purple]: 'from-purple-400 to-purple-700',
+    [UserAvatarColor.Orange]: 'from-orange-400 to-orange-600',
+    [UserAvatarColor.Gray]: 'from-gray-400 to-gray-600',
+    [UserAvatarColor.Amber]: 'from-amber-400 to-amber-600',
+  };
+
+  const spaceGradient = $derived(gradientClasses[space.color ?? 'primary'] ?? gradientClasses[UserAvatarColor.Primary]);
 
   const handleChangeCover = () => {
     spaceUiManager.requestChangeCover();
@@ -257,6 +274,7 @@
     {#if showChrome}
       <SpaceHero
         {space}
+        gradientClass={spaceGradient}
         currentRole={currentMember?.role}
         canEdit={isEditor}
         onChangeCover={handleChangeCover}
