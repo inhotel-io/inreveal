@@ -574,4 +574,93 @@ describe('Space album detail page', () => {
     await fireEvent.click(screen.getByTestId('active-filters-clear-all'));
     await waitFor(() => expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument());
   });
+
+  it('add mode renders the picker FilterPanel', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => expect(screen.getByTestId('filter-panel')).toBeInTheDocument());
+  });
+
+  it('pickerOptions carry filter fields once a picker filter is set, and show ActiveFiltersBar', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => {
+      const options = JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}');
+      expect(options.personIds).toEqual(['person-1']);
+      expect(options.timelineAlbumId).toBe('album-1');
+    });
+    expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument();
+  });
+
+  it('add mode: filtered-empty replaces the picker timeline; clear restores it', async () => {
+    setMockTimelineEmpty();
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => {
+      expect(screen.getByTestId('picker-filtered-empty')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-timeline')).not.toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId('picker-clear-filters'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('picker-filtered-empty')).not.toBeInTheDocument();
+      expect(screen.getByTestId('space-album-timeline')).toBeInTheDocument();
+    });
+  });
+
+  it('picker filters are reset after a successful add (returns to browse with no active filters)', async () => {
+    const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
+    vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
+    const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getAlbumAssetsActions).mockReturnValue({
+      AddAssets: { title: 'Add assets', icon: '', onAction: addAssetsOnAction, $if: () => true },
+      Upload: { title: 'Upload', icon: '', onAction: vi.fn() },
+    } as never);
+
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+
+    // Enter add mode and set a picker filter.
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'add');
+    });
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
+
+    // Fire the AddAssets action — same mechanism as the existing test.
+    const addAssetsButton = screen.getByRole('button', { name: /add assets/i });
+    await fireEvent.click(addAssetsButton);
+
+    // handleAddAssetsSuccess runs: calls onAction, refreshes album, resets picker filters, returns to browse.
+    await waitFor(() => {
+      expect(getAlbumInfo).toHaveBeenCalledWith({ id: 'album-1' });
+    });
+    // After returning to browse, the picker filters must be cleared → no active-filters-bar.
+    await waitFor(() => expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument());
+  });
+
+  it('entering add mode starts with no active picker filters even if browse was filtered', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument());
+    expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
+  });
+
+  it('add mode: the picker FilterPanel is hidden when there are no photos to add and no filters', async () => {
+    setMockTimelineEmpty();
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => expect(screen.getByTestId('filter-panel').dataset.hidden).toBe('true'));
+  });
+
+  it('add mode: the picker FilterPanel stays visible when filtered to empty', async () => {
+    setMockTimelineEmpty();
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    await waitFor(() => expect(screen.getByTestId('filter-panel').dataset.hidden).toBe('false'));
+  });
 });
