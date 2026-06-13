@@ -58,6 +58,7 @@
     spaceId?: string;
     onSelect?: (asset: TimelineAsset) => void;
     onEscape?: () => void;
+    onScroll?: (scrollTop: number) => void;
     onTimelineBucketActivate?: (bucket: ActivatableTimelineBucket) => void;
     grouping?: TimelineGrouping;
     onGroupingChange?: (grouping: TimelineGrouping) => void;
@@ -96,6 +97,7 @@
     spaceId,
     onSelect = () => {},
     onEscape = () => {},
+    onScroll,
     onTimelineBucketActivate,
     grouping = 'day',
     onGroupingChange,
@@ -725,7 +727,12 @@
   bind:clientHeight={timelineManager.viewportHeight}
   bind:clientWidth={timelineManager.viewportWidth}
   bind:this={scrollableElement}
-  onscroll={() => (handleTimelineScroll(), timelineManager.updateSlidingWindow(), updateIsScrolling())}
+  onscroll={() => (
+    handleTimelineScroll(),
+    timelineManager.updateSlidingWindow(),
+    updateIsScrolling(),
+    onScroll?.(scrollableElement?.scrollTop ?? 0)
+  )}
 >
   <section
     bind:this={timelineElement}
