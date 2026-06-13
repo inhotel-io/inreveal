@@ -100,9 +100,9 @@ Resets:
   (`handleExitAddMode`, `handleAddAssetsSuccess`): `pickerFilters = createFilterState()` and clear
   the picker name maps, alongside the existing `timelineGrouping='day'` / anchor resets.
 - On `album.id` change: `browseFilters = createFilterState()` and clear the browse name maps
-  (via `$effect` keyed on `album.id`). The `{#key \`space-album-${album.id}\`}`wrappers (see
-Layout) additionally remount each FilterPanel so its internal section/collapse state resets per
-album — matching the reference's`{#key}` wrappers.
+  (via `$effect` keyed on `album.id`). The per-album `{#key}` wrappers around each FilterPanel
+  (see Layout) additionally remount it so its internal section/collapse state resets per album —
+  matching the reference's keyed wrappers.
 
 Derived flags (per mode — browse reads `timelineManager`, picker reads `pickerTimelineManager`),
 matching the reference (`+page.svelte:324-331`). Each is guarded on `?.isInitialized`:
