@@ -15,6 +15,7 @@ import { getAlbumAssetsActions } from '$lib/services/album.service';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumDetailPage from './+page.svelte';
+import { resetMockTimelineState } from './mock-timeline-state';
 
 vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
   const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
@@ -44,6 +45,16 @@ vi.mock('$lib/components/timeline/actions/DownloadAction.svelte', async () => {
 vi.mock('$lib/components/shared-components/ControlAppBar.svelte', async () => {
   const { default: MockComponent } =
     await import('../../[[photos=photos]]/[[assetId=id]]/mock-control-app-bar.test-wrapper.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/filter-panel/filter-panel.svelte', async () => {
+  const { default: MockComponent } = await import('./mock-filter-panel.test-wrapper.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/filter-panel/active-filters-bar.svelte', async () => {
+  const { default: MockComponent } = await import('./mock-active-filters-bar.test-wrapper.svelte');
   return { default: MockComponent };
 });
 
@@ -183,6 +194,7 @@ describe('Space album detail page', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    resetMockTimelineState();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     // Restore the default getAlbumAssetsActions return after resetAllMocks clears it

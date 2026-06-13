@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import type { ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
+  import { mockTimelineState } from './mock-timeline-state';
 
   interface Props {
     options?: Record<string, unknown>;
@@ -34,7 +35,7 @@
   void rest;
 
   $effect(() => {
-    const stub = { isInitialized: true, scrollTop: 0, grouping: 'day', months: [] };
+    const stub = { ...mockTimelineState };
     if (timelineManager) {
       Object.assign(timelineManager, stub);
     } else {
