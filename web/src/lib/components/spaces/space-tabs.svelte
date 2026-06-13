@@ -75,7 +75,7 @@
       data-testid="space-tab-{tab.key}"
       data-sveltekit-preload-data={tab.external ? 'off' : undefined}
       aria-current={tab.active ? 'page' : undefined}
-      class="flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors
+      class="flex shrink-0 items-center gap-1.5 border-b-2 p-3 text-sm font-medium transition-colors
         {tab.active
         ? 'border-primary text-primary'
         : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'}"

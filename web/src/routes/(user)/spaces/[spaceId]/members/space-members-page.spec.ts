@@ -206,7 +206,8 @@ describe('Members tab', () => {
         member({ userId: 'u2', role: SharedSpaceRole.Editor, name: 'Ann' }),
       ]);
       const { invalidateAll } = await import('$app/navigation');
-      const SpaceAddMemberModal = (await import('$lib/modals/SpaceAddMemberModal.svelte')).default;
+      const addMemberModalModule = await import('$lib/modals/SpaceAddMemberModal.svelte');
+      const SpaceAddMemberModal = addMemberModalModule.default;
 
       await fireEvent.click(screen.getByTestId('members-invite'));
 
