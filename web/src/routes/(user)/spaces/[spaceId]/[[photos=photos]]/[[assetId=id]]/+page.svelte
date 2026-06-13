@@ -841,89 +841,95 @@
 </div>
 
 {#if assetMultiSelectManager.selectionActive && viewMode === 'view'}
-  <AssetSelectControlBar>
-    <SelectAllAssets {timelineManager} assetInteraction={assetMultiSelectManager} />
-    {#if isEditor}
-      <RemoveFromSpaceAction spaceId={space.id} onRemove={handleRemoveAssets} />
-    {/if}
-    {#if assetMultiSelectManager.isAllUserOwned}
-      <FavoriteAction
-        removeFavorite={assetMultiSelectManager.isAllFavorite}
-        onFavorite={(ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))}
-      />
-    {/if}
-    <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
-      <DownloadAction menuItem />
+  <div class="fixed inset-s-0 top-0 z-2 w-full">
+    <AssetSelectControlBar>
+      <SelectAllAssets {timelineManager} assetInteraction={assetMultiSelectManager} />
+      {#if isEditor}
+        <RemoveFromSpaceAction spaceId={space.id} onRemove={handleRemoveAssets} />
+      {/if}
       {#if assetMultiSelectManager.isAllUserOwned}
-        <ChangeDate menuItem />
-        <ChangeDescription menuItem />
-        <ChangeLocation menuItem />
-        <ArchiveAction
-          menuItem
-          unarchive={assetMultiSelectManager.isAllArchived}
-          onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
+        <FavoriteAction
+          removeFavorite={assetMultiSelectManager.isAllFavorite}
+          onFavorite={(ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))}
         />
       {/if}
-      {#if authManager.preferences.tags.enabled && assetMultiSelectManager.isAllUserOwned}
-        <TagAction menuItem />
-      {/if}
-      {#if isEditor && assetMultiSelectManager.assets.length === 1}
-        <MenuOption text={$t('set_as_space_cover')} icon={mdiImageOutline} onClick={handleSetAsCover} />
-      {/if}
-    </ButtonContextMenu>
-  </AssetSelectControlBar>
+      <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
+        <DownloadAction menuItem />
+        {#if assetMultiSelectManager.isAllUserOwned}
+          <ChangeDate menuItem />
+          <ChangeDescription menuItem />
+          <ChangeLocation menuItem />
+          <ArchiveAction
+            menuItem
+            unarchive={assetMultiSelectManager.isAllArchived}
+            onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
+          />
+        {/if}
+        {#if authManager.preferences.tags.enabled && assetMultiSelectManager.isAllUserOwned}
+          <TagAction menuItem />
+        {/if}
+        {#if isEditor && assetMultiSelectManager.assets.length === 1}
+          <MenuOption text={$t('set_as_space_cover')} icon={mdiImageOutline} onClick={handleSetAsCover} />
+        {/if}
+      </ButtonContextMenu>
+    </AssetSelectControlBar>
+  </div>
 {/if}
 
 {#if viewMode === 'select-assets'}
-  <ControlAppBar onClose={handleCloseSelectAssets}>
-    {#snippet leading()}
-      <p class="text-lg dark:text-immich-dark-fg">
-        {#if !assetMultiSelectManager.selectionActive}
-          {$t('add_to_space')}
-        {:else}
-          {$t('selected_count', { values: { count: assetMultiSelectManager.assets.length } })}
-        {/if}
-      </p>
-    {/snippet}
+  <div class="fixed inset-s-0 top-0 z-2 w-full">
+    <ControlAppBar onClose={handleCloseSelectAssets}>
+      {#snippet leading()}
+        <p class="text-lg dark:text-immich-dark-fg">
+          {#if !assetMultiSelectManager.selectionActive}
+            {$t('add_to_space')}
+          {:else}
+            {$t('selected_count', { values: { count: assetMultiSelectManager.assets.length } })}
+          {/if}
+        </p>
+      {/snippet}
 
-    {#snippet trailing()}
-      <IconButton
-        variant="ghost"
-        shape="round"
-        color="secondary"
-        aria-label={$t('add_to_space')}
-        onclick={handleAddAssets}
-        icon={mdiPlus}
-        disabled={!assetMultiSelectManager.selectionActive ||
-          assetMultiSelectManager.assets.length > MAX_SPACE_ASSETS_PER_REQUEST}
-      />
-    {/snippet}
-  </ControlAppBar>
-  <SpaceAssetLimitWarning selectedCount={assetMultiSelectManager.assets.length} />
+      {#snippet trailing()}
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          aria-label={$t('add_to_space')}
+          onclick={handleAddAssets}
+          icon={mdiPlus}
+          disabled={!assetMultiSelectManager.selectionActive ||
+            assetMultiSelectManager.assets.length > MAX_SPACE_ASSETS_PER_REQUEST}
+        />
+      {/snippet}
+    </ControlAppBar>
+    <SpaceAssetLimitWarning selectedCount={assetMultiSelectManager.assets.length} />
+  </div>
 {/if}
 
 {#if viewMode === 'select-cover'}
-  <ControlAppBar onClose={handleCloseSelectCover}>
-    {#snippet leading()}
-      <p class="text-lg dark:text-immich-dark-fg">
-        {#if !assetMultiSelectManager.selectionActive}
-          {$t('set_cover_photo')}
-        {:else}
-          {$t('selected_count', { values: { count: assetMultiSelectManager.assets.length } })}
-        {/if}
-      </p>
-    {/snippet}
+  <div class="fixed inset-s-0 top-0 z-2 w-full">
+    <ControlAppBar onClose={handleCloseSelectCover}>
+      {#snippet leading()}
+        <p class="text-lg dark:text-immich-dark-fg">
+          {#if !assetMultiSelectManager.selectionActive}
+            {$t('set_cover_photo')}
+          {:else}
+            {$t('selected_count', { values: { count: assetMultiSelectManager.assets.length } })}
+          {/if}
+        </p>
+      {/snippet}
 
-    {#snippet trailing()}
-      <IconButton
-        variant="ghost"
-        shape="round"
-        color="secondary"
-        aria-label={$t('set_cover_photo')}
-        onclick={handleSetCoverFromSelection}
-        icon={mdiImageOutline}
-        disabled={assetMultiSelectManager.assets.length !== 1}
-      />
-    {/snippet}
-  </ControlAppBar>
+      {#snippet trailing()}
+        <IconButton
+          variant="ghost"
+          shape="round"
+          color="secondary"
+          aria-label={$t('set_cover_photo')}
+          onclick={handleSetCoverFromSelection}
+          icon={mdiImageOutline}
+          disabled={assetMultiSelectManager.assets.length !== 1}
+        />
+      {/snippet}
+    </ControlAppBar>
+  </div>
 {/if}
