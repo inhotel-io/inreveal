@@ -17,7 +17,7 @@
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAlbumAssetsActions } from '$lib/services/album.service';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
-  import { buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
+  import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import { withNameCapture } from '$lib/utils/filter-name-capture';
@@ -58,6 +58,7 @@
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+  let pickerTimelineManager = $state<TimelineManager>() as TimelineManager;
 
   // Picker multi-select manager (mirrors global album page's timelineMultiSelectManager)
   const pickerMultiSelectManager = new AssetMultiSelectManager();
@@ -105,6 +106,20 @@
     // build buckets. The top-level <Timeline grouping={...}> prop alone does not re-group.
     grouping: timelineGrouping,
   });
+
+  const pickerFilterConfig = $derived(
+    withNameCapture(buildAlbumAssetPickerFilterConfig(), pickerPersonNames, pickerTagNames),
+  );
+  const pickerTotal = $derived(pickerTimelineManager?.assetCount ?? 0);
+  const pickerHasMonths = $derived((pickerTimelineManager?.months?.length ?? 0) > 0);
+  const pickerActive = $derived(getActiveFilterCount(pickerFilters));
+  const isPickerEmpty = $derived(
+    Boolean(pickerTimelineManager?.isInitialized) && !pickerHasMonths && pickerTotal === 0 && pickerActive === 0,
+  );
+  const showPickerFilteredEmpty = $derived(
+    Boolean(pickerTimelineManager?.isInitialized) && !pickerHasMonths && pickerTotal === 0 && pickerActive > 0,
+  );
+  const pickerTimeBuckets = $derived(getTimelineManagerTimeBuckets(pickerTimelineManager));
 
   const pickerOptions = $derived(buildAlbumAssetPickerOptions(album.id, pickerFilters));
 
@@ -307,22 +322,60 @@
 {#if mode === 'add'}
   <section class="fixed inset-0 z-40 bg-immich-bg dark:bg-immich-dark-bg" data-testid="add-photos-overlay">
     <!--
-      The picker Timeline lives in <main> and the ControlAppBar is rendered AFTER it. The bar is
-      `position: absolute` with auto z-index, so it would be painted under the full-height <main>
-      (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it last —
-      as the global album page does — lets it paint on top while staying pinned to the top.
+      The sidebar + picker Timeline live inside <main>; the ControlAppBar is rendered AFTER it. The
+      bar is `position: absolute` with auto z-index, so it would be painted under the full-height
+      <main> (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it last
+      — as the global album page does — lets it paint on top while staying pinned to the top.
     -->
-    <main
-      class="relative h-dvh overflow-hidden px-2 pt-(--navbar-height) md:px-6"
-      data-testid="add-photos-timeline-main"
-    >
-      <Timeline
-        enableRouting={false}
-        options={pickerOptions}
-        assetInteraction={pickerMultiSelectManager}
-        isSelectionMode={true}
-        singleSelect={false}
-      />
+    <main class="relative h-dvh overflow-hidden pt-(--navbar-height)" data-testid="add-photos-timeline-main">
+      <div class="flex h-full">
+        {#key `space-album-picker-${album.id}`}
+          <FilterPanel
+            config={pickerFilterConfig}
+            bind:filters={pickerFilters}
+            timeBuckets={pickerTimeBuckets}
+            storageKey="gallery-filter-visible-sections-space-album-picker"
+            hidden={isPickerEmpty}
+          />
+        {/key}
+        <div class="flex flex-1 flex-col overflow-hidden px-2 md:px-6">
+          {#if pickerActive > 0}
+            <div class="mb-4 shrink-0">
+              <ActiveFiltersBar
+                filters={pickerFilters}
+                resultCount={pickerTotal}
+                personNames={pickerPersonNames}
+                tagNames={pickerTagNames}
+                onRemoveFilter={(type, id) => (pickerFilters = handlePhotosRemoveFilter(pickerFilters, type, id))}
+                onClearAll={() => (pickerFilters = clearFilters(pickerFilters))}
+              />
+            </div>
+          {/if}
+
+          {#if showPickerFilteredEmpty}
+            <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="picker-filtered-empty">
+              <p class="text-sm text-gray-500 dark:text-gray-400">{$t('space_album_no_photos_to_add_match_filters')}</p>
+              <button
+                type="button"
+                data-testid="picker-clear-filters"
+                class="text-sm text-(--primary)"
+                onclick={() => (pickerFilters = clearFilters(pickerFilters))}
+              >
+                {$t('space_album_clear_all_filters')}
+              </button>
+            </div>
+          {:else}
+            <Timeline
+              enableRouting={false}
+              options={pickerOptions}
+              bind:timelineManager={pickerTimelineManager}
+              assetInteraction={pickerMultiSelectManager}
+              isSelectionMode={true}
+              singleSelect={false}
+            />
+          {/if}
+        </div>
+      </div>
     </main>
     <ControlAppBar onClose={handleExitAddMode}>
       {#snippet leading()}
