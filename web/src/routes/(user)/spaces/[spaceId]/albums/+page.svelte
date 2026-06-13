@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
   import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
-  import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
@@ -18,8 +16,8 @@
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
-  import { Button, Icon, IconButton, modalManager } from '@immich/ui';
-  import { mdiArrowLeft, mdiImageAlbum, mdiImageMultipleOutline, mdiLinkVariantPlus } from '@mdi/js';
+  import { Button, Icon, modalManager } from '@immich/ui';
+  import { mdiImageAlbum, mdiImageMultipleOutline, mdiLinkVariantPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -121,22 +119,9 @@
   }
 </script>
 
-<UserPageLayout
-  title={$t('space_albums_page_title')}
-  description={$t('space_albums_count', { values: { count: albums.length } })}
->
-  {#snippet leading()}
-    <IconButton
-      variant="ghost"
-      shape="round"
-      color="secondary"
-      aria-label={$t('back')}
-      onclick={() => void goto(`/spaces/${space.id}`)}
-      icon={mdiArrowLeft}
-    />
-  {/snippet}
-
-  {#snippet buttons()}
+<div class="flex h-full flex-col">
+  <div class="flex items-center justify-between px-4 py-2">
+    <p class="text-sm text-gray-500">{$t('space_albums_count', { values: { count: albums.length } })}</p>
     {#if isEditor}
       <Button
         size="small"
@@ -148,7 +133,7 @@
         {$t('spaces_linked_albums_link_album')}
       </Button>
     {/if}
-  {/snippet}
+  </div>
 
   {#if albums.length === 0}
     <div class="flex min-h-[calc(66vh-11rem)] w-full place-content-center items-center dark:text-white">
@@ -235,4 +220,4 @@
       </div>
     </div>
   {/if}
-</UserPageLayout>
+</div>

@@ -12,18 +12,15 @@
     type FilterState,
   } from '$lib/components/filter-panel/filter-panel';
   import OnEvents from '$lib/components/OnEvents.svelte';
-  import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
   import SmartSearchResults from '$lib/components/search/smart-search-results.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import SpaceHero from '$lib/components/spaces/space-hero.svelte';
-  import SpaceMap from '$lib/components/spaces/space-map.svelte';
   import SpaceNewAssetsDivider from '$lib/components/spaces/space-new-assets-divider.svelte';
   import SpaceOnboardingBanner from '$lib/components/spaces/space-onboarding-banner.svelte';
   import SpaceAssetLimitWarning from '$lib/components/spaces/space-asset-limit-warning.svelte';
   import SpacePanel from '$lib/components/spaces/space-panel.svelte';
   import SpacePeopleStrip from '$lib/components/spaces/space-people-strip.svelte';
-  import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
   import ChangeDate from '$lib/components/timeline/actions/ChangeDateAction.svelte';
@@ -42,6 +39,7 @@
   import { registerSelectionContext, registerSpaceContext } from '$lib/managers/command-context-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
   import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
+  import { spaceUiManager } from '$lib/managers/space-ui-manager.svelte';
   import { Route } from '$lib/route';
   import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
   import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
@@ -72,7 +70,6 @@
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import {
     addAssets,
-    bulkAddAssets,
     AssetTypeEnum,
     AssetVisibility,
     getFilterSuggestions,
@@ -82,12 +79,9 @@
     getSpaceActivities,
     getSpacePeople,
     markSpaceViewed,
-    removeSpace,
     searchSmartFacets,
     SharedSpaceRole,
     SearchSuggestionType,
-    updateMemberPreferences,
-    updateMemberTimeline,
     updateSpace,
     UserAvatarColor,
     type SharedSpaceActivityResponseDto,
@@ -96,23 +90,8 @@
     type SharedSpaceResponseDto,
     type SmartSearchFacetsResponseDto,
   } from '@immich/sdk';
-  import { IconButton, modalManager, toastManager } from '@immich/ui';
-  import {
-    mdiAccountMultipleOutline,
-    mdiArrowLeft,
-    mdiBookshelf,
-    mdiAccountSupervisorCircleOutline,
-    mdiDeleteOutline,
-    mdiDotsVertical,
-    mdiEyeOffOutline,
-    mdiEyeOutline,
-    mdiFaceRecognition,
-    mdiImageMultipleOutline,
-    mdiImageOutline,
-    mdiImagePlusOutline,
-    mdiPaw,
-    mdiPlus,
-  } from '@mdi/js';
+  import { IconButton, toastManager } from '@immich/ui';
+  import { mdiDotsVertical, mdiImageOutline, mdiPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
@@ -432,8 +411,6 @@
   const isEditor = $derived(
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
   );
-  const showInTimeline = $derived(currentMember?.showInTimeline ?? true);
-  const sharePersonMetadata = $derived(currentMember?.sharePersonMetadata ?? true);
 
   registerSpaceContext(
     () => space,
@@ -638,96 +615,6 @@
       viewMode === 'select-assets' && isEditor ? addSelectedAssetsToCurrentSpace : undefined,
   });
 
-  const handleBulkAddAssets = async () => {
-    const confirmed = await modalManager.showDialog({
-      title: $t('add_all_photos'),
-      prompt: $t('bulk_add_confirmation'),
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await bulkAddAssets({ id: space.id });
-      toastManager.success($t('bulk_add_started'));
-    } catch (error) {
-      handleError(error, $t('errors.error_adding_assets_to_space'));
-    }
-  };
-
-  const handleLinkLibraries = async () => {
-    const changed = await modalManager.show(SpaceLinkedLibrariesModal, { space });
-    if (changed) {
-      await refreshSpace();
-      await loadActivities();
-    }
-  };
-
-  const handleDelete = async () => {
-    const confirmed = await modalManager.showDialog({
-      prompt: $t('spaces_delete_confirmation', { values: { name: space.name } }),
-      title: $t('spaces_delete'),
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    await removeSpace({ id: space.id });
-    await goto(Route.spaces());
-  };
-
-  const handleToggleTimeline = async () => {
-    try {
-      const updated = await updateMemberTimeline({
-        id: space.id,
-        sharedSpaceMemberTimelineDto: { showInTimeline: !showInTimeline },
-      });
-      members = members.map((m) => (m.userId === updated.userId ? updated : m));
-    } catch (error) {
-      handleError(error, $t('errors.unable_to_update_timeline_display_status'));
-    }
-  };
-
-  const handleTogglePersonMetadataSharing = async () => {
-    try {
-      const updated = await updateMemberPreferences({
-        id: space.id,
-        sharedSpaceMemberPreferencesDto: { sharePersonMetadata: !sharePersonMetadata },
-      });
-      members = members.map((m) => (m.userId === updated.userId ? updated : m));
-    } catch (error) {
-      handleError(error, $t('errors.unable_to_update_person_metadata_sharing'));
-    }
-  };
-
-  const handleToggleFaceRecognition = async () => {
-    try {
-      const updated = await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { faceRecognitionEnabled: !space.faceRecognitionEnabled },
-      });
-      space = { ...space, faceRecognitionEnabled: updated.faceRecognitionEnabled };
-      await loadSpacePeople();
-    } catch (error) {
-      handleError(error, 'Failed to update face recognition');
-    }
-  };
-
-  const handleTogglePets = async () => {
-    try {
-      const updated = await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { petsEnabled: !space.petsEnabled },
-      });
-      space = { ...space, petsEnabled: updated.petsEnabled };
-      await loadSpacePeople();
-    } catch (error) {
-      handleError(error, 'Failed to update pets setting');
-    }
-  };
-
   const handleShowMembers = () => {
     panelOpen = !panelOpen;
   };
@@ -930,260 +817,172 @@
       void loadSpacePeople();
     }
   });
+
+  // Consume add-photos / change-cover intents triggered from the shell app bar.
+  $effect(() => {
+    const intent = spaceUiManager.intent;
+    if (!intent) {
+      return;
+    }
+    spaceUiManager.consumeIntent();
+    if (intent === 'add-assets') {
+      viewMode = 'select-assets';
+    } else if (intent === 'set-cover') {
+      openSelectCover();
+    }
+  });
+
+  $effect(() => {
+    spaceUiManager.setChromeHidden(
+      assetMultiSelectManager.selectionActive || viewMode === 'select-assets' || viewMode === 'select-cover',
+    );
+  });
+
+  // Reset shell state when leaving the Photos page.
+  $effect(() => () => spaceUiManager.reset());
 </script>
 
 <OnEvents {onSpaceAddAssets} {onSpaceRemoveAssets} onAssetsDelete={refreshSpace} />
 
-<UserPageLayout
-  hideNavbar={assetMultiSelectManager.selectionActive || viewMode === 'select-assets' || viewMode === 'select-cover'}
-  title={viewMode === 'select-assets' || viewMode === 'select-cover' ? undefined : space.name}
-  scrollbar={false}
->
-  {#snippet leading()}
-    {#if viewMode === 'view' && !assetMultiSelectManager.selectionActive}
-      <IconButton
-        variant="ghost"
-        shape="round"
-        color="secondary"
-        aria-label={$t('back')}
-        onclick={() => goto(Route.spaces())}
-        icon={mdiArrowLeft}
+<div class="flex h-full" data-testid="discovery-timeline">
+  <!-- Filter Panel (left sidebar) -->
+  {#if viewMode === 'view'}
+    {#key `${space.id}:${showSearchResults ? `spaces-search-${committedSearchQuery.trim()}:${$lang}` : 'spaces-browse'}`}
+      <FilterPanel
+        config={filterConfig}
+        bind:filters
+        timeBuckets={smartFacetBuckets}
+        hidden={isTimelineEmpty}
+        {personNames}
+        {tagNames}
+        onFiltersChange={handleFiltersChange}
       />
-    {/if}
-  {/snippet}
+    {/key}
+  {/if}
 
-  {#snippet buttons()}
-    {#if viewMode === 'view' && !assetMultiSelectManager.selectionActive}
-      <div class="flex items-center gap-1">
-        {#if isEditor}
-          <IconButton
-            variant="ghost"
-            shape="round"
-            color="secondary"
-            aria-label={$t('add_photos')}
-            onclick={() => {
-              viewMode = 'select-assets';
-            }}
-            icon={mdiImagePlusOutline}
-          />
-        {/if}
-
-        <SpaceMap spaceId={space.id} />
-
-        <IconButton
-          icon={mdiImageMultipleOutline}
-          aria-label={$t('space_albums_page_title')}
-          variant="ghost"
-          shape="round"
-          color="secondary"
-          onclick={() => void goto(`/spaces/${space.id}/albums`)}
-          data-testid="space-albums-button"
-        />
-
-        <IconButton
-          variant="ghost"
-          shape="round"
-          color="secondary"
-          aria-label={$t('members')}
-          onclick={handleShowMembers}
-          icon={mdiAccountMultipleOutline}
-          data-testid="space-members-button"
-        />
-
-        <ButtonContextMenu direction="left" align="top-right" color="secondary" title="More" icon={mdiDotsVertical}>
-          <MenuOption
-            text={showInTimeline ? $t('spaces_hide_from_timeline') : $t('spaces_show_on_timeline')}
-            icon={showInTimeline ? mdiEyeOutline : mdiEyeOffOutline}
-            onClick={handleToggleTimeline}
-          />
-          <MenuOption
-            text={sharePersonMetadata ? $t('spaces_stop_sharing_person_metadata') : $t('spaces_share_person_metadata')}
-            icon={mdiFaceRecognition}
-            onClick={handleTogglePersonMetadataSharing}
-          />
-          {#if isEditor || authManager.user?.isAdmin}
-            <hr class="my-1 border-gray-300" />
-          {/if}
-          {#if isEditor}
-            <MenuOption text={$t('add_all_photos')} icon={mdiImageMultipleOutline} onClick={handleBulkAddAssets} />
-          {/if}
-          {#if authManager.user?.isAdmin}
-            <MenuOption text="Link Libraries" icon={mdiBookshelf} onClick={handleLinkLibraries} />
-          {/if}
-          {#if space.faceRecognitionEnabled}
-            <MenuOption
-              text={$t('people')}
-              icon={mdiAccountSupervisorCircleOutline}
-              onClick={() => goto(`/spaces/${space.id}/people`)}
-            />
-          {/if}
-          {#if isOwner}
-            <hr class="my-1 border-gray-300" />
-            <MenuOption
-              text={space.faceRecognitionEnabled ? 'Hide people' : 'Show people'}
-              icon={mdiFaceRecognition}
-              onClick={handleToggleFaceRecognition}
-            />
-            {#if space.faceRecognitionEnabled && space.hasPets}
-              <MenuOption
-                text={space.petsEnabled ? 'Hide pets' : 'Show pets'}
-                icon={mdiPaw}
-                onClick={handleTogglePets}
-              />
-            {/if}
-            <hr class="my-1 border-gray-300" />
-            <MenuOption
-              text={$t('spaces_delete')}
-              icon={mdiDeleteOutline}
-              textColor="text-red-500"
-              onClick={handleDelete}
-            />
-          {/if}
-        </ButtonContextMenu>
+  <!-- Main Content — pl-4 adds breathing room between filter panel and content -->
+  <div class="flex flex-1 flex-col overflow-hidden pl-4">
+    {#if viewMode === 'view' && !showSearchResults && !assetMultiSelectManager.selectionActive}
+      <div
+        class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 dark:bg-transparent md:flex"
+        data-testid="timeline-desktop-grouping-control"
+      >
+        <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
       </div>
     {/if}
-  {/snippet}
 
-  <div class="flex h-full" data-testid="discovery-timeline">
-    <!-- Filter Panel (left sidebar) -->
-    {#if viewMode === 'view'}
-      {#key `${space.id}:${showSearchResults ? `spaces-search-${committedSearchQuery.trim()}:${$lang}` : 'spaces-browse'}`}
-        <FilterPanel
-          config={filterConfig}
-          bind:filters
-          timeBuckets={smartFacetBuckets}
-          hidden={isTimelineEmpty}
+    <!-- Active filter chips -->
+    {#if viewMode === 'view' && (getActiveFilterCount(filters) > 0 || committedSearchQuery.trim().length > 0)}
+      <div class="mb-4 shrink-0" data-testid="space-active-filters-bar-spacing">
+        <ActiveFiltersBar
+          {filters}
+          resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
           {personNames}
           {tagNames}
-          onFiltersChange={handleFiltersChange}
+          onRemoveFilter={handleRemoveFilter}
+          onClearAll={handleClearAllFilters}
+          searchQuery={committedSearchQuery}
+          onClearSearch={clearSearch}
         />
-      {/key}
+      </div>
     {/if}
 
-    <!-- Main Content — pl-4 adds breathing room between filter panel and content -->
-    <div class="flex flex-1 flex-col overflow-hidden pl-4">
-      {#if viewMode === 'view' && !showSearchResults && !assetMultiSelectManager.selectionActive}
-        <div
-          class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 dark:bg-transparent md:flex"
-          data-testid="timeline-desktop-grouping-control"
-        >
-          <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
-        </div>
-      {/if}
+    {#if showSearchResults}
+      <SmartSearchResults
+        searchQuery={committedSearchQuery}
+        bind:isLoading
+        {filters}
+        language={$lang}
+        spaceId={space.id}
+        isShared={true}
+        total={smartFacetTotal}
+      />
+    {/if}
 
-      <!-- Active filter chips -->
-      {#if viewMode === 'view' && (getActiveFilterCount(filters) > 0 || committedSearchQuery.trim().length > 0)}
-        <div class="mb-4 shrink-0" data-testid="space-active-filters-bar-spacing">
-          <ActiveFiltersBar
-            {filters}
-            resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
-            {personNames}
-            {tagNames}
-            onRemoveFilter={handleRemoveFilter}
-            onClearAll={handleClearAllFilters}
-            searchQuery={committedSearchQuery}
-            onClearSearch={clearSearch}
-          />
+    {#if !showSearchResults}
+      {#if isFilteredTimelineEmpty}
+        <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="empty-state-message">
+          <p class="text-sm text-(--fg-muted)">No photos match your filters</p>
+          <button type="button" class="text-sm text-(--primary)" onclick={handleClearAllFilters}>
+            Clear all filters
+          </button>
         </div>
-      {/if}
-
-      {#if showSearchResults}
-        <SmartSearchResults
-          searchQuery={committedSearchQuery}
-          bind:isLoading
-          {filters}
-          language={$lang}
+      {:else}
+        <Timeline
+          enableRouting={false}
+          bind:timelineManager
+          {options}
+          assetInteraction={assetMultiSelectManager}
+          {isSelectionMode}
+          onEscape={handleEscape}
           spaceId={space.id}
-          isShared={true}
-          total={smartFacetTotal}
-        />
-      {/if}
+          onTimelineBucketActivate={handleTimelineBucketActivate}
+          {temporalAnchor}
+          onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
+          grouping={timelineGrouping}
+          onGroupingChange={handleTimelineGroupingChange}
+        >
+          {#if viewMode === 'view'}
+            <section class="px-4 pt-4">
+              <SpaceHero
+                {space}
+                memberCount={members.length}
+                assetCount={space.assetCount ?? 0}
+                currentRole={currentMember?.role}
+                gradientClass={spaceGradient}
+                onSetCover={isEditor ? openSelectCover : undefined}
+                onReposition={isEditor && space.thumbnailAssetId ? handleReposition : undefined}
+                {repositioning}
+                onSavePosition={handleSavePosition}
+                onCancelReposition={handleCancelReposition}
+                faceRecognitionEnabled={space.faceRecognitionEnabled}
+                spaceId={space.id}
+                onShowMembers={handleShowMembers}
+                collapsed={heroCollapsed}
+                onToggleCollapse={toggleHeroCollapsed}
+              />
 
-      {#if !showSearchResults}
-        {#if isFilteredTimelineEmpty}
-          <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="empty-state-message">
-            <p class="text-sm text-(--fg-muted)">No photos match your filters</p>
-            <button type="button" class="text-sm text-(--primary)" onclick={handleClearAllFilters}>
-              Clear all filters
-            </button>
-          </div>
-        {:else}
-          <Timeline
-            enableRouting={false}
-            bind:timelineManager
-            {options}
-            assetInteraction={assetMultiSelectManager}
-            {isSelectionMode}
-            onEscape={handleEscape}
-            spaceId={space.id}
-            onTimelineBucketActivate={handleTimelineBucketActivate}
-            {temporalAnchor}
-            onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
-            grouping={timelineGrouping}
-            onGroupingChange={handleTimelineGroupingChange}
-          >
-            {#if viewMode === 'view'}
-              <section class="px-4 pt-4">
-                <SpaceHero
-                  {space}
-                  memberCount={members.length}
-                  assetCount={space.assetCount ?? 0}
-                  currentRole={currentMember?.role}
-                  gradientClass={spaceGradient}
-                  onSetCover={isEditor ? openSelectCover : undefined}
-                  onReposition={isEditor && space.thumbnailAssetId ? handleReposition : undefined}
-                  {repositioning}
-                  onSavePosition={handleSavePosition}
-                  onCancelReposition={handleCancelReposition}
-                  faceRecognitionEnabled={space.faceRecognitionEnabled}
+              {#if space.faceRecognitionEnabled && spacePeople.length > 0}
+                <SpacePeopleStrip
+                  people={spacePeople}
                   spaceId={space.id}
-                  onShowMembers={handleShowMembers}
-                  collapsed={heroCollapsed}
-                  onToggleCollapse={toggleHeroCollapsed}
-                />
-
-                {#if space.faceRecognitionEnabled && spacePeople.length > 0}
-                  <SpacePeopleStrip
-                    people={spacePeople}
-                    spaceId={space.id}
-                    selectedPersonIds={filters.personIds}
-                    onPersonClick={handlePersonClick}
-                  />
-                {/if}
-              </section>
-
-              {#if isOwner}
-                <SpaceOnboardingBanner
-                  {space}
-                  gradientClass={spaceGradient}
-                  onAddPhotos={() => (viewMode = 'select-assets')}
-                  onInviteMembers={() => (panelOpen = true)}
-                  onSetCover={openSelectCover}
+                  selectedPersonIds={filters.personIds}
+                  onPersonClick={handlePersonClick}
                 />
               {/if}
+            </section>
 
-              {#if (space.newAssetCount ?? 0) > 0 && space.lastViewedAt}
-                <SpaceNewAssetsDivider
-                  newAssetCount={space.newAssetCount ?? 0}
-                  lastViewedAt={space.lastViewedAt}
-                  spaceColor={space.color ?? 'primary'}
-                />
-              {/if}
+            {#if isOwner}
+              <SpaceOnboardingBanner
+                {space}
+                gradientClass={spaceGradient}
+                onAddPhotos={() => (viewMode = 'select-assets')}
+                onInviteMembers={() => (panelOpen = true)}
+                onSetCover={openSelectCover}
+              />
             {/if}
 
-            {#snippet empty()}
-              {#if viewMode === 'view'}
-                <div class="mx-auto max-w-md py-16 text-center">
-                  <p class="text-gray-500 dark:text-gray-400">{$t('spaces_no_assets')}</p>
-                </div>
-              {/if}
-            {/snippet}
-          </Timeline>
-        {/if}
+            {#if (space.newAssetCount ?? 0) > 0 && space.lastViewedAt}
+              <SpaceNewAssetsDivider
+                newAssetCount={space.newAssetCount ?? 0}
+                lastViewedAt={space.lastViewedAt}
+                spaceColor={space.color ?? 'primary'}
+              />
+            {/if}
+          {/if}
+
+          {#snippet empty()}
+            {#if viewMode === 'view'}
+              <div class="mx-auto max-w-md py-16 text-center">
+                <p class="text-gray-500 dark:text-gray-400">{$t('spaces_no_assets')}</p>
+              </div>
+            {/if}
+          {/snippet}
+        </Timeline>
       {/if}
-    </div>
+    {/if}
   </div>
-</UserPageLayout>
+</div>
 
 {#if assetMultiSelectManager.selectionActive && viewMode === 'view'}
   <AssetSelectControlBar>
