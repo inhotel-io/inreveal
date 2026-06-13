@@ -1,5 +1,5 @@
 import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
-import { SharedSpaceRole } from '@immich/sdk';
+import { SharedSpaceRole, UserAvatarColor } from '@immich/sdk';
 import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -280,6 +280,11 @@ describe('space [spaceId] +layout.svelte', () => {
   it('renders the cover (SpaceHero) when chrome is shown', () => {
     renderLayout(SharedSpaceRole.Owner);
     expect(screen.getByTestId('hero-title')).toHaveTextContent('Trip');
+  });
+
+  it('passes a per-space colored gradient to the cover derived from space.color', () => {
+    renderLayout(SharedSpaceRole.Owner, { space: space({ color: UserAvatarColor.Pink }) });
+    expect(screen.getByTestId('hero-gradient')).toHaveClass('from-pink-300', 'to-pink-500');
   });
 
   it('suppresses the tab bar on a person/album detail route', () => {
