@@ -99,10 +99,10 @@ Resets:
 - Entering add mode (the `add-photos` button onclick + the empty-state add button) and leaving it
   (`handleExitAddMode`, `handleAddAssetsSuccess`): `pickerFilters = createFilterState()` and clear
   the picker name maps, alongside the existing `timelineGrouping='day'` / anchor resets.
-- On `album.id` change: `browseFilters = createFilterState()` and clear the browse name maps
-  (via `$effect` keyed on `album.id`). The per-album `{#key}` wrappers around each FilterPanel
-  (see Layout) additionally remount it so its internal section/collapse state resets per album —
-  matching the reference's keyed wrappers.
+- No cross-album reset is needed: `album` is local `$state` seeded once from `data.album` (only
+  `refreshAlbum` reassigns it, keeping the same id), so `album.id` is stable for the component's
+  life — album navigation goes through the grid, not in-place. The per-album `{#key}` wrappers are
+  kept as cheap, defensive parity with the reference (they no-op while the id is stable).
 
 Derived flags (per mode — browse reads `timelineManager`, picker reads `pickerTimelineManager`),
 matching the reference (`+page.svelte:324-331`). Each is guarded on `?.isInitialized`:
@@ -248,7 +248,7 @@ mocks surface `config`/`filters`/`hidden` and the active-filter handlers via tes
 - `ActiveFiltersBar` renders when that mode's filters are active; **absent** when none (both modes).
 - Filter independence: entering add mode resets `pickerFilters` while `browseFilters` persists;
   exiting/`handleAddAssetsSuccess` resets `pickerFilters` (active count back to 0).
-- `album.id` change resets `browseFilters` and clears the browse name maps.
+- (No cross-album reset test — `album.id` is stable for this component; see Resets.)
 - **Filtered-empty**: when `showBrowse/PickerFilteredEmpty`, the filtered-empty block renders and
   the Timeline does **not**; its clear-all button resets that mode's filters (and `temporalAnchor`
   for browse). Unfiltered-empty still shows the Timeline's own `empty` snippet.
