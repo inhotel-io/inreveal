@@ -202,16 +202,13 @@ describe('space [spaceId] +layout.svelte', () => {
       expect(gotoMock).not.toHaveBeenCalled();
     });
 
-    it('handleToggleFaceRecognition: enables face recognition for an owner and revalidates', async () => {
+    it('does NOT offer a hide/show people toggle in the overflow', async () => {
       renderLayout(SharedSpaceRole.Owner, { space: space({ faceRecognitionEnabled: false }) });
 
-      await clickOverflowOption('spaces_show_people');
+      await openOverflow();
 
-      expect(sdkMock.updateSpace).toHaveBeenCalledWith({
-        id: 's1',
-        sharedSpaceUpdateDto: { faceRecognitionEnabled: true },
-      });
-      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
+      expect(screen.queryByText('spaces_show_people')).not.toBeInTheDocument();
+      expect(screen.queryByText('spaces_hide_people')).not.toBeInTheDocument();
     });
 
     it('handleBulkAddAssets: bulk-adds assets for an editor when confirmed', async () => {
@@ -287,10 +284,14 @@ describe('space [spaceId] +layout.svelte', () => {
     expect(screen.getByTestId('hero-gradient')).toHaveClass('from-pink-300', 'to-pink-500');
   });
 
-  it('suppresses the tab bar on a person/album detail route', () => {
+  it('defers entirely to the child on a detail route — no nested shell chrome', () => {
     mockPage.url = new URL('https://gallery.test/spaces/s1/albums/al-1');
     renderLayout(SharedSpaceRole.Owner);
+    // Detail pages render their OWN UserPageLayout; the shell must render bare children there,
+    // otherwise the whole app nests inside itself.
     expect(screen.queryByTestId('space-tabs')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('space-add-photos')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('space-overflow')).not.toBeInTheDocument();
   });
 
   it('suppresses the app bar, tabs and cover when chrome is hidden (full-screen selection mode)', async () => {
