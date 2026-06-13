@@ -11,13 +11,7 @@
     memberCount?: number;
   }
 
-  let {
-    spaceId,
-    faceRecognitionEnabled = false,
-    photoCount = 0,
-    albumCount = 0,
-    memberCount = 0,
-  }: Props = $props();
+  let { spaceId, faceRecognitionEnabled = false, photoCount = 0, albumCount = 0, memberCount = 0 }: Props = $props();
 
   const base = $derived(`/spaces/${spaceId}`);
   const path = $derived(page.url.pathname);
