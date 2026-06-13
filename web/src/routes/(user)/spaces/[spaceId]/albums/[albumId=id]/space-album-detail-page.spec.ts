@@ -281,6 +281,17 @@ describe('Space album detail page', () => {
     expect(screen.getByTestId('timeline-desktop-grouping-control')).toBeInTheDocument();
   });
 
+  it('the grouping-control bar is transparent (no navy/border bar) to match the space page', () => {
+    renderPage();
+    const bar = screen.getByTestId('timeline-desktop-grouping-control');
+    // The rolling/main fix dropped the bordered grey/navy bar in favour of a transparent container.
+    expect(bar.className).toContain('bg-transparent');
+    expect(bar.className).toContain('dark:bg-transparent');
+    expect(bar.className).not.toContain('bg-gray-50');
+    expect(bar.className).not.toContain('dark:bg-gray-900');
+    expect(bar.className).not.toContain('border-b');
+  });
+
   it('timeline receives grouping="day" by default (not "month")', () => {
     renderPage();
     expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-grouping', 'day');
