@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import FilterPanel from '$lib/components/filter-panel/filter-panel.svelte';
   import ActiveFiltersBar from '$lib/components/filter-panel/active-filters-bar.svelte';
@@ -15,12 +15,10 @@
   import SmartSearchResults from '$lib/components/search/smart-search-results.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
-  import SpaceHero from '$lib/components/spaces/space-hero.svelte';
   import SpaceNewAssetsDivider from '$lib/components/spaces/space-new-assets-divider.svelte';
   import SpaceOnboardingBanner from '$lib/components/spaces/space-onboarding-banner.svelte';
   import SpaceAssetLimitWarning from '$lib/components/spaces/space-asset-limit-warning.svelte';
   import SpacePanel from '$lib/components/spaces/space-panel.svelte';
-  import SpacePeopleStrip from '$lib/components/spaces/space-people-strip.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
   import ChangeDate from '$lib/components/timeline/actions/ChangeDateAction.svelte';
@@ -60,7 +58,6 @@
     buildSmartSearchFacetsParams,
     mapSmartSearchFacetsToFilterSuggestions,
   } from '$lib/utils/space-search';
-  import { loadHeroCollapsed, persistHeroCollapsed } from '$lib/utils/space-hero-storage';
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
   import {
     type ActivatableTimelineBucket,
@@ -77,7 +74,6 @@
     getSearchSuggestions,
     getSpace,
     getSpaceActivities,
-    getSpacePeople,
     markSpaceViewed,
     searchSmartFacets,
     SharedSpaceRole,
@@ -86,7 +82,6 @@
     UserAvatarColor,
     type SharedSpaceActivityResponseDto,
     type SharedSpaceMemberResponseDto,
-    type SharedSpacePersonResponseDto,
     type SharedSpaceResponseDto,
     type SmartSearchFacetsResponseDto,
   } from '@immich/sdk';
@@ -124,7 +119,6 @@
       activities = [];
       hasMoreActivities = false;
       activityOffset = 0;
-      spacePeople = [];
       personNames.clear();
       tagNames.clear();
       consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
@@ -137,25 +131,20 @@
       lastHandledSearchState = `${nextSearchState.query}:${nextSearchState.sortOrder}:${page.url.search}`;
       timelineGrouping = 'day';
       temporalAnchor = undefined;
-      heroCollapsed = loadHeroCollapsed(data.space.id);
       panelOpen = false;
       viewMode = 'view';
-      repositioning = false;
       assetMultiSelectManager.clear();
     }
   });
 
   let viewMode = $state<ViewMode>('view');
   let panelOpen = $state(false);
-  let repositioning = $state(false);
 
   let activities = $state<SharedSpaceActivityResponseDto[]>([]);
   let hasMoreActivities = $state(false);
   let activityOffset = $state(0);
   const ACTIVITY_PAGE_SIZE = 50;
   let initializedSpaceId = $state('');
-
-  let spacePeople = $state<SharedSpacePersonResponseDto[]>([]);
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
 
@@ -194,23 +183,6 @@
         promise: Promise<SmartSearchFacetsResponseDto | undefined>;
       }
     | undefined;
-
-  let heroCollapsed = $state(loadHeroCollapsed(data.space.id));
-
-  function toggleHeroCollapsed() {
-    heroCollapsed = !heroCollapsed;
-    persistHeroCollapsed(space.id, heroCollapsed);
-  }
-
-  let prevFilterCount = 0;
-
-  $effect(() => {
-    const count = getActiveFilterCount(filters);
-    if (count > 0 && prevFilterCount === 0) {
-      heroCollapsed = true;
-    }
-    prevFilterCount = count;
-  });
 
   const emptyFilterSuggestions = () => ({
     countries: [],
@@ -468,26 +440,6 @@
     }
   }
 
-  async function loadSpacePeople() {
-    if (!space.faceRecognitionEnabled) {
-      spacePeople = [];
-      return;
-    }
-    try {
-      spacePeople = await getSpacePeople({ id: space.id, limit: 10 });
-    } catch (error) {
-      handleError(error, 'Failed to load space people');
-    }
-  }
-
-  const handlePersonClick = (personId: string) => {
-    const current = filters.personIds;
-    filters = {
-      ...filters,
-      personIds: current.includes(personId) ? current.filter((id) => id !== personId) : [...current, personId],
-    };
-  };
-
   const handleEscape = () => {
     if (showSearchResults) {
       clearSearch();
@@ -524,44 +476,17 @@
     viewMode = 'view';
   };
 
-  const handleReposition = () => {
-    repositioning = true;
-  };
-
-  const handleSavePosition = async (cropY: number) => {
-    try {
-      await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { thumbnailCropY: cropY },
-      });
-      space = { ...space, thumbnailCropY: cropY };
-      repositioning = false;
-      toastManager.success($t('space_cover_updated'));
-    } catch (error) {
-      handleError(error, $t('errors.unable_to_update_space_cover'));
-    }
-  };
-
-  const handleCancelReposition = () => {
-    repositioning = false;
-  };
-
   const handleSetCoverFromSelection = async () => {
     const assets = assetMultiSelectManager.assets;
     if (assets.length !== 1) {
       return;
     }
-
     try {
-      await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { thumbnailAssetId: assets[0].id },
-      });
-      space = { ...space, thumbnailAssetId: assets[0].id, thumbnailCropY: null };
+      await updateSpace({ id: space.id, sharedSpaceUpdateDto: { thumbnailAssetId: assets[0].id } });
+      await invalidateAll();
       toastManager.success($t('space_cover_updated'));
       assetMultiSelectManager.clear();
       viewMode = 'view';
-      repositioning = true;
     } catch (error) {
       handleError(error, $t('errors.unable_to_update_space_cover'));
     }
@@ -615,10 +540,6 @@
       viewMode === 'select-assets' && isEditor ? addSelectedAssetsToCurrentSpace : undefined,
   });
 
-  const handleShowMembers = () => {
-    panelOpen = !panelOpen;
-  };
-
   const handleRemoveAssets = async (assetIds: string[]) => {
     timelineManager.removeAssets(assetIds);
     await refreshSpace();
@@ -630,16 +551,11 @@
     if (assets.length !== 1) {
       return;
     }
-
     try {
-      await updateSpace({
-        id: space.id,
-        sharedSpaceUpdateDto: { thumbnailAssetId: assets[0].id },
-      });
-      space = { ...space, thumbnailAssetId: assets[0].id, thumbnailCropY: null };
+      await updateSpace({ id: space.id, sharedSpaceUpdateDto: { thumbnailAssetId: assets[0].id } });
+      await invalidateAll();
       toastManager.success($t('space_cover_updated'));
       assetMultiSelectManager.clear();
-      repositioning = true;
     } catch (error) {
       handleError(error, $t('errors.unable_to_update_space_cover'));
     }
@@ -814,7 +730,6 @@
       initializedSpaceId = space.id;
       void markSpaceViewed({ id: space.id });
       void loadActivities();
-      void loadSpacePeople();
     }
   });
 
@@ -864,7 +779,7 @@
   <div class="flex flex-1 flex-col overflow-hidden pl-4">
     {#if viewMode === 'view' && !showSearchResults && !assetMultiSelectManager.selectionActive}
       <div
-        class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 dark:bg-transparent md:flex"
+        class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 md:flex dark:bg-transparent"
         data-testid="timeline-desktop-grouping-control"
       >
         <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
@@ -921,37 +836,9 @@
           onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
           grouping={timelineGrouping}
           onGroupingChange={handleTimelineGroupingChange}
+          onScroll={(scrollTop) => spaceUiManager.setCoverCollapsed(scrollTop > 64)}
         >
           {#if viewMode === 'view'}
-            <section class="px-4 pt-4">
-              <SpaceHero
-                {space}
-                memberCount={members.length}
-                assetCount={space.assetCount ?? 0}
-                currentRole={currentMember?.role}
-                gradientClass={spaceGradient}
-                onSetCover={isEditor ? openSelectCover : undefined}
-                onReposition={isEditor && space.thumbnailAssetId ? handleReposition : undefined}
-                {repositioning}
-                onSavePosition={handleSavePosition}
-                onCancelReposition={handleCancelReposition}
-                faceRecognitionEnabled={space.faceRecognitionEnabled}
-                spaceId={space.id}
-                onShowMembers={handleShowMembers}
-                collapsed={heroCollapsed}
-                onToggleCollapse={toggleHeroCollapsed}
-              />
-
-              {#if space.faceRecognitionEnabled && spacePeople.length > 0}
-                <SpacePeopleStrip
-                  people={spacePeople}
-                  spaceId={space.id}
-                  selectedPersonIds={filters.personIds}
-                  onPersonClick={handlePersonClick}
-                />
-              {/if}
-            </section>
-
             {#if isOwner}
               <SpaceOnboardingBanner
                 {space}

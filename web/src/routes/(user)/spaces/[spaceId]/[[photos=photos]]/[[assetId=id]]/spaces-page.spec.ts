@@ -140,10 +140,6 @@ vi.mock('$lib/managers/global-search-manager.svelte', () => ({
     registerSearchablePageFilters: mockRegisterSearchablePageFilters,
   },
 }));
-vi.mock('$lib/utils/space-hero-storage', () => ({
-  loadHeroCollapsed: vi.fn().mockReturnValue(false),
-  persistHeroCollapsed: vi.fn(),
-}));
 
 vi.mock('$lib/utils/space-filter-options', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/utils/space-filter-options')>();
@@ -809,7 +805,9 @@ describe('Spaces page search URL state', () => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"year"');
     });
 
-    await fireEvent.click(screen.getByTestId('hero-set-cover-button'));
+    // The change-cover affordance now lives in the shell cover (not this page); it signals the page
+    // through the space-ui-manager intent, which the page consumes to enter select-cover mode.
+    spaceUiManager.requestChangeCover();
 
     await waitFor(() => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
