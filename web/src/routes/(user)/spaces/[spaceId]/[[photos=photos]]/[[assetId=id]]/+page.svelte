@@ -18,7 +18,6 @@
   import SpaceNewAssetsDivider from '$lib/components/spaces/space-new-assets-divider.svelte';
   import SpaceOnboardingBanner from '$lib/components/spaces/space-onboarding-banner.svelte';
   import SpaceAssetLimitWarning from '$lib/components/spaces/space-asset-limit-warning.svelte';
-  import SpacePanel from '$lib/components/spaces/space-panel.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import ArchiveAction from '$lib/components/timeline/actions/ArchiveAction.svelte';
   import ChangeDate from '$lib/components/timeline/actions/ChangeDateAction.svelte';
@@ -70,17 +69,14 @@
     AssetTypeEnum,
     AssetVisibility,
     getFilterSuggestions,
-    getMembers,
     getSearchSuggestions,
     getSpace,
-    getSpaceActivities,
     markSpaceViewed,
     searchSmartFacets,
     SharedSpaceRole,
     SearchSuggestionType,
     updateSpace,
     UserAvatarColor,
-    type SharedSpaceActivityResponseDto,
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
     type SmartSearchFacetsResponseDto,
@@ -116,9 +112,6 @@
         ...nextFilterState,
         sortOrder: nextSearchState.sortOrder,
       };
-      activities = [];
-      hasMoreActivities = false;
-      activityOffset = 0;
       personNames.clear();
       tagNames.clear();
       consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
@@ -131,19 +124,13 @@
       lastHandledSearchState = `${nextSearchState.query}:${nextSearchState.sortOrder}:${page.url.search}`;
       timelineGrouping = 'day';
       temporalAnchor = undefined;
-      panelOpen = false;
       viewMode = 'view';
       assetMultiSelectManager.clear();
     }
   });
 
   let viewMode = $state<ViewMode>('view');
-  let panelOpen = $state(false);
 
-  let activities = $state<SharedSpaceActivityResponseDto[]>([]);
-  let hasMoreActivities = $state(false);
-  let activityOffset = $state(0);
-  const ACTIVITY_PAGE_SIZE = 50;
   let initializedSpaceId = $state('');
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
@@ -418,28 +405,6 @@
     space = await getSpace({ id: space.id });
   };
 
-  async function loadActivities() {
-    try {
-      const result = await getSpaceActivities({ id: space.id, limit: ACTIVITY_PAGE_SIZE, offset: 0 });
-      activities = result;
-      hasMoreActivities = result.length === ACTIVITY_PAGE_SIZE;
-      activityOffset = result.length;
-    } catch (error) {
-      handleError(error, 'Failed to load activities');
-    }
-  }
-
-  async function loadMoreActivities() {
-    try {
-      const result = await getSpaceActivities({ id: space.id, limit: ACTIVITY_PAGE_SIZE, offset: activityOffset });
-      activities = [...activities, ...result];
-      hasMoreActivities = result.length === ACTIVITY_PAGE_SIZE;
-      activityOffset += result.length;
-    } catch (error) {
-      handleError(error, 'Failed to load activities');
-    }
-  }
-
   const handleEscape = () => {
     if (showSearchResults) {
       clearSearch();
@@ -495,7 +460,7 @@
   let skipNextLocalSpaceAddEventForSpaceId: string | null = null;
 
   const applySpaceAddSuccess = async () => {
-    await Promise.all([refreshSpace(), loadActivities()]);
+    await refreshSpace();
     assetMultiSelectManager.clear();
     viewMode = 'view';
   };
@@ -543,7 +508,6 @@
   const handleRemoveAssets = async (assetIds: string[]) => {
     timelineManager.removeAssets(assetIds);
     await refreshSpace();
-    await loadActivities();
   };
 
   const handleSetAsCover = async () => {
@@ -573,7 +537,7 @@
 
   const onSpaceRemoveAssets = async ({ assetIds }: { assetIds: string[]; spaceId: string }) => {
     timelineManager.removeAssets(assetIds);
-    await Promise.all([refreshSpace(), loadActivities()]);
+    await refreshSpace();
   };
 
   let committedSearchQuery = $state(initialSearchState.query);
@@ -729,7 +693,6 @@
     if (space?.id && space.id !== initializedSpaceId) {
       initializedSpaceId = space.id;
       void markSpaceViewed({ id: space.id });
-      void loadActivities();
     }
   });
 
@@ -844,7 +807,7 @@
                 {space}
                 gradientClass={spaceGradient}
                 onAddPhotos={() => (viewMode = 'select-assets')}
-                onInviteMembers={() => (panelOpen = true)}
+                onInviteMembers={() => void goto(`/spaces/${space.id}/members`)}
                 onSetCover={openSelectCover}
               />
             {/if}
@@ -904,23 +867,6 @@
     </ButtonContextMenu>
   </AssetSelectControlBar>
 {/if}
-
-<SpacePanel
-  {space}
-  {members}
-  {activities}
-  currentUserId={authManager.user.id}
-  {isOwner}
-  open={panelOpen}
-  onClose={() => (panelOpen = false)}
-  onMembersChanged={async () => {
-    members = await getMembers({ id: space.id });
-    await refreshSpace();
-    await loadActivities();
-  }}
-  onLoadMoreActivities={loadMoreActivities}
-  {hasMoreActivities}
-/>
 
 {#if viewMode === 'select-assets'}
   <ControlAppBar onClose={handleCloseSelectAssets}>
