@@ -5,6 +5,7 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
+  import SpaceHero from '$lib/components/spaces/space-hero.svelte';
   import SpaceTabs from '$lib/components/spaces/space-tabs.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { spaceUiManager } from '$lib/managers/space-ui-manager.svelte';
@@ -58,6 +59,28 @@
   const suffix = $derived(page.url.pathname.slice(base.length));
   const isDetailRoute = $derived(/^\/(people|albums)\/[^/]+/.test(suffix));
   const showChrome = $derived(!isDetailRoute && !spaceUiManager.chromeHidden);
+
+  // The cover (SpaceHero) is tall + scroll-collapsible on the Photos route, compact on other tabs.
+  let repositioning = $state(false);
+  const onPhotosTab = $derived(page.url.pathname === base || page.url.pathname.startsWith(`${base}/photos`));
+
+  const handleChangeCover = () => {
+    spaceUiManager.requestChangeCover();
+    if (page.url.pathname !== base) {
+      void goto(base);
+    }
+  };
+
+  const handleSavePosition = async (cropY: number) => {
+    try {
+      await updateSpace({ id: space.id, sharedSpaceUpdateDto: { thumbnailCropY: cropY } });
+      repositioning = false;
+      await invalidateAll();
+      toastManager.success($t('space_cover_updated'));
+    } catch (error) {
+      handleError(error, $t('errors.unable_to_update_space_cover'));
+    }
+  };
 
   const handleAddPhotos = () => {
     spaceUiManager.requestAddPhotos();
@@ -232,7 +255,18 @@
 
   <div class="flex h-full flex-col">
     {#if showChrome}
-      <!-- cover (SpaceHero) is inserted above the tabs in Task 9 -->
+      <SpaceHero
+        {space}
+        currentRole={currentMember?.role}
+        canEdit={isEditor}
+        onChangeCover={handleChangeCover}
+        onReposition={() => (repositioning = true)}
+        {repositioning}
+        onSavePosition={handleSavePosition}
+        onCancelReposition={() => (repositioning = false)}
+        compact={!onPhotosTab}
+        collapsed={onPhotosTab && spaceUiManager.coverCollapsed}
+      />
       <SpaceTabs
         spaceId={space.id}
         faceRecognitionEnabled={space.faceRecognitionEnabled}
