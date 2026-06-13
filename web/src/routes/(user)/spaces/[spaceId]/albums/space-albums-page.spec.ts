@@ -233,5 +233,59 @@ describe('Space albums page', () => {
       // Optimistic flip: "hidden from timeline" label should now appear
       await waitFor(() => expect(screen.getByText(/hidden from timeline/i)).toBeInTheDocument());
     });
+
+    // ── Owner equivalents for unlink and toggle ──────────────────────────────
+
+    it('owner can unlink: after confirm resolves true, calls unlinkAlbum', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.unlinkAlbum.mockResolvedValue(undefined as never);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
+      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation' });
+      renderPage([album], SharedSpaceRole.Owner);
+
+      const menuContainer = screen.getByTestId('space-album-card-menu');
+      const menuButton = menuContainer.querySelector('button');
+      expect(menuButton).not.toBeNull();
+      await fireEvent.click(menuButton!);
+
+      const unlinkOption = await screen.findByText('Unlink album');
+      await fireEvent.click(unlinkOption);
+
+      await waitFor(() => expect(sdkMock.unlinkAlbum).toHaveBeenCalledWith({ id: 'space-1', albumId: 'album-1' }));
+    });
+
+    it('owner can toggle show-in-timeline: calls updateSharedSpaceAlbum', async () => {
+      sdkMock.updateSharedSpaceAlbum.mockResolvedValue(undefined as never);
+      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation', showInTimeline: true });
+      renderPage([album], SharedSpaceRole.Owner);
+
+      const menuContainer = screen.getByTestId('space-album-card-menu');
+      const menuButton = menuContainer.querySelector('button');
+      expect(menuButton).not.toBeNull();
+      await fireEvent.click(menuButton!);
+
+      const toggleOption = await screen.findByText('Hide from timeline');
+      await fireEvent.click(toggleOption);
+
+      await waitFor(() =>
+        expect(sdkMock.updateSharedSpaceAlbum).toHaveBeenCalledWith({
+          id: 'space-1',
+          albumId: 'album-1',
+          sharedSpaceAlbumLinkUpdateDto: { showInTimeline: false },
+        }),
+      );
+    });
+  });
+
+  // ── Viewer gating: card menu and empty CTA ──────────────────────────────────
+
+  it('viewer with a linked album sees no space-album-card-menu', () => {
+    renderPage([makeAlbum()], SharedSpaceRole.Viewer);
+    expect(screen.queryByTestId('space-album-card-menu')).not.toBeInTheDocument();
+  });
+
+  it('viewer with empty albums list sees no empty-link-album-button', () => {
+    renderPage([], SharedSpaceRole.Viewer);
+    expect(screen.queryByTestId('empty-link-album-button')).not.toBeInTheDocument();
   });
 });
