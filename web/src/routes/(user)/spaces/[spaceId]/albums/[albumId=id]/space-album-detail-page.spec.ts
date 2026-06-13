@@ -417,6 +417,25 @@ describe('Space album detail page', () => {
     expect(main.className).toContain('pt-(--navbar-height)');
   });
 
+  it('the picker control bar comes AFTER the timeline-main in DOM so it paints on top and its buttons are clickable', async () => {
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => {
+      expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
+    });
+
+    const overlay = screen.getByTestId('add-photos-overlay');
+    const main = screen.getByTestId('add-photos-timeline-main');
+    // The ControlAppBar is `position: absolute` with auto z-index. The full-height <main> would
+    // paint over it (swallowing clicks on the trailing Upload/Add buttons) unless the bar comes
+    // LATER in DOM order. querySelectorAll returns document order — bar must be last.
+    const ordered = [
+      ...overlay.querySelectorAll('[data-testid="add-photos-timeline-main"], [data-testid="control-app-bar"]'),
+    ];
+    expect(ordered[0]).toBe(main);
+    expect(ordered[1]).toBe(screen.getByTestId('control-app-bar'));
+  });
+
   it('in browse mode, the add-photos overlay is NOT rendered', () => {
     renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
     expect(screen.queryByTestId('add-photos-overlay')).not.toBeInTheDocument();
