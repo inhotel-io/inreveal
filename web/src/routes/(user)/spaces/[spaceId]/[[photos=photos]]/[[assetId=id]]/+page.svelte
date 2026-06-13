@@ -461,6 +461,8 @@
 
   const applySpaceAddSuccess = async () => {
     await refreshSpace();
+    // Also revalidate layout data so the shell's Photos tab count badge updates.
+    await invalidateAll();
     assetMultiSelectManager.clear();
     viewMode = 'view';
   };
@@ -508,6 +510,8 @@
   const handleRemoveAssets = async (assetIds: string[]) => {
     timelineManager.removeAssets(assetIds);
     await refreshSpace();
+    // Also revalidate layout data so the shell's Photos tab count badge updates.
+    await invalidateAll();
   };
 
   const handleSetAsCover = async () => {
@@ -538,6 +542,8 @@
   const onSpaceRemoveAssets = async ({ assetIds }: { assetIds: string[]; spaceId: string }) => {
     timelineManager.removeAssets(assetIds);
     await refreshSpace();
+    // Also revalidate layout data so the shell's Photos tab count badge updates.
+    await invalidateAll();
   };
 
   let committedSearchQuery = $state(initialSearchState.query);
