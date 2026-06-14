@@ -33,6 +33,7 @@ Run all server commands from `server/`. Run e2e from `e2e/`.
 ## Task 1: Repository — `getAssetIdsWithoutOtherSpacePath`
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts`
 - Test: `server/test/medium/specs/repositories/shared-space.repository.spec.ts`
 
@@ -160,6 +161,7 @@ git commit -m "feat(spaces): add getAssetIdsWithoutOtherSpacePath repo method (s
 ## Task 2: Event types
 
 **Files:**
+
 - Modify: `server/src/repositories/event.repository.ts`
 
 - [ ] **Step 1: Add the event declarations**
@@ -188,6 +190,7 @@ git commit -m "feat(spaces): add AlbumAssetsAdd/Remove event types (slice 1)"
 ## Task 3: Service — `@OnEvent` handlers in shared-space.service
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts`
 - Test: `server/src/services/shared-space.service.spec.ts`
 
@@ -348,6 +351,7 @@ git commit -m "feat(spaces): sync space people on linked-album asset add/remove 
 ## Task 4: Service — emit events from album.service
 
 **Files:**
+
 - Modify: `server/src/services/album.service.ts`
 - Test: `server/src/services/album.service.spec.ts`
 
@@ -445,33 +449,33 @@ In `server/src/services/album.service.ts`:
 **`addAssets`** — inside the existing `if (firstNewAssetId) { ... }` block, after the `AlbumUpdate` emit loop, add:
 
 ```typescript
-      const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
-      await this.eventRepository.emit('AlbumAssetsAdd', { albumId: id, assetIds: addedAssetIds });
+const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
+await this.eventRepository.emit('AlbumAssetsAdd', { albumId: id, assetIds: addedAssetIds });
 ```
 
 **`addAssetsToAlbums`** — after `await this.albumRepository.addAssetIdsToAlbums(albumAssetValues);` (and the existing `AlbumUpdate` loop), add:
 
 ```typescript
-    const addedByAlbum = new Map<string, string[]>();
-    for (const { albumId, assetId } of albumAssetValues) {
-      const ids = addedByAlbum.get(albumId);
-      if (ids) {
-        ids.push(assetId);
-      } else {
-        addedByAlbum.set(albumId, [assetId]);
-      }
-    }
-    for (const [albumId, assetIds] of addedByAlbum) {
-      await this.eventRepository.emit('AlbumAssetsAdd', { albumId, assetIds });
-    }
+const addedByAlbum = new Map<string, string[]>();
+for (const { albumId, assetId } of albumAssetValues) {
+  const ids = addedByAlbum.get(albumId);
+  if (ids) {
+    ids.push(assetId);
+  } else {
+    addedByAlbum.set(albumId, [assetId]);
+  }
+}
+for (const [albumId, assetIds] of addedByAlbum) {
+  await this.eventRepository.emit('AlbumAssetsAdd', { albumId, assetIds });
+}
 ```
 
 **`removeAssets`** — after `const removedIds = results.filter(({ success }) => success).map(({ id }) => id);`, add:
 
 ```typescript
-    if (removedIds.length > 0) {
-      await this.eventRepository.emit('AlbumAssetsRemove', { albumId: id, assetIds: removedIds });
-    }
+if (removedIds.length > 0) {
+  await this.eventRepository.emit('AlbumAssetsRemove', { albumId: id, assetIds: removedIds });
+}
 ```
 
 - [ ] **Step 4: Run to verify passing**
@@ -491,6 +495,7 @@ git commit -m "feat(spaces): emit AlbumAssetsAdd/Remove on album asset mutations
 ## Task 5: Medium end-to-end + linchpin regression
 
 **Files:**
+
 - Test: `server/test/medium/specs/services/shared-space-album.service.spec.ts`
 
 Use `setupWithFaceMatch()` (already defined in this file: real `AccessRepository, AlbumRepository, AlbumUserRepository, AssetRepository, SharedSpaceRepository, UserRepository, FaceIdentityRepository, PersonRepository, ConfigRepository, SystemMetadataRepository, SearchRepository`; mocked `EventRepository, LoggingRepository, JobRepository, StorageRepository`; returns `{ ctx, sut, jobs, faceIdentityRepository }`). The face-seeding block is copied verbatim from the existing `handleSharedSpaceAlbumFaceSync` test in this file.
@@ -513,7 +518,11 @@ describe('onAlbumAssetsAdd (medium)', () => {
     await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
     await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: newEmbedding() }).execute();
-    await faceIdentityRepository.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await faceIdentityRepository.linkFace({
+      assetFaceId: assetFace.id,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
 
     await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
 
@@ -578,7 +587,11 @@ describe('onAlbumAssetsRemove (medium)', () => {
     ]);
 
     // Simulate the real removeAssets ordering: album_asset rows for a1,a2 are deleted FIRST.
-    await ctx.database.deleteFrom('album_asset').where('albumId', '=', album.id).where('assetId', 'in', [a1.id, a2.id]).execute();
+    await ctx.database
+      .deleteFrom('album_asset')
+      .where('albumId', '=', album.id)
+      .where('assetId', 'in', [a1.id, a2.id])
+      .execute();
 
     await sut.onAlbumAssetsRemove({ albumId: album.id, assetIds: [a1.id, a2.id] });
 
@@ -611,6 +624,7 @@ git commit -m "test(spaces): medium e2e for linked-album add/remove people sync 
 ## Task 6: E2E API coverage (infra-gated)
 
 **Files:**
+
 - Test: `e2e/src/specs/web/spaces-albums.e2e-spec.ts` (or a new `e2e/src/specs/<area>.e2e-spec.ts` API spec if the web spec lacks face-recognition setup)
 
 > This task requires the e2e stack (`make e2e`/running server + DB). If the stack is not available in this environment, write the test, attempt to run it, and if it cannot run, record that clearly in the commit body and leave it for CI — do NOT delete it or fake a pass.
@@ -643,23 +657,23 @@ git commit -m "test(e2e): linked-album live people sync add/remove (slice 1)"
 
 ## Edge-case coverage map (spec §4.4 → test)
 
-| Spec edge | Covered by |
-| --- | --- |
-| Add: face-enabled space → per-asset job | Task 3 unit #1, Task 5 add |
-| Add: mixed face on/off spaces | Task 3 unit #1 |
-| Add: face-disabled only → no jobs | Task 3 unit #2 |
-| Add: no linked space → no jobs | Task 3 unit #2 (empty/false) |
-| Add: multi-album fan-out | Task 4 unit #3 |
-| Add: only newly-inserted ids | Task 4 unit #1/#2 |
-| Add: already-in-space idempotent | covered by `processSpaceFaceMatch` idempotency (Task 5 runs real match) |
-| Add: no successful inserts → no emit | Task 4 unit #2 |
-| Remove: direct path retained | Task 5 remove (a2) |
-| Remove: other-album path retained | Task 1 repo test (otherAlbum) |
-| Remove: library path retained | Task 1 repo test (extend with a library case if a `newSharedSpaceLibrary`/library seeder exists; otherwise the direct + other-album cases plus the library NOT-EXISTS branch are exercised by the query shape — note this in the commit) |
-| Remove: true orphan removed | Task 1 repo test (orphan), Task 5 remove (a1) |
-| Remove: album linked to no/face-disabled space | Task 3 unit (#3 / disabled) |
-| Remove: empty / no faces | Task 3 unit #4, repo empty-list case |
-| Remove: ordering (rows deleted first) | Task 5 remove (deletes album_asset before handler) |
-| Remove: multiple spaces independent | Task 3 unit (loop) — extend mock to 2 spaces if desired |
-| Stale match after unlink (no ghost) | Task 5 add note + linchpin (isAssetInSpace guard) |
-| Hidden/deleted/offline assets | guarded by isAssetInSpace; no code path added |
+| Spec edge                                      | Covered by                                                                                                                                                                                                                               |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add: face-enabled space → per-asset job        | Task 3 unit #1, Task 5 add                                                                                                                                                                                                               |
+| Add: mixed face on/off spaces                  | Task 3 unit #1                                                                                                                                                                                                                           |
+| Add: face-disabled only → no jobs              | Task 3 unit #2                                                                                                                                                                                                                           |
+| Add: no linked space → no jobs                 | Task 3 unit #2 (empty/false)                                                                                                                                                                                                             |
+| Add: multi-album fan-out                       | Task 4 unit #3                                                                                                                                                                                                                           |
+| Add: only newly-inserted ids                   | Task 4 unit #1/#2                                                                                                                                                                                                                        |
+| Add: already-in-space idempotent               | covered by `processSpaceFaceMatch` idempotency (Task 5 runs real match)                                                                                                                                                                  |
+| Add: no successful inserts → no emit           | Task 4 unit #2                                                                                                                                                                                                                           |
+| Remove: direct path retained                   | Task 5 remove (a2)                                                                                                                                                                                                                       |
+| Remove: other-album path retained              | Task 1 repo test (otherAlbum)                                                                                                                                                                                                            |
+| Remove: library path retained                  | Task 1 repo test (extend with a library case if a `newSharedSpaceLibrary`/library seeder exists; otherwise the direct + other-album cases plus the library NOT-EXISTS branch are exercised by the query shape — note this in the commit) |
+| Remove: true orphan removed                    | Task 1 repo test (orphan), Task 5 remove (a1)                                                                                                                                                                                            |
+| Remove: album linked to no/face-disabled space | Task 3 unit (#3 / disabled)                                                                                                                                                                                                              |
+| Remove: empty / no faces                       | Task 3 unit #4, repo empty-list case                                                                                                                                                                                                     |
+| Remove: ordering (rows deleted first)          | Task 5 remove (deletes album_asset before handler)                                                                                                                                                                                       |
+| Remove: multiple spaces independent            | Task 3 unit (loop) — extend mock to 2 spaces if desired                                                                                                                                                                                  |
+| Stale match after unlink (no ghost)            | Task 5 add note + linchpin (isAssetInSpace guard)                                                                                                                                                                                        |
+| Hidden/deleted/offline assets                  | guarded by isAssetInSpace; no code path added                                                                                                                                                                                            |
