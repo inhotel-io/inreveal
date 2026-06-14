@@ -90,6 +90,7 @@ git commit -m "refactor(web): relocate space-album page into optional photos rou
 - [ ] **Step 1: Update the test FIRST (TDD) — rewrite `page-load.spec.ts` for the new load contract**
 
 Read the moved `page-load.spec.ts`. It currently asserts the load calls `getSpace`/`getMembers`/`getSharedSpaceAlbums`/`getAlbumInfo` and redirects when the album isn't linked. Rewrite it to the new contract:
+
 - The load now reads `linkedAlbums` from `parent()` (not `getSharedSpaceAlbums`) and calls only `getAlbumInfo`.
 - Provide a fake `parent` returning `{ space, members, linkedAlbums }` and a fake `params`/`url`.
 - Keep two cases: (a) album present in `linkedAlbums` → returns `{ album, meta }` and `getAlbumInfo` was called with `params.albumId`; (b) album absent → throws/performs a redirect to `/spaces/:spaceId/albums`.
@@ -186,15 +187,15 @@ git commit -m "test(e2e): open/close photos in a space album (slice 2)"
 
 ## Edge-case coverage map (spec §5.4 → coverage)
 
-| Spec edge | Covered by |
-| --- | --- |
-| Owner opens photo → viewer; next/prev within album; close→grid | Task 3 e2e (open + close); next/prev is inherent to the album-scoped Timeline (covered by the viewer opening on the album route) |
-| Non-owner member opens photo (authorized) | Task 3 e2e (viewer role) |
-| Deep link / refresh on photos URL | Task 1/2 (route exists + load runs for the optional-param URL); add a deep-link e2e step (`page.goto` the photos URL directly → viewer visible) |
-| assetId not in album / invalid | existing viewer not-found behavior (unchanged; no new code) |
-| Album not linked / no access | Task 2 load redirect to `/spaces/:id/albums` (page-load.spec.ts) |
-| Browse vs select mode click behavior | unchanged `Timeline` behavior (no code change) |
-| Active browse filter preserved across open/close | unchanged `Timeline` behavior |
-| Back returns to album grid | Task 3 e2e (close) |
+| Spec edge                                                      | Covered by                                                                                                                                      |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner opens photo → viewer; next/prev within album; close→grid | Task 3 e2e (open + close); next/prev is inherent to the album-scoped Timeline (covered by the viewer opening on the album route)                |
+| Non-owner member opens photo (authorized)                      | Task 3 e2e (viewer role)                                                                                                                        |
+| Deep link / refresh on photos URL                              | Task 1/2 (route exists + load runs for the optional-param URL); add a deep-link e2e step (`page.goto` the photos URL directly → viewer visible) |
+| assetId not in album / invalid                                 | existing viewer not-found behavior (unchanged; no new code)                                                                                     |
+| Album not linked / no access                                   | Task 2 load redirect to `/spaces/:id/albums` (page-load.spec.ts)                                                                                |
+| Browse vs select mode click behavior                           | unchanged `Timeline` behavior (no code change)                                                                                                  |
+| Active browse filter preserved across open/close               | unchanged `Timeline` behavior                                                                                                                   |
+| Back returns to album grid                                     | Task 3 e2e (close)                                                                                                                              |
 
 > Add the deep-link `page.goto` step to Task 3 so the "refresh on photos URL" edge is explicitly exercised.
