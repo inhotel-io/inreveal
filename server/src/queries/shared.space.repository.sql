@@ -133,6 +133,18 @@ from
       and "asset"."deletedAt" is null
       and "asset"."isOffline" = $6
       and "asset"."visibility" in ($7, $8)
+    union
+    select
+      "asset"."id"
+    from
+      "shared_space_album"
+      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+      inner join "asset" on "asset"."id" = "album_asset"."assetId"
+    where
+      "shared_space_album"."spaceId" = $9
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $10
+      and "asset"."visibility" in ($11, $12)
   ) as "combined"
 
 -- SharedSpaceRepository.getEditableByAssetIds

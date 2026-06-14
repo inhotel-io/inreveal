@@ -3382,4 +3382,50 @@ describe(SharedSpaceRepository.name, () => {
       await expect(sut.getSpaceIdsForAsset(asset.id)).resolves.toEqual([]);
     });
   });
+
+  describe('getAssetCount (album path)', () => {
+    it('counts assets reachable via a linked album', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'CountAlbum' });
+      const { asset: a1 } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: a2 } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(2);
+    });
+
+    it('dedupes an asset that is both directly added and album-linked', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'DedupCount' });
+      const { asset: shared } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: albumOnly } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: shared.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: albumOnly.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+      await sut.addAssets([{ spaceId: space.id, assetId: shared.id, addedById: user.id }]);
+
+      // `shared` is reachable two ways but must count once (union dedup) → 2 total.
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(2);
+    });
+
+    it('excludes deleted album assets', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'FilterCount' });
+      const { asset: ok } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: gone } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: ok.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: gone.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(1);
+    });
+  });
 });
