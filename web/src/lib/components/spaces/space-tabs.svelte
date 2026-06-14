@@ -61,6 +61,12 @@
           badge: memberCount,
           active: path.startsWith(`${base}/members`),
         },
+        {
+          key: 'activity',
+          label: $t('spaces_activity'),
+          href: `${base}/activity`,
+          active: path.startsWith(`${base}/activity`),
+        },
       ] as (Tab | undefined)[]
     ).filter((tab): tab is Tab => tab !== undefined),
   );

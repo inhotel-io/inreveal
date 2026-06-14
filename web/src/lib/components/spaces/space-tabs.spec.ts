@@ -55,4 +55,24 @@ describe('SpaceTabs', () => {
     expect(map).toHaveAttribute('href', '/map?spaceId=s1');
     expect(map).not.toHaveAttribute('aria-current');
   });
+
+  it('renders an Activity tab linking to the activity route', () => {
+    render(SpaceTabs, base);
+    const activity = screen.getByTestId('space-tab-activity');
+    expect(activity).toHaveAttribute('href', '/spaces/s1/activity');
+  });
+
+  it('marks the Activity tab active on the activity route', () => {
+    mockPage.url = new URL('https://gallery.test/spaces/s1/activity');
+    render(SpaceTabs, base);
+    expect(screen.getByTestId('space-tab-activity')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('space-tab-members')).not.toHaveAttribute('aria-current');
+  });
+
+  it('renders the Activity tab regardless of faceRecognitionEnabled', () => {
+    render(SpaceTabs, { ...base, faceRecognitionEnabled: false });
+    expect(screen.getByTestId('space-tab-activity')).toBeInTheDocument();
+    render(SpaceTabs, { ...base, faceRecognitionEnabled: true });
+    expect(screen.getAllByTestId('space-tab-activity')).toHaveLength(2);
+  });
 });
