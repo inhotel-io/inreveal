@@ -1,7 +1,7 @@
 import {
   AlbumResponseDto,
   AlbumUserRole,
-  AssetResponseDto,
+  AssetMediaResponseDto,
   BulkIdResponseDto,
   LoginResponseDto,
   SharedSpaceResponseDto,
@@ -31,7 +31,8 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
   let viewer: LoginResponseDto;
   let space: SharedSpaceResponseDto;
   let album: AlbumResponseDto;
-  let asset: AssetResponseDto;
+  let asset!: AssetMediaResponseDto;
+  let asset2!: AssetMediaResponseDto;
 
   test.beforeAll(async () => {
     utils.initSdk();
@@ -57,15 +58,16 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
       role: SharedSpaceRole.Viewer,
     });
 
-    // Create an asset owned by `owner` and put it in the album so the album is non-empty.
-    asset = await utils.createAsset(owner.accessToken);
+    // Create two assets owned by `owner` so the album is non-empty and the viewer has a sibling
+    // to navigate to (next/prev test).
+    [asset, asset2] = await Promise.all([utils.createAsset(owner.accessToken), utils.createAsset(owner.accessToken)]);
 
     // Album owned by `owner`, shared with `editor` as album editor (so editor passes the
     // linkAlbum two-step gate: space Editor role + album Editor access).
     album = await utils.createAlbum(owner.accessToken, {
       albumName: 'Linked Album',
       albumUsers: [{ userId: editor.userId, role: AlbumUserRole.Editor }],
-      assetIds: [asset.id],
+      assetIds: [asset.id, asset2.id],
     });
 
     // Link the album to the space (performed as owner, who satisfies both gates).
@@ -212,6 +214,30 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
       // Phase 1 album-read predicate for space members.
       await page.waitForURL(`/spaces/${space.id}/albums/${album.id}/photos/${asset.id}`);
       await page.waitForSelector('#immich-asset-viewer');
+      await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+    });
+
+    test('arrow keys navigate between photos within the album', async ({ context, page }) => {
+      await utils.setAuthCookies(context, owner.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      // Open the first photo in the album timeline (order is timeline-dependent, so don't assume which).
+      const photoUrl = new RegExp(`/spaces/${space.id}/albums/${album.id}/photos/[^/]+$`);
+      await page.waitForSelector('[data-thumbnail-focus-container][data-asset]');
+      await page.locator('[data-thumbnail-focus-container][data-asset]').first().click();
+      await page.waitForURL(photoUrl);
+      await page.waitForSelector('#immich-asset-viewer');
+      const firstUrl = page.url();
+
+      // ArrowRight moves to the sibling photo within the album — the assetId in the URL changes.
+      await page.keyboard.press('ArrowRight');
+      await expect.poll(() => page.url()).not.toBe(firstUrl);
+      await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+      expect(page.url()).toMatch(photoUrl);
+
+      // ArrowLeft returns to the first photo.
+      await page.keyboard.press('ArrowLeft');
+      await expect.poll(() => page.url()).toBe(firstUrl);
       await expect(page.locator('#immich-asset-viewer')).toBeVisible();
     });
   });
