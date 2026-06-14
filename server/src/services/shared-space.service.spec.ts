@@ -6373,7 +6373,7 @@ describe(SharedSpaceService.name, () => {
         spaceId,
         userId: auth.user.id,
         type: SharedSpaceActivityType.PersonUpdate,
-        data: { personId },
+        data: { personId, personName: '' },
       });
     });
 
@@ -7082,6 +7082,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getPersonById.mockResolvedValueOnce(target).mockResolvedValueOnce(source);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] });
 
@@ -7090,7 +7091,9 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.deletePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SharedSpacePersonDedup, data: { spaceId } });
-      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.PersonMerge }),
+      );
     });
 
     it('keeps automatic shared-space reconciliation conservative', async () => {
@@ -7719,6 +7722,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -7753,6 +7758,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -7786,6 +7793,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -7855,6 +7864,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -7884,6 +7895,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -7917,6 +7930,8 @@ describe(SharedSpaceService.name, () => {
         updateId: newUuid(),
       } as any);
       mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Test Album' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.linkAlbum(auth, space.id, albumId);
 
@@ -10147,6 +10162,133 @@ describe(SharedSpaceService.name, () => {
     it('does nothing for an empty asset list', async () => {
       await sut.onAlbumAssetsRemove({ albumId: newUuid(), assetIds: [] });
       expect(mocks.sharedSpace.getSpacesLinkedToAlbum).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('activity logging', () => {
+    it('linkAlbum logs an album_link activity for a new link', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue({ spaceId, albumId, addedById: auth.user.id } as any);
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false }));
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.linkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumLink,
+        data: { albumId, albumName: 'Trip' },
+      });
+    });
+
+    it('linkAlbum does not log album_link on an idempotent re-link', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.sharedSpace.addAlbum.mockResolvedValue(undefined as any);
+
+      await sut.linkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.AlbumLink }),
+      );
+    });
+
+    it('unlinkAlbum logs an album_unlink activity with the album name', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumUnlink,
+        data: { albumId, albumName: 'Trip' },
+      });
+    });
+
+    it('updateSpacePerson logs person_update with the person name', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const personId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, identityId: 'identity-1' });
+      const enrichedPerson = factory.sharedSpacePerson({ id: personId, spaceId, name: 'Alice' });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById
+        .mockResolvedValueOnce(person)
+        .mockResolvedValueOnce({ ...enrichedPerson, name: 'Alice' });
+      mocks.sharedSpace.updatePerson.mockResolvedValue(enrichedPerson);
+      mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.updateSpacePerson(auth, spaceId, personId, { name: 'Alice' });
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.PersonUpdate,
+        data: { personId, personName: 'Alice' },
+      });
+    });
+
+    it('mergeSpacePeople logs person_merge with the target name and count', async () => {
+      const identityMergePropagation = useIdentityMergePropagation(sut);
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const targetId = newUuid();
+      const sourceId = newUuid();
+      const target = factory.sharedSpacePerson({ id: targetId, spaceId, name: 'Alice' });
+      const source = factory.sharedSpacePerson({ id: sourceId, spaceId });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(target).mockResolvedValueOnce(source);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] });
+
+      expect(identityMergePropagation.mergeSpacePeople).toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.PersonMerge,
+        data: { personName: 'Alice', count: 1 },
+      });
+    });
+
+    it('mergeSpacePeople does NOT log on a validation error (empty ids)', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+
+      await expect(sut.mergeSpacePeople(factory.auth(), newUuid(), newUuid(), { ids: [] })).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.PersonMerge }),
+      );
     });
   });
 });
