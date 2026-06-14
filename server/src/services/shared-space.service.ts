@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AssetFace, SharedSpacePerson } from 'src/database';
-import { OnJob } from 'src/decorators';
+import { OnEvent, OnJob } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
@@ -52,6 +52,7 @@ import {
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
+import type { ArgOf } from 'src/repositories/event.repository';
 import type { SpaceFaceAssignment } from 'src/repositories/shared-space.repository';
 import {
   buildAutomaticReconciliationClaim,
@@ -2748,5 +2749,48 @@ export class SharedSpaceService extends BaseService {
       updatedAt: (person.updatedAt as unknown as Date).toISOString(),
       type: person.type,
     };
+  }
+
+  @OnEvent({ name: 'AlbumAssetsAdd' })
+  async onAlbumAssetsAdd({ albumId, assetIds }: ArgOf<'AlbumAssetsAdd'>): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+    const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+    const jobs = spaces
+      .filter((space) => space.faceRecognitionEnabled)
+      .flatMap((space) =>
+        assetIds.map((assetId) => ({
+          name: JobName.SharedSpaceFaceMatch as const,
+          data: { spaceId: space.spaceId, assetId },
+        })),
+      );
+    if (jobs.length > 0) {
+      await this.jobRepository.queueAll(jobs);
+    }
+  }
+
+  @OnEvent({ name: 'AlbumAssetsRemove' })
+  async onAlbumAssetsRemove({ albumId, assetIds }: ArgOf<'AlbumAssetsRemove'>): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+    const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+    let anyOrphanWork = false;
+    for (const space of spaces) {
+      if (!space.faceRecognitionEnabled) {
+        continue;
+      }
+      const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(space.spaceId, assetIds);
+      if (orphaned.length === 0) {
+        continue;
+      }
+      await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
+      await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
+      anyOrphanWork = true;
+    }
+    if (anyOrphanWork) {
+      await this.queueSpacePersonMetadataBackfill();
+    }
   }
 }
