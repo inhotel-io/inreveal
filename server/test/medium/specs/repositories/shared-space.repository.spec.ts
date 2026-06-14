@@ -3290,4 +3290,39 @@ describe(SharedSpaceRepository.name, () => {
       expect(results.find((r) => r.id === asset.id)).toBeDefined();
     });
   });
+
+  describe('getAssetIdsWithoutOtherSpacePath', () => {
+    it('returns only assets with no remaining path into the space', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+      const { result: albumA } = await ctx.newAlbum({ ownerId: user.id, albumName: 'A' });
+      const { result: albumB } = await ctx.newAlbum({ ownerId: user.id, albumName: 'B' });
+
+      // orphan: only ever in albumA (which we treat as already-removed below)
+      const { asset: orphan } = await ctx.newAsset({ ownerId: user.id });
+      // direct: also directly added to the space
+      const { asset: direct } = await ctx.newAsset({ ownerId: user.id });
+      // otherAlbum: also in albumB which is linked to the space
+      const { asset: otherAlbum } = await ctx.newAsset({ ownerId: user.id });
+
+      await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: user.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: albumB.id, addedById: user.id });
+
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: direct.id });
+      await ctx.newAlbumAsset({ albumId: albumB.id, assetId: otherAlbum.id });
+
+      // Simulate "removed from albumA": none of the three are in albumA anymore.
+      const result = await sut.getAssetIdsWithoutOtherSpacePath(space.id, [orphan.id, direct.id, otherAlbum.id]);
+
+      expect(result).toEqual([orphan.id]);
+    });
+
+    it('returns [] for an empty asset list', async () => {
+      const { sut } = setup();
+      await expect(sut.getAssetIdsWithoutOtherSpacePath('00000000-0000-0000-0000-000000000000', [])).resolves.toEqual([]);
+    });
+  });
 });

@@ -1965,6 +1965,54 @@ export class SharedSpaceRepository {
     return rows.map((r) => r.assetId);
   }
 
+  // Per-asset analogue of getAlbumAssetIdsWithoutOtherSpacePath. Call AFTER the album_asset
+  // rows for the removed assets are deleted, so "any linked album" already excludes the album
+  // they were removed from. Returns the subset of assetIds with NO remaining space path.
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getAssetIdsWithoutOtherSpacePath(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const rows = await this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', assetIds)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('shared_space_album.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset as libAsset', 'libAsset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('libAsset.id', '=', 'asset.id')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+    return rows.map((r) => r.id);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   async deleteOrphanedPersons(spaceId: string) {
     await this.db
