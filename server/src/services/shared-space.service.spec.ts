@@ -10048,4 +10048,80 @@ describe(SharedSpaceService.name, () => {
       });
     });
   });
+
+  describe('onAlbumAssetsAdd', () => {
+    it('queues SharedSpaceFaceMatch per asset only for face-enabled linked spaces', async () => {
+      const albumId = newUuid();
+      const spaceA = newUuid();
+      const spaceB = newUuid();
+      const a1 = newUuid();
+      const a2 = newUuid();
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: spaceA, faceRecognitionEnabled: true },
+        { spaceId: spaceB, faceRecognitionEnabled: false },
+      ] as any);
+
+      await sut.onAlbumAssetsAdd({ albumId, assetIds: [a1, a2] });
+
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: spaceA, assetId: a1 } },
+        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: spaceA, assetId: a2 } },
+      ]);
+    });
+
+    it('does nothing when there are no face-enabled linked spaces', async () => {
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: newUuid(), faceRecognitionEnabled: false },
+      ] as any);
+      await sut.onAlbumAssetsAdd({ albumId: newUuid(), assetIds: [newUuid()] });
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+
+    it('does nothing for an empty asset list', async () => {
+      await sut.onAlbumAssetsAdd({ albumId: newUuid(), assetIds: [] });
+      expect(mocks.sharedSpace.getSpacesLinkedToAlbum).not.toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onAlbumAssetsRemove', () => {
+    it('removes orphaned faces + persons and queues metadata backfill', async () => {
+      const albumId = newUuid();
+      const space = newUuid();
+      const a1 = newUuid();
+      const a2 = newUuid();
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: space, faceRecognitionEnabled: true },
+      ] as any);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([a1]);
+      mocks.sharedSpace.removePersonFacesByAssetIds.mockResolvedValue();
+      mocks.sharedSpace.deleteOrphanedPersons.mockResolvedValue();
+
+      await sut.onAlbumAssetsRemove({ albumId, assetIds: [a1, a2] });
+
+      expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(space, [a1, a2]);
+      expect(mocks.sharedSpace.removePersonFacesByAssetIds).toHaveBeenCalledWith(space, [a1]);
+      expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledWith(space);
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SharedSpacePersonMetadataBackfill, data: {} });
+    });
+
+    it('skips cleanup and backfill when nothing is orphaned', async () => {
+      const space = newUuid();
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: space, faceRecognitionEnabled: true },
+      ] as any);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+
+      await sut.onAlbumAssetsRemove({ albumId: newUuid(), assetIds: [newUuid()] });
+
+      expect(mocks.sharedSpace.removePersonFacesByAssetIds).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.deleteOrphanedPersons).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SharedSpacePersonMetadataBackfill, data: {} });
+    });
+
+    it('does nothing for an empty asset list', async () => {
+      await sut.onAlbumAssetsRemove({ albumId: newUuid(), assetIds: [] });
+      expect(mocks.sharedSpace.getSpacesLinkedToAlbum).not.toHaveBeenCalled();
+    });
+  });
 });
