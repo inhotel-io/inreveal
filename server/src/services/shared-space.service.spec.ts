@@ -7028,6 +7028,7 @@ describe(SharedSpaceService.name, () => {
       );
 
       expect(identityMergePropagation.mergeSpacePeople).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
     });
 
     it('rejects missing target or source people before delegation', async () => {
@@ -7051,6 +7052,7 @@ describe(SharedSpaceService.name, () => {
       );
 
       expect(identityMergePropagation.mergeSpacePeople).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
     });
 
     it('rejects mixed person and pet space profiles before delegation', async () => {
@@ -7069,6 +7071,7 @@ describe(SharedSpaceService.name, () => {
       );
 
       expect(identityMergePropagation.mergeSpacePeople).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
     });
 
     it('delegates editor-initiated merges after validating source people belong to the initiating space', async () => {
