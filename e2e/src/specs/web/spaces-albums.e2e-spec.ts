@@ -111,9 +111,11 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
       await page.getByTestId('add-photos-button').click();
       await expect(page.getByTestId('add-photos-overlay')).toBeVisible();
 
-      // Close the overlay via the back / close button that appears in the overlay's
-      // ControlAppBar. The overlay renders a back IconButton with aria-label "back".
-      await page.getByRole('button', { name: /back/i }).click();
+      // Close the overlay via the close button in the overlay's ControlAppBar
+      // (ControlAppBar → @immich/ui ControlBar renders an IconButton with aria-label "Close").
+      // Note: the browse-mode "back" IconButton stays mounted behind the z-40 overlay, so a
+      // /back/i match would resolve to it and the click would be intercepted by the overlay.
+      await page.getByRole('button', { name: /close/i }).click();
       await expect(page.getByTestId('add-photos-overlay')).not.toBeVisible();
     });
   });
@@ -251,9 +253,8 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
     await utils.setAuthCookies(context, editor.accessToken);
     await page.goto(`/spaces/${space.id}`);
 
-    // The Albums nav button is on the space timeline page.
-    // data-testid="space-albums-button" at +page.svelte:980
-    await page.getByTestId('space-albums-button').click();
+    // The Albums tab anchor in the space tab bar (space-tabs.svelte, data-testid="space-tab-albums").
+    await page.getByTestId('space-tab-albums').click();
     await page.waitForURL(`/spaces/${space.id}/albums`);
     await expect(page.getByTestId('space-album-card-link').filter({ hasText: 'Linked Album' })).toBeVisible();
   });
@@ -280,10 +281,7 @@ test.describe('Spaces — linked-album live people sync', () => {
     syncSpace = await utils.createSpace(syncOwner.accessToken, {
       name: 'Sync People Test Space',
     });
-    await utils.addSpaceMember(syncOwner.accessToken, syncSpace.id, {
-      userId: syncOwner.userId,
-      role: SharedSpaceRole.Owner,
-    });
+    // syncOwner is already the space owner/member via createSpace — no addSpaceMember needed.
 
     // Create an album and link it to the space.
     syncAlbum = await utils.createAlbum(syncOwner.accessToken, { albumName: 'Sync People Album' });
