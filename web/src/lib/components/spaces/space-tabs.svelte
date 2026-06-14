@@ -9,9 +9,19 @@
     photoCount?: number;
     albumCount?: number;
     memberCount?: number;
+    isAdmin?: boolean;
+    libraryCount?: number;
   }
 
-  let { spaceId, faceRecognitionEnabled = false, photoCount = 0, albumCount = 0, memberCount = 0 }: Props = $props();
+  let {
+    spaceId,
+    faceRecognitionEnabled = false,
+    photoCount = 0,
+    albumCount = 0,
+    memberCount = 0,
+    isAdmin = false,
+    libraryCount = 0,
+  }: Props = $props();
 
   const base = $derived(`/spaces/${spaceId}`);
   const path = $derived(page.url.pathname);
@@ -47,6 +57,16 @@
           badge: albumCount,
           active: path.startsWith(`${base}/albums`),
         },
+        // External libraries are admin-only, so the tab is too.
+        isAdmin
+          ? {
+              key: 'libraries',
+              label: $t('spaces_libraries'),
+              href: `${base}/libraries`,
+              badge: libraryCount,
+              active: path.startsWith(`${base}/libraries`),
+            }
+          : undefined,
         {
           key: 'map',
           label: $t('map'),

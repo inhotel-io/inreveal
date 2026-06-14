@@ -5,7 +5,6 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
-import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
 import SpaceLayout from './+layout.svelte';
 
 const { mockPage, mockAuthManager, gotoMock, invalidateAllMock } = vi.hoisted(() => ({
@@ -211,6 +210,14 @@ describe('space [spaceId] +layout.svelte', () => {
       expect(screen.queryByText('spaces_hide_people')).not.toBeInTheDocument();
     });
 
+    it('does NOT offer link-libraries in the overflow for an admin (moved to the Libraries tab)', async () => {
+      renderLayout(SharedSpaceRole.Owner, { isAdmin: true });
+
+      await openOverflow();
+
+      expect(screen.queryByText('spaces_link_libraries')).not.toBeInTheDocument();
+    });
+
     it('handleBulkAddAssets: bulk-adds assets for an editor when confirmed', async () => {
       vi.mocked(modalManager.showDialog).mockResolvedValue(true);
       renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
@@ -229,28 +236,6 @@ describe('space [spaceId] +layout.svelte', () => {
 
       await waitFor(() => expect(modalManager.showDialog).toHaveBeenCalled());
       expect(sdkMock.bulkAddAssets).not.toHaveBeenCalled();
-    });
-
-    it('handleLinkLibraries: opens the link-libraries modal for an admin and revalidates on change', async () => {
-      vi.mocked(modalManager.show).mockResolvedValue(true as never);
-      renderLayout(SharedSpaceRole.Owner, { isAdmin: true });
-
-      await clickOverflowOption('spaces_link_libraries');
-
-      await waitFor(() =>
-        expect(modalManager.show).toHaveBeenCalledWith(SpaceLinkedLibrariesModal, { space: expect.anything() }),
-      );
-      await waitFor(() => expect(invalidateAllMock).toHaveBeenCalled());
-    });
-
-    it('handleLinkLibraries: does not revalidate when the modal reports no change', async () => {
-      vi.mocked(modalManager.show).mockResolvedValue(false as never);
-      renderLayout(SharedSpaceRole.Owner, { isAdmin: true });
-
-      await clickOverflowOption('spaces_link_libraries');
-
-      await waitFor(() => expect(modalManager.show).toHaveBeenCalled());
-      expect(invalidateAllMock).not.toHaveBeenCalled();
     });
 
     it('handleTogglePets: toggles pet visibility for an owner when face recognition is on and pets exist', async () => {
