@@ -7,8 +7,6 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import ActivityPage from './+page.svelte';
 
-vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn().mockResolvedValue(undefined) }));
-
 const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto =>
   ({ id: 's1', name: 'Trip', color: 'primary', ...o }) as never;
 const activity = (o: Partial<SharedSpaceActivityResponseDto> = {}): SharedSpaceActivityResponseDto =>
