@@ -2428,6 +2428,15 @@ export class SharedSpaceRepository {
               .where('asset.id', '=', assetId)
               .where('shared_space.faceRecognitionEnabled', '=', true),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+              .select('shared_space_album.spaceId')
+              .where('album_asset.assetId', '=', assetId)
+              .where('shared_space.faceRecognitionEnabled', '=', true),
+          )
           .as('combined'),
       )
       .select('combined.spaceId')

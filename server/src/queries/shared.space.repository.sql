@@ -1754,6 +1754,16 @@ from
     where
       "asset"."id" = $3
       and "shared_space"."faceRecognitionEnabled" = $4
+    union
+    select
+      "shared_space_album"."spaceId"
+    from
+      "shared_space_album"
+      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+      inner join "shared_space" on "shared_space"."id" = "shared_space_album"."spaceId"
+    where
+      "album_asset"."assetId" = $5
+      and "shared_space"."faceRecognitionEnabled" = $6
   ) as "combined"
 
 -- SharedSpaceRepository.isPersonFaceAssigned

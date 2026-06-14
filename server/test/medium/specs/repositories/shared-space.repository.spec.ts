@@ -3325,4 +3325,59 @@ describe(SharedSpaceRepository.name, () => {
       await expect(sut.getAssetIdsWithoutOtherSpacePath('00000000-0000-0000-0000-000000000000', [])).resolves.toEqual([]);
     });
   });
+
+  describe('getSpaceIdsForAsset (album path)', () => {
+    it('returns a face-enabled space reachable only via a linked album', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'BackfillAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+      const rows = await sut.getSpaceIdsForAsset(asset.id);
+      expect(rows.map((r) => r.spaceId)).toEqual([space.id]);
+    });
+
+    it('excludes a linked album whose space has face recognition disabled', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'NoFaceAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+      await expect(sut.getSpaceIdsForAsset(asset.id)).resolves.toEqual([]);
+    });
+
+    it('dedupes a space reached via both a linked album and a direct add', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'DupAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+      const rows = await sut.getSpaceIdsForAsset(asset.id);
+      expect(rows.map((r) => r.spaceId)).toEqual([space.id]);
+    });
+
+    it('does not return a space for an asset whose album is not linked', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'UnlinkedAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      await expect(sut.getSpaceIdsForAsset(asset.id)).resolves.toEqual([]);
+    });
+  });
 });
