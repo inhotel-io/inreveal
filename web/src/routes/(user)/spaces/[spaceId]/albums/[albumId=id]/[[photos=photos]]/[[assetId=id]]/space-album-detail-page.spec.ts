@@ -44,7 +44,7 @@ vi.mock('$lib/components/timeline/actions/DownloadAction.svelte', async () => {
 
 vi.mock('$lib/components/shared-components/ControlAppBar.svelte', async () => {
   const { default: MockComponent } =
-    await import('../../[[photos=photos]]/[[assetId=id]]/mock-control-app-bar.test-wrapper.svelte');
+    await import('../../../../[[photos=photos]]/[[assetId=id]]/mock-control-app-bar.test-wrapper.svelte');
   return { default: MockComponent };
 });
 

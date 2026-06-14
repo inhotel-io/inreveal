@@ -55,40 +55,43 @@ const album = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 } as unknown as AlbumResponseDto;
 
-const event = {
+const makeEvent = (overrides: { linkedAlbums?: typeof linkedAlbums } = {}) => ({
   url: new URL('https://gallery.test/spaces/space-1/albums/album-1'),
   params: { spaceId: 'space-1', albumId: 'album-1' },
-};
+  parent: vi.fn().mockResolvedValue({
+    space,
+    members,
+    linkedAlbums: overrides.linkedAlbums ?? linkedAlbums,
+  }),
+});
 
 describe('space album detail page load', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    sdkMock.getSpace.mockResolvedValue(space as never);
-    sdkMock.getMembers.mockResolvedValue(members as never);
-    sdkMock.getSharedSpaceAlbums.mockResolvedValue(linkedAlbums as never);
     sdkMock.getAlbumInfo.mockResolvedValue(album as never);
   });
 
-  it('authenticates, verifies linkage, calls getAlbumInfo and returns data', async () => {
+  it('calls authenticate, reads linkedAlbums from parent(), calls getAlbumInfo, returns album + meta', async () => {
+    const event = makeEvent();
+
     const result = await load(event as never);
 
     expect(authenticate).toHaveBeenCalledWith(event.url);
-    expect(sdkMock.getSpace).toHaveBeenCalledWith({ id: 'space-1' });
-    expect(sdkMock.getMembers).toHaveBeenCalledWith({ id: 'space-1' });
-    expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-1' });
+    expect(event.parent).toHaveBeenCalled();
+    // Must NOT call the individual space/members/albums SDK methods (they come from layout)
+    expect(sdkMock.getSpace).not.toHaveBeenCalled();
+    expect(sdkMock.getMembers).not.toHaveBeenCalled();
+    expect(sdkMock.getSharedSpaceAlbums).not.toHaveBeenCalled();
     expect(sdkMock.getAlbumInfo).toHaveBeenCalledWith({ id: 'album-1' });
 
     expect(result).toEqual({
-      space,
-      members,
       album,
       meta: { title: 'Vacation' },
     });
   });
 
   it('redirects to /spaces/:id/albums and does NOT call getAlbumInfo when album is not linked to this space', async () => {
-    // Album exists (owner might have access) but is NOT linked to this space
-    sdkMock.getSharedSpaceAlbums.mockResolvedValue([] as never);
+    const event = makeEvent({ linkedAlbums: [] });
     sdkMock.getAlbumInfo.mockResolvedValue(album as never); // would succeed if called — but must NOT be called
 
     let thrown: unknown;
@@ -105,7 +108,7 @@ describe('space album detail page load', () => {
   });
 
   it('redirects when the album is present in the space but for a different albumId', async () => {
-    sdkMock.getSharedSpaceAlbums.mockResolvedValue([{ ...linkedAlbums[0], albumId: 'other-album' }] as never);
+    const event = makeEvent({ linkedAlbums: [{ ...linkedAlbums[0], albumId: 'other-album' }] });
 
     let thrown: unknown;
     try {
