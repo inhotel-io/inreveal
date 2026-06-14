@@ -119,6 +119,7 @@ DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
 
@@ -555,6 +556,7 @@ DELETE FROM "kysely_migrations"
    '1775000000000-AddPetsEnabledToSharedSpace',
    '1775100000000-AddAssetDuplicateChecksum',
    '1775100000000-DropSpacePersonThumbnailPath',
+   '1775300000000-AddSharedSpaceAlbumTable',
    '1776000000000-AddClassificationTables',
    '1777000000000-AddSpacePersonCounts',
    '1777000000000-AdminScopedClassification',
