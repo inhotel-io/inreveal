@@ -294,12 +294,7 @@ test.describe('Spaces — linked-album live people sync', () => {
     // Seed a space person that references this asset so we can verify face removal.
     // We use the DB seeder because real ML face detection is non-deterministic in CI.
     const asset = await utils.createAsset(syncOwner.accessToken);
-    const { spacePersonId } = await utils.createSpacePerson(
-      syncSpace.id,
-      'SyncTestPerson',
-      syncOwner.userId,
-      asset.id,
-    );
+    const { spacePersonId } = await utils.createSpacePerson(syncSpace.id, 'SyncTestPerson', syncOwner.userId, asset.id);
 
     // Add the asset to the album — this triggers AlbumAssetsAdd → SharedSpaceFaceMatch.
     // (Face match is async; we don't wait for it here — we're testing the sync path.)
@@ -310,10 +305,7 @@ test.describe('Spaces — linked-album live people sync', () => {
     expect(addResults.some(({ success }) => success)).toBe(true);
 
     // Verify the person still exists before removal.
-    const peopleBefore = await getSpacePeople(
-      { id: syncSpace.id },
-      { headers: asBearerAuth(syncOwner.accessToken) },
-    );
+    const peopleBefore = await getSpacePeople({ id: syncSpace.id }, { headers: asBearerAuth(syncOwner.accessToken) });
     const personBefore = peopleBefore.find((p) => p.id === spacePersonId);
     expect(personBefore).toBeDefined();
 
@@ -328,10 +320,7 @@ test.describe('Spaces — linked-album live people sync', () => {
     // removeAssetFromAlbum awaits the AlbumAssetsRemove emit, whose @OnEvent handler runs
     // synchronously in-process: the asset has no other path into the space, so its only face
     // link is dropped and the now-faceless space person is deleted before the response returns.
-    const peopleAfter = await getSpacePeople(
-      { id: syncSpace.id },
-      { headers: asBearerAuth(syncOwner.accessToken) },
-    );
+    const peopleAfter = await getSpacePeople({ id: syncSpace.id }, { headers: asBearerAuth(syncOwner.accessToken) });
     const personAfter = peopleAfter.find((p) => p.id === spacePersonId);
     expect(personAfter).toBeUndefined();
   });
