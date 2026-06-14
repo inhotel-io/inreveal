@@ -429,7 +429,8 @@ export class SharedSpaceRepository {
       .execute();
   }
 
-  // Reserved for Phase 2 (album sync fan-out); mirrors getSpacesLinkedToLibrary.
+  // Album sync fan-out: used by the AlbumAssetsAdd/Remove handlers to find every space
+  // a linked album feeds, with its face-recognition flag. Mirrors getSpacesLinkedToLibrary.
   @GenerateSql({ params: [DummyValue.UUID] })
   getSpacesLinkedToAlbum(albumId: string) {
     return this.db

@@ -10077,6 +10077,12 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
     });
 
+    it('does nothing when the album is linked to no spaces', async () => {
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([]);
+      await sut.onAlbumAssetsAdd({ albumId: newUuid(), assetIds: [newUuid()] });
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+
     it('does nothing for an empty asset list', async () => {
       await sut.onAlbumAssetsAdd({ albumId: newUuid(), assetIds: [] });
       expect(mocks.sharedSpace.getSpacesLinkedToAlbum).not.toHaveBeenCalled();
@@ -10102,6 +10108,25 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(space, [a1, a2]);
       expect(mocks.sharedSpace.removePersonFacesByAssetIds).toHaveBeenCalledWith(space, [a1]);
       expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledWith(space);
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SharedSpacePersonMetadataBackfill, data: {} });
+    });
+
+    it('queues the metadata backfill exactly once across multiple spaces with orphans', async () => {
+      const spaceA = newUuid();
+      const spaceB = newUuid();
+      const a1 = newUuid();
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: spaceA, faceRecognitionEnabled: true },
+        { spaceId: spaceB, faceRecognitionEnabled: true },
+      ] as any);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([a1]);
+      mocks.sharedSpace.removePersonFacesByAssetIds.mockResolvedValue();
+      mocks.sharedSpace.deleteOrphanedPersons.mockResolvedValue();
+
+      await sut.onAlbumAssetsRemove({ albumId: newUuid(), assetIds: [a1] });
+
+      expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledTimes(2);
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
       expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.SharedSpacePersonMetadataBackfill, data: {} });
     });
 
