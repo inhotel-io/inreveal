@@ -80,6 +80,8 @@ describe('Members tab', () => {
   it('does not render the activity feed (moved to the Activity tab)', () => {
     renderPage(SharedSpaceRole.Owner);
     expect(screen.queryByTestId('members-activity')).not.toBeInTheDocument();
+    // The Members page must not fetch activities anymore — that's the Activity tab's job.
+    expect(sdkMock.getSpaceActivities).not.toHaveBeenCalled();
   });
 
   describe('role Select vs RoleBadge rendering', () => {
