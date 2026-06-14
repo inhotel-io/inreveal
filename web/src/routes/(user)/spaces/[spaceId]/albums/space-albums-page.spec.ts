@@ -10,6 +10,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
+import { invalidateAll } from '$app/navigation';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -18,7 +19,7 @@ import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumsPage from './+page.svelte';
 
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
 vi.mock('$app/stores', () => ({
   page: {
     subscribe: (run: (v: unknown) => void) => {
@@ -207,6 +208,37 @@ describe('Space albums page', () => {
       await fireEvent.click(unlinkOption);
 
       await waitFor(() => expect(sdkMock.unlinkAlbum).toHaveBeenCalledWith({ id: 'space-1', albumId: 'album-1' }));
+    });
+
+    // Regression: after unlink/link the [spaceId] layout's cached linkedAlbums must be invalidated,
+    // otherwise navigating away (People tab) and back (Albums tab) re-mounts the grid from the stale
+    // layout data and the list is wrong until a full page refresh.
+    it('unlink invalidates layout data so tab navigation reflects the change', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.unlinkAlbum.mockResolvedValue(undefined as never);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
+      renderPage([makeAlbum({ albumId: 'album-1', albumName: 'Vacation' })], SharedSpaceRole.Editor);
+
+      const menuButton = screen.getByTestId('space-album-card-menu').querySelector('button');
+      await fireEvent.click(menuButton!);
+      await fireEvent.click(await screen.findByText('Unlink album'));
+
+      await waitFor(() => expect(sdkMock.unlinkAlbum).toHaveBeenCalled());
+      await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
+    });
+
+    it('link invalidates layout data so tab navigation reflects the change', async () => {
+      sdkMock.getAllAlbums.mockResolvedValue([makeAvailableAlbum({ id: 'av-1', albumName: 'Road Trip' })]);
+      sdkMock.linkAlbum.mockResolvedValue(undefined as never);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ albumId: 'av-1', albumName: 'Road Trip' })]);
+      renderPage([], SharedSpaceRole.Editor);
+
+      await fireEvent.click(screen.getByTestId('empty-link-album-button'));
+      await waitFor(() => expect(screen.getByTestId('album-picker')).toBeInTheDocument());
+      await fireEvent.click(await screen.findByTestId('album-picker-item'));
+
+      await waitFor(() => expect(sdkMock.linkAlbum).toHaveBeenCalled());
+      await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
     });
 
     it('toggle show-in-timeline calls updateSharedSpaceAlbum and flips optimistic state', async () => {
