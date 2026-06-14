@@ -189,8 +189,9 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
       // Press Escape to close the viewer.
       await page.keyboard.press('Escape');
 
-      // The viewer must be gone and the URL must return to the album grid.
-      await page.waitForURL(`/spaces/${space.id}/albums/${album.id}`);
+      // The URL must return to the album grid. Closing the viewer appends a `?at=<assetId>`
+      // scroll-restore query, so match on the pathname only (ignore the query string).
+      await page.waitForURL((url) => url.pathname === `/spaces/${space.id}/albums/${album.id}`);
       await expect(page.locator('#immich-asset-viewer')).not.toBeVisible();
     });
 
