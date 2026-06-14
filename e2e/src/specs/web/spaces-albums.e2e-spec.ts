@@ -1,6 +1,7 @@
 import {
   AlbumResponseDto,
   AlbumUserRole,
+  AssetResponseDto,
   BulkIdResponseDto,
   LoginResponseDto,
   SharedSpaceResponseDto,
@@ -30,6 +31,7 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
   let viewer: LoginResponseDto;
   let space: SharedSpaceResponseDto;
   let album: AlbumResponseDto;
+  let asset: AssetResponseDto;
 
   test.beforeAll(async () => {
     utils.initSdk();
@@ -56,7 +58,7 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
     });
 
     // Create an asset owned by `owner` and put it in the album so the album is non-empty.
-    const asset = await utils.createAsset(owner.accessToken);
+    asset = await utils.createAsset(owner.accessToken);
 
     // Album owned by `owner`, shared with `editor` as album editor (so editor passes the
     // linkAlbum two-step gate: space Editor role + album Editor access).
@@ -148,6 +150,69 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
 
       // The Add-photos button must not be present for a viewer.
       await expect(page.getByTestId('add-photos-button')).not.toBeVisible();
+    });
+  });
+
+  // ─── Photo viewer ─────────────────────────────────────────────────────────
+
+  test.describe('photo viewer', () => {
+    test('owner clicks a photo → viewer opens at photos URL', async ({ context, page }) => {
+      await utils.setAuthCookies(context, owner.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      // Wait for the album timeline to be rendered and the thumbnail to be present.
+      await page.waitForSelector(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`);
+
+      // Click the thumbnail to open the viewer.
+      await page.locator(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`).click();
+
+      // The URL should update to include /photos/<assetId>.
+      await page.waitForURL(`/spaces/${space.id}/albums/${album.id}/photos/${asset.id}`);
+
+      // The asset viewer must be visible.
+      await page.waitForSelector('#immich-asset-viewer');
+      await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+    });
+
+    test('close returns to the album grid', async ({ context, page }) => {
+      await utils.setAuthCookies(context, owner.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      await page.waitForSelector(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`);
+      await page.locator(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`).click();
+      await page.waitForSelector('#immich-asset-viewer');
+
+      // Press Escape to close the viewer.
+      await page.keyboard.press('Escape');
+
+      // The viewer must be gone and the URL must return to the album grid.
+      await page.waitForURL(`/spaces/${space.id}/albums/${album.id}`);
+      await expect(page.locator('#immich-asset-viewer')).not.toBeVisible();
+    });
+
+    test('deep link to /photos/:assetId → viewer opens immediately', async ({ context, page }) => {
+      await utils.setAuthCookies(context, owner.accessToken);
+
+      // Navigate directly to the photos URL (deep link / refresh scenario).
+      await page.goto(`/spaces/${space.id}/albums/${album.id}/photos/${asset.id}`);
+
+      // The asset viewer must render without needing a click.
+      await page.waitForSelector('#immich-asset-viewer');
+      await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+    });
+
+    test('non-owner member (viewer role) can open a photo', async ({ context, page }) => {
+      await utils.setAuthCookies(context, viewer.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      await page.waitForSelector(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`);
+      await page.locator(`[data-thumbnail-focus-container][data-asset="${asset.id}"]`).click();
+
+      // Assert the URL updated and the viewer is visible — proves authorization via the
+      // Phase 1 album-read predicate for space members.
+      await page.waitForURL(`/spaces/${space.id}/albums/${album.id}/photos/${asset.id}`);
+      await page.waitForSelector('#immich-asset-viewer');
+      await expect(page.locator('#immich-asset-viewer')).toBeVisible();
     });
   });
 
