@@ -1,4 +1,4 @@
-import type { SharedSpaceActivityResponseDto, SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
+import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immich/sdk';
 import { SharedSpaceRole } from '@immich/sdk';
 import { modalManager } from '@immich/ui';
 import '@testing-library/jest-dom';
@@ -34,32 +34,22 @@ const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto 
   ({ id: 's1', name: 'Trip', color: 'primary', ...o }) as never;
 const member = (o: Partial<SharedSpaceMemberResponseDto> = {}): SharedSpaceMemberResponseDto =>
   ({ userId: 'u1', role: SharedSpaceRole.Owner, name: 'Me', email: 'me@x.io', contributionCount: 0, ...o }) as never;
-const activity = (o: Partial<SharedSpaceActivityResponseDto> = {}): SharedSpaceActivityResponseDto =>
-  ({ id: 'a1', type: 'asset_add', createdAt: '2024-01-01T00:00:00.000Z', data: { count: 1 }, ...o }) as never;
 
 type PageProps = {
   data: {
     space: SharedSpaceResponseDto;
     members: SharedSpaceMemberResponseDto[];
     linkedAlbums: never[];
-    activities: SharedSpaceActivityResponseDto[];
-    hasMoreActivities: boolean;
   };
 };
 
-function renderPage(
-  role: SharedSpaceRole,
-  members = [member({ role })],
-  options: { activities?: SharedSpaceActivityResponseDto[]; hasMoreActivities?: boolean; currentUserId?: string } = {},
-) {
+function renderPage(role: SharedSpaceRole, members = [member({ role })], options: { currentUserId?: string } = {}) {
   mockAuthManager.user = { id: options.currentUserId ?? 'u1', isAdmin: false };
   const props: PageProps = {
     data: {
       space: space(),
       members,
       linkedAlbums: [],
-      activities: options.activities ?? [],
-      hasMoreActivities: options.hasMoreActivities ?? false,
     },
   };
   return render(TestWrapper as Component<{ component: typeof MembersPage; componentProps: PageProps }>, {
@@ -87,9 +77,9 @@ describe('Members tab', () => {
     expect(screen.queryByTestId('members-invite')).not.toBeInTheDocument();
   });
 
-  it('renders the activity section', () => {
+  it('does not render the activity feed (moved to the Activity tab)', () => {
     renderPage(SharedSpaceRole.Owner);
-    expect(screen.getByTestId('members-activity')).toBeInTheDocument();
+    expect(screen.queryByTestId('members-activity')).not.toBeInTheDocument();
   });
 
   describe('role Select vs RoleBadge rendering', () => {
@@ -229,20 +219,6 @@ describe('Members tab', () => {
 
       await waitFor(() => expect(modalManager.show).toHaveBeenCalled());
       expect(invalidateAll).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('load more activities', () => {
-    it('fetches the next page at the current offset and appends the results', async () => {
-      const initial = Array.from({ length: 20 }, (_, i) => activity({ id: `a${i}`, data: { count: i } }));
-      sdkMock.getSpaceActivities.mockResolvedValue([activity({ id: 'a-next', type: 'space_color_change', data: {} })]);
-      renderPage(SharedSpaceRole.Owner, [member()], { activities: initial, hasMoreActivities: true });
-
-      await fireEvent.click(within(screen.getByTestId('load-more-button')).getByRole('button'));
-
-      await waitFor(() => expect(sdkMock.getSpaceActivities).toHaveBeenCalledWith({ id: 's1', limit: 20, offset: 20 }));
-      // The newly fetched activity is appended to the feed.
-      await waitFor(() => expect(screen.getByTestId('activity-item-a-next')).toBeInTheDocument());
     });
   });
 });
