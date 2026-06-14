@@ -789,7 +789,11 @@ describe('onAlbumAssetsAdd (medium)', () => {
     await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
     const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
     await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: newEmbedding() }).execute();
-    await faceIdentityRepository.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+    await faceIdentityRepository.linkFace({
+      assetFaceId: assetFace.id,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
 
     await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
 
@@ -843,7 +847,11 @@ describe('onAlbumAssetsRemove (medium)', () => {
     ]);
 
     // Simulate the real removeAssets ordering: album_asset rows for a1,a2 are deleted FIRST.
-    await ctx.database.deleteFrom('album_asset').where('albumId', '=', album.id).where('assetId', 'in', [a1.id, a2.id]).execute();
+    await ctx.database
+      .deleteFrom('album_asset')
+      .where('albumId', '=', album.id)
+      .where('assetId', 'in', [a1.id, a2.id])
+      .execute();
 
     await sut.onAlbumAssetsRemove({ albumId: album.id, assetIds: [a1.id, a2.id] });
 
