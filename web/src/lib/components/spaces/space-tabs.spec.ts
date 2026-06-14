@@ -75,4 +75,22 @@ describe('SpaceTabs', () => {
     render(SpaceTabs, { ...base, faceRecognitionEnabled: true });
     expect(screen.getAllByTestId('space-tab-activity')).toHaveLength(2);
   });
+
+  it('hides the Libraries tab for a non-admin', () => {
+    render(SpaceTabs, { ...base, isAdmin: false });
+    expect(screen.queryByTestId('space-tab-libraries')).not.toBeInTheDocument();
+  });
+
+  it('shows the Libraries tab with an href and badge for an admin', () => {
+    render(SpaceTabs, { ...base, isAdmin: true, libraryCount: 2 });
+    const libraries = screen.getByTestId('space-tab-libraries');
+    expect(libraries).toHaveAttribute('href', '/spaces/s1/libraries');
+    expect(libraries).toHaveTextContent('2');
+  });
+
+  it('marks the Libraries tab active on the libraries route', () => {
+    mockPage.url = new URL('https://gallery.test/spaces/s1/libraries');
+    render(SpaceTabs, { ...base, isAdmin: true });
+    expect(screen.getByTestId('space-tab-libraries')).toHaveAttribute('aria-current', 'page');
+  });
 });
