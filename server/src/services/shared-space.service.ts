@@ -2751,22 +2751,30 @@ export class SharedSpaceService extends BaseService {
     };
   }
 
+  // Space people sync is a best-effort side effect of an album mutation. EventRepository.onEvent
+  // awaits handlers inline and does not isolate their errors, so a throw here would bubble up and
+  // fail the user's album add/remove. Guard the whole body in try/catch: face matches are also
+  // recoverable via the post-detection backfill, so logging and moving on is correct.
   @OnEvent({ name: 'AlbumAssetsAdd' })
   async onAlbumAssetsAdd({ albumId, assetIds }: ArgOf<'AlbumAssetsAdd'>): Promise<void> {
     if (assetIds.length === 0) {
       return;
     }
-    const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
-    const jobs = spaces
-      .filter((space) => space.faceRecognitionEnabled)
-      .flatMap((space) =>
-        assetIds.map((assetId) => ({
-          name: JobName.SharedSpaceFaceMatch as const,
-          data: { spaceId: space.spaceId, assetId },
-        })),
-      );
-    if (jobs.length > 0) {
-      await this.jobRepository.queueAll(jobs);
+    try {
+      const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+      const jobs = spaces
+        .filter((space) => space.faceRecognitionEnabled)
+        .flatMap((space) =>
+          assetIds.map((assetId) => ({
+            name: JobName.SharedSpaceFaceMatch as const,
+            data: { spaceId: space.spaceId, assetId },
+          })),
+        );
+      if (jobs.length > 0) {
+        await this.jobRepository.queueAll(jobs);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to sync space people after adding assets to album ${albumId}: ${error}`);
     }
   }
 
@@ -2775,22 +2783,26 @@ export class SharedSpaceService extends BaseService {
     if (assetIds.length === 0) {
       return;
     }
-    const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
-    let anyOrphanWork = false;
-    for (const space of spaces) {
-      if (!space.faceRecognitionEnabled) {
-        continue;
+    try {
+      const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+      let anyOrphanWork = false;
+      for (const space of spaces) {
+        if (!space.faceRecognitionEnabled) {
+          continue;
+        }
+        const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(space.spaceId, assetIds);
+        if (orphaned.length === 0) {
+          continue;
+        }
+        await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
+        await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
+        anyOrphanWork = true;
       }
-      const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(space.spaceId, assetIds);
-      if (orphaned.length === 0) {
-        continue;
+      if (anyOrphanWork) {
+        await this.queueSpacePersonMetadataBackfill();
       }
-      await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
-      await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
-      anyOrphanWork = true;
-    }
-    if (anyOrphanWork) {
-      await this.queueSpacePersonMetadataBackfill();
+    } catch (error) {
+      this.logger.error(`Failed to sync space people after removing assets from album ${albumId}: ${error}`);
     }
   }
 }

@@ -296,6 +296,11 @@ export class AlbumService extends BaseService {
       }
     }
 
+    // Best-effort space people sync: albumAssetValues already excludes assets present in the
+    // album (the notPresentAssetIds filter above), so in the normal path these are exactly the
+    // newly-inserted rows. A concurrent insert could make addAssetIdsToAlbums' onConflict-do-nothing
+    // skip one; the downstream SharedSpaceFaceMatch is idempotent and guards on isAssetInSpace, so a
+    // spurious id is harmless. We accept best-effort here rather than plumbing inserted ids back.
     const addedByAlbum = new Map<string, string[]>();
     for (const { albumId, assetId } of albumAssetValues) {
       const ids = addedByAlbum.get(albumId);

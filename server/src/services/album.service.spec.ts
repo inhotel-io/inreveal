@@ -1567,5 +1567,18 @@ describe(AlbumService.name, () => {
         assetIds: [asset1.id, asset2.id],
       });
     });
+
+    it('removeAssets does not emit AlbumAssetsRemove when nothing was removed', async () => {
+      const owner = UserFactory.create({ isAdmin: true });
+      const album = AlbumFactory.from().owner(owner).build();
+      const asset1 = AssetFactory.create();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.album.getAssetIds.mockResolvedValueOnce(new Set()); // asset not in album → not removed
+
+      await sut.removeAssets(AuthFactory.create(owner), album.id, { ids: [asset1.id] });
+
+      expect(mocks.event.emit).not.toHaveBeenCalledWith('AlbumAssetsRemove', expect.anything());
+    });
   });
 });

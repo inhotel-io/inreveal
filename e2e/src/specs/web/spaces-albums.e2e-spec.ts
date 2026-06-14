@@ -184,11 +184,11 @@ test.describe('Spaces — linked-album live people sync', () => {
     syncAdmin = await utils.adminSetup();
     syncOwner = await utils.userSetup(syncAdmin.accessToken, createUserDto.create('sync-people-owner'));
 
-    // Create a space with face recognition enabled so the sync handlers fire.
+    // Create the space. Face recognition is on by default for new spaces, which is what the
+    // sync handlers gate on (faceRecognitionEnabled is not part of the create DTO).
     syncSpace = await utils.createSpace(syncOwner.accessToken, {
       name: 'Sync People Test Space',
-      faceRecognitionEnabled: true,
-    } as any);
+    });
     await utils.addSpaceMember(syncOwner.accessToken, syncSpace.id, {
       userId: syncOwner.userId,
       role: SharedSpaceRole.Owner,
@@ -223,7 +223,7 @@ test.describe('Spaces — linked-album live people sync', () => {
       { id: syncSpace.id },
       { headers: asBearerAuth(syncOwner.accessToken) },
     );
-    const personBefore = (peopleBefore as any[]).find((p: { id: string }) => p.id === spacePersonId);
+    const personBefore = peopleBefore.find((p) => p.id === spacePersonId);
     expect(personBefore).toBeDefined();
 
     // Remove the asset from the album — this triggers AlbumAssetsRemove → cleanup.
@@ -234,18 +234,14 @@ test.describe('Spaces — linked-album live people sync', () => {
       { headers: asBearerAuth(syncOwner.accessToken) },
     );
 
-    // The person may be gone or may have 0 faces now — both are acceptable outcomes
-    // depending on whether the dedup job has run. The key assertion is that we didn't
-    // throw during the event processing chain.
+    // removeAssetFromAlbum awaits the AlbumAssetsRemove emit, whose @OnEvent handler runs
+    // synchronously in-process: the asset has no other path into the space, so its only face
+    // link is dropped and the now-faceless space person is deleted before the response returns.
     const peopleAfter = await getSpacePeople(
       { id: syncSpace.id },
       { headers: asBearerAuth(syncOwner.accessToken) },
     );
-    // If the person still exists, it should have no faces referencing the removed asset.
-    const personAfter = (peopleAfter as any[]).find((p: { id: string }) => p.id === spacePersonId);
-    if (personAfter) {
-      // Person may survive if it has other face links; but asset's face should be gone.
-      expect(personAfter).toBeDefined();
-    }
+    const personAfter = peopleAfter.find((p) => p.id === spacePersonId);
+    expect(personAfter).toBeUndefined();
   });
 });
