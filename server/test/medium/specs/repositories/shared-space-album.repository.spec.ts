@@ -1,6 +1,6 @@
 import { Kysely } from 'kysely';
-import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRole } from 'src/enum';
+import { AccessRepository } from 'src/repositories/access.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
