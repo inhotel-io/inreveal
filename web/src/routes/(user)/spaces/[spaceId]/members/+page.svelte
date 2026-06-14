@@ -2,14 +2,12 @@
   import { invalidateAll } from '$app/navigation';
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import RoleBadge from '$lib/components/spaces/role-badge.svelte';
-  import SpaceActivityFeed from '$lib/components/spaces/space-activity-feed.svelte';
   import SpaceAddMemberModal from '$lib/modals/SpaceAddMemberModal.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
   import { formatTimeAgo } from '$lib/utils/timesince';
   import {
-    getSpaceActivities,
     removeMember,
     SharedSpaceRole,
     updateMember,
@@ -21,17 +19,11 @@
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
-  const ACTIVITY_PAGE_SIZE = 20;
-
   let { data }: { data: PageData } = $props();
   const space = $derived(data.space);
   const members = $derived(data.members);
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isOwner = $derived(currentMember?.role === SharedSpaceRole.Owner);
-
-  let activities = $state(data.activities);
-  let hasMoreActivities = $state(data.hasMoreActivities);
-  let activityOffset = $state(data.activities.length);
 
   const toAvatarUser = (m: SharedSpaceMemberResponseDto) => ({
     id: m.userId,
@@ -75,13 +67,6 @@
     } catch (error) {
       handleError(error, $t('errors.error_updating_member_role'));
     }
-  }
-
-  async function loadMoreActivities() {
-    const result = await getSpaceActivities({ id: space.id, limit: ACTIVITY_PAGE_SIZE, offset: activityOffset });
-    activities = [...activities, ...result];
-    activityOffset += result.length;
-    hasMoreActivities = result.length === ACTIVITY_PAGE_SIZE;
   }
 </script>
 
@@ -141,15 +126,5 @@
         {/if}
       </div>
     {/each}
-  </div>
-
-  <h3 class="mt-6 mb-2 text-xs font-medium tracking-wide text-gray-500 uppercase">{$t('spaces_recent_activity')}</h3>
-  <div data-testid="members-activity">
-    <SpaceActivityFeed
-      {activities}
-      spaceColor={space.color ?? 'primary'}
-      onLoadMore={loadMoreActivities}
-      hasMore={hasMoreActivities}
-    />
   </div>
 </div>
