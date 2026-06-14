@@ -17,8 +17,8 @@ test.describe('Spaces P3 — Activity Feed, Members Tab, New-Since-Last-Visit', 
     });
   });
 
-  // The Activity feed moved from the slide-out panel onto the Members tab route
-  // (/spaces/<id>/members), wrapped in the `members-activity` section.
+  // The Activity feed now lives on its own Activity tab route (/spaces/<id>/activity),
+  // wrapped in the `space-activity` section (moved off the Members page).
   test.describe('Activity Feed', () => {
     test('should show activity feed with "added N photos" event after adding assets', async ({ context, page }) => {
       const space = await utils.createSpace(admin.accessToken, { name: 'Activity Feed Test' });
@@ -28,17 +28,17 @@ test.describe('Spaces P3 — Activity Feed, Members Tab, New-Since-Last-Visit', 
       await utils.addSpaceAssets(admin.accessToken, space.id, [asset1.id, asset2.id, asset3.id]);
 
       await utils.setAuthCookies(context, admin.accessToken);
-      await page.goto(`/spaces/${space.id}/members`);
+      await page.goto(`/spaces/${space.id}/activity`);
 
       // Verify the "added 3 photos" activity event is visible in the activity section.
-      await expect(page.getByTestId('members-activity')).toContainText('added 3 photos');
+      await expect(page.getByTestId('space-activity')).toContainText('added 3 photos');
     });
 
     test('should show empty state when no activities exist', async ({ context, page }) => {
       const space = await utils.createSpace(admin.accessToken, { name: 'Empty Activity' });
 
       await utils.setAuthCookies(context, admin.accessToken);
-      await page.goto(`/spaces/${space.id}/members`);
+      await page.goto(`/spaces/${space.id}/activity`);
 
       await expect(page.getByTestId('activity-empty-state')).toBeVisible();
       await expect(page.getByTestId('activity-empty-state')).toContainText('No activity yet');
@@ -49,14 +49,14 @@ test.describe('Spaces P3 — Activity Feed, Members Tab, New-Since-Last-Visit', 
       await utils.addSpaceMember(admin.accessToken, space.id, { userId: user2.userId });
 
       await utils.setAuthCookies(context, admin.accessToken);
-      await page.goto(`/spaces/${space.id}/members`);
+      await page.goto(`/spaces/${space.id}/activity`);
 
-      await expect(page.getByTestId('members-activity')).toContainText('joined as');
+      await expect(page.getByTestId('space-activity')).toContainText('joined as');
     });
   });
 
   test.describe('Members Tab', () => {
-    test('shows both the member list and the activity section on one page', async ({ context, page }) => {
+    test('Members tab shows the member list (no feed); Activity tab shows the feed', async ({ context, page }) => {
       const space = await utils.createSpace(admin.accessToken, { name: 'Members Tab Page' });
       const asset = await utils.createAsset(admin.accessToken);
       await utils.addSpaceAssets(admin.accessToken, space.id, [asset.id]);
@@ -65,16 +65,17 @@ test.describe('Spaces P3 — Activity Feed, Members Tab, New-Since-Last-Visit', 
       await utils.setAuthCookies(context, admin.accessToken);
       await page.goto(`/spaces/${space.id}`);
 
-      // Reach the Members tab via the shell tab bar.
+      // Members tab via the shell tab bar: shows the member list and no longer the activity feed.
       await page.getByTestId('space-tab-members').click();
       await page.waitForURL(`/spaces/${space.id}/members`);
-
-      // Member list shows both members.
       await expect(page.getByTestId('member-list')).toBeVisible();
       await expect(page.getByTestId('member-list')).toContainText('User Two');
+      await expect(page.getByTestId('members-activity')).not.toBeVisible();
 
-      // The activity section is present on the same page and shows the add event.
-      await expect(page.getByTestId('members-activity')).toContainText('added 1 photos');
+      // Activity tab: the feed now lives here and shows the add event.
+      await page.getByTestId('space-tab-activity').click();
+      await page.waitForURL(`/spaces/${space.id}/activity`);
+      await expect(page.getByTestId('space-activity')).toContainText('added 1 photos');
     });
 
     test('should show member count in the Members tab badge', async ({ context, page }) => {
