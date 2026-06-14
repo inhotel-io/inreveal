@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invalidateAll } from '$app/navigation';
   import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
@@ -63,6 +64,9 @@
     try {
       await unlinkAlbum({ id: space.id, albumId: album.albumId });
       await reload();
+      // Refresh the [spaceId] layout's cached linkedAlbums so other tabs (and a re-mount of this
+      // page on tab navigation) reflect the change without a full page refresh.
+      await invalidateAll();
     } catch (error) {
       handleError(error, $t('spaces_linked_albums_error_unlink'));
     }
@@ -76,6 +80,8 @@
         sharedSpaceAlbumLinkUpdateDto: { showInTimeline: !album.showInTimeline },
       });
       albums = albums.map((a) => (a.albumId === album.albumId ? { ...a, showInTimeline: !album.showInTimeline } : a));
+      // Keep the layout's cached linkedAlbums in sync so the timeline tab + a re-mount reflect it.
+      await invalidateAll();
     } catch (error) {
       handleError(error, $t('spaces_linked_albums_error_update'));
     }
@@ -110,6 +116,7 @@
       linking = true;
       await linkAlbum({ id: space.id, albumId });
       await reload();
+      await invalidateAll();
       showPicker = false;
     } catch (error) {
       handleError(error, $t('spaces_linked_albums_error_link'));
