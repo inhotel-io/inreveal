@@ -10,6 +10,7 @@ import {
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
+import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { getAlbumAssetsActions } from '$lib/services/album.service';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
@@ -195,6 +196,10 @@ describe('Space album detail page', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // The add→browse transition calls element.animate(); without a mock it returns undefined and
+    // setting .onfinish on it throws an async unhandled error that fails the run (seen only in CI's
+    // test ordering). Mirror the global-album route spec.
+    Element.prototype.animate = getAnimateMock();
     resetMockTimelineState();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
