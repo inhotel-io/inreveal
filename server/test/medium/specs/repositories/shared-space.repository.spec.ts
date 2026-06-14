@@ -3322,7 +3322,9 @@ describe(SharedSpaceRepository.name, () => {
 
     it('returns [] for an empty asset list', async () => {
       const { sut } = setup();
-      await expect(sut.getAssetIdsWithoutOtherSpacePath('00000000-0000-0000-0000-000000000000', [])).resolves.toEqual([]);
+      await expect(sut.getAssetIdsWithoutOtherSpacePath('00000000-0000-0000-0000-000000000000', [])).resolves.toEqual(
+        [],
+      );
     });
   });
 
