@@ -4,7 +4,6 @@
   import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
-  import SpaceLinkedLibrariesModal from '$lib/modals/SpaceLinkedLibrariesModal.svelte';
   import SpaceHero from '$lib/components/spaces/space-hero.svelte';
   import SpaceTabs from '$lib/components/spaces/space-tabs.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -23,7 +22,6 @@
   import { Button, IconButton, modalManager, toastManager } from '@immich/ui';
   import {
     mdiArrowLeft,
-    mdiBookshelf,
     mdiDeleteOutline,
     mdiDotsVertical,
     mdiEyeOffOutline,
@@ -146,13 +144,6 @@
     }
   };
 
-  const handleLinkLibraries = async () => {
-    const changed = await modalManager.show(SpaceLinkedLibrariesModal, { space });
-    if (changed) {
-      await invalidateAll();
-    }
-  };
-
   const handleTogglePets = async () => {
     try {
       await updateSpace({ id: space.id, sharedSpaceUpdateDto: { petsEnabled: !space.petsEnabled } });
@@ -229,14 +220,9 @@
               icon={mdiFaceRecognition}
               onClick={handleTogglePersonMetadataSharing}
             />
-            {#if isEditor || authManager.user?.isAdmin}
-              <hr class="my-1 border-gray-300" />
-            {/if}
             {#if isEditor}
+              <hr class="my-1 border-gray-300" />
               <MenuOption text={$t('add_all_photos')} icon={mdiImageMultipleOutline} onClick={handleBulkAddAssets} />
-            {/if}
-            {#if authManager.user?.isAdmin}
-              <MenuOption text={$t('spaces_link_libraries')} icon={mdiBookshelf} onClick={handleLinkLibraries} />
             {/if}
             {#if isOwner}
               {#if space.faceRecognitionEnabled && space.hasPets}
@@ -282,6 +268,8 @@
           photoCount={space.assetCount ?? 0}
           albumCount={data.linkedAlbums.length}
           memberCount={members.length}
+          isAdmin={authManager.user?.isAdmin ?? false}
+          libraryCount={space.linkedLibraries?.length ?? 0}
         />
       {/if}
       <div class="min-h-0 flex-1">
