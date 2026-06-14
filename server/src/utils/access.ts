@@ -186,7 +186,10 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
         AlbumUserRole.Viewer,
       );
       const granted = setUnion(isOwner, isShared);
-      const isSpaceLinked = await access.album.checkSpaceLinkedAlbumReadAccess(auth.user.id, setDifference(ids, granted));
+      const isSpaceLinked = await access.album.checkSpaceLinkedAlbumReadAccess(
+        auth.user.id,
+        setDifference(ids, granted),
+      );
       return setUnion(granted, isSpaceLinked);
     }
 
@@ -234,7 +237,10 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
         AlbumUserRole.Viewer,
       );
       const granted = setUnion(isOwner, isShared);
-      const isSpaceLinked = await access.album.checkSpaceLinkedAlbumReadAccess(auth.user.id, setDifference(ids, granted));
+      const isSpaceLinked = await access.album.checkSpaceLinkedAlbumReadAccess(
+        auth.user.id,
+        setDifference(ids, granted),
+      );
       return setUnion(granted, isSpaceLinked);
     }
 
