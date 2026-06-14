@@ -773,3 +773,87 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
     expect(spacePersons).toHaveLength(0);
   });
 });
+
+describe('onAlbumAssetsAdd (medium)', () => {
+  it('queues face match for an album-only asset and produces a space person when run', async () => {
+    const { ctx, sut, faceIdentityRepository, jobs } = setupWithFaceMatch();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'AddSyncAlbum' });
+
+    const { result: person } = await ctx.newPerson({ ownerId: user.id, name: 'AddedPerson' });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: newEmbedding() }).execute();
+    await faceIdentityRepository.linkFace({ assetFaceId: assetFace.id, identityId: identity.id, source: 'owner-person' });
+
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    // The event handler queues a per-asset face match for the face-enabled linked space.
+    await sut.onAlbumAssetsAdd({ albumId: album.id, assetIds: [asset.id] });
+    expect(jobs.queueAll).toHaveBeenCalledWith([
+      { name: JobName.SharedSpaceFaceMatch, data: { spaceId: space.id, assetId: asset.id } },
+    ]);
+
+    // Running that match against the real DB creates the space person (linchpin: isAssetInSpace
+    // recognises the album path, so processSpaceFaceMatch does NOT early-return).
+    const status = await sut.handleSharedSpaceFaceMatch({ spaceId: space.id, assetId: asset.id });
+    expect(status).toBe(JobStatus.Success);
+    const spacePersons = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('spaceId', '=', space.id)
+      .execute();
+    expect(spacePersons.length).toBeGreaterThan(0);
+  });
+});
+
+describe('onAlbumAssetsRemove (medium)', () => {
+  it('removes faces for an album-only removed asset but retains faces for a removed asset with a direct path', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'RemoveSyncAlbum' });
+
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id }); // album-only → face removed
+    const { asset: a2 } = await ctx.newAsset({ ownerId: user.id }); // album + direct → face retained
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: a2.id });
+
+    const { result: face1Id } = await ctx.newAssetFace({ assetId: a1.id });
+    const { result: face2Id } = await ctx.newAssetFace({ assetId: a2.id });
+    const repo = ctx.get(SharedSpaceRepository);
+    const spacePerson = await repo.createPerson({
+      spaceId: space.id,
+      name: 'Test Person',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await repo.addPersonFaces([
+      { personId: spacePerson.id, assetFaceId: face1Id },
+      { personId: spacePerson.id, assetFaceId: face2Id },
+    ]);
+
+    // Simulate the real removeAssets ordering: album_asset rows for a1,a2 are deleted FIRST.
+    await ctx.database.deleteFrom('album_asset').where('albumId', '=', album.id).where('assetId', 'in', [a1.id, a2.id]).execute();
+
+    await sut.onAlbumAssetsRemove({ albumId: album.id, assetIds: [a1.id, a2.id] });
+
+    const facesAfter = await ctx.database
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    const faceIds = facesAfter.map((f) => f.assetFaceId);
+    expect(faceIds).not.toContain(face1Id);
+    expect(faceIds).toContain(face2Id);
+  });
+});
