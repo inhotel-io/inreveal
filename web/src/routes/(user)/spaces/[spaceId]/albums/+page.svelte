@@ -2,23 +2,19 @@
   import { invalidateAll } from '$app/navigation';
   import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
-  import { getAssetMediaUrl } from '$lib/utils';
+  import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
   import { handleError } from '$lib/utils/handle-error';
   import {
-    AlbumUserRole,
-    getAllAlbums,
     getSharedSpaceAlbums,
-    linkAlbum,
     SharedSpaceRole,
     unlinkAlbum,
     updateSharedSpaceAlbum,
-    type AlbumResponseDto,
     type SharedSpaceLinkedAlbumDto,
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
   import { Button, Icon, modalManager } from '@immich/ui';
-  import { mdiImageAlbum, mdiImageMultipleOutline, mdiLinkVariantPlus } from '@mdi/js';
+  import { mdiImageMultipleOutline, mdiLinkVariantPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -37,13 +33,7 @@
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
   );
 
-  // Picker state
-  let showPicker = $state(false);
-  let availableAlbums = $state<AlbumResponseDto[]>([]);
-  let loadingAvailable = $state(false);
-  let linking = $state(false);
-
-  const linkedAlbumIds = $derived(new Set(albums.map((a) => a.albumId)));
+  const linkedAlbumIds = $derived(albums.map((a) => a.albumId));
 
   async function reload() {
     try {
@@ -87,41 +77,17 @@
     }
   }
 
-  async function loadAvailableAlbums() {
-    try {
-      loadingAvailable = true;
-      const all = await getAllAlbums({});
-      const userId = authManager.user.id;
-      availableAlbums = all.filter((album) => {
-        if (linkedAlbumIds.has(album.id)) {
-          return false;
-        }
-        const myRole = album.albumUsers.find((au) => au.user.id === userId)?.role;
-        return myRole === AlbumUserRole.Owner || myRole === AlbumUserRole.Editor;
-      });
-    } catch (error) {
-      handleError(error, $t('spaces_linked_albums_error_load'));
-    } finally {
-      loadingAvailable = false;
-    }
-  }
-
-  async function openPicker() {
-    showPicker = true;
-    await loadAvailableAlbums();
-  }
-
-  async function handleLink(albumId: string) {
-    try {
-      linking = true;
-      await linkAlbum({ id: space.id, albumId });
+  async function openLinkAlbumModal() {
+    const linkedCount = await modalManager.show(SpaceLinkAlbumModal, {
+      spaceId: space.id,
+      linkedAlbumIds,
+    });
+    // The modal returns how many albums it linked; only refresh when something changed.
+    if (linkedCount) {
       await reload();
+      // Refresh the [spaceId] layout's cached linkedAlbums so other tabs (and a re-mount of this
+      // page on tab navigation) reflect the change without a full page refresh.
       await invalidateAll();
-      showPicker = false;
-    } catch (error) {
-      handleError(error, $t('spaces_linked_albums_error_link'));
-    } finally {
-      linking = false;
     }
   }
 </script>
@@ -134,7 +100,7 @@
         size="small"
         variant="ghost"
         leadingIcon={mdiLinkVariantPlus}
-        onclick={() => void openPicker()}
+        onclick={() => void openLinkAlbumModal()}
         data-testid="link-album-button"
       >
         {$t('spaces_linked_albums_link_album')}
@@ -150,7 +116,7 @@
           {$t('space_albums_empty')}
         </p>
         {#if isEditor}
-          <Button onclick={() => void openPicker()} data-testid="empty-link-album-button">
+          <Button onclick={() => void openLinkAlbumModal()} data-testid="empty-link-album-button">
             {$t('space_albums_empty_editor_cta')}
           </Button>
         {/if}
@@ -168,62 +134,6 @@
             onToggleTimeline={handleToggleTimeline}
           />
         {/each}
-      </div>
-    </div>
-  {/if}
-
-  <!-- Inline album picker -->
-  {#if showPicker}
-    <div class="px-4 pt-4">
-      <div
-        class="flex flex-col gap-2 rounded-xl border border-gray-200 p-4 dark:border-gray-700"
-        data-testid="album-picker"
-      >
-        <p class="text-xs font-medium text-gray-500">{$t('spaces_linked_albums_pick_album')}</p>
-        {#if loadingAvailable}
-          <p class="text-xs text-gray-400">{$t('spaces_linked_albums_loading')}</p>
-        {:else if availableAlbums.length === 0}
-          <p class="text-xs text-gray-400 italic">{$t('spaces_linked_albums_no_albums')}</p>
-        {:else}
-          <div class="flex max-h-64 flex-col gap-1 overflow-y-auto">
-            {#each availableAlbums as album (album.id)}
-              <button
-                type="button"
-                class="flex items-center gap-2 rounded-lg p-2 text-left hover:bg-gray-100 dark:hover:bg-gray-800"
-                onclick={() => void handleLink(album.id)}
-                disabled={linking}
-                data-testid="album-picker-item"
-              >
-                <div class="size-8 shrink-0 overflow-hidden rounded-md bg-gray-100 dark:bg-gray-800">
-                  {#if album.albumThumbnailAssetId}
-                    <img
-                      alt={album.albumName}
-                      src={getAssetMediaUrl({ id: album.albumThumbnailAssetId })}
-                      class="size-full object-cover"
-                      loading="lazy"
-                    />
-                  {:else}
-                    <div class="flex size-full items-center justify-center">
-                      <Icon icon={mdiImageAlbum} size="12" class="text-gray-400" />
-                    </div>
-                  {/if}
-                </div>
-                <span class="truncate text-sm">{album.albumName}</span>
-                <span class="ml-auto shrink-0 text-xs text-gray-400">
-                  {$t('items_count', { values: { count: album.assetCount } })}
-                </span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-        <Button
-          size="tiny"
-          variant="ghost"
-          onclick={() => (showPicker = false)}
-          data-testid="close-album-picker-button"
-        >
-          {$t('cancel')}
-        </Button>
       </div>
     </div>
   {/if}
