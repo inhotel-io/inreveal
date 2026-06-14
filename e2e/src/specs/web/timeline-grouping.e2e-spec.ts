@@ -38,18 +38,19 @@ test.describe('Timeline grouping navigation', () => {
     await thumbnailUtils.expectInViewport(page, newestAsset.id);
 
     await page.getByTestId('timeline-grouping-year').click();
-    // Wait for the year-grouping layout to settle before the raw scroll, otherwise
-    // scrollTop = scrollHeight lands on the stale day-layout height and the virtualized
-    // 2000 bucket card never enters the visible window (flake).
     await expect(page.getByTestId('timeline-grouping-year')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('timeline-representative-buckets')).toBeVisible();
-    await timelineUtils.locator(page).evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-      element.dispatchEvent(new Event('scroll', { bubbles: true }));
-    });
 
+    // The representative bucket cards are virtualized: a single raw scrollTop=scrollHeight can land
+    // on a stale (still-rebuilding) layout height, so the bottom-most (2000) card never enters the
+    // visible window. Re-scroll to the bottom until that card actually renders (de-flake).
     const targetYearCard = page.getByTestId('timeline-bucket-card').filter({ hasText: '2000' });
-    await expect(targetYearCard).toBeVisible();
+    await expect(async () => {
+      await timelineUtils.locator(page).evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+        element.dispatchEvent(new Event('scroll', { bubbles: true }));
+      });
+      await expect(targetYearCard).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 30_000 });
     await targetYearCard.click();
 
     await expect(page.getByTestId('timeline-grouping-month')).toHaveAttribute('aria-pressed', 'true');
