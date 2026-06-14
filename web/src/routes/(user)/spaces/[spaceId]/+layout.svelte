@@ -12,6 +12,7 @@
   import { handleError } from '$lib/utils/handle-error';
   import {
     bulkAddAssets,
+    removeMember,
     removeSpace,
     SharedSpaceRole,
     updateMemberPreferences,
@@ -24,6 +25,7 @@
     mdiArrowLeft,
     mdiDeleteOutline,
     mdiDotsVertical,
+    mdiExitToApp,
     mdiEyeOffOutline,
     mdiEyeOutline,
     mdiFaceRecognition,
@@ -153,6 +155,23 @@
     }
   };
 
+  const handleLeave = async () => {
+    const confirmed = await modalManager.showDialog({
+      prompt: $t('spaces_leave_confirmation', { values: { name: space.name } }),
+      title: $t('spaces_leave'),
+    });
+    if (!confirmed) {
+      return;
+    }
+    try {
+      await removeMember({ id: space.id, userId: authManager.user.id });
+      toastManager.success($t('spaces_leave_success', { values: { name: space.name } }));
+      await goto(Route.spaces());
+    } catch (error) {
+      handleError(error, $t('spaces_leave_failed'));
+    }
+  };
+
   const handleDelete = async () => {
     const confirmed = await modalManager.showDialog({
       prompt: $t('spaces_delete_confirmation', { values: { name: space.name } }),
@@ -223,6 +242,15 @@
             {#if isEditor}
               <hr class="my-1 border-gray-300" />
               <MenuOption text={$t('add_all_photos')} icon={mdiImageMultipleOutline} onClick={handleBulkAddAssets} />
+            {/if}
+            {#if currentMember && !isOwner}
+              <hr class="my-1 border-gray-300" />
+              <MenuOption
+                text={$t('spaces_leave')}
+                icon={mdiExitToApp}
+                textColor="text-red-500"
+                onClick={handleLeave}
+              />
             {/if}
             {#if isOwner}
               {#if space.faceRecognitionEnabled && space.hasPets}
