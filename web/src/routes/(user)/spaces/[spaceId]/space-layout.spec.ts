@@ -218,6 +218,43 @@ describe('space [spaceId] +layout.svelte', () => {
       expect(screen.queryByText('spaces_link_libraries')).not.toBeInTheDocument();
     });
 
+    it('offers "Leave space" in the overflow for a non-owner member', async () => {
+      renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
+
+      await openOverflow();
+
+      expect(screen.getByText('spaces_leave')).toBeInTheDocument();
+    });
+
+    it('does NOT offer "Leave space" to the owner', async () => {
+      renderLayout(SharedSpaceRole.Owner, { member: member({ role: SharedSpaceRole.Owner }) });
+
+      await openOverflow();
+
+      expect(screen.queryByText('spaces_leave')).not.toBeInTheDocument();
+    });
+
+    it('handleLeave: removes the current user from the space and navigates to the spaces list when confirmed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(true);
+      renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
+
+      await clickOverflowOption('spaces_leave');
+
+      await waitFor(() => expect(sdkMock.removeMember).toHaveBeenCalledWith({ id: 's1', userId: 'u1' }));
+      expect(gotoMock).toHaveBeenCalledWith('/spaces');
+    });
+
+    it('handleLeave: does nothing when the confirm dialog is dismissed', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(false);
+      renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
+
+      await clickOverflowOption('spaces_leave');
+
+      await waitFor(() => expect(modalManager.showDialog).toHaveBeenCalled());
+      expect(sdkMock.removeMember).not.toHaveBeenCalled();
+      expect(gotoMock).not.toHaveBeenCalled();
+    });
+
     it('handleBulkAddAssets: bulk-adds assets for an editor when confirmed', async () => {
       vi.mocked(modalManager.showDialog).mockResolvedValue(true);
       renderLayout(SharedSpaceRole.Editor, { member: member({ role: SharedSpaceRole.Editor }) });
