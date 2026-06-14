@@ -653,14 +653,28 @@ export class SharedSpaceService extends BaseService {
           data: { spaceId, albumId },
         });
       }
+      const album = await this.albumRepository.getById(albumId, { withAssets: false });
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumLink,
+        data: { albumId, albumName: album?.albumName ?? '' },
+      });
     }
   }
 
   async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
 
+    const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
     await this.sharedSpaceRepository.removeAlbum(spaceId, albumId);
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.AlbumUnlink,
+      data: { albumId, albumName: album?.albumName ?? '' },
+    });
     if (orphanedAssetIds.length > 0) {
       await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
@@ -1231,17 +1245,17 @@ export class SharedSpaceService extends BaseService {
 
     const alias = await this.sharedSpaceRepository.getAlias(personId, auth.user.id);
 
-    await this.sharedSpaceRepository.logActivity({
-      spaceId,
-      userId: auth.user.id,
-      type: SharedSpaceActivityType.PersonUpdate,
-      data: { personId },
-    });
-
     const enriched = await this.sharedSpaceRepository.getPersonById(personId);
     if (!enriched) {
       throw new BadRequestException('Person not found');
     }
+
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.PersonUpdate,
+      data: { personId, personName: enriched.name ?? '' },
+    });
 
     return this.mapSpacePerson(enriched, alias?.alias ?? null);
   }
@@ -1369,6 +1383,12 @@ export class SharedSpaceService extends BaseService {
     }
 
     await this.identityMergePropagationService.mergeSpacePeople(auth, spaceId, targetPersonId, dto.ids);
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.PersonMerge,
+      data: { personName: target.name ?? '', count: dto.ids.length },
+    });
   }
 
   async setSpacePersonAlias(
