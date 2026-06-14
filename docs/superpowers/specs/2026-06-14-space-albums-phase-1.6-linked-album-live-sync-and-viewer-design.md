@@ -216,6 +216,13 @@ Remove:
 16. Ordering: cleanup runs **after** `album_asset` rows are deleted, so the "any linked album" branch correctly excludes the removed membership.
 17. Multiple spaces → each evaluated independently; metadata backfill queued once if any space had orphan work.
 
+Concurrency & visibility (handled by the core guard — documented so implementation does not add redundant guards or regress them):
+
+18. **Stale match after concurrent unlink / removal.** A `SharedSpaceFaceMatch` queued for an added asset may run after the album is unlinked or the asset removed. `processSpaceFaceMatch` early-returns via `isAssetInSpace(spaceId, assetId)` (verified to include the album-link union branch), so no ghost space-person is created once the asset has no remaining space path. The add handler needs **no** extra album-link re-check.
+19. **Hidden / archived / deleted / offline assets.** `isAssetInSpace` filters on `deletedAt IS NULL`, `isOffline = false`, and `visibility IN visibleSpaceAssetVisibilities`. Adding such an asset to a linked album therefore surfaces no people (correct — it matches space-timeline visibility); no special handling required.
+
+> **Correctness linchpin:** Slice 1's queued `SharedSpaceFaceMatch` only does work because `processSpaceFaceMatch → isAssetInSpace` already recognises the album path (`shared-space.repository.ts`, third union branch). This is verified present today. Slice 3 fixes the one sibling method (`getSpaceIdsForAsset`) that still lacks the same branch. The Slice 1 medium test below pins this dependency so a future change to `isAssetInSpace` cannot silently no-op album sync.
+
 ### 4.5 Test plan (RED first)
 
 **Unit — `server/src/services/album.service.spec.ts`** (auto-mocked repos/event):
@@ -234,6 +241,7 @@ Remove:
 
 - `getAssetIdsWithoutOtherSpacePath` correctness against real rows for each retention branch (direct / other-album / library) and the true-orphan case.
 - End-to-end remove: seed space-people for album assets, remove a subset via the handler, assert orphaned faces/people removed and multi-path assets retained.
+- **Linchpin regression guard:** `isAssetInSpace(spaceId, assetId)` returns `true` for an asset reachable **only** via a linked album (no direct row, no library). Edge 18 — `processSpaceFaceMatch` returns `[]` (no ghost) for an album asset whose album was unlinked and that has no other space path.
 
 **E2E (real API, truest wiring) — `e2e/src/specs/` (API) and/or `e2e/src/specs/web/spaces-albums.e2e-spec.ts`**:
 
@@ -333,6 +341,10 @@ Add a third `union` branch to `getSpaceIdsForAsset` for the album path:
 ```
 
 `union` (not `unionAll`) keeps results de-duplicated when an asset is reachable by more than one path. Run `pnpm sql` afterward (the method is `@GenerateSql`-decorated).
+
+Mirror the existing direct/library branches exactly: they filter only on `faceRecognitionEnabled` (no `deletedAt`/`visibility` predicates — that fine filtering lives in `processSpaceFaceMatch`'s `isAssetInSpace` guard), so the album branch must not add them either.
+
+**Corroboration:** album-path-as-space-membership is already the established norm — `isAssetInSpace` (`shared-space.repository.ts`) and `getAlbumAssetIdsWithoutOtherSpacePath` both carry the album union/branch. `getSpaceIdsForAsset` is the lone sibling that was missed; adding the branch makes the family consistent rather than introducing a new policy.
 
 **Verify-item (do during implementation, record the result):** audit every caller of `getSpaceIdsForAsset` and confirm "include album-linked assets" is the correct semantics for each. Expected yes — the method already filters to `faceRecognitionEnabled` spaces, i.e. it exists solely for face-match fan-out, and an album-linked asset genuinely _is_ in the space.
 
