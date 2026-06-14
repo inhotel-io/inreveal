@@ -93,8 +93,9 @@ test.describe('Spaces P2', () => {
       await utils.setAuthCookies(context, admin.accessToken);
       await page.goto(`/spaces/${space.id}/members`);
 
-      // The member row shows the contribution count ("<n> photos") for contributors.
-      await expect(page.getByTestId('member-list')).toContainText('1 photos');
+      // The member row shows the contribution count ("<n> Photos") for contributors
+      // (i18n "photos" => "Photos"; toContainText is case-sensitive).
+      await expect(page.getByTestId('member-list')).toContainText(/1 Photos/);
     });
   });
 
