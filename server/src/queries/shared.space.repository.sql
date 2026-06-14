@@ -1356,6 +1356,40 @@ where
       and "shared_space_library"."spaceId" = $5
   )
 
+-- SharedSpaceRepository.getAssetIdsWithoutOtherSpacePath
+select
+  "asset"."id"
+from
+  "asset"
+where
+  "asset"."id" in ($1)
+  and not exists (
+    select
+    from
+      "shared_space_asset"
+    where
+      "shared_space_asset"."assetId" = "asset"."id"
+      and "shared_space_asset"."spaceId" = $2
+  )
+  and not exists (
+    select
+    from
+      "shared_space_album"
+      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+    where
+      "album_asset"."assetId" = "asset"."id"
+      and "shared_space_album"."spaceId" = $3
+  )
+  and not exists (
+    select
+    from
+      "shared_space_library"
+      inner join "asset" as "libAsset" on "libAsset"."libraryId" = "shared_space_library"."libraryId"
+    where
+      "libAsset"."id" = "asset"."id"
+      and "shared_space_library"."spaceId" = $4
+  )
+
 -- SharedSpaceRepository.deleteOrphanedPersons
 delete from "shared_space_person"
 where
