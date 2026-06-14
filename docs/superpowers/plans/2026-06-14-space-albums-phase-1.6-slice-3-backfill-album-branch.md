@@ -9,6 +9,7 @@
 **Tech Stack:** Kysely, Vitest medium (testcontainers). Run from `server/`.
 
 ## Consistency note
+
 `isAssetInSpace` and `getAlbumAssetIdsWithoutOtherSpacePath` already carry the album branch; `getSpaceIdsForAsset` is the lone sibling missing it. Mirror the existing direct/library branches exactly: filter only on `faceRecognitionEnabled` (NO `deletedAt`/`visibility` predicates — that fine filtering lives in `processSpaceFaceMatch`'s `isAssetInSpace` guard). Use `union` (not `unionAll`) so multi-path assets dedupe.
 
 ---
@@ -16,6 +17,7 @@
 ## Task 1: Add the album branch to `getSpaceIdsForAsset` (+ medium repo test)
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` (`getSpaceIdsForAsset`)
 - Test: `server/test/medium/specs/repositories/shared-space.repository.spec.ts`
 
@@ -107,20 +109,23 @@ git commit -m "feat(spaces): getSpaceIdsForAsset includes the album path (slice 
 ```
 
 ## Producer fan-out — already covered (no redundant unit test)
+
 Both `metadata.service.ts` and `person.service.ts` fan out one backfill job per space returned by `getSpaceIdsForAsset`, and their existing unit specs already assert that with a mocked `getSpaceIdsForAsset`. Since those unit tests mock the method, an "album case" there would be identical to the existing direct/library cases (the producer is agnostic to how the space was found). The album branch's real behavior is proven by the medium repo test above; adding a mocked-method "album" unit test would be pure duplication, so it is intentionally omitted.
 
 ## Completion gate
+
 - [ ] `pnpm test:medium -- --run -t "getSpaceIdsForAsset (album path)"` → 4 PASS.
 - [ ] `pnpm run check` clean; `pnpm sql` leaves no uncommitted diff.
 - [ ] Push.
 
 ## Edge-case coverage map (spec §6.4 → test)
-| Spec edge | Covered by |
-| --- | --- |
-| 1. album-only asset → returned | test 1 |
-| 2. album + direct → once | test 3 |
-| 3. album + library → once | same dedup mechanism as test 3 (union); library+album dedup is structurally identical |
-| 4. face-disabled linked album → excluded | test 2 |
-| 5. unlinked album → not returned | test 4 |
-| 6. multiple linked albums → single row | union dedup (test 3 demonstrates union dedup) |
-| 7. late detection on album-only asset → backfill | medium repo test proves the space is returned; producer fan-out already unit-tested |
+
+| Spec edge                                        | Covered by                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| 1. album-only asset → returned                   | test 1                                                                                |
+| 2. album + direct → once                         | test 3                                                                                |
+| 3. album + library → once                        | same dedup mechanism as test 3 (union); library+album dedup is structurally identical |
+| 4. face-disabled linked album → excluded         | test 2                                                                                |
+| 5. unlinked album → not returned                 | test 4                                                                                |
+| 6. multiple linked albums → single row           | union dedup (test 3 demonstrates union dedup)                                         |
+| 7. late detection on album-only asset → backfill | medium repo test proves the space is returned; producer fan-out already unit-tested   |
