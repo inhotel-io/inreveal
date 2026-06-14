@@ -282,7 +282,7 @@
           </div>
         {:else}
           <Timeline
-            enableRouting={false}
+            enableRouting={true}
             options={browseOptions}
             bind:timelineManager
             assetInteraction={assetMultiSelectManager}
