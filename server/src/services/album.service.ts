@@ -231,6 +231,9 @@ export class AlbumService extends BaseService {
       for (const recipientId of allUsersExceptUs) {
         await this.eventRepository.emit('AlbumUpdate', { id, recipientId });
       }
+
+      const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
+      await this.eventRepository.emit('AlbumAssetsAdd', { albumId: id, assetIds: addedAssetIds });
     }
 
     return results;
@@ -293,6 +296,19 @@ export class AlbumService extends BaseService {
       }
     }
 
+    const addedByAlbum = new Map<string, string[]>();
+    for (const { albumId, assetId } of albumAssetValues) {
+      const ids = addedByAlbum.get(albumId);
+      if (ids) {
+        ids.push(assetId);
+      } else {
+        addedByAlbum.set(albumId, [assetId]);
+      }
+    }
+    for (const [albumId, assetIds] of addedByAlbum) {
+      await this.eventRepository.emit('AlbumAssetsAdd', { albumId, assetIds });
+    }
+
     return results;
   }
 
@@ -309,6 +325,9 @@ export class AlbumService extends BaseService {
     const removedIds = results.filter(({ success }) => success).map(({ id }) => id);
     if (removedIds.length > 0 && album.albumThumbnailAssetId && removedIds.includes(album.albumThumbnailAssetId)) {
       await this.albumRepository.updateThumbnails();
+    }
+    if (removedIds.length > 0) {
+      await this.eventRepository.emit('AlbumAssetsRemove', { albumId: id, assetIds: removedIds });
     }
 
     return results;
