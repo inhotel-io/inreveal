@@ -1,7 +1,5 @@
 import {
-  AlbumUserRole,
   SharedSpaceRole,
-  type AlbumResponseDto,
   type SharedSpaceLinkedAlbumDto,
   type SharedSpaceMemberResponseDto,
   type SharedSpaceResponseDto,
@@ -14,7 +12,7 @@ import { invalidateAll } from '$app/navigation';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import { albumFactory } from '@test-data/factories/album-factory';
+import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumsPage from './+page.svelte';
@@ -90,15 +88,6 @@ function makeMember(role: SharedSpaceRole): SharedSpaceMemberResponseDto {
   };
 }
 
-function makeAvailableAlbum(overrides: Partial<AlbumResponseDto> = {}): AlbumResponseDto {
-  return albumFactory.build({
-    id: 'available-album-1',
-    albumName: 'Available Trip',
-    albumUsers: [{ user: userAdminFactory.build({ id: 'current-user-id' }), role: AlbumUserRole.Owner }],
-    ...overrides,
-  });
-}
-
 function renderPage(albums: SharedSpaceLinkedAlbumDto[], role: SharedSpaceRole = SharedSpaceRole.Editor) {
   const props = {
     data: {
@@ -162,32 +151,40 @@ describe('Space albums page', () => {
   });
 
   describe('interactions', () => {
-    it('clicking "Link album" opens the picker and calls getAllAlbums', async () => {
-      sdkMock.getAllAlbums.mockResolvedValue([makeAvailableAlbum()]);
-      renderPage([], SharedSpaceRole.Editor);
+    it('clicking "Link album" opens the SpaceLinkAlbumModal with the linked album ids', async () => {
+      modalManagerMock.show.mockResolvedValue(undefined);
+      renderPage([makeAlbum({ albumId: 'album-1' })], SharedSpaceRole.Editor);
 
-      await fireEvent.click(screen.getByTestId('empty-link-album-button'));
+      await fireEvent.click(screen.getByTestId('link-album-button'));
 
-      await waitFor(() => expect(screen.getByTestId('album-picker')).toBeInTheDocument());
-      expect(sdkMock.getAllAlbums).toHaveBeenCalledWith({});
+      await waitFor(() =>
+        expect(modalManagerMock.show).toHaveBeenCalledWith(SpaceLinkAlbumModal, {
+          spaceId: 'space-1',
+          linkedAlbumIds: ['album-1'],
+        }),
+      );
     });
 
-    it('clicking an album in the picker calls linkAlbum and closes the picker', async () => {
-      const available = makeAvailableAlbum({ id: 'av-1', albumName: 'Road Trip' });
-      sdkMock.getAllAlbums.mockResolvedValue([available]);
-      sdkMock.linkAlbum.mockResolvedValue(undefined as never);
+    it('reloads and invalidates layout data when the modal reports linked albums', async () => {
+      modalManagerMock.show.mockResolvedValue(2);
       sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ albumId: 'av-1', albumName: 'Road Trip' })]);
       renderPage([], SharedSpaceRole.Editor);
 
-      // Open picker via the empty-state CTA
       await fireEvent.click(screen.getByTestId('empty-link-album-button'));
-      await waitFor(() => expect(screen.getByTestId('album-picker')).toBeInTheDocument());
 
-      const pickerItem = await screen.findByTestId('album-picker-item');
-      await fireEvent.click(pickerItem);
+      await waitFor(() => expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-1' }));
+      await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
+    });
 
-      await waitFor(() => expect(sdkMock.linkAlbum).toHaveBeenCalledWith({ id: 'space-1', albumId: 'av-1' }));
-      await waitFor(() => expect(screen.queryByTestId('album-picker')).not.toBeInTheDocument());
+    it('does not reload or invalidate when the modal links nothing', async () => {
+      modalManagerMock.show.mockResolvedValue(0);
+      renderPage([], SharedSpaceRole.Editor);
+
+      await fireEvent.click(screen.getByTestId('empty-link-album-button'));
+
+      await waitFor(() => expect(modalManagerMock.show).toHaveBeenCalled());
+      expect(sdkMock.getSharedSpaceAlbums).not.toHaveBeenCalled();
+      expect(invalidateAll).not.toHaveBeenCalled();
     });
 
     it('unlink: after confirm resolves true, calls unlinkAlbum', async () => {
@@ -224,20 +221,6 @@ describe('Space albums page', () => {
       await fireEvent.click(await screen.findByText('Unlink album'));
 
       await waitFor(() => expect(sdkMock.unlinkAlbum).toHaveBeenCalled());
-      await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
-    });
-
-    it('link invalidates layout data so tab navigation reflects the change', async () => {
-      sdkMock.getAllAlbums.mockResolvedValue([makeAvailableAlbum({ id: 'av-1', albumName: 'Road Trip' })]);
-      sdkMock.linkAlbum.mockResolvedValue(undefined as never);
-      sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ albumId: 'av-1', albumName: 'Road Trip' })]);
-      renderPage([], SharedSpaceRole.Editor);
-
-      await fireEvent.click(screen.getByTestId('empty-link-album-button'));
-      await waitFor(() => expect(screen.getByTestId('album-picker')).toBeInTheDocument());
-      await fireEvent.click(await screen.findByTestId('album-picker-item'));
-
-      await waitFor(() => expect(sdkMock.linkAlbum).toHaveBeenCalled());
       await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
     });
 
