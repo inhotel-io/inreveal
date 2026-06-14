@@ -289,9 +289,9 @@ describe('Space album detail page', () => {
     expect(screen.getByTestId('space-album-timeline')).toBeInTheDocument();
   });
 
-  it('timeline has enableRouting=false', () => {
+  it('browse timeline has enableRouting=true so the in-place asset viewer opens/closes via the URL', () => {
     renderPage();
-    expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-enable-routing', 'false');
+    expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-enable-routing', 'true');
   });
 
   it('in browse mode, the timeline-desktop-grouping-control renders', () => {
