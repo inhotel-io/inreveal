@@ -1,4 +1,5 @@
 import {
+  AfterDeleteTrigger,
   AfterInsertTrigger,
   Column,
   CreateDateColumn,
@@ -9,7 +10,7 @@ import {
   UpdateDateColumn,
 } from '@immich/sql-tools';
 import { CreateIdColumn, UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
-import { shared_space_album_after_insert_user } from 'src/schema/functions';
+import { shared_space_album_after_insert_user, shared_space_album_delete_audit } from 'src/schema/functions';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { UserTable } from 'src/schema/tables/user.table';
@@ -24,6 +25,14 @@ import { UserTable } from 'src/schema/tables/user.table';
   scope: 'statement',
   referencingNewTableAs: 'inserted_rows',
   function: shared_space_album_after_insert_user,
+})
+// Fan-out trigger: on unlinking (direct or via cascade from album/shared_space
+// deletion) emits rows to shared_space_album_audit (the join-row delete, ungated)
+// and shared_space_album_user_audit (per user who loses access, gated).
+@AfterDeleteTrigger({
+  scope: 'statement',
+  function: shared_space_album_delete_audit,
+  referencingOldTableAs: 'old',
 })
 export class SharedSpaceAlbumTable {
   @ForeignKeyColumn(() => SharedSpaceTable, { onDelete: 'CASCADE', primary: true, index: false })

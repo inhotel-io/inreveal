@@ -15,6 +15,7 @@ import {
   shared_space_member_after_insert,
   shared_space_member_after_insert_album,
   shared_space_member_after_insert_library,
+  shared_space_member_delete_album_audit,
   shared_space_member_delete_audit,
   shared_space_member_delete_library_audit,
 } from 'src/schema/functions';
@@ -68,6 +69,15 @@ import { UserTable } from 'src/schema/tables/user.table';
   name: 'shared_space_member_delete_library_audit',
   scope: 'statement',
   function: shared_space_member_delete_library_audit,
+  referencingOldTableAs: 'old',
+})
+// Third fan-out trigger: for each album linked to the space the member is
+// leaving, emit a shared_space_album_user_audit row iff the user has no other
+// access path. Mirrors shared_space_member_delete_library_audit for albums.
+@AfterDeleteTrigger({
+  name: 'shared_space_member_delete_album_audit',
+  scope: 'statement',
+  function: shared_space_member_delete_album_audit,
   referencingOldTableAs: 'old',
 })
 export class SharedSpaceMemberTable {
