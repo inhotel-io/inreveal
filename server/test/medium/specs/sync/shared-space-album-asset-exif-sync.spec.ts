@@ -14,6 +14,10 @@ let defaultDatabase: Kysely<DB>;
 
 const NOW_ID = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const BEFORE_UPDATE_ID = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
+const ZERO_UPDATE_ID = '00000000-0000-7000-8000-000000000000';
+// ZERO_UPDATE_ID is below any real album_asset.updateId (ULIDs start after epoch 0),
+// so getUpdates with this ack must return EMPTY — the coupling
+// `album_asset.updateId <= albumToAssetAck.updateId` filters everything out.
 
 const setup = () => {
   const ctx = new SyncTestContext(defaultDatabase);
@@ -102,7 +106,7 @@ describe('SharedSpaceAlbumAssetExifSync.getCreates', () => {
 });
 
 describe('SharedSpaceAlbumAssetExifSync.getUpdates', () => {
-  it('honors albumToAssetAck coupling and returns exif updates for accessible grant holders', async () => {
+  it('honors albumToAssetAck coupling — only sends exif updates for assets the client already knows about', async () => {
     const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();
     const { user: member } = await ctx.newUser();
@@ -114,8 +118,24 @@ describe('SharedSpaceAlbumAssetExifSync.getUpdates', () => {
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
-    // With max ack — asset is "known", exif updates should come through
-    const streamMax = sut.getUpdates({ nowId: NOW_ID, userId: member.id }, { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID });
+    // With ack BELOW the asset's album_asset.updateId → result must be EMPTY.
+    // (Dropping the `album_asset.updateId <= albumToAssetAck.updateId` coupling
+    // would cause this assertion to fail because the exif row would appear here.)
+    const streamZero = sut.getUpdates(
+      { nowId: NOW_ID, userId: member.id },
+      { type: SyncEntityType.AlbumToAssetV1, updateId: ZERO_UPDATE_ID },
+    );
+    const resultZero: any[] = [];
+    for await (const row of streamZero) {
+      resultZero.push(row);
+    }
+    expect(resultZero).toHaveLength(0);
+
+    // With ack ABOVE the asset's album_asset.updateId → exif must be returned.
+    const streamMax = sut.getUpdates(
+      { nowId: NOW_ID, userId: member.id },
+      { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID },
+    );
     const resultMax: any[] = [];
     for await (const row of streamMax) {
       resultMax.push(row);
