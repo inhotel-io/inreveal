@@ -285,16 +285,68 @@ describe('SharedSpaceAlbum sync — viewer parity: Viewer receives same asset/ex
     await ctx1.newSharedSpaceMember({ spaceId: space.id, userId: editor.user.id, role: SharedSpaceRole.Editor });
     await ctx1.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
-    const viewerResponse = await ctx1.syncStream(viewer, [SyncRequestType.SharedSpaceAlbumsV1]);
-    const editorResponse = await ctx2.syncStream(editor, [SyncRequestType.SharedSpaceAlbumsV1]);
+    // ── Album metadata parity ────────────────────────────────────────────────
+    const viewerAlbumResponse = await ctx1.syncStream(viewer, [SyncRequestType.SharedSpaceAlbumsV1]);
+    const editorAlbumResponse = await ctx2.syncStream(editor, [SyncRequestType.SharedSpaceAlbumsV1]);
 
-    const viewerAlbumEvents = viewerResponse.filter((r) => isAlbumEvent(r));
-    const editorAlbumEvents = editorResponse.filter((r) => isAlbumEvent(r));
+    const viewerAlbumEvents = viewerAlbumResponse.filter((r) => isAlbumEvent(r));
+    const editorAlbumEvents = editorAlbumResponse.filter((r) => isAlbumEvent(r));
 
     expect(viewerAlbumEvents).toHaveLength(1);
     expect(editorAlbumEvents).toHaveLength(1);
     expect((viewerAlbumEvents[0] as { data: { id: string } }).data.id).toBe(album.id);
     expect((editorAlbumEvents[0] as { data: { id: string } }).data.id).toBe(album.id);
+
+    // ── Membership (album_asset join) parity ─────────────────────────────────
+    // Viewer must receive the same SharedSpaceAlbumToAsset* events as Editor —
+    // sync access is role-independent (driven by shared_space_album_user grant).
+    const viewerMembershipResponse = await ctx1.syncStream(viewer, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const editorMembershipResponse = await ctx2.syncStream(editor, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    const viewerMembershipEvents = viewerMembershipResponse.filter((r) => isMembershipEvent(r));
+    const editorMembershipEvents = editorMembershipResponse.filter((r) => isMembershipEvent(r));
+
+    expect(viewerMembershipEvents.length).toBeGreaterThan(0);
+    expect(editorMembershipEvents.length).toBeGreaterThan(0);
+
+    const viewerMembershipAssetIds = viewerMembershipEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
+    const editorMembershipAssetIds = editorMembershipEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
+    expect(viewerMembershipAssetIds).toContain(asset.id);
+    expect(editorMembershipAssetIds).toContain(asset.id);
+
+    // Ack membership for both so the assets/exif creates stream fires.
+    await ctx1.syncAckAll(viewer, viewerMembershipResponse);
+    await ctx2.syncAckAll(editor, editorMembershipResponse);
+
+    // ── Full asset blob parity ───────────────────────────────────────────────
+    const viewerAssetResponse = await ctx1.syncStream(viewer, [SyncRequestType.SharedSpaceAlbumAssetsV1]);
+    const editorAssetResponse = await ctx2.syncStream(editor, [SyncRequestType.SharedSpaceAlbumAssetsV1]);
+
+    const viewerAssetEvents = viewerAssetResponse.filter((r) => isAssetEvent(r));
+    const editorAssetEvents = editorAssetResponse.filter((r) => isAssetEvent(r));
+
+    expect(viewerAssetEvents.length).toBeGreaterThan(0);
+    expect(editorAssetEvents.length).toBeGreaterThan(0);
+
+    const viewerAssetIds = viewerAssetEvents.map((r) => (r as { data: { id: string } }).data.id);
+    const editorAssetIds = editorAssetEvents.map((r) => (r as { data: { id: string } }).data.id);
+    expect(viewerAssetIds).toContain(asset.id);
+    expect(editorAssetIds).toContain(asset.id);
+
+    // ── Exif parity ──────────────────────────────────────────────────────────
+    const viewerExifResponse = await ctx1.syncStream(viewer, [SyncRequestType.SharedSpaceAlbumAssetExifsV1]);
+    const editorExifResponse = await ctx2.syncStream(editor, [SyncRequestType.SharedSpaceAlbumAssetExifsV1]);
+
+    const viewerExifEvents = viewerExifResponse.filter((r) => isExifEvent(r));
+    const editorExifEvents = editorExifResponse.filter((r) => isExifEvent(r));
+
+    expect(viewerExifEvents.length).toBeGreaterThan(0);
+    expect(editorExifEvents.length).toBeGreaterThan(0);
+
+    const viewerExifAssetIds = viewerExifEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
+    const editorExifAssetIds = editorExifEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
+    expect(viewerExifAssetIds).toContain(asset.id);
+    expect(editorExifAssetIds).toContain(asset.id);
   });
 });
 
