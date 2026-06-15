@@ -407,6 +407,8 @@ part 'model/sync_partner_v1.dart';
 part 'model/sync_person_delete_v1.dart';
 part 'model/sync_person_v1.dart';
 part 'model/sync_request_type.dart';
+part 'model/sync_shared_space_album_link_delete_v1.dart';
+part 'model/sync_shared_space_album_link_v1.dart';
 part 'model/sync_shared_space_delete_v1.dart';
 part 'model/sync_shared_space_library_delete_v1.dart';
 part 'model/sync_shared_space_library_v1.dart';
