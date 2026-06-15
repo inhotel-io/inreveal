@@ -77,7 +77,7 @@ const setupSyncMocks = (mocks: ServiceMocks) => {
     libraryAssetExif: makeSub(),
     sharedSpaceLibrary: makeSub(),
     sharedSpaceAlbum: makeSub(),
-    sharedSpaceAlbumUser: makeSub(),
+    sharedSpaceAlbumLink: makeSub(),
   };
 
   // Assign onto the mock
@@ -1091,7 +1091,7 @@ describe(SyncService.name, () => {
       expect(syncSubs.user.cleanupAuditTable).toHaveBeenCalledWith(31);
       expect(syncSubs.userMetadata.cleanupAuditTable).toHaveBeenCalledWith(31);
       expect(syncSubs.sharedSpaceAlbum.cleanupAuditTable).toHaveBeenCalledWith(31);
-      expect(syncSubs.sharedSpaceAlbumUser.cleanupAuditTable).toHaveBeenCalledWith(31);
+      expect(syncSubs.sharedSpaceAlbumLink.cleanupAuditTable).toHaveBeenCalledWith(31);
     });
   });
 
