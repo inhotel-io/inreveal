@@ -31,5 +31,12 @@ describe(LibraryManifestController.name, () => {
       const { status } = await request(ctx.getHttpServer()).get('/admin/users/not-a-uuid/library-manifest');
       expect(status).toBe(400);
     });
+
+    it('rejects an invalid cursor with 400', async () => {
+      const { status } = await request(ctx.getHttpServer()).get(
+        `/admin/users/aaaaaaaa-0000-4000-8000-000000000000/library-manifest?cursor=not-a-uuid`,
+      );
+      expect(status).toBe(400);
+    });
   });
 });

@@ -1,8 +1,8 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { LibraryManifestResponseDto } from 'src/dtos/library-manifest.dto';
+import { LibraryManifestQueryDto, LibraryManifestResponseDto } from 'src/dtos/library-manifest.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Auth, Authenticated } from 'src/middleware/auth.guard';
 import { LibraryManifestService } from 'src/services/library-manifest.service';
@@ -20,7 +20,11 @@ export class LibraryManifestController {
     description: "Return a paginated manifest of a user's owned, non-trashed assets for data export.",
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  getLibraryManifest(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<LibraryManifestResponseDto> {
-    return this.service.getManifest(auth, id);
+  getLibraryManifest(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Query() { cursor }: LibraryManifestQueryDto,
+  ): Promise<LibraryManifestResponseDto> {
+    return this.service.getManifest(auth, id, cursor);
   }
 }

@@ -42,7 +42,7 @@ export class LibraryManifestService extends BaseService {
       owner: { id: user.id, email: user.email },
       albums: [],
       assets,
-      nextCursor: hasMore ? pageRows[pageRows.length - 1].id : null,
+      nextCursor: hasMore ? pageRows.at(-1)!.id : null,
     };
   }
 }
