@@ -1097,6 +1097,21 @@ export class SharedSpaceToAssetSync extends BaseSync {
   }
 }
 
+// `accessibleSpaceAlbums` returns albums linked to spaces the user belongs to,
+// excluding soft-deleted albums. Used by SharedSpaceAlbumToAssetSync.getDeletes
+// and SharedSpaceAlbumAssetSync / SharedSpaceAlbumAssetExifSync for scoping.
+//
+// Usage:
+//   .where('album.id', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+export function accessibleSpaceAlbums(eb: ExpressionBuilder<DB, keyof DB>, userId: string) {
+  return eb
+    .selectFrom('shared_space_album')
+    .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+    .select('shared_space_album.albumId as id')
+    .where('album.deletedAt', 'is', null)
+    .where('shared_space_album.spaceId', 'in', (e) => accessibleSpaces(e, userId));
+}
+
 // `accessibleLibraries` is the source-of-truth scoping subquery used by every
 // library sync class. A user can access a library via direct ownership OR via
 // any space they can access (membership or creator). The UNION naturally
@@ -1325,10 +1340,69 @@ export class SharedSpaceLibrarySync extends BaseSync {
   }
 }
 
-// Owns shared_space_album_user_audit (grant-revocation) cleanup; mirrors LibrarySync↔library_audit. Full metadata sync + getDeletes land in A4.
+// Streams album metadata for albums accessible to the user via the
+// shared_space_album_user grant. The grant table is populated by A2 triggers
+// (create-side) and consumed by A3 triggers (delete-side).
+//
+// NOTE (hybrid-clone gotcha §7): getDeletes reads shared_space_album_user_audit
+// (the gated grant-revocation audit) NOT album_audit. This mirrors
+// LibrarySync.getDeletes which reads library_audit (not album_audit).
+// The grant audit fires when the user LOSES ACCESS to the album
+// (space unlinked or member removed), so it signals "client should drop this
+// album" without requiring the album itself to be deleted.
 export class SharedSpaceAlbumSync extends BaseSync {
+  // Reads shared_space_album_user grant table keyed by createId.
+  // This mirrors AlbumSync.getCreatedAfter (album_user table) and
+  // LibrarySync.getCreatedAfter (library_user table). A fresh grant
+  // row is written for every (userId, albumId) pair when an album is linked
+  // to a space the user belongs to, or when the user joins a space with
+  // existing album links.
+  @GenerateSql({ params: [dummyCreateAfterOptions] })
+  getCreatedAfter({ nowId, userId, afterCreateId }: SyncCreatedAfterOptions) {
+    return this.db
+      .selectFrom('shared_space_album_user')
+      .select(['albumId as id', 'createId'])
+      .where('userId', '=', userId)
+      .$if(!!afterCreateId, (qb) => qb.where('createId', '>=', afterCreateId!))
+      .where('createId', '<', nowId)
+      .orderBy('createId', 'asc')
+      .execute();
+  }
+
+  // HYBRID-CLONE: reads shared_space_album_user_audit (grant revocation),
+  // NOT album_audit. Each row signals that the user has lost access to
+  // the album (no other path remains). The client should drop the album.
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getDeletes(options: SyncQueryOptions) {
+    return this.auditQuery('shared_space_album_user_audit', options)
+      .select(['id', 'albumId'])
+      .where('userId', '=', options.userId)
+      .stream();
+  }
+
   cleanupAuditTable(daysAgo: number) {
     return this.auditCleanup('shared_space_album_user_audit', daysAgo);
+  }
+
+  // Streams album metadata rows for albums the user can access via
+  // accessibleSpaceAlbums, excluding soft-deleted albums.
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getUpserts(options: SyncQueryOptions) {
+    return this.upsertQuery('album', options)
+      .distinctOn(['album.id', 'album.updateId'])
+      .where('album.id', 'in', (eb) => accessibleSpaceAlbums(eb, options.userId))
+      .select([
+        'album.id',
+        'album.albumName as name',
+        'album.description',
+        'album.createdAt',
+        'album.updatedAt',
+        'album.albumThumbnailAssetId as thumbnailAssetId',
+        'album.isActivityEnabled',
+        'album.order',
+        'album.updateId',
+      ])
+      .stream();
   }
 }
 
