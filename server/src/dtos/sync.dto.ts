@@ -695,9 +695,10 @@ export type SyncItem = {
   [SyncEntityType.SharedSpaceLibraryV1]: SyncSharedSpaceLibraryV1;
   [SyncEntityType.SharedSpaceLibraryBackfillV1]: SyncSharedSpaceLibraryV1;
   [SyncEntityType.SharedSpaceLibraryDeleteV1]: SyncSharedSpaceLibraryDeleteV1;
-  // gallery-fork: shared-space album sync types
-  [SyncEntityType.SharedSpaceAlbumV1]: SyncAlbumV1;
-  [SyncEntityType.SharedSpaceAlbumBackfillV1]: SyncAlbumV1;
+  // gallery-fork: shared-space album sync types (V2 shape: no ownerId, access is
+  // via space grant so ownership info is not needed by the mobile client)
+  [SyncEntityType.SharedSpaceAlbumV1]: SyncAlbumV2;
+  [SyncEntityType.SharedSpaceAlbumBackfillV1]: SyncAlbumV2;
   [SyncEntityType.SharedSpaceAlbumDeleteV1]: SyncAlbumDeleteV1;
   [SyncEntityType.SharedSpaceAlbumLinkV1]: SyncSharedSpaceAlbumLinkV1;
   [SyncEntityType.SharedSpaceAlbumLinkBackfillV1]: SyncSharedSpaceAlbumLinkV1;
