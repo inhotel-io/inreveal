@@ -239,5 +239,74 @@ describe(LibraryManifestService.name, () => {
       const page = await sut.getManifest(auth, user.id, '00000000-0000-4000-8000-000000000000', 2);
       expect(page.assets.map((a) => a.assetId)).toContain(asset.id);
     });
+
+    it('populates albumIds for an asset in multiple owned albums and lists the albums', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { album: a1 } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Trip' }, [asset.id]);
+      const { album: a2 } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Family' }, [asset.id]);
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      const entry = result.assets.find((x) => x.assetId === asset.id)!;
+      expect(entry.albumIds.toSorted()).toEqual([a1.id, a2.id].toSorted());
+      expect(result.albums.map((al) => al.id).toSorted()).toEqual([a1.id, a2.id].toSorted());
+      expect(result.albums).toEqual(
+        expect.arrayContaining([
+          { id: a1.id, name: 'Trip' },
+          { id: a2.id, name: 'Family' },
+        ]),
+      );
+    });
+
+    it('gives an asset in no album an empty albumIds', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      expect(result.assets.find((x) => x.assetId === asset.id)!.albumIds).toEqual([]);
+    });
+
+    it('does not include foreign shared-album membership and keeps the envelope consistent', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { user: other } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      // other user's album containing this user's asset (a shared album owned by someone else)
+      await ctx.newAlbum({ ownerId: other.id, albumName: 'Shared' }, [asset.id]);
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      const entry = result.assets.find((x) => x.assetId === asset.id)!;
+      expect(entry.albumIds).toEqual([]);
+      // consistency invariant: every albumId referenced resolves in `albums`
+      const albumIdSet = new Set(result.albums.map((al) => al.id));
+      for (const a of result.assets) {
+        for (const albumId of a.albumIds) {
+          expect(albumIdSet.has(albumId)).toBe(true);
+        }
+      }
+    });
+
+    it('repeats the same albums list on every page', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: a } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: b } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbum({ ownerId: user.id, albumName: 'All' }, [a.id, b.id]);
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const page1 = await sut.getManifest(auth, user.id, undefined, 1);
+      const page2 = await sut.getManifest(auth, user.id, page1.nextCursor ?? undefined, 1);
+
+      expect(page1.albums).toEqual(page2.albums);
+      expect(page1.albums).toHaveLength(1);
+    });
   });
 });

@@ -23,6 +23,13 @@ export class LibraryManifestService extends BaseService {
     const hasMore = rows.length > pageSize;
     const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
 
+    const assetIds = pageRows.map((row) => row.id);
+    const [ownedAlbums, albumMemberships] = await Promise.all([
+      this.albumRepository.getOwnedNames(id),
+      this.albumRepository.getOwnedAlbumIdsForAssets(id, assetIds),
+    ]);
+    const albumIdsByAsset = new Map(albumMemberships.map((m) => [m.assetId, m.albumIds]));
+
     const assets: LibraryManifestAssetDto[] = pageRows.map((row) => ({
       assetId: row.id,
       objectKey: row.originalPath,
@@ -33,14 +40,14 @@ export class LibraryManifestService extends BaseService {
       type: row.type,
       fileCreatedAt: asDateString(row.fileCreatedAt),
       fileModifiedAt: asDateString(row.fileModifiedAt),
-      albumIds: [],
+      albumIds: albumIdsByAsset.get(row.id) ?? [],
     }));
 
     return {
       manifestSchemaVersion: MANIFEST_SCHEMA_VERSION,
       generatedAt: new Date().toISOString(),
       owner: { id: user.id, email: user.email },
-      albums: [],
+      albums: ownedAlbums.map((album) => ({ id: album.id, name: album.albumName })),
       assets,
       nextCursor: hasMore ? pageRows.at(-1)!.id : null,
     };
