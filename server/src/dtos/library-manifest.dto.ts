@@ -44,3 +44,11 @@ const LibraryManifestResponseSchema = z
 
 export class LibraryManifestAssetDto extends createZodDto(LibraryManifestAssetSchema) {}
 export class LibraryManifestResponseDto extends createZodDto(LibraryManifestResponseSchema) {}
+
+const LibraryManifestQuerySchema = z
+  .object({
+    cursor: z.uuidv4().optional().describe('Asset id cursor from the previous page (nextCursor)'),
+  })
+  .meta({ id: 'LibraryManifestQueryDto' });
+
+export class LibraryManifestQueryDto extends createZodDto(LibraryManifestQuerySchema) {}
