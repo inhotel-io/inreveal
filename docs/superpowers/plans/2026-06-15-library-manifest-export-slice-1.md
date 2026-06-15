@@ -13,6 +13,7 @@
 **Spec:** `docs/superpowers/specs/2026-06-15-library-manifest-export-design.md`.
 
 **Key decisions baked in (do not "fix"):**
+
 - **404 via `NotFoundException`** for a missing user — deliberately more RESTful than the sibling `user-admin.service.findOrFail`, which throws `BadRequestException` (400). The manifest endpoint returns 404.
 - User resolved **`withDeleted: true`** so a deactivated account is still exportable.
 - Filter: `ownerId = :id AND deletedAt IS NULL AND status = 'active' AND libraryId IS NULL AND isExternal = false`, across all visibilities.
@@ -24,6 +25,7 @@
 ## Task 1: Constants
 
 **Files:**
+
 - Modify: `server/src/constants.ts`
 
 - [ ] **Step 1: Add the constants** (after the existing `JOBS_*_PAGINATION_SIZE` lines, ~line 21)
@@ -45,6 +47,7 @@ git commit -m "feat(manifest): add MANIFEST_PAGE_SIZE and MANIFEST_SCHEMA_VERSIO
 ## Task 2: DTOs
 
 **Files:**
+
 - Create: `server/src/dtos/library-manifest.dto.ts`
 
 - [ ] **Step 1: Create the DTO file**
@@ -115,6 +118,7 @@ git commit -m "feat(manifest): add library manifest response/asset DTOs"
 ## Task 3: Repository query + service (TDD core)
 
 **Files:**
+
 - Modify: `server/src/repositories/asset.repository.ts` (add method; add imports if missing)
 - Create: `server/src/services/library-manifest.service.ts`
 - Modify: `server/src/services/index.ts` (register service)
@@ -189,7 +193,7 @@ describe(LibraryManifestService.name, () => {
       ]);
     });
 
-    it('only returns the target user\'s assets', async () => {
+    it("only returns the target user's assets", async () => {
       const { sut, ctx } = setup();
       const { user: owner } = await ctx.newUser();
       const { user: other } = await ctx.newUser();
@@ -312,93 +316,93 @@ Expected: both tests PASS.
 Append these `it(...)` blocks inside `describe('getManifest', ...)`:
 
 ```typescript
-    it('excludes trashed and permanently-deleted assets', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const { asset: active } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.newAsset({ ownerId: user.id, status: AssetStatus.Trashed, deletedAt: new Date() });
-      await ctx.newAsset({ ownerId: user.id, status: AssetStatus.Deleted, deletedAt: new Date() });
+it('excludes trashed and permanently-deleted assets', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const { asset: active } = await ctx.newAsset({ ownerId: user.id });
+  await ctx.newAsset({ ownerId: user.id, status: AssetStatus.Trashed, deletedAt: new Date() });
+  await ctx.newAsset({ ownerId: user.id, status: AssetStatus.Deleted, deletedAt: new Date() });
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets.map((a) => a.assetId)).toEqual([active.id]);
-    });
+  expect(result.assets.map((a) => a.assetId)).toEqual([active.id]);
+});
 
-    it('excludes external-library assets', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const { asset: managed } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.newAsset({ ownerId: user.id, isExternal: true });
+it('excludes external-library assets', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const { asset: managed } = await ctx.newAsset({ ownerId: user.id });
+  await ctx.newAsset({ ownerId: user.id, isExternal: true });
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets.map((a) => a.assetId)).toEqual([managed.id]);
-    });
+  expect(result.assets.map((a) => a.assetId)).toEqual([managed.id]);
+});
 
-    it('includes assets of every visibility', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const ids = [];
-      for (const visibility of [
-        AssetVisibility.Timeline,
-        AssetVisibility.Archive,
-        AssetVisibility.Hidden,
-        AssetVisibility.Locked,
-      ]) {
-        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility });
-        ids.push(asset.id);
-      }
+it('includes assets of every visibility', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const ids = [];
+  for (const visibility of [
+    AssetVisibility.Timeline,
+    AssetVisibility.Archive,
+    AssetVisibility.Hidden,
+    AssetVisibility.Locked,
+  ]) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id, visibility });
+    ids.push(asset.id);
+  }
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets.map((a) => a.assetId).sort()).toEqual(ids.sort());
-    });
+  expect(result.assets.map((a) => a.assetId).sort()).toEqual(ids.sort());
+});
 
-    it('returns size null when the asset has no exif row', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+it('returns size null when the asset has no exif row', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const { asset } = await ctx.newAsset({ ownerId: user.id });
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets).toEqual([expect.objectContaining({ assetId: asset.id, size: null })]);
-    });
+  expect(result.assets).toEqual([expect.objectContaining({ assetId: asset.id, size: null })]);
+});
 
-    it('returns an empty manifest for a user with no assets', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
+it('returns an empty manifest for a user with no assets', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets).toEqual([]);
-      expect(result.nextCursor).toBeNull();
-      expect(result.albums).toEqual([]);
-    });
+  expect(result.assets).toEqual([]);
+  expect(result.nextCursor).toBeNull();
+  expect(result.albums).toEqual([]);
+});
 
-    it('still exports a deactivated (soft-deleted) user\'s library', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser({ deletedAt: new Date() });
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
+it("still exports a deactivated (soft-deleted) user's library", async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser({ deletedAt: new Date() });
+  const { asset } = await ctx.newAsset({ ownerId: user.id });
 
-      const auth = factory.auth({ user: { id: user.id } });
-      const result = await sut.getManifest(auth, user.id);
+  const auth = factory.auth({ user: { id: user.id } });
+  const result = await sut.getManifest(auth, user.id);
 
-      expect(result.owner.id).toBe(user.id);
-      expect(result.assets.map((a) => a.assetId)).toEqual([asset.id]);
-    });
+  expect(result.owner.id).toBe(user.id);
+  expect(result.assets.map((a) => a.assetId)).toEqual([asset.id]);
+});
 
-    it('throws NotFoundException for a user that does not exist', async () => {
-      const { sut } = setup();
-      const missingId = newUuid();
-      const auth = factory.auth({ user: { id: missingId } });
+it('throws NotFoundException for a user that does not exist', async () => {
+  const { sut } = setup();
+  const missingId = newUuid();
+  const auth = factory.auth({ user: { id: missingId } });
 
-      await expect(sut.getManifest(auth, missingId)).rejects.toBeInstanceOf(NotFoundException);
-    });
+  await expect(sut.getManifest(auth, missingId)).rejects.toBeInstanceOf(NotFoundException);
+});
 ```
 
 Add `NotFoundException` to the imports at the top of the spec, and add `newUuid` to the existing `test/small.factory` import:
@@ -426,6 +430,7 @@ git commit -m "feat(manifest): single-page library manifest service + asset quer
 ## Task 4: Controller + registration
 
 **Files:**
+
 - Create: `server/src/controllers/library-manifest.controller.ts`
 - Modify: `server/src/controllers/index.ts` (register controller)
 - Test: `server/src/controllers/library-manifest.controller.spec.ts`
@@ -460,7 +465,9 @@ describe(LibraryManifestController.name, () => {
 
   describe('GET /admin/users/:id/library-manifest', () => {
     it('should be an authenticated route', async () => {
-      await request(ctx.getHttpServer()).get(`/admin/users/${'a'.repeat(8)}-0000-4000-8000-000000000000/library-manifest`);
+      await request(ctx.getHttpServer()).get(
+        `/admin/users/${'a'.repeat(8)}-0000-4000-8000-000000000000/library-manifest`,
+      );
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
@@ -539,6 +546,7 @@ git commit -m "feat(manifest): add LibraryManifestController + admin guard (TDD)
 ## Task 5: E2E (happy path + 403 + 404)
 
 **Files:**
+
 - Create: `e2e/src/specs/server/api/library-manifest.e2e-spec.ts`
 
 E2E runs against the running stack. The endpoint is not yet in `@immich/sdk`, so call it with raw `supertest` (`request(app)`), mirroring the raw-request style already used in `user-admin.e2e-spec.ts`.
@@ -621,15 +629,18 @@ git commit -m "test(manifest): e2e for library-manifest happy path + 401/403/404
 ## Task 6: Regenerate OpenAPI + SDKs
 
 **Files:**
+
 - Modify (generated): `open-api/immich-openapi-specs.json`, `open-api/typescript-sdk/**`, and the dart SDK — whatever `make open-api` regenerates. CI verifies these are committed and in sync.
 
 - [ ] **Step 1: Regenerate**
 
 Run from the **repo root** (`/Users/pierre/dev/gallery/.claude/worktrees/library-manifest-export`):
+
 ```bash
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 make open-api
 ```
+
 This runs `open-api/bin/generate-open-api.sh`, which builds the server, writes `immich-openapi-specs.json` (via `sync-open-api`), and regenerates the TypeScript (`@immich/sdk`) and Dart SDKs. If `make` is unavailable, run the steps in that script directly.
 
 - [ ] **Step 2: Inspect the diff**

@@ -29,6 +29,7 @@ export class LibraryManifestQueryDto extends createZodDto(LibraryManifestQuerySc
 ```
 
 - [ ] **Step 2:** `pnpm exec tsc --noEmit` — clean. Commit:
+
 ```bash
 git add server/src/dtos/library-manifest.dto.ts
 git commit -m "feat(manifest): add cursor query DTO"
@@ -39,6 +40,7 @@ git commit -m "feat(manifest): add cursor query DTO"
 ## Task 2: Repository cursor predicate + service trim (TDD)
 
 **Files:**
+
 - Modify `server/src/repositories/asset.repository.ts` (`getOwnedManifestAssets` gains a `cursor` arg)
 - Modify `server/src/services/library-manifest.service.ts` (`getManifest` gains `cursor` + internal `pageSize`, computes `nextCursor`)
 - Modify `server/test/medium/specs/services/library-manifest.service.spec.ts` (add pagination tests)
@@ -46,85 +48,85 @@ git commit -m "feat(manifest): add cursor query DTO"
 - [ ] **Step 1: Write failing pagination tests.** Append inside `describe('getManifest', ...)`:
 
 ```typescript
-    it('sets nextCursor and trims to pageSize when more rows remain', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const made = [];
-      for (let i = 0; i < 3; i++) {
-        const { asset } = await ctx.newAsset({ ownerId: user.id });
-        made.push(asset.id);
-      }
-      const ordered = [...made].toSorted();
-      const auth = factory.auth({ user: { id: user.id } });
+it('sets nextCursor and trims to pageSize when more rows remain', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const made = [];
+  for (let i = 0; i < 3; i++) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    made.push(asset.id);
+  }
+  const ordered = [...made].toSorted();
+  const auth = factory.auth({ user: { id: user.id } });
 
-      const page1 = await sut.getManifest(auth, user.id, undefined, 2);
-      expect(page1.assets.map((a) => a.assetId)).toEqual(ordered.slice(0, 2));
-      expect(page1.nextCursor).toBe(ordered[1]);
+  const page1 = await sut.getManifest(auth, user.id, undefined, 2);
+  expect(page1.assets.map((a) => a.assetId)).toEqual(ordered.slice(0, 2));
+  expect(page1.nextCursor).toBe(ordered[1]);
 
-      const page2 = await sut.getManifest(auth, user.id, page1.nextCursor ?? undefined, 2);
-      expect(page2.assets.map((a) => a.assetId)).toEqual([ordered[2]]);
-      expect(page2.nextCursor).toBeNull();
-    });
+  const page2 = await sut.getManifest(auth, user.id, page1.nextCursor ?? undefined, 2);
+  expect(page2.assets.map((a) => a.assetId)).toEqual([ordered[2]]);
+  expect(page2.nextCursor).toBeNull();
+});
 
-    it('returns nextCursor null when the page exactly equals pageSize', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      await ctx.newAsset({ ownerId: user.id });
-      await ctx.newAsset({ ownerId: user.id });
-      const auth = factory.auth({ user: { id: user.id } });
+it('returns nextCursor null when the page exactly equals pageSize', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  await ctx.newAsset({ ownerId: user.id });
+  await ctx.newAsset({ ownerId: user.id });
+  const auth = factory.auth({ user: { id: user.id } });
 
-      const page = await sut.getManifest(auth, user.id, undefined, 2);
-      expect(page.assets).toHaveLength(2);
-      expect(page.nextCursor).toBeNull();
-    });
+  const page = await sut.getManifest(auth, user.id, undefined, 2);
+  expect(page.assets).toHaveLength(2);
+  expect(page.nextCursor).toBeNull();
+});
 
-    it('paginates to exhaustion with no duplicates or skips', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const all = new Set<string>();
-      for (let i = 0; i < 5; i++) {
-        const { asset } = await ctx.newAsset({ ownerId: user.id });
-        all.add(asset.id);
-      }
-      const auth = factory.auth({ user: { id: user.id } });
+it('paginates to exhaustion with no duplicates or skips', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const all = new Set<string>();
+  for (let i = 0; i < 5; i++) {
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    all.add(asset.id);
+  }
+  const auth = factory.auth({ user: { id: user.id } });
 
-      const seen: string[] = [];
-      let cursor: string | undefined;
-      for (let guard = 0; guard < 10; guard++) {
-        const page = await sut.getManifest(auth, user.id, cursor, 2);
-        seen.push(...page.assets.map((a) => a.assetId));
-        if (!page.nextCursor) break;
-        cursor = page.nextCursor;
-      }
-      expect(seen).toHaveLength(5);
-      expect(new Set(seen)).toEqual(all);
-    });
+  const seen: string[] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 10; guard++) {
+    const page = await sut.getManifest(auth, user.id, cursor, 2);
+    seen.push(...page.assets.map((a) => a.assetId));
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  expect(seen).toHaveLength(5);
+  expect(new Set(seen)).toEqual(all);
+});
 
-    it('returns an empty page for a cursor past the end', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      await ctx.newAsset({ ownerId: user.id });
-      const auth = factory.auth({ user: { id: user.id } });
+it('returns an empty page for a cursor past the end', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  await ctx.newAsset({ ownerId: user.id });
+  const auth = factory.auth({ user: { id: user.id } });
 
-      const page = await sut.getManifest(auth, user.id, 'ffffffff-ffff-4fff-bfff-ffffffffffff', 2);
-      expect(page.assets).toEqual([]);
-      expect(page.nextCursor).toBeNull();
-    });
+  const page = await sut.getManifest(auth, user.id, 'ffffffff-ffff-4fff-bfff-ffffffffffff', 2);
+  expect(page.assets).toEqual([]);
+  expect(page.nextCursor).toBeNull();
+});
 
-    it('accepts a cursor whose asset no longer exists (returns rows ordered after it)', async () => {
-      const { sut, ctx } = setup();
-      const { user } = await ctx.newUser();
-      const { asset } = await ctx.newAsset({ ownerId: user.id });
-      const auth = factory.auth({ user: { id: user.id } });
+it('accepts a cursor whose asset no longer exists (returns rows ordered after it)', async () => {
+  const { sut, ctx } = setup();
+  const { user } = await ctx.newUser();
+  const { asset } = await ctx.newAsset({ ownerId: user.id });
+  const auth = factory.auth({ user: { id: user.id } });
 
-      // a random uuid less-than the existing id is unlikely; use a known-small cursor
-      const page = await sut.getManifest(auth, user.id, '00000000-0000-4000-8000-000000000000', 2);
-      expect(page.assets.map((a) => a.assetId)).toContain(asset.id);
-    });
+  // a random uuid less-than the existing id is unlikely; use a known-small cursor
+  const page = await sut.getManifest(auth, user.id, '00000000-0000-4000-8000-000000000000', 2);
+  expect(page.assets.map((a) => a.assetId)).toContain(asset.id);
+});
 ```
 
 - [ ] **Step 2: Run — expect RED** (`sut.getManifest` 4-arg form / nextCursor not computed):
-`pnpm test:medium -- library-manifest.service` → failures on nextCursor/pagination assertions.
+      `pnpm test:medium -- library-manifest.service` → failures on nextCursor/pagination assertions.
 
 - [ ] **Step 3: Update the repository method** in `asset.repository.ts`:
 
@@ -160,6 +162,7 @@ git commit -m "feat(manifest): add cursor query DTO"
 - [ ] **Step 4: Update the service** `getManifest` in `library-manifest.service.ts`:
 
 Change the signature and body:
+
 ```typescript
   async getManifest(
     auth: AuthDto,
@@ -203,6 +206,7 @@ Change the signature and body:
 - [ ] **Step 5: Run — expect GREEN.** `pnpm test:medium -- library-manifest.service` → all pass (Slice 1 tests still green; new pagination tests pass).
 
 - [ ] **Step 6: Commit.**
+
 ```bash
 git add server/src/repositories/asset.repository.ts server/src/services/library-manifest.service.ts server/test/medium/specs/services/library-manifest.service.spec.ts
 git commit -m "feat(manifest): keyset pagination (cursor + nextCursor, TDD)"
@@ -213,18 +217,19 @@ git commit -m "feat(manifest): keyset pagination (cursor + nextCursor, TDD)"
 ## Task 3: Controller wires the cursor + 400 test
 
 **Files:**
+
 - Modify `server/src/controllers/library-manifest.controller.ts`
 - Modify `server/src/controllers/library-manifest.controller.spec.ts`
 
 - [ ] **Step 1: Add the failing controller test** (append inside the describe):
 
 ```typescript
-    it('rejects an invalid cursor with 400', async () => {
-      const { status } = await request(ctx.getHttpServer()).get(
-        `/admin/users/aaaaaaaa-0000-4000-8000-000000000000/library-manifest?cursor=not-a-uuid`,
-      );
-      expect(status).toBe(400);
-    });
+it('rejects an invalid cursor with 400', async () => {
+  const { status } = await request(ctx.getHttpServer()).get(
+    `/admin/users/aaaaaaaa-0000-4000-8000-000000000000/library-manifest?cursor=not-a-uuid`,
+  );
+  expect(status).toBe(400);
+});
 ```
 
 - [ ] **Step 2: Run — expect RED** (cursor not validated yet; returns 200/other): `pnpm test -- library-manifest.controller`.
@@ -236,6 +241,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 // add to the manifest dto import:
 import { LibraryManifestQueryDto, LibraryManifestResponseDto } from 'src/dtos/library-manifest.dto';
 ```
+
 ```typescript
   getLibraryManifest(
     @Auth() auth: AuthDto,
@@ -249,6 +255,7 @@ import { LibraryManifestQueryDto, LibraryManifestResponseDto } from 'src/dtos/li
 - [ ] **Step 4: Run — expect GREEN** (`pnpm test -- library-manifest.controller`): authenticated + bad `:id` 400 + bad cursor 400 all pass.
 
 - [ ] **Step 5: tsc + lint** (`pnpm exec tsc --noEmit` clean; `pnpm exec eslint --max-warnings 0 <changed files>` clean), then commit:
+
 ```bash
 git add server/src/controllers/library-manifest.controller.ts server/src/controllers/library-manifest.controller.spec.ts
 git commit -m "feat(manifest): wire cursor query param into the controller (TDD)"
@@ -263,15 +270,16 @@ git commit -m "feat(manifest): wire cursor query param into the controller (TDD)
 - [ ] **Step 1:** Add a test that creates 2 assets, requests with no cursor, and (if the default page is large) asserts both returned with `nextCursor: null`; and a 400 test for `?cursor=not-a-uuid`:
 
 ```typescript
-  it('rejects an invalid cursor (400)', async () => {
-    const { status } = await request(app)
-      .get(`/admin/users/${admin.userId}/library-manifest?cursor=not-a-uuid`)
-      .set(asBearerAuth(admin.accessToken));
-    expect(status).toBe(400);
-  });
+it('rejects an invalid cursor (400)', async () => {
+  const { status } = await request(app)
+    .get(`/admin/users/${admin.userId}/library-manifest?cursor=not-a-uuid`)
+    .set(asBearerAuth(admin.accessToken));
+  expect(status).toBe(400);
+});
 ```
 
 - [ ] **Step 2:** Commit (e2e runs in CI):
+
 ```bash
 git add e2e/src/specs/server/api/library-manifest.e2e-spec.ts
 git commit -m "test(manifest): e2e for invalid cursor (400)"
@@ -280,6 +288,7 @@ git commit -m "test(manifest): e2e for invalid cursor (400)"
 ---
 
 ## Slice 2 Done Criteria
+
 - `pnpm test:medium -- library-manifest.service` green (all Slice 1 + pagination tests).
 - `pnpm test -- library-manifest.controller` green (incl. 400 invalid cursor).
 - `pnpm exec tsc --noEmit` 0 errors; eslint clean on changed files.

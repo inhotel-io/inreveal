@@ -62,12 +62,14 @@ GET /api/admin/users/:id/library-manifest?cursor=<assetId>
 
 ```jsonc
 {
-  "manifestSchemaVersion": 1,                       // bump on breaking changes; consumers must guard
-  "generatedAt": "2026-06-15T12:00:00.000Z",        // ISO-8601, when this page was generated
+  "manifestSchemaVersion": 1, // bump on breaking changes; consumers must guard
+  "generatedAt": "2026-06-15T12:00:00.000Z", // ISO-8601, when this page was generated
   "owner": { "id": "<uuid>", "email": "<string>" }, // the target user
-  "albums": [ { "id": "<uuid>", "name": "<string>" } ], // the user's OWN albums; maps albumIds -> names
-  "assets": [ /* ManifestAssetItem, this page */ ],
-  "nextCursor": "<assetId>"                          // pass back as ?cursor to get the next page; null when exhausted
+  "albums": [{ "id": "<uuid>", "name": "<string>" }], // the user's OWN albums; maps albumIds -> names
+  "assets": [
+    /* ManifestAssetItem, this page */
+  ],
+  "nextCursor": "<assetId>", // pass back as ?cursor to get the next page; null when exhausted
 }
 ```
 
@@ -81,27 +83,27 @@ GET /api/admin/users/:id/library-manifest?cursor=<assetId>
 ```jsonc
 {
   "assetId": "<uuid>",
-  "objectKey": "<string>",       // = asset.originalPath; the object key under the object-storage backend
+  "objectKey": "<string>", // = asset.originalPath; the object key under the object-storage backend
   "originalFileName": "<string>",
-  "checksum": "<base64>",        // base64-encoded SHA1 hash; reuse hexOrBufferToBase64()
-  "checksumAlgorithm": "sha1",   // ChecksumAlgorithm: 'sha1' (managed uploads). 'sha1-path' marks external libs (excluded)
-  "size": 123456,                // bytes (number; fileSizeInByte is typed number|null); null if no exif row
-  "type": "IMAGE",               // AssetType enum, serialized as-is (IMAGE, VIDEO, …)
+  "checksum": "<base64>", // base64-encoded SHA1 hash; reuse hexOrBufferToBase64()
+  "checksumAlgorithm": "sha1", // ChecksumAlgorithm: 'sha1' (managed uploads). 'sha1-path' marks external libs (excluded)
+  "size": 123456, // bytes (number; fileSizeInByte is typed number|null); null if no exif row
+  "type": "IMAGE", // AssetType enum, serialized as-is (IMAGE, VIDEO, …)
   "fileCreatedAt": "<ISO-8601>",
   "fileModifiedAt": "<ISO-8601>",
-  "albumIds": [ "<uuid>", "..." ] // the user's OWN albums this asset belongs to (possibly empty)
+  "albumIds": ["<uuid>", "..."], // the user's OWN albums this asset belongs to (possibly empty)
 }
 ```
 
 ### Errors
 
-| Status | When |
-|---|---|
-| `401` | unauthenticated |
-| `403` | authenticated but not an admin / lacks `AdminUserRead` |
-| `404` | user `:id` does not exist |
-| `400` | `cursor` present but not a valid UUID |
-| `200` | empty library or a cursor past the end → `assets: []`, `nextCursor: null` |
+| Status | When                                                                      |
+| ------ | ------------------------------------------------------------------------- |
+| `401`  | unauthenticated                                                           |
+| `403`  | authenticated but not an admin / lacks `AdminUserRead`                    |
+| `404`  | user `:id` does not exist                                                 |
+| `400`  | `cursor` present but not a valid UUID                                     |
+| `200`  | empty library or a cursor past the end → `assets: []`, `nextCursor: null` |
 
 ## Behavior & Semantics
 
@@ -121,8 +123,9 @@ WHERE asset.ownerId = :id
 across **all** visibilities (`timeline`, `archive`, `hidden`, `locked`).
 
 Excluded:
+
 - trashed / soft-deleted assets (`deletedAt IS NOT NULL` or `status <> 'active'`),
-- assets owned by someone else (e.g. shared *to* this user),
+- assets owned by someone else (e.g. shared _to_ this user),
 - **external-library assets** (`libraryId IS NOT NULL` / `isExternal = true`) — their `originalPath` is
   an external filesystem path, not an object key in the user's bucket, so a no-copy export cannot fetch
   them. In the Noodle managed setting users have no external libraries, so this is currently a no-op
@@ -162,7 +165,7 @@ rows deleted are skipped, and no existing row is ever skipped or duplicated — 
 
 Both the envelope `albums` list and per-asset `albumIds` are scoped to **albums owned by `:id`**
 (`album.ownerId = :id`). This keeps the envelope self-consistent: every id in any asset's `albumIds`
-resolves to a name in `albums`. Assets that live only in another user's *shared* album therefore carry
+resolves to a name in `albums`. Assets that live only in another user's _shared_ album therefore carry
 an empty (or smaller) `albumIds` — by design; we export the user's own organization, not foreign
 shared-album membership.
 
@@ -214,13 +217,14 @@ conventions.
 
 Each slice is built test-first:
 
-1. **Red** — write the slice's failing tests first; run them and confirm they fail for the *expected*
+1. **Red** — write the slice's failing tests first; run them and confirm they fail for the _expected_
    reason (assertion mismatch / missing method), not a setup error.
 2. **Green** — write the minimal implementation to make them pass; run and confirm green.
 3. **Refactor** — clean up (extract helpers, tidy mapping) with tests staying green.
 4. **Regen + validate** — when DTOs change, run `pnpm run sync:open-api`; run lint/typecheck.
 
 Test harness mapping (verified against the repo):
+
 - **Service + SQL behavior** → **medium tests** (`server/test/medium/specs/services/*.spec.ts`) via
   `newMediumService(LibraryManifestService, { database, real: [...repos...], mock: [...] })` against a
   **real Kysely DB**, seeding with `ctx.newUser()/newAsset()/newAlbum()`. Use real repos for the
@@ -245,21 +249,22 @@ live, managed assets for a user, fully mapped, with `albums: []`, `albumIds: []`
 A usable manifest for any user whose library fits in one page.
 
 **Build:** `LibraryManifestAssetDto` + `LibraryManifestResponseDto` (Zod + `.meta`); `MANIFEST_PAGE_SIZE`
-constant; asset-repo keyset method *without* the cursor arg (just the filtered, ordered, limited query);
+constant; asset-repo keyset method _without_ the cursor arg (just the filtered, ordered, limited query);
 `LibraryManifestService.getManifest(auth, id)` doing user-resolve (`withDeleted`) + map + stamp; new
 `LibraryManifestController` with the route; `pnpm run sync:open-api`.
 
 **Tests (red→green):**
-- *Medium:* owner scoping (only `:id`'s assets); trash excluded (`deletedAt`/`status='trashed'` not
+
+- _Medium:_ owner scoping (only `:id`'s assets); trash excluded (`deletedAt`/`status='trashed'` not
   returned); `status='deleted'` excluded; external excluded (`libraryId` set / `isExternal=true` not
   returned); **all four visibilities included** (seed one of each); field mapping — `objectKey ===
-  originalPath`, `checksum` base64 matches `hexOrBufferToBase64`, `checksumAlgorithm`, `type`,
+originalPath`, `checksum` base64 matches `hexOrBufferToBase64`, `checksumAlgorithm`, `type`,
   timestamps ISO-8601; `size` from `asset_exif.fileSizeInByte`; **`size: null` when no exif row**;
   `owner.{id,email}`; `manifestSchemaVersion === 1` and `generatedAt` present; empty library →
   `assets: []`, `nextCursor: null`, `albums: []`; **a deactivated (soft-deleted) target user's library
   is still exported** (user resolved with `withDeleted`).
-- *Controller:* route is authenticated (`ctx.authenticate` called).
-- *E2E:* admin happy path returns assets; **403** for a non-admin user; **404** for an unknown `:id`.
+- _Controller:_ route is authenticated (`ctx.authenticate` called).
+- _E2E:_ admin happy path returns assets; **403** for a non-admin user; **404** for an unknown `:id`.
 
 **Edge cases covered here:** empty library; user with only trashed assets → empty; user with only
 external assets → empty; locked/hidden-only library still exported; deactivated target user exported.
@@ -273,13 +278,14 @@ the `cursor` predicate (`asset.id > :cursor`) and fetch `pageSize + 1`; service 
 computes `nextCursor`; wire `@Query()` into the controller; regen OpenAPI.
 
 **Tests (red→green):**
-- *Medium:* with `pageSize+1` matching rows, exactly `pageSize` returned and `nextCursor` = last kept
+
+- _Medium:_ with `pageSize+1` matching rows, exactly `pageSize` returned and `nextCursor` = last kept
   id; with exactly `pageSize` rows, all returned and `nextCursor: null`; passing that `nextCursor` back
   returns the next contiguous page; **paginate to exhaustion → union has every asset exactly once, no
   dup, no skip**; cursor past the end → `assets: []`, `nextCursor: null`; cursor of a since-deleted
   asset still returns the assets ordered after it (no crash).
-- *Controller:* **400** when `cursor` is present but not a UUID.
-- *E2E:* seed > `pageSize` (use a small test override or enough fixtures) and paginate to exhaustion;
+- _Controller:_ **400** when `cursor` is present but not a UUID.
+- _E2E:_ seed > `pageSize` (use a small test override or enough fixtures) and paginate to exhaustion;
   assert complete, non-duplicated coverage.
 
 **Edge cases covered here:** invalid cursor (400); cursor past end; deleted-cursor; single page exactly
@@ -295,13 +301,14 @@ populated from owned albums; both consistent.
 `albums`; regen OpenAPI if the DTO shape changed (it already declares the fields, so likely no change).
 
 **Tests (red→green):**
-- *Medium:* asset in multiple owned albums → all ids present; asset in no album → `[]`; **single grouped
+
+- _Medium:_ asset in multiple owned albums → all ids present; asset in no album → `[]`; **single grouped
   query, no N+1** (e.g. assert via the medium harness that one album query runs for the page, or assert
   correctness across many assets); `albums` lists exactly the user's owned albums with correct names;
   **every id in any `albumIds` appears in `albums`** (consistency invariant); an asset that is only in
-  *another* user's shared album → `albumIds: []` and that foreign album absent from `albums`; `albums`
+  _another_ user's shared album → `albumIds: []` and that foreign album absent from `albums`; `albums`
   repeated identically on page 2.
-- *E2E:* seeded user with assets across albums + visibilities; assert `albumIds` and `albums` resolve.
+- _E2E:_ seeded user with assets across albums + visibilities; assert `albumIds` and `albums` resolve.
 
 **Edge cases covered here:** asset in 0 / 1 / many albums; shared-album-only asset; albums list stable
 across pages.
@@ -319,7 +326,7 @@ across pages.
 ## Open Implementation Details To Verify (during the code, not blocking the design)
 
 - That `originalPath` is the raw object key (no leading slash) under the object-storage backend — see
-  **Prerequisite** (this one *is* blocking).
+  **Prerequisite** (this one _is_ blocking).
 - Exact `array_agg` typing in Kysely (cast to `uuid[]`) and that `ANY(:ids)` is parameterized safely.
 - Whether `asset_exif`'s int8 parser is already globally configured (it is, per `src/types.ts`); confirm
   `size` arrives as a number in the medium test.
