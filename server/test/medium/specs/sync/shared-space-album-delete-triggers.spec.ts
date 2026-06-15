@@ -59,7 +59,8 @@ describe('unlink album from space', () => {
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
     await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
     // create-side (A2) granted owner + viewer
-    expect((await grantsFor(album.id)).length).toBe(2);
+    const initialGrants = await grantsFor(album.id);
+    expect(initialGrants.length).toBe(2);
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
 
@@ -73,7 +74,8 @@ describe('unlink album from space', () => {
     expect(linkAudit).toHaveLength(1);
     // viewer had no other path → grant revoked by the consumer;
     // owner has an album_user role='owner' row → user_has_album_path = true → grant retained
-    const remaining = (await grantsFor(album.id)).map((r) => r.userId);
+    const remainingGrants = await grantsFor(album.id);
+    const remaining = remainingGrants.map((r) => r.userId);
     expect(remaining).toEqual([owner.id]);
   });
 
@@ -90,7 +92,8 @@ describe('unlink album from space', () => {
     await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
 
     // user_has_album_path is true via album_user → grant retained
-    expect((await grantsFor(album.id)).some((g) => g.userId === shared.id)).toBe(true);
+    const sharedGrants = await grantsFor(album.id);
+    expect(sharedGrants.some((g) => g.userId === shared.id)).toBe(true);
     // the album_user row itself is untouched
     const au = await db
       .selectFrom('album_user')
@@ -117,7 +120,8 @@ describe('album linked to two spaces; member in only one', () => {
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', s1.id).where('albumId', '=', album.id).execute();
 
-    expect((await grantsFor(album.id)).some((g) => g.userId === member.id)).toBe(true); // kept via s2
+    const memberGrants = await grantsFor(album.id);
+    expect(memberGrants.some((g) => g.userId === member.id)).toBe(true); // kept via s2
   });
 });
 
@@ -134,7 +138,8 @@ describe('member leaves space', () => {
 
     await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', viewer.id).execute();
 
-    expect((await grantsFor(album.id)).some((g) => g.userId === viewer.id)).toBe(false); // revoked
+    const viewerGrants1 = await grantsFor(album.id);
+    expect(viewerGrants1.some((g) => g.userId === viewer.id)).toBe(false); // revoked
     const linkAudit = await db
       .selectFrom('shared_space_album_audit')
       .selectAll()
@@ -157,7 +162,8 @@ describe('whole-space delete', () => {
 
     await db.deleteFrom('shared_space').where('id', '=', space.id).execute();
 
-    expect((await grantsFor(album.id)).some((g) => g.userId === viewer.id)).toBe(false); // revoked (no other path)
+    const viewerGrants1 = await grantsFor(album.id);
+    expect(viewerGrants1.some((g) => g.userId === viewer.id)).toBe(false); // revoked (no other path)
     const linkAudit = await db
       .selectFrom('shared_space_album_audit')
       .selectAll()

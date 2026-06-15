@@ -81,9 +81,12 @@ describe('shared_space_album_user grant table', () => {
 
 describe('shared_space_album audit tables (append logs, no FKs)', () => {
   it('shared_space_album_audit accepts a (spaceId, albumId) row with defaulted id + deletedAt', async () => {
-    const id = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
-    const fakeSpace = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
-    const fakeAlbum = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
+    const idResult = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const id = idResult.rows[0].id;
+    const fakeSpaceResult = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const fakeSpace = fakeSpaceResult.rows[0].id;
+    const fakeAlbumResult = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const fakeAlbum = fakeAlbumResult.rows[0].id;
 
     // No FK: a row survives even though spaceId/albumId reference nothing.
     await defaultDatabase.insertInto('shared_space_album_audit').values({ id, spaceId: fakeSpace, albumId: fakeAlbum }).execute();
@@ -94,9 +97,12 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
   });
 
   it('shared_space_album_user_audit accepts an (albumId, userId) row with no FK constraint', async () => {
-    const id = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
-    const fakeAlbum = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
-    const fakeUser = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
+    const idResult2 = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const id = idResult2.rows[0].id;
+    const fakeAlbumResult2 = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const fakeAlbum = fakeAlbumResult2.rows[0].id;
+    const fakeUserResult = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
+    const fakeUser = fakeUserResult.rows[0].id;
 
     await defaultDatabase.insertInto('shared_space_album_user_audit').values({ id, albumId: fakeAlbum, userId: fakeUser }).execute();
 
