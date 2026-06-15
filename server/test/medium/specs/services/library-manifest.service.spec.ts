@@ -310,5 +310,58 @@ describe(LibraryManifestService.name, () => {
       expect(page1.albums).toEqual(page2.albums);
       expect(page1.albums).toHaveLength(1);
     });
+
+    it('serializes timestamps as ISO strings and stamps a valid generatedAt', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const fileCreatedAt = new Date('2021-01-02T03:04:05.000Z');
+      const fileModifiedAt = new Date('2022-06-07T08:09:10.000Z');
+      const { asset } = await ctx.newAsset({ ownerId: user.id, fileCreatedAt, fileModifiedAt });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      const entry = result.assets.find((x) => x.assetId === asset.id)!;
+      expect(entry.fileCreatedAt).toBe('2021-01-02T03:04:05.000Z');
+      expect(entry.fileModifiedAt).toBe('2022-06-07T08:09:10.000Z');
+      expect(Number.isNaN(Date.parse(result.generatedAt))).toBe(false);
+    });
+
+    it('passes through non-image asset types', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, type: AssetType.Video });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      expect(result.assets.find((x) => x.assetId === asset.id)!.type).toBe(AssetType.Video);
+    });
+
+    it('lists an owned album that has no assets', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      await ctx.newAsset({ ownerId: user.id });
+      const { album: empty } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Empty' });
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      expect(result.albums.map((al) => al.id)).toContain(empty.id);
+    });
+
+    it('includes only owned-album ids for an asset that is also in a foreign album', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { user: other } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { album: owned } = await ctx.newAlbum({ ownerId: user.id, albumName: 'Mine' }, [asset.id]);
+      await ctx.newAlbum({ ownerId: other.id, albumName: 'Theirs' }, [asset.id]);
+
+      const auth = factory.auth({ user: { id: user.id } });
+      const result = await sut.getManifest(auth, user.id);
+
+      expect(result.assets.find((x) => x.assetId === asset.id)!.albumIds).toEqual([owned.id]);
+    });
   });
 });

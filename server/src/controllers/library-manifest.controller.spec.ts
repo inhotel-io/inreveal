@@ -40,5 +40,25 @@ describe(LibraryManifestController.name, () => {
       );
       expect(status).toBe(400);
     });
+
+    it('accepts a valid cursor and forwards it to the service', async () => {
+      const id = 'aaaaaaaa-0000-4000-8000-000000000000';
+      const cursor = 'bbbbbbbb-0000-4000-8000-000000000000';
+      service.getManifest.mockResolvedValue({
+        manifestSchemaVersion: 1,
+        generatedAt: new Date().toISOString(),
+        owner: { id, email: 'admin@immich.cloud' },
+        albums: [],
+        assets: [],
+        nextCursor: null,
+      });
+
+      const { status } = await request(ctx.getHttpServer()).get(`/admin/users/${id}/library-manifest?cursor=${cursor}`);
+
+      expect(status).toBe(200);
+      const [, calledId, calledCursor] = service.getManifest.mock.calls[0];
+      expect(calledId).toBe(id);
+      expect(calledCursor).toBe(cursor);
+    });
   });
 });
