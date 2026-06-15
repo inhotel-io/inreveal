@@ -79,6 +79,9 @@ export class SyncRepository {
   sharedSpaceLibrary: SharedSpaceLibrarySync;
   sharedSpaceAlbum: SharedSpaceAlbumSync;
   sharedSpaceAlbumLink: SharedSpaceAlbumLinkSync;
+  sharedSpaceAlbumToAsset: SharedSpaceAlbumToAssetSync;
+  sharedSpaceAlbumAsset: SharedSpaceAlbumAssetSync;
+  sharedSpaceAlbumAssetExif: SharedSpaceAlbumAssetExifSync;
 
   constructor(@InjectKysely() private db: Kysely<DB>) {
     this.album = new AlbumSync(this.db);
@@ -114,6 +117,9 @@ export class SyncRepository {
     this.sharedSpaceLibrary = new SharedSpaceLibrarySync(this.db);
     this.sharedSpaceAlbum = new SharedSpaceAlbumSync(this.db);
     this.sharedSpaceAlbumLink = new SharedSpaceAlbumLinkSync(this.db);
+    this.sharedSpaceAlbumToAsset = new SharedSpaceAlbumToAssetSync(this.db);
+    this.sharedSpaceAlbumAsset = new SharedSpaceAlbumAssetSync(this.db);
+    this.sharedSpaceAlbumAssetExif = new SharedSpaceAlbumAssetExifSync(this.db);
   }
 }
 
@@ -1450,6 +1456,159 @@ export class SharedSpaceAlbumLinkSync extends BaseSync {
     return this.upsertQuery('shared_space_album', options)
       .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
       .where('shared_space_album.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .stream();
+  }
+}
+
+// Streams album_asset join rows (album membership) for albums accessible via
+// the shared_space_album_user grant. Clone of AlbumToAssetSync with the
+// album_user scoping swapped for the grant.
+//
+// getDeletes reads album_asset_audit scoped to albums in accessibleSpaceAlbums
+// (not album_user like AlbumToAssetSync) so that access-revocation at the space
+// level stops the user from seeing further delete events.
+class SharedSpaceAlbumToAssetSync extends BaseSync {
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, albumId: string) {
+    return this.backfillQuery('album_asset', options)
+      .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
+      .where('album_asset.albumId', '=', albumId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getDeletes(options: SyncQueryOptions) {
+    const userId = options.userId;
+    return this.auditQuery('album_asset_audit', options)
+      .select(['id', 'assetId', 'albumId'])
+      .where((eb) =>
+        eb(
+          'albumId',
+          'in',
+          (eb2) => accessibleSpaceAlbums(eb2, userId),
+        ),
+      )
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getUpserts(options: SyncQueryOptions) {
+    const userId = options.userId;
+    return this.upsertQuery('album_asset', options)
+      .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .stream();
+  }
+}
+
+// Streams album_asset rows (full asset metadata) for albums accessible via
+// the shared_space_album_user grant. Clone of AlbumAssetSync with the
+// album_user scoping swapped for the grant.
+//
+// Preserves the split getCreates/getUpdates/getBackfill pattern, the
+// isFavorite masking (false for non-owners), and the albumToAssetAck coupling
+// that ensures updates only fire for assets the client already knows about.
+class SharedSpaceAlbumAssetSync extends BaseSync {
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, albumId: string, userId: string) {
+    return this.backfillQuery('album_asset', options)
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .select('album_asset.updateId')
+      .where('album_asset.albumId', '=', albumId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions, { updateId: DummyValue.UUID }], stream: true })
+  getUpdates(options: SyncQueryOptions, albumToAssetAck: SyncAck) {
+    const userId = options.userId;
+    return this.upsertQuery('asset', options)
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .select('asset.updateId')
+      .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send updates for assets that the client already knows about
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getCreates(options: SyncQueryOptions) {
+    const userId = options.userId;
+    return this.upsertQuery('album_asset', options)
+      .select('album_asset.updateId')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .stream();
+  }
+}
+
+// Streams asset_exif rows for album-accessible assets via the
+// shared_space_album_user grant. Clone of AlbumAssetExifSync with the
+// album_user scoping swapped for the grant.
+class SharedSpaceAlbumAssetExifSync extends BaseSync {
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, albumId: string) {
+    return this.backfillQuery('album_asset', options)
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
+      .select(columns.syncAssetExif)
+      .select('album_asset.updateId')
+      .where('album_asset.albumId', '=', albumId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions, { updateId: DummyValue.UUID }], stream: true })
+  getUpdates(options: SyncQueryOptions, albumToAssetAck: SyncAck) {
+    const userId = options.userId;
+    return this.upsertQuery('asset_exif', options)
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset_exif.assetId')
+      .select(columns.syncAssetExif)
+      .select('asset_exif.updateId')
+      .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send exif updates for assets that the client already knows about
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getCreates(options: SyncQueryOptions) {
+    const userId = options.userId;
+    return this.upsertQuery('album_asset', options)
+      .select('album_asset.updateId')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
+      .select(columns.syncAssetExif)
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .where('shared_space_album_user.userId', '=', userId)
       .stream();
   }
 }
