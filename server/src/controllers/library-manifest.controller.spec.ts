@@ -23,7 +23,9 @@ describe(LibraryManifestController.name, () => {
 
   describe('GET /admin/users/:id/library-manifest', () => {
     it('should be an authenticated route', async () => {
-      await request(ctx.getHttpServer()).get(`/admin/users/${'a'.repeat(8)}-0000-4000-8000-000000000000/library-manifest`);
+      await request(ctx.getHttpServer()).get(
+        `/admin/users/${'a'.repeat(8)}-0000-4000-8000-000000000000/library-manifest`,
+      );
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 

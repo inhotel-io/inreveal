@@ -63,7 +63,7 @@ describe(LibraryManifestService.name, () => {
       ]);
     });
 
-    it('only returns the target user\'s assets', async () => {
+    it("only returns the target user's assets", async () => {
       const { sut, ctx } = setup();
       const { user: owner } = await ctx.newUser();
       const { user: other } = await ctx.newUser();
@@ -144,7 +144,7 @@ describe(LibraryManifestService.name, () => {
       expect(result.albums).toEqual([]);
     });
 
-    it('still exports a deactivated (soft-deleted) user\'s library', async () => {
+    it("still exports a deactivated (soft-deleted) user's library", async () => {
       const { sut, ctx } = setup();
       const { user } = await ctx.newUser({ deletedAt: new Date() });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
@@ -211,7 +211,9 @@ describe(LibraryManifestService.name, () => {
       for (let guard = 0; guard < 10; guard++) {
         const page = await sut.getManifest(auth, user.id, cursor, 2);
         seen.push(...page.assets.map((a) => a.assetId));
-        if (!page.nextCursor) { break; }
+        if (!page.nextCursor) {
+          break;
+        }
         cursor = page.nextCursor;
       }
       expect(seen).toHaveLength(5);
