@@ -1,4 +1,5 @@
 import {
+  AfterInsertTrigger,
   Column,
   CreateDateColumn,
   ForeignKeyColumn,
@@ -8,12 +9,22 @@ import {
   UpdateDateColumn,
 } from '@immich/sql-tools';
 import { CreateIdColumn, UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
+import { shared_space_album_after_insert_user } from 'src/schema/functions';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { UserTable } from 'src/schema/tables/user.table';
 
 @Table('shared_space_album')
 @UpdatedAtTrigger('shared_space_album_updatedAt')
+// Populates shared_space_album_user for every member of the space when an album
+// is linked, and bumps album.updateId so the metadata row re-emits via
+// AlbumSync. See docs/superpowers/specs/2026-06-15-space-albums-phase2a-server-sync-design.md.
+@AfterInsertTrigger({
+  name: 'shared_space_album_after_insert_user',
+  scope: 'statement',
+  referencingNewTableAs: 'inserted_rows',
+  function: shared_space_album_after_insert_user,
+})
 export class SharedSpaceAlbumTable {
   @ForeignKeyColumn(() => SharedSpaceTable, { onDelete: 'CASCADE', primary: true, index: false })
   spaceId!: string;

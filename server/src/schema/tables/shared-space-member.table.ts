@@ -13,6 +13,7 @@ import { CreateIdColumn, UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators
 import { SharedSpaceRole } from 'src/enum';
 import {
   shared_space_member_after_insert,
+  shared_space_member_after_insert_album,
   shared_space_member_after_insert_library,
   shared_space_member_delete_audit,
   shared_space_member_delete_library_audit,
@@ -29,6 +30,17 @@ import { UserTable } from 'src/schema/tables/user.table';
   scope: 'statement',
   referencingNewTableAs: 'inserted_rows',
   function: shared_space_member_after_insert,
+})
+// Populates shared_space_album_user + bumps album.updateId for every album
+// linked to the space the new member joined. Name-suffixed with `_album` so
+// it sorts between shared_space_member_after_insert and _library in
+// alphabetical trigger order. See
+// docs/superpowers/specs/2026-06-15-space-albums-phase2a-server-sync-design.md.
+@AfterInsertTrigger({
+  name: 'shared_space_member_after_insert_album',
+  scope: 'statement',
+  referencingNewTableAs: 'inserted_rows',
+  function: shared_space_member_after_insert_album,
 })
 // Populates library_user + bumps library.updateId for every library linked
 // to the space the new member joined. Name-suffixed with `_library` so it
