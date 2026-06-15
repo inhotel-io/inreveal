@@ -74,7 +74,7 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
     const { user: joiner } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: joiner.id, role: SharedSpaceRole.Viewer });
-    // nothing to assert beyond "no error"; the grant table stays empty for this space's (absent) albums
-    expect(true).toBe(true);
+    const grants = await db.selectFrom('shared_space_album_user').selectAll().where('userId', '=', joiner.id).execute();
+    expect(grants).toHaveLength(0);
   });
 });
