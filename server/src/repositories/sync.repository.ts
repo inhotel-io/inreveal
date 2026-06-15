@@ -1406,9 +1406,50 @@ export class SharedSpaceAlbumSync extends BaseSync {
   }
 }
 
-// Owns shared_space_album_audit (link-removal) cleanup; mirrors SharedSpaceLibrarySync↔shared_space_library_audit. Full link sync lands in A4.
+// Columns emitted for each space→album link join row.
+const SHARED_SPACE_ALBUM_SYNC_COLUMNS = [
+  'shared_space_album.spaceId',
+  'shared_space_album.albumId',
+  'shared_space_album.showInTimeline',
+  'shared_space_album.addedById',
+  'shared_space_album.createdAt',
+  'shared_space_album.updatedAt',
+  'shared_space_album.updateId',
+] as const;
+
+// Streams the shared_space_album join rows — the per-space "which albums are
+// linked" mapping. Scoped by accessibleSpaces (NOT accessibleSpaceAlbums):
+// this is the join row belonging to the space, and the user must have access
+// to the space itself to see its album link set.
+//
+// Clone of SharedSpaceLibrarySync with shared_space_library→shared_space_album
+// and carrying showInTimeline. Owns shared_space_album_audit cleanup.
 export class SharedSpaceAlbumLinkSync extends BaseSync {
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, spaceId: string) {
+    return this.backfillQuery('shared_space_album', options)
+      .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getDeletes(options: SyncQueryOptions) {
+    return this.auditQuery('shared_space_album_audit', options)
+      .select(['id', 'spaceId', 'albumId'])
+      .where('spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .stream();
+  }
+
   cleanupAuditTable(daysAgo: number) {
     return this.auditCleanup('shared_space_album_audit', daysAgo);
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getUpserts(options: SyncQueryOptions) {
+    return this.upsertQuery('shared_space_album', options)
+      .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
+      .where('shared_space_album.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .stream();
   }
 }
