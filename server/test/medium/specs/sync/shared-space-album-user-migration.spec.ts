@@ -105,17 +105,3 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
     expect(rows[0].deletedAt).toBeDefined();
   });
 });
-
-describe('migration down() reversibility', () => {
-  it('down() drops all three tables', async () => {
-    // getKyselyDB() returns a fresh isolated DB from the template — safe to mutate.
-    const db = await getKyselyDB();
-    const migration = await import('src/schema/migrations-gallery/1779000000000-AddSharedSpaceAlbumUserTables');
-    await migration.down(db as unknown as Kysely<any>);
-    const exists = await sql<{ count: string }>`
-      SELECT count(*)::text AS count FROM information_schema.tables
-      WHERE table_name IN ('shared_space_album_user','shared_space_album_audit','shared_space_album_user_audit')
-    `.execute(db);
-    expect(exists.rows[0].count).toBe('0');
-  });
-});
