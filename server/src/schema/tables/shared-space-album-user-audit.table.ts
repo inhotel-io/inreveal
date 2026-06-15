@@ -1,12 +1,19 @@
-import { Column, CreateDateColumn, Generated, Table, Timestamp } from '@immich/sql-tools';
+import { AfterInsertTrigger, Column, CreateDateColumn, Generated, Table, Timestamp } from '@immich/sql-tools';
 import { PrimaryGeneratedUuidV7Column } from 'src/decorators';
+import { shared_space_album_user_delete_after_audit } from 'src/schema/functions';
 
 // Gated grant-revocation audit: one row per (album, user) who has lost all
-// paths. In A3, the consumer trigger shared_space_album_user_delete_after_audit
+// paths. The consumer trigger shared_space_album_user_delete_after_audit
 // (AFTER INSERT on this table) deletes the grant row; SharedSpaceAlbumSync.getDeletes
-// (A4) also reads it. FK-less append log. Mirrors library_audit (minus the trigger,
-// which A3 adds).
+// (A4) also reads it. FK-less append log. Mirrors library_audit.
 @Table('shared_space_album_user_audit')
+// When audit rows land, drop the corresponding shared_space_album_user rows.
+@AfterInsertTrigger({
+  name: 'shared_space_album_user_delete_after_audit',
+  scope: 'statement',
+  referencingNewTableAs: 'inserted_rows',
+  function: shared_space_album_user_delete_after_audit,
+})
 export class SharedSpaceAlbumUserAuditTable {
   @PrimaryGeneratedUuidV7Column()
   id!: Generated<string>;
