@@ -275,7 +275,7 @@ export class SyncService extends BaseService {
     await this.syncRepository.libraryAsset.cleanupAuditTable(pruneThreshold);
     await this.syncRepository.sharedSpaceLibrary.cleanupAuditTable(pruneThreshold);
     await this.syncRepository.sharedSpaceAlbum.cleanupAuditTable(pruneThreshold);
-    await this.syncRepository.sharedSpaceAlbumUser.cleanupAuditTable(pruneThreshold);
+    await this.syncRepository.sharedSpaceAlbumLink.cleanupAuditTable(pruneThreshold);
   }
 
   private needsFullSync(checkpointMap: CheckpointMap) {
