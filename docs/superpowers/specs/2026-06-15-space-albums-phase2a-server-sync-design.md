@@ -173,15 +173,19 @@ table; the existing audit is read by an additional, grant-scoped reader.
 path holds (so revocation never strips access a user legitimately retains, and never consults
 `album_user` for write — only for existence):
 
-1. **Ownership** — `album.ownerId = target_user_id AND album.deletedAt IS NULL`.
-2. **Manual `album_user`** — a row `album_user(albumId = target, userId = target)` of **any** role
-   (its existence is an independent access path; the space grant never touches it).
-3. **Another linking space** — `shared_space_album ⋈ shared_space_member` (or
-   `shared_space.createdById`) for `albumId = target`, `userId = target`, `spaceId <> exclude_space_id`.
+1. **Owner or manual `album_user`** — a row `album_user(albumId = target, userId = target)` of **any**
+   role, joined to a **non-deleted** album (`album.deletedAt IS NULL`). **Note:** the `album` table has
+   **no `ownerId` column** — album ownership is represented as an `album_user` row with `role = 'owner'`
+   (enforced by the `album_user_unique_owner` partial unique index), so this single branch covers both
+   the owner and manual shares. The space grant never touches `album_user`.
+2. **Another linking space (membership)** — `shared_space_album ⋈ shared_space_member` for
+   `albumId = target`, `userId = target`, `spaceId <> exclude_space_id`.
+3. **Another linking space (creator)** — `shared_space_album ⋈ shared_space.createdById` for
+   `albumId = target`, `userId = target`, `spaceId <> exclude_space_id`.
 
-Mirrors `user_has_library_path` branch-for-branch (ownership / membership / creator), adding the
-`album_user` branch (libraries have no per-user share table). Unit-pinned per branch + the
-`excludeSpaceId` gating.
+Mirrors `user_has_library_path`'s membership/creator branches; its single ownership-or-share branch
+replaces the library's separate `library.ownerId` ownership branch (libraries have an `ownerId` column;
+albums do not). Unit-pinned per branch + the `excludeSpaceId` gating.
 
 ### 5.2 Create-side triggers (statement-level, `REFERENCING NEW TABLE AS inserted_rows`)
 
@@ -294,8 +298,10 @@ as in personal albums). The greenfield streams need **no** V1/V2 legacy split �
 
 ### 6.2 DTOs — reuse, do not redefine
 
-- `SharedSpaceAlbumV1` (metadata) reuses **`SyncAlbumV1`** `{id, name, ownerId, thumbnailAssetId, …}`;
-  delete reuses the `{albumId}` shape (`SyncAlbumDeleteV1`-like).
+- `SharedSpaceAlbumV1` (metadata) reuses **`SyncAlbumV1`** — the exact column set `AlbumSync.getUpserts`
+  selects: `{id, name, description, createdAt, updatedAt, thumbnailAssetId, isActivityEnabled, order}`
+  (+ `updateId` as the ack). **There is no `ownerId`** (the `album` table has no such column; ownership is
+  an `album_user` row). Delete reuses the `{albumId}` shape (`SyncAlbumDeleteV1`-like).
 - `SharedSpaceAlbumLinkV1` is the one genuinely new DTO: `{spaceId, albumId, showInTimeline, addedById,
 createdAt, updatedAt}` (mirrors `SyncSharedSpaceLibraryV1` + `showInTimeline`); link-delete
   `{spaceId, albumId}`.
