@@ -15,6 +15,7 @@ import { DownloadService } from 'src/services/download.service';
 import { DuplicateService } from 'src/services/duplicate.service';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { JobService } from 'src/services/job.service';
+import { LibraryManifestService } from 'src/services/library-manifest.service';
 import { LibraryService } from 'src/services/library.service';
 import { MaintenanceService } from 'src/services/maintenance.service';
 import { MapService } from 'src/services/map.service';
@@ -71,6 +72,7 @@ export const services = [
   DuplicateService,
   FaceRepairService,
   JobService,
+  LibraryManifestService,
   LibraryService,
   MaintenanceService,
   MapService,

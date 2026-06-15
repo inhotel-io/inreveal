@@ -738,6 +738,32 @@ export class AssetRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, 1000] })
+  getOwnedManifestAssets(ownerId: string, limit: number) {
+    return this.db
+      .selectFrom('asset')
+      .leftJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select([
+        'asset.id',
+        'asset.originalPath',
+        'asset.originalFileName',
+        'asset.checksum',
+        'asset.checksumAlgorithm',
+        'asset.type',
+        'asset.fileCreatedAt',
+        'asset.fileModifiedAt',
+      ])
+      .select('asset_exif.fileSizeInByte as size')
+      .where('asset.ownerId', '=', asUuid(ownerId))
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.status', '=', AssetStatus.Active)
+      .where('asset.libraryId', 'is', null)
+      .where('asset.isExternal', '=', false)
+      .orderBy('asset.id')
+      .limit(limit)
+      .execute();
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   @ChunkedArray()
   getByIds(ids: string[]) {
