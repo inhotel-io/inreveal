@@ -1115,6 +1115,13 @@ export enum SyncRequestType {
   LibraryAssetsV1 = 'LibraryAssetsV1',
   LibraryAssetExifsV1 = 'LibraryAssetExifsV1',
   SharedSpaceLibrariesV1 = 'SharedSpaceLibrariesV1',
+
+  // Shared-space album sync (Phase 2A): one request type per granularity.
+  SharedSpaceAlbumsV1 = 'SharedSpaceAlbumsV1',
+  SharedSpaceAlbumLinksV1 = 'SharedSpaceAlbumLinksV1',
+  SharedSpaceAlbumToAssetsV1 = 'SharedSpaceAlbumToAssetsV1',
+  SharedSpaceAlbumAssetsV1 = 'SharedSpaceAlbumAssetsV1',
+  SharedSpaceAlbumAssetExifsV1 = 'SharedSpaceAlbumAssetExifsV1',
 }
 
 export const SyncRequestTypeSchema = z
