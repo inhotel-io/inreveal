@@ -78,7 +78,7 @@ export class SyncRepository {
   libraryAssetExif: LibraryAssetExifSync;
   sharedSpaceLibrary: SharedSpaceLibrarySync;
   sharedSpaceAlbum: SharedSpaceAlbumSync;
-  sharedSpaceAlbumUser: SharedSpaceAlbumUserSync;
+  sharedSpaceAlbumLink: SharedSpaceAlbumLinkSync;
 
   constructor(@InjectKysely() private db: Kysely<DB>) {
     this.album = new AlbumSync(this.db);
@@ -113,7 +113,7 @@ export class SyncRepository {
     this.libraryAssetExif = new LibraryAssetExifSync(this.db);
     this.sharedSpaceLibrary = new SharedSpaceLibrarySync(this.db);
     this.sharedSpaceAlbum = new SharedSpaceAlbumSync(this.db);
-    this.sharedSpaceAlbumUser = new SharedSpaceAlbumUserSync(this.db);
+    this.sharedSpaceAlbumLink = new SharedSpaceAlbumLinkSync(this.db);
   }
 }
 
@@ -1325,18 +1325,16 @@ export class SharedSpaceLibrarySync extends BaseSync {
   }
 }
 
-// Owns shared_space_album_audit cleanup. Sync reads (getDeletes/getUpserts/
-// getBackfill) land in A4; this class exists in A1 only so onAuditTableCleanup
-// covers every *_audit table discovered by schemaFromCode().
+// Owns shared_space_album_user_audit (grant-revocation) cleanup; mirrors LibrarySync↔library_audit. Full metadata sync + getDeletes land in A4.
 export class SharedSpaceAlbumSync extends BaseSync {
   cleanupAuditTable(daysAgo: number) {
-    return this.auditCleanup('shared_space_album_audit', daysAgo);
+    return this.auditCleanup('shared_space_album_user_audit', daysAgo);
   }
 }
 
-// Owns shared_space_album_user_audit cleanup. Full sync logic lands in A4.
-export class SharedSpaceAlbumUserSync extends BaseSync {
+// Owns shared_space_album_audit (link-removal) cleanup; mirrors SharedSpaceLibrarySync↔shared_space_library_audit. Full link sync lands in A4.
+export class SharedSpaceAlbumLinkSync extends BaseSync {
   cleanupAuditTable(daysAgo: number) {
-    return this.auditCleanup('shared_space_album_user_audit', daysAgo);
+    return this.auditCleanup('shared_space_album_audit', daysAgo);
   }
 }
