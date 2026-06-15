@@ -211,7 +211,7 @@ describe(LibraryManifestService.name, () => {
       for (let guard = 0; guard < 10; guard++) {
         const page = await sut.getManifest(auth, user.id, cursor, 2);
         seen.push(...page.assets.map((a) => a.assetId));
-        if (!page.nextCursor) break;
+        if (!page.nextCursor) { break; }
         cursor = page.nextCursor;
       }
       expect(seen).toHaveLength(5);
