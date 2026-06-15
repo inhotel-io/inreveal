@@ -16,6 +16,9 @@ let defaultDatabase: Kysely<DB>;
 const NOW_ID = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const BEFORE_UPDATE_ID = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
 const ZERO_UPDATE_ID = '00000000-0000-7000-8000-000000000000';
+// ZERO_UPDATE_ID is below any real album_asset.updateId (ULIDs start after epoch 0),
+// so getUpdates with this ack must return EMPTY — the coupling
+// `album_asset.updateId <= albumToAssetAck.updateId` filters everything out.
 
 const setup = () => {
   const ctx = new SyncTestContext(defaultDatabase);
@@ -162,10 +165,12 @@ describe('SharedSpaceAlbumAssetSync.getUpdates', () => {
     for await (const row of streamMax) {
       resultMax.push(row);
     }
-    // The max ack results should contain the asset (assuming it was "known")
+    // With ack BELOW the asset's album_asset.updateId → result must be EMPTY.
+    // (Dropping the `album_asset.updateId <= albumToAssetAck.updateId` coupling
+    // would cause this assertion to fail because the asset would appear here.)
+    expect(resultZero).toHaveLength(0);
+
+    // With ack ABOVE the asset's album_asset.updateId → asset must be returned.
     expect(resultMax.map((r: any) => r.id)).toContain(asset.id);
-    // Zero ack should not contain assets that were added after
-    // (depends on actual updateId values — at minimum verify no exception)
-    expect(Array.isArray(resultZero)).toBe(true);
   });
 });
