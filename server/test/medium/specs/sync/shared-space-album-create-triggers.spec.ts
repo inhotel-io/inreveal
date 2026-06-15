@@ -11,8 +11,10 @@ beforeAll(async () => {
 
 const grantsFor = (albumId: string) =>
   db.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', albumId).execute();
-const albumUpdateId = async (albumId: string) =>
-  (await db.selectFrom('album').select('updateId').where('id', '=', albumId).executeTakeFirstOrThrow()).updateId;
+const albumUpdateId = async (albumId: string) => {
+  const row = await db.selectFrom('album').select('updateId').where('id', '=', albumId).executeTakeFirstOrThrow();
+  return row.updateId;
+};
 
 describe('shared_space_album_after_insert_user (link → grant members)', () => {
   it('grants shared_space_album_user to every current member and bumps album.updateId', async () => {
@@ -63,8 +65,10 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
 
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: joiner.id, role: SharedSpaceRole.Viewer });
 
-    expect((await grantsFor(a1.id)).some((g) => g.userId === joiner.id)).toBe(true);
-    expect((await grantsFor(a2.id)).some((g) => g.userId === joiner.id)).toBe(true);
+    const a1Grants = await grantsFor(a1.id);
+    const a2Grants = await grantsFor(a2.id);
+    expect(a1Grants.some((g) => g.userId === joiner.id)).toBe(true);
+    expect(a2Grants.some((g) => g.userId === joiner.id)).toBe(true);
     expect(await albumUpdateId(a1.id)).not.toEqual(a1Before);
   });
 

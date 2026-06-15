@@ -1,6 +1,6 @@
 import { Kysely } from 'kysely';
 import { SharedSpaceRole } from 'src/enum';
-import { accessibleSpaceAlbums, SyncRepository } from 'src/repositories/sync.repository';
+import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -61,10 +61,10 @@ describe('SharedSpaceAlbumSync.getCreatedAfter', () => {
       expect(all[i].createId >= all[i - 1].createId).toBe(true);
     }
     // Using afterCreateId = last createId returns only that one (or more at same value)
-    const lastCreateId = all[all.length - 1].createId;
+    const lastCreateId = all.at(-1)!.createId;
     const last = await sut.getCreatedAfter({ nowId: NOW_ID, userId: member.id, afterCreateId: lastCreateId });
     expect(last.length).toBeGreaterThanOrEqual(1);
-    expect(last.map((r) => r.id)).toContain(all[all.length - 1].id);
+    expect(last.map((r) => r.id)).toContain(all.at(-1)!.id);
   });
 
   it('returns empty for a non-member', async () => {
@@ -82,7 +82,7 @@ describe('SharedSpaceAlbumSync.getCreatedAfter', () => {
 
 describe('SharedSpaceAlbumSync.getUpserts', () => {
   it('returns album metadata for albums accessible via space grant', async () => {
-    const { ctx, db, sut } = setup();
+    const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();
     const { user: member } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
