@@ -53,4 +53,16 @@ describe('/admin/users/:id/library-manifest', () => {
       .set(asBearerAuth(admin.accessToken));
     expect(status).toBe(400);
   });
+
+  it('includes owned album membership', async () => {
+    const asset = await utils.createAsset(admin.accessToken);
+    const album = await utils.createAlbum(admin.accessToken, { albumName: 'E2E', assetIds: [asset.id] });
+    const { status, body } = await request(app)
+      .get(`/admin/users/${admin.userId}/library-manifest`)
+      .set(asBearerAuth(admin.accessToken));
+    expect(status).toBe(200);
+    expect(body.albums.map((a: { id: string }) => a.id)).toContain(album.id);
+    const entry = body.assets.find((a: { assetId: string }) => a.assetId === asset.id);
+    expect(entry.albumIds).toContain(album.id);
+  });
 });
