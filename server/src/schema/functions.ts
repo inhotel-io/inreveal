@@ -513,9 +513,10 @@ export const asset_library_delete_audit = registerFunction({
 // Helper: does `target_user_id` retain any access path to `target_album_id`
 // ignoring the space identified by `exclude_space_id`? Used by album grant
 // triggers to determine whether a user still has access via another route.
-// Four branches: (1) album ownership (deletedAt IS NULL), (2) manual album_user
-// row of any role, (3) membership in another space that links the album,
-// (4) creator of another space that links the album.
+// Three branches: (1) owner OR any manual album_user share, joined to a non-deleted
+//   album (album has no ownerId column — ownership is an album_user role='owner' row);
+// (2) membership in ANOTHER space that links the album (excluding exclude_space_id);
+// (3) being the creator of ANOTHER linking space (excluding exclude_space_id).
 export const user_has_album_path = registerFunction({
   name: 'user_has_album_path',
   arguments: ['target_album_id uuid', 'target_user_id uuid', 'exclude_space_id uuid'],
