@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceRole } from 'src/enum';
+import { SharedSpaceRole, SyncEntityType } from 'src/enum';
 import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
@@ -115,7 +115,7 @@ describe('SharedSpaceAlbumAssetExifSync.getUpdates', () => {
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
     // With max ack — asset is "known", exif updates should come through
-    const streamMax = sut.getUpdates({ nowId: NOW_ID, userId: member.id }, { updateId: BEFORE_UPDATE_ID });
+    const streamMax = sut.getUpdates({ nowId: NOW_ID, userId: member.id }, { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID });
     const resultMax: any[] = [];
     for await (const row of streamMax) {
       resultMax.push(row);
