@@ -1235,6 +1235,32 @@ export enum SyncEntityType {
   SharedSpaceLibraryDeleteV1 = 'SharedSpaceLibraryDeleteV1',
   SharedSpaceLibraryBackfillV1 = 'SharedSpaceLibraryBackfillV1',
 
+  // --- gallery-fork: shared-space album sync ---
+  // metadata family (grant-keyed) ← clone AlbumSync
+  SharedSpaceAlbumV1 = 'SharedSpaceAlbumV1',
+  SharedSpaceAlbumDeleteV1 = 'SharedSpaceAlbumDeleteV1',
+  SharedSpaceAlbumBackfillV1 = 'SharedSpaceAlbumBackfillV1',
+
+  // link family (space-keyed) ← clone SharedSpaceLibrarySync
+  SharedSpaceAlbumLinkV1 = 'SharedSpaceAlbumLinkV1',
+  SharedSpaceAlbumLinkDeleteV1 = 'SharedSpaceAlbumLinkDeleteV1',
+  SharedSpaceAlbumLinkBackfillV1 = 'SharedSpaceAlbumLinkBackfillV1',
+
+  // membership ← clone AlbumToAssetSync
+  SharedSpaceAlbumToAssetV1 = 'SharedSpaceAlbumToAssetV1',
+  SharedSpaceAlbumToAssetDeleteV1 = 'SharedSpaceAlbumToAssetDeleteV1',
+  SharedSpaceAlbumToAssetBackfillV1 = 'SharedSpaceAlbumToAssetBackfillV1',
+
+  // assets (current V2 asset shape) ← clone AlbumAssetSync
+  SharedSpaceAlbumAssetCreateV1 = 'SharedSpaceAlbumAssetCreateV1',
+  SharedSpaceAlbumAssetUpdateV1 = 'SharedSpaceAlbumAssetUpdateV1',
+  SharedSpaceAlbumAssetBackfillV1 = 'SharedSpaceAlbumAssetBackfillV1',
+
+  // exif ← clone AlbumAssetExifSync
+  SharedSpaceAlbumAssetExifCreateV1 = 'SharedSpaceAlbumAssetExifCreateV1',
+  SharedSpaceAlbumAssetExifUpdateV1 = 'SharedSpaceAlbumAssetExifUpdateV1',
+  SharedSpaceAlbumAssetExifBackfillV1 = 'SharedSpaceAlbumAssetExifBackfillV1',
+
   SyncAckV1 = 'SyncAckV1',
   SyncResetV1 = 'SyncResetV1',
   SyncCompleteV1 = 'SyncCompleteV1',
