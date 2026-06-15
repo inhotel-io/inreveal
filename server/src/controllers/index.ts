@@ -14,6 +14,7 @@ import { FaceRepairAdminController } from 'src/controllers/face-repair-admin.con
 import { FaceController } from 'src/controllers/face.controller';
 import { GalleryMapController } from 'src/controllers/gallery-map.controller';
 import { JobController } from 'src/controllers/job.controller';
+import { LibraryManifestController } from 'src/controllers/library-manifest.controller';
 import { LibraryController } from 'src/controllers/library.controller';
 import { MaintenanceController } from 'src/controllers/maintenance.controller';
 import { MapController } from 'src/controllers/map.controller';
@@ -61,6 +62,7 @@ export const controllers = [
   FaceRepairAdminController,
   GalleryMapController,
   JobController,
+  LibraryManifestController,
   LibraryController,
   MaintenanceController,
   MapController,
