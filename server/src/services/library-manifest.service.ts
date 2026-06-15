@@ -8,15 +8,22 @@ import { asDateString } from 'src/utils/date';
 
 @Injectable()
 export class LibraryManifestService extends BaseService {
-  async getManifest(auth: AuthDto, id: string): Promise<LibraryManifestResponseDto> {
+  async getManifest(
+    auth: AuthDto,
+    id: string,
+    cursor?: string,
+    pageSize: number = MANIFEST_PAGE_SIZE,
+  ): Promise<LibraryManifestResponseDto> {
     const user = await this.userRepository.get(id, { withDeleted: true });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const rows = await this.assetRepository.getOwnedManifestAssets(id, MANIFEST_PAGE_SIZE);
+    const rows = await this.assetRepository.getOwnedManifestAssets(id, pageSize + 1, cursor);
+    const hasMore = rows.length > pageSize;
+    const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
 
-    const assets: LibraryManifestAssetDto[] = rows.map((row) => ({
+    const assets: LibraryManifestAssetDto[] = pageRows.map((row) => ({
       assetId: row.id,
       objectKey: row.originalPath,
       originalFileName: row.originalFileName,
@@ -35,7 +42,7 @@ export class LibraryManifestService extends BaseService {
       owner: { id: user.id, email: user.email },
       albums: [],
       assets,
-      nextCursor: null,
+      nextCursor: hasMore ? pageRows[pageRows.length - 1].id : null,
     };
   }
 }

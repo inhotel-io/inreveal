@@ -163,5 +163,81 @@ describe(LibraryManifestService.name, () => {
 
       await expect(sut.getManifest(auth, missingId)).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('sets nextCursor and trims to pageSize when more rows remain', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const made = [];
+      for (let i = 0; i < 3; i++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        made.push(asset.id);
+      }
+      const ordered = [...made].toSorted();
+      const auth = factory.auth({ user: { id: user.id } });
+
+      const page1 = await sut.getManifest(auth, user.id, undefined, 2);
+      expect(page1.assets.map((a) => a.assetId)).toEqual(ordered.slice(0, 2));
+      expect(page1.nextCursor).toBe(ordered[1]);
+
+      const page2 = await sut.getManifest(auth, user.id, page1.nextCursor ?? undefined, 2);
+      expect(page2.assets.map((a) => a.assetId)).toEqual([ordered[2]]);
+      expect(page2.nextCursor).toBeNull();
+    });
+
+    it('returns nextCursor null when the page exactly equals pageSize', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAsset({ ownerId: user.id });
+      const auth = factory.auth({ user: { id: user.id } });
+
+      const page = await sut.getManifest(auth, user.id, undefined, 2);
+      expect(page.assets).toHaveLength(2);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('paginates to exhaustion with no duplicates or skips', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const all = new Set<string>();
+      for (let i = 0; i < 5; i++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        all.add(asset.id);
+      }
+      const auth = factory.auth({ user: { id: user.id } });
+
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      for (let guard = 0; guard < 10; guard++) {
+        const page = await sut.getManifest(auth, user.id, cursor, 2);
+        seen.push(...page.assets.map((a) => a.assetId));
+        if (!page.nextCursor) break;
+        cursor = page.nextCursor;
+      }
+      expect(seen).toHaveLength(5);
+      expect(new Set(seen)).toEqual(all);
+    });
+
+    it('returns an empty page for a cursor past the end', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      await ctx.newAsset({ ownerId: user.id });
+      const auth = factory.auth({ user: { id: user.id } });
+
+      const page = await sut.getManifest(auth, user.id, 'ffffffff-ffff-4fff-bfff-ffffffffffff', 2);
+      expect(page.assets).toEqual([]);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('accepts a cursor whose asset no longer exists (returns rows ordered after it)', async () => {
+      const { sut, ctx } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const auth = factory.auth({ user: { id: user.id } });
+
+      // a random uuid less-than the existing id is unlikely; use a known-small cursor
+      const page = await sut.getManifest(auth, user.id, '00000000-0000-4000-8000-000000000000', 2);
+      expect(page.assets.map((a) => a.assetId)).toContain(asset.id);
+    });
   });
 });

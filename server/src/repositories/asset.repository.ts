@@ -738,8 +738,8 @@ export class AssetRepository {
       .execute();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, 1000] })
-  getOwnedManifestAssets(ownerId: string, limit: number) {
+  @GenerateSql({ params: [DummyValue.UUID, 1000, DummyValue.UUID] })
+  getOwnedManifestAssets(ownerId: string, limit: number, cursor?: string) {
     return this.db
       .selectFrom('asset')
       .leftJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
@@ -759,6 +759,7 @@ export class AssetRepository {
       .where('asset.status', '=', AssetStatus.Active)
       .where('asset.libraryId', 'is', null)
       .where('asset.isExternal', '=', false)
+      .$if(!!cursor, (qb) => qb.where('asset.id', '>', asUuid(cursor!)))
       .orderBy('asset.id')
       .limit(limit)
       .execute();
