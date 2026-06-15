@@ -46,4 +46,11 @@ describe('/admin/users/:id/library-manifest', () => {
     expect(body.assets[0].albumIds).toEqual([]);
     expect(body.nextCursor).toBeNull();
   });
+
+  it('rejects an invalid cursor (400)', async () => {
+    const { status } = await request(app)
+      .get(`/admin/users/${admin.userId}/library-manifest?cursor=not-a-uuid`)
+      .set(asBearerAuth(admin.accessToken));
+    expect(status).toBe(400);
+  });
 });
