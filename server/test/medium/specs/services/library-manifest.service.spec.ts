@@ -118,7 +118,7 @@ describe(LibraryManifestService.name, () => {
       const auth = factory.auth({ user: { id: user.id } });
       const result = await sut.getManifest(auth, user.id);
 
-      expect(result.assets.map((a) => a.assetId).sort()).toEqual(ids.sort());
+      expect(result.assets.map((a) => a.assetId).toSorted()).toEqual(ids.toSorted());
     });
 
     it('returns size null when the asset has no exif row', async () => {
