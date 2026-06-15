@@ -747,6 +747,8 @@ Class | Method | HTTP request | Description
  - [SyncPersonDeleteV1](doc//SyncPersonDeleteV1.md)
  - [SyncPersonV1](doc//SyncPersonV1.md)
  - [SyncRequestType](doc//SyncRequestType.md)
+ - [SyncSharedSpaceAlbumLinkDeleteV1](doc//SyncSharedSpaceAlbumLinkDeleteV1.md)
+ - [SyncSharedSpaceAlbumLinkV1](doc//SyncSharedSpaceAlbumLinkV1.md)
  - [SyncSharedSpaceDeleteV1](doc//SyncSharedSpaceDeleteV1.md)
  - [SyncSharedSpaceLibraryDeleteV1](doc//SyncSharedSpaceLibraryDeleteV1.md)
  - [SyncSharedSpaceLibraryV1](doc//SyncSharedSpaceLibraryV1.md)
