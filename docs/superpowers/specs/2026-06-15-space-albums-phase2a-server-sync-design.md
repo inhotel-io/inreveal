@@ -291,17 +291,22 @@ SharedSpaceAlbumAssetCreateV1 / SharedSpaceAlbumAssetUpdateV1 / SharedSpaceAlbum
 SharedSpaceAlbumAssetExifCreateV1 / SharedSpaceAlbumAssetExifUpdateV1 / SharedSpaceAlbumAssetExifBackfillV1
 ```
 
-…and `SyncRequestType`: `SharedSpaceAlbumsV1` (metadata), `SharedSpaceAlbumLinksV1` (link),
-`SharedSpaceAlbumAssetsV1`, `SharedSpaceAlbumAssetExifsV1` (the membership rides with the asset request,
-as in personal albums). The greenfield streams need **no** V1/V2 legacy split — clone the **current**
-(V2) personal query shapes under single `…V1` entity types.
+…and **five** `SyncRequestType`s, mirroring the personal album's request granularity (which keeps
+membership and assets as separate requests — `AlbumToAssetsV1` vs `AlbumAssetsV2`):
+`SharedSpaceAlbumsV1` (metadata), `SharedSpaceAlbumLinksV1` (link), `SharedSpaceAlbumToAssetsV1`
+(membership), `SharedSpaceAlbumAssetsV1` (assets), `SharedSpaceAlbumAssetExifsV1` (exif). The greenfield
+streams need **no** V1/V2 legacy split — clone the **current** personal query shapes under single `…V1`
+entity types (the album metadata mirrors the V1 `AlbumSync`/`SyncAlbumV1` shape A4 cloned; the asset rows
+use the current `SyncAssetV2` DTO).
 
 ### 6.2 DTOs — reuse, do not redefine
 
-- `SharedSpaceAlbumV1` (metadata) reuses **`SyncAlbumV1`** — the exact column set `AlbumSync.getUpserts`
+- `SharedSpaceAlbumV1` (metadata) reuses **`SyncAlbumV2`** — the exact column set the metadata stream
   selects: `{id, name, description, createdAt, updatedAt, thumbnailAssetId, isActivityEnabled, order}`
-  (+ `updateId` as the ack). **There is no `ownerId`** (the `album` table has no such column; ownership is
-  an `album_user` row). Delete reuses the `{albumId}` shape (`SyncAlbumDeleteV1`-like).
+  (+ `updateId` as the ack). **`SyncAlbumV2`, not `SyncAlbumV1`** — `SyncAlbumV1` carries an `ownerId`
+  field, but the `album` table has no `ownerId` column (ownership is an `album_user` row) and the stream
+  selects none, so `SyncAlbumV2` (identical minus `ownerId`) is the matching DTO. Delete reuses the
+  `{albumId}` shape (`SyncAlbumDeleteV1`-like).
 - `SharedSpaceAlbumLinkV1` is the one genuinely new DTO: `{spaceId, albumId, showInTimeline, addedById,
 createdAt, updatedAt}` (mirrors `SyncSharedSpaceLibraryV1` + `showInTimeline`); link-delete
   `{spaceId, albumId}`.
@@ -385,14 +390,18 @@ its result drives the per-album asset/membership/exif backfill loops in the hand
 
 ## 9. Dispatch, checkpoint & OpenAPI wiring
 
-- `sync.service.ts`: add the four request types (`SharedSpaceAlbumsV1` metadata, `SharedSpaceAlbumLinksV1`
-  link, `SharedSpaceAlbumAssetsV1`, `SharedSpaceAlbumAssetExifsV1`) to `SYNC_TYPES_ORDER` **after**
-  `SharedSpaceLibrariesV1` (link + metadata before asset rows); add handler methods
-  (`syncSharedSpaceAlbumsV1` / `…AlbumLinksV1` / `…AssetsV1` / `…AssetExifsV1`) mirroring the library
-  handlers (per-space backfill loop for the link stream; per-album/grant backfill loop for
-  metadata/assets/exif/membership, threading the `SharedSpaceAlbumToAsset` ack into the asset/exif
-  `getUpdates`); add audit-cleanup calls for both new audit tables in `onAuditTableCleanup`.
-- `sync.repository.ts`: instantiate the **five** new classes in the `SyncRepository` constructor.
+- `sync.service.ts`: add the **five** request types (`SharedSpaceAlbumsV1` metadata,
+  `SharedSpaceAlbumLinksV1` link, `SharedSpaceAlbumToAssetsV1` membership, `SharedSpaceAlbumAssetsV1`
+  assets, `SharedSpaceAlbumAssetExifsV1` exif) to `SYNC_TYPES_ORDER` **after** `SharedSpaceLibrariesV1`
+  (metadata + link before membership/assets/exif); add the five handler methods, cloning the personal
+  album handlers (`syncAlbumsV1` → metadata; `syncSharedSpaceLibrariesV1` → link; `syncAlbumToAssetsV1`
+  → membership; `syncAlbumAssetsV2` → assets; `syncAlbumAssetExifsV1` → exif), swapping the repo accessor
+  to `syncRepository.sharedSpaceAlbum*` and the entity types to `SharedSpaceAlbum*`. The
+  membership/asset/exif per-album backfill loops key off `sharedSpaceAlbum.getCreatedAfter` (the grant
+  watermark); the asset/exif `getUpdates` thread the `SharedSpaceAlbumToAsset` ack. The
+  `onAuditTableCleanup` calls were already wired in A1.
+- `sync.repository.ts`: the five classes are instantiated in the `SyncRepository` constructor (A1 wired
+  the two stub classes; A4 wired the other three).
 - OpenAPI: `cd server && pnpm build && pnpm sync:open-api && make open-api` (regen **both** TS SDK and
   Dart client — the Dart types are Sub-project B's contract).
 
