@@ -551,6 +551,107 @@ export const user_has_album_path = registerFunction({
 `,
 });
 
+// --- gallery-fork: album_user delete-side trigger functions ---
+//
+// Consume shared_space_album_user_audit inserts by deleting the corresponding
+// shared_space_album_user rows UNCONDITIONALLY. Trusts the gating at insertion
+// time — every path that inserts into shared_space_album_user_audit already
+// checks NOT user_has_album_path(...), so audit rows represent "this (user,
+// album) pair has definitively lost access".
+export const shared_space_album_user_delete_after_audit = registerFunction({
+  name: 'shared_space_album_user_delete_after_audit',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      DELETE FROM shared_space_album_user ssau
+      USING inserted_rows ir
+      WHERE ssau."userId" = ir."userId"
+        AND ssau."albumId" = ir."albumId";
+      RETURN NULL;
+    END`,
+});
+
+// Fan-out trigger: on unlinking an album from a space (direct or via cascade
+// from album/shared_space deletion) emits rows to shared_space_album_audit
+// (the join-row delete, ungated) and shared_space_album_user_audit
+// (per user who loses access, gated). Mirrors shared_space_library_delete_audit.
+export const shared_space_album_delete_audit = registerFunction({
+  name: 'shared_space_album_delete_audit',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      -- 1. Always record the (space, album) link delete (ungated) so clients drop the space-album.
+      INSERT INTO shared_space_album_audit ("spaceId", "albumId")
+      SELECT "spaceId", "albumId" FROM "old";
+
+      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).
+      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
+      SELECT o."albumId", ssm."userId"
+      FROM "old" o
+      INNER JOIN shared_space_member ssm ON ssm."spaceId" = o."spaceId"
+      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o."spaceId")
+        AND NOT user_has_album_path(o."albumId", ssm."userId", o."spaceId");
+
+      -- 3. Gated grant revocation for the space creator.
+      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
+      SELECT o."albumId", ss."createdById"
+      FROM "old" o
+      INNER JOIN shared_space ss ON ss."id" = o."spaceId"
+      WHERE NOT user_has_album_path(o."albumId", ss."createdById", o."spaceId");
+
+      RETURN NULL;
+    END`,
+});
+
+// Fan-out trigger: on member removal, revoke album grants for all albums linked
+// to that space, gated. Skips during shared_space cascade (EXISTS guard fails).
+// Mirrors shared_space_member_delete_library_audit.
+export const shared_space_member_delete_album_audit = registerFunction({
+  name: 'shared_space_member_delete_album_audit',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
+      SELECT ssa."albumId", o."userId"
+      FROM "old" o
+      INNER JOIN shared_space_album ssa ON ssa."spaceId" = o."spaceId"
+      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o."spaceId")
+        AND NOT user_has_album_path(ssa."albumId", o."userId", o."spaceId");
+      RETURN NULL;
+    END`,
+});
+
+// BEFORE DELETE row-level trigger on shared_space so shared_space_album and
+// shared_space_member rows are still visible when fanning out grant revocations.
+// The companion AFTER triggers on shared_space_album and shared_space_member
+// skip during this cascade via EXISTS shared_space guards.
+// Mirrors shared_space_delete_library_audit.
+export const shared_space_delete_album_audit = registerFunction({
+  name: 'shared_space_delete_album_audit',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
+      SELECT DISTINCT "albumId", "userId" FROM (
+        SELECT ssa."albumId", ssm."userId"
+        FROM shared_space_album ssa
+        INNER JOIN shared_space_member ssm ON ssm."spaceId" = ssa."spaceId"
+        WHERE ssa."spaceId" = OLD."id"
+          AND NOT user_has_album_path(ssa."albumId", ssm."userId", OLD."id")
+        UNION
+        SELECT ssa."albumId", OLD."createdById"
+        FROM shared_space_album ssa
+        WHERE ssa."spaceId" = OLD."id"
+          AND NOT user_has_album_path(ssa."albumId", OLD."createdById", OLD."id")
+      ) AS targets;
+      RETURN OLD;
+    END`,
+});
+
 // --- gallery-fork: album_user create-side trigger functions ---
 //
 // When an album is linked to a space (shared_space_album INSERT), grant
