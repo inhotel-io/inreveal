@@ -169,6 +169,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
   const AddToAlbum: ActionItem = {
     title: $t('add_to_album_or_space'),
     icon: mdiPlus,
+    shortcuts: [{ key: 'l' }],
     $if: () => asset.visibility !== AssetVisibility.Locked && !asset.isTrashed,
     onAction: () => modalManager.show(AssetAddToCollectionModal, { assetIds: [asset.id] }),
   };

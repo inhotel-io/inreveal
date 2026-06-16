@@ -118,6 +118,7 @@
   };
 
   const onNewAlbum = async (name: string) => {
+    name = name.trim();
     try {
       const album = await createAlbum({ createAlbumDto: { albumName: name } });
       eventManager.emit('AlbumCreate', album);
