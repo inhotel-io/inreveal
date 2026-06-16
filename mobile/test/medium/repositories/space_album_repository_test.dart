@@ -37,6 +37,27 @@ void main() {
       final albums = await repo.watchLinkedAlbums(s1.id).first;
       expect(albums, isEmpty);
     });
+
+    test('assetCount reflects shared_space_album_asset rows for each album', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final a1 = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+      final a2 = await ctx.newSharedSpaceAlbum(name: 'Reef');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: a1.id);
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: a2.id);
+
+      // Insert 2 assets for a1, 0 for a2
+      final asset1 = await ctx.newRemoteAsset(ownerId: user.id);
+      final asset2 = await ctx.newRemoteAsset(ownerId: user.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: a1.id, assetId: asset1.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: a1.id, assetId: asset2.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      final hawaii = albums.firstWhere((a) => a.id == a1.id);
+      final reef = albums.firstWhere((a) => a.id == a2.id);
+      expect(hawaii.assetCount, 2);
+      expect(reef.assetCount, 0);
+    });
   });
 
   test('deleteAlbumMetadata removes metadata + membership but keeps remote_asset', () async {

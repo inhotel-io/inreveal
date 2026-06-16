@@ -10,11 +10,13 @@ class SpaceAlbum {
   final String name;
   final String? thumbnailAssetId;
   final bool showInTimeline;
+  final int assetCount;
 
   const SpaceAlbum({
     required this.id,
     required this.name,
     this.thumbnailAssetId,
     required this.showInTimeline,
+    this.assetCount = 0,
   });
 }
