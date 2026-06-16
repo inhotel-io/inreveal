@@ -71,6 +71,24 @@ void main() {
     });
   });
 
+  group('spaceAlbum query', () {
+    test('returns exactly the album assets regardless of showInTimeline', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum();
+      final inAlbum = await ctx.newRemoteAsset(ownerId: user.id);
+      final notInAlbum = await ctx.newRemoteAsset(ownerId: user.id);
+      // off-timeline link → still returned by the detail query
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id, showInTimeline: false);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: inAlbum.id);
+
+      final assets = await sut.spaceAlbum(space.id, album.id, .none).assetSource(0, 100);
+      final ids = assets.map((a) => (a as RemoteAsset).id);
+      expect(ids, contains(inAlbum.id));
+      expect(ids, isNot(contains(notInAlbum.id)));
+    });
+  });
+
   group('sharedSpace album branch', () {
     test('includes an album asset when its link showInTimeline = true', () async {
       final user = await ctx.newUser();

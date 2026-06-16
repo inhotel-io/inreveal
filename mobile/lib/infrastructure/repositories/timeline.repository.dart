@@ -623,6 +623,113 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
         .get();
   }
 
+  // Detail query for one linked album inside a space. Scopes by album membership
+  // only (no showInTimeline filter — the detail page shows all the album's
+  // photos). spaceId is carried for the origin/header.
+  TimelineQuery spaceAlbum(
+    String spaceId,
+    String albumId,
+    GroupAssetsBy groupBy, {
+    TimelineTemporalScope temporalScope = const TimelineTemporalScope.none(),
+  }) => (
+    bucketSource: () => _watchSpaceAlbumBucket(albumId, groupBy: groupBy, temporalScope: temporalScope),
+    assetSource: (offset, count) =>
+        _getSpaceAlbumBucketAssets(albumId, offset: offset, count: count, temporalScope: temporalScope),
+    origin: TimelineOrigin.remoteSpace,
+  );
+
+  Stream<List<Bucket>> _watchSpaceAlbumBucket(
+    String albumId, {
+    GroupAssetsBy groupBy = GroupAssetsBy.day,
+    TimelineTemporalScope temporalScope = const TimelineTemporalScope.none(),
+  }) {
+    if (groupBy == GroupAssetsBy.none) {
+      final countExp = _db.remoteAssetEntity.id.count(distinct: true);
+      final countQuery = _db.remoteAssetEntity.selectOnly()
+        ..addColumns([countExp])
+        ..join([
+          leftOuterJoin(
+            _db.sharedSpaceAlbumAssetEntity,
+            _db.sharedSpaceAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id) &
+                _db.sharedSpaceAlbumAssetEntity.albumId.equals(albumId),
+            useColumns: false,
+          ),
+        ])
+        ..where(
+          _db.remoteAssetEntity.deletedAt.isNull() &
+              _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+              _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
+              _db.sharedSpaceAlbumAssetEntity.assetId.isNotNull(),
+        );
+      return countQuery
+          .map((row) => row.read(countExp) ?? 0)
+          .watchSingle()
+          .map(_generateBuckets)
+          .handleError((error) => const <Bucket>[]);
+    }
+
+    final assetCountExp = _db.remoteAssetEntity.id.count(distinct: true);
+    final dateExp = _db.remoteAssetEntity.effectiveCreatedAt(groupBy);
+    final query = _db.remoteAssetEntity.selectOnly()
+      ..addColumns([assetCountExp, dateExp])
+      ..join([
+        leftOuterJoin(
+          _db.sharedSpaceAlbumAssetEntity,
+          _db.sharedSpaceAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id) &
+              _db.sharedSpaceAlbumAssetEntity.albumId.equals(albumId),
+          useColumns: false,
+        ),
+      ])
+      ..where(
+        _db.remoteAssetEntity.deletedAt.isNull() &
+            _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+            _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
+            _db.sharedSpaceAlbumAssetEntity.assetId.isNotNull(),
+      )
+      ..groupBy([dateExp])
+      ..orderBy([OrderingTerm.desc(dateExp)]);
+    return query
+        .map((row) {
+          final timeline = row.read(dateExp)!.truncateDate(groupBy);
+          final assetCount = row.read(assetCountExp)!;
+          return TimeBucket(date: timeline, assetCount: assetCount);
+        })
+        .watch()
+        .handleError((error) => const <Bucket>[]);
+  }
+
+  Future<List<BaseAsset>> _getSpaceAlbumBucketAssets(
+    String albumId, {
+    required int offset,
+    required int count,
+    TimelineTemporalScope temporalScope = const TimelineTemporalScope.none(),
+  }) async {
+    final membership = _db.remoteAssetEntity.id.isInQuery(
+      _db.sharedSpaceAlbumAssetEntity.selectOnly()
+        ..addColumns([_db.sharedSpaceAlbumAssetEntity.assetId])
+        ..where(_db.sharedSpaceAlbumAssetEntity.albumId.equals(albumId)),
+    );
+    final query =
+        _db.remoteAssetEntity.select().addColumns([_db.localAssetEntity.id]).join([
+            leftOuterJoin(
+              _db.localAssetEntity,
+              _db.remoteAssetEntity.checksum.equalsExp(_db.localAssetEntity.checksum),
+              useColumns: false,
+            ),
+          ])
+          ..where(
+            _db.remoteAssetEntity.deletedAt.isNull() &
+                _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+                _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
+                membership,
+          )
+          ..orderBy([OrderingTerm.desc(_db.remoteAssetEntity.createdAt)])
+          ..limit(count, offset: offset);
+    return query
+        .map((row) => row.readTable(_db.remoteAssetEntity).toDto(localId: row.read(_db.localAssetEntity.id)))
+        .get();
+  }
+
   TimelineQuery fromAssets(List<BaseAsset> assets, TimelineOrigin origin) => (
     bucketSource: () => Stream.value(_generateBuckets(assets.length)),
     assetSource: (offset, count) => Future.value(assets.skip(offset).take(count).toList(growable: false)),
