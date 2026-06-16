@@ -87,6 +87,7 @@
 **Type consistency:** `SpaceAlbumKebab`, `SpaceAlbumBottomSheet`, `SpaceAlbumDetailPage`, `SpaceAlbumDetailRoute`, the `canEdit`/`showInTimeline` flags and `onAddPhotos`/`onToggleTimeline`/`onUnlink`/`onRemove` callbacks used consistently.
 
 ## Open items
+
 - Reuse `RemoteAlbumSliverAppBar` vs a minimal `SliverAppBar` (Task 2) — decide by reading its coupling to `RemoteAlbum`.
 - Whether the `spaceAlbum` Timeline needs any scoped-album provider override (it should not — keyed by albumId).
 - Widget-testability of the full Timeline page — if untestable, extract a testable app-bar sub-widget and keep the page thin.

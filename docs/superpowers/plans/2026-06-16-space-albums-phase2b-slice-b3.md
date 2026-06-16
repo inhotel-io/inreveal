@@ -85,6 +85,7 @@
 **Type consistency:** `SpaceAlbum.assetCount`, `SpaceAlbumsPage`, `SpaceAlbumsRoute`, card Keys consistent.
 
 ## Open items
+
 - The Drift count-subquery idiom for `assetCount` (Task 1 Step 4) — match an existing repo pattern.
 - `mise codegen` must succeed and regenerate `SpaceAlbumsRoute` before the route compiles.
 - `context.pushRoute(SpaceAlbumsRoute(...))` arg names match the generated route constructor.
