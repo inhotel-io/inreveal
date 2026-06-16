@@ -30,6 +30,7 @@
 ### Task 1: `user_has_album_path()` — RED → GREEN
 
 **Files:**
+
 - Test: `server/test/medium/specs/sync/user-has-album-path.spec.ts`
 - Modify: `server/src/schema/functions.ts`
 - Create (start): `server/src/schema/migrations-gallery/1779100000000-AddSharedSpaceAlbumCreateSideTriggers.ts`
@@ -51,7 +52,9 @@ beforeAll(async () => {
 });
 
 const hasPath = async (albumId: string, userId: string, excludeSpaceId: string) => {
-  const res = await sql<{ ok: boolean }>`SELECT user_has_album_path(${albumId}::uuid, ${userId}::uuid, ${excludeSpaceId}::uuid) AS ok`.execute(db);
+  const res = await sql<{
+    ok: boolean;
+  }>`SELECT user_has_album_path(${albumId}::uuid, ${userId}::uuid, ${excludeSpaceId}::uuid) AS ok`.execute(db);
   return res.rows[0].ok;
 };
 
@@ -79,7 +82,10 @@ describe('user_has_album_path', () => {
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
-    await db.insertInto('album_user').values({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer }).execute();
+    await db
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer })
+      .execute();
     expect(await hasPath(album.id, viewer.id, NIL)).toBe(true);
   });
 
@@ -90,7 +96,10 @@ describe('user_has_album_path', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: member.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: s2.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s2.id, albumId: album.id, addedById: owner.id })
+      .execute();
     // exclude a DIFFERENT space → s2 path still counts
     expect(await hasPath(album.id, member.id, NIL)).toBe(true);
     // exclude s2 itself → that path is removed; member has no other path
@@ -103,7 +112,10 @@ describe('user_has_album_path', () => {
     const { user: albumOwner } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
     const { space } = await ctx.newSharedSpace({ createdById: creator.id });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: creator.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: creator.id })
+      .execute();
     expect(await hasPath(album.id, creator.id, NIL)).toBe(true);
     expect(await hasPath(album.id, creator.id, space.id)).toBe(false);
   });
@@ -243,6 +255,7 @@ git commit -m "feat(spaces): add user_has_album_path() (Phase 2A slice A2)"
 ### Task 2: Create-side triggers — RED → GREEN
 
 **Files:**
+
 - Test: `server/test/medium/specs/sync/shared-space-album-create-triggers.spec.ts`
 - Modify: `server/src/schema/functions.ts`
 - Modify: `server/src/schema/tables/shared-space-album.table.ts`
@@ -281,7 +294,10 @@ describe('shared_space_album_after_insert_user (link → grant members)', () => 
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: m2.id, role: SharedSpaceRole.Viewer });
     const before = await albumUpdateId(album.id);
 
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     const grants = await grantsFor(album.id);
     expect(new Set(grants.map((g) => g.userId))).toEqual(new Set([owner.id, m1.id, m2.id]));
@@ -295,9 +311,17 @@ describe('shared_space_album_after_insert_user (link → grant members)', () => 
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).onConflict((oc) => oc.doNothing()).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
     // a second (idempotent) insert attempt must not create duplicate grants
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).onConflict((oc) => oc.doNothing()).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
     expect(await grantsFor(album.id)).toHaveLength(1);
   });
 });
@@ -311,8 +335,14 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
     const { album: a2 } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: a1.id, addedById: owner.id }).execute();
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: a2.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: a1.id, addedById: owner.id })
+      .execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: a2.id, addedById: owner.id })
+      .execute();
     const a1Before = await albumUpdateId(a1.id);
 
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: joiner.id, role: SharedSpaceRole.Viewer });

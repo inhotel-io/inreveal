@@ -118,7 +118,9 @@ import { shared_space_album_user_delete_after_audit } from 'src/schema/functions
   referencingNewTableAs: 'inserted_rows',
   function: shared_space_album_user_delete_after_audit,
 })
-export class SharedSpaceAlbumUserAuditTable { /* unchanged columns */ }
+export class SharedSpaceAlbumUserAuditTable {
+  /* unchanged columns */
+}
 ```
 
 - [ ] **Step 5: Start the migration** `1779200000000-AddSharedSpaceAlbumDeleteSideTriggers.ts` — `up()` creates this function + trigger + 2 `migration_overrides`; `down()` drops them. (Tasks 2–3 append the other three functions/triggers to the same file.)
@@ -145,14 +147,22 @@ describe('unlink album from space', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
     // create-side (A2) granted owner + viewer
     expect((await grantsFor(album.id)).length).toBe(2);
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
 
     // link audit (ungated): one (space, album) row
-    const linkAudit = await db.selectFrom('shared_space_album_audit').selectAll().where('albumId', '=', album.id).where('spaceId', '=', space.id).execute();
+    const linkAudit = await db
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .where('spaceId', '=', space.id)
+      .execute();
     expect(linkAudit).toHaveLength(1);
     // viewer had no other path → grant revoked by the consumer; owner is the album owner (album_user role='owner') → grant retained
     const remaining = (await grantsFor(album.id)).map((r) => r.userId);
@@ -164,17 +174,28 @@ describe('unlink album from space', () => {
     const { user: owner } = await ctx.newUser();
     const { user: shared } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
-    await db.insertInto('album_user').values({ albumId: album.id, userId: shared.id, role: AlbumUserRole.Editor }).execute();
+    await db
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: shared.id, role: AlbumUserRole.Editor })
+      .execute();
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: shared.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
 
     // grant revoked (user_has_album_path is true via album_user, so actually NOT revoked!) — verify retention
     expect((await grantsFor(album.id)).some((g) => g.userId === shared.id)).toBe(true);
     // the album_user row itself is untouched
-    const au = await db.selectFrom('album_user').selectAll().where('albumId', '=', album.id).where('userId', '=', shared.id).execute();
+    const au = await db
+      .selectFrom('album_user')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .where('userId', '=', shared.id)
+      .execute();
     expect(au).toHaveLength(1);
   });
 });
@@ -189,8 +210,14 @@ describe('album linked to two spaces; member in only one', () => {
     const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: member.id, role: SharedSpaceRole.Viewer });
     await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: member.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: s1.id, albumId: album.id, addedById: owner.id }).execute();
-    await db.insertInto('shared_space_album').values({ spaceId: s2.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s1.id, albumId: album.id, addedById: owner.id })
+      .execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s2.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', s1.id).where('albumId', '=', album.id).execute();
 
@@ -207,12 +234,24 @@ describe('member leaves space', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
-    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', viewer.id).execute();
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', viewer.id)
+      .execute();
 
     expect((await grantsFor(album.id)).some((g) => g.userId === viewer.id)).toBe(false); // revoked
-    const linkAudit = await db.selectFrom('shared_space_album_audit').selectAll().where('albumId', '=', album.id).where('spaceId', '=', space.id).execute();
+    const linkAudit = await db
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .where('spaceId', '=', space.id)
+      .execute();
     expect(linkAudit).toHaveLength(0); // link persists for remaining members
   });
 });
@@ -225,12 +264,19 @@ describe('whole-space delete', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space').where('id', '=', space.id).execute();
 
     expect((await grantsFor(album.id)).some((g) => g.userId === viewer.id)).toBe(false); // revoked (no other path)
-    const linkAudit = await db.selectFrom('shared_space_album_audit').selectAll().where('albumId', '=', album.id).execute();
+    const linkAudit = await db
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(linkAudit.length).toBeGreaterThanOrEqual(1); // section 1 fired via cascade
   });
 });
@@ -243,13 +289,20 @@ describe('album hard-delete', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('album').where('id', '=', album.id).execute();
 
     // FK cascade removed the grant rows directly; assert none remain
     expect(await grantsFor(album.id)).toHaveLength(0);
-    const linkAudit = await db.selectFrom('shared_space_album_audit').selectAll().where('albumId', '=', album.id).execute();
+    const linkAudit = await db
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(linkAudit.length).toBeGreaterThanOrEqual(1); // section 1 fired during shared_space_album cascade
   });
 });
@@ -334,6 +387,7 @@ export const shared_space_delete_album_audit = registerFunction({
 - [ ] **Step 4: Add the trigger decorators**
 
 `shared-space-album.table.ts` — add (import `AfterDeleteTrigger` + the function):
+
 ```ts
 @AfterDeleteTrigger({
   scope: 'statement',
@@ -343,6 +397,7 @@ export const shared_space_delete_album_audit = registerFunction({
 ```
 
 `shared-space-member.table.ts` — add a 4th trigger (alongside the existing `shared_space_member_delete_library_audit`):
+
 ```ts
 @AfterDeleteTrigger({
   name: 'shared_space_member_delete_album_audit',
@@ -353,6 +408,7 @@ export const shared_space_delete_album_audit = registerFunction({
 ```
 
 `shared-space.table.ts` — add a 3rd `@TriggerFunction` (before/delete/row), import the function:
+
 ```ts
 @TriggerFunction({
   timing: 'before',
@@ -373,7 +429,9 @@ export async function down(db: Kysely<any>): Promise<void> {
     'function_shared_space_delete_album_audit','trigger_shared_space_delete_album_audit',
     'function_shared_space_album_user_delete_after_audit','trigger_shared_space_album_user_delete_after_audit'
   );`.execute(db);
-  await sql`DROP TRIGGER IF EXISTS "shared_space_album_user_delete_after_audit" ON "shared_space_album_user_audit";`.execute(db);
+  await sql`DROP TRIGGER IF EXISTS "shared_space_album_user_delete_after_audit" ON "shared_space_album_user_audit";`.execute(
+    db,
+  );
   await sql`DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit();`.execute(db);
   await sql`DROP TRIGGER IF EXISTS "shared_space_delete_album_audit" ON "shared_space";`.execute(db);
   await sql`DROP FUNCTION IF EXISTS shared_space_delete_album_audit();`.execute(db);
