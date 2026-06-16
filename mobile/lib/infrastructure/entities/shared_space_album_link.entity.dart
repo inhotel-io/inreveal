@@ -14,8 +14,7 @@ import 'package:immich_mobile/infrastructure/utils/drift_default.mixin.dart';
 class SharedSpaceAlbumLinkEntity extends Table with DriftDefaultsMixin {
   const SharedSpaceAlbumLinkEntity();
 
-  TextColumn get spaceId =>
-      text().references(SharedSpaceEntity, #id, onDelete: KeyAction.cascade)();
+  TextColumn get spaceId => text().references(SharedSpaceEntity, #id, onDelete: KeyAction.cascade)();
 
   // No FK — the album metadata row may not be synced yet.
   TextColumn get albumId => text()();
