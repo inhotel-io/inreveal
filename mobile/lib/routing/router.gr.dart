@@ -1842,6 +1842,78 @@ class SharedLinkRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [SpaceAlbumDetailPage]
+class SpaceAlbumDetailRoute extends PageRouteInfo<SpaceAlbumDetailRouteArgs> {
+  SpaceAlbumDetailRoute({
+    Key? key,
+    required String spaceId,
+    required String albumId,
+    required bool canEdit,
+    List<PageRouteInfo>? children,
+  }) : super(
+         SpaceAlbumDetailRoute.name,
+         args: SpaceAlbumDetailRouteArgs(
+           key: key,
+           spaceId: spaceId,
+           albumId: albumId,
+           canEdit: canEdit,
+         ),
+         initialChildren: children,
+       );
+
+  static const String name = 'SpaceAlbumDetailRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<SpaceAlbumDetailRouteArgs>();
+      return SpaceAlbumDetailPage(
+        key: args.key,
+        spaceId: args.spaceId,
+        albumId: args.albumId,
+        canEdit: args.canEdit,
+      );
+    },
+  );
+}
+
+class SpaceAlbumDetailRouteArgs {
+  const SpaceAlbumDetailRouteArgs({
+    this.key,
+    required this.spaceId,
+    required this.albumId,
+    required this.canEdit,
+  });
+
+  final Key? key;
+
+  final String spaceId;
+
+  final String albumId;
+
+  final bool canEdit;
+
+  @override
+  String toString() {
+    return 'SpaceAlbumDetailRouteArgs{key: $key, spaceId: $spaceId, albumId: $albumId, canEdit: $canEdit}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SpaceAlbumDetailRouteArgs) return false;
+    return key == other.key &&
+        spaceId == other.spaceId &&
+        albumId == other.albumId &&
+        canEdit == other.canEdit;
+  }
+
+  @override
+  int get hashCode =>
+      key.hashCode ^ spaceId.hashCode ^ albumId.hashCode ^ canEdit.hashCode;
+}
+
+/// generated route for
 /// [SpaceAlbumsPage]
 class SpaceAlbumsRoute extends PageRouteInfo<SpaceAlbumsRouteArgs> {
   SpaceAlbumsRoute({
