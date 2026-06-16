@@ -144,10 +144,7 @@ describe('SharedSpaceAlbumSync.getDeletes (hybrid-clone: reads shared_space_albu
     const { album } = await ctx.newAlbum({ ownerId: user.id });
 
     // Insert a grant-revocation audit row directly (this is what the A3 delete triggers write)
-    await db
-      .insertInto('shared_space_album_user_audit')
-      .values({ albumId: album.id, userId: user.id })
-      .execute();
+    await db.insertInto('shared_space_album_user_audit').values({ albumId: album.id, userId: user.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: user.id });
     const result: any[] = [];
@@ -164,10 +161,7 @@ describe('SharedSpaceAlbumSync.getDeletes (hybrid-clone: reads shared_space_albu
     const { album } = await ctx.newAlbum({ ownerId: u1.id });
 
     // Audit row for u1, querying as u2
-    await db
-      .insertInto('shared_space_album_user_audit')
-      .values({ albumId: album.id, userId: u1.id })
-      .execute();
+    await db.insertInto('shared_space_album_user_audit').values({ albumId: album.id, userId: u1.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: u2.id });
     const result: any[] = [];
@@ -211,10 +205,7 @@ describe('accessibleSpaceAlbums set-equality guard', () => {
       .where(
         'shared_space_album.spaceId',
         'in',
-        db
-          .selectFrom('shared_space_member')
-          .select('spaceId')
-          .where('userId', '=', member.id),
+        db.selectFrom('shared_space_member').select('spaceId').where('userId', '=', member.id),
       )
       .execute();
     const accessibleIds = new Set(accessibleRows.map((r) => r.id));
