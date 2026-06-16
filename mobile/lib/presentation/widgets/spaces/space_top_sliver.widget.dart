@@ -19,12 +19,17 @@ class SpaceTopSliver extends StatelessWidget {
     required this.canEdit,
     required this.onLinkTap,
     required this.onAlbumTap,
+    this.onSeeAll,
   });
 
   final String spaceId;
   final bool canEdit;
   final VoidCallback onLinkTap;
   final void Function(String albumId) onAlbumTap;
+
+  /// Invoked when the user taps "See all ▸" in the shelf header.
+  /// B3 wires this to push [SpaceAlbumsRoute]. If null, the tap is a no-op.
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +43,7 @@ class SpaceTopSliver extends StatelessWidget {
             canEdit: canEdit,
             onLinkTap: onLinkTap,
             onAlbumTap: onAlbumTap,
+            onSeeAll: onSeeAll,
           ),
         ],
       ),
