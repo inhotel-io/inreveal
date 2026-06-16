@@ -5,7 +5,7 @@
   import { SettingInputFieldType } from '$lib/constants';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { systemConfigManager } from '$lib/managers/system-config-manager.svelte';
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
   // Mirrors the server-side memory-type registry keys.
@@ -41,8 +41,8 @@
         />
         {#each memoryTypeKeys as key (key)}
           <SettingSwitch
-            title={$t(`admin.memory_type_${key}_setting`)}
-            subtitle={$t(`admin.memory_type_${key}_setting_description`)}
+            title={$t(`admin.memory_type_${key}_setting` as Translations)}
+            subtitle={$t(`admin.memory_type_${key}_setting_description` as Translations)}
             bind:checked={memoryTypes[key]}
             {disabled}
           />
