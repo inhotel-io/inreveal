@@ -1,6 +1,8 @@
 // collection-selection-utils.ts
 import { normalizeSearchString } from '$lib/utils/string-utils';
 import { SharedSpaceRole, type AlbumResponseDto, type SharedSpaceResponseDto } from '@immich/sdk';
+import { t, type Translations } from 'svelte-i18n';
+import { get } from 'svelte/store';
 
 export type PickerCollection =
   | { kind: 'album'; id: string; name: string; album: AlbumResponseDto }
@@ -43,16 +45,13 @@ export const pickRecent = (collections: PickerCollection[], limit = 3): PickerCo
 
 export const isValidNewSpaceName = (name: string): boolean => {
   const trimmed = name.trim();
-  return trimmed.length >= 1 && trimmed.length <= 100;
+  return trimmed.length > 0 && trimmed.length <= 100;
 };
 
 // `normalizeSearchString` is re-exported intentionally so the converter (Task 2) and
 // row components share one matcher. (Imported above to keep a single source of truth.)
 export const matchesSearch = (name: string, search: string): boolean =>
   normalizeSearchString(name).includes(normalizeSearchString(search));
-
-import { t, type Translations } from 'svelte-i18n';
-import { get } from 'svelte/store';
 
 export enum CollectionModalRowType {
   NEW_ALBUM = 'newAlbum',
@@ -91,15 +90,16 @@ export class CollectionModalRowConverter {
     }
     const createCount = rows.length;
 
+    const visible = options.showSpaces ? all : all.filter((c) => c.kind !== 'space');
     const isSearching = search.trim().length > 0;
     const recentToShow = isSearching ? [] : recent;
-    const filtered = sortByNameAsc(isSearching ? all.filter((c) => matchesSearch(c.name, search)) : all);
+    const filtered = sortByNameAsc(isSearching ? visible.filter((c) => matchesSearch(c.name, search)) : visible);
 
     if (filtered.length === 0) {
       rows.push({
         type: CollectionModalRowType.MESSAGE,
         text:
-          all.length > 0
+          visible.length > 0
             ? $t('no_albums_or_spaces_with_name' as Translations)
             : $t('no_albums_or_spaces_yet' as Translations),
       });
@@ -118,7 +118,7 @@ export class CollectionModalRowConverter {
     };
 
     if (recentToShow.length > 0) {
-      rows.push({ type: CollectionModalRowType.SECTION, text: $t('recent' as Translations).toUpperCase() });
+      rows.push({ type: CollectionModalRowType.SECTION, text: $t('recent').toUpperCase() });
       for (const c of recentToShow) {
         pushItem(c);
       }

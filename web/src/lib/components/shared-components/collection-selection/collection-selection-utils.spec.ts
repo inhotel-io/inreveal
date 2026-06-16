@@ -1,6 +1,6 @@
 // collection-selection-utils.spec.ts
 import { describe, expect, it } from 'vitest';
-import { SharedSpaceRole } from '@immich/sdk';
+import { SharedSpaceRole, type AlbumResponseDto, type SharedSpaceResponseDto } from '@immich/sdk';
 import {
   albumToCollection,
   collectionKey,
@@ -13,9 +13,9 @@ import {
 } from './collection-selection-utils';
 
 const album = (id: string, name: string, updatedAt = '2024-01-01T00:00:00Z') =>
-  ({ id, albumName: name, updatedAt, assetCount: 0, shared: false }) as any;
+  ({ id, albumName: name, updatedAt, assetCount: 0, shared: false }) as unknown as AlbumResponseDto;
 const space = (id: string, name: string, extra: Record<string, unknown> = {}) =>
-  ({ id, name, createdById: 'me', createdAt: '2024-01-01T00:00:00Z', members: [], ...extra }) as any;
+  ({ id, name, createdById: 'me', createdAt: '2024-01-01T00:00:00Z', members: [], ...extra }) as unknown as SharedSpaceResponseDto;
 
 describe('collection helpers', () => {
   it('builds discriminated collections with stable keys', () => {
@@ -147,5 +147,14 @@ describe('CollectionModalRowConverter', () => {
     expect(isSelectableRowType(CollectionModalRowType.COLLECTION_ITEM)).toBe(true);
     expect(isSelectableRowType(CollectionModalRowType.SECTION)).toBe(false);
     expect(isSelectableRowType(CollectionModalRowType.MESSAGE)).toBe(false);
+  });
+
+  it('excludes space items from the list when showSpaces is false', () => {
+    const all = [a('a1', 'A'), s('s1', 'B')];
+    const items = conv
+      .toModalRows('', [], all, -1, [], { showSpaces: false })
+      .filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    expect(items).toHaveLength(1);
+    expect(items[0].collection!.kind).toBe('album');
   });
 });
