@@ -261,7 +261,7 @@ describe(MapRepository.name, () => {
         .execute();
       await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: true });
 
-      const results = await sut.getMapMarkers([member.id], [], { timelineSpaceIds: [space.id] });
+      const results = await sut.getMapMarkers(member.id, [member.id], [], { timelineSpaceIds: [space.id] });
 
       expect(results.find((r) => r.id === asset.id)).toBeDefined();
     });
@@ -282,7 +282,7 @@ describe(MapRepository.name, () => {
         .execute();
       await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: false });
 
-      const results = await sut.getMapMarkers([member.id], [], { timelineSpaceIds: [space.id] });
+      const results = await sut.getMapMarkers(member.id, [member.id], [], { timelineSpaceIds: [space.id] });
 
       expect(results.find((r) => r.id === asset.id)).toBeUndefined();
     });
