@@ -10,7 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
-import 'package:immich_mobile/presentation/widgets/spaces/space_albums_shelf.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/sync_status.provider.dart';

@@ -16,6 +16,7 @@ import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
+import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
 import 'package:openapi/api.dart';
 
 // PR 2 — Task 35: the space timeline is now served directly by the Drift
