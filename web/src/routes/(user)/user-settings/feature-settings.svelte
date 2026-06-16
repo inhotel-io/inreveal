@@ -5,7 +5,7 @@
   import { handleError } from '$lib/utils/handle-error';
   import { AssetOrder, updateMyPreferences } from '@immich/sdk';
   import { Button, Field, NumberInput, Select, Switch, toastManager } from '@immich/ui';
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
   // Albums
@@ -116,7 +116,10 @@
             </Field>
 
             {#each availableMemoryTypes as type (type)}
-              <Field label={$t(`memory_type_${type}`)} description={$t(`memory_type_${type}_description`)}>
+              <Field
+                label={$t(`memory_type_${type}` as Translations)}
+                description={$t(`memory_type_${type}_description` as Translations)}
+              >
                 <Switch bind:checked={memoryTypes[type]} />
               </Field>
             {/each}
