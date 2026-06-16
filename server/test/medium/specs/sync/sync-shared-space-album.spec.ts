@@ -37,12 +37,10 @@ const isLinkEvent = (r: { type: string }) =>
   r.type === SyncEntityType.SharedSpaceAlbumLinkV1 || r.type === SyncEntityType.SharedSpaceAlbumLinkBackfillV1;
 
 const isMembershipEvent = (r: { type: string }) =>
-  r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 ||
-  r.type === SyncEntityType.SharedSpaceAlbumToAssetBackfillV1;
+  r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 || r.type === SyncEntityType.SharedSpaceAlbumToAssetBackfillV1;
 
 const isAssetEvent = (r: { type: string }) =>
-  r.type === SyncEntityType.SharedSpaceAlbumAssetCreateV1 ||
-  r.type === SyncEntityType.SharedSpaceAlbumAssetBackfillV1;
+  r.type === SyncEntityType.SharedSpaceAlbumAssetCreateV1 || r.type === SyncEntityType.SharedSpaceAlbumAssetBackfillV1;
 
 const isExifEvent = (r: { type: string }) =>
   r.type === SyncEntityType.SharedSpaceAlbumAssetExifCreateV1 ||
@@ -78,7 +76,9 @@ describe('SharedSpaceAlbum sync — scenario 1: member sees linked album', () =>
     const response = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumLinksV1]);
     const linkEvents = response.filter((r) => isLinkEvent(r));
     expect(linkEvents).toHaveLength(1);
-    expect((linkEvents[0] as { data: { spaceId: string; albumId: string; showInTimeline: boolean } }).data).toMatchObject({
+    expect(
+      (linkEvents[0] as { data: { spaceId: string; albumId: string; showInTimeline: boolean } }).data,
+    ).toMatchObject({
       spaceId: space.id,
       albumId: album.id,
       showInTimeline: true,
@@ -309,8 +309,12 @@ describe('SharedSpaceAlbum sync — viewer parity: Viewer receives same asset/ex
     expect(viewerMembershipEvents.length).toBeGreaterThan(0);
     expect(editorMembershipEvents.length).toBeGreaterThan(0);
 
-    const viewerMembershipAssetIds = viewerMembershipEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
-    const editorMembershipAssetIds = editorMembershipEvents.map((r) => (r as { data: { assetId: string } }).data.assetId);
+    const viewerMembershipAssetIds = viewerMembershipEvents.map(
+      (r) => (r as { data: { assetId: string } }).data.assetId,
+    );
+    const editorMembershipAssetIds = editorMembershipEvents.map(
+      (r) => (r as { data: { assetId: string } }).data.assetId,
+    );
     expect(viewerMembershipAssetIds).toContain(asset.id);
     expect(editorMembershipAssetIds).toContain(asset.id);
 
@@ -374,9 +378,7 @@ describe('SharedSpaceAlbum sync — delete events', () => {
       .execute();
 
     const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumLinksV1]);
-    const deleteEvents = next.filter(
-      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumLinkDeleteV1,
-    );
+    const deleteEvents = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumLinkDeleteV1);
     expect(deleteEvents).toHaveLength(1);
     expect((deleteEvents[0] as { data: { spaceId: string; albumId: string } }).data).toMatchObject({
       spaceId: space.id,

@@ -29,7 +29,10 @@ describe('shared_space_album_after_insert_user (link → grant members)', () => 
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: m2.id, role: SharedSpaceRole.Viewer });
     const before = await albumUpdateId(album.id);
 
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     const grants = await grantsFor(album.id);
     expect(new Set(grants.map((g) => g.userId))).toEqual(new Set([owner.id, m1.id, m2.id]));
@@ -43,9 +46,17 @@ describe('shared_space_album_after_insert_user (link → grant members)', () => 
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).onConflict((oc) => oc.doNothing()).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
     // a second (idempotent) insert attempt must not create duplicate grants
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).onConflict((oc) => oc.doNothing()).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
     expect(await grantsFor(album.id)).toHaveLength(1);
   });
 });
@@ -59,8 +70,14 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
     const { album: a2 } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: a1.id, addedById: owner.id }).execute();
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: a2.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: a1.id, addedById: owner.id })
+      .execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: a2.id, addedById: owner.id })
+      .execute();
     const a1Before = await albumUpdateId(a1.id);
 
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: joiner.id, role: SharedSpaceRole.Viewer });

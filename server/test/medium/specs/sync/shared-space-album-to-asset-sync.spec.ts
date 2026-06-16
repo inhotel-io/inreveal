@@ -110,10 +110,7 @@ describe('SharedSpaceAlbumToAssetSync.getDeletes', () => {
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
     // Insert an album_asset_audit row directly (written by asset removal triggers)
-    await db
-      .insertInto('album_asset_audit')
-      .values({ assetId: asset.id, albumId: album.id })
-      .execute();
+    await db.insertInto('album_asset_audit').values({ assetId: asset.id, albumId: album.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: member.id });
     const result: any[] = [];
@@ -132,10 +129,7 @@ describe('SharedSpaceAlbumToAssetSync.getDeletes', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
-    await db
-      .insertInto('album_asset_audit')
-      .values({ assetId: asset.id, albumId: album.id })
-      .execute();
+    await db.insertInto('album_asset_audit').values({ assetId: asset.id, albumId: album.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: stranger.id });
     const result: any[] = [];

@@ -76,9 +76,9 @@ import { SharedLinkAssetTable } from 'src/schema/tables/shared-link-asset.table'
 import { SharedLinkTable } from 'src/schema/tables/shared-link.table';
 import { SharedSpaceActivityTable } from 'src/schema/tables/shared-space-activity.table';
 import { SharedSpaceAlbumAuditTable } from 'src/schema/tables/shared-space-album-audit.table';
-import { SharedSpaceAlbumTable } from 'src/schema/tables/shared-space-album.table';
-import { SharedSpaceAlbumUserTable } from 'src/schema/tables/shared-space-album-user.table';
 import { SharedSpaceAlbumUserAuditTable } from 'src/schema/tables/shared-space-album-user-audit.table';
+import { SharedSpaceAlbumUserTable } from 'src/schema/tables/shared-space-album-user.table';
+import { SharedSpaceAlbumTable } from 'src/schema/tables/shared-space-album.table';
 import { SharedSpaceAssetAuditTable } from 'src/schema/tables/shared-space-asset-audit.table';
 import { SharedSpaceAssetTable } from 'src/schema/tables/shared-space-asset.table';
 import { SharedSpaceAuditTable } from 'src/schema/tables/shared-space-audit.table';
