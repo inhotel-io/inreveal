@@ -9,6 +9,7 @@ import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widge
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/sync_status.provider.dart';
@@ -233,6 +234,37 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     }
   }
 
+  /// Opens the [SpaceLinkAlbumPage] picker with the current linked-album ids
+  /// pre-excluded. On a non-null result, calls the no-op [_onAlbumsPicked]
+  /// stub that B6 replaces with the PUT loop + sync-nudge.
+  Future<void> _openLinkPicker() async {
+    // Collect the ids of albums already linked to this space so the picker
+    // can exclude them from the candidate list.
+    final linkedAlbumIds = ref
+        .read(spaceAlbumsProvider(widget.spaceId))
+        .whenData((albums) => albums.map((a) => a.id).toList())
+        .valueOrNull ?? <String>[];
+
+    if (!mounted) return;
+    final picked = await context.pushRoute<List<String>>(
+      SpaceLinkAlbumRoute(
+        spaceId: widget.spaceId,
+        linkedAlbumIds: linkedAlbumIds,
+        // B6 replaces this with the PUT loop + sync-nudge.
+        onAlbumsPicked: _onAlbumsPicked,
+      ),
+    );
+    if (picked == null || picked.isEmpty) return;
+    // TODO(B6): call the PUT /shared-spaces/:id/albums/:albumId loop here.
+    _onAlbumsPicked(picked);
+  }
+
+  /// B5 stub — B6 replaces with the actual `PUT /shared-spaces/:id/albums/:albumId`
+  /// loop + sync-nudge.
+  // TODO(B6): remove stub and implement the link REST call + sync-nudge.
+  void _onAlbumsPicked(List<String> ids) {}
+
+
   void _navigateToMembers() {
     context.pushRoute<String>(SpaceMembersRoute(spaceId: widget.spaceId)).then((result) async {
       if (!mounted) return;
@@ -294,14 +326,20 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
         topSliverWidget: SpaceTopSliver(
           spaceId: widget.spaceId,
           canEdit: _canEdit,
-          // B5 wires the link picker; no-op stub for B2.
-          onLinkTap: () {},
+          // B5: opens the link picker.
+          onLinkTap: _openLinkPicker,
           // B4: tapping an album tile pushes the detail page.
           onAlbumTap: (albumId) => context.pushRoute(
             SpaceAlbumDetailRoute(spaceId: widget.spaceId, albumId: albumId, canEdit: _canEdit),
           ),
-          // B3: "See all ▸" pushes the list/manage page.
-          onSeeAll: () => context.pushRoute(SpaceAlbumsRoute(spaceId: widget.spaceId, canEdit: _canEdit)),
+          // B3: "See all ▸" pushes the list/manage page; B5 passes the link picker callback.
+          onSeeAll: () => context.pushRoute(
+            SpaceAlbumsRoute(
+              spaceId: widget.spaceId,
+              canEdit: _canEdit,
+              onLink: _openLinkPicker,
+            ),
+          ),
         ),
         topSliverWidgetHeight: computeTopSliverHeight(
           ref: ref,
