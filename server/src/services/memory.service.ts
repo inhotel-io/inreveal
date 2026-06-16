@@ -1,16 +1,20 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DateTime } from 'luxon';
-import { SystemConfig } from 'src/config';
 import { OnJob } from 'src/decorators';
 import { BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MemoryCreateDto, MemoryResponseDto, MemorySearchDto, MemoryUpdateDto, mapMemory } from 'src/dtos/memory.dto';
 import { DatabaseLock, JobName, MemoryType, Permission, QueueName, SystemMetadataKey } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
-import { BirthdayMemoryRule } from 'src/services/memory-rules/birthday.rule';
 import { MemoryRule, MemoryRuleCandidate } from 'src/services/memory-rules/memory-rule.interface';
-import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
+import {
+  getAdminAvailableMemoryTypeKeys,
+  getMemoryTypeMetadata,
+  isMemoryTypeEnabledForUser,
+} from 'src/services/memory-rules/memory-type.metadata';
+import { createMemoryRules } from 'src/services/memory-rules/memory-type.registry';
 import { addAssets, removeAssets } from 'src/utils/asset.util';
+import { getPreferences } from 'src/utils/preferences';
 
 const DAYS = 3;
 const RULE_DAILY_LIMIT = 2;
@@ -21,6 +25,23 @@ export class MemoryService extends BaseService {
   async onMemoriesCreate() {
     const users = await this.userRepository.getList({ withDeleted: false });
     const config = await this.getConfig({ withCache: false });
+
+    const availableTypes = getAdminAvailableMemoryTypeKeys(config.memories);
+    const userTypesById = new Map(
+      users.map((user) => [user.id, getPreferences(user.metadata ?? []).memories.types]),
+    );
+    const enabledRuleKeysById = new Map(
+      users.map((user) => [
+        user.id,
+        [...availableTypes].filter(
+          (key) =>
+            getMemoryTypeMetadata(key)?.kind === 'rule' && isMemoryTypeEnabledForUser(userTypesById.get(user.id), key),
+        ),
+      ]),
+    );
+    const onThisDayUsers = availableTypes.has('on_this_day')
+      ? users.filter((user) => isMemoryTypeEnabledForUser(userTypesById.get(user.id), 'on_this_day'))
+      : [];
 
     await this.databaseRepository.withLock(DatabaseLock.MemoryCreation, async () => {
       const state = (await this.systemMetadataRepository.get(SystemMetadataKey.MemoriesState)) ?? {};
@@ -37,7 +58,7 @@ export class MemoryService extends BaseService {
 
         this.logger.log(`Creating memories for ${target.toISO()}`);
         try {
-          await Promise.all(users.map((owner) => this.createOnThisDayMemories(owner.id, target)));
+          await Promise.all(onThisDayUsers.map((owner) => this.createOnThisDayMemories(owner.id, target)));
         } catch (error) {
           this.logger.error(`Failed to create memories for ${target.toISO()}: ${error}`);
         }
@@ -56,7 +77,9 @@ export class MemoryService extends BaseService {
       for (let target = lastRuleDate.plus({ days: 1 }); target <= today; target = target.plus({ days: 1 })) {
         this.logger.log(`Creating rule memories for ${target.toISO()}`);
         try {
-          await Promise.all(users.map((owner) => this.createRuleMemories(owner.id, target, config.memories)));
+          await Promise.all(
+            users.map((owner) => this.createRuleMemories(owner.id, target, enabledRuleKeysById.get(owner.id) ?? [])),
+          );
           nextState.lastRuleDate = target.toISO()!;
           await this.systemMetadataRepository.set(SystemMetadataKey.MemoriesState, {
             ...nextState,
@@ -89,21 +112,15 @@ export class MemoryService extends BaseService {
     );
   }
 
-  private getMemoryRules(config: SystemConfig['memories']): MemoryRule[] {
-    const rules: MemoryRule[] = [];
-
-    if (config.birthday) {
-      rules.push(new BirthdayMemoryRule(this.personRepository, this.assetRepository));
-    }
-
-    if (config.recentTrips) {
-      rules.push(new RecentTripMemoryRule(this.assetRepository, this.memoryRepository));
-    }
-
-    return rules;
+  private getMemoryRules(enabledKeys: Iterable<string>): MemoryRule[] {
+    return createMemoryRules(enabledKeys, {
+      personRepository: this.personRepository,
+      assetRepository: this.assetRepository,
+      memoryRepository: this.memoryRepository,
+    });
   }
 
-  private async createRuleMemories(ownerId: string, target: DateTime, config: SystemConfig['memories']) {
+  private async createRuleMemories(ownerId: string, target: DateTime, enabledRuleKeys: Iterable<string>) {
     const existingRuleMemories = await this.memoryRepository.search(ownerId, {
       type: MemoryType.Rule,
       for: target.toJSDate(),
@@ -117,7 +134,7 @@ export class MemoryService extends BaseService {
     const showAt = target.startOf('day').toJSDate();
     const hideAt = target.endOf('day').toJSDate();
     const seenDedupeKeys = new Set<string>();
-    const evaluatedCandidates = await this.evaluateRuleCandidates(ownerId, target, config);
+    const evaluatedCandidates = await this.evaluateRuleCandidates(ownerId, target, enabledRuleKeys);
     const candidates = evaluatedCandidates.toSorted((left, right) => right.score - left.score);
     let inserted = 0;
 
@@ -161,11 +178,11 @@ export class MemoryService extends BaseService {
   private async evaluateRuleCandidates(
     ownerId: string,
     target: DateTime,
-    config: SystemConfig['memories'],
+    enabledRuleKeys: Iterable<string>,
   ): Promise<MemoryRuleCandidate[]> {
     const candidates: MemoryRuleCandidate[] = [];
 
-    for (const rule of this.getMemoryRules(config)) {
+    for (const rule of this.getMemoryRules(enabledRuleKeys)) {
       try {
         candidates.push(...(await rule.evaluate({ ownerId, target })));
       } catch (error) {

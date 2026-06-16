@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { defaults } from 'src/config';
-import { MemoryType, SystemMetadataKey } from 'src/enum';
+import { MemoryType, SystemMetadataKey, UserMetadataKey } from 'src/enum';
 import { MemoryService } from 'src/services/memory.service';
 import { OnThisDayData, RuleMemoryData } from 'src/types';
 import { AssetFactory } from 'test/factories/asset.factory';
@@ -486,6 +486,104 @@ describe(MemoryService.name, () => {
         SystemMetadataKey.MemoriesState,
         expect.objectContaining({ lastRuleDate: '2026-04-23T00:00:00.000Z' }),
       );
+
+      vi.useRealTimers();
+    });
+
+    it('should skip on-this-day generation when the user disabled that type', async () => {
+      const user = factory.userAdmin({
+        metadata: [{ key: UserMetadataKey.Preferences, value: { memories: { types: { on_this_day: false } } } }],
+      });
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockResolvedValue(null);
+
+      await sut.onMemoriesCreate();
+
+      expect(mocks.asset.getByDayOfYear).not.toHaveBeenCalled();
+    });
+
+    it('should skip on-this-day generation when an admin disabled that type globally', async () => {
+      const user = factory.userAdmin();
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockImplementation((key) =>
+        Promise.resolve(key === SystemMetadataKey.SystemConfig ? { memories: { types: { on_this_day: false } } } : null),
+      );
+
+      await sut.onMemoriesCreate();
+
+      expect(mocks.asset.getByDayOfYear).not.toHaveBeenCalled();
+    });
+
+    it('should evaluate a rule only for users who enabled it', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+
+      const userA = factory.userAdmin();
+      const userB = factory.userAdmin({
+        metadata: [{ key: UserMetadataKey.Preferences, value: { memories: { types: { birthday: false } } } }],
+      });
+      mocks.user.getList.mockResolvedValue([userA, userB]);
+      mocks.systemMetadata.get.mockResolvedValue({
+        lastOnThisDayDate: '2026-04-25T00:00:00.000Z',
+        lastRuleDate: '2026-04-22T00:00:00.000Z',
+      });
+      mocks.asset.getByDayOfYear.mockResolvedValue([]);
+      mocks.person.getBirthdaysForDay.mockResolvedValue([]);
+      mocks.asset.getMemoryLocationClusters.mockResolvedValue([]);
+
+      await sut.onMemoriesCreate();
+
+      // birthday rule runs only for userA; recent-trip runs for both
+      expect(mocks.person.getBirthdaysForDay).toHaveBeenCalledTimes(1);
+      expect(mocks.person.getBirthdaysForDay).toHaveBeenCalledWith(userA.id, expect.anything());
+      expect(mocks.asset.getMemoryLocationClusters).toHaveBeenCalledWith(userA.id, expect.anything());
+      expect(mocks.asset.getMemoryLocationClusters).toHaveBeenCalledWith(userB.id, expect.anything());
+
+      vi.useRealTimers();
+    });
+
+    it('should never evaluate a rule disabled by the admin types map', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+
+      const user = factory.userAdmin();
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockImplementation((key) =>
+        Promise.resolve(
+          key === SystemMetadataKey.SystemConfig
+            ? { memories: { types: { recent_trip: false } } }
+            : { lastOnThisDayDate: '2026-04-25T00:00:00.000Z', lastRuleDate: '2026-04-22T00:00:00.000Z' },
+        ),
+      );
+      mocks.asset.getByDayOfYear.mockResolvedValue([]);
+      mocks.person.getBirthdaysForDay.mockResolvedValue([]);
+
+      await sut.onMemoriesCreate();
+
+      expect(mocks.asset.getMemoryLocationClusters).not.toHaveBeenCalled();
+      expect(mocks.person.getBirthdaysForDay).toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it('should still generate rule memories when the master switch is off (display-only)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
+
+      const user = factory.userAdmin({
+        metadata: [{ key: UserMetadataKey.Preferences, value: { memories: { enabled: false } } }],
+      });
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockResolvedValue({
+        lastOnThisDayDate: '2026-04-25T00:00:00.000Z',
+        lastRuleDate: '2026-04-22T00:00:00.000Z',
+      });
+      mocks.asset.getByDayOfYear.mockResolvedValue([]);
+      mocks.person.getBirthdaysForDay.mockResolvedValue([]);
+
+      await sut.onMemoriesCreate();
+
+      expect(mocks.person.getBirthdaysForDay).toHaveBeenCalled();
 
       vi.useRealTimers();
     });
