@@ -223,10 +223,13 @@ Generalize the existing `AlbumPickerModal` interaction model:
   offset of 1; the unified converter has _two_ create rows, so the offset is 2.**
   This is the most likely off-by-one regression and must be pinned by a converter
   test.
-- **Over-cap spaces are non-selectable.** When the asset selection exceeds
-  `MAX_SPACE_ASSETS_PER_REQUEST` (10,000), space rows render disabled (greyed,
-  not focusable, with a short tooltip) while album rows stay selectable — albums
-  have no equivalent cap. The "New Space" row is likewise disabled in this state.
+- **Over-cap hides spaces.** When the asset selection exceeds
+  `MAX_SPACE_ASSETS_PER_REQUEST` (10,000), spaces and the "New Space" row are
+  omitted from the list entirely and a one-line notice explains why; albums stay
+  fully usable (they have no equivalent cap). Hiding rather than disabling keeps
+  the keyboard-offset math simple, and a >10k timeline selection is a rare safety
+  valve. In this state the create-row offset is 1 (only "New Album"); the
+  converter takes the cap state as input so this is covered by a converter test.
 - **Double-submit guard.** Once a confirm/add is dispatched, the confirm button
   and rows are disabled until the add promise settles, so a fast second click or
   `Enter` cannot fire a duplicate add.
@@ -243,18 +246,22 @@ into `albumIds` and `spaceIds`, then:
   — preserves today's toast + "View space".
 - **Any multi / mixed selection** → call each primitive with `{notify:false}`,
   `await` **all** with `Promise.allSettled` (one slow/failing target must not
-  abort the others), then show **one aggregate toast** "Added to {count}
-  collections" (new key) where `count` = collections that succeeded. On partial
-  failure show a warning naming how many of N succeeded; on total failure show an
-  error. The aggregate toast has **no** "View" button (there is no single target
-  to navigate to) — the per-target "View album/space" button only appears in the
-  single-selection paths above.
+  abort the others), then show **one aggregate success toast** "Added to {count}
+  collections" (new key) where `count` = collections that succeeded. The aggregate
+  toast has **no** "View" button (there is no single target to navigate to) — the
+  per-target "View album/space" button only appears in the single-selection paths
+  above. When **nothing** succeeds, no aggregate toast is shown.
+
+Failures surface through each primitive's own error toast. `addAssetsToAlbums` /
+`addAssetsToSpace` call `handleError` unconditionally on failure (it is **not**
+gated by `notify` — only the _success_ toast is), so a failed target already
+tells the user exactly what failed. The aggregate therefore reports successes
+only and does **not** add a redundant "M of N" warning, which would double-toast.
 
 Events stay correct under partial failure: each primitive emits its event
-(`AlbumAddAssets` / `SpaceAddAssets`) **only on its own success** (this is already
-how `addAssetsToAlbums` / `addAssetsToSpace` behave — they emit then return
-`true`, or return `false` without emitting on error), so the UI never reacts to an
-add that didn't happen.
+(`AlbumAddAssets` / `SpaceAddAssets`) **only on its own success** (they emit then
+return `true`, or call `handleError` and return `false` on error), so the UI never
+reacts to an add that didn't happen.
 
 This keeps the familiar single-target experience and adds a coherent summary for
 the new mixed case, rather than firing N separate toasts.
@@ -292,9 +299,9 @@ add **German and French** translations per project convention):
 - `all_albums_and_spaces` → "All" (the ALL section header for the merged list)
 - `add_to_collections_count` → "Add to {count}" (multi-submit button)
 - `added_to_collections_count` → "Added to {count, plural, one {# collection} other {# collections}}"
-- `added_to_collections_partial` → "Added to {success} of {total}" (partial-failure warning)
 - `no_albums_or_spaces_with_name` → "No albums or spaces with that name"
-- `space_selection_too_large` → "Too many photos for a space (max {count})" (over-cap tooltip)
+- `no_albums_or_spaces_yet` → "You don't have any albums or spaces yet"
+- `spaces_hidden_too_many_assets` → "Spaces are hidden — too many photos selected (max {count})" (over-cap notice)
 
 Reuse existing keys where possible: `new_album`, `recent`, `to_select`,
 `to_multi_select`, `view_space`, `view_album`, `failed_to_load_spaces`,
@@ -320,14 +327,14 @@ column points at the test or design decision that covers it.
 | Space missing `assetCount` | Subtitle shows "N members" only, no "· N items" | space-list-item render test |
 | **Same name, album vs space** | Both rows show; badges + collage disambiguate | converter test asserts both present with distinct `kind` |
 | **Same name within one type** (two albums "Family") | Pre-existing behavior unchanged; badge does **not** disambiguate same-type dupes (out of scope) | noted; no regression |
-| Selection **> 10,000 assets** | Space rows + "New Space" disabled with tooltip; albums unaffected; dispatch defensively skips over-cap spaces | selection test + dispatch test |
+| Selection **> 10,000 assets** | Spaces + "New Space" hidden with a one-line notice; albums unaffected; dispatch defensively skips over-cap spaces | converter test + dispatch test |
 | Duplicate assets already in album | Single-album path keeps duplicate-aware toast; aggregate counts as success | dispatch unit test |
 | Duplicate assets already in space | Server `onConflict doNothing`; space add is **not** per-asset duplicate-aware, so toast says "added" (no dup breakdown) — acceptable, documented | dispatch unit test |
 | Adding **non-owned/partner assets** to a space | Server enforces `AssetRead`; a forbidden asset fails the whole space call → error toast for that target | dispatch error-path test |
 | "New Space" with empty/whitespace name | Row non-actionable until a name is typed; name sent trimmed | create-guard unit test |
 | "New Space" name > 100 chars | Clamped/blocked client-side before the call | create-guard unit test |
 | Rapid double confirm / `Enter` | Disabled-while-pending guard prevents duplicate add | component test |
-| Mixed add, one target fails | Other targets still complete; warning toast "M of N"; only succeeded targets emit events | dispatch partial-failure test |
+| Mixed add, one target fails | Other targets still complete (`allSettled`); failed target's own error toast fires; aggregate success toast counts only successes; only succeeded targets emit events | dispatch partial-failure test |
 | Two create rows shift keyboard offset | Focus index offset = 2, not 1 | converter focus-offset test |
 | Touch device | Longpress toggles multi-select on both album and space rows | component/touch test |
 
