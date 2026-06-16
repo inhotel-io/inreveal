@@ -126,12 +126,12 @@ composes the existing pieces.
 
 New fork-only files (`web/src/lib/...`):
 
-| File | Responsibility |
-| --- | --- |
-| `modals/CollectionPickerModal.svelte` | The unified modal: loads albums + writable spaces, builds rows, renders create rows + collection rows, owns search / multi-select / keyboard nav, larger size. Returns the chosen collection(s). |
-| `modals/AssetAddToCollectionModal.svelte` | Wrapper: receives `assetIds`, shows `CollectionPickerModal`, on close splits the selection by type and dispatches adds (see below). Replaces both `AssetAddToAlbumModal` and `AssetAddToSpaceModal` as the entry-point modal. |
-| `components/.../collection-selection/collection-selection-utils.ts` | `CollectionModalRowConverter` + types: the fork analogue of `AlbumModalRowConverter`, producing a unified row list (create rows, RECENT, ALL, messages) over a discriminated `PickerCollection` union. |
-| `components/.../collection-selection/space-list-item.svelte` | Space row: collage cover (thumbhashes) + name (with search highlight) + `members · items` subtitle + multi-select checkmark, mirroring `AlbumListItem`'s interaction affordances. |
+| File                                                                | Responsibility                                                                                                                                                                                                                |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modals/CollectionPickerModal.svelte`                               | The unified modal: loads albums + writable spaces, builds rows, renders create rows + collection rows, owns search / multi-select / keyboard nav, larger size. Returns the chosen collection(s).                              |
+| `modals/AssetAddToCollectionModal.svelte`                           | Wrapper: receives `assetIds`, shows `CollectionPickerModal`, on close splits the selection by type and dispatches adds (see below). Replaces both `AssetAddToAlbumModal` and `AssetAddToSpaceModal` as the entry-point modal. |
+| `components/.../collection-selection/collection-selection-utils.ts` | `CollectionModalRowConverter` + types: the fork analogue of `AlbumModalRowConverter`, producing a unified row list (create rows, RECENT, ALL, messages) over a discriminated `PickerCollection` union.                        |
+| `components/.../collection-selection/space-list-item.svelte`        | Space row: collage cover (thumbhashes) + name (with search highlight) + `members · items` subtitle + multi-select checkmark, mirroring `AlbumListItem`'s interaction affordances.                                             |
 
 Reused as-is or near-as-is:
 
@@ -140,7 +140,7 @@ Reused as-is or near-as-is:
   "+ New Space"; it is a trivial copy differing only in label/handler.
 - `AlbumListItem` renders album rows. To place the **badge on the album
   thumbnail**, add a single **optional, additive** prop (e.g. `badgeIcon?:
-  string`) defaulted to undefined so existing upstream callers are unaffected.
+string`) defaulted to undefined so existing upstream callers are unaffected.
   This is the one small upstream touch; the alternative (a fully duplicated
   fork album-row component) avoids it entirely at the cost of duplicating the
   longpress / search-highlight / checkmark logic. **Recommendation: the additive
@@ -316,27 +316,27 @@ alphabetical position the repo's i18n lint expects.
 Every row below must be addressed by the implementation; the **Addressed by**
 column points at the test or design decision that covers it.
 
-| Edge case | Behavior | Addressed by |
-| --- | --- | --- |
-| Albums load fails | Render spaces only + error toast | `Promise.allSettled` load; converter test with empty albums |
-| Spaces load fails | Render albums only + `failed_to_load_spaces` toast | same |
-| Both load fail | Empty list, create rows still present | converter test: no albums + no spaces |
-| User has **no writable spaces** | Albums only; "New Space" row still present (lets them create their first) | converter test |
-| User has spaces but **all read-only** (Viewer) | Same as none-writable | writable-filter unit test |
-| Space with **< 4 thumbhashes** (or 0) | Collage fills available tiles; missing tiles render a neutral placeholder (no broken/empty grid) | space-list-item render test (0, 1, 4 thumbhashes) |
-| Space missing `assetCount` | Subtitle shows "N members" only, no "· N items" | space-list-item render test |
-| **Same name, album vs space** | Both rows show; badges + collage disambiguate | converter test asserts both present with distinct `kind` |
-| **Same name within one type** (two albums "Family") | Pre-existing behavior unchanged; badge does **not** disambiguate same-type dupes (out of scope) | noted; no regression |
-| Selection **> 10,000 assets** | Spaces + "New Space" hidden with a one-line notice; albums unaffected; dispatch defensively skips over-cap spaces | converter test + dispatch test |
-| Duplicate assets already in album | Single-album path keeps duplicate-aware toast; aggregate counts as success | dispatch unit test |
-| Duplicate assets already in space | Server `onConflict doNothing`; space add is **not** per-asset duplicate-aware, so toast says "added" (no dup breakdown) — acceptable, documented | dispatch unit test |
-| Adding **non-owned/partner assets** to a space | Server enforces `AssetRead`; a forbidden asset fails the whole space call → error toast for that target | dispatch error-path test |
-| "New Space" with empty/whitespace name | Row non-actionable until a name is typed; name sent trimmed | create-guard unit test |
-| "New Space" name > 100 chars | Clamped/blocked client-side before the call | create-guard unit test |
-| Rapid double confirm / `Enter` | Disabled-while-pending guard prevents duplicate add | component test |
-| Mixed add, one target fails | Other targets still complete (`allSettled`); failed target's own error toast fires; aggregate success toast counts only successes; only succeeded targets emit events | dispatch partial-failure test |
-| Two create rows shift keyboard offset | Focus index offset = 2, not 1 | converter focus-offset test |
-| Touch device | Longpress toggles multi-select on both album and space rows | component/touch test |
+| Edge case                                           | Behavior                                                                                                                                                              | Addressed by                                                |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Albums load fails                                   | Render spaces only + error toast                                                                                                                                      | `Promise.allSettled` load; converter test with empty albums |
+| Spaces load fails                                   | Render albums only + `failed_to_load_spaces` toast                                                                                                                    | same                                                        |
+| Both load fail                                      | Empty list, create rows still present                                                                                                                                 | converter test: no albums + no spaces                       |
+| User has **no writable spaces**                     | Albums only; "New Space" row still present (lets them create their first)                                                                                             | converter test                                              |
+| User has spaces but **all read-only** (Viewer)      | Same as none-writable                                                                                                                                                 | writable-filter unit test                                   |
+| Space with **< 4 thumbhashes** (or 0)               | Collage fills available tiles; missing tiles render a neutral placeholder (no broken/empty grid)                                                                      | space-list-item render test (0, 1, 4 thumbhashes)           |
+| Space missing `assetCount`                          | Subtitle shows "N members" only, no "· N items"                                                                                                                       | space-list-item render test                                 |
+| **Same name, album vs space**                       | Both rows show; badges + collage disambiguate                                                                                                                         | converter test asserts both present with distinct `kind`    |
+| **Same name within one type** (two albums "Family") | Pre-existing behavior unchanged; badge does **not** disambiguate same-type dupes (out of scope)                                                                       | noted; no regression                                        |
+| Selection **> 10,000 assets**                       | Spaces + "New Space" hidden with a one-line notice; albums unaffected; dispatch defensively skips over-cap spaces                                                     | converter test + dispatch test                              |
+| Duplicate assets already in album                   | Single-album path keeps duplicate-aware toast; aggregate counts as success                                                                                            | dispatch unit test                                          |
+| Duplicate assets already in space                   | Server `onConflict doNothing`; space add is **not** per-asset duplicate-aware, so toast says "added" (no dup breakdown) — acceptable, documented                      | dispatch unit test                                          |
+| Adding **non-owned/partner assets** to a space      | Server enforces `AssetRead`; a forbidden asset fails the whole space call → error toast for that target                                                               | dispatch error-path test                                    |
+| "New Space" with empty/whitespace name              | Row non-actionable until a name is typed; name sent trimmed                                                                                                           | create-guard unit test                                      |
+| "New Space" name > 100 chars                        | Clamped/blocked client-side before the call                                                                                                                           | create-guard unit test                                      |
+| Rapid double confirm / `Enter`                      | Disabled-while-pending guard prevents duplicate add                                                                                                                   | component test                                              |
+| Mixed add, one target fails                         | Other targets still complete (`allSettled`); failed target's own error toast fires; aggregate success toast counts only successes; only succeeded targets emit events | dispatch partial-failure test                               |
+| Two create rows shift keyboard offset               | Focus index offset = 2, not 1                                                                                                                                         | converter focus-offset test                                 |
+| Touch device                                        | Longpress toggles multi-select on both album and space rows                                                                                                           | component/touch test                                        |
 
 ## Testing
 
