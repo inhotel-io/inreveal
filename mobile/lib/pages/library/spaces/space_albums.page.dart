@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
+import 'package:immich_mobile/routing/router.dart';
 
 /// Space Albums list/manage page — Surface 2 of the Phase-2B design.
 ///
@@ -77,6 +78,9 @@ class SpaceAlbumsPage extends ConsumerWidget {
                 canEdit: canEdit,
                 onToggle: onToggle,
                 onUnlink: onUnlink,
+                onTap: (albumId) => context.pushRoute(
+                  SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit),
+                ),
               ),
       ),
     );
@@ -93,12 +97,14 @@ class _AlbumGrid extends StatelessWidget {
     required this.canEdit,
     required this.onToggle,
     required this.onUnlink,
+    required this.onTap,
   });
 
   final List<SpaceAlbum> albums;
   final bool canEdit;
   final void Function(String albumId) onToggle;
   final void Function(String albumId) onUnlink;
+  final void Function(String albumId) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +125,7 @@ class _AlbumGrid extends StatelessWidget {
           canEdit: canEdit,
           onToggle: onToggle,
           onUnlink: onUnlink,
+          onTap: onTap,
         );
       },
     );
@@ -136,19 +143,23 @@ class _AlbumCard extends StatelessWidget {
     required this.canEdit,
     required this.onToggle,
     required this.onUnlink,
+    required this.onTap,
   });
 
   final SpaceAlbum album;
   final bool canEdit;
   final void Function(String albumId) onToggle;
   final void Function(String albumId) onUnlink;
+  final void Function(String albumId) onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = context.colorScheme;
     final isOffTimeline = !album.showInTimeline;
 
-    return Column(
+    return GestureDetector(
+      onTap: () => onTap(album.id),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Cover
@@ -254,6 +265,7 @@ class _AlbumCard extends StatelessWidget {
           ],
         ),
       ],
+      ),
     );
   }
 }

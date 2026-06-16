@@ -48,7 +48,7 @@ class SpaceAlbumKebab extends StatelessWidget {
           child: Text('Add photos'),
         ),
         PopupMenuItem<_KebabAction>(
-          key: Key('space-album-kebab-toggle'),
+          key: const Key('space-album-kebab-toggle'),
           value: _KebabAction.toggle,
           child: Text(showInTimeline ? 'Hide from timeline' : 'Show in timeline'),
         ),

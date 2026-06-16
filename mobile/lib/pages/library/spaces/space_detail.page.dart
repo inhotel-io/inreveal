@@ -296,8 +296,10 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           canEdit: _canEdit,
           // B5 wires the link picker; no-op stub for B2.
           onLinkTap: () {},
-          // B4 wires album-tap navigation; no-op stub for B2.
-          onAlbumTap: (albumId) {},
+          // B4: tapping an album tile pushes the detail page.
+          onAlbumTap: (albumId) => context.pushRoute(
+            SpaceAlbumDetailRoute(spaceId: widget.spaceId, albumId: albumId, canEdit: _canEdit),
+          ),
           // B3: "See all ▸" pushes the list/manage page.
           onSeeAll: () => context.pushRoute(SpaceAlbumsRoute(spaceId: widget.spaceId, canEdit: _canEdit)),
         ),
