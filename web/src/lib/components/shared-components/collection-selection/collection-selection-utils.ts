@@ -98,10 +98,7 @@ export class CollectionModalRowConverter {
     if (filtered.length === 0) {
       rows.push({
         type: CollectionModalRowType.MESSAGE,
-        text:
-          visible.length > 0
-            ? $t('no_albums_or_spaces_with_name')
-            : $t('no_albums_or_spaces_yet'),
+        text: visible.length > 0 ? $t('no_albums_or_spaces_with_name') : $t('no_albums_or_spaces_yet'),
       });
       return rows;
     }

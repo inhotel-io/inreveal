@@ -3,8 +3,21 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import SpaceListItem from './space-list-item.svelte';
 
-const base = { id: 's1', name: 'Family', memberCount: 2, assetCount: 5, members: [], createdById: 'u1', createdAt: '2024-01-01T00:00:00Z' };
-const props = (over = {}) => ({ space: { ...base, ...over } as unknown as SharedSpaceResponseDto, selected: false, onSpaceClick: vi.fn(), onMultiSelect: vi.fn() });
+const base = {
+  id: 's1',
+  name: 'Family',
+  memberCount: 2,
+  assetCount: 5,
+  members: [],
+  createdById: 'u1',
+  createdAt: '2024-01-01T00:00:00Z',
+};
+const props = (over = {}) => ({
+  space: { ...base, ...over } as unknown as SharedSpaceResponseDto,
+  selected: false,
+  onSpaceClick: vi.fn(),
+  onMultiSelect: vi.fn(),
+});
 
 describe('SpaceListItem', () => {
   it('renders the people badge and empty collage when no recent assets', () => {

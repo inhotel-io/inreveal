@@ -150,7 +150,11 @@
           class="absolute -bottom-1.5 -end-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-immich-bg ring-2 ring-immich-bg dark:bg-immich-dark-gray dark:ring-immich-dark-gray"
           data-testid="collection-row-badge"
         >
-          <Icon icon={badgeIcon} size="0.9rem" class={badgeClass ?? 'text-immich-primary dark:text-immich-dark-primary'} />
+          <Icon
+            icon={badgeIcon}
+            size="0.9rem"
+            class={badgeClass ?? 'text-immich-primary dark:text-immich-dark-primary'}
+          />
         </span>
       {/if}
     </span>

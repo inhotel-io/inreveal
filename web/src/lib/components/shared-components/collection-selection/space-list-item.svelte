@@ -19,7 +19,14 @@
     onMultiSelect: () => void;
   }
 
-  let { space, searchQuery = '', selected = false, multiSelected = false, onSpaceClick, onMultiSelect }: Props = $props();
+  let {
+    space,
+    searchQuery = '',
+    selected = false,
+    multiSelected = false,
+    onSpaceClick,
+    onMultiSelect,
+  }: Props = $props();
 
   const scrollIntoViewIfSelected: Action = (node) => {
     $effect(() => {
@@ -38,7 +45,11 @@
     if (index === -1) {
       return [name, '', ''];
     }
-    return [name.slice(0, index), name.slice(index, index + searchQuery.length), name.slice(index + searchQuery.length)];
+    return [
+      name.slice(0, index),
+      name.slice(index, index + searchQuery.length),
+      name.slice(index + searchQuery.length),
+    ];
   });
 
   const collageAssets = $derived((space.recentAssetIds ?? []).map((id) => ({ id, thumbhash: null })));
@@ -112,7 +123,11 @@
       tabindex={-1}
       aria-checked={multiSelected}
     >
-      <Icon icon={mdiCheckCircle} size="24" class={multiSelected ? 'text-primary' : 'text-gray-300 hover:text-primary/75'} />
+      <Icon
+        icon={mdiCheckCircle}
+        size="24"
+        class={multiSelected ? 'text-primary' : 'text-gray-300 hover:text-primary/75'}
+      />
     </button>
   {/if}
 </div>

@@ -1,6 +1,6 @@
 // collection-selection-utils.spec.ts
-import { describe, expect, it } from 'vitest';
 import { SharedSpaceRole, type AlbumResponseDto, type SharedSpaceResponseDto } from '@immich/sdk';
+import { describe, expect, it } from 'vitest';
 import {
   albumToCollection,
   collectionKey,
@@ -15,7 +15,14 @@ import {
 const album = (id: string, name: string, updatedAt = '2024-01-01T00:00:00Z') =>
   ({ id, albumName: name, updatedAt, assetCount: 0, shared: false }) as unknown as AlbumResponseDto;
 const space = (id: string, name: string, extra: Record<string, unknown> = {}) =>
-  ({ id, name, createdById: 'me', createdAt: '2024-01-01T00:00:00Z', members: [], ...extra }) as unknown as SharedSpaceResponseDto;
+  ({
+    id,
+    name,
+    createdById: 'me',
+    createdAt: '2024-01-01T00:00:00Z',
+    members: [],
+    ...extra,
+  }) as unknown as SharedSpaceResponseDto;
 
 describe('collection helpers', () => {
   it('builds discriminated collections with stable keys', () => {
@@ -26,13 +33,25 @@ describe('collection helpers', () => {
     expect(collectionKey(a)).toBe('album:a1');
     expect(collectionKey(s)).toBe('space:s1');
     // same id across types must not collide
-    expect(collectionKey(albumToCollection(album('x', 'A')))).not.toBe(collectionKey(spaceToCollection(space('x', 'A'))));
+    expect(collectionKey(albumToCollection(album('x', 'A')))).not.toBe(
+      collectionKey(spaceToCollection(space('x', 'A'))),
+    );
   });
 
   it('treats owner and editor as writable, viewer as not', () => {
     expect(isWritableSpace(space('s', 'n', { createdById: 'me' }), 'me')).toBe(true);
-    expect(isWritableSpace(space('s', 'n', { createdById: 'other', members: [{ userId: 'me', role: SharedSpaceRole.Editor }] }), 'me')).toBe(true);
-    expect(isWritableSpace(space('s', 'n', { createdById: 'other', members: [{ userId: 'me', role: SharedSpaceRole.Viewer }] }), 'me')).toBe(false);
+    expect(
+      isWritableSpace(
+        space('s', 'n', { createdById: 'other', members: [{ userId: 'me', role: SharedSpaceRole.Editor }] }),
+        'me',
+      ),
+    ).toBe(true);
+    expect(
+      isWritableSpace(
+        space('s', 'n', { createdById: 'other', members: [{ userId: 'me', role: SharedSpaceRole.Viewer }] }),
+        'me',
+      ),
+    ).toBe(false);
     expect(isWritableSpace(space('s', 'n', { createdById: 'other', members: [] }), 'me')).toBe(false);
     expect(isWritableSpace(space('s', 'n', { createdById: 'other', members: [] }), null)).toBe(false);
   });
@@ -40,7 +59,9 @@ describe('collection helpers', () => {
   it('ranks recency: album updatedAt, space lastActivityAt ?? createdAt', () => {
     const a = albumToCollection(album('a', 'A', '2024-05-01T00:00:00Z'));
     const sActive = spaceToCollection(space('s1', 'S1', { lastActivityAt: '2024-06-01T00:00:00Z' }));
-    const sNoActivity = spaceToCollection(space('s2', 'S2', { lastActivityAt: null, createdAt: '2024-01-01T00:00:00Z' }));
+    const sNoActivity = spaceToCollection(
+      space('s2', 'S2', { lastActivityAt: null, createdAt: '2024-01-01T00:00:00Z' }),
+    );
     expect(recencyOf(sActive)).toBeGreaterThan(recencyOf(a));
     expect(recencyOf(a)).toBeGreaterThan(recencyOf(sNoActivity));
     expect(pickRecent([sNoActivity, a, sActive], 2).map((c) => c.id)).toEqual(['s1', 'a']);
@@ -60,11 +81,7 @@ describe('collection helpers', () => {
   });
 });
 
-import {
-  CollectionModalRowConverter,
-  CollectionModalRowType,
-  isSelectableRowType,
-} from './collection-selection-utils';
+import { CollectionModalRowConverter, CollectionModalRowType, isSelectableRowType } from './collection-selection-utils';
 
 describe('CollectionModalRowConverter', () => {
   const conv = new CollectionModalRowConverter();
@@ -87,14 +104,18 @@ describe('CollectionModalRowConverter', () => {
 
   it('shows both same-name collections with correct kind', () => {
     const all = [a('a1', 'Tuscany 2024'), s('s1', 'Tuscany 2024')];
-    const rows = conv.toModalRows('', [], all, -1, [], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    const rows = conv
+      .toModalRows('', [], all, -1, [], opts)
+      .filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
     expect(rows.map((r) => r.collection!.kind).sort()).toEqual(['album', 'space']);
   });
 
   it('hides RECENT while searching and filters both types via normalize', () => {
     const all = [a('a1', 'Tüscany'), s('s1', 'Rome')];
     const rows = conv.toModalRows('tuscany', [a('a1', 'Tüscany')], all, -1, [], opts);
-    expect(rows.find((r) => r.type === CollectionModalRowType.SECTION && r.text?.toUpperCase().includes('RECENT'))).toBeUndefined();
+    expect(
+      rows.find((r) => r.type === CollectionModalRowType.SECTION && r.text?.toUpperCase().includes('RECENT')),
+    ).toBeUndefined();
     const items = rows.filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
     expect(items).toHaveLength(1);
     expect(items[0].collection!.id).toBe('a1');
@@ -102,7 +123,9 @@ describe('CollectionModalRowConverter', () => {
 
   it('focus offset is 2 (two create rows): index 2 selects the first item', () => {
     const all = [a('a1', 'A'), s('s1', 'B')];
-    const rows = conv.toModalRows('', [], all, 2, [], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    const rows = conv
+      .toModalRows('', [], all, 2, [], opts)
+      .filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
     expect(rows[0].selected).toBe(true);
     expect(rows[1].selected).toBe(false);
   });
@@ -125,7 +148,9 @@ describe('CollectionModalRowConverter', () => {
 
   it('marks multiSelected rows by collectionKey', () => {
     const all = [a('a1', 'A'), s('s1', 'B')];
-    const rows = conv.toModalRows('', [], all, -1, ['space:s1'], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    const rows = conv
+      .toModalRows('', [], all, -1, ['space:s1'], opts)
+      .filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
     expect(rows.find((r) => r.collection!.id === 's1')!.multiSelected).toBe(true);
     expect(rows.find((r) => r.collection!.id === 'a1')!.multiSelected).toBe(false);
   });

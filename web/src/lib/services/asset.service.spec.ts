@@ -1,6 +1,12 @@
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import AssetAddToCollectionModal from '$lib/modals/AssetAddToCollectionModal.svelte';
-import { getAssetActions, getAssetBulkActions, handleDownloadAsset, mergeRotation, normalizeAngle } from '$lib/services/asset.service';
+import {
+  getAssetActions,
+  getAssetBulkActions,
+  handleDownloadAsset,
+  mergeRotation,
+  normalizeAngle,
+} from '$lib/services/asset.service';
 import { setSharedLink } from '$lib/utils';
 import { getFormatter } from '$lib/utils/i18n';
 import { AssetEditAction, getAssetInfo, type AssetEditActionItemDto } from '@immich/sdk';

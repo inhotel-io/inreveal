@@ -1,8 +1,8 @@
 // CollectionPickerModal.spec.ts — follows the house pattern (sdk.mock + Modal global stubs)
-import '$lib/__mocks__/sdk.mock';
-import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
+import '$lib/__mocks__/sdk.mock';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
 import { type AlbumResponseDto, type SharedSpaceResponseDto } from '@immich/sdk';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';

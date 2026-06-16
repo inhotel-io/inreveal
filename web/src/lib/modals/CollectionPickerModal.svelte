@@ -61,7 +61,9 @@
 
   const converter = new CollectionModalRowConverter();
   const rows = $derived(
-    converter.toModalRows(search, recentCollections, allCollections, selectedRowIndex, multiSelectedKeys, { showSpaces }),
+    converter.toModalRows(search, recentCollections, allCollections, selectedRowIndex, multiSelectedKeys, {
+      showSpaces,
+    }),
   );
   const selectableRowCount = $derived(rows.filter((row) => isSelectableRowType(row.type)).length);
 
