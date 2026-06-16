@@ -507,7 +507,9 @@ describe(MemoryService.name, () => {
       const user = factory.userAdmin();
       mocks.user.getList.mockResolvedValue([user]);
       mocks.systemMetadata.get.mockImplementation((key) =>
-        Promise.resolve(key === SystemMetadataKey.SystemConfig ? { memories: { types: { on_this_day: false } } } : null),
+        Promise.resolve(
+          key === SystemMetadataKey.SystemConfig ? { memories: { types: { on_this_day: false } } } : null,
+        ),
       );
 
       await sut.onMemoriesCreate();
