@@ -52,7 +52,7 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
         spaceId: spaceId,
         albums: albums,
       ),
@@ -77,7 +77,7 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+        const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
         spaceId: spaceId,
         albums: albums,
       ),
@@ -97,7 +97,7 @@ void main() {
   testWidgets('empty + editor: shows empty state', (tester) async {
     await tester.pumpWidget(
       _wrap(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
         spaceId: spaceId,
         albums: [],
       ),
@@ -119,7 +119,7 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
         spaceId: spaceId,
         albums: albums,
       ),
