@@ -10,6 +10,7 @@
     isSelectableRowType,
     isValidNewSpaceName,
     isWritableSpace,
+    pickRecent,
     spaceToCollection,
     type PickerCollection,
   } from '$lib/components/shared-components/collection-selection/collection-selection-utils';
@@ -56,9 +57,11 @@
   );
   const allCollections = $derived([...albumCollections, ...spaceCollections]);
 
+  const recentCollections = $derived(pickRecent(allCollections, 3));
+
   const converter = new CollectionModalRowConverter();
   const rows = $derived(
-    converter.toModalRows(search, [], allCollections, selectedRowIndex, multiSelectedKeys, { showSpaces }),
+    converter.toModalRows(search, recentCollections, allCollections, selectedRowIndex, multiSelectedKeys, { showSpaces }),
   );
   const selectableRowCount = $derived(rows.filter((row) => isSelectableRowType(row.type)).length);
 

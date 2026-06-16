@@ -70,17 +70,22 @@ describe('CollectionPickerModal', () => {
     withAlbum();
     sdkMock.getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
     render(CollectionPickerModal, { assetCount: 3, onClose: vi.fn() });
-    await waitFor(() => expect(screen.getByTestId('row-album-a1')).toBeTruthy());
-    expect(screen.getByTestId('row-space-s1')).toBeTruthy();
-    expect(screen.queryByTestId('collection-row-badge')).not.toBeNull();
-    expect(screen.queryByTestId('space-row-badge')).not.toBeNull();
+    // Albums and spaces appear in both RECENT and All sections, so use getAllByTestId.
+    await waitFor(() => expect(screen.getAllByTestId('row-album-a1').length).toBeGreaterThan(0));
+    expect(screen.getAllByTestId('row-space-s1').length).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId('collection-row-badge').length).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId('space-row-badge').length).toBeGreaterThan(0);
+    // The album appears in BOTH Recent and All → proves RECENT section is rendered.
+    expect(screen.getAllByTestId('row-album-a1')).toHaveLength(2);
   });
 
   it('clicking an album row confirms with that single collection', async () => {
     const onClose = vi.fn();
     withAlbum();
     render(CollectionPickerModal, { assetCount: 3, onClose });
-    await fireEvent.click(await screen.findByRole('button', { name: /Trip/ }));
+    // Album appears in both Recent and All sections; click the first occurrence.
+    const rows = await screen.findAllByRole('button', { name: /Trip/ });
+    await fireEvent.click(rows[0]);
     expect(onClose).toHaveBeenCalledWith([expect.objectContaining({ kind: 'album', id: 'a1' })]);
   });
 
@@ -90,11 +95,12 @@ describe('CollectionPickerModal', () => {
     sdkMock.getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
     render(CollectionPickerModal, { assetCount: 3, onClose });
     // hover reveals each row's multi-select checkbox, then toggle both.
-    // Re-query each row right before use — selecting one re-derives the list.
-    const albumRow = await screen.findByTestId('row-album-a1');
+    // Album and space each appear in both Recent and All; use the first occurrence.
+    const albumRows = await screen.findAllByTestId('row-album-a1');
+    const albumRow = albumRows[0];
     await fireEvent.mouseEnter(within(albumRow).getByRole('group'));
     await fireEvent.click(within(albumRow).getByRole('checkbox'));
-    const spaceRow = screen.getByTestId('row-space-s1');
+    const spaceRow = screen.getAllByTestId('row-space-s1')[0];
     await fireEvent.mouseEnter(within(spaceRow).getByRole('group'));
     await fireEvent.click(within(spaceRow).getByRole('checkbox'));
     await fireEvent.click(await screen.findByTestId('add-collections-button'));
@@ -116,7 +122,7 @@ describe('CollectionPickerModal', () => {
     withAlbum();
     sdkMock.getAllSpaces.mockRejectedValue(new Error('boom'));
     render(CollectionPickerModal, { assetCount: 3, onClose: vi.fn() });
-    await waitFor(() => expect(screen.getByTestId('row-album-a1')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByTestId('row-album-a1').length).toBeGreaterThan(0));
     expect(mockHandleError).toHaveBeenCalledOnce();
   });
 
