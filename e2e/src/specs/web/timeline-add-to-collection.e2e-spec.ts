@@ -28,8 +28,10 @@ async function openPickerWithAllAssets(page: import('@playwright/test').Page) {
   await expect(thumbnailUtils.locator(page).first()).toBeVisible();
 
   // Select all visible assets by clicking each thumbnail's checkbox button.
+  // Hover first so the checkbox overlay becomes visible (it is only rendered on hover).
   const thumbs = thumbnailUtils.locator(page);
   for (const thumb of await thumbs.all()) {
+    await thumb.hover();
     const checkbox = thumb.locator('button[role="checkbox"]');
     if (await checkbox.isVisible()) {
       await checkbox.click();
@@ -37,9 +39,8 @@ async function openPickerWithAllAssets(page: import('@playwright/test').Page) {
   }
 
   // The "Add to album or space" ActionButton becomes visible on the control
-  // bar once selection is active. Its accessible title matches the i18n key
-  // `add_to_album_or_space` which is rendered as "Add to album or space".
-  const addButton = page.getByTitle('Add to album or space');
+  // bar once selection is active. It renders an aria-label (not a title attribute).
+  const addButton = page.getByRole('button', { name: 'Add to album or space' });
   await expect(addButton).toBeVisible();
   await addButton.click();
 
