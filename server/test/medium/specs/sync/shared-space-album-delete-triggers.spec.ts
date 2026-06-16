@@ -189,12 +189,29 @@ describe('whole-space delete', () => {
 
     const viewerGrants1 = await grantsFor(album.id);
     expect(viewerGrants1.some((g) => g.userId === viewer.id)).toBe(false); // revoked (no other path)
+
+    // The BEFORE-row trigger is the SOLE writer of the gated grant-audit on this
+    // path: the cascade-fired shared_space_album_delete_audit section 2/3 must be
+    // suppressed by its EXISTS(shared_space) guard (the space row is already gone
+    // by the time the cascade runs). So there is EXACTLY ONE grant-audit row for
+    // the viewer — a regressed guard would produce a duplicate here.
+    const grantAudit = await db
+      .selectFrom('shared_space_album_user_audit')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(grantAudit).toHaveLength(1);
+    expect(grantAudit[0].userId).toBe(viewer.id); // creator/owner has a path → no audit
+
+    // Section 1 (unconditional) is the only link-removal writer: exactly one
+    // (space, album) row.
     const linkAudit = await db
       .selectFrom('shared_space_album_audit')
       .selectAll()
       .where('albumId', '=', album.id)
+      .where('spaceId', '=', space.id)
       .execute();
-    expect(linkAudit.length).toBeGreaterThanOrEqual(1); // section 1 fired via cascade
+    expect(linkAudit).toHaveLength(1);
   });
 });
 
