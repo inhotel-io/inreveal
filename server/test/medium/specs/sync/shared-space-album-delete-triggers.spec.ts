@@ -57,7 +57,10 @@ describe('unlink album from space', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
     // create-side (A2) granted owner + viewer
     const initialGrants = await grantsFor(album.id);
     expect(initialGrants.length).toBe(2);
@@ -79,15 +82,21 @@ describe('unlink album from space', () => {
     expect(remaining).toEqual([owner.id]);
   });
 
-  it('does NOT touch a member\'s manual album_user share (separate-table invariant)', async () => {
+  it("does NOT touch a member's manual album_user share (separate-table invariant)", async () => {
     const ctx = new SyncTestContext(db);
     const { user: owner } = await ctx.newUser();
     const { user: shared } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
-    await db.insertInto('album_user').values({ albumId: album.id, userId: shared.id, role: AlbumUserRole.Editor }).execute();
+    await db
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: shared.id, role: AlbumUserRole.Editor })
+      .execute();
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: shared.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
 
@@ -115,8 +124,14 @@ describe('album linked to two spaces; member in only one', () => {
     const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: member.id, role: SharedSpaceRole.Viewer });
     await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: member.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: s1.id, albumId: album.id, addedById: owner.id }).execute();
-    await db.insertInto('shared_space_album').values({ spaceId: s2.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s1.id, albumId: album.id, addedById: owner.id })
+      .execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s2.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space_album').where('spaceId', '=', s1.id).where('albumId', '=', album.id).execute();
 
@@ -134,9 +149,16 @@ describe('member leaves space', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
-    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', viewer.id).execute();
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', viewer.id)
+      .execute();
 
     const viewerGrants1 = await grantsFor(album.id);
     expect(viewerGrants1.some((g) => g.userId === viewer.id)).toBe(false); // revoked
@@ -151,14 +173,17 @@ describe('member leaves space', () => {
 });
 
 describe('whole-space delete', () => {
-  it('revokes all members\' grants (BEFORE trigger) and writes a link-removal row via cascade', async () => {
+  it("revokes all members' grants (BEFORE trigger) and writes a link-removal row via cascade", async () => {
     const ctx = new SyncTestContext(db);
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('shared_space').where('id', '=', space.id).execute();
 
@@ -181,7 +206,10 @@ describe('album hard-delete', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
 
     await db.deleteFrom('album').where('id', '=', album.id).execute();
 

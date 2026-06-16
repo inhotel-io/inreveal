@@ -15,7 +15,9 @@ export async function up(db: Kysely<any>): Promise<void> {
       CONSTRAINT "shared_space_album_user_pkey" PRIMARY KEY ("userId", "albumId")
     );
   `.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_userId_createId_idx" ON "shared_space_album_user" ("userId", "createId");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_user_userId_createId_idx" ON "shared_space_album_user" ("userId", "createId");`.execute(
+    db,
+  );
 
   // Link-removal audit (FK-less append log), mirrors shared_space_library_audit.
   await sql`
@@ -29,7 +31,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
   await sql`CREATE INDEX "shared_space_album_audit_spaceId_idx" ON "shared_space_album_audit" ("spaceId");`.execute(db);
   await sql`CREATE INDEX "shared_space_album_audit_albumId_idx" ON "shared_space_album_audit" ("albumId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_audit_deletedAt_idx" ON "shared_space_album_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_audit_deletedAt_idx" ON "shared_space_album_audit" ("deletedAt");`.execute(
+    db,
+  );
 
   // Grant-revocation audit (FK-less append log), mirrors library_audit.
   await sql`
@@ -41,9 +45,15 @@ export async function up(db: Kysely<any>): Promise<void> {
       CONSTRAINT "shared_space_album_user_audit_pkey" PRIMARY KEY ("id")
     );
   `.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_albumId_idx" ON "shared_space_album_user_audit" ("albumId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_userId_idx" ON "shared_space_album_user_audit" ("userId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_deletedAt_idx" ON "shared_space_album_user_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_user_audit_albumId_idx" ON "shared_space_album_user_audit" ("albumId");`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "shared_space_album_user_audit_userId_idx" ON "shared_space_album_user_audit" ("userId");`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "shared_space_album_user_audit_deletedAt_idx" ON "shared_space_album_user_audit" ("deletedAt");`.execute(
+    db,
+  );
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
