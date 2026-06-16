@@ -10,6 +10,7 @@ import { BaseService } from 'src/services/base.service';
 import { MemoryRule, MemoryRuleCandidate } from 'src/services/memory-rules/memory-rule.interface';
 import {
   getAdminAvailableMemoryTypeKeys,
+  getMemoryTypeKeyForMemory,
   getMemoryTypeMetadata,
   isMemoryTypeEnabledForUser,
 } from 'src/services/memory-rules/memory-type.metadata';
@@ -205,13 +206,38 @@ export class MemoryService extends BaseService {
     const assetIds = memories.flatMap((memory) => memory.assets.map((asset) => asset.id));
     const allowedAssetIds = await this.checkAccess({ auth, permission: Permission.AssetView, ids: assetIds });
 
+    const config = await this.getConfig({ withCache: true });
+    const availableTypes = getAdminAvailableMemoryTypeKeys(config.memories);
+    const userTypes = getPreferences((await this.userRepository.getMetadata(auth.user.id)) ?? []).memories.types;
+
     return memories
+      .filter((memory) => this.isMemoryTypeVisible(memory, availableTypes, userTypes))
       .map((memory) => ({
         ...memory,
         assets: memory.assets.filter((asset) => allowedAssetIds.has(asset.id)),
       }))
       .filter((memory: Memory) => memory.assets.length > 0)
       .map((memory: Memory) => mapMemory(memory, auth));
+  }
+
+  /**
+   * A memory is visible unless its type maps to a KNOWN registry key that is currently
+   * unavailable (admin) or disabled (user). Saved memories and memories whose type key is
+   * unknown/underivable are always shown.
+   */
+  private isMemoryTypeVisible(
+    memory: { type: MemoryType; data: unknown; isSaved: boolean },
+    availableTypes: Set<string>,
+    userTypes: Record<string, boolean>,
+  ): boolean {
+    if (memory.isSaved) {
+      return true;
+    }
+    const key = getMemoryTypeKeyForMemory(memory.type, memory.data);
+    if (key === undefined || getMemoryTypeMetadata(key) === undefined) {
+      return true;
+    }
+    return availableTypes.has(key) && isMemoryTypeEnabledForUser(userTypes, key);
   }
 
   statistics(auth: AuthDto, dto: MemorySearchDto) {
