@@ -15,6 +15,7 @@ class MemoriesUpdate {
   MemoriesUpdate({
     this.duration,
     this.enabled,
+    this.types = const {},
   });
 
   /// Memory duration in seconds
@@ -38,19 +39,24 @@ class MemoriesUpdate {
   ///
   bool? enabled;
 
+  /// Per-memory-type enable overrides, keyed by memory type
+  Map<String, bool> types;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is MemoriesUpdate &&
     other.duration == duration &&
-    other.enabled == enabled;
+    other.enabled == enabled &&
+    _deepEquality.equals(other.types, types);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (duration == null ? 0 : duration!.hashCode) +
-    (enabled == null ? 0 : enabled!.hashCode);
+    (enabled == null ? 0 : enabled!.hashCode) +
+    (types.hashCode);
 
   @override
-  String toString() => 'MemoriesUpdate[duration=$duration, enabled=$enabled]';
+  String toString() => 'MemoriesUpdate[duration=$duration, enabled=$enabled, types=$types]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -64,6 +70,7 @@ class MemoriesUpdate {
     } else {
     //  json[r'enabled'] = null;
     }
+      json[r'types'] = this.types;
     return json;
   }
 
@@ -78,6 +85,7 @@ class MemoriesUpdate {
       return MemoriesUpdate(
         duration: mapValueOfType<int>(json, r'duration'),
         enabled: mapValueOfType<bool>(json, r'enabled'),
+        types: mapCastOfType<String, bool>(json, r'types') ?? const {},
       );
     }
     return null;

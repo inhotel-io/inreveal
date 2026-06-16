@@ -117,6 +117,7 @@ const ServerConfigSchema = z
     mapDarkStyleUrl: z.string().describe('Map dark style URL'),
     mapLightStyleUrl: z.string().describe('Map light style URL'),
     maintenanceMode: z.boolean().describe('Whether maintenance mode is active'),
+    availableMemoryTypes: z.array(z.string()).describe('Globally-available memory type keys'),
   })
   .meta({ id: 'ServerConfigDto' });
 

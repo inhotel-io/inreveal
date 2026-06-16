@@ -191,8 +191,22 @@ describe(ServerService.name, () => {
         mapDarkStyleUrl: 'https://tiles.openfreemap.org/styles/dark',
         mapLightStyleUrl: 'https://tiles.openfreemap.org/styles/positron',
         maintenanceMode: false,
+        availableMemoryTypes: ['on_this_day', 'birthday', 'recent_trip'],
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
+    });
+
+    it('should omit memory types disabled by the admin', async () => {
+      clearConfigCache();
+      mocks.systemMetadata.get.mockImplementation((key) =>
+        Promise.resolve(
+          key === SystemMetadataKey.SystemConfig ? { memories: { types: { recent_trip: false } } } : null,
+        ),
+      );
+
+      const result = await sut.getSystemConfig();
+
+      expect(result.availableMemoryTypes).toEqual(['on_this_day', 'birthday']);
     });
 
     // Regression guard: getSystemConfig is hit on every page load; must read from cache.
