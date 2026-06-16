@@ -2045,6 +2045,82 @@ class SpaceDetailRouteArgs {
 }
 
 /// generated route for
+/// [SpaceLinkAlbumPage]
+class SpaceLinkAlbumRoute extends PageRouteInfo<SpaceLinkAlbumRouteArgs> {
+  SpaceLinkAlbumRoute({
+    Key? key,
+    required String spaceId,
+    required List<String> linkedAlbumIds,
+    void Function(List<String>)? onAlbumsPicked,
+    List<PageRouteInfo>? children,
+  }) : super(
+         SpaceLinkAlbumRoute.name,
+         args: SpaceLinkAlbumRouteArgs(
+           key: key,
+           spaceId: spaceId,
+           linkedAlbumIds: linkedAlbumIds,
+           onAlbumsPicked: onAlbumsPicked,
+         ),
+         initialChildren: children,
+       );
+
+  static const String name = 'SpaceLinkAlbumRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<SpaceLinkAlbumRouteArgs>();
+      return SpaceLinkAlbumPage(
+        key: args.key,
+        spaceId: args.spaceId,
+        linkedAlbumIds: args.linkedAlbumIds,
+        onAlbumsPicked: args.onAlbumsPicked,
+      );
+    },
+  );
+}
+
+class SpaceLinkAlbumRouteArgs {
+  const SpaceLinkAlbumRouteArgs({
+    this.key,
+    required this.spaceId,
+    required this.linkedAlbumIds,
+    this.onAlbumsPicked,
+  });
+
+  final Key? key;
+
+  final String spaceId;
+
+  final List<String> linkedAlbumIds;
+
+  final void Function(List<String>)? onAlbumsPicked;
+
+  @override
+  String toString() {
+    return 'SpaceLinkAlbumRouteArgs{key: $key, spaceId: $spaceId, linkedAlbumIds: $linkedAlbumIds, onAlbumsPicked: $onAlbumsPicked}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SpaceLinkAlbumRouteArgs) return false;
+    return key == other.key &&
+        spaceId == other.spaceId &&
+        const ListEquality<String>().equals(
+          linkedAlbumIds,
+          other.linkedAlbumIds,
+        );
+  }
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      spaceId.hashCode ^
+      const ListEquality<String>().hash(linkedAlbumIds);
+}
+
+/// generated route for
 /// [SpaceMemberSelectionPage]
 class SpaceMemberSelectionRoute
     extends PageRouteInfo<SpaceMemberSelectionRouteArgs> {
