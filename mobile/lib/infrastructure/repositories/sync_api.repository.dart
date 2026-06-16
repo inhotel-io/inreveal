@@ -96,6 +96,12 @@ class SyncApiRepository {
           SyncRequestType.libraryAssetsV1,
           SyncRequestType.libraryAssetExifsV1,
           SyncRequestType.sharedSpaceLibrariesV1,
+          // --- gallery-fork: shared-space album sync types (Phase 2B) ---
+          SyncRequestType.sharedSpaceAlbumsV1,
+          SyncRequestType.sharedSpaceAlbumLinksV1,
+          SyncRequestType.sharedSpaceAlbumToAssetsV1,
+          SyncRequestType.sharedSpaceAlbumAssetsV1,
+          SyncRequestType.sharedSpaceAlbumAssetExifsV1,
         ],
       ).toJson(),
     );
