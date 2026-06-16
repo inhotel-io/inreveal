@@ -42,6 +42,7 @@ types) and three i18n label strings (EN/DE/FR). No edits to the generation loop 
 - No mobile settings UI in this change. Mobile keeps working via the same preferences API + regenerated
   OpenAPI client; surfacing per-type toggles in mobile is a deliberate follow-up.
 - No database schema change. `MemoryType` enum and the `memory` table are unchanged.
+- No type-filtering of `statistics()` (the `{ total }` aggregate); its count may include disabled types.
 
 ## Existing Context
 
@@ -83,7 +84,16 @@ duration? }`, `MemoriesResponseSchema { enabled, duration }`.
   (+ `.spec.ts`) — hardcoded switches for birthday/recentTrips + retention number input.
 - **Web user UI:** `web/src/routes/(user)/user-settings/feature-settings.svelte` — `memories` accordion
   with the master enable `Switch` + duration `NumberInput`; save payload builds `memories: { enabled, duration }`.
-- **Web i18n:** locale JSON under `web/src/lib/i18n/` (EN source) with DE/FR maintained by the fork.
+- **Web i18n:** the source-of-truth locale JSON is at the repo root `/i18n/` — `i18n/en.json` (EN source),
+  `i18n/de.json`, `i18n/fr.json` (DE/FR maintained by the fork). Admin-settings strings use an `admin.`
+  prefix (e.g. `admin.birthday_memories_setting`); user-facing strings are top-level (e.g. `time_based_memories`).
+- **Web managers:** `web/src/lib/managers/server-config-manager.svelte.ts` exposes the server config via
+  `serverConfigManager.value` (loaded with `getServerConfig` from `@immich/sdk`). User prefs are held by
+  `authManager.preferences` and saved with `updateMyPreferences({ userPreferencesUpdateDto })`, then
+  `authManager.setPreferences(response)`.
+- **Server-config build:** `server/src/services/server.service.ts` `getSystemConfig()` builds the public
+  `ServerConfigDto` from `await this.getConfig({ withCache: true })`, so it can read `config.memories`.
+  `server.service.spec.ts` asserts the whole DTO with an exact `toEqual({...})`.
 
 ## Architecture Overview
 
@@ -262,14 +272,23 @@ where `key = getMemoryTypeKeyForMemory(memory.type, memory.data)`. A memory whos
 
 In `onMemoriesCreate()`:
 
-- Compute `adminAvailable = getAdminAvailableMemoryTypeKeys(config.memories)` once.
-- For each user, compute `userTypes = getPreferences(owner.metadata).memories.types`.
+- Compute `adminAvailable = getAdminAvailableMemoryTypeKeys(config.memories)` once (the job already loads
+  `config` via `getConfig`).
+- Resolve preferences **once** into a per-user map before the loops:
+  `userTypesById = new Map(users.map((u) => [u.id, getPreferences(u.metadata ?? []).memories.types]))`.
+  The `?? []` guard matters: `getPreferences` calls `metadata.find`, and although `userRepository.getList`
+  returns `withMetadata` at runtime, defensiveness keeps it crash-free for any user lacking metadata.
 - **OnThisDay window loop:** call `createOnThisDayMemories(owner.id, target)` for a user only when
-  `adminAvailable.has('on_this_day') && isMemoryTypeEnabledForUser(userTypes, 'on_this_day')`.
+  `adminAvailable.has('on_this_day') && isMemoryTypeEnabledForUser(userTypesById.get(owner.id), 'on_this_day')`.
 - **Rule loop:** for each user compute the enabled rule keys
-  `enabledRuleKeys = [...adminAvailable].filter((k) => metadata(k).kind === 'rule' && isMemoryTypeEnabledForUser(userTypes, k))`
+  `enabledRuleKeys = [...adminAvailable].filter((k) => getMemoryTypeMetadata(k)?.kind === 'rule' && isMemoryTypeEnabledForUser(userTypesById.get(owner.id), k))`
   and pass them into rule creation. `getMemoryRules(enabledKeys)` (renamed/retained seam) returns
   `createMemoryRules(enabledKeys, deps)`. Scoring, daily limit, and dedupe logic are unchanged.
+
+**Gating happens only at `getMemoryRules(enabledKeys)`** — do NOT add a secondary post-evaluation filter
+that drops candidates whose `ruleId` is not in `enabledKeys`. The real `getMemoryRules` already filters by
+instantiating only enabled rules; a post-filter would also discard the fake rules used by the existing
+spy-based scheduling/scoring tests (rule ids `'scoring'`, `'broken'`), breaking them.
 
 The master `memories.enabled` switch is **not** consulted during generation (kept display-only, matching
 today's behavior — generation already ignores it). Per-type toggles are the generation gate.
@@ -278,12 +297,17 @@ today's behavior — generation already ignores it). Per-type toggles are the ge
 
 `MemoryService.search(auth, dto)` additionally:
 
-- Loads the auth user's preferences via `getPreferences(await userRepository.getMetadata(auth.user.id))`
-  (single query; memories search is not a hot path) → `userTypes`.
+- Loads the auth user's preferences via `getPreferences((await userRepository.getMetadata(auth.user.id)) ?? [])`
+  (single query; memories search is not a hot path) → `userTypes`. `auth.user` does **not** carry metadata,
+  so a `getMetadata` round-trip is required; the `?? []` guard keeps it safe when the repo returns nothing.
 - Computes `adminAvailable` from `getConfig()`.
 - After mapping, filters out any memory where `!memory.isSaved` and the effective-show predicate is false.
-  Saved memories are always shown (a user who curated a memory keeps it even if its type is later disabled).
-  Unknown-key memories are always shown.
+  The mapped `MemoryResponseDto` retains `type`, `data` (incl. `ruleId`), and `isSaved`, so the key is
+  derived with `getMemoryTypeKeyForMemory(memory.type, memory.data)`. Saved memories are always shown (a
+  user who curated a memory keeps it even if its type is later disabled). Unknown-key memories are always shown.
+
+`statistics()` is **not** type-filtered in this change (it returns a DB aggregate `{ total }`); its count may
+include disabled-type memories. This is a documented limitation, not a goal of this change.
 
 ## Data Model
 
@@ -353,13 +377,25 @@ so the web user-settings UI knows which toggles to render. Populated in `server.
 
 ## i18n
 
-Add to the EN source locale and the DE + FR locales (fork maintains all three):
+Add keys to the root locale files `i18n/en.json` (source), `i18n/de.json`, and `i18n/fr.json` (the fork
+maintains all three; keep the key set identical across files).
+
+**User-settings labels (top-level keys)** — used by `feature-settings.svelte` via `$t('memory_type_' + key)`:
 
 - `memory_type_on_this_day` / `memory_type_on_this_day_description`
 - `memory_type_birthday` / `memory_type_birthday_description`
 - `memory_type_recent_trip` / `memory_type_recent_trip_description`
 
-Suggested EN copy:
+**Admin-settings labels (`admin.` prefix)** — used by `MemoriesSettings.svelte` via `$t('admin.memory_type_' + key + '_setting')`:
+
+- `admin.memory_type_on_this_day_setting` / `admin.memory_type_on_this_day_setting_description`
+- `admin.memory_type_birthday_setting` / `admin.memory_type_birthday_setting_description`
+- `admin.memory_type_recent_trip_setting` / `admin.memory_type_recent_trip_setting_description`
+
+The existing `admin.birthday_memories_setting` / `admin.recent_trip_memories_setting` keys may be left in
+place (harmless) or removed once the admin UI no longer references them.
+
+Suggested EN copy (user-facing):
 
 - on_this_day: "On this day" / "Photos taken on this date in previous years."
 - birthday: "Birthdays" / "Memories on the birthdays of people you've named."
@@ -457,21 +493,23 @@ still reads legacy fields until Slice 4). Regenerate SDK.
 - `server/src/config.ts` — add `types: Record<string, boolean>` to the `memories` type; add `types: {}` to
   the `memories` defaults. Keep `birthday`/`recentTrips` (and their `true` defaults) intact.
 - `server/src/dtos/system-config.dto.ts` — `SystemConfigMemoriesSchema` adds
-  `types: z.record(z.string(), z.boolean())` (default `{}`); keep existing fields.
-- `server/src/services/config.service.spec.ts` (or the existing system-config spec that asserts defaults) —
-  extend.
+  `types: z.record(z.string(), z.boolean()).default({})`; keep existing fields.
+- `server/src/services/system-config.service.spec.ts` — extend (this is the file that asserts config
+  defaults and validates the `memories` section; there is no `config.service.spec.ts` / `system-config.dto.spec.ts`).
+- The `defaults.memories` object lives in `server/src/config.ts` and is exported as `defaults`.
 - Regenerate SDK (commands above).
 
-**Tests (write first — red):**
+**Tests (write first — red):** `cd server && pnpm test -- --run src/services/system-config.service.spec.ts`
 
-- Config defaults: `cd server && pnpm test -- --run src/services/config.service.spec.ts`
-  - default `config.memories.types` equals `{}`.
-  - default `config.memories.retentionDays === 365`, `birthday === true`, `recentTrips === true` (unchanged).
-- DTO validation (extend the system-config DTO/validation spec, e.g.
-  `src/dtos/system-config.dto.spec.ts` if present, else the config service spec):
-  - accepts `memories.types` as a `{ string: boolean }` map and round-trips it.
-  - accepts an empty `types` map.
-  - still accepts `birthday`/`recentTrips` booleans.
+- Defaults: `defaults.memories.types` equals `{}`; `defaults.memories.retentionDays === 365`,
+  `birthday === true`, `recentTrips === true` (unchanged).
+- Validation: a stored override `{ memories: { types: { recent_trip: false } } }` round-trips through
+  `getConfig` and yields `config.memories.types.recent_trip === false`.
+- Validation: with no `types` in the stored override, `config.memories.types` resolves to `{}` (the schema
+  default), and `birthday`/`recentTrips` booleans still validate.
+
+Note: `getConfig` merges the stored override over `defaults`, `safeParse`s, and only logs (does not throw on)
+unknown keys, so this is additive and safe for existing stored configs.
 
 **Implement (green):** add the field + default; extend the zod schema.
 
@@ -533,14 +571,16 @@ scheduling/scoring tests.
   - Replace `getMemoryRules(config)` with `getMemoryRules(enabledKeys: Iterable<string>): MemoryRule[]`
     returning `createMemoryRules(enabledKeys, { personRepository, assetRepository, memoryRepository })`.
     (Keep it a private method so existing tests can `vi.spyOn(sut, 'getMemoryRules')`.)
-  - In `onMemoriesCreate`, compute `adminAvailable` once; per user compute `userTypes` from
-    `getPreferences(owner.metadata).memories.types`.
+  - In `onMemoriesCreate`, compute `adminAvailable` once; resolve `userTypesById` once via
+    `getPreferences(owner.metadata ?? []).memories.types` (per the Generation flow section).
   - Gate `createOnThisDayMemories` per user on `on_this_day` effective-generate.
   - Compute per-user `enabledRuleKeys` and pass them through `createRuleMemories` →
-    `evaluateRuleCandidates` → `getMemoryRules(enabledRuleKeys)`.
+    `evaluateRuleCandidates` → `getMemoryRules(enabledRuleKeys)`. No secondary `ruleId` post-filter.
   - Remove direct reads of `config.memories.birthday` / `recentTrips` from generation (they now flow only
-    through `getAdminAvailableMemoryTypeKeys`).
-- `server/src/services/memory.service.spec.ts` — update existing rule tests and add new gating tests.
+    through `getAdminAvailableMemoryTypeKeys`). Keep `getMemoryRules` and `createRuleMemories` as private
+    methods so the existing arg-agnostic spies keep working.
+- `server/src/services/memory.service.spec.ts` — add new gating tests; the three existing legacy-disable
+  tests should continue to pass **unchanged** (see below).
 
 **Tests (write first — red):**
 
@@ -560,25 +600,39 @@ Registry: `cd server && pnpm test -- --run src/services/memory-rules/memory-type
 
 Service: `cd server && pnpm test -- --run src/services/memory.service.spec.ts`
 
-Update the existing tests that assert disabling via `config.memories.birthday/recentTrips` so they assert
-the new behavior (admin map and/or legacy fold still disable the corresponding rule). Add:
+**Existing tests that must stay green unchanged (regression guard, do NOT rewrite):**
+
+- The three legacy-disable tests (`...when birthday memories are disabled`, `...when recent trip memories are
+disabled`, `...when all generated memory rules are disabled`) feed `SystemConfig` overrides
+  `{ memories: { birthday: false, recentTrips: true } }` etc. Via the legacy fold these still exclude the
+  corresponding rule, so `getBirthdaysForDay` / `getMemoryLocationClusters` assertions hold as-is. This is
+  the back-compat proof.
+- The spy-based scheduling/scoring tests (`...not future precompute dates`, `...top two surviving...`,
+  `...daily rule cap...`, `prefers a fallback...`, `...not advance the rule cursor...`) `vi.spyOn` the private
+  `getMemoryRules` / `createRuleMemories` with arg-agnostic mocks, so the new `(enabledKeys)` signature does
+  not change them. Their users come from `factory.userAdmin()` (metadata `[]` → all types enabled by
+  default) so the per-user gate does not filter their fake rules. Confirm green; no edits expected.
+
+**New tests to add:**
 
 - **OnThisDay per-user gate:** with `on_this_day` admin-available and user pref enabled → `createOnThisDayMemories`
-  runs (memoryRepository.create called for OnThisDay). With user pref `types.on_this_day = false` →
-  OnThisDay generation skipped for that user. With admin `types.on_this_day = false` → skipped for all users.
-- **Rule per-user gate:** user A with `types.birthday = true` gets birthday candidates evaluated; user B with
-  `types.birthday = false` does not (the birthday rule is not instantiated/evaluated for B).
-- **Admin gate over rules:** `types.recent_trip = false` (admin) → recent-trip rule never instantiated for
-  any user, regardless of user prefs.
-- **Legacy fold preserved:** legacy `config.memories.birthday = false` (no `types` entry) → birthday rule not
-  instantiated (mirrors today's behavior; replaces the old "skip when disabled" tests).
-- **Master switch is display-only:** a user with `memories.enabled = false` but `types.birthday = true` still
-  has birthday candidates generated (generation ignores the master switch).
-- **Spy-seam intact:** existing scheduling/scoring tests that `vi.spyOn(sut, 'getMemoryRules')` still drive
-  the per-day loop; update their call to match the new `(enabledKeys)` signature.
+  runs (memoryRepository.create called for OnThisDay). With a user whose metadata encodes
+  `memories.types.on_this_day = false` → OnThisDay generation skipped for that user. With admin
+  `memories.types.on_this_day = false` (SystemConfig override) → skipped for all users.
+- **Rule per-user gate:** two users from `factory.userAdmin()`, user A metadata with `types.birthday = true`,
+  user B metadata with `types.birthday = false`; assert the birthday rule is evaluated for A but not B
+  (e.g. via a `getMemoryRules` spy that records the `enabledKeys` it was called with per user, or by
+  asserting `getBirthdaysForDay` call count tracks only A).
+- **Admin gate over rules:** SystemConfig `memories.types.recent_trip = false` → recent-trip rule never
+  instantiated for any user, regardless of user prefs (`getMemoryLocationClusters` not called).
+- **Master switch is display-only:** a user whose metadata sets `memories.enabled = false` but
+  `types.birthday = true` still has birthday generation attempted (generation ignores the master switch).
 
-Mocking notes: `userRepository.getList` mock must return users carrying `.metadata` so `getPreferences`
-yields the intended `types`. For default-on cases, an empty `metadata` array yields all-true defaults.
+Mocking notes: build user metadata with the existing factories — a user metadata item
+`{ key: UserMetadataKey.Preferences, value: { memories: { types: { birthday: false } } } }` on
+`factory.userAdmin({ metadata: [...] })` drives `getPreferences`. `userRepository.getList` returns those
+users. SystemConfig overrides go through `mocks.systemMetadata.get` keyed on `SystemMetadataKey.SystemConfig`
+exactly as the existing legacy tests do.
 
 **Implement (green):** add the registry module; rewire `MemoryService` as specified.
 
@@ -595,29 +649,38 @@ yields the intended `types`. For default-on cases, an empty `metadata` array yie
 **Files:**
 
 - `server/src/services/memory.service.ts` — extend `search`:
-  - load `userTypes` via `getPreferences(await userRepository.getMetadata(auth.user.id)).memories.types`.
+  - load `userTypes` via `getPreferences((await userRepository.getMetadata(auth.user.id)) ?? []).memories.types`.
   - compute `adminAvailable` from `getConfig()`.
   - filter mapped memories: keep when `memory.isSaved`, or `key === undefined`, or
-    `adminAvailable.has(key) && isMemoryTypeEnabledForUser(userTypes, key)`.
-- `server/src/services/memory.service.spec.ts` — add `describe('search')` cases.
+    `adminAvailable.has(key) && isMemoryTypeEnabledForUser(userTypes, key)`, where
+    `key = getMemoryTypeKeyForMemory(memory.type, memory.data)`.
+- `server/src/services/memory.service.spec.ts` — **first** make the existing search tests safe, then add cases.
+
+**Required fix to existing tests (do this before adding new ones):** the new `search` calls
+`userRepository.getMetadata`, whose auto-mock returns `undefined` by default → `getPreferences(undefined)`
+would throw and break ALL five existing `describe('search')` tests. Add
+`mocks.user.getMetadata.mockResolvedValue([])` to the `search` describe's setup (a local `beforeEach` or in
+each existing test). `getConfig` is safe by default (no SystemConfig override → defaults → all available),
+so the existing search assertions then pass unchanged.
 
 **Tests (write first — red):** `cd server && pnpm test -- --run src/services/memory.service.spec.ts`
 
-- Returns an `OnThisDay` memory when `on_this_day` is enabled for the user; excludes it when
-  user `types.on_this_day = false`.
-- Returns a `Rule` memory with `ruleId: 'birthday'` when `birthday` enabled; excludes it when user
-  disabled birthday.
-- Excludes a memory when its type is admin-unavailable (e.g. `types.recent_trip = false` in system config)
-  even if the user pref would allow it.
+- Returns an `OnThisDay` memory when `on_this_day` is enabled for the user; excludes it when the user's
+  metadata sets `memories.types.on_this_day = false` (mock `userRepository.getMetadata` to return that
+  preferences metadata).
+- Returns a `Rule` memory with `ruleId: 'birthday'` when `birthday` enabled; excludes it when the user's
+  metadata disables birthday.
+- Excludes a memory when its type is admin-unavailable (SystemConfig `memories.types.recent_trip = false`
+  via `mocks.systemMetadata.get` on `SystemMetadataKey.SystemConfig`) even if the user pref would allow it.
 - **Saved exemption:** a saved (`isSaved: true`) birthday memory is still returned even when the user has
   birthday disabled.
 - **Unknown key passthrough:** a `Rule` memory with `ruleId: 'foreign_rule'` (not in metadata) is always
   returned.
-- Existing asset-permission filtering still applies (do not regress the current `search` behavior — keep
-  its existing test passing).
+- Existing asset-permission filtering still applies (the existing `search` tests stay green after the
+  `getMetadata` mock fix).
 
-Mocking notes: mock `userRepository.getMetadata` to return the preferences metadata; mock `getConfig` /
-`memoryRepository.searchAccessible` as the existing search test does.
+Mocking notes: `MemoryFactory.create({ type, data, isSaved })` builds the memory; `getForMemory(...)` wraps
+it for `searchAccessible`. The mapped DTO keeps `type`/`data`/`isSaved`, so the filter can derive the key.
 
 **Implement (green):** add the filter.
 
@@ -631,36 +694,48 @@ Mocking notes: mock `userRepository.getMetadata` to return the preferences metad
 
 **Goal:** Expose available type keys to the web and render per-type user toggles. Regenerate SDK.
 
-**Files:**
+Do the server side first, regenerate the SDK, then the web side (the web code/tests need the regenerated
+`availableMemoryTypes` / `memories.types` SDK types to type-check).
 
-- `server/src/dtos/server.dto.ts` — `ServerConfigSchema` adds `availableMemoryTypes: z.array(z.string())`.
-- `server/src/services/server.service.ts` — populate `availableMemoryTypes` from
-  `getAdminAvailableMemoryTypeKeys(config.memories)` in registry order
-  (`MEMORY_TYPE_KEYS.filter((k) => available.has(k))`).
-- `server/src/services/server.service.spec.ts` — assert the field.
-- Regenerate SDK.
-- Web i18n: add the six `memory_type_*` keys to the EN source locale and DE + FR.
-- `web/src/routes/(user)/user-settings/feature-settings.svelte` — render a `Switch` per
-  `availableMemoryTypes` key bound to `preferences.memories.types[key]`; include `memories.types` in the
-  save payload. Add a small web constant or use the server config value for the key list.
-- `web/src/routes/(user)/user-settings/feature-settings.spec.ts` (create if absent) — web test.
+**Files (server, then regen, then web):**
+
+- `server/src/dtos/server.dto.ts` — `ServerConfigSchema` adds
+  `availableMemoryTypes: z.array(z.string()).describe('Globally-available memory type keys')`.
+- `server/src/services/server.service.ts` — in `getSystemConfig()`, add `availableMemoryTypes` populated
+  from `getAdminAvailableMemoryTypeKeys(config.memories)` in registry order:
+  `availableMemoryTypes: MEMORY_TYPE_KEYS.filter((k) => available.has(k))`.
+- `server/src/services/server.service.spec.ts` — the `getSystemConfig` test asserts the whole DTO with an
+  exact `toEqual({...})`; **add `availableMemoryTypes: ['on_this_day','birthday','recent_trip']` to that
+  expected object** (otherwise it goes red on an unrelated field), and add a case for the admin-disabled path.
+- Regenerate SDK (server build + `make open-api-typescript`); commit generated output.
+- i18n: add the user-facing `memory_type_*` keys to `i18n/en.json`, `i18n/de.json`, `i18n/fr.json`.
+- `web/src/routes/(user)/user-settings/feature-settings.svelte` — read the key list from
+  `serverConfigManager.value.availableMemoryTypes`; inside the memories accordion render a `Switch` per key
+  bound to a local `memoriesTypes` state seeded from `authManager.preferences.memories?.types`; include
+  `memories: { enabled, duration, types: memoriesTypes }` in the `updateMyPreferences` payload. Label via
+  `$t('memory_type_' + key)`, subtitle via `$t('memory_type_' + key + '_description')`.
+- `web/src/routes/(user)/user-settings/feature-settings.spec.ts` — **new file** (none exists today).
 
 **Tests (write first — red):**
 
 - Server: `cd server && pnpm test -- --run src/services/server.service.spec.ts`
-  - `availableMemoryTypes` defaults to `['on_this_day','birthday','recent_trip']`.
-  - with system config `memories.types.recent_trip = false`, the array omits `recent_trip`.
-- Web: `cd web && pnpm test -- --run src/routes/(user)/user-settings/feature-settings.spec.ts`
-  - given `availableMemoryTypes = ['on_this_day','birthday','recent_trip']` and preferences
-    `memories.types`, renders one labelled toggle per key reflecting the pref value.
+  - `getSystemConfig()` returns `availableMemoryTypes: ['on_this_day','birthday','recent_trip']` by default.
+  - with `mocks.systemMetadata.get` returning a SystemConfig override `{ memories: { types: { recent_trip: false } } }`,
+    the array omits `recent_trip`.
+- Web: `cd web && pnpm test -- --run 'src/routes/(user)/user-settings/feature-settings.spec.ts'`
+  (mock `serverConfigManager` to expose `value.availableMemoryTypes` and `authManager` to expose
+  `preferences`, mirroring how `MemoriesSettings.spec.ts` mocks `systemConfigManager`)
+  - given `availableMemoryTypes = ['on_this_day','birthday','recent_trip']` and preferences `memories.types`,
+    renders one labelled toggle per key reflecting the pref value.
   - toggling a type updates the outgoing `updateMyPreferences` payload's `memories.types[key]` without
     altering `enabled` / `duration`.
   - a type absent from `availableMemoryTypes` is not rendered.
 
-**Implement (green):** server field + population; web toggles + i18n strings.
+**Implement (green):** server field + population (+ fix the exact-match test); regen SDK; web toggles +
+i18n strings.
 
 **Verify:** server + web test commands green; `pnpm check` (server) and `make check-web` clean; SDK
-regenerated/committed; i18n JSON valid.
+regenerated/committed; i18n JSON valid (all three locales have the new keys).
 
 **Commit:** `feat(memories): per-type user toggles in settings`
 
@@ -670,21 +745,29 @@ regenerated/committed; i18n JSON valid.
 
 **Goal:** Replace the hardcoded admin birthday/recentTrips switches with a registry-driven list.
 
+No SDK regen here (no server DTO change — `SystemConfigMemoriesDto.types` already shipped in Slice 2).
+
 **Files:**
 
-- `web/src/routes/admin/system-settings/MemoriesSettings.svelte` — render a `Switch` per memory-type key
-  (web constant mirroring `MEMORY_TYPE_KEYS`), bound to `config.memories.types[key]` with effective
-  fallback to the metadata default when unset; keep the retention number input; on save persist the explicit
-  `types` map. Reuse `memory_type_<key>` labels.
-- `web/src/routes/admin/system-settings/MemoriesSettings.spec.ts` — update.
+- `web/src/routes/admin/system-settings/MemoriesSettings.svelte` — the component reads
+  `config = systemConfigManager.value` and edits a clone `configToEdit = systemConfigManager.cloneValue()`,
+  with `SettingButtonsRow keys={['memories']}`. Keep the `retentionDays` `SettingInputField`. Replace the two
+  hardcoded `SettingSwitch`es (birthday / recentTrips) with a loop over a small web constant mirroring
+  `MEMORY_TYPE_KEYS` (`['on_this_day','birthday','recent_trip']`); each `SettingSwitch` is `bind:checked` to a
+  derived getter/setter over `configToEdit.memories.types[key]` that **falls back to `true`** (the metadata
+  default) when the key is unset, and writes the explicit boolean on toggle. Titles/subtitles via
+  `$t('admin.memory_type_' + key + '_setting')` / `_setting_description`.
+- `web/src/routes/admin/system-settings/MemoriesSettings.spec.ts` — update the `makeConfig` factory so
+  `memories` includes `types: {}` (alongside `retentionDays`, `birthday`, `recentTrips`), and rewrite the
+  switch assertions to the dynamic list. Keep the same mocking shape (`featureFlagsManager`,
+  `systemConfigManager`) and the `handleSystemConfigSave` assertion pattern.
 
 **Tests (write first — red):** `cd web && pnpm test -- --run src/routes/admin/system-settings/MemoriesSettings.spec.ts`
 
-- Renders one switch per memory-type key plus the retention input.
-- A key unset in `config.memories.types` renders at its metadata default (on); a key set to `false` renders
-  off.
-- Toggling a type writes `config.memories.types[key]`; toggling does not disturb `retentionDays`.
-- Saving emits the updated `memories.types` through the existing system-config save flow.
+- Renders one switch per memory-type key (`on_this_day`, `birthday`, `recent_trip`) plus the retention input.
+- A key unset in `config.memories.types` renders **on** (metadata default); a key set to `false` renders off.
+- Toggling a type writes `configToEdit.memories.types[key]` and does not disturb `retentionDays`.
+- Saving emits the updated `memories.types` through `handleSystemConfigSave` (the existing save flow).
 
 **Implement (green):** rewrite the component's memory-type section as a loop; keep retention handling.
 
@@ -711,6 +794,9 @@ regenerated/committed; i18n JSON valid.
 | 11  | Partial preferences update (one toggle)       | `mergePreferences` leaf-merge does not clobber other type values                       | 3          |
 | 12  | `on_this_day` toggled like any rule type      | gated in the OnThisDay window loop, code path otherwise unchanged                      | 4          |
 | 13  | Import cycle risk (config↔registry)           | metadata module imports only `enum`; rule classes isolated in registry module          | 1, 4       |
+| 14  | `auth.user` has no metadata in `search`       | `userRepository.getMetadata(auth.user.id)` round-trip, guarded with `?? []`            | 5          |
+| 15  | Existing `search`/`getSystemConfig` tests     | update `getMetadata` mock + the exact-match `toEqual` expectation in the same slice    | 5, 6       |
+| 16  | `statistics()` count vs hidden types          | NOT filtered in v1 (DB aggregate) — documented limitation, count may include disabled  | —          |
 
 ## Out of Scope (restated)
 
