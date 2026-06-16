@@ -13,6 +13,7 @@ part of openapi.api;
 class ServerConfigDto {
   /// Returns a new [ServerConfigDto] instance.
   ServerConfigDto({
+    this.availableMemoryTypes = const [],
     required this.externalDomain,
     required this.isInitialized,
     required this.isOnboarded,
@@ -20,12 +21,14 @@ class ServerConfigDto {
     required this.maintenanceMode,
     required this.mapDarkStyleUrl,
     required this.mapLightStyleUrl,
-    required this.minFaces,
     required this.oauthButtonText,
     required this.publicUsers,
     required this.trashDays,
     required this.userDeleteDelay,
   });
+
+  /// Globally-available memory type keys
+  List<String> availableMemoryTypes;
 
   /// External domain URL
   String externalDomain;
@@ -48,12 +51,6 @@ class ServerConfigDto {
   /// Map light style URL
   String mapLightStyleUrl;
 
-  /// People min faces server default
-  ///
-  /// Minimum value: -9007199254740991
-  /// Maximum value: 9007199254740991
-  int minFaces;
-
   /// OAuth button text
   String oauthButtonText;
 
@@ -74,6 +71,7 @@ class ServerConfigDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is ServerConfigDto &&
+    _deepEquality.equals(other.availableMemoryTypes, availableMemoryTypes) &&
     other.externalDomain == externalDomain &&
     other.isInitialized == isInitialized &&
     other.isOnboarded == isOnboarded &&
@@ -81,7 +79,6 @@ class ServerConfigDto {
     other.maintenanceMode == maintenanceMode &&
     other.mapDarkStyleUrl == mapDarkStyleUrl &&
     other.mapLightStyleUrl == mapLightStyleUrl &&
-    other.minFaces == minFaces &&
     other.oauthButtonText == oauthButtonText &&
     other.publicUsers == publicUsers &&
     other.trashDays == trashDays &&
@@ -90,6 +87,7 @@ class ServerConfigDto {
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
+    (availableMemoryTypes.hashCode) +
     (externalDomain.hashCode) +
     (isInitialized.hashCode) +
     (isOnboarded.hashCode) +
@@ -97,17 +95,17 @@ class ServerConfigDto {
     (maintenanceMode.hashCode) +
     (mapDarkStyleUrl.hashCode) +
     (mapLightStyleUrl.hashCode) +
-    (minFaces.hashCode) +
     (oauthButtonText.hashCode) +
     (publicUsers.hashCode) +
     (trashDays.hashCode) +
     (userDeleteDelay.hashCode);
 
   @override
-  String toString() => 'ServerConfigDto[externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, minFaces=$minFaces, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
+  String toString() => 'ServerConfigDto[availableMemoryTypes=$availableMemoryTypes, externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
+      json[r'availableMemoryTypes'] = this.availableMemoryTypes;
       json[r'externalDomain'] = this.externalDomain;
       json[r'isInitialized'] = this.isInitialized;
       json[r'isOnboarded'] = this.isOnboarded;
@@ -115,7 +113,6 @@ class ServerConfigDto {
       json[r'maintenanceMode'] = this.maintenanceMode;
       json[r'mapDarkStyleUrl'] = this.mapDarkStyleUrl;
       json[r'mapLightStyleUrl'] = this.mapLightStyleUrl;
-      json[r'minFaces'] = this.minFaces;
       json[r'oauthButtonText'] = this.oauthButtonText;
       json[r'publicUsers'] = this.publicUsers;
       json[r'trashDays'] = this.trashDays;
@@ -132,6 +129,9 @@ class ServerConfigDto {
       final json = value.cast<String, dynamic>();
 
       return ServerConfigDto(
+        availableMemoryTypes: json[r'availableMemoryTypes'] is Iterable
+            ? (json[r'availableMemoryTypes'] as Iterable).cast<String>().toList(growable: false)
+            : const [],
         externalDomain: mapValueOfType<String>(json, r'externalDomain')!,
         isInitialized: mapValueOfType<bool>(json, r'isInitialized')!,
         isOnboarded: mapValueOfType<bool>(json, r'isOnboarded')!,
@@ -139,7 +139,6 @@ class ServerConfigDto {
         maintenanceMode: mapValueOfType<bool>(json, r'maintenanceMode')!,
         mapDarkStyleUrl: mapValueOfType<String>(json, r'mapDarkStyleUrl')!,
         mapLightStyleUrl: mapValueOfType<String>(json, r'mapLightStyleUrl')!,
-        minFaces: mapValueOfType<int>(json, r'minFaces')!,
         oauthButtonText: mapValueOfType<String>(json, r'oauthButtonText')!,
         publicUsers: mapValueOfType<bool>(json, r'publicUsers')!,
         trashDays: mapValueOfType<int>(json, r'trashDays')!,
@@ -191,6 +190,7 @@ class ServerConfigDto {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'availableMemoryTypes',
     'externalDomain',
     'isInitialized',
     'isOnboarded',
@@ -198,7 +198,6 @@ class ServerConfigDto {
     'maintenanceMode',
     'mapDarkStyleUrl',
     'mapLightStyleUrl',
-    'minFaces',
     'oauthButtonText',
     'publicUsers',
     'trashDays',
