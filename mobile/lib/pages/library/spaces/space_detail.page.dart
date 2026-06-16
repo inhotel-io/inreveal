@@ -298,6 +298,8 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           onLinkTap: () {},
           // B4 wires album-tap navigation; no-op stub for B2.
           onAlbumTap: (albumId) {},
+          // B3: "See all ▸" pushes the list/manage page.
+          onSeeAll: () => context.pushRoute(SpaceAlbumsRoute(spaceId: widget.spaceId, canEdit: _canEdit)),
         ),
         topSliverWidgetHeight: computeTopSliverHeight(
           ref: ref,
