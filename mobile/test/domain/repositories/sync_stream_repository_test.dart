@@ -7,7 +7,6 @@ import 'package:immich_mobile/domain/models/memory.model.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/partner.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_album.entity.drift.dart';
-import 'package:immich_mobile/infrastructure/entities/remote_album_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/sync_stream.repository.dart';
 import 'package:openapi/api.dart';
@@ -1109,7 +1108,7 @@ void main() {
   //
   // Helpers — all tests re-use the same setUp (clean in-memory DB + SUT).
 
-  SyncAlbumV2 _makeAlbumV2({
+  SyncAlbumV2 makeAlbumV2({
     String id = 'album-1',
     String name = 'Test Album',
     String description = '',
@@ -1127,7 +1126,7 @@ void main() {
     );
   }
 
-  SyncSharedSpaceAlbumLinkV1 _makeAlbumLink({
+  SyncSharedSpaceAlbumLinkV1 makeAlbumLink({
     String spaceId = 'space-1',
     String albumId = 'album-1',
     bool showInTimeline = true,
@@ -1142,14 +1141,14 @@ void main() {
     );
   }
 
-  SyncAlbumToAssetV1 _makeAlbumToAsset({
+  SyncAlbumToAssetV1 makeAlbumToAsset({
     String albumId = 'album-1',
     String assetId = 'asset-1',
   }) {
     return SyncAlbumToAssetV1(albumId: albumId, assetId: assetId);
   }
 
-  SyncSharedSpaceV1 _makeSpace({String id = 'space-1'}) {
+  SyncSharedSpaceV1 makeSpace({String id = 'space-1'}) {
     return SyncSharedSpaceV1(
       id: id,
       name: 'Test Space',
@@ -1169,7 +1168,7 @@ void main() {
   group('SyncStreamRepository - SharedSpaceAlbum handlers', () {
     group('updateSharedSpaceAlbumsV1', () {
       test('upserts a metadata row (id/name/thumbnailAssetId/order)', () async {
-        await sut.updateSharedSpaceAlbumsV1([_makeAlbumV2(id: 'album-1', name: 'Holiday')]);
+        await sut.updateSharedSpaceAlbumsV1([makeAlbumV2(id: 'album-1', name: 'Holiday')]);
 
         final rows = await db.sharedSpaceAlbumEntity.select().get();
         expect(rows, hasLength(1));
@@ -1179,7 +1178,7 @@ void main() {
       });
 
       test('upsert is idempotent — re-inserting updates the row', () async {
-        await sut.updateSharedSpaceAlbumsV1([_makeAlbumV2(id: 'album-1', name: 'Original')]);
+        await sut.updateSharedSpaceAlbumsV1([makeAlbumV2(id: 'album-1', name: 'Original')]);
         await sut.updateSharedSpaceAlbumsV1([
           SyncAlbumV2(
             id: 'album-1',
@@ -1204,8 +1203,8 @@ void main() {
     group('updateSharedSpaceAlbumLinksV1', () {
       test('upserts a link row (showInTimeline carried)', () async {
         await sut.updateUsersV1([_createUser()]);
-        await sut.updateSharedSpacesV1([_makeSpace()]);
-        await sut.updateSharedSpaceAlbumLinksV1([_makeAlbumLink(showInTimeline: true)]);
+        await sut.updateSharedSpacesV1([makeSpace()]);
+        await sut.updateSharedSpaceAlbumLinksV1([makeAlbumLink(showInTimeline: true)]);
 
         final rows = await db.sharedSpaceAlbumLinkEntity.select().get();
         expect(rows, hasLength(1));
@@ -1216,9 +1215,9 @@ void main() {
 
       test('re-upsert updates showInTimeline', () async {
         await sut.updateUsersV1([_createUser()]);
-        await sut.updateSharedSpacesV1([_makeSpace()]);
-        await sut.updateSharedSpaceAlbumLinksV1([_makeAlbumLink(showInTimeline: true)]);
-        await sut.updateSharedSpaceAlbumLinksV1([_makeAlbumLink(showInTimeline: false)]);
+        await sut.updateSharedSpacesV1([makeSpace()]);
+        await sut.updateSharedSpaceAlbumLinksV1([makeAlbumLink(showInTimeline: true)]);
+        await sut.updateSharedSpaceAlbumLinksV1([makeAlbumLink(showInTimeline: false)]);
 
         final rows = await db.sharedSpaceAlbumLinkEntity.select().get();
         expect(rows, hasLength(1));
@@ -1228,7 +1227,7 @@ void main() {
 
     group('updateSharedSpaceAlbumToAssetsV1', () {
       test('inserts a membership row', () async {
-        await sut.updateSharedSpaceAlbumToAssetsV1([_makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1')]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1')]);
 
         final rows = await db.sharedSpaceAlbumAssetEntity.select().get();
         expect(rows, hasLength(1));
@@ -1237,8 +1236,8 @@ void main() {
       });
 
       test('idempotent on conflict — no duplicate row', () async {
-        await sut.updateSharedSpaceAlbumToAssetsV1([_makeAlbumToAsset()]);
-        await sut.updateSharedSpaceAlbumToAssetsV1([_makeAlbumToAsset()]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([makeAlbumToAsset()]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([makeAlbumToAsset()]);
 
         final rows = await db.sharedSpaceAlbumAssetEntity.select().get();
         expect(rows, hasLength(1));
@@ -1248,10 +1247,10 @@ void main() {
     group('deleteSharedSpaceAlbumLinksV1', () {
       test('removes only the (spaceId, albumId) link row', () async {
         await sut.updateUsersV1([_createUser()]);
-        await sut.updateSharedSpacesV1([_makeSpace()]);
+        await sut.updateSharedSpacesV1([makeSpace()]);
         await sut.updateSharedSpaceAlbumLinksV1([
-          _makeAlbumLink(spaceId: 'space-1', albumId: 'album-1'),
-          _makeAlbumLink(spaceId: 'space-1', albumId: 'album-2'),
+          makeAlbumLink(spaceId: 'space-1', albumId: 'album-1'),
+          makeAlbumLink(spaceId: 'space-1', albumId: 'album-2'),
         ]);
 
         await sut.deleteSharedSpaceAlbumLinksV1([
@@ -1267,8 +1266,8 @@ void main() {
     group('deleteSharedSpaceAlbumToAssetsV1', () {
       test('removes the (albumId, assetId) membership row', () async {
         await sut.updateSharedSpaceAlbumToAssetsV1([
-          _makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1'),
-          _makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
+          makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1'),
+          makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
         ]);
 
         await sut.deleteSharedSpaceAlbumToAssetsV1([
@@ -1285,10 +1284,10 @@ void main() {
       test('removes metadata + membership rows; leaves remote_asset intact', () async {
         // Seed: user, album metadata, membership, AND an asset blob.
         await sut.updateUsersV1([_createUser()]);
-        await sut.updateSharedSpaceAlbumsV1([_makeAlbumV2()]);
+        await sut.updateSharedSpaceAlbumsV1([makeAlbumV2()]);
         await sut.updateSharedSpaceAlbumToAssetsV1([
-          _makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1'),
-          _makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
+          makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-1'),
+          makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
         ]);
         // Asset blob written via the shared remote_asset store.
         await sut.updateAssetsV1([
@@ -1419,10 +1418,10 @@ void main() {
 
         // Dispatch all 8 SharedSpaceAlbum handler types.
         await sut.updateUsersV1([_createUser()]);
-        await sut.updateSharedSpacesV1([_makeSpace()]);
-        await sut.updateSharedSpaceAlbumsV1([_makeAlbumV2()]);
-        await sut.updateSharedSpaceAlbumLinksV1([_makeAlbumLink()]);
-        await sut.updateSharedSpaceAlbumToAssetsV1([_makeAlbumToAsset()]);
+        await sut.updateSharedSpacesV1([makeSpace()]);
+        await sut.updateSharedSpaceAlbumsV1([makeAlbumV2()]);
+        await sut.updateSharedSpaceAlbumLinksV1([makeAlbumLink()]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([makeAlbumToAsset()]);
         await sut.updateSharedSpaceAlbumAssetsV1([
           SyncAssetV2(
             id: 'asset-inv-1',
