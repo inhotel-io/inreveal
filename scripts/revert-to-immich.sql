@@ -119,6 +119,9 @@ DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album_user" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album_user_audit" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
@@ -160,6 +163,13 @@ DROP FUNCTION IF EXISTS shared_space_library_after_insert_user() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_delete_library_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_library_delete_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_member_delete_library_audit() CASCADE;
+DROP FUNCTION IF EXISTS user_has_album_path(uuid, uuid, uuid) CASCADE;
+DROP FUNCTION IF EXISTS shared_space_album_after_insert_user() CASCADE;
+DROP FUNCTION IF EXISTS shared_space_member_after_insert_album() CASCADE;
+DROP FUNCTION IF EXISTS shared_space_album_delete_audit() CASCADE;
+DROP FUNCTION IF EXISTS shared_space_member_delete_album_audit() CASCADE;
+DROP FUNCTION IF EXISTS shared_space_delete_album_audit() CASCADE;
+DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit() CASCADE;
 
 -- -----------------------------------------------------------------------------
 -- 4. Drop Gallery-added columns from Immich-native tables.
@@ -208,6 +218,13 @@ DELETE FROM "migration_overrides"
    'function_shared_space_member_delete_audit',
    'function_shared_space_member_delete_library_audit',
    'function_user_has_library_path',
+   'function_user_has_album_path',
+   'function_shared_space_album_after_insert_user',
+   'function_shared_space_member_after_insert_album',
+   'function_shared_space_album_delete_audit',
+   'function_shared_space_member_delete_album_audit',
+   'function_shared_space_delete_album_audit',
+   'function_shared_space_album_user_delete_after_audit',
    'index_asset_face_personId_idx',
    'index_face_identity_representativeFaceId_idx',
    'index_person_identityId_idx',
@@ -228,6 +245,12 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_delete_library_audit',
    'trigger_shared_space_library_after_insert_user',
    'trigger_shared_space_library_delete_audit',
+   'trigger_shared_space_album_after_insert_user',
+   'trigger_shared_space_member_after_insert_album',
+   'trigger_shared_space_album_delete_audit',
+   'trigger_shared_space_member_delete_album_audit',
+   'trigger_shared_space_delete_album_audit',
+   'trigger_shared_space_album_user_delete_after_audit',
    'trigger_shared_space_library_updatedAt',
    'trigger_shared_space_member_after_insert',
    'trigger_shared_space_member_after_insert_library',
@@ -604,6 +627,9 @@ DELETE FROM "kysely_migrations"
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
    '1778800000000-ReconcileFaceIdentityIndexOverrides',
    '1778800000000-TrimSpacePersonNameIndex',
+   '1779000000000-AddSharedSpaceAlbumUserTables',
+   '1779100000000-AddSharedSpaceAlbumCreateSideTriggers',
+   '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
