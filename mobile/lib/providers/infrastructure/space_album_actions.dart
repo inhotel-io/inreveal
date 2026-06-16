@@ -17,10 +17,7 @@ import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 /// album in a batch aborts the whole operation (fail-fast). The caller shows
 /// an error toast; the sync will catch up on the next regular cycle.
 class SpaceAlbumActions {
-  SpaceAlbumActions({
-    required this._repo,
-    required this._syncManager,
-  });
+  SpaceAlbumActions({required this._repo, required this._syncManager});
 
   final SharedSpaceApiRepository _repo;
   final BackgroundSyncManager _syncManager;
@@ -47,11 +44,7 @@ class SpaceAlbumActions {
   ///
   /// Pass [current] as the album's current `showInTimeline` value; the method
   /// sends the inverse.
-  Future<void> toggleTimeline(
-    String spaceId,
-    String albumId, {
-    required bool current,
-  }) async {
+  Future<void> toggleTimeline(String spaceId, String albumId, {required bool current}) async {
     await _repo.updateAlbumLink(spaceId, albumId, showInTimeline: !current);
     await _syncManager.syncRemote();
   }

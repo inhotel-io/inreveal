@@ -494,8 +494,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
           ),
           leftOuterJoin(
             _db.sharedSpaceAlbumLinkEntity,
-            _db.sharedSpaceAlbumLinkEntity.albumId
-                    .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+            _db.sharedSpaceAlbumLinkEntity.albumId.equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
                 _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
                 _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
             useColumns: false,
@@ -541,8 +540,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
         ),
         leftOuterJoin(
           _db.sharedSpaceAlbumLinkEntity,
-          _db.sharedSpaceAlbumLinkEntity.albumId
-                  .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+          _db.sharedSpaceAlbumLinkEntity.albumId.equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
               _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
               _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
           useColumns: false,
@@ -592,8 +590,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             ..join([
               innerJoin(
                 _db.sharedSpaceAlbumLinkEntity,
-                _db.sharedSpaceAlbumLinkEntity.albumId
-                        .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+                _db.sharedSpaceAlbumLinkEntity.albumId.equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
                     _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
                     _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
                 useColumns: false,
