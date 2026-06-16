@@ -487,12 +487,27 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
                 _db.sharedSpaceLibraryEntity.spaceId.equals(spaceId),
             useColumns: false,
           ),
+          leftOuterJoin(
+            _db.sharedSpaceAlbumAssetEntity,
+            _db.sharedSpaceAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id),
+            useColumns: false,
+          ),
+          leftOuterJoin(
+            _db.sharedSpaceAlbumLinkEntity,
+            _db.sharedSpaceAlbumLinkEntity.albumId
+                    .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+                _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
+                _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
+            useColumns: false,
+          ),
         ])
         ..where(
           _db.remoteAssetEntity.deletedAt.isNull() &
               _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
               _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
-              (_db.sharedSpaceAssetEntity.assetId.isNotNull() | _db.sharedSpaceLibraryEntity.libraryId.isNotNull()),
+              (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
+                  _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
+                  _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()),
         );
       return countQuery
           .map((row) => row.read(countExp) ?? 0)
@@ -519,12 +534,27 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
               _db.sharedSpaceLibraryEntity.spaceId.equals(spaceId),
           useColumns: false,
         ),
+        leftOuterJoin(
+          _db.sharedSpaceAlbumAssetEntity,
+          _db.sharedSpaceAlbumAssetEntity.assetId.equalsExp(_db.remoteAssetEntity.id),
+          useColumns: false,
+        ),
+        leftOuterJoin(
+          _db.sharedSpaceAlbumLinkEntity,
+          _db.sharedSpaceAlbumLinkEntity.albumId
+                  .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+              _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
+              _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
+          useColumns: false,
+        ),
       ])
       ..where(
         _db.remoteAssetEntity.deletedAt.isNull() &
             _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
-            (_db.sharedSpaceAssetEntity.assetId.isNotNull() | _db.sharedSpaceLibraryEntity.libraryId.isNotNull()),
+            (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
+                _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
+                _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()),
       )
       ..groupBy([dateExp])
       ..orderBy([OrderingTerm.desc(dateExp)]);
@@ -555,6 +585,20 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
           _db.sharedSpaceLibraryEntity.selectOnly()
             ..addColumns([_db.sharedSpaceLibraryEntity.libraryId])
             ..where(_db.sharedSpaceLibraryEntity.spaceId.equals(spaceId)),
+        ) |
+        _db.remoteAssetEntity.id.isInQuery(
+          _db.sharedSpaceAlbumAssetEntity.selectOnly()
+            ..addColumns([_db.sharedSpaceAlbumAssetEntity.assetId])
+            ..join([
+              innerJoin(
+                _db.sharedSpaceAlbumLinkEntity,
+                _db.sharedSpaceAlbumLinkEntity.albumId
+                        .equalsExp(_db.sharedSpaceAlbumAssetEntity.albumId) &
+                    _db.sharedSpaceAlbumLinkEntity.spaceId.equals(spaceId) &
+                    _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
+                useColumns: false,
+              ),
+            ]),
         );
 
     final query =
