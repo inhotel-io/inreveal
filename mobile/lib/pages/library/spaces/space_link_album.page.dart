@@ -91,10 +91,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
       appBar: AppBar(
         title: const Text('Link Albums'),
         centerTitle: false,
-        leading: IconButton(
-          icon: const Icon(Icons.close_rounded),
-          onPressed: () => context.maybePop(),
-        ),
+        leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => context.maybePop()),
         actions: [
           TextButton(
             key: const Key('link-album-confirm'),
@@ -120,10 +117,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
               decoration: InputDecoration(
                 hintText: 'Search albums',
                 prefixIcon: const Icon(Icons.search_rounded),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 filled: true,
                 fillColor: context.colorScheme.surfaceContainerHigh,
                 contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -141,15 +135,12 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
                         Icon(
                           Icons.photo_album_outlined,
                           size: 56,
-                          color: context.colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.4),
+                          color: context.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           'No albums to link',
-                          style: context.textTheme.titleMedium?.copyWith(
-                            color: context.colorScheme.onSurfaceVariant,
-                          ),
+                          style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -179,12 +170,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _AlbumRow extends StatelessWidget {
-  const _AlbumRow({
-    super.key,
-    required this.album,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _AlbumRow({super.key, required this.album, required this.isSelected, required this.onTap});
 
   final RemoteAlbum album;
   final bool isSelected;
@@ -202,15 +188,8 @@ class _AlbumRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
-      subtitle: Text(
-        '${album.assetCount} photos',
-        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-      ),
-      trailing: Checkbox(
-        value: isSelected,
-        onChanged: (_) => onTap(),
-        shape: const CircleBorder(),
-      ),
+      subtitle: Text('${album.assetCount} photos', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+      trailing: Checkbox(value: isSelected, onChanged: (_) => onTap(), shape: const CircleBorder()),
       onTap: onTap,
     );
   }
@@ -233,14 +212,9 @@ class _AlbumCover extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest,
         borderRadius: const BorderRadius.all(Radius.circular(8)),
-        border: Border.all(
-          color: cs.outline.withValues(alpha: 0.3),
-          width: 1,
-        ),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.3), width: 1),
       ),
-      child: const Center(
-        child: Icon(Icons.photo_album_outlined, size: 24, color: Colors.grey),
-      ),
+      child: const Center(child: Icon(Icons.photo_album_outlined, size: 24, color: Colors.grey)),
     );
   }
 }
