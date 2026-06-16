@@ -35,7 +35,7 @@ describe('createMemoryRules', () => {
   it('has a factory for every rule-kind metadata entry and no extras (completeness guard)', () => {
     const rules = createMemoryRules(MEMORY_TYPE_KEYS, deps);
     expect(rules).toHaveLength(ruleKeys.length);
-    expect(rules.map((r) => r.id).sort()).toEqual([...ruleKeys].sort());
+    expect(rules.map((r) => r.id).toSorted()).toEqual(ruleKeys.toSorted());
   });
 
   it('dedupes duplicate keys', () => {
