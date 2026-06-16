@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AlbumUserRole, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -396,5 +396,126 @@ describe('SharedSpaceAlbum sync — delete events', () => {
 
     const response = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumLinksV1]);
     expect(response.filter((r) => isLinkEvent(r))).toHaveLength(0);
+  });
+});
+
+// ── Scenario 6: both-paths invariant (album_user AND a space grant) ──────────
+// The complement of the absorbed invariant (scenario 4): a member who ALSO holds
+// a manual album_user share must receive the album on BOTH the personal path and
+// the space path — neither suppresses the other (master doc §8 "Member with both
+// album_user AND a space grant").
+
+describe('SharedSpaceAlbum sync — both-paths invariant: album_user + space grant', () => {
+  it('emits the album via BOTH personal AlbumsV2 and SharedSpaceAlbumsV1 (no suppression)', async () => {
+    const { auth, ctx } = await setup();
+    const { user: owner } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    // auth.user has a manual album_user share (personal path)…
+    await ctx.newAlbumUser({ albumId: album.id, userId: auth.user.id, role: AlbumUserRole.Editor });
+    // …AND a space grant (space path) for the same album.
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    const response = await ctx.syncStream(auth, [SyncRequestType.AlbumsV2, SyncRequestType.SharedSpaceAlbumsV1]);
+
+    const personalAlbumIds = response
+      .filter((r: { type: string }) => r.type === SyncEntityType.AlbumV2)
+      .map((r) => (r as { data: { id: string } }).data.id);
+    const spaceAlbumIds = response.filter((r) => isAlbumEvent(r)).map((r) => (r as { data: { id: string } }).data.id);
+
+    // The album appears in BOTH streams — independent paths, no suppression.
+    expect(personalAlbumIds).toContain(album.id);
+    expect(spaceAlbumIds).toContain(album.id);
+  });
+});
+
+// ── Scenario 7: two delete families — album-owner member ─────────────────────
+// On unlink, an album-owner who is also a space member must receive the UNGATED
+// link-removal (shelf drop) but NOT the GATED metadata delete, because they
+// retain the album via the personal owner path (master doc §8 / spec §10
+// two-delete-families topology guard).
+
+describe('SharedSpaceAlbum sync — two delete families: album-owner member', () => {
+  it('emits LinkDelete but NOT a metadata Delete to an album-owner who is also a space member', async () => {
+    const { auth, ctx } = await setup();
+    // auth.user OWNS the album (personal owner path) and is a member of the space.
+    const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
+    const { space } = await ctx.newSharedSpace({ createdById: auth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    // Drain + ack the initial metadata + link state.
+    const initial = await ctx.syncStream(auth, [
+      SyncRequestType.SharedSpaceAlbumsV1,
+      SyncRequestType.SharedSpaceAlbumLinksV1,
+    ]);
+    await ctx.syncAckAll(auth, initial);
+    await ctx.assertSyncIsComplete(auth, [
+      SyncRequestType.SharedSpaceAlbumsV1,
+      SyncRequestType.SharedSpaceAlbumLinksV1,
+    ]);
+
+    // Unlink the album from the space.
+    await defaultDatabase
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', space.id)
+      .where('albumId', '=', album.id)
+      .execute();
+
+    const next = await ctx.syncStream(auth, [
+      SyncRequestType.SharedSpaceAlbumsV1,
+      SyncRequestType.SharedSpaceAlbumLinksV1,
+    ]);
+
+    // Ungated link-removal → the shelf entry drops.
+    const linkDeletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumLinkDeleteV1);
+    expect(linkDeletes).toHaveLength(1);
+    expect((linkDeletes[0] as { data: { spaceId: string; albumId: string } }).data).toMatchObject({
+      spaceId: space.id,
+      albumId: album.id,
+    });
+
+    // Gated grant-revocation → NOT sent: user_has_album_path is true via the
+    // owner path, so the personal album is retained (no SharedSpaceAlbumDeleteV1).
+    const metadataDeletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumDeleteV1);
+    expect(metadataDeletes).toHaveLength(0);
+  });
+});
+
+// ── Scenario 8: write-amplification + idempotent re-delivery ─────────────────
+// album_asset is many-to-many, so an asset in two linked albums is streamed once
+// per (album, asset) — the documented amplification (spec §7). The client dedupes
+// via ON CONFLICT; re-delivery is idempotent (the stream is complete after ack).
+
+describe('SharedSpaceAlbum sync — write-amplification across albums', () => {
+  it('streams one membership row per (album, asset) for an asset in two linked albums, idempotently', async () => {
+    const { auth, ctx } = await setup();
+    const { user: owner } = await ctx.newUser();
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    const { album: album1 } = await ctx.newAlbum({ ownerId: owner.id });
+    const { album: album2 } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album1.id, assetId: asset.id });
+    await ctx.newAlbumAsset({ albumId: album2.id, assetId: asset.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album1.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album2.id });
+
+    const membership = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const rowsForAsset = membership
+      .filter((r) => isMembershipEvent(r))
+      .map((r) => (r as { data: { albumId: string; assetId: string } }).data)
+      .filter((d) => d.assetId === asset.id);
+
+    // One membership row per (album, asset) — the accepted amplification.
+    expect(rowsForAsset).toHaveLength(2);
+    expect(rowsForAsset.map((d) => d.albumId).sort()).toEqual([album1.id, album2.id].sort());
+
+    // Re-delivery is idempotent: after acking, nothing re-streams.
+    await ctx.syncAckAll(auth, membership);
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
   });
 });

@@ -251,6 +251,7 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_member_delete_album_audit',
    'trigger_shared_space_delete_album_audit',
    'trigger_shared_space_album_user_delete_after_audit',
+   'trigger_shared_space_album_updatedAt',
    'trigger_shared_space_library_updatedAt',
    'trigger_shared_space_member_after_insert',
    'trigger_shared_space_member_after_insert_library',
