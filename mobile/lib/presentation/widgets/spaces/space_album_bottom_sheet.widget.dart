@@ -18,15 +18,23 @@ import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_shee
 ///   Unstack / Edit-date-time / Edit-location / Delete-local
 ///
 /// Role-gating is on [canEdit] (space role), not album ownership (D3).
+///
+/// [onRemoved] is called after a successful remove-from-album action so the
+/// caller can fire the sync-nudge (B6).
 class SpaceAlbumBottomSheet extends ConsumerStatefulWidget {
   const SpaceAlbumBottomSheet({
     super.key,
     required this.canEdit,
     required this.albumId,
+    this.onRemoved,
   });
 
   final bool canEdit;
   final String albumId;
+
+  /// Optional callback fired after photos are successfully removed from the
+  /// album. Used by [SpaceAlbumDetailPage] to trigger the sync-nudge.
+  final VoidCallback? onRemoved;
 
   @override
   ConsumerState<SpaceAlbumBottomSheet> createState() => _SpaceAlbumBottomSheetState();
@@ -59,7 +67,11 @@ class _SpaceAlbumBottomSheetState extends ConsumerState<SpaceAlbumBottomSheet> {
         const ShareActionButton(source: ActionSource.timeline),
         const DownloadActionButton(source: ActionSource.timeline),
         if (widget.canEdit)
-          RemoveFromAlbumActionButton(source: ActionSource.timeline, albumId: widget.albumId),
+          RemoveFromAlbumActionButton(
+            source: ActionSource.timeline,
+            albumId: widget.albumId,
+            onComplete: widget.onRemoved,
+          ),
       ],
     );
   }
