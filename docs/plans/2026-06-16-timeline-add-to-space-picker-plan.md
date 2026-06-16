@@ -43,12 +43,15 @@
 
 - `web/src/lib/components/asset-viewer/album-list-item.svelte` — add optional `badgeIcon`/`badgeClass` props (additive).
 - `web/src/lib/services/asset.service.ts` — repoint the two `AddToAlbum` actions to `AssetAddToCollectionModal`.
+- `web/src/lib/services/asset.service.spec.ts` — **exists already**; extend its `@immich/ui` mock with `modalManager` and append a describe asserting the repointed action.
 - `web/src/lib/managers/selection-command-handlers.ts` — repoint `handleAddSelectedToAlbum` and `handleAddSelectedToSpace` to `AssetAddToCollectionModal`.
+- `web/src/lib/managers/selection-command-handlers.spec.ts` — **exists already**; update its imports and the two modal-identity assertions (lines ~4–5, ~226–246) to `AssetAddToCollectionModal`, or the suite goes red.
 - `i18n/en.json`, `i18n/de.json`, `i18n/fr.json` — new keys.
 
-**Removed (after repoint, if no other callers — verify with grep):**
+**Removed (after repoint; `grep` in Task 10 confirms only the two repointed files reference them):**
 
-- `web/src/lib/modals/AssetAddToAlbumModal.svelte`, `web/src/lib/modals/AssetAddToSpaceModal.svelte`.
+- `web/src/lib/modals/AssetAddToAlbumModal.svelte` (no spec file exists for it).
+- `web/src/lib/modals/AssetAddToSpaceModal.svelte` **and its `AssetAddToSpaceModal.spec.ts`** (the spec imports the deleted modal, so it must be removed too).
 
 ---
 
@@ -267,6 +270,22 @@ describe('CollectionModalRowConverter', () => {
     expect(rows[1].selected).toBe(false);
   });
 
+  it('renders a RECENT section and shifts the ALL focus offset by the recent count', () => {
+    const recent = [s('s1', 'B')];
+    const all = [a('a1', 'A'), s('s1', 'B')]; // sorted ALL → A (album a1), B (space s1)
+    const sections = conv
+      .toModalRows('', recent, all, -1, [], opts)
+      .filter((r) => r.type === CollectionModalRowType.SECTION)
+      .map((r) => (r.text ?? '').toUpperCase());
+    expect(sections[0]).toContain('RECENT'); // RECENT precedes ALL
+
+    // selectable order: NewAlbum(0) NewSpace(1) recent[0](2) all[0](3) all[1](4)
+    const selectedAt = (i: number) =>
+      conv.toModalRows('', recent, all, i, [], opts).find((r) => r.selected && r.collection)?.collection;
+    expect(selectedAt(2)?.id).toBe('s1'); // first RECENT item
+    expect(selectedAt(3)?.id).toBe('a1'); // first ALL item — offset includes the 1 recent row
+  });
+
   it('marks multiSelected rows by collectionKey', () => {
     const all = [a('a1', 'A'), s('s1', 'B')];
     const rows = conv.toModalRows('', [], all, -1, ['space:s1'], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
@@ -482,7 +501,7 @@ git commit -m "i18n: add unified collection picker strings (en/de/fr)"
 
 **Interfaces:**
 - Consumes: `PickerCollection` (Task 1); `addAssetsToAlbums` (`$lib/services/album.service`), `addAssetsToSpace` (`$lib/services/space.service`), `MAX_SPACE_ASSETS_PER_REQUEST` (`$lib/constants`), `toastManager`.
-- Produces: `addAssetsToCollections(collections: PickerCollection[], assetIds: string[]): Promise<void>`.
+- Produces: `addAssetsToCollections(collections: PickerCollection[], assetIds: string[]): Promise<boolean>` — resolves `true` when the modal should close (something succeeded, or nothing to do), `false` on total failure so the wrapper keeps the picker open for a retry (mirrors today's `AssetAddToAlbumModal`/`AssetAddToSpaceModal`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -511,47 +530,52 @@ beforeEach(() => {
 });
 
 describe('addAssetsToCollections', () => {
-  it('single album → addAssetsToAlbums notify:true, no aggregate toast', async () => {
-    await addAssetsToCollections([albumCol('a1')], ['x']);
+  it('single album → addAssetsToAlbums notify:true, no aggregate toast, returns true', async () => {
+    await expect(addAssetsToCollections([albumCol('a1')], ['x'])).resolves.toBe(true);
     expect(addAssetsToAlbums).toHaveBeenCalledWith(['a1'], ['x'], { notify: true });
     expect(primary).not.toHaveBeenCalled();
   });
 
-  it('single space → addAssetsToSpace notify:true, no aggregate toast', async () => {
-    await addAssetsToCollections([spaceCol('s1')], ['x']);
+  it('single album failure returns false (keep modal open)', async () => {
+    addAssetsToAlbums.mockResolvedValue(false);
+    await expect(addAssetsToCollections([albumCol('a1')], ['x'])).resolves.toBe(false);
+  });
+
+  it('single space → addAssetsToSpace notify:true, no aggregate toast, returns true', async () => {
+    await expect(addAssetsToCollections([spaceCol('s1')], ['x'])).resolves.toBe(true);
     expect(addAssetsToSpace).toHaveBeenCalledWith('s1', ['x'], { notify: true });
     expect(primary).not.toHaveBeenCalled();
   });
 
-  it('mixed multi → each notify:false, one aggregate toast counting successes', async () => {
-    await addAssetsToCollections([albumCol('a1'), albumCol('a2'), spaceCol('s1')], ['x']);
+  it('mixed multi → each notify:false, one aggregate toast counting successes, returns true', async () => {
+    await expect(addAssetsToCollections([albumCol('a1'), albumCol('a2'), spaceCol('s1')], ['x'])).resolves.toBe(true);
     expect(addAssetsToAlbums).toHaveBeenCalledWith(['a1', 'a2'], ['x'], { notify: false });
     expect(addAssetsToSpace).toHaveBeenCalledWith('s1', ['x'], { notify: false });
     expect(primary).toHaveBeenCalledWith('added_to_collections_count:3'); // 2 albums + 1 space
   });
 
-  it('partial failure → aggregate counts only successes; no throw', async () => {
+  it('partial failure → aggregate counts only successes; returns true; no throw', async () => {
     addAssetsToSpace.mockResolvedValue(false); // space fails
-    await addAssetsToCollections([albumCol('a1'), spaceCol('s1')], ['x']);
+    await expect(addAssetsToCollections([albumCol('a1'), spaceCol('s1')], ['x'])).resolves.toBe(true);
     expect(primary).toHaveBeenCalledWith('added_to_collections_count:1');
   });
 
-  it('total failure → no aggregate toast', async () => {
+  it('total failure → no aggregate toast, returns false', async () => {
     addAssetsToAlbums.mockResolvedValue(false);
     addAssetsToSpace.mockResolvedValue(false);
-    await addAssetsToCollections([albumCol('a1'), spaceCol('s1')], ['x']);
+    await expect(addAssetsToCollections([albumCol('a1'), spaceCol('s1')], ['x'])).resolves.toBe(false);
     expect(primary).not.toHaveBeenCalled();
   });
 
   it('over-cap selection skips spaces but still adds albums', async () => {
     const assetIds = Array.from({ length: 10001 }, (_, i) => `x${i}`);
-    await addAssetsToCollections([albumCol('a1'), spaceCol('s1')], assetIds);
+    await expect(addAssetsToCollections([albumCol('a1'), spaceCol('s1')], assetIds)).resolves.toBe(true);
     expect(addAssetsToSpace).not.toHaveBeenCalled();
     expect(addAssetsToAlbums).toHaveBeenCalledWith(['a1'], assetIds, { notify: true }); // total becomes 1 → single path
   });
 
-  it('empty selection is a no-op', async () => {
-    await addAssetsToCollections([], ['x']);
+  it('empty selection is a no-op and returns true', async () => {
+    await expect(addAssetsToCollections([], ['x'])).resolves.toBe(true);
     expect(addAssetsToAlbums).not.toHaveBeenCalled();
     expect(addAssetsToSpace).not.toHaveBeenCalled();
   });
@@ -574,7 +598,10 @@ import { addAssetsToSpace } from '$lib/services/space.service';
 import { getFormatter } from '$lib/utils/i18n';
 import { toastManager } from '@immich/ui';
 
-export const addAssetsToCollections = async (collections: PickerCollection[], assetIds: string[]): Promise<void> => {
+export const addAssetsToCollections = async (
+  collections: PickerCollection[],
+  assetIds: string[],
+): Promise<boolean> => {
   const $t = await getFormatter();
 
   const albumIds = collections.filter((c) => c.kind === 'album').map((c) => c.id);
@@ -585,16 +612,14 @@ export const addAssetsToCollections = async (collections: PickerCollection[], as
 
   const total = albumIds.length + spaceIds.length;
   if (total === 0) {
-    return;
+    return true;
   }
 
   if (total === 1 && albumIds.length === 1) {
-    await addAssetsToAlbums(albumIds, assetIds, { notify: true });
-    return;
+    return addAssetsToAlbums(albumIds, assetIds, { notify: true });
   }
   if (total === 1 && spaceIds.length === 1) {
-    await addAssetsToSpace(spaceIds[0], assetIds, { notify: true });
-    return;
+    return addAssetsToSpace(spaceIds[0], assetIds, { notify: true });
   }
 
   const tasks: { count: number; run: () => Promise<boolean> }[] = [];
@@ -616,6 +641,7 @@ export const addAssetsToCollections = async (collections: PickerCollection[], as
   if (success > 0) {
     toastManager.primary($t('added_to_collections_count', { values: { count: success } }));
   }
+  return success > 0;
 };
 ```
 
@@ -776,6 +802,19 @@ describe('SpaceListItem', () => {
     const checkbox = screen.getByRole('checkbox');
     await fireEvent.click(checkbox);
     expect(p.onMultiSelect).toHaveBeenCalledOnce();
+  });
+
+  it('shows only the member count (no separator) when assetCount is absent', () => {
+    render(SpaceListItem, props({ recentAssetIds: [], assetCount: undefined, memberCount: 3 }));
+    const details = screen.getByTestId('space-row-details');
+    expect(details.textContent).toContain('3');
+    expect(details.textContent).not.toContain('·'); // separator only renders when both counts exist
+  });
+
+  it('highlights the matching slice of the space name', () => {
+    render(SpaceListItem, { ...props({ recentAssetIds: [] }), searchQuery: 'mil' }); // "Family" → Fa[mil]y
+    const bold = screen.getByTestId('space-row').querySelector('b');
+    expect(bold?.textContent?.toLowerCase()).toBe('mil');
   });
 });
 ```
@@ -1105,42 +1144,73 @@ git commit -m "feat(web): NewSpaceListItem row with name validation"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// CollectionPickerModal.spec.ts
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+// CollectionPickerModal.spec.ts — follows the house pattern (sdk.mock + Modal global stubs)
+import '$lib/__mocks__/sdk.mock';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { getAnimateMock } from '$lib/__mocks__/animate.mock';
+import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
+import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 
-const getAllAlbums = vi.fn();
-const getAllSpaces = vi.fn();
-const handleError = vi.fn();
-
-vi.mock('@immich/sdk', async (orig) => {
-  const actual = await (orig as any)();
-  return {
-    ...actual,
-    getAllAlbums: (...a: unknown[]) => getAllAlbums(...a),
-    getAllSpaces: (...a: unknown[]) => getAllSpaces(...a),
-    createAlbum: vi.fn(),
-    createSpace: vi.fn(),
-  };
-});
-vi.mock('$lib/managers/auth-manager.svelte', () => ({ authManager: { authenticated: true, user: { id: 'me' } } }));
-vi.mock('$lib/utils/handle-error', () => ({ handleError: (...a: unknown[]) => handleError(...a) }));
+const { mockUser, mockHandleError } = vi.hoisted(() => ({
+  mockUser: { current: { id: 'me', isAdmin: false } },
+  mockHandleError: vi.fn(),
+}));
+vi.mock('$lib/managers/auth-manager.svelte', () => ({
+  authManager: {
+    get authenticated() {
+      return mockUser.current !== null;
+    },
+    get user() {
+      return mockUser.current;
+    },
+  },
+}));
+vi.mock('$lib/utils/handle-error', () => ({ handleError: mockHandleError }));
 
 import CollectionPickerModal from './CollectionPickerModal.svelte';
 
-const album = (id: string, name: string) => ({ id, albumName: name, assetCount: 1, albumThumbnailAssetId: null, shared: false, updatedAt: '2024-01-01T00:00:00Z' });
-const space = (id: string, name: string) => ({ id, name, createdById: 'me', createdAt: '2024-01-01T00:00:00Z', members: [], memberCount: 1, assetCount: 1, recentAssetIds: [] });
+const album = (id: string, name: string) => ({
+  id,
+  albumName: name,
+  assetCount: 1,
+  albumThumbnailAssetId: null,
+  shared: false,
+  updatedAt: '2024-01-01T00:00:00Z',
+});
+const space = (id: string, name: string) => ({
+  id,
+  name,
+  createdById: 'me',
+  createdAt: '2024-01-01T00:00:00Z',
+  members: [],
+  memberCount: 1,
+  assetCount: 1,
+  recentAssetIds: [],
+});
+const withAlbum = () =>
+  sdkMock.getAllAlbums.mockImplementation(({ shared }: { shared: boolean }) =>
+    Promise.resolve(shared ? [] : [album('a1', 'Trip')]),
+  );
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  getAllAlbums.mockResolvedValue([]); // both shared:false and shared:true resolve to []
-  getAllSpaces.mockResolvedValue([]);
+  vi.stubGlobal('IntersectionObserver', getIntersectionObserverMock());
+  vi.stubGlobal('visualViewport', getVisualViewportMock());
+  Element.prototype.animate = getAnimateMock();
+  vi.resetAllMocks();
+  mockUser.current = { id: 'me', isAdmin: false };
+  sdkMock.getAllAlbums.mockResolvedValue([]); // both shared:false and shared:true resolve to []
+  sdkMock.getAllSpaces.mockResolvedValue([]);
+});
+
+afterAll(async () => {
+  await waitFor(() => expect(document.body.style.pointerEvents).not.toBe('none'));
 });
 
 describe('CollectionPickerModal', () => {
   it('renders album rows (with badge) and space rows after load', async () => {
-    getAllAlbums.mockImplementation(({ shared }: { shared: boolean }) => Promise.resolve(shared ? [] : [album('a1', 'Trip')]));
-    getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
+    withAlbum();
+    sdkMock.getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
     render(CollectionPickerModal, { assetCount: 3, onClose: vi.fn() });
     await waitFor(() => expect(screen.getByTestId('row-album-a1')).toBeTruthy());
     expect(screen.getByTestId('row-space-s1')).toBeTruthy();
@@ -1150,17 +1220,34 @@ describe('CollectionPickerModal', () => {
 
   it('clicking an album row confirms with that single collection', async () => {
     const onClose = vi.fn();
-    getAllAlbums.mockImplementation(({ shared }: { shared: boolean }) => Promise.resolve(shared ? [] : [album('a1', 'Trip')]));
+    withAlbum();
     render(CollectionPickerModal, { assetCount: 3, onClose });
-    await waitFor(() => expect(screen.getByTestId('row-album-a1')).toBeTruthy());
-    await fireEvent.click(screen.getByTestId('space-row') ?? screen.getByTestId('row-album-a1'));
-    // click the album row's main button (AlbumListItem button inside row-album-a1)
-    await fireEvent.click(screen.getByTestId('row-album-a1').querySelector('button')!);
+    await fireEvent.click(await screen.findByRole('button', { name: /Trip/ }));
     expect(onClose).toHaveBeenCalledWith([expect.objectContaining({ kind: 'album', id: 'a1' })]);
   });
 
+  it('Ctrl/checkbox multi-select mixes album + space and submits all at once', async () => {
+    const onClose = vi.fn();
+    withAlbum();
+    sdkMock.getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
+    render(CollectionPickerModal, { assetCount: 3, onClose });
+    // hover reveals each row's multi-select checkbox, then toggle both.
+    // Re-query each row right before use — selecting one re-derives the list.
+    const albumRow = await screen.findByTestId('row-album-a1');
+    await fireEvent.mouseEnter(within(albumRow).getByRole('group'));
+    await fireEvent.click(within(albumRow).getByRole('checkbox'));
+    const spaceRow = screen.getByTestId('row-space-s1');
+    await fireEvent.mouseEnter(within(spaceRow).getByRole('group'));
+    await fireEvent.click(within(spaceRow).getByRole('checkbox'));
+    await fireEvent.click(await screen.findByTestId('add-collections-button'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    const selected = onClose.mock.calls[0][0] as Array<{ kind: string }>;
+    expect(selected).toHaveLength(2);
+    expect(selected.map((c) => c.kind).sort()).toEqual(['album', 'space']);
+  });
+
   it('hides spaces and shows a notice when over the cap', async () => {
-    getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
+    sdkMock.getAllSpaces.mockResolvedValue([space('s1', 'Family')]);
     render(CollectionPickerModal, { assetCount: 10001, onClose: vi.fn() });
     await waitFor(() => expect(screen.getByTestId('spaces-hidden-notice')).toBeTruthy());
     expect(screen.queryByTestId('row-space-s1')).toBeNull();
@@ -1168,11 +1255,20 @@ describe('CollectionPickerModal', () => {
   });
 
   it('reports an error and still renders albums when spaces fail to load', async () => {
-    getAllAlbums.mockImplementation(({ shared }: { shared: boolean }) => Promise.resolve(shared ? [] : [album('a1', 'Trip')]));
-    getAllSpaces.mockRejectedValue(new Error('boom'));
+    withAlbum();
+    sdkMock.getAllSpaces.mockRejectedValue(new Error('boom'));
     render(CollectionPickerModal, { assetCount: 3, onClose: vi.fn() });
     await waitFor(() => expect(screen.getByTestId('row-album-a1')).toBeTruthy());
-    expect(handleError).toHaveBeenCalled();
+    expect(mockHandleError).toHaveBeenCalledOnce();
+  });
+
+  it('reports both errors and still shows the create rows when both loads fail', async () => {
+    sdkMock.getAllAlbums.mockRejectedValue(new Error('albums down'));
+    sdkMock.getAllSpaces.mockRejectedValue(new Error('spaces down'));
+    render(CollectionPickerModal, { assetCount: 3, onClose: vi.fn() });
+    await waitFor(() => expect(screen.getByTestId('new-space-row')).toBeTruthy());
+    expect(mockHandleError).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('row-album-a1')).toBeNull();
   });
 });
 ```
@@ -1454,7 +1550,7 @@ Expected: FAIL — component not found.
       {/if}
     </div>
     {#if multiSelectActive}
-      <Button size="small" shape="round" fullWidth onclick={submitMulti}>
+      <Button size="small" shape="round" fullWidth onclick={submitMulti} data-testid="add-collections-button">
         {$t('add_to_collections_count', { values: { count: multiSelectedKeys.length } })}
       </Button>
     {/if}
@@ -1501,53 +1597,107 @@ git commit -m "feat(web): unified CollectionPickerModal"
 - Test: `web/src/lib/modals/AssetAddToCollectionModal.spec.ts`
 
 **Interfaces:**
-- Consumes: `CollectionPickerModal` (Task 8), `addAssetsToCollections` (Task 4).
-- Produces: `AssetAddToCollectionModal` with props `{ assetIds: string[]; onClose: () => void }`. Passes `assetCount={assetIds.length}`; on a non-empty selection, calls `addAssetsToCollections(collections, assetIds)` then `onClose()`; on cancel, calls `onClose()` only.
+- Consumes: `CollectionPickerModal` (Task 8), `addAssetsToCollections` (Task 4, returns `boolean`).
+- Produces: `AssetAddToCollectionModal` with props `{ assetIds: string[]; onClose: () => void }`. Passes `assetCount={assetIds.length}`. On a non-empty selection it calls `addAssetsToCollections(collections, assetIds)` and closes **only if it returns `true`** (so a failed add keeps the picker open, like today's wrappers). A re-entrancy `pending` guard drops a second confirm while a dispatch is in flight, then resets so a retry is possible — this is the spec's "no duplicate add" guard (kept in the wrapper, not the modal, so failure doesn't freeze the picker).
+
+This test follows the house pattern from the (now-deleted) `AssetAddToSpaceModal.spec.ts`: render the **real** wrapper + real picker, mock the service + SDK + auth, and drive via the rendered rows. (Do not mock the Svelte child — that is brittle in this repo.)
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 // AssetAddToCollectionModal.spec.ts
-import { render } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import '$lib/__mocks__/sdk.mock';
+import { sdkMock } from '$lib/__mocks__/sdk.mock';
+import { getAnimateMock } from '$lib/__mocks__/animate.mock';
+import { getIntersectionObserverMock } from '$lib/__mocks__/intersection-observer.mock';
+import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 
-const addAssetsToCollections = vi.fn().mockResolvedValue(undefined);
-let captured: { assetCount: number; onClose: (c?: unknown[]) => void } | null = null;
-
-vi.mock('$lib/services/collection.service', () => ({
-  addAssetsToCollections: (...a: unknown[]) => addAssetsToCollections(...a),
+const { mockUser, mockAdd } = vi.hoisted(() => ({
+  mockUser: { current: { id: 'me', isAdmin: false } },
+  mockAdd: vi.fn(),
 }));
-// Stub the heavy modal: capture props so we can drive onClose directly.
-vi.mock('./CollectionPickerModal.svelte', () => ({
-  default: function MockModal(_anchor: unknown, props: { assetCount: number; onClose: (c?: unknown[]) => void }) {
-    captured = props;
-    return {};
+vi.mock('$lib/services/collection.service', () => ({ addAssetsToCollections: mockAdd }));
+vi.mock('$lib/managers/auth-manager.svelte', () => ({
+  authManager: {
+    get authenticated() {
+      return mockUser.current !== null;
+    },
+    get user() {
+      return mockUser.current;
+    },
   },
 }));
 
 import AssetAddToCollectionModal from './AssetAddToCollectionModal.svelte';
 
+const album = (id: string, name: string) => ({
+  id,
+  albumName: name,
+  assetCount: 1,
+  albumThumbnailAssetId: null,
+  shared: false,
+  updatedAt: '2024-01-01T00:00:00Z',
+});
+
+beforeEach(() => {
+  vi.stubGlobal('IntersectionObserver', getIntersectionObserverMock());
+  vi.stubGlobal('visualViewport', getVisualViewportMock());
+  Element.prototype.animate = getAnimateMock();
+  vi.resetAllMocks();
+  mockUser.current = { id: 'me', isAdmin: false };
+  mockAdd.mockResolvedValue(true);
+  sdkMock.getAllAlbums.mockImplementation(({ shared }: { shared: boolean }) =>
+    Promise.resolve(shared ? [] : [album('a1', 'Trip')]),
+  );
+  sdkMock.getAllSpaces.mockResolvedValue([]);
+});
+
+afterAll(async () => {
+  await waitFor(() => expect(document.body.style.pointerEvents).not.toBe('none'));
+});
+
 describe('AssetAddToCollectionModal', () => {
-  it('passes assetCount and dispatches on a non-empty selection', async () => {
+  it('dispatches to the chosen collection and closes on success', async () => {
     const onClose = vi.fn();
     render(AssetAddToCollectionModal, { assetIds: ['1', '2'], onClose });
-    expect(captured!.assetCount).toBe(2);
-    await captured!.onClose([{ kind: 'album', id: 'a1', name: 'A', album: { id: 'a1' } } as any]);
-    expect(addAssetsToCollections).toHaveBeenCalledWith([expect.objectContaining({ id: 'a1' })], ['1', '2']);
+    await fireEvent.click(await screen.findByRole('button', { name: /Trip/ }));
+    expect(mockAdd).toHaveBeenCalledWith([expect.objectContaining({ id: 'a1', kind: 'album' })], ['1', '2']);
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
+  it('closes without dispatching when the picker is dismissed', async () => {
+    const onClose = vi.fn();
+    render(AssetAddToCollectionModal, { assetIds: ['1'], onClose });
+    const closeButtons = await screen.findAllByRole('button', { name: 'Close' });
+    await fireEvent.click(closeButtons[0]);
+    expect(mockAdd).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it('cancels without dispatching on empty selection', async () => {
+  it('stays open when the dispatch reports failure', async () => {
+    mockAdd.mockResolvedValue(false);
     const onClose = vi.fn();
     render(AssetAddToCollectionModal, { assetIds: ['1'], onClose });
-    await captured!.onClose(undefined);
-    expect(addAssetsToCollections).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledOnce();
+    await fireEvent.click(await screen.findByRole('button', { name: /Trip/ }));
+    await waitFor(() => expect(mockAdd).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second confirm while the first dispatch is pending (no duplicate add)', async () => {
+    let resolveAdd!: (value: boolean) => void;
+    mockAdd.mockReturnValue(new Promise<boolean>((resolve) => (resolveAdd = resolve)));
+    const onClose = vi.fn();
+    render(AssetAddToCollectionModal, { assetIds: ['1'], onClose });
+    const row = await screen.findByRole('button', { name: /Trip/ });
+    await fireEvent.click(row);
+    await fireEvent.click(row); // second click while the first dispatch is still pending
+    expect(mockAdd).toHaveBeenCalledTimes(1);
+    resolveAdd(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 });
 ```
-
-> Note: if mocking the Svelte child component proves brittle in this repo's setup, fall back to a thinner test that imports the real `CollectionPickerModal` mock-free and asserts `addAssetsToCollections` wiring by exporting `handleClose` from a tiny `asset-add-to-collection.ts` helper and unit-testing that instead. Prefer the component test first.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1569,13 +1719,22 @@ Expected: FAIL — component not found.
 
   const { assetIds, onClose }: Props = $props();
 
+  let pending = false;
+
   const handleClose = async (collections?: PickerCollection[]) => {
     if (!collections || collections.length === 0) {
       onClose();
       return;
     }
-    await addAssetsToCollections(collections, assetIds);
-    onClose();
+    if (pending) {
+      return; // re-entrancy guard: a dispatch is already in flight
+    }
+    pending = true;
+    const ok = await addAssetsToCollections(collections, assetIds);
+    pending = false;
+    if (ok) {
+      onClose();
+    }
   };
 </script>
 
@@ -1600,46 +1759,62 @@ git commit -m "feat(web): AssetAddToCollectionModal wrapper"
 
 **Files:**
 - Modify: `web/src/lib/services/asset.service.ts`
+- Modify: `web/src/lib/services/asset.service.spec.ts` (**exists** — append a describe + extend its `@immich/ui` mock)
 - Modify: `web/src/lib/managers/selection-command-handlers.ts`
-- Delete: `web/src/lib/modals/AssetAddToAlbumModal.svelte`, `web/src/lib/modals/AssetAddToSpaceModal.svelte` (only after the grep in Step 1 confirms no remaining importers)
-- Test: `web/src/lib/services/asset.service.spec.ts` (add a focused test if the file exists; otherwise create it)
+- Modify: `web/src/lib/managers/selection-command-handlers.spec.ts` (**exists** — update imports + 2 assertions)
+- Delete: `web/src/lib/modals/AssetAddToAlbumModal.svelte`
+- Delete: `web/src/lib/modals/AssetAddToSpaceModal.svelte` + `web/src/lib/modals/AssetAddToSpaceModal.spec.ts`
 
 **Interfaces:**
 - Consumes: `AssetAddToCollectionModal` (Task 9).
 - Produces: timeline "+" and single-photo "Add to album" actions, and both command-palette handlers, open `AssetAddToCollectionModal`.
 
-- [ ] **Step 1: Confirm no other importers of the old wrappers**
+> **Why this task touches existing specs:** `selection-command-handlers.spec.ts` imports the two old modals and asserts the handlers open them; `AssetAddToSpaceModal.spec.ts` tests a modal we delete. Both break unless updated/removed here. `getAssetBulkActions` is the real export; `asset.service.spec.ts` already exists and mocks `@immich/ui` with **only** `toastManager` — we must add `modalManager`.
+
+- [ ] **Step 1: Confirm the blast radius**
 
 Run:
 ```bash
-grep -rn "AssetAddToAlbumModal\|AssetAddToSpaceModal" web/src --include="*.svelte" --include="*.ts" | grep -v "\.spec\."
+grep -rln "AssetAddToAlbumModal\|AssetAddToSpaceModal" web/src
 ```
-Expected: only `asset.service.ts` and `selection-command-handlers.ts` reference them. (If anything else does, leave the old wrapper file in place and only repoint these two.)
+Expected exactly: `asset.service.ts`, `selection-command-handlers.ts`, `selection-command-handlers.spec.ts`, `AssetAddToSpaceModal.spec.ts`. (If anything else appears, repoint it too before deleting.)
 
-- [ ] **Step 2: Write the failing test** (`asset.service.spec.ts`)
+- [ ] **Step 2: Write the failing test** — append to the existing `asset.service.spec.ts`
 
+First, extend the file's existing `@immich/ui` mock (it currently only mocks `toastManager`) to add `modalManager`, and add an `assetMultiSelectManager` mock near the other `vitest.mock(...)` calls:
 ```ts
-import { describe, expect, it, vi } from 'vitest';
-
-const show = vi.fn();
-vi.mock('@immich/ui', async (orig) => ({ ...(await (orig as any)()), modalManager: { show: (...a: unknown[]) => show(...a) } }));
-vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
-  assetMultiSelectManager: { assets: [{ id: 'x1' }, { id: 'x2' }] },
+// change the existing `vitest.mock('@immich/ui', ...)` to:
+vitest.mock('@immich/ui', () => ({
+  toastManager: { primary: vitest.fn() },
+  modalManager: { show: vitest.fn() },
 }));
 
+vitest.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
+  assetMultiSelectManager: { assets: [{ id: 'x1' }, { id: 'x2' }] },
+}));
+```
+Then add the imports and a describe block:
+```ts
 import AssetAddToCollectionModal from '$lib/modals/AssetAddToCollectionModal.svelte';
-import { getAssetBulkActions } from './asset.service';
+import { getAssetActions, getAssetBulkActions } from '$lib/services/asset.service';
+import { modalManager } from '@immich/ui';
 
-describe('timeline add action', () => {
-  it('opens the unified collection modal with selected asset ids', () => {
-    const actions = getAssetBulkActions(((k: string) => k) as any);
-    actions.AddToAlbum.onAction();
-    expect(show).toHaveBeenCalledWith(AssetAddToCollectionModal, { assetIds: ['x1', 'x2'] });
+describe('add to album/space entry points', () => {
+  beforeEach(() => vitest.mocked(modalManager.show).mockClear());
+
+  it('timeline bulk "+" opens the unified collection modal with the selected ids', () => {
+    getAssetBulkActions(((k: string) => k) as never).AddToAlbum.onAction();
+    expect(modalManager.show).toHaveBeenCalledWith(AssetAddToCollectionModal, { assetIds: ['x1', 'x2'] });
+  });
+
+  it('single-photo viewer "+" opens the unified collection modal with the one id', () => {
+    const asset = assetFactory.build({ id: 'single-1' });
+    getAssetActions(() => '', asset).AddToAlbum.onAction();
+    expect(modalManager.show).toHaveBeenCalledWith(AssetAddToCollectionModal, { assetIds: ['single-1'] });
   });
 });
 ```
-
-(If `getAssetBulkActions` is not exported, export it, or adapt the test to the existing export. Verify the actual export name before writing.)
+(`getAssetActions` and `assetFactory` are already imported at the top of the existing file.)
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -1708,21 +1883,47 @@ export function handleAddSelectedToSpace(ctx?: CommandContext) {
 ```
 (`canAddSelectedToAlbum`, `canAddSelectedToSpace`, and `handleAddSelectedToCurrentSpace` are unchanged.)
 
-- [ ] **Step 6: Run tests to verify they pass; delete dead modals**
+- [ ] **Step 6: Update the existing `selection-command-handlers.spec.ts`**
 
-Run: `cd web && pnpm test -- --run src/lib/services/asset.service.spec.ts`
-Expected: PASS.
-Then delete the now-unused wrappers (confirmed by Step 1):
+Replace the two old imports (lines ~4–5):
+```ts
+import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
+import AssetAddToSpaceModal from '$lib/modals/AssetAddToSpaceModal.svelte';
+```
+with:
+```ts
+import AssetAddToCollectionModal from '$lib/modals/AssetAddToCollectionModal.svelte';
+```
+Update the "add to album" assertion (line ~232):
+```ts
+    expect(modalManager.show).toHaveBeenCalledWith(AssetAddToCollectionModal, { assetIds: ['asset-1', 'asset-2'] });
+```
+Update the "add to space" assertion (line ~244) — and retitle the `it(...)` to reflect the unified modal:
+```ts
+    expect(modalManager.show).toHaveBeenCalledWith(AssetAddToCollectionModal, { assetIds: ['asset-1', 'asset-2'] });
+```
+(The `no-ops when add-to-space is disabled` and `canAdd*` tests are unchanged — they assert behavior, not modal identity.)
+
+- [ ] **Step 7: Run the two touched specs; delete the dead modals + orphaned spec**
+
+Run:
 ```bash
-git rm web/src/lib/modals/AssetAddToAlbumModal.svelte web/src/lib/modals/AssetAddToSpaceModal.svelte
+cd web && pnpm test -- --run src/lib/services/asset.service.spec.ts src/lib/managers/selection-command-handlers.spec.ts
+```
+Expected: PASS.
+Then delete the now-unused wrappers and the orphaned spec (Step 1 confirmed no other importers):
+```bash
+git rm web/src/lib/modals/AssetAddToAlbumModal.svelte \
+       web/src/lib/modals/AssetAddToSpaceModal.svelte \
+       web/src/lib/modals/AssetAddToSpaceModal.spec.ts
 ```
 Run: `cd web && pnpm check`
 Expected: no type errors (confirms nothing still imports the deleted files).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add web/src/lib/services/asset.service.ts web/src/lib/managers/selection-command-handlers.ts web/src/lib/services/asset.service.spec.ts
+git add web/src/lib/services/asset.service.ts web/src/lib/services/asset.service.spec.ts web/src/lib/managers/selection-command-handlers.ts web/src/lib/managers/selection-command-handlers.spec.ts
 git commit -m "feat(web): open unified collection picker from timeline, viewer, and command palette"
 ```
 
@@ -1823,16 +2024,17 @@ git commit -m "chore(web): final gate — tests, check, lint, docs format for co
 - Cross-type Ctrl multi-select + "Add to N" → Task 8 (`toggleMultiSelect`, `submitMulti`) keyed by `collectionKey` (Task 1).
 - Bigger modal (`size="medium"`, taller list) → Task 8.
 - Writable-spaces filter → Task 1 (`isWritableSpace`) + Task 8.
-- Single-target rich toasts + mixed aggregate + success-only events → Task 4.
+- Single-target rich toasts + mixed aggregate + success-only events → Task 4 (returns `boolean`).
 - Over-cap hides spaces + notice → Task 2 (`showSpaces` option) + Task 8 (notice) + Task 4 (defensive skip).
-- Both-settled loading + degrade on one failure → Task 8 (`Promise.allSettled` + `handleError`).
-- Repoint timeline "+", single-photo viewer, both palette commands → Task 10.
+- Both-settled loading + degrade on one (or both) failure → Task 8 (`Promise.allSettled` + `handleError`).
+- Stay-open-on-failure + no-duplicate-add guard → Task 9 wrapper (`pending` re-entrancy guard, close only when the dispatch returns `true`).
+- Repoint timeline "+", single-photo viewer, both palette commands → Task 10, which **also updates the existing `selection-command-handlers.spec.ts` + `asset.service.spec.ts` and deletes the orphaned `AssetAddToSpaceModal.spec.ts`** so the suite stays green.
 - i18n en/de/fr → Task 3.
-- Test coverage (converter, dispatch, components, modal, e2e) → Tasks 1,2,4,5,6,7,8,9,11.
+- Test coverage (converter incl. RECENT/offset, dispatch incl. boolean returns, components incl. missing-count + highlight, modal incl. mixed multi-select + both-loads-fail, wrapper incl. pending guard, e2e) → Tasks 1,2,4,5,6,7,8,9,11.
 
-**Placeholder scan** — every code step shows full code; no "TBD"/"handle errors"/"similar to". The only deliberately-open items are the e2e selectors (Task 11) and the optional fallback in Task 9, both with concrete inspection commands.
+**Placeholder scan** — every code step shows full code; no "TBD"/"handle errors"/"similar to". The only deliberately-open items are the e2e selectors (Task 11), with concrete inspection commands.
 
-**Type consistency** — `PickerCollection`, `collectionKey`, `CollectionModalRowType`, `isSelectableRowType`, `isValidNewSpaceName`, `addAssetsToCollections(collections, assetIds)`, `CollectionPickerModal({ assetCount, onClose })`, `AssetAddToCollectionModal({ assetIds, onClose })`, `SpaceListItem`/`NewSpaceListItem` prop shapes, and `AlbumListItem` `badgeIcon` are used identically across Tasks 1–10.
+**Type consistency** — `PickerCollection`, `collectionKey`, `CollectionModalRowType`, `isSelectableRowType`, `isValidNewSpaceName`, `addAssetsToCollections(collections, assetIds): Promise<boolean>`, `CollectionPickerModal({ assetCount, onClose })`, `AssetAddToCollectionModal({ assetIds, onClose })`, `SpaceListItem`/`NewSpaceListItem` prop shapes, and `AlbumListItem` `badgeIcon` are used identically across Tasks 1–10. The wrapper closes only when `addAssetsToCollections` resolves `true`.
 
 ## Execution Handoff
 
