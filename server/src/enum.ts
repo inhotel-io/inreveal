@@ -1246,6 +1246,11 @@ export enum SyncEntityType {
   // metadata family (grant-keyed) ← clone AlbumSync
   SharedSpaceAlbumV1 = 'SharedSpaceAlbumV1',
   SharedSpaceAlbumDeleteV1 = 'SharedSpaceAlbumDeleteV1',
+  // NB: the metadata stream is NOT backfilled — getUpserts already returns every
+  // grant-accessible album (not just recent ones), so this entity type is never
+  // emitted. It is retained only to keep the wire-contract shape symmetric with
+  // the library family; per-album backfill is carried by the dependent
+  // membership/asset/exif streams keyed off the grant createId.
   SharedSpaceAlbumBackfillV1 = 'SharedSpaceAlbumBackfillV1',
 
   // link family (space-keyed) ← clone SharedSpaceLibrarySync
