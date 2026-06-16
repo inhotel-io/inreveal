@@ -1,3 +1,5 @@
+library;
+
 /// Task 3 — B5 wiring test.
 ///
 /// Verifies that tapping the "＋ Link" action in [SpaceAlbumsPage] invokes the
