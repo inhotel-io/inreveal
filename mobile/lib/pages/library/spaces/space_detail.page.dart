@@ -241,7 +241,8 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
   Future<void> _openLinkPicker() async {
     // Collect the ids of albums already linked to this space so the picker
     // can exclude them from the candidate list.
-    final linkedAlbumIds = ref
+    final linkedAlbumIds =
+        ref
             .read(spaceAlbumsProvider(widget.spaceId))
             .whenData((albums) => albums.map((a) => a.id).toList())
             .valueOrNull ??
@@ -249,11 +250,7 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
 
     if (!mounted) return;
     final picked = await context.pushRoute<List<String>>(
-      SpaceLinkAlbumRoute(
-        spaceId: widget.spaceId,
-        linkedAlbumIds: linkedAlbumIds,
-        onAlbumsPicked: _onAlbumsPicked,
-      ),
+      SpaceLinkAlbumRoute(spaceId: widget.spaceId, linkedAlbumIds: linkedAlbumIds, onAlbumsPicked: _onAlbumsPicked),
     );
     if (picked == null || picked.isEmpty) return;
     await _onAlbumsPicked(picked);
@@ -274,11 +271,7 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to link album',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to link album', toastType: ToastType.error);
       }
     }
   }
@@ -286,33 +279,21 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
   /// B6: Toggle `showInTimeline` for a linked album from the list/manage page.
   Future<void> _onToggleAlbumTimeline(String albumId) async {
     final albumsAsync = ref.read(spaceAlbumsProvider(widget.spaceId));
-    final album = albumsAsync.valueOrNull
-        ?.where((a) => a.id == albumId)
-        .firstOrNull;
+    final album = albumsAsync.valueOrNull?.where((a) => a.id == albumId).firstOrNull;
     if (album == null) return;
 
     try {
-      await ref.read(spaceAlbumActionsProvider).toggleTimeline(
-            widget.spaceId,
-            albumId,
-            current: album.showInTimeline,
-          );
+      await ref.read(spaceAlbumActionsProvider).toggleTimeline(widget.spaceId, albumId, current: album.showInTimeline);
       if (context.mounted) {
         ImmichToast.show(
           context: context,
-          msg: album.showInTimeline
-              ? 'Album hidden from timeline'
-              : 'Album shown in timeline',
+          msg: album.showInTimeline ? 'Album hidden from timeline' : 'Album shown in timeline',
           toastType: ToastType.success,
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to update timeline setting',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to update timeline setting', toastType: ToastType.error);
       }
     }
   }
@@ -323,19 +304,12 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Unlink album'),
-        content: const Text(
-          'Remove this album from the space? Its photos will no longer appear here.',
-        ),
+        content: const Text('Remove this album from the space? Its photos will no longer appear here.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(ctx).colorScheme.error,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
             child: const Text('Unlink'),
           ),
         ],
@@ -347,23 +321,14 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     try {
       await ref.read(spaceAlbumActionsProvider).unlink(widget.spaceId, albumId);
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Album unlinked',
-          toastType: ToastType.success,
-        );
+        ImmichToast.show(context: context, msg: 'Album unlinked', toastType: ToastType.success);
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to unlink album',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to unlink album', toastType: ToastType.error);
       }
     }
   }
-
 
   void _navigateToMembers() {
     context.pushRoute<String>(SpaceMembersRoute(spaceId: widget.spaceId)).then((result) async {
@@ -429,9 +394,8 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           // B5: opens the link picker.
           onLinkTap: _openLinkPicker,
           // B4: tapping an album tile pushes the detail page.
-          onAlbumTap: (albumId) => context.pushRoute(
-            SpaceAlbumDetailRoute(spaceId: widget.spaceId, albumId: albumId, canEdit: _canEdit),
-          ),
+          onAlbumTap: (albumId) =>
+              context.pushRoute(SpaceAlbumDetailRoute(spaceId: widget.spaceId, albumId: albumId, canEdit: _canEdit)),
           // B3: "See all ▸" pushes the list/manage page; B5/B6 pass the real callbacks.
           onSeeAll: () => context.pushRoute(
             SpaceAlbumsRoute(
