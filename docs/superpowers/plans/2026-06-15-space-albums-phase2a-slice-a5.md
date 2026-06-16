@@ -18,13 +18,13 @@
 
 ## Handler → clone-source map
 
-| New handler (`sync.service.ts`) | Clone of | repo accessor | entity types | RequestType |
-| ------------------------------- | -------- | ------------- | ------------ | ----------- |
-| `syncSharedSpaceAlbumsV1` | `syncAlbumsV1` | `sharedSpaceAlbum` | `SharedSpaceAlbumV1` (upsert, →`SyncAlbumV1`) / `SharedSpaceAlbumDeleteV1` | `SharedSpaceAlbumsV1` |
-| `syncSharedSpaceAlbumLinksV1` | `syncSharedSpaceLibrariesV1` | `sharedSpaceAlbumLink` (+ `sharedSpace.getCreatedAfter` for per-space backfill) | `SharedSpaceAlbumLinkV1` / `…DeleteV1` / `…BackfillV1` | `SharedSpaceAlbumLinksV1` |
-| `syncSharedSpaceAlbumToAssetsV1` | `syncAlbumToAssetsV1` | `sharedSpaceAlbumToAsset` (+ `sharedSpaceAlbum.getCreatedAfter` for the per-album backfill loop) | `SharedSpaceAlbumToAssetV1` / `…DeleteV1` / `…BackfillV1` | `SharedSpaceAlbumToAssetsV1` |
-| `syncSharedSpaceAlbumAssetsV1` | `syncAlbumAssetsV2` | `sharedSpaceAlbumAsset` (+ `sharedSpaceAlbum.getCreatedAfter`; `getUpdates` ack = `checkpointMap[SharedSpaceAlbumToAssetV1]`) | `SharedSpaceAlbumAssetCreateV1` / `…UpdateV1` / `…BackfillV1` (→`SyncAssetV2`) | `SharedSpaceAlbumAssetsV1` |
-| `syncSharedSpaceAlbumAssetExifsV1` | `syncAlbumAssetExifsV1` | `sharedSpaceAlbumAssetExif` (+ same backfill + ack) | `SharedSpaceAlbumAssetExifCreateV1` / `…UpdateV1` / `…BackfillV1` | `SharedSpaceAlbumAssetExifsV1` |
+| New handler (`sync.service.ts`)    | Clone of                     | repo accessor                                                                                                                 | entity types                                                                   | RequestType                    |
+| ---------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------ |
+| `syncSharedSpaceAlbumsV1`          | `syncAlbumsV1`               | `sharedSpaceAlbum`                                                                                                            | `SharedSpaceAlbumV1` (upsert, →`SyncAlbumV1`) / `SharedSpaceAlbumDeleteV1`     | `SharedSpaceAlbumsV1`          |
+| `syncSharedSpaceAlbumLinksV1`      | `syncSharedSpaceLibrariesV1` | `sharedSpaceAlbumLink` (+ `sharedSpace.getCreatedAfter` for per-space backfill)                                               | `SharedSpaceAlbumLinkV1` / `…DeleteV1` / `…BackfillV1`                         | `SharedSpaceAlbumLinksV1`      |
+| `syncSharedSpaceAlbumToAssetsV1`   | `syncAlbumToAssetsV1`        | `sharedSpaceAlbumToAsset` (+ `sharedSpaceAlbum.getCreatedAfter` for the per-album backfill loop)                              | `SharedSpaceAlbumToAssetV1` / `…DeleteV1` / `…BackfillV1`                      | `SharedSpaceAlbumToAssetsV1`   |
+| `syncSharedSpaceAlbumAssetsV1`     | `syncAlbumAssetsV2`          | `sharedSpaceAlbumAsset` (+ `sharedSpaceAlbum.getCreatedAfter`; `getUpdates` ack = `checkpointMap[SharedSpaceAlbumToAssetV1]`) | `SharedSpaceAlbumAssetCreateV1` / `…UpdateV1` / `…BackfillV1` (→`SyncAssetV2`) | `SharedSpaceAlbumAssetsV1`     |
+| `syncSharedSpaceAlbumAssetExifsV1` | `syncAlbumAssetExifsV1`      | `sharedSpaceAlbumAssetExif` (+ same backfill + ack)                                                                           | `SharedSpaceAlbumAssetExifCreateV1` / `…UpdateV1` / `…BackfillV1`              | `SharedSpaceAlbumAssetExifsV1` |
 
 ---
 
@@ -44,6 +44,7 @@
 - [ ] **Step 3: Add the five `SyncRequestType` values** to `enum.ts` (after `SharedSpaceLibrariesV1`): `SharedSpaceAlbumsV1`, `SharedSpaceAlbumLinksV1`, `SharedSpaceAlbumToAssetsV1`, `SharedSpaceAlbumAssetsV1`, `SharedSpaceAlbumAssetExifsV1`.
 
 - [ ] **Step 4: Add them to `SYNC_TYPES_ORDER`** (after `SharedSpaceLibrariesV1`), in this order (metadata + link before membership/assets/exif):
+
   ```
   SyncRequestType.SharedSpaceAlbumsV1,
   SyncRequestType.SharedSpaceAlbumLinksV1,
@@ -53,6 +54,7 @@
   ```
 
 - [ ] **Step 5: Add the five `handlers` Record entries + the five handler methods** (clone per the map above). Example for metadata (clone `syncAlbumsV1`):
+
   ```ts
   [SyncRequestType.SharedSpaceAlbumsV1]: () => this.syncSharedSpaceAlbumsV1(options, response, checkpointMap),
   // ...
@@ -65,6 +67,7 @@
     for await (const { updateId, ...data } of upserts) send(response, { type: upsertType, ids: [updateId], data });
   }
   ```
+
   The membership/asset/exif handlers clone `syncAlbumToAssetsV1` / `syncAlbumAssetsV2` / `syncAlbumAssetExifsV1`: the per-album backfill loop uses `this.syncRepository.sharedSpaceAlbum.getCreatedAfter(...)` (the grant watermark) and `this.syncRepository.sharedSpaceAlbum<Stream>.getBackfill(..., album.id[, userId])`; the asset/exif `getUpdates` receive `checkpointMap[SyncEntityType.SharedSpaceAlbumToAssetV1]` as the `albumToAssetAck`. The link handler clones `syncSharedSpaceLibrariesV1` (per-space backfill via `this.syncRepository.sharedSpace.getCreatedAfter`).
 
 - [ ] **Step 6: Run, verify GREEN** — same command → all scenario tests pass. `cd server && pnpm check` clean.

@@ -31,28 +31,28 @@ SharedSpaceAlbumAssetExifCreateV1, SharedSpaceAlbumAssetExifUpdateV1, SharedSpac
 
 ## DTO reuse + the one new DTO (`sync.dto.ts`) + `SyncItem` map entries
 
-| Entity type | DTO (in the `SyncItem` interface map ~lines 612–671) |
-| ----------- | ----- |
-| `SharedSpaceAlbumV1` / `…BackfillV1` | `SyncAlbumV1` (the metadata shape `AlbumSync.getUpserts` selects) |
-| `SharedSpaceAlbumDeleteV1` | `SyncAlbumDeleteV1` (`{albumId}`) |
-| `SharedSpaceAlbumLinkV1` / `…BackfillV1` | **new** `SyncSharedSpaceAlbumLinkV1` (`{spaceId, albumId, showInTimeline, addedById, createdAt, updatedAt}`) |
-| `SharedSpaceAlbumLinkDeleteV1` | **new** `SyncSharedSpaceAlbumLinkDeleteV1` (`{spaceId, albumId}`) |
-| `SharedSpaceAlbumToAssetV1` / `…BackfillV1` | `SyncAlbumToAssetV1` |
-| `SharedSpaceAlbumToAssetDeleteV1` | `SyncAlbumToAssetDeleteV1` |
-| `SharedSpaceAlbumAssetCreateV1` / `UpdateV1` / `BackfillV1` | `SyncAssetV2` (the current album-asset shape; matches `AlbumAssetCreateV2`) |
-| `SharedSpaceAlbumAssetExifCreateV1` / `UpdateV1` / `BackfillV1` | `SyncAssetExifV1` |
+| Entity type                                                     | DTO (in the `SyncItem` interface map ~lines 612–671)                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `SharedSpaceAlbumV1` / `…BackfillV1`                            | `SyncAlbumV1` (the metadata shape `AlbumSync.getUpserts` selects)                                            |
+| `SharedSpaceAlbumDeleteV1`                                      | `SyncAlbumDeleteV1` (`{albumId}`)                                                                            |
+| `SharedSpaceAlbumLinkV1` / `…BackfillV1`                        | **new** `SyncSharedSpaceAlbumLinkV1` (`{spaceId, albumId, showInTimeline, addedById, createdAt, updatedAt}`) |
+| `SharedSpaceAlbumLinkDeleteV1`                                  | **new** `SyncSharedSpaceAlbumLinkDeleteV1` (`{spaceId, albumId}`)                                            |
+| `SharedSpaceAlbumToAssetV1` / `…BackfillV1`                     | `SyncAlbumToAssetV1`                                                                                         |
+| `SharedSpaceAlbumToAssetDeleteV1`                               | `SyncAlbumToAssetDeleteV1`                                                                                   |
+| `SharedSpaceAlbumAssetCreateV1` / `UpdateV1` / `BackfillV1`     | `SyncAssetV2` (the current album-asset shape; matches `AlbumAssetCreateV2`)                                  |
+| `SharedSpaceAlbumAssetExifCreateV1` / `UpdateV1` / `BackfillV1` | `SyncAssetExifV1`                                                                                            |
 
 Only **two** new DTO schemas: `SyncSharedSpaceAlbumLinkV1Schema` + `SyncSharedSpaceAlbumLinkDeleteV1Schema` (clone `SyncSharedSpaceLibraryV1Schema` + add `showInTimeline: z.boolean()`), each with an `@ExtraModel()` `createZodDto` class. Everything else reuses existing DTO classes already in the map.
 
 ## The five classes (`sync.repository.ts`) — clone source + re-key
 
-| Class | Clone of | Key transformation |
-| ----- | -------- | ------------------ |
-| `SharedSpaceAlbumSync` (flesh out the A1 stub) | `AlbumSync` | `getCreatedAfter`/`getUpserts` join `album_user`→**`shared_space_album_user`** grant; **`getDeletes` reads `shared_space_album_user_audit`** (the gated grant audit), NOT `album_audit` — the hybrid-clone gotcha (§7) |
-| `SharedSpaceAlbumLinkSync` (flesh out the A1 stub) | `SharedSpaceLibrarySync` | `shared_space_library`→`shared_space_album`; carry `showInTimeline`; `getDeletes` reads `shared_space_album_audit`; scope by `accessibleSpaces` |
-| `SharedSpaceAlbumToAssetSync` (new) | `AlbumToAssetSync` | `album_user`→grant; `getDeletes` reads `album_asset_audit` scoped to album ∈ `accessibleSpaceAlbums` |
-| `SharedSpaceAlbumAssetSync` (new) | `AlbumAssetSync` | `album_user`→grant; keep the split `getCreates`/`getUpdates`/`getBackfill` + `isFavorite` masking + the `album_asset.updateId <= albumToAssetAck.updateId` coupling |
-| `SharedSpaceAlbumAssetExifSync` (new) | `AlbumAssetExifSync` | `album_user`→grant; same split + ack coupling |
+| Class                                              | Clone of                 | Key transformation                                                                                                                                                                                                     |
+| -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SharedSpaceAlbumSync` (flesh out the A1 stub)     | `AlbumSync`              | `getCreatedAfter`/`getUpserts` join `album_user`→**`shared_space_album_user`** grant; **`getDeletes` reads `shared_space_album_user_audit`** (the gated grant audit), NOT `album_audit` — the hybrid-clone gotcha (§7) |
+| `SharedSpaceAlbumLinkSync` (flesh out the A1 stub) | `SharedSpaceLibrarySync` | `shared_space_library`→`shared_space_album`; carry `showInTimeline`; `getDeletes` reads `shared_space_album_audit`; scope by `accessibleSpaces`                                                                        |
+| `SharedSpaceAlbumToAssetSync` (new)                | `AlbumToAssetSync`       | `album_user`→grant; `getDeletes` reads `album_asset_audit` scoped to album ∈ `accessibleSpaceAlbums`                                                                                                                   |
+| `SharedSpaceAlbumAssetSync` (new)                  | `AlbumAssetSync`         | `album_user`→grant; keep the split `getCreates`/`getUpdates`/`getBackfill` + `isFavorite` masking + the `album_asset.updateId <= albumToAssetAck.updateId` coupling                                                    |
+| `SharedSpaceAlbumAssetExifSync` (new)              | `AlbumAssetExifSync`     | `album_user`→grant; same split + ack coupling                                                                                                                                                                          |
 
 Plus the helper `accessibleSpaceAlbums(eb, userId)` (spec §7): albums linked to spaces the user belongs to, excluding soft-deleted albums (`album.deletedAt IS NULL`).
 

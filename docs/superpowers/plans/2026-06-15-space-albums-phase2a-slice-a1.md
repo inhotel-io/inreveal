@@ -28,6 +28,7 @@
 ### Task 1: RED — medium test for table shape + FK cascade
 
 **Files:**
+
 - Test: `server/test/medium/specs/sync/shared-space-album-user-migration.spec.ts`
 
 Read first for factory helper names + patterns: `server/test/medium.factory.ts` (confirm `newUser`, `newAlbum` exist; `newAlbum` is used by `sync-album.spec.ts`), and `server/test/medium/specs/sync/sync-library.spec.ts` (DB + getKyselyDB pattern).
@@ -77,7 +78,10 @@ describe('shared_space_album_user grant table', () => {
     const { auth, ctx } = await setup();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
 
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: auth.user.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: auth.user.id, albumId: album.id })
+      .execute();
     await defaultDatabase
       .insertInto('shared_space_album_user')
       .values({ userId: auth.user.id, albumId: album.id })
@@ -95,11 +99,18 @@ describe('shared_space_album_user grant table', () => {
   it('cascades when the album is deleted', async () => {
     const { auth, ctx } = await setup();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: auth.user.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: auth.user.id, albumId: album.id })
+      .execute();
 
     await defaultDatabase.deleteFrom('album').where('id', '=', album.id).execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', album.id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(rows).toHaveLength(0);
   });
 
@@ -107,11 +118,18 @@ describe('shared_space_album_user grant table', () => {
     const { auth, ctx } = await setup();
     const { user: other } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: other.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: other.id, albumId: album.id })
+      .execute();
 
     await defaultDatabase.deleteFrom('user').where('id', '=', other.id).execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', album.id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(rows).toHaveLength(0);
   });
 });
@@ -123,9 +141,16 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
     const fakeAlbum = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
 
     // No FK: a row survives even though spaceId/albumId reference nothing.
-    await defaultDatabase.insertInto('shared_space_album_audit').values({ id, spaceId: fakeSpace, albumId: fakeAlbum }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_audit')
+      .values({ id, spaceId: fakeSpace, albumId: fakeAlbum })
+      .execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_audit').selectAll().where('id', '=', id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('id', '=', id)
+      .execute();
     expect(rows).toHaveLength(1);
     expect(rows[0].deletedAt).toBeDefined();
   });
@@ -135,9 +160,16 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
     const fakeAlbum = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
     const fakeUser = (await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase)).rows[0].id;
 
-    await defaultDatabase.insertInto('shared_space_album_user_audit').values({ id, albumId: fakeAlbum, userId: fakeUser }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user_audit')
+      .values({ id, albumId: fakeAlbum, userId: fakeUser })
+      .execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user_audit').selectAll().where('id', '=', id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user_audit')
+      .selectAll()
+      .where('id', '=', id)
+      .execute();
     expect(rows).toHaveLength(1);
     expect(rows[0].deletedAt).toBeDefined();
   });
@@ -156,6 +188,7 @@ Expected: FAIL at **runtime** with `relation "shared_space_album_user" does not 
 ### Task 2: GREEN — table decorators + register in `index.ts`
 
 **Files:**
+
 - Create: `server/src/schema/tables/shared-space-album-user.table.ts`
 - Create: `server/src/schema/tables/shared-space-album-audit.table.ts`
 - Create: `server/src/schema/tables/shared-space-album-user-audit.table.ts`
@@ -284,10 +317,10 @@ Add to the tables array (next to `SharedSpaceAlbumTable` ~line 172):
 Add to the `DB` interface map (next to `shared_space_album:` ~line 312):
 
 ```ts
-  shared_space_album: SharedSpaceAlbumTable;
-  shared_space_album_audit: SharedSpaceAlbumAuditTable;
-  shared_space_album_user: SharedSpaceAlbumUserTable;
-  shared_space_album_user_audit: SharedSpaceAlbumUserAuditTable;
+shared_space_album: SharedSpaceAlbumTable;
+shared_space_album_audit: SharedSpaceAlbumAuditTable;
+shared_space_album_user: SharedSpaceAlbumUserTable;
+shared_space_album_user_audit: SharedSpaceAlbumUserAuditTable;
 ```
 
 - [ ] **Step 5: Type-check**
@@ -300,6 +333,7 @@ Expected: PASS — the `DB` map now knows the three tables; the test file's `ins
 ### Task 3: GREEN — the fork migration
 
 **Files:**
+
 - Create: `server/src/schema/migrations-gallery/1779000000000-AddSharedSpaceAlbumUserTables.ts`
 
 - [ ] **Step 1: Write the migration**
@@ -322,7 +356,9 @@ export async function up(db: Kysely<any>): Promise<void> {
       CONSTRAINT "shared_space_album_user_pkey" PRIMARY KEY ("userId", "albumId")
     );
   `.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_userId_createId_idx" ON "shared_space_album_user" ("userId", "createId");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_user_userId_createId_idx" ON "shared_space_album_user" ("userId", "createId");`.execute(
+    db,
+  );
 
   // Link-removal audit (FK-less append log), mirrors shared_space_library_audit.
   await sql`
@@ -336,7 +372,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   `.execute(db);
   await sql`CREATE INDEX "shared_space_album_audit_spaceId_idx" ON "shared_space_album_audit" ("spaceId");`.execute(db);
   await sql`CREATE INDEX "shared_space_album_audit_albumId_idx" ON "shared_space_album_audit" ("albumId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_audit_deletedAt_idx" ON "shared_space_album_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_audit_deletedAt_idx" ON "shared_space_album_audit" ("deletedAt");`.execute(
+    db,
+  );
 
   // Grant-revocation audit (FK-less append log), mirrors library_audit.
   await sql`
@@ -348,9 +386,15 @@ export async function up(db: Kysely<any>): Promise<void> {
       CONSTRAINT "shared_space_album_user_audit_pkey" PRIMARY KEY ("id")
     );
   `.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_albumId_idx" ON "shared_space_album_user_audit" ("albumId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_userId_idx" ON "shared_space_album_user_audit" ("userId");`.execute(db);
-  await sql`CREATE INDEX "shared_space_album_user_audit_deletedAt_idx" ON "shared_space_album_user_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "shared_space_album_user_audit_albumId_idx" ON "shared_space_album_user_audit" ("albumId");`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "shared_space_album_user_audit_userId_idx" ON "shared_space_album_user_audit" ("userId");`.execute(
+    db,
+  );
+  await sql`CREATE INDEX "shared_space_album_user_audit_deletedAt_idx" ON "shared_space_album_user_audit" ("deletedAt");`.execute(
+    db,
+  );
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
@@ -428,6 +472,7 @@ it('down() drops all three tables', async () => {
 
 Run: `cd server && pnpm test:medium -- --run test/medium/specs/sync/shared-space-album-user-migration.spec.ts`
 Expected: PASS
+
 ```bash
 git add -A && git commit -m "test(spaces): assert A1 migration down() reversibility"
 ```
