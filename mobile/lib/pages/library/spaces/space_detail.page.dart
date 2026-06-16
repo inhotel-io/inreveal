@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/space_bottom_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
@@ -15,7 +16,6 @@ import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
-import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
 import 'package:openapi/api.dart';
 
 // PR 2 — Task 35: the space timeline is now served directly by the Drift
@@ -290,8 +290,20 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           .sharedSpace(spaceId: widget.spaceId, groupBy: groupBy, temporalScope: scope),
       child: Timeline(
         withGroupingPill: true,
-        topSliverWidget: const SyncStatusBannerSliver(),
-        topSliverWidgetHeight: SpaceDetailPage.syncBannerTopSliverHeight(isRemoteSyncing: isRemoteSyncing),
+        topSliverWidget: SpaceTopSliver(
+          spaceId: widget.spaceId,
+          canEdit: _canEdit,
+          // B5 wires the link picker; no-op stub for B2.
+          onLinkTap: () {},
+          // B4 wires album-tap navigation; no-op stub for B2.
+          onAlbumTap: (albumId) {},
+        ),
+        topSliverWidgetHeight: computeTopSliverHeight(
+          ref: ref,
+          spaceId: widget.spaceId,
+          canEdit: _canEdit,
+          isRemoteSyncing: isRemoteSyncing,
+        ),
         appBar: SliverAppBar(
           title: Text(_space!.name),
           centerTitle: false,
