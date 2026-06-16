@@ -10,6 +10,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/space_album_actions.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/sync_status.provider.dart';
@@ -235,34 +236,133 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
   }
 
   /// Opens the [SpaceLinkAlbumPage] picker with the current linked-album ids
-  /// pre-excluded. On a non-null result, calls the no-op [_onAlbumsPicked]
-  /// stub that B6 replaces with the PUT loop + sync-nudge.
+  /// pre-excluded. On confirm, calls [_onAlbumsPicked] which loops the PUT
+  /// endpoint and fires the sync-nudge.
   Future<void> _openLinkPicker() async {
     // Collect the ids of albums already linked to this space so the picker
     // can exclude them from the candidate list.
     final linkedAlbumIds = ref
-        .read(spaceAlbumsProvider(widget.spaceId))
-        .whenData((albums) => albums.map((a) => a.id).toList())
-        .valueOrNull ?? <String>[];
+            .read(spaceAlbumsProvider(widget.spaceId))
+            .whenData((albums) => albums.map((a) => a.id).toList())
+            .valueOrNull ??
+        <String>[];
 
     if (!mounted) return;
     final picked = await context.pushRoute<List<String>>(
       SpaceLinkAlbumRoute(
         spaceId: widget.spaceId,
         linkedAlbumIds: linkedAlbumIds,
-        // B6 replaces this with the PUT loop + sync-nudge.
         onAlbumsPicked: _onAlbumsPicked,
       ),
     );
     if (picked == null || picked.isEmpty) return;
-    // TODO(B6): call the PUT /shared-spaces/:id/albums/:albumId loop here.
-    _onAlbumsPicked(picked);
+    await _onAlbumsPicked(picked);
   }
 
-  /// B5 stub — B6 replaces with the actual `PUT /shared-spaces/:id/albums/:albumId`
-  /// loop + sync-nudge.
-  // TODO(B6): remove stub and implement the link REST call + sync-nudge.
-  void _onAlbumsPicked(List<String> ids) {}
+  /// B6: Loop PUT /shared-spaces/:id/albums/:albumId for each picked album,
+  /// then fire the sync-nudge and show a success toast.
+  Future<void> _onAlbumsPicked(List<String> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      await ref.read(spaceAlbumActionsProvider).link(widget.spaceId, ids);
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: ids.length == 1 ? 'Album linked' : '${ids.length} albums linked',
+          toastType: ToastType.success,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to link album',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
+
+  /// B6: Toggle `showInTimeline` for a linked album from the list/manage page.
+  Future<void> _onToggleAlbumTimeline(String albumId) async {
+    final albumsAsync = ref.read(spaceAlbumsProvider(widget.spaceId));
+    final album = albumsAsync.valueOrNull
+        ?.where((a) => a.id == albumId)
+        .firstOrNull;
+    if (album == null) return;
+
+    try {
+      await ref.read(spaceAlbumActionsProvider).toggleTimeline(
+            widget.spaceId,
+            albumId,
+            current: album.showInTimeline,
+          );
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: album.showInTimeline
+              ? 'Album hidden from timeline'
+              : 'Album shown in timeline',
+          toastType: ToastType.success,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to update timeline setting',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
+
+  /// B6: Confirm + unlink an album from the list/manage page.
+  Future<void> _onUnlinkAlbum(String albumId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unlink album'),
+        content: const Text(
+          'Remove this album from the space? Its photos will no longer appear here.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(spaceAlbumActionsProvider).unlink(widget.spaceId, albumId);
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Album unlinked',
+          toastType: ToastType.success,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to unlink album',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
 
 
   void _navigateToMembers() {
@@ -332,12 +432,14 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           onAlbumTap: (albumId) => context.pushRoute(
             SpaceAlbumDetailRoute(spaceId: widget.spaceId, albumId: albumId, canEdit: _canEdit),
           ),
-          // B3: "See all ▸" pushes the list/manage page; B5 passes the link picker callback.
+          // B3: "See all ▸" pushes the list/manage page; B5/B6 pass the real callbacks.
           onSeeAll: () => context.pushRoute(
             SpaceAlbumsRoute(
               spaceId: widget.spaceId,
               canEdit: _canEdit,
               onLink: _openLinkPicker,
+              onToggle: _onToggleAlbumTimeline,
+              onUnlink: _onUnlinkAlbum,
             ),
           ),
         ),
