@@ -140,6 +140,7 @@ describe('/server', () => {
         maintenanceMode: false,
         mapDarkStyleUrl: 'https://tiles.openfreemap.org/styles/dark',
         mapLightStyleUrl: 'https://tiles.openfreemap.org/styles/positron',
+        availableMemoryTypes: ['on_this_day', 'birthday', 'recent_trip'],
       });
     });
   });
