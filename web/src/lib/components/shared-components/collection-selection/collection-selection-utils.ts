@@ -1,7 +1,7 @@
 // collection-selection-utils.ts
 import { normalizeSearchString } from '$lib/utils/string-utils';
 import { SharedSpaceRole, type AlbumResponseDto, type SharedSpaceResponseDto } from '@immich/sdk';
-import { t, type Translations } from 'svelte-i18n';
+import { t } from 'svelte-i18n';
 import { get } from 'svelte/store';
 
 export type PickerCollection =
@@ -100,8 +100,8 @@ export class CollectionModalRowConverter {
         type: CollectionModalRowType.MESSAGE,
         text:
           visible.length > 0
-            ? $t('no_albums_or_spaces_with_name' as Translations)
-            : $t('no_albums_or_spaces_yet' as Translations),
+            ? $t('no_albums_or_spaces_with_name')
+            : $t('no_albums_or_spaces_yet'),
       });
       return rows;
     }
@@ -124,7 +124,7 @@ export class CollectionModalRowConverter {
       }
     }
 
-    rows.push({ type: CollectionModalRowType.SECTION, text: $t('all_albums_and_spaces' as Translations).toUpperCase() });
+    rows.push({ type: CollectionModalRowType.SECTION, text: $t('all_albums_and_spaces').toUpperCase() });
     for (const c of filtered) {
       pushItem(c);
     }
