@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_albums_shelf.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
-import 'package:immich_mobile/providers/sync_status.provider.dart';
 import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
 
 /// Combined top sliver: sync banner stacked above the Albums shelf.
