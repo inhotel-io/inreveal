@@ -28,9 +28,7 @@ export class MemoryService extends BaseService {
     const config = await this.getConfig({ withCache: false });
 
     const availableTypes = getAdminAvailableMemoryTypeKeys(config.memories);
-    const userTypesById = new Map(
-      users.map((user) => [user.id, getPreferences(user.metadata ?? []).memories.types]),
-    );
+    const userTypesById = new Map(users.map((user) => [user.id, getPreferences(user.metadata ?? []).memories.types]));
     const enabledRuleKeysById = new Map(
       users.map((user) => [
         user.id,

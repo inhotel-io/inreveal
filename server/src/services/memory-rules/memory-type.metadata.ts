@@ -85,10 +85,7 @@ export const getAdminAvailableMemoryTypeKeys = (config: AdminMemoriesConfig): Se
 };
 
 /** per-user enable for a known key: override > metadata.defaultEnabled. Unknown key -> false. */
-export const isMemoryTypeEnabledForUser = (
-  userTypes: Record<string, boolean> | undefined,
-  key: string,
-): boolean => {
+export const isMemoryTypeEnabledForUser = (userTypes: Record<string, boolean> | undefined, key: string): boolean => {
   const override = userTypes?.[key];
   if (override !== undefined) {
     return override;
