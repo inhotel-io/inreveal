@@ -32,16 +32,10 @@ class SpaceAlbumDetailPage extends ConsumerStatefulWidget {
   final String albumId;
   final bool canEdit;
 
-  const SpaceAlbumDetailPage({
-    super.key,
-    required this.spaceId,
-    required this.albumId,
-    required this.canEdit,
-  });
+  const SpaceAlbumDetailPage({super.key, required this.spaceId, required this.albumId, required this.canEdit});
 
   @override
-  ConsumerState<SpaceAlbumDetailPage> createState() =>
-      _SpaceAlbumDetailPageState();
+  ConsumerState<SpaceAlbumDetailPage> createState() => _SpaceAlbumDetailPageState();
 }
 
 class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
@@ -49,8 +43,7 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
   /// calling the regular album addAssets endpoint (D3 — server enforces
   /// space-editor permission), then nudging sync.
   Future<void> _addPhotos() async {
-    final newAssets =
-        await context.pushRoute<Set<BaseAsset>>(DriftAssetSelectionTimelineRoute());
+    final newAssets = await context.pushRoute<Set<BaseAsset>>(DriftAssetSelectionTimelineRoute());
     if (newAssets == null || newAssets.isEmpty) return;
 
     // Filter to remote assets only (local assets can't be added to a space
@@ -59,59 +52,39 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     if (remoteAssets.isEmpty) return;
 
     try {
-      final count = await ref
-          .read(remoteAlbumProvider.notifier)
-          .addAssetsToAlbum(widget.albumId, remoteAssets);
+      final count = await ref.read(remoteAlbumProvider.notifier).addAssetsToAlbum(widget.albumId, remoteAssets);
       if (context.mounted && count > 0) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Added $count photos to album',
-          toastType: ToastType.success,
-        );
+        ImmichToast.show(context: context, msg: 'Added $count photos to album', toastType: ToastType.success);
       }
       // Nudge sync so the new assets appear in Drift without waiting for the
       // next scheduled sync cycle.
       await _triggerSync();
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to add photos',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to add photos', toastType: ToastType.error);
       }
     }
   }
 
   Future<void> _toggleTimeline() async {
     final albumsAsync = ref.read(spaceAlbumsProvider(widget.spaceId));
-    final album = albumsAsync.valueOrNull
-        ?.where((a) => a.id == widget.albumId)
-        .firstOrNull;
+    final album = albumsAsync.valueOrNull?.where((a) => a.id == widget.albumId).firstOrNull;
     if (album == null) return;
 
     try {
-      await ref.read(spaceAlbumActionsProvider).toggleTimeline(
-            widget.spaceId,
-            widget.albumId,
-            current: album.showInTimeline,
-          );
+      await ref
+          .read(spaceAlbumActionsProvider)
+          .toggleTimeline(widget.spaceId, widget.albumId, current: album.showInTimeline);
       if (context.mounted) {
         ImmichToast.show(
           context: context,
-          msg: album.showInTimeline
-              ? 'Album hidden from timeline'
-              : 'Album shown in timeline',
+          msg: album.showInTimeline ? 'Album hidden from timeline' : 'Album shown in timeline',
           toastType: ToastType.success,
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to update timeline setting',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to update timeline setting', toastType: ToastType.error);
       }
     }
   }
@@ -121,18 +94,12 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Unlink album'),
-        content:
-            const Text('Remove this album from the space? Its photos will no longer appear here.'),
+        content: const Text('Remove this album from the space? Its photos will no longer appear here.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(ctx).colorScheme.error,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
             child: const Text('Unlink'),
           ),
         ],
@@ -142,24 +109,14 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     if (confirmed != true) return;
 
     try {
-      await ref
-          .read(spaceAlbumActionsProvider)
-          .unlink(widget.spaceId, widget.albumId);
+      await ref.read(spaceAlbumActionsProvider).unlink(widget.spaceId, widget.albumId);
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Album unlinked',
-          toastType: ToastType.success,
-        );
+        ImmichToast.show(context: context, msg: 'Album unlinked', toastType: ToastType.success);
         await context.maybePop();
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(
-          context: context,
-          msg: 'Failed to unlink album',
-          toastType: ToastType.error,
-        );
+        ImmichToast.show(context: context, msg: 'Failed to unlink album', toastType: ToastType.error);
       }
     }
   }
@@ -175,18 +132,12 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
   @override
   Widget build(BuildContext context) {
     final albumsAsync = ref.watch(spaceAlbumsProvider(widget.spaceId));
-    final album = albumsAsync.valueOrNull
-        ?.where((a) => a.id == widget.albumId)
-        .firstOrNull;
+    final album = albumsAsync.valueOrNull?.where((a) => a.id == widget.albumId).firstOrNull;
 
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope, groupBy) =>
-          ref.watch(timelineFactoryProvider).spaceAlbum(
-            spaceId: widget.spaceId,
-            albumId: widget.albumId,
-            groupBy: groupBy,
-            temporalScope: scope,
-          ),
+      timelineServiceBuilder: (ref, scope, groupBy) => ref
+          .watch(timelineFactoryProvider)
+          .spaceAlbum(spaceId: widget.spaceId, albumId: widget.albumId, groupBy: groupBy, temporalScope: scope),
       child: Timeline(
         withGroupingPill: true,
         appBar: SpaceAlbumAppBar(

@@ -22,12 +22,7 @@ import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_shee
 /// [onRemoved] is called after a successful remove-from-album action so the
 /// caller can fire the sync-nudge (B6).
 class SpaceAlbumBottomSheet extends ConsumerStatefulWidget {
-  const SpaceAlbumBottomSheet({
-    super.key,
-    required this.canEdit,
-    required this.albumId,
-    this.onRemoved,
-  });
+  const SpaceAlbumBottomSheet({super.key, required this.canEdit, required this.albumId, this.onRemoved});
 
   final bool canEdit;
   final String albumId;

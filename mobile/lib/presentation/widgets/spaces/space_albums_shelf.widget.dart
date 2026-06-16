@@ -127,20 +127,13 @@ class _HeaderRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Albums ($count)',
-            style: context.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text('Albums ($count)', style: context.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
           if (showSeeAll)
             GestureDetector(
               onTap: onSeeAll,
               child: Text(
                 'See all ▸',
-                style: context.textTheme.bodySmall?.copyWith(
-                  color: context.colorScheme.primary,
-                ),
+                style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.primary),
               ),
             ),
         ],
@@ -167,11 +160,7 @@ class _HeaderRow extends StatelessWidget {
 /// tile + [Icons.visibility_off] badge. [withOpacity] is banned by `dart
 /// analyze --fatal-infos` (replaced by [withValues(alpha:)] in Material 3).
 class _SpaceAlbumCoverTile extends StatelessWidget {
-  const _SpaceAlbumCoverTile({
-    super.key,
-    required this.album,
-    required this.onTap,
-  });
+  const _SpaceAlbumCoverTile({super.key, required this.album, required this.onTap});
 
   final SpaceAlbum album;
   final VoidCallback onTap;
@@ -206,22 +195,14 @@ class _SpaceAlbumCoverTile extends StatelessWidget {
                         width: 1,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.photo_album_outlined,
-                      size: 32,
-                      color: Colors.grey,
-                    ),
+                    child: const Icon(Icons.photo_album_outlined, size: 32, color: Colors.grey),
                   ),
                 ),
                 // Off-timeline badge
                 if (isOffTimeline)
                   Positioned.fill(
                     child: Center(
-                      child: Icon(
-                        Icons.visibility_off,
-                        size: 20,
-                        color: cs.onSurface.withValues(alpha: 0.7),
-                      ),
+                      child: Icon(Icons.visibility_off, size: 20, color: cs.onSurface.withValues(alpha: 0.7)),
                     ),
                   ),
               ],
@@ -232,9 +213,7 @@ class _SpaceAlbumCoverTile extends StatelessWidget {
               album.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: context.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
+              style: context.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -262,10 +241,7 @@ class _LinkTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CustomPaint(
-              painter: _DashedBorderPainter(
-                color: cs.outline.withValues(alpha: 0.5),
-                radius: _kTileRadius,
-              ),
+              painter: _DashedBorderPainter(color: cs.outline.withValues(alpha: 0.5), radius: _kTileRadius),
               child: Container(
                 width: _kTileSize,
                 height: _kTileSize,
@@ -281,10 +257,7 @@ class _LinkTile extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: context.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w500,
-                color: cs.primary,
-              ),
+              style: context.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500, color: cs.primary),
             ),
           ],
         ),
@@ -309,25 +282,18 @@ class _DashedBorderPainter extends CustomPainter {
 
     const dashWidth = 5.0;
     const dashSpace = 4.0;
-    final rrect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Radius.circular(radius),
-    );
+    final rrect = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), Radius.circular(radius));
     final path = Path()..addRRect(rrect);
     final metrics = path.computeMetrics();
     for (final metric in metrics) {
       double distance = 0;
       while (distance < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(distance, distance + dashWidth),
-          paint,
-        );
+        canvas.drawPath(metric.extractPath(distance, distance + dashWidth), paint);
         distance += dashWidth + dashSpace;
       }
     }
   }
 
   @override
-  bool shouldRepaint(_DashedBorderPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) => oldDelegate.color != color || oldDelegate.radius != radius;
 }

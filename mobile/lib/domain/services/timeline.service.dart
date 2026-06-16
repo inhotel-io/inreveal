@@ -87,10 +87,9 @@ class TimelineFactory {
     required String albumId,
     GroupAssetsBy? groupBy,
     TimelineTemporalScope temporalScope = const TimelineTemporalScope.none(),
-  }) =>
-      TimelineService(
-        _timelineRepository.spaceAlbum(spaceId, albumId, groupBy ?? this.groupBy, temporalScope: temporalScope),
-      );
+  }) => TimelineService(
+    _timelineRepository.spaceAlbum(spaceId, albumId, groupBy ?? this.groupBy, temporalScope: temporalScope),
+  );
 
   TimelineService remoteAssets(
     String userId, {

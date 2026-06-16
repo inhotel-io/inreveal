@@ -43,9 +43,9 @@ class SpaceAlbumsPage extends ConsumerWidget {
     void Function(String albumId)? onToggle,
     void Function(String albumId)? onUnlink,
     VoidCallback? onLink,
-  })  : onToggle = onToggle ?? _noop,
-        onUnlink = onUnlink ?? _noop,
-        onLink = onLink ?? _voidNoop;
+  }) : onToggle = onToggle ?? _noop,
+       onUnlink = onUnlink ?? _noop,
+       onLink = onLink ?? _voidNoop;
 
   static void _noop(String _) {}
   static void _voidNoop() {}
@@ -78,9 +78,8 @@ class SpaceAlbumsPage extends ConsumerWidget {
                 canEdit: canEdit,
                 onToggle: onToggle,
                 onUnlink: onUnlink,
-                onTap: (albumId) => context.pushRoute(
-                  SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit),
-                ),
+                onTap: (albumId) =>
+                    context.pushRoute(SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit)),
               ),
       ),
     );
@@ -160,111 +159,89 @@ class _AlbumCard extends StatelessWidget {
     return GestureDetector(
       onTap: () => onTap(album.id),
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Cover
-        Expanded(
-          child: Stack(
-            children: [
-              Opacity(
-                opacity: isOffTimeline ? 0.6 : 1.0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest,
-                    borderRadius: const BorderRadius.all(Radius.circular(16)),
-                    border: Border.all(
-                      color: cs.outline.withValues(alpha: 0.3),
-                      width: 1,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Cover
+          Expanded(
+            child: Stack(
+              children: [
+                Opacity(
+                  opacity: isOffTimeline ? 0.6 : 1.0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: const BorderRadius.all(Radius.circular(16)),
+                      border: Border.all(color: cs.outline.withValues(alpha: 0.3), width: 1),
                     ),
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.photo_album_outlined,
-                      size: 40,
-                      color: Colors.grey,
-                    ),
+                    child: const Center(child: Icon(Icons.photo_album_outlined, size: 40, color: Colors.grey)),
                   ),
                 ),
-              ),
-              // Off-timeline badge
-              if (isOffTimeline)
-                Positioned.fill(
-                  child: Center(
-                    child: Icon(
-                      Icons.visibility_off,
-                      size: 24,
-                      color: cs.onSurface.withValues(alpha: 0.7),
+                // Off-timeline badge
+                if (isOffTimeline)
+                  Positioned.fill(
+                    child: Center(
+                      child: Icon(Icons.visibility_off, size: 24, color: cs.onSurface.withValues(alpha: 0.7)),
                     ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Name + overflow row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      album.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          '${album.assetCount} photos',
+                          style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                        if (isOffTimeline)
+                          Text('· Hidden', style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (canEdit)
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: PopupMenuButton<_CardAction>(
+                    key: Key('space-album-card-menu-${album.id}'),
+                    padding: EdgeInsets.zero,
+                    iconSize: 18,
+                    onSelected: (action) {
+                      switch (action) {
+                        case _CardAction.toggle:
+                          onToggle(album.id);
+                        case _CardAction.unlink:
+                          onUnlink(album.id);
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: _CardAction.toggle,
+                        child: Text(album.showInTimeline ? 'Hide in timeline' : 'Show in timeline'),
+                      ),
+                      const PopupMenuItem(value: _CardAction.unlink, child: Text('Unlink from space')),
+                    ],
                   ),
                 ),
             ],
           ),
-        ),
-        const SizedBox(height: 4),
-        // Name + overflow row
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    album.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Text(
-                        '${album.assetCount} photos',
-                        style: context.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      if (isOffTimeline)
-                        Text(
-                          '· Hidden',
-                          style: context.textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (canEdit)
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: PopupMenuButton<_CardAction>(
-                  key: Key('space-album-card-menu-${album.id}'),
-                  padding: EdgeInsets.zero,
-                  iconSize: 18,
-                  onSelected: (action) {
-                    switch (action) {
-                      case _CardAction.toggle:
-                        onToggle(album.id);
-                      case _CardAction.unlink:
-                        onUnlink(album.id);
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    PopupMenuItem(
-                      value: _CardAction.toggle,
-                      child: Text(album.showInTimeline ? 'Hide in timeline' : 'Show in timeline'),
-                    ),
-                    const PopupMenuItem(value: _CardAction.unlink, child: Text('Unlink from space')),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -296,17 +273,11 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'No albums yet',
-            style: context.textTheme.titleMedium?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
-            ),
+            style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
           ),
           if (canEdit) ...[
             const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: onLink,
-              icon: const Icon(Icons.add),
-              label: const Text('Link album'),
-            ),
+            FilledButton.icon(onPressed: onLink, icon: const Icon(Icons.add), label: const Text('Link album')),
           ],
         ],
       ),

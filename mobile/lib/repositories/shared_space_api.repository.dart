@@ -91,15 +91,7 @@ class SharedSpaceApiRepository extends ApiRepository {
 
   /// Update the showInTimeline flag for a space-album link
   /// (PATCH /shared-spaces/{id}/albums/{albumId}).
-  Future<void> updateAlbumLink(
-    String spaceId,
-    String albumId, {
-    required bool showInTimeline,
-  }) async {
-    await _api.updateSharedSpaceAlbum(
-      albumId,
-      spaceId,
-      SharedSpaceAlbumLinkUpdateDto(showInTimeline: showInTimeline),
-    );
+  Future<void> updateAlbumLink(String spaceId, String albumId, {required bool showInTimeline}) async {
+    await _api.updateSharedSpaceAlbum(albumId, spaceId, SharedSpaceAlbumLinkUpdateDto(showInTimeline: showInTimeline));
   }
 }

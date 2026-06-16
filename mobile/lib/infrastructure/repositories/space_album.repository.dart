@@ -16,33 +16,28 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
     // COUNT of membership rows per album (correlated via groupBy + LEFT JOIN).
     final assetCountExp = assetMembership.assetId.count();
 
-    final query = _db.select(link).join([
-      innerJoin(meta, meta.id.equalsExp(link.albumId)),
-      leftOuterJoin(
-        assetMembership,
-        assetMembership.albumId.equalsExp(link.albumId),
-        useColumns: false,
-      ),
-    ])
-      ..where(link.spaceId.equals(spaceId))
-      ..addColumns([assetCountExp])
-      ..groupBy([link.spaceId, link.albumId, meta.id])
-      ..orderBy([OrderingTerm.asc(meta.name)]);
+    final query =
+        _db.select(link).join([
+            innerJoin(meta, meta.id.equalsExp(link.albumId)),
+            leftOuterJoin(assetMembership, assetMembership.albumId.equalsExp(link.albumId), useColumns: false),
+          ])
+          ..where(link.spaceId.equals(spaceId))
+          ..addColumns([assetCountExp])
+          ..groupBy([link.spaceId, link.albumId, meta.id])
+          ..orderBy([OrderingTerm.asc(meta.name)]);
 
     return query.watch().map(
-      (rows) => rows
-          .map((row) {
-            final m = row.readTable(meta);
-            final l = row.readTable(link);
-            return SpaceAlbum(
-              id: m.id,
-              name: m.name,
-              thumbnailAssetId: m.thumbnailAssetId,
-              showInTimeline: l.showInTimeline,
-              assetCount: row.read(assetCountExp) ?? 0,
-            );
-          })
-          .toList(),
+      (rows) => rows.map((row) {
+        final m = row.readTable(meta);
+        final l = row.readTable(link);
+        return SpaceAlbum(
+          id: m.id,
+          name: m.name,
+          thumbnailAssetId: m.thumbnailAssetId,
+          showInTimeline: l.showInTimeline,
+          assetCount: row.read(assetCountExp) ?? 0,
+        );
+      }).toList(),
     );
   }
 
@@ -55,8 +50,8 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
   }
 
   Future<void> deleteLink({required String spaceId, required String albumId}) {
-    return (_db.delete(_db.sharedSpaceAlbumLinkEntity)
-          ..where((t) => t.spaceId.equals(spaceId) & t.albumId.equals(albumId)))
-        .go();
+    return (_db.delete(
+      _db.sharedSpaceAlbumLinkEntity,
+    )..where((t) => t.spaceId.equals(spaceId) & t.albumId.equals(albumId))).go();
   }
 }
