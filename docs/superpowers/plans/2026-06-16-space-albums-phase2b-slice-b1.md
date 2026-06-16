@@ -280,6 +280,7 @@
 ## Self-Review
 
 **Spec coverage (§10.2):**
+
 - 15 types route to the correct handler → Task 4 (dispatch) + Task 3 (handlers). ✓
 - backfill variants route identically → covered by the shared `case` arms (e.g. `sharedSpaceAlbumLinkBackfillV1` → `updateSharedSpaceAlbumLinksV1`). ✓
 - asset/exif delegate to `updateAssetsV2`/`updateAssetsExifV1` → Task 3. ✓

@@ -75,7 +75,7 @@
   - List/detail `onUnlink(albumId)` → confirm `AlertDialog` → `actions.unlink(spaceId, albumId)`.
   - Detail kebab `onAddPhotos` → push `DriftAssetSelectionTimelineRoute`, then `addToAlbum(albumId, selected)` (the existing action) → `syncRemote()`.
   - Detail bottom-sheet remove (B4 `RemoveFromAlbumActionButton`) → ensure it triggers `syncRemote()` after (add an `onRemoved` nudge if needed).
-  All gated on `canEdit` (already true from B2–B5; keep it).
+    All gated on `canEdit` (already true from B2–B5; keep it).
 
 - [ ] **Step 2: Tests** — for each wired entry point, a widget/callback test asserting the action method is invoked with the right args (mock `spaceAlbumActionsProvider`). Plus a **viewer-denied** test per surface: with `canEdit:false`, the affordance is absent (re-assert the B2–B5 gating end-to-end so a regression that ungated them fails here).
 
@@ -108,6 +108,7 @@
 **Type consistency:** `SpaceAlbumActions.{link,unlink,toggleTimeline}`, `spaceAlbumActionsProvider`, the api-repo `linkAlbum`/`unlinkAlbum`/`updateAlbumLink` used consistently.
 
 ## Open items
+
 - Confirm the SDK link/unlink method names + arg order (Task 1).
 - The `BackgroundSyncManager`/`backgroundSyncProvider` type to mock (Task 2) — read how `SpaceDetailPage` reads it.
 - Whether `addToAlbum`/`removeFromAlbum` already nudge sync (they may not — add the nudge in the wiring if absent).

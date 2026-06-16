@@ -757,6 +757,7 @@ git commit -m "chore(mobile): B0 analyze fixes"
 ## Self-Review
 
 **Spec coverage (§10.1 B0):**
+
 - entity upsert/delete for the three entities → exercised via the harness helpers + Task 4/5/6 tests (insert then query/delete). ✓
 - metadata-delete sweep → Task 6. ✓
 - link-delete drops only the link row → Task 6 (`deleteLink` test). ✓

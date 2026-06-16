@@ -80,6 +80,7 @@
 **Type consistency:** `linkableAlbumCandidates`, `SpaceLinkAlbumPage`, `SpaceLinkAlbumRoute`, the row/confirm/empty Keys consistent.
 
 ## Open items
+
 - The exact albums provider + the `RemoteAlbum` own/edit-role field (Task 1/3) — read the provider and model.
 - How `SpaceMemberSelectionPage` returns its result (`context.maybePop(<list>)`) — mirror it.
 - `RemoteAlbum` test-fixture construction for the filter test.
