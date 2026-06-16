@@ -11,11 +11,24 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
   Stream<List<SpaceAlbum>> watchLinkedAlbums(String spaceId) {
     final link = _db.sharedSpaceAlbumLinkEntity;
     final meta = _db.sharedSpaceAlbumEntity;
+    final assetMembership = _db.sharedSpaceAlbumAssetEntity;
+
+    // COUNT of membership rows per album (correlated via groupBy + LEFT JOIN).
+    final assetCountExp = assetMembership.assetId.count();
+
     final query = _db.select(link).join([
       innerJoin(meta, meta.id.equalsExp(link.albumId)),
+      leftOuterJoin(
+        assetMembership,
+        assetMembership.albumId.equalsExp(link.albumId),
+        useColumns: false,
+      ),
     ])
       ..where(link.spaceId.equals(spaceId))
+      ..addColumns([assetCountExp])
+      ..groupBy([link.spaceId, link.albumId, meta.id])
       ..orderBy([OrderingTerm.asc(meta.name)]);
+
     return query.watch().map(
       (rows) => rows
           .map((row) {
@@ -26,6 +39,7 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
               name: m.name,
               thumbnailAssetId: m.thumbnailAssetId,
               showInTimeline: l.showInTimeline,
+              assetCount: row.read(assetCountExp) ?? 0,
             );
           })
           .toList(),
