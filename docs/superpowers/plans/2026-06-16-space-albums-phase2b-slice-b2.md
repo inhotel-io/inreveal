@@ -128,6 +128,7 @@ final spaceAlbumsProvider = StreamProvider.family<List<SpaceAlbum>, String>(
 - Test: `mobile/test/presentation/widgets/spaces/space_albums_shelf_test.dart`
 
 The shelf takes `spaceId`, `canEdit` (bool), and an `onLinkTap` / `onAlbumTap` callback. It watches `spaceAlbumsProvider(spaceId)` and renders per **mobile design §Surface 1**:
+
 - count>0: horizontal list of cover tiles + (if canEdit) a trailing dashed **Link** tile.
 - count==0 & canEdit: a slim one-row shelf with just the Link tile + "Link an album" label.
 - count==0 & !canEdit: render **nothing** (`SizedBox.shrink()`).
