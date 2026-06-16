@@ -35,6 +35,7 @@ const double _kTileRadius = 16.0;
 ///
 /// Callbacks [onLinkTap] and [onAlbumTap] are **no-op stubs in B2** — B4 wires
 /// album-tap navigation and B5 wires the link picker.
+/// [onSeeAll] is wired in B3 to push [SpaceAlbumsRoute].
 class SpaceAlbumsShelf extends ConsumerWidget {
   const SpaceAlbumsShelf({
     super.key,
@@ -42,12 +43,17 @@ class SpaceAlbumsShelf extends ConsumerWidget {
     required this.canEdit,
     required this.onLinkTap,
     required this.onAlbumTap,
+    this.onSeeAll,
   });
 
   final String spaceId;
   final bool canEdit;
   final VoidCallback onLinkTap;
   final void Function(String albumId) onAlbumTap;
+
+  /// Called when the "See all ▸" header tap is fired. If null, the "See all"
+  /// text is non-tappable (visual only). B3 wires this to push [SpaceAlbumsRoute].
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,7 +77,7 @@ class SpaceAlbumsShelf extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header row: "Albums (N)  See all ▸"
-          _HeaderRow(count: albums.length, showSeeAll: albums.isNotEmpty),
+          _HeaderRow(count: albums.length, showSeeAll: albums.isNotEmpty, onSeeAll: onSeeAll),
           const SizedBox(height: 8),
           // Horizontal scroll of tiles
           Expanded(
@@ -109,9 +115,10 @@ class SpaceAlbumsShelf extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _HeaderRow extends StatelessWidget {
-  const _HeaderRow({required this.count, required this.showSeeAll});
+  const _HeaderRow({required this.count, required this.showSeeAll, this.onSeeAll});
   final int count;
   final bool showSeeAll;
+  final VoidCallback? onSeeAll;
 
   @override
   Widget build(BuildContext context) {
@@ -127,10 +134,13 @@ class _HeaderRow extends StatelessWidget {
             ),
           ),
           if (showSeeAll)
-            Text(
-              'See all ▸',
-              style: context.textTheme.bodySmall?.copyWith(
-                color: context.colorScheme.primary,
+            GestureDetector(
+              onTap: onSeeAll,
+              child: Text(
+                'See all ▸',
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: context.colorScheme.primary,
+                ),
               ),
             ),
         ],
