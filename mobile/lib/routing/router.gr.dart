@@ -1842,6 +1842,90 @@ class SharedLinkRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [SpaceAlbumsPage]
+class SpaceAlbumsRoute extends PageRouteInfo<SpaceAlbumsRouteArgs> {
+  SpaceAlbumsRoute({
+    Key? key,
+    required String spaceId,
+    required bool canEdit,
+    void Function(String)? onToggle,
+    void Function(String)? onUnlink,
+    VoidCallback? onLink,
+    List<PageRouteInfo>? children,
+  }) : super(
+         SpaceAlbumsRoute.name,
+         args: SpaceAlbumsRouteArgs(
+           key: key,
+           spaceId: spaceId,
+           canEdit: canEdit,
+           onToggle: onToggle,
+           onUnlink: onUnlink,
+           onLink: onLink,
+         ),
+         initialChildren: children,
+       );
+
+  static const String name = 'SpaceAlbumsRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<SpaceAlbumsRouteArgs>();
+      return SpaceAlbumsPage(
+        key: args.key,
+        spaceId: args.spaceId,
+        canEdit: args.canEdit,
+        onToggle: args.onToggle,
+        onUnlink: args.onUnlink,
+        onLink: args.onLink,
+      );
+    },
+  );
+}
+
+class SpaceAlbumsRouteArgs {
+  const SpaceAlbumsRouteArgs({
+    this.key,
+    required this.spaceId,
+    required this.canEdit,
+    this.onToggle,
+    this.onUnlink,
+    this.onLink,
+  });
+
+  final Key? key;
+
+  final String spaceId;
+
+  final bool canEdit;
+
+  final void Function(String)? onToggle;
+
+  final void Function(String)? onUnlink;
+
+  final VoidCallback? onLink;
+
+  @override
+  String toString() {
+    return 'SpaceAlbumsRouteArgs{key: $key, spaceId: $spaceId, canEdit: $canEdit, onToggle: $onToggle, onUnlink: $onUnlink, onLink: $onLink}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SpaceAlbumsRouteArgs) return false;
+    return key == other.key &&
+        spaceId == other.spaceId &&
+        canEdit == other.canEdit &&
+        onLink == other.onLink;
+  }
+
+  @override
+  int get hashCode =>
+      key.hashCode ^ spaceId.hashCode ^ canEdit.hashCode ^ onLink.hashCode;
+}
+
+/// generated route for
 /// [SpaceDetailPage]
 class SpaceDetailRoute extends PageRouteInfo<SpaceDetailRouteArgs> {
   SpaceDetailRoute({
