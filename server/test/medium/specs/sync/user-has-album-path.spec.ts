@@ -10,7 +10,9 @@ beforeAll(async () => {
 });
 
 const hasPath = async (albumId: string, userId: string, excludeSpaceId: string) => {
-  const res = await sql<{ ok: boolean }>`SELECT user_has_album_path(${albumId}::uuid, ${userId}::uuid, ${excludeSpaceId}::uuid) AS ok`.execute(db);
+  const res = await sql<{
+    ok: boolean;
+  }>`SELECT user_has_album_path(${albumId}::uuid, ${userId}::uuid, ${excludeSpaceId}::uuid) AS ok`.execute(db);
   return res.rows[0].ok;
 };
 
@@ -38,7 +40,10 @@ describe('user_has_album_path', () => {
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
-    await db.insertInto('album_user').values({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer }).execute();
+    await db
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer })
+      .execute();
     expect(await hasPath(album.id, viewer.id, NIL)).toBe(true);
   });
 
@@ -49,7 +54,10 @@ describe('user_has_album_path', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: member.id, role: SharedSpaceRole.Viewer });
-    await db.insertInto('shared_space_album').values({ spaceId: s2.id, albumId: album.id, addedById: owner.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: s2.id, albumId: album.id, addedById: owner.id })
+      .execute();
     // exclude a DIFFERENT space → s2 path still counts
     expect(await hasPath(album.id, member.id, NIL)).toBe(true);
     // exclude s2 itself → that path is removed; member has no other path
@@ -62,7 +70,10 @@ describe('user_has_album_path', () => {
     const { user: albumOwner } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
     const { space } = await ctx.newSharedSpace({ createdById: creator.id });
-    await db.insertInto('shared_space_album').values({ spaceId: space.id, albumId: album.id, addedById: creator.id }).execute();
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: creator.id })
+      .execute();
     expect(await hasPath(album.id, creator.id, NIL)).toBe(true);
     expect(await hasPath(album.id, creator.id, space.id)).toBe(false);
   });

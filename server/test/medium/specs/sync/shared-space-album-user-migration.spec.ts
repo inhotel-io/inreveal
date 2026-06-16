@@ -40,7 +40,10 @@ describe('shared_space_album_user grant table', () => {
     const { auth, ctx } = await setup();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
 
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: auth.user.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: auth.user.id, albumId: album.id })
+      .execute();
     await defaultDatabase
       .insertInto('shared_space_album_user')
       .values({ userId: auth.user.id, albumId: album.id })
@@ -58,11 +61,18 @@ describe('shared_space_album_user grant table', () => {
   it('cascades when the album is deleted', async () => {
     const { auth, ctx } = await setup();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: auth.user.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: auth.user.id, albumId: album.id })
+      .execute();
 
     await defaultDatabase.deleteFrom('album').where('id', '=', album.id).execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', album.id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(rows).toHaveLength(0);
   });
 
@@ -70,11 +80,18 @@ describe('shared_space_album_user grant table', () => {
     const { auth, ctx } = await setup();
     const { user: other } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: auth.user.id });
-    await defaultDatabase.insertInto('shared_space_album_user').values({ userId: other.id, albumId: album.id }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user')
+      .values({ userId: other.id, albumId: album.id })
+      .execute();
 
     await defaultDatabase.deleteFrom('user').where('id', '=', other.id).execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', album.id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .selectAll()
+      .where('albumId', '=', album.id)
+      .execute();
     expect(rows).toHaveLength(0);
   });
 });
@@ -89,9 +106,16 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
     const fakeAlbum = fakeAlbumResult.rows[0].id;
 
     // No FK: a row survives even though spaceId/albumId reference nothing.
-    await defaultDatabase.insertInto('shared_space_album_audit').values({ id, spaceId: fakeSpace, albumId: fakeAlbum }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_audit')
+      .values({ id, spaceId: fakeSpace, albumId: fakeAlbum })
+      .execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_audit').selectAll().where('id', '=', id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_audit')
+      .selectAll()
+      .where('id', '=', id)
+      .execute();
     expect(rows).toHaveLength(1);
     expect(rows[0].deletedAt).toBeDefined();
   });
@@ -104,9 +128,16 @@ describe('shared_space_album audit tables (append logs, no FKs)', () => {
     const fakeUserResult = await sql<{ id: string }>`SELECT immich_uuid_v7() AS id`.execute(defaultDatabase);
     const fakeUser = fakeUserResult.rows[0].id;
 
-    await defaultDatabase.insertInto('shared_space_album_user_audit').values({ id, albumId: fakeAlbum, userId: fakeUser }).execute();
+    await defaultDatabase
+      .insertInto('shared_space_album_user_audit')
+      .values({ id, albumId: fakeAlbum, userId: fakeUser })
+      .execute();
 
-    const rows = await defaultDatabase.selectFrom('shared_space_album_user_audit').selectAll().where('id', '=', id).execute();
+    const rows = await defaultDatabase
+      .selectFrom('shared_space_album_user_audit')
+      .selectAll()
+      .where('id', '=', id)
+      .execute();
     expect(rows).toHaveLength(1);
     expect(rows[0].deletedAt).toBeDefined();
   });

@@ -37,11 +37,7 @@ describe('SharedSpaceAlbumAssetSync.getBackfill', () => {
     const { asset } = await ctx.newAsset({ ownerId: owner.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
 
-    const stream = sut.getBackfill(
-      { nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID },
-      album.id,
-      owner.id,
-    );
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, owner.id);
     const result: any[] = [];
     for await (const row of stream) {
       result.push(row);
@@ -154,13 +150,19 @@ describe('SharedSpaceAlbumAssetSync.getUpdates', () => {
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
     // With a zero ack — no assets "known" by client, so updates should be filtered
-    const streamZero = sut.getUpdates({ nowId: NOW_ID, userId: member.id }, { type: SyncEntityType.AlbumToAssetV1, updateId: ZERO_UPDATE_ID });
+    const streamZero = sut.getUpdates(
+      { nowId: NOW_ID, userId: member.id },
+      { type: SyncEntityType.AlbumToAssetV1, updateId: ZERO_UPDATE_ID },
+    );
     const resultZero: any[] = [];
     for await (const row of streamZero) {
       resultZero.push(row);
     }
     // With ack at max — all assets known, so updates should come through
-    const streamMax = sut.getUpdates({ nowId: NOW_ID, userId: member.id }, { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID });
+    const streamMax = sut.getUpdates(
+      { nowId: NOW_ID, userId: member.id },
+      { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID },
+    );
     const resultMax: any[] = [];
     for await (const row of streamMax) {
       resultMax.push(row);
