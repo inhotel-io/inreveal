@@ -166,8 +166,19 @@ On mount, in parallel:
   Owner/Editor predicate `SpacePickerModal` uses today (`createdById === me` or
   member role ∈ {Owner, Editor}).
 
-A failure loading one type degrades gracefully: show the other, surface a
-non-blocking error toast for the failed one (reuse `failed_to_load_spaces`).
+Both loads run under a single `Promise.allSettled`; the skeleton shows until both
+settle (no flash of an albums-only list that spaces then shove around). A failure
+loading one type degrades gracefully: render the other, surface a non-blocking
+error toast for the failed one (reuse `failed_to_load_spaces`; albums already
+toast via `handleError`). If **both** fail, the list is empty but the two create
+rows remain.
+
+**Search normalization is unified.** Both album and space names are filtered and
+highlighted with the same `normalizeSearchString` util the album row uses today
+(diacritic- and case-insensitive). The current `SpacePickerModal` uses a plainer
+`toLowerCase().includes`; the unified converter must standardize on
+`normalizeSearchString` so "Tuscany" matches "Tüscany" for spaces too — otherwise
+search behaves inconsistently across the two types in one list.
 
 ### Row order
 
@@ -184,6 +195,13 @@ non-blocking error toast for the failed one (reuse `failed_to_load_spaces`).
   already covers recency.)
 - When searching, both create rows become "New Album **<query>**" / "New Space
   **<query>**" exactly as the album row does today.
+- **Create-name validation differs by type.** "New Album" with an empty search
+  creates an unnamed album today (server allows it) — keep that behavior. A
+  **space name is required** (server schema: 1–100 chars), so "New Space" with an
+  empty/whitespace search must be guarded: the row is non-actionable until the
+  search box has a non-empty name (and the name is sent trimmed). Over-long names
+  (>100) are clamped/blocked client-side to avoid a 400. This asymmetry is
+  deliberate, not an oversight.
 - Empty states: no matches → message "No albums or spaces with that name"; truly
   empty library → message but create rows still present.
 
@@ -200,7 +218,18 @@ Generalize the existing `AlbumPickerModal` interaction model:
   today's "Add to albums ({count})"); clicking it confirms the whole set.
 - Arrow up/down move a focus index across selectable rows; `Enter` confirms the
   focused row (or submits the multi-select set if active); `Ctrl` toggles the
-  focused row — same shape as today, extended to the unified row list.
+  focused row — same shape as today, extended to the unified row list. **Note the
+  focus-index offset changes: today's converter hard-codes a single create-row
+  offset of 1; the unified converter has _two_ create rows, so the offset is 2.**
+  This is the most likely off-by-one regression and must be pinned by a converter
+  test.
+- **Over-cap spaces are non-selectable.** When the asset selection exceeds
+  `MAX_SPACE_ASSETS_PER_REQUEST` (10,000), space rows render disabled (greyed,
+  not focusable, with a short tooltip) while album rows stay selectable — albums
+  have no equivalent cap. The "New Space" row is likewise disabled in this state.
+- **Double-submit guard.** Once a confirm/add is dispatched, the confirm button
+  and rows are disabled until the add promise settles, so a fast second click or
+  `Enter` cannot fire a duplicate add.
 - Footer hint ("↵ to select · CTRL to multi-select") is preserved.
 
 ### Add dispatch (the wrapper)
@@ -213,18 +242,27 @@ into `albumIds` and `spaceIds`, then:
 - **Exactly one space** → `addAssetsToSpace(spaceId, assetIds, {notify:true})`
   — preserves today's toast + "View space".
 - **Any multi / mixed selection** → call each primitive with `{notify:false}`,
-  `await` all, then show **one aggregate toast** "Added to {count} collections"
-  (new key) summarizing success; on partial failure show a warning summarizing
-  how many succeeded. Each primitive still emits its existing event
-  (`AlbumAddAssets` / `SpaceAddAssets`) so the rest of the UI stays reactive.
+  `await` **all** with `Promise.allSettled` (one slow/failing target must not
+  abort the others), then show **one aggregate toast** "Added to {count}
+  collections" (new key) where `count` = collections that succeeded. On partial
+  failure show a warning naming how many of N succeeded; on total failure show an
+  error. The aggregate toast has **no** "View" button (there is no single target
+  to navigate to) — the per-target "View album/space" button only appears in the
+  single-selection paths above.
+
+Events stay correct under partial failure: each primitive emits its event
+(`AlbumAddAssets` / `SpaceAddAssets`) **only on its own success** (this is already
+how `addAssetsToAlbums` / `addAssetsToSpace` behave — they emit then return
+`true`, or return `false` without emitting on error), so the UI never reacts to an
+add that didn't happen.
 
 This keeps the familiar single-target experience and adds a coherent summary for
 the new mixed case, rather than firing N separate toasts.
 
-Guard: spaces cap adds at `MAX_SPACE_ASSETS_PER_REQUEST` (10,000). The selection
-count from the timeline is the same set for all targets; if it exceeds the cap,
-disable/skip space targets with a brief explanation (albums have no equivalent
-cap). In practice the timeline rarely selects 10k+, but the guard must exist.
+The 10,000-asset space cap is enforced at the **selection** layer (over-cap space
+rows are non-selectable — see above), so the dispatch never builds a space call
+that exceeds it. The dispatch still defensively skips any space target whose asset
+count is over the cap rather than throwing.
 
 ### Entry points to repoint
 
@@ -251,41 +289,120 @@ add **German and French** translations per project convention):
 
 - `add_to_album_or_space` → "Add to album or space" (modal + action title)
 - `new_space` → "New Space"
+- `all_albums_and_spaces` → "All" (the ALL section header for the merged list)
 - `add_to_collections_count` → "Add to {count}" (multi-submit button)
 - `added_to_collections_count` → "Added to {count, plural, one {# collection} other {# collections}}"
+- `added_to_collections_partial` → "Added to {success} of {total}" (partial-failure warning)
 - `no_albums_or_spaces_with_name` → "No albums or spaces with that name"
+- `space_selection_too_large` → "Too many photos for a space (max {count})" (over-cap tooltip)
 
-Reuse existing keys where possible: `new_album`, `recent`, `all_albums`/`albums`
-(or new combined section labels if clearer), `to_select`, `to_multi_select`,
-`view_space`, `view_album`, `failed_to_load_spaces`,
+Reuse existing keys where possible: `new_album`, `recent`, `to_select`,
+`to_multi_select`, `view_space`, `view_album`, `failed_to_load_spaces`,
 `spaces_no_writable_spaces`.
+
+All new keys are **fork-only strings**, so each must also get German (`de.json`)
+and French (`fr.json`) entries per project convention, and stay in the same
+alphabetical position the repo's i18n lint expects.
 
 ## Error handling & edge cases
 
-- Space or album load failure → degrade to the other list + error toast.
-- User has no writable spaces → list shows albums only; "New Space" row remains
-  so they can create their first space (which then receives the assets).
-- Duplicate assets already in an album → existing duplicate-aware toast for the
-  single-album path; aggregate path counts them as success (no error).
-- Selection exceeds the space cap → space targets disabled with explanation;
-  album targets unaffected.
-- Inline "New Space" creates the space, then the same add dispatch runs against
-  it (consistent with "New Album" today).
+Every row below must be addressed by the implementation; the **Addressed by**
+column points at the test or design decision that covers it.
+
+| Edge case | Behavior | Addressed by |
+| --- | --- | --- |
+| Albums load fails | Render spaces only + error toast | `Promise.allSettled` load; converter test with empty albums |
+| Spaces load fails | Render albums only + `failed_to_load_spaces` toast | same |
+| Both load fail | Empty list, create rows still present | converter test: no albums + no spaces |
+| User has **no writable spaces** | Albums only; "New Space" row still present (lets them create their first) | converter test |
+| User has spaces but **all read-only** (Viewer) | Same as none-writable | writable-filter unit test |
+| Space with **< 4 thumbhashes** (or 0) | Collage fills available tiles; missing tiles render a neutral placeholder (no broken/empty grid) | space-list-item render test (0, 1, 4 thumbhashes) |
+| Space missing `assetCount` | Subtitle shows "N members" only, no "· N items" | space-list-item render test |
+| **Same name, album vs space** | Both rows show; badges + collage disambiguate | converter test asserts both present with distinct `kind` |
+| **Same name within one type** (two albums "Family") | Pre-existing behavior unchanged; badge does **not** disambiguate same-type dupes (out of scope) | noted; no regression |
+| Selection **> 10,000 assets** | Space rows + "New Space" disabled with tooltip; albums unaffected; dispatch defensively skips over-cap spaces | selection test + dispatch test |
+| Duplicate assets already in album | Single-album path keeps duplicate-aware toast; aggregate counts as success | dispatch unit test |
+| Duplicate assets already in space | Server `onConflict doNothing`; space add is **not** per-asset duplicate-aware, so toast says "added" (no dup breakdown) — acceptable, documented | dispatch unit test |
+| Adding **non-owned/partner assets** to a space | Server enforces `AssetRead`; a forbidden asset fails the whole space call → error toast for that target | dispatch error-path test |
+| "New Space" with empty/whitespace name | Row non-actionable until a name is typed; name sent trimmed | create-guard unit test |
+| "New Space" name > 100 chars | Clamped/blocked client-side before the call | create-guard unit test |
+| Rapid double confirm / `Enter` | Disabled-while-pending guard prevents duplicate add | component test |
+| Mixed add, one target fails | Other targets still complete; warning toast "M of N"; only succeeded targets emit events | dispatch partial-failure test |
+| Two create rows shift keyboard offset | Focus index offset = 2, not 1 | converter focus-offset test |
+| Touch device | Longpress toggles multi-select on both album and space rows | component/touch test |
 
 ## Testing
 
-- **Unit (`web`, vitest):** `CollectionModalRowConverter` — create rows always
-  present; RECENT interleaving + 3-item cap; alphabetical ALL ordering; search
-  filtering across both types; same-name pair both appear with correct `kind`;
-  empty/no-match messages.
-- **Unit:** add-dispatch split logic — single album, single space, mixed multi;
-  notify behavior (rich single vs aggregate); space-cap guard.
-- **Component:** `CollectionPickerModal` renders album badge vs space
-  badge/collage; `Ctrl` toggles multi-select across types; keyboard nav across
-  the unified list; "Add to {count}" appears/acts.
-- **Manual / e2e (optional):** from the timeline, select photos → "+" → add to an
-  album, to a space, and to a mixed multi-selection; verify toasts, that assets
-  land in both, and the same-name case is visually distinct.
+**This feature is built test-first (TDD).** Each unit below starts as a failing
+test that pins the behavior, then the implementation makes it pass, then refactor
+— per `superpowers:test-driven-development`. The implementation plan
+(`writing-plans` step) sequences the work as test → code → refactor slices, not
+code-then-test. The pure logic (`CollectionModalRowConverter`, the add-dispatch
+splitter) is extracted specifically so it can be tested without DOM, and is
+written before any Svelte wiring. No implementation task is "done" without its
+test green and the full `web` suite + `pnpm check` passing.
+
+The tables above are the source of truth: **every edge-case row maps to a named
+test here.**
+
+**Unit — `CollectionModalRowConverter` (`web`, vitest), no DOM:**
+
+- Create rows ("New Album", "New Space") always present and always first.
+- `kind` discrimination: an album and a space with the same name both appear,
+  each tagged with the correct `kind` and `id`.
+- RECENT: interleaves both types by recency (`updatedAt` / `lastActivityAt`),
+  capped at 3; hidden when a search is active; recency tie-break is deterministic.
+- ALL: merged albums + writable spaces sorted case-insensitively by name asc;
+  same-name pairs land adjacent.
+- Search: filters **both** types via `normalizeSearchString` (diacritic/case
+  insensitive — explicit "Tüscany" vs "Tuscany" case); create rows reflect the
+  query.
+- **Focus-index offset = 2** (two create rows) — guards the off-by-one.
+- Messages: no-match → "No albums or spaces with that name"; empty library →
+  empty-library message, create rows still present.
+- Writable filter: Owner/Editor included, Viewer excluded, creator always
+  included (mirrors `SpacePickerModal`).
+- Create-name guard: "New Space" not actionable on empty/whitespace; name > 100
+  blocked; album empty-name still allowed.
+
+**Unit — add-dispatch splitter (`web`, vitest):**
+
+- Single album → `addAssetsToAlbums([id], …, {notify:true})`, no aggregate toast.
+- Single space → `addAssetsToSpace(id, …, {notify:true})`, no aggregate toast.
+- Mixed multi → each primitive called with `{notify:false}`; one aggregate toast
+  with the success count; no "View" button.
+- Partial failure (one target rejects) → others still called (`allSettled`);
+  warning toast "M of N"; only succeeded targets' events asserted emitted.
+- Over-cap space target skipped defensively; album in the same set still added.
+
+**Component — `space-list-item.svelte` (@testing-library/svelte, happy-dom):**
+
+- Renders the pink people badge; album row renders the blue photo-stack badge.
+- Collage with 0, 1, and 4 thumbhashes (placeholder tiles for the missing ones).
+- Subtitle: "N members · N items", and "N members" when `assetCount` is absent.
+- Search-term highlight on the space name (same 3-part split as `AlbumListItem`).
+- Multi-select checkmark toggles via click and via longpress (touch).
+- a11y: `role="checkbox"` + `aria-checked` on the select affordance; row is a
+  button with an accessible name.
+
+**Component — `CollectionPickerModal.svelte`:**
+
+- `Ctrl`-click selects a mix of one album + one space; "Add to {count}" button
+  appears and submits the mixed set.
+- Keyboard arrow/enter nav traverses create rows + collection rows correctly
+  (exercises the offset-2 path end-to-end).
+- Over-cap selection disables space rows + "New Space" while albums stay active.
+- Disabled-while-pending: a second `Enter`/click during the in-flight add is a
+  no-op.
+- Both-loads-fail and one-load-fails render states.
+
+**E2E — Playwright web (`e2e`, _recommended, not optional_):** this changes a
+core, high-traffic timeline flow, so it warrants a browser test. From the
+timeline, select photos → "+" → (a) add to an existing album, (b) add to an
+existing space, (c) `Ctrl`-select one of each and add to both; assert the toast,
+that the assets actually land in the album and the space (via API), and that a
+same-name album/space pair is visually distinguishable. Also assert the
+single-photo viewer "+" opens the same unified picker.
 
 ## Approaches considered
 
