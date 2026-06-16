@@ -161,5 +161,28 @@ void main() {
     // Cover has no thumbnail → fallback icon is shown
     expect(find.byIcon(Icons.photo_album_outlined), findsOneWidget);
   });
+
+  testWidgets('tapping "See all ▸" invokes the onSeeAll callback', (tester) async {
+    var called = false;
+    final albums = [_album(id: 'a1', name: 'Hawaii')];
+
+    await tester.pumpWidget(
+      _wrap(
+        SpaceAlbumsShelf(
+          spaceId: spaceId,
+          canEdit: true,
+          onLinkTap: () {},
+          onAlbumTap: (_) {},
+          onSeeAll: () => called = true,
+        ),
+        spaceId: spaceId,
+        albums: albums,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('See all ▸'));
+    expect(called, isTrue);
+  });
 }
 
