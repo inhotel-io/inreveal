@@ -15,7 +15,7 @@ Spec: `2026-06-16-config-driven-memory-types-design.md` (Slice 7). No SDK regen 
 
 - `SystemConfigMemoriesDto.types` is optional in the SDK; seed `configToEdit.memories.types ??= {}` then
   default each known key to `true`, and bind the switches to a narrowed local `const memoryTypes =
-  configToEdit.memories.types` (shares the proxy ref, so toggles reach the save payload). Display default is
+configToEdit.memories.types` (shares the proxy ref, so toggles reach the save payload). Display default is
   the metadata default (`?? true`), not the legacy fold — matches the spec's admin-UI fallback.
 - `SettingButtonsRow` saves `pick(configToEdit, ['memories'])`, so the saved object carries
   `retentionDays`, the deprecated `birthday`/`recentTrips`, and the new `types` map.
