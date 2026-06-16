@@ -50,3 +50,84 @@ export const isValidNewSpaceName = (name: string): boolean => {
 // row components share one matcher. (Imported above to keep a single source of truth.)
 export const matchesSearch = (name: string, search: string): boolean =>
   normalizeSearchString(name).includes(normalizeSearchString(search));
+
+import { t, type Translations } from 'svelte-i18n';
+import { get } from 'svelte/store';
+
+export enum CollectionModalRowType {
+  NEW_ALBUM = 'newAlbum',
+  NEW_SPACE = 'newSpace',
+  SECTION = 'section',
+  MESSAGE = 'message',
+  COLLECTION_ITEM = 'collectionItem',
+}
+
+export type CollectionModalRow = {
+  type: CollectionModalRowType;
+  selected?: boolean;
+  multiSelected?: boolean;
+  text?: string;
+  collection?: PickerCollection;
+};
+
+export const isSelectableRowType = (type: CollectionModalRowType): boolean =>
+  type === CollectionModalRowType.NEW_ALBUM ||
+  type === CollectionModalRowType.NEW_SPACE ||
+  type === CollectionModalRowType.COLLECTION_ITEM;
+
+export class CollectionModalRowConverter {
+  toModalRows(
+    search: string,
+    recent: PickerCollection[],
+    all: PickerCollection[],
+    selectedRowIndex: number,
+    multiSelectedKeys: string[],
+    options: { showSpaces: boolean },
+  ): CollectionModalRow[] {
+    const $t = get(t);
+    const rows: CollectionModalRow[] = [{ type: CollectionModalRowType.NEW_ALBUM, selected: selectedRowIndex === 0 }];
+    if (options.showSpaces) {
+      rows.push({ type: CollectionModalRowType.NEW_SPACE, selected: selectedRowIndex === 1 });
+    }
+    const createCount = rows.length;
+
+    const isSearching = search.trim().length > 0;
+    const recentToShow = isSearching ? [] : recent;
+    const filtered = sortByNameAsc(isSearching ? all.filter((c) => matchesSearch(c.name, search)) : all);
+
+    if (filtered.length === 0) {
+      rows.push({
+        type: CollectionModalRowType.MESSAGE,
+        text:
+          all.length > 0
+            ? $t('no_albums_or_spaces_with_name' as Translations)
+            : $t('no_albums_or_spaces_yet' as Translations),
+      });
+      return rows;
+    }
+
+    let index = createCount;
+    const pushItem = (c: PickerCollection) => {
+      rows.push({
+        type: CollectionModalRowType.COLLECTION_ITEM,
+        selected: selectedRowIndex === index,
+        multiSelected: multiSelectedKeys.includes(collectionKey(c)),
+        collection: c,
+      });
+      index++;
+    };
+
+    if (recentToShow.length > 0) {
+      rows.push({ type: CollectionModalRowType.SECTION, text: $t('recent' as Translations).toUpperCase() });
+      for (const c of recentToShow) {
+        pushItem(c);
+      }
+    }
+
+    rows.push({ type: CollectionModalRowType.SECTION, text: $t('all_albums_and_spaces' as Translations).toUpperCase() });
+    for (const c of filtered) {
+      pushItem(c);
+    }
+    return rows;
+  }
+}

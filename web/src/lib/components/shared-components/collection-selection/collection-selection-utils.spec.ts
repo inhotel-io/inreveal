@@ -59,3 +59,93 @@ describe('collection helpers', () => {
     expect(isValidNewSpaceName('x'.repeat(100))).toBe(true);
   });
 });
+
+import {
+  CollectionModalRowConverter,
+  CollectionModalRowType,
+  isSelectableRowType,
+} from './collection-selection-utils';
+
+describe('CollectionModalRowConverter', () => {
+  const conv = new CollectionModalRowConverter();
+  const a = (id: string, name: string) => albumToCollection(album(id, name));
+  const s = (id: string, name: string) => spaceToCollection(space(id, name));
+  const opts = { showSpaces: true };
+
+  it('always emits New Album then New Space first when spaces shown', () => {
+    const rows = conv.toModalRows('', [], [], -1, [], opts);
+    expect(rows[0].type).toBe(CollectionModalRowType.NEW_ALBUM);
+    expect(rows[1].type).toBe(CollectionModalRowType.NEW_SPACE);
+  });
+
+  it('omits New Space and all spaces when showSpaces is false (over-cap)', () => {
+    const rows = conv.toModalRows('', [a('a', 'A')], [a('a', 'A')], -1, [], { showSpaces: false });
+    expect(rows.find((r) => r.type === CollectionModalRowType.NEW_SPACE)).toBeUndefined();
+    // create-row offset is now 1: index 0 = New Album, index 1 = first item
+    expect(rows[0].type).toBe(CollectionModalRowType.NEW_ALBUM);
+  });
+
+  it('shows both same-name collections with correct kind', () => {
+    const all = [a('a1', 'Tuscany 2024'), s('s1', 'Tuscany 2024')];
+    const rows = conv.toModalRows('', [], all, -1, [], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    expect(rows.map((r) => r.collection!.kind).sort()).toEqual(['album', 'space']);
+  });
+
+  it('hides RECENT while searching and filters both types via normalize', () => {
+    const all = [a('a1', 'Tüscany'), s('s1', 'Rome')];
+    const rows = conv.toModalRows('tuscany', [a('a1', 'Tüscany')], all, -1, [], opts);
+    expect(rows.find((r) => r.type === CollectionModalRowType.SECTION && r.text?.toUpperCase().includes('RECENT'))).toBeUndefined();
+    const items = rows.filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    expect(items).toHaveLength(1);
+    expect(items[0].collection!.id).toBe('a1');
+  });
+
+  it('focus offset is 2 (two create rows): index 2 selects the first item', () => {
+    const all = [a('a1', 'A'), s('s1', 'B')];
+    const rows = conv.toModalRows('', [], all, 2, [], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    expect(rows[0].selected).toBe(true);
+    expect(rows[1].selected).toBe(false);
+  });
+
+  it('renders a RECENT section and shifts the ALL focus offset by the recent count', () => {
+    const recent = [s('s1', 'B')];
+    const all = [a('a1', 'A'), s('s1', 'B')]; // sorted ALL → A (album a1), B (space s1)
+    const sections = conv
+      .toModalRows('', recent, all, -1, [], opts)
+      .filter((r) => r.type === CollectionModalRowType.SECTION)
+      .map((r) => (r.text ?? '').toUpperCase());
+    expect(sections[0]).toContain('RECENT'); // RECENT precedes ALL
+
+    // selectable order: NewAlbum(0) NewSpace(1) recent[0](2) all[0](3) all[1](4)
+    const selectedAt = (i: number) =>
+      conv.toModalRows('', recent, all, i, [], opts).find((r) => r.selected && r.collection)?.collection;
+    expect(selectedAt(2)?.id).toBe('s1'); // first RECENT item
+    expect(selectedAt(3)?.id).toBe('a1'); // first ALL item — offset includes the 1 recent row
+  });
+
+  it('marks multiSelected rows by collectionKey', () => {
+    const all = [a('a1', 'A'), s('s1', 'B')];
+    const rows = conv.toModalRows('', [], all, -1, ['space:s1'], opts).filter((r) => r.type === CollectionModalRowType.COLLECTION_ITEM);
+    expect(rows.find((r) => r.collection!.id === 's1')!.multiSelected).toBe(true);
+    expect(rows.find((r) => r.collection!.id === 'a1')!.multiSelected).toBe(false);
+  });
+
+  it('emits no-match message when search matches nothing but library is non-empty', () => {
+    const rows = conv.toModalRows('zzz', [], [a('a1', 'A')], -1, [], opts);
+    expect(rows.some((r) => r.type === CollectionModalRowType.MESSAGE)).toBe(true);
+    expect(rows.some((r) => r.type === CollectionModalRowType.COLLECTION_ITEM)).toBe(false);
+  });
+
+  it('emits empty-library message when there is nothing at all', () => {
+    const rows = conv.toModalRows('', [], [], -1, [], opts);
+    expect(rows.some((r) => r.type === CollectionModalRowType.MESSAGE)).toBe(true);
+  });
+
+  it('isSelectableRowType: create rows and items are selectable, section/message are not', () => {
+    expect(isSelectableRowType(CollectionModalRowType.NEW_ALBUM)).toBe(true);
+    expect(isSelectableRowType(CollectionModalRowType.NEW_SPACE)).toBe(true);
+    expect(isSelectableRowType(CollectionModalRowType.COLLECTION_ITEM)).toBe(true);
+    expect(isSelectableRowType(CollectionModalRowType.SECTION)).toBe(false);
+    expect(isSelectableRowType(CollectionModalRowType.MESSAGE)).toBe(false);
+  });
+});
