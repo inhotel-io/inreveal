@@ -1,13 +1,19 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
+import 'package:immich_mobile/providers/background_sync.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/space_album_actions.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/widgets/common/immich_toast.dart';
 
 /// Space Album detail page — pushes a `TimelineRouteScope + Timeline` scoped
 /// to a single shared-space album.
@@ -18,10 +24,10 @@ import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 ///   [canEdit]  — true for Owner/Editor role; drives kebab and bottom-sheet
 ///                gating (space role, NOT album ownership — see D3).
 ///
-/// Mutations (Add photos, Show/Hide in timeline, Unlink) are no-op stubs —
-/// B6 supplies the real REST calls.
+/// B6: mutations (Add photos, Show/Hide in timeline, Unlink) are wired to the
+/// real REST calls via [SpaceAlbumActions] + sync-nudge.
 @RoutePage()
-class SpaceAlbumDetailPage extends ConsumerWidget {
+class SpaceAlbumDetailPage extends ConsumerStatefulWidget {
   final String spaceId;
   final String albumId;
   final bool canEdit;
@@ -34,26 +40,170 @@ class SpaceAlbumDetailPage extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final albumsAsync = ref.watch(spaceAlbumsProvider(spaceId));
-    final album = albumsAsync.valueOrNull?.where((a) => a.id == albumId).firstOrNull;
+  ConsumerState<SpaceAlbumDetailPage> createState() =>
+      _SpaceAlbumDetailPageState();
+}
+
+class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
+  /// Add photos to this album by pushing the asset-selection timeline, then
+  /// calling the regular album addAssets endpoint (D3 — server enforces
+  /// space-editor permission), then nudging sync.
+  Future<void> _addPhotos() async {
+    final newAssets =
+        await context.pushRoute<Set<BaseAsset>>(DriftAssetSelectionTimelineRoute());
+    if (newAssets == null || newAssets.isEmpty) return;
+
+    // Filter to remote assets only (local assets can't be added to a space
+    // album via the REST endpoint — the server requires remote asset ids).
+    final remoteAssets = newAssets.whereType<RemoteAsset>().toSet();
+    if (remoteAssets.isEmpty) return;
+
+    try {
+      final count = await ref
+          .read(remoteAlbumProvider.notifier)
+          .addAssetsToAlbum(widget.albumId, remoteAssets);
+      if (context.mounted && count > 0) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Added $count photos to album',
+          toastType: ToastType.success,
+        );
+      }
+      // Nudge sync so the new assets appear in Drift without waiting for the
+      // next scheduled sync cycle.
+      await _triggerSync();
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to add photos',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleTimeline() async {
+    final albumsAsync = ref.read(spaceAlbumsProvider(widget.spaceId));
+    final album = albumsAsync.valueOrNull
+        ?.where((a) => a.id == widget.albumId)
+        .firstOrNull;
+    if (album == null) return;
+
+    try {
+      await ref.read(spaceAlbumActionsProvider).toggleTimeline(
+            widget.spaceId,
+            widget.albumId,
+            current: album.showInTimeline,
+          );
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: album.showInTimeline
+              ? 'Album hidden from timeline'
+              : 'Album shown in timeline',
+          toastType: ToastType.success,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to update timeline setting',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _unlink() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unlink album'),
+        content:
+            const Text('Remove this album from the space? Its photos will no longer appear here.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ref
+          .read(spaceAlbumActionsProvider)
+          .unlink(widget.spaceId, widget.albumId);
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Album unlinked',
+          toastType: ToastType.success,
+        );
+        await context.maybePop();
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ImmichToast.show(
+          context: context,
+          msg: 'Failed to unlink album',
+          toastType: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _triggerSync() async {
+    try {
+      await ref.read(backgroundSyncProvider).syncRemote();
+    } catch (_) {
+      // Non-fatal — sync will catch up on next cycle.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final albumsAsync = ref.watch(spaceAlbumsProvider(widget.spaceId));
+    final album = albumsAsync.valueOrNull
+        ?.where((a) => a.id == widget.albumId)
+        .firstOrNull;
 
     return TimelineRouteScope(
-      timelineServiceBuilder: (ref, scope, groupBy) => ref.watch(timelineFactoryProvider).spaceAlbum(
-        spaceId: spaceId,
-        albumId: albumId,
-        groupBy: groupBy,
-        temporalScope: scope,
-      ),
+      timelineServiceBuilder: (ref, scope, groupBy) =>
+          ref.watch(timelineFactoryProvider).spaceAlbum(
+            spaceId: widget.spaceId,
+            albumId: widget.albumId,
+            groupBy: groupBy,
+            temporalScope: scope,
+          ),
       child: Timeline(
         withGroupingPill: true,
         appBar: SpaceAlbumAppBar(
-          canEdit: canEdit,
+          canEdit: widget.canEdit,
           album: album,
+          onAddPhotos: widget.canEdit ? _addPhotos : () {},
+          onToggleTimeline: widget.canEdit ? _toggleTimeline : () {},
+          onUnlink: widget.canEdit ? _unlink : () {},
         ),
         bottomSheet: SpaceAlbumBottomSheet(
-          canEdit: canEdit,
-          albumId: albumId,
+          canEdit: widget.canEdit,
+          albumId: widget.albumId,
+          onRemoved: () async {
+            // Nudge sync after the remove-from-album action so assets
+            // disappear from Drift without waiting for the next cycle.
+            await _triggerSync();
+          },
         ),
       ),
     );
@@ -70,10 +220,22 @@ class SpaceAlbumAppBar extends StatelessWidget {
     super.key,
     required this.canEdit,
     this.album,
+    this.onAddPhotos,
+    this.onToggleTimeline,
+    this.onUnlink,
   });
 
   final bool canEdit;
   final SpaceAlbum? album;
+
+  /// Called when the editor taps "Add photos" in the kebab.
+  final VoidCallback? onAddPhotos;
+
+  /// Called when the editor taps "Show/Hide in timeline" in the kebab.
+  final VoidCallback? onToggleTimeline;
+
+  /// Called when the editor taps "Unlink from space" in the kebab.
+  final VoidCallback? onUnlink;
 
   @override
   Widget build(BuildContext context) {
@@ -85,9 +247,9 @@ class SpaceAlbumAppBar extends StatelessWidget {
         SpaceAlbumKebab(
           canEdit: canEdit,
           showInTimeline: album?.showInTimeline ?? true,
-          onAddPhotos: () {}, // B6 stub
-          onToggleTimeline: () {}, // B6 stub
-          onUnlink: () {}, // B6 stub
+          onAddPhotos: onAddPhotos ?? () {},
+          onToggleTimeline: onToggleTimeline ?? () {},
+          onUnlink: onUnlink ?? () {},
         ),
       ],
     );
