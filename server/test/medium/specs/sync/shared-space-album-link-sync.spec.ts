@@ -32,10 +32,7 @@ describe('SharedSpaceAlbumLinkSync.getBackfill', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id, showInTimeline: true });
 
-    const stream = sut.getBackfill(
-      { nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID },
-      space.id,
-    );
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, space.id);
     const result: any[] = [];
     for await (const row of stream) {
       result.push(row);
@@ -140,10 +137,7 @@ describe('SharedSpaceAlbumLinkSync.getDeletes', () => {
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
 
     // Insert a link-removal audit row (written by the A3 delete trigger on shared_space_album)
-    await db
-      .insertInto('shared_space_album_audit')
-      .values({ spaceId: space.id, albumId: album.id })
-      .execute();
+    await db.insertInto('shared_space_album_audit').values({ spaceId: space.id, albumId: album.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: owner.id });
     const result: any[] = [];
@@ -160,10 +154,7 @@ describe('SharedSpaceAlbumLinkSync.getDeletes', () => {
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
 
-    await db
-      .insertInto('shared_space_album_audit')
-      .values({ spaceId: space.id, albumId: album.id })
-      .execute();
+    await db.insertInto('shared_space_album_audit').values({ spaceId: space.id, albumId: album.id }).execute();
 
     const stream = sut.getDeletes({ nowId: NOW_ID, userId: stranger.id });
     const result: any[] = [];

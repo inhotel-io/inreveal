@@ -1481,13 +1481,7 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
     const userId = options.userId;
     return this.auditQuery('album_asset_audit', options)
       .select(['id', 'assetId', 'albumId'])
-      .where((eb) =>
-        eb(
-          'albumId',
-          'in',
-          (eb2) => accessibleSpaceAlbums(eb2, userId),
-        ),
-      )
+      .where((eb) => eb('albumId', 'in', (eb2) => accessibleSpaceAlbums(eb2, userId)))
       .stream();
   }
 

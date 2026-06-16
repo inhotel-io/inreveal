@@ -246,8 +246,7 @@ export class SyncService extends BaseService {
       [SyncRequestType.SharedSpaceLibrariesV1]: () =>
         this.syncSharedSpaceLibrariesV1(options, response, checkpointMap, session.id),
       // Shared-space album sync handlers (Phase 2A).
-      [SyncRequestType.SharedSpaceAlbumsV1]: () =>
-        this.syncSharedSpaceAlbumsV1(options, response, checkpointMap),
+      [SyncRequestType.SharedSpaceAlbumsV1]: () => this.syncSharedSpaceAlbumsV1(options, response, checkpointMap),
       [SyncRequestType.SharedSpaceAlbumLinksV1]: () =>
         this.syncSharedSpaceAlbumLinksV1(options, response, checkpointMap, session.id),
       [SyncRequestType.SharedSpaceAlbumToAssetsV1]: () =>

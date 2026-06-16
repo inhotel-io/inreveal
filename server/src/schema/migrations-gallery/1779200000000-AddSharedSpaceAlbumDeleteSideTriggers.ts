@@ -39,9 +39,13 @@ export async function up(db: Kysely<any>): Promise<void> {
   FOR EACH STATEMENT
   EXECUTE FUNCTION shared_space_album_user_delete_after_audit();`.execute(db);
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_album_user_delete_after_audit', '{"type":"function","name":"shared_space_album_user_delete_after_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_user_delete_after_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      DELETE FROM shared_space_album_user ssau\\n      USING inserted_rows ir\\n      WHERE ssau.\\"userId\\" = ir.\\"userId\\"\\n        AND ssau.\\"albumId\\" = ir.\\"albumId\\";\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_album_user_delete_after_audit', '{"type":"function","name":"shared_space_album_user_delete_after_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_user_delete_after_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      DELETE FROM shared_space_album_user ssau\\n      USING inserted_rows ir\\n      WHERE ssau.\\"userId\\" = ir.\\"userId\\"\\n        AND ssau.\\"albumId\\" = ir.\\"albumId\\";\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(
+    db,
+  );
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_album_user_delete_after_audit', '{"type":"trigger","name":"shared_space_album_user_delete_after_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_album_user_delete_after_audit\\"\\n  AFTER INSERT ON \\"shared_space_album_user_audit\\"\\n  REFERENCING NEW TABLE AS \\"inserted_rows\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_album_user_delete_after_audit();"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_album_user_delete_after_audit', '{"type":"trigger","name":"shared_space_album_user_delete_after_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_album_user_delete_after_audit\\"\\n  AFTER INSERT ON \\"shared_space_album_user_audit\\"\\n  REFERENCING NEW TABLE AS \\"inserted_rows\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_album_user_delete_after_audit();"}'::jsonb);`.execute(
+    db,
+  );
 
   // Fan-out: when an album is unlinked from a space (or cascade from
   // album/shared_space deletion), section 1 writes the link audit unconditionally;
@@ -81,9 +85,13 @@ export async function up(db: Kysely<any>): Promise<void> {
   FOR EACH STATEMENT
   EXECUTE FUNCTION shared_space_album_delete_audit();`.execute(db);
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_album_delete_audit', '{"type":"function","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      -- 1. Always record the (space, album) link delete (ungated) so clients drop the space-album.\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT \\"spaceId\\", \\"albumId\\" FROM \\"old\\";\\n\\n      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ssm.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = o.\\"spaceId\\"\\n      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o.\\"spaceId\\")\\n        AND NOT user_has_album_path(o.\\"albumId\\", ssm.\\"userId\\", o.\\"spaceId\\");\\n\\n      -- 3. Gated grant revocation for the space creator.\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ss.\\"createdById\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space ss ON ss.\\"id\\" = o.\\"spaceId\\"\\n      WHERE NOT user_has_album_path(o.\\"albumId\\", ss.\\"createdById\\", o.\\"spaceId\\");\\n\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_album_delete_audit', '{"type":"function","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      -- 1. Always record the (space, album) link delete (ungated) so clients drop the space-album.\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT \\"spaceId\\", \\"albumId\\" FROM \\"old\\";\\n\\n      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ssm.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = o.\\"spaceId\\"\\n      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o.\\"spaceId\\")\\n        AND NOT user_has_album_path(o.\\"albumId\\", ssm.\\"userId\\", o.\\"spaceId\\");\\n\\n      -- 3. Gated grant revocation for the space creator.\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ss.\\"createdById\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space ss ON ss.\\"id\\" = o.\\"spaceId\\"\\n      WHERE NOT user_has_album_path(o.\\"albumId\\", ss.\\"createdById\\", o.\\"spaceId\\");\\n\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(
+    db,
+  );
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_album_delete_audit', '{"type":"trigger","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_album_delete_audit\\"\\n  AFTER DELETE ON \\"shared_space_album\\"\\n  REFERENCING OLD TABLE AS \\"old\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_album_delete_audit();"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_album_delete_audit', '{"type":"trigger","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_album_delete_audit\\"\\n  AFTER DELETE ON \\"shared_space_album\\"\\n  REFERENCING OLD TABLE AS \\"old\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_album_delete_audit();"}'::jsonb);`.execute(
+    db,
+  );
 
   // Fan-out: when a member leaves a space, revoke album grants for all albums
   // linked to that space, gated. No link audit — the album-space link persists.
@@ -109,9 +117,13 @@ export async function up(db: Kysely<any>): Promise<void> {
   FOR EACH STATEMENT
   EXECUTE FUNCTION shared_space_member_delete_album_audit();`.execute(db);
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_member_delete_album_audit', '{"type":"function","name":"shared_space_member_delete_album_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_member_delete_album_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT ssa.\\"albumId\\", o.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space_album ssa ON ssa.\\"spaceId\\" = o.\\"spaceId\\"\\n      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o.\\"spaceId\\")\\n        AND NOT user_has_album_path(ssa.\\"albumId\\", o.\\"userId\\", o.\\"spaceId\\");\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_member_delete_album_audit', '{"type":"function","name":"shared_space_member_delete_album_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_member_delete_album_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT ssa.\\"albumId\\", o.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space_album ssa ON ssa.\\"spaceId\\" = o.\\"spaceId\\"\\n      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o.\\"spaceId\\")\\n        AND NOT user_has_album_path(ssa.\\"albumId\\", o.\\"userId\\", o.\\"spaceId\\");\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(
+    db,
+  );
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_member_delete_album_audit', '{"type":"trigger","name":"shared_space_member_delete_album_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_member_delete_album_audit\\"\\n  AFTER DELETE ON \\"shared_space_member\\"\\n  REFERENCING OLD TABLE AS \\"old\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_member_delete_album_audit();"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_member_delete_album_audit', '{"type":"trigger","name":"shared_space_member_delete_album_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_member_delete_album_audit\\"\\n  AFTER DELETE ON \\"shared_space_member\\"\\n  REFERENCING OLD TABLE AS \\"old\\"\\n  FOR EACH STATEMENT\\n  EXECUTE FUNCTION shared_space_member_delete_album_audit();"}'::jsonb);`.execute(
+    db,
+  );
 
   // BEFORE DELETE row-level trigger on shared_space: fires before FK cascades
   // remove shared_space_album and shared_space_member rows, so this is the
@@ -143,9 +155,13 @@ export async function up(db: Kysely<any>): Promise<void> {
   FOR EACH ROW
   EXECUTE FUNCTION shared_space_delete_album_audit();`.execute(db);
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_delete_album_audit', '{"type":"function","name":"shared_space_delete_album_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_delete_album_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT DISTINCT \\"albumId\\", \\"userId\\" FROM (\\n        SELECT ssa.\\"albumId\\", ssm.\\"userId\\"\\n        FROM shared_space_album ssa\\n        INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = ssa.\\"spaceId\\"\\n        WHERE ssa.\\"spaceId\\" = OLD.\\"id\\"\\n          AND NOT user_has_album_path(ssa.\\"albumId\\", ssm.\\"userId\\", OLD.\\"id\\")\\n        UNION\\n        SELECT ssa.\\"albumId\\", OLD.\\"createdById\\"\\n        FROM shared_space_album ssa\\n        WHERE ssa.\\"spaceId\\" = OLD.\\"id\\"\\n          AND NOT user_has_album_path(ssa.\\"albumId\\", OLD.\\"createdById\\", OLD.\\"id\\")\\n      ) AS targets;\\n      RETURN OLD;\\n    END\\n  $$;"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_shared_space_delete_album_audit', '{"type":"function","name":"shared_space_delete_album_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_delete_album_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT DISTINCT \\"albumId\\", \\"userId\\" FROM (\\n        SELECT ssa.\\"albumId\\", ssm.\\"userId\\"\\n        FROM shared_space_album ssa\\n        INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = ssa.\\"spaceId\\"\\n        WHERE ssa.\\"spaceId\\" = OLD.\\"id\\"\\n          AND NOT user_has_album_path(ssa.\\"albumId\\", ssm.\\"userId\\", OLD.\\"id\\")\\n        UNION\\n        SELECT ssa.\\"albumId\\", OLD.\\"createdById\\"\\n        FROM shared_space_album ssa\\n        WHERE ssa.\\"spaceId\\" = OLD.\\"id\\"\\n          AND NOT user_has_album_path(ssa.\\"albumId\\", OLD.\\"createdById\\", OLD.\\"id\\")\\n      ) AS targets;\\n      RETURN OLD;\\n    END\\n  $$;"}'::jsonb);`.execute(
+    db,
+  );
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_delete_album_audit', '{"type":"trigger","name":"shared_space_delete_album_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_delete_album_audit\\"\\n  BEFORE DELETE ON \\"shared_space\\"\\n  FOR EACH ROW\\n  EXECUTE FUNCTION shared_space_delete_album_audit();"}'::jsonb);`.execute(db);
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('trigger_shared_space_delete_album_audit', '{"type":"trigger","name":"shared_space_delete_album_audit","sql":"CREATE OR REPLACE TRIGGER \\"shared_space_delete_album_audit\\"\\n  BEFORE DELETE ON \\"shared_space\\"\\n  FOR EACH ROW\\n  EXECUTE FUNCTION shared_space_delete_album_audit();"}'::jsonb);`.execute(
+    db,
+  );
 }
 
 export async function down(db: Kysely<any>): Promise<void> {
@@ -165,6 +181,8 @@ export async function down(db: Kysely<any>): Promise<void> {
   await sql`DROP FUNCTION IF EXISTS shared_space_member_delete_album_audit();`.execute(db);
   await sql`DROP TRIGGER IF EXISTS "shared_space_album_delete_audit" ON "shared_space_album";`.execute(db);
   await sql`DROP FUNCTION IF EXISTS shared_space_album_delete_audit();`.execute(db);
-  await sql`DROP TRIGGER IF EXISTS "shared_space_album_user_delete_after_audit" ON "shared_space_album_user_audit";`.execute(db);
+  await sql`DROP TRIGGER IF EXISTS "shared_space_album_user_delete_after_audit" ON "shared_space_album_user_audit";`.execute(
+    db,
+  );
   await sql`DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit();`.execute(db);
 }
