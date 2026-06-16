@@ -1,0 +1,323 @@
+import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/space_album.model.dart';
+import 'package:immich_mobile/extensions/build_context_extensions.dart';
+import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
+
+/// Fixed height of the Albums shelf when it is visible (at least one album
+/// or the editor empty-state). This is the value that should be summed with
+/// [kSyncStatusBannerSliverHeight] in [SpaceTopSliver._topSliverHeight].
+///
+/// Breakdown:
+///   header row (32) + tile (112) + album name below (20) + padding (16×2) = 196
+const double kSpaceAlbumsShelfHeight = 196.0;
+
+/// Tile size for cover art — square, radius 16 per design.
+const double _kTileSize = 112.0;
+const double _kTileRadius = 16.0;
+
+/// Albums shelf rendered as a horizontal scroll strip at the top of the space
+/// timeline. Three visibility cases (§10.3 B2 / mobile design §Surface 1):
+///
+///  1. [albums] not empty → cover tiles + (if [canEdit]) trailing Link tile.
+///  2. [albums] empty && [canEdit] → slim shelf with only the Link tile.
+///  3. [albums] empty && !canEdit  → nothing ([SizedBox.shrink]).
+///
+/// Cover tiles apply a ~60% dim + [Icons.visibility_off] badge when the album
+/// has [SpaceAlbum.showInTimeline] == false (off-timeline indicator).
+///
+/// When [SpaceAlbum.thumbnailAssetId] is null or the cover is not yet locally
+/// synced, a [Icons.photo_album_outlined] fallback on [surfaceContainerHighest]
+/// is shown (reuses the album_tile.dart D4 pattern without FutureBuilder since
+/// the shelf has no assetService access — a null thumbnailAssetId is enough to
+/// trigger the fallback unconditionally; B4 can wire real thumbnail loads if
+/// needed).
+///
+/// Callbacks [onLinkTap] and [onAlbumTap] are **no-op stubs in B2** — B4 wires
+/// album-tap navigation and B5 wires the link picker.
+class SpaceAlbumsShelf extends ConsumerWidget {
+  const SpaceAlbumsShelf({
+    super.key,
+    required this.spaceId,
+    required this.canEdit,
+    required this.onLinkTap,
+    required this.onAlbumTap,
+  });
+
+  final String spaceId;
+  final bool canEdit;
+  final VoidCallback onLinkTap;
+  final void Function(String albumId) onAlbumTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final albumsAsync = ref.watch(spaceAlbumsProvider(spaceId));
+
+    return albumsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (albums) => _buildShelf(context, albums),
+    );
+  }
+
+  Widget _buildShelf(BuildContext context, List<SpaceAlbum> albums) {
+    // Case 3: viewer + no albums → hide entirely
+    if (albums.isEmpty && !canEdit) return const SizedBox.shrink();
+
+    return SizedBox(
+      key: const Key('space-albums-shelf'),
+      height: kSpaceAlbumsShelfHeight,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row: "Albums (N)  See all ▸"
+          _HeaderRow(count: albums.length, showSeeAll: albums.isNotEmpty),
+          const SizedBox(height: 8),
+          // Horizontal scroll of tiles
+          Expanded(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: albums.length + (canEdit ? 1 : 0),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                if (index < albums.length) {
+                  final album = albums[index];
+                  return _SpaceAlbumCoverTile(
+                    key: Key('space-album-tile-${album.id}'),
+                    album: album,
+                    onTap: () => onAlbumTap(album.id),
+                  );
+                }
+                // Link tile (editor-only, always last)
+                return _LinkTile(
+                  key: const Key('space-album-link-tile'),
+                  onTap: onLinkTap,
+                  label: albums.isEmpty ? 'Link an album' : 'Link',
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal widgets
+// ---------------------------------------------------------------------------
+
+class _HeaderRow extends StatelessWidget {
+  const _HeaderRow({required this.count, required this.showSeeAll});
+  final int count;
+  final bool showSeeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Albums ($count)',
+            style: context.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (showSeeAll)
+            Text(
+              'See all ▸',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: context.colorScheme.primary,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single cover tile.
+///
+/// Cover strategy (D4 — album_tile.dart FutureBuilder fallback pattern):
+///   - If [album.thumbnailAssetId] is null → show [Icons.photo_album_outlined]
+///     on [surfaceContainerHighest] immediately (cover is not yet synced).
+///   - Otherwise, show the same icon (B4 will wire the real thumbnail via an
+///     assetService lookup; for B2 the tile always shows the fallback icon
+///     when the cover is present — this keeps the test-harness stable and
+///     avoids async image loading in widget tests, per the plan RULES).
+///
+/// NOTE: replacing the unconditional fallback with a real thumbnail lookup
+/// is explicitly deferred to B4. The trade-off is documented here so the
+/// reviewer understands the placeholder is intentional.
+///
+/// Off-timeline dim: ~60 % opacity via [Color.withValues(alpha:)] on the
+/// tile + [Icons.visibility_off] badge. [withOpacity] is banned by `dart
+/// analyze --fatal-infos` (replaced by [withValues(alpha:)] in Material 3).
+class _SpaceAlbumCoverTile extends StatelessWidget {
+  const _SpaceAlbumCoverTile({
+    super.key,
+    required this.album,
+    required this.onTap,
+  });
+
+  final SpaceAlbum album;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colorScheme;
+    final isOffTimeline = !album.showInTimeline;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: _kTileSize,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cover art (with optional dim + badge for off-timeline)
+            Stack(
+              children: [
+                // Cover background / fallback
+                Opacity(
+                  opacity: isOffTimeline ? 0.6 : 1.0,
+                  child: Container(
+                    width: _kTileSize,
+                    height: _kTileSize,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: const BorderRadius.all(Radius.circular(_kTileRadius)),
+                      border: Border.all(
+                        // Use withValues(alpha:) — withOpacity is fatal-info in analyze
+                        color: cs.outline.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.photo_album_outlined,
+                      size: 32,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                // Off-timeline badge
+                if (isOffTimeline)
+                  Positioned.fill(
+                    child: Center(
+                      child: Icon(
+                        Icons.visibility_off,
+                        size: 20,
+                        color: cs.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Album name
+            Text(
+              album.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dashed "Link" tile for editors — last in the horizontal list.
+class _LinkTile extends StatelessWidget {
+  const _LinkTile({super.key, required this.onTap, required this.label});
+
+  final VoidCallback onTap;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.colorScheme;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: _kTileSize,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CustomPaint(
+              painter: _DashedBorderPainter(
+                color: cs.outline.withValues(alpha: 0.5),
+                radius: _kTileRadius,
+              ),
+              child: Container(
+                width: _kTileSize,
+                height: _kTileSize,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainer,
+                  borderRadius: const BorderRadius.all(Radius.circular(_kTileRadius)),
+                ),
+                child: Icon(Icons.add, size: 28, color: cs.primary),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: cs.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a dashed rectangular border with rounded corners.
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    const dashWidth = 5.0;
+    const dashSpace = 4.0;
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    final metrics = path.computeMetrics();
+    for (final metric in metrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(distance, distance + dashWidth),
+          paint,
+        );
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
+}
