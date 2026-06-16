@@ -97,9 +97,9 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceLinkAlbumPage(
+        const SpaceLinkAlbumPage(
           spaceId: spaceId,
-          linkedAlbumIds: const ['a3'],
+          linkedAlbumIds: ['a3'],
         ),
         albums: albums,
       ),
@@ -121,7 +121,7 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: const []),
+        const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
         albums: albums,
       ),
     );
@@ -192,7 +192,7 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: const []),
+        const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
         albums: albums,
       ),
     );

@@ -20,7 +20,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/pages/library/spaces/space_album_detail.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
-import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 
 // ---------------------------------------------------------------------------
