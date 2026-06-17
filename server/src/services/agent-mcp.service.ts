@@ -14,6 +14,7 @@ import type {
   AgentReadSelectionMetadataToolRequestDto,
   AgentReadSpaceToolRequestDto,
   AgentResolveAssetSearchFiltersToolRequestDto,
+  AgentResolveLocationToolRequestDto,
   AgentSearchAssetsToolRequestDto,
   AgentSearchPeopleToolRequestDto,
   AgentSearchUsersToolRequestDto,
@@ -561,6 +562,9 @@ export class AgentMcpService {
           sessionId,
           dto as AgentResolveAssetSearchFiltersToolRequestDto,
         );
+      }
+      case AgentToolName.ResolveLocation: {
+        return this.toolService.resolveLocation(auth, sessionId, dto as AgentResolveLocationToolRequestDto);
       }
       case AgentToolName.SearchAssets: {
         return this.toolService.searchAssets(auth, sessionId, dto as AgentSearchAssetsToolRequestDto);
