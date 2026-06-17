@@ -400,7 +400,7 @@
               class="text-sm font-semibold text-primary hover:underline"
               data-testid="load-more"
             >
-              {$t('admin.face_cleanup_review_load_more')} ({(flaggedFaces.length - visibleCount).toLocaleString()} remaining)
+              {$t('admin.face_cleanup_review_load_more', { values: { count: flaggedFaces.length - visibleCount } })}
             </button>
           </div>
         {/if}

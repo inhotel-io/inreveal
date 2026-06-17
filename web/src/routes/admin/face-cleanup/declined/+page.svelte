@@ -78,7 +78,7 @@
       <!-- Face-level declines -->
       {#if faceDeclines.length > 0}
         <div class="mb-8">
-          <h2 class="mb-3 text-base font-semibold">{$t('admin.face_cleanup_decline')} — faces</h2>
+          <h2 class="mb-3 text-base font-semibold">{$t('admin.face_cleanup_declined_faces_heading')}</h2>
           <div class="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700">
             {#each faceDeclines as decline (decline.id)}
               <div
@@ -105,7 +105,9 @@
                     </span>
                   </div>
                   <div class="mt-0.5 font-mono text-xs text-gray-400">
-                    face: {decline.assetFaceId?.slice(0, 8) ?? '—'}
+                    {$t('admin.face_cleanup_declined_face_label', {
+                      values: { id: decline.assetFaceId?.slice(0, 8) ?? '—' },
+                    })}
                   </div>
                 </div>
 
@@ -131,7 +133,7 @@
       <!-- Person-level declines (Dismiss) -->
       {#if personDeclines.length > 0}
         <div>
-          <h2 class="mb-3 text-base font-semibold">{$t('admin.face_cleanup_dismiss')} — people</h2>
+          <h2 class="mb-3 text-base font-semibold">{$t('admin.face_cleanup_declined_people_heading')}</h2>
           <div class="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700">
             {#each personDeclines as decline (decline.id)}
               <div

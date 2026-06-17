@@ -4,7 +4,7 @@
   import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiArrowRight, mdiCheckCircle, mdiAlertCircle } from '@mdi/js';
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import type { FaceCleanupModel, FaceCleanupPerson } from './face-cleanup.svelte';
 
   type Props = {
@@ -52,6 +52,16 @@
   const showConfidentGroup = $derived(filter === 'all' || filter === 'confident' || filter === 'named');
 
   const isBadTarget = (p: FaceCleanupPerson) => p.reviewReasons.includes('bad-target');
+
+  // Map server-provided review-reason tags to translated chip labels. Falls back to the raw tag for
+  // any future reason the server adds before the web side learns about it.
+  const reviewReasonKeys: Record<string, string> = {
+    'over-cap': 'admin.face_cleanup_reason_over_cap',
+    named: 'admin.face_cleanup_reason_named',
+    'large-cluster': 'admin.face_cleanup_reason_large_cluster',
+    'multiple-owners': 'admin.face_cleanup_reason_multiple_owners',
+    'bad-target': 'admin.face_cleanup_reason_bad_target',
+  };
 
   const pct = (p: FaceCleanupPerson) => Math.round(p.flaggedFraction * 100);
 
@@ -243,7 +253,7 @@
                   : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400',
               ].join(' ')}
             >
-              {reason}
+              {reviewReasonKeys[reason] ? $t(reviewReasonKeys[reason] as Translations) : reason}
             </span>
           {/each}
         </div>
