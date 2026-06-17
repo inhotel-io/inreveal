@@ -43,11 +43,11 @@ The panel is a **shared component** rendered in 5+ hosts (photos, map, spaces, s
 
 Shared tokens, defined once and reused so the feel is consistent.
 
-- **Easing:** decelerating "settle" curve `cubic-bezier(0.22, 1, 0.36, 1)`. For Svelte JS transitions (`slide`), use the closest stock curve `expoOut` from `svelte/easing`.
+- **Easing:** decelerating "settle" curve `cubic-bezier(0.22, 1, 0.36, 1)` for CSS transitions. For Svelte JS transitions (`slide`), use `quintOut` from `svelte/easing` — it is the closest stock match to that curve and is already the convention in this codebase (`people-merge-selector.svelte`, `setting-input-field.svelte`).
 - **Durations:** panel width `380ms`; section slide `240ms`; hover/micro `150ms`.
 - **Reduced motion** uses two mechanisms, both already available in the codebase:
   - **CSS transitions** (panel width, hovers, year chips) → Tailwind `motion-reduce:transition-none` variant (used elsewhere, e.g. `global-search.svelte`, `crop-area.svelte`).
-  - **Svelte `slide` transition** (section body) → set `duration` to `0` when `mediaQueryManager.reducedMotion` is true (the existing reactive store in `stores/media-query-manager.svelte.ts`).
+  - **Svelte `slide` transition** (section body) → set `duration` to `0` when `mediaQueryManager.reducedMotion` is true (the existing reactive getter in `stores/media-query-manager.svelte.ts`).
 
 A small new module `web/src/lib/components/filter-panel/motion.ts` exports the easing/duration constants and a `slideMotion(reducedMotion: boolean)` helper returning `{ duration, easing }`. Keeps values in one place; used by `filter-section.svelte` and `filter-panel.svelte`.
 
@@ -57,9 +57,9 @@ A small new module `web/src/lib/components/filter-panel/motion.ts` exports the e
 
 **Approach:** introduce a **persistent outer shell** whose width animates, and keep the existing `{#if collapsed}` content swap *inside* it.
 
-- The shell is always rendered (when not `hidden`): `overflow-hidden`, `transition-[width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none`, with width driven by a class — full (`w-[268px]`) vs rail (`w-[56px]`, up from today's 32px for breathing room).
+- The shell is always rendered (when not `hidden`): `overflow-hidden`, `transition-[width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none`, with width driven by a class — expanded `w-64` (256px, **unchanged from today**) vs rail `w-14` (56px, up from today's `w-8`/32px for breathing room — see open question below).
 - Inside the shell, the current `{#if collapsed}` branches are preserved: the collapsed branch keeps `data-testid="collapsed-icon-strip"` (with `expand-panel-btn` and the per-section rail icons + active dot), and the expanded branch keeps `data-testid="discovery-panel"`.
-- Because content swaps via `{#if}` and the shell clips with `overflow-hidden`, expanding produces a **clip-reveal** (the full content is revealed left-to-right as the shell widens) and collapsing narrows the panel down to the rail. The width animates smoothly; only one content branch is ever in the DOM.
+- The inner `discovery-panel` already carries a fixed `w-64`; because the shell width animates while the inner content stays a fixed `w-64` under `overflow-hidden`, **expanding** produces a **clip-reveal** (the full content is revealed left-to-right as the shell widens, with no text reflow). **Collapsing** unmounts `discovery-panel`, mounts the rail, and the shell narrows down to it. Only one content branch is ever in the DOM, so the existing presence-based unit/E2E assertions stay valid. The shell + inner expanded width must remain equal (`w-64`).
 
 **Why not a both-mounted cross-fade:** keeping both the rail and full content mounted simultaneously (to cross-fade) would require rewriting ~10 unit assertions that encode "collapsed ⟺ `discovery-panel` absent" and risks Playwright visibility flakiness. Option A was chosen specifically for low churn, so we keep the single-branch swap. (If a cross-fade is wanted later, it is a follow-up with explicit test updates — out of scope here.)
 
@@ -67,7 +67,7 @@ A small new module `web/src/lib/components/filter-panel/motion.ts` exports the e
 
 ### 2. Section expand/collapse — height slide (`filter-section.svelte`)
 
-- Keep `{#if expanded && !isEmpty}` for the body, but wrap the reveal with `transition:slide={slideMotion(mediaQueryManager.reducedMotion)}` (import `slide` from `svelte/transition`, `expoOut` from `svelte/easing`, `mediaQueryManager` from `stores/media-query-manager.svelte`, and the helper from `motion.ts`). `mediaQueryManager.reducedMotion` is a Svelte 5 reactive getter, accessed directly (no `$` store prefix). This matches `setting-accordion.svelte`.
+- Keep `{#if expanded && !isEmpty}` for the body, but wrap the reveal with `transition:slide={slideMotion(mediaQueryManager.reducedMotion)}` (import `slide` from `svelte/transition`, `quintOut` from `svelte/easing`, `mediaQueryManager` from `stores/media-query-manager.svelte`, and the helper from `motion.ts`). `mediaQueryManager.reducedMotion` is a Svelte 5 reactive getter, accessed directly (no `$` store prefix). This matches `setting-accordion.svelte`.
 - Replace the wrapper's hard `border-b border-gray-200 dark:border-gray-700` with **surfaces over rules**: each section becomes a `rounded-xl mx-1.5` block; the expanded/active section gets a soft `bg-subtle` tonal background; spacing (not full-width borders) separates sections. A hairline divider may remain only where needed (`border-white/5` / `border-gray-200/60`).
 - Keep the chevron rotate (already `transition-transform`); add `motion-reduce:transition-none`.
 - Keep `data-testid="filter-section-{testId}"` and the empty `(0)` behavior.
@@ -84,18 +84,25 @@ A small new module `web/src/lib/components/filter-panel/motion.ts` exports the e
 
 Stay entirely within the existing `@immich/ui` / Tailwind theme tokens already used in these files (`bg-light`, `bg-subtle`, `text-primary`, `immich-primary` / `immich-dark-primary`, gray scale). Hairlines are expressed as low-opacity variants of the existing border grays. No new color system. Works in both light and dark themes (verified visually in the prototype).
 
-## Testing
+## Testing & TDD approach
 
-**Must stay green (unchanged):**
+This is mostly a CSS/animation change, so be deliberate about the boundary between what is test-drivable and what is not. The implementation plan follows **TDD (red → green → refactor)** for every behavioral/structural item below: write or extend the failing assertion first, watch it fail, then implement to green. Aesthetic feel is verified separately — do not fake-test it.
 
-- `filter-panel.spec.ts` collapse/expand presence assertions — preserved by keeping the `{#if}` content swap.
+**Test-drive these (write the test first):**
+
+1. **`motion.ts` pure helper** — `motion.spec.ts` is the cleanest TDD unit and should be written first: `slideMotion(true)` returns `{ duration: 0 }`; `slideMotion(false)` returns `{ duration: 240, easing: quintOut }` (the section-slide duration from the Motion language section). This isolates the reduced-motion branch (the trickiest correctness bit) into a pure function.
+2. **Reduced-motion gating in the DOM** — extend `filter-panel.spec.ts` to assert the width-animating shell carries `motion-reduce:transition-none`, mirroring the existing pattern in `global-search.spec.ts` (which asserts `motion-reduce:` class presence on an element). For the section body, drive it through `motion.ts` (item 1) rather than asserting the JS transition directly.
+3. **Panel shell width toggle** — assert the persistent shell exposes the width-transition class and that toggling `collapsed` flips the expanded (`w-64`) ↔ rail (`w-14`) width class, **without** changing which content testid is present. The existing mutual-exclusivity assertions (`collapsed-icon-strip` ⟺ `discovery-panel`) are the regression guard for this — they must stay green and must not be weakened.
+4. **Year grid structure** — assert the year container renders a 3-column grid (`grid-cols-3`) and that all `year-btn-{year}` testids and the selected-state class are preserved. Extend `temporal-picker`'s spec first.
+
+**Cannot be meaningfully unit-tested — verify by other means (and say so honestly):** the easing/settle feel, hairline-vs-ruled surfaces, the clip-reveal smoothness, hover lifts. Verify via (a) the committed prototype, (b) manual exercise under `make dev` across the photos / map / spaces hosts, and (c) the OS "Reduce motion" setting toggled on. None of these get a green checkmark in CI; they are listed as a manual verification checklist in the plan.
+
+**Regression — must stay green, untouched:**
+
+- `filter-panel.spec.ts` collapse/expand presence assertions (preserved by keeping the `{#if}` swap).
 - E2E `photos-filter-panel`, `map-filter-panel`, `spaces-filter-panel` specs — testids and element visibility preserved; Playwright auto-waiting absorbs the transition.
 
-**New / updated:**
-
-- Unit: assert the shell carries the width-transition + `motion-reduce:transition-none` classes, and that toggling `collapsed` flips the width class (pattern mirrors `global-search.spec.ts`, which asserts `motion-reduce:` class presence).
-- Section slide: verify `filter-sections.spec.ts` still passes; if any assertion checks section-body **absence immediately after collapse**, wrap it in `waitFor`/`tick` because `transition:slide` makes removal async. (Touch-point to confirm during implementation — expected to be small.)
-- Manual: open `design-exploration/filter-panel-redesign.html`, exercise both themes and the reduced-motion toggle. In the running app, verify with OS "Reduce motion" on.
+**Known async touch-point:** `transition:slide` makes the section body's *removal* async. `filter-sections.spec.ts` exercises the row components (e.g. `PeopleFilter`), not `FilterSection` expand/collapse, so it is unaffected. Any assertion elsewhere that checks section-body **absence immediately after collapse** must move to `waitFor`/`tick`; identify these during the red phase (expected to be few or none).
 
 ## Risks
 
@@ -103,6 +110,12 @@ Stay entirely within the existing `@immich/ui` / Tailwind theme tokens already u
 - **Rail width change (32px → 56px).** Purely internal to the component's collapsed footprint; hosts are unaffected, but visually confirm in each host during implementation.
 - **Section surface restyle** touches the most-rendered component path; keep diffs tight and rely on existing testids to catch regressions.
 
-## Out-of-repo artifact
+## Open questions (for sign-off before planning)
 
-The prototype `design-exploration/filter-panel-redesign.html` is a throwaway design reference. Decide at finish time whether to keep it in the branch (as a design record under `design-exploration/`) or delete it before merge — it is not wired into any build.
+1. **Rail width** — bump the collapsed rail from `w-8` (32px) to `w-14` (56px) for roomier icons (matches the prototype), or keep 32px? Default in this spec: 56px.
+2. **Section dividers** — fully drop the hard full-width `border-b` ladder in favour of soft `bg-subtle` surfaces + spacing (default), or retain a faint hairline between sections? Default: drop them, surfaces only.
+3. **Prototype file** — keep `design-exploration/filter-panel-redesign.html` in the branch as a design record, or delete before merge? Default: decide at finish time.
+
+## Prototype artifact
+
+`design-exploration/filter-panel-redesign.html` is a self-contained design reference committed to this branch. It is not wired into any build and is not shipped. Whether it stays as a design record or is removed before merge is Open Question #3.
