@@ -2082,6 +2082,7 @@
   "new_pin_code": "Nouveau code PIN",
   "new_pin_code_subtitle": "C'est votre premier accès au dossier verrouillé. Créez un code PIN pour sécuriser l'accès à cette page",
   "new_space": "Nouvel espace",
+  "new_space_requires_name": "Saisissez un nom pour créer un espace",
   "new_timeline": "Nouvelle vue chronologique",
   "new_update": "Nouvelle mise à jour",
   "new_user_created": "Nouvel utilisateur créé",

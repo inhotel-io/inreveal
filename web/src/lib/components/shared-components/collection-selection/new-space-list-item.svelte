@@ -29,6 +29,7 @@
 <button
   type="button"
   {disabled}
+  title={disabled ? $t('new_space_requires_name') : undefined}
   onclick={() => {
     if (!disabled) {
       onNewSpace(trimmed);

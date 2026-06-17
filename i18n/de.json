@@ -2082,6 +2082,7 @@
   "new_pin_code": "Neuer PIN-Code",
   "new_pin_code_subtitle": "Dies ist dein erster Zugriff auf den gesperrten Ordner. Erstelle einen PIN-Code für den sicheren Zugriff auf diese Seite",
   "new_space": "Neuer Space",
+  "new_space_requires_name": "Gib einen Namen ein, um einen Space zu erstellen",
   "new_timeline": "Neue Zeitleiste",
   "new_update": "Neues Update",
   "new_user_created": "Neuer Benutzer wurde erstellt",

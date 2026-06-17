@@ -22,4 +22,14 @@ describe('NewSpaceListItem', () => {
     await fireEvent.click(button);
     expect(onNewSpace).toHaveBeenCalledWith('Family');
   });
+
+  it('explains via a hover title why it is disabled', () => {
+    render(NewSpaceListItem, { searchQuery: '', selected: false, onNewSpace: vi.fn() });
+    expect(screen.getByTestId('new-space-row').getAttribute('title')).toBe('new_space_requires_name');
+  });
+
+  it('drops the disabled-reason title once a valid name is entered', () => {
+    render(NewSpaceListItem, { searchQuery: 'Family', selected: false, onNewSpace: vi.fn() });
+    expect(screen.getByTestId('new-space-row').getAttribute('title')).toBeNull();
+  });
 });
