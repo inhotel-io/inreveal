@@ -2,6 +2,7 @@ import { Kysely } from 'kysely';
 import { AssetVisibility, JobName, JobStatus, SharedSpaceRole, SourceType } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -29,6 +30,7 @@ const setup = (db?: Kysely<DB>) => {
       FaceIdentityRepository,
       PersonRepository,
       ConfigRepository,
+      DatabaseRepository,
       SystemMetadataRepository,
       SearchRepository,
       PersonFaceSuggestionRepository,
