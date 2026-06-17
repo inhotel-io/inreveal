@@ -30,9 +30,9 @@
 >
   <button
     type="button"
-    class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-start {isEmpty ? 'opacity-50' : ''} {isOpen
-      ? ''
-      : 'hover:bg-subtle'}"
+    class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-start {isEmpty
+      ? 'opacity-50'
+      : ''} {isOpen ? '' : 'hover:bg-subtle'}"
     onclick={() => {
       if (!isEmpty && onToggleExpanded) {
         onToggleExpanded();
