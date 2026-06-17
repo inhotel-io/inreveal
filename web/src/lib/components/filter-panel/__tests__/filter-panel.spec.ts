@@ -16,6 +16,15 @@ describe('FilterPanel', () => {
     localStorage.clear();
   });
 
+  it('renders an expanded section on a soft surface without a hard divider', () => {
+    const { getByTestId } = render(FilterPanel, {
+      props: { config: { sections: ['timeline'], providers: {} }, timeBuckets: [] },
+    });
+    const section = getByTestId('filter-section-timeline');
+    expect(section.className).toContain('bg-subtle');
+    expect(section.className).not.toContain('border-b');
+  });
+
   it('should render configured sections only', () => {
     const { queryByTestId } = render(FilterPanel, {
       props: {
