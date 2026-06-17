@@ -6116,6 +6116,9 @@ describe(AgentOperationPlanService.name, () => {
         }
         break;
       }
+      default: {
+        throw new Error(`Unhandled operation type in apply-batch assertion: ${type}`);
+      }
     }
     expect(sessionRepository.update).toHaveBeenCalledWith(auth.user.id, session.id, {
       status: AgentSessionStatus.Running,
