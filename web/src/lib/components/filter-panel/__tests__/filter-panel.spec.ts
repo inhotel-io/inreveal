@@ -285,6 +285,29 @@ describe('FilterPanel', () => {
     });
   });
 
+  it('animates the panel width via a persistent shell with a reduced-motion guard', async () => {
+    const { getByTestId } = render(FilterPanel, {
+      props: { config: { sections: ['timeline'], providers: {} }, timeBuckets: [] },
+    });
+    const shell = getByTestId('filter-panel-shell');
+    expect(shell.className).toContain('transition-[width]');
+    expect(shell.className).toContain('motion-reduce:transition-none');
+    expect(shell.className).toContain('w-64');
+
+    await fireEvent.click(getByTestId('collapse-panel-btn'));
+    expect(shell.className).toContain('w-14');
+    expect(shell.className).not.toContain('w-64');
+  });
+
+  it('gives the toggle-row pills a press-scale and a reduced-motion guard', () => {
+    const { getByTestId } = render(FilterPanel, {
+      props: { config: { sections: ['timeline'], providers: {} }, timeBuckets: [] },
+    });
+    const toggle = getByTestId('section-toggle-timeline');
+    expect(toggle.className).toContain('active:scale-90');
+    expect(toggle.className).toContain('motion-reduce:transition-none');
+  });
+
   describe('emptyText prop', () => {
     it('should show generic empty text for people section when no people', async () => {
       render(FilterPanel, {
