@@ -1,7 +1,7 @@
 # Filter Panel Redesign — Motion & Polish
 
 **Date:** 2026-06-17
-**Status:** Design approved, pending spec review
+**Status:** Design approved, open questions resolved — ready for implementation planning
 **Scope:** Fork-only feature (`web/src/lib/components/filter-panel/`)
 **Interactive prototype:** `design-exploration/filter-panel-redesign.html` (open in a browser)
 
@@ -110,11 +110,11 @@ This is mostly a CSS/animation change, so be deliberate about the boundary betwe
 - **Rail width change (32px → 56px).** Purely internal to the component's collapsed footprint; hosts are unaffected, but visually confirm in each host during implementation.
 - **Section surface restyle** touches the most-rendered component path; keep diffs tight and rely on existing testids to catch regressions.
 
-## Open questions (for sign-off before planning)
+## Resolved decisions (sign-off complete)
 
-1. **Rail width** — bump the collapsed rail from `w-8` (32px) to `w-14` (56px) for roomier icons (matches the prototype), or keep 32px? Default in this spec: 56px.
-2. **Section dividers** — fully drop the hard full-width `border-b` ladder in favour of soft `bg-subtle` surfaces + spacing (default), or retain a faint hairline between sections? Default: drop them, surfaces only.
-3. **Prototype file** — keep `design-exploration/filter-panel-redesign.html` in the branch as a design record, or delete before merge? Default: decide at finish time.
+1. **Rail width** — ✅ bump the collapsed rail from `w-8` (32px) to `w-14` (56px). Roomier icons + tap target, matches the prototype, still reclaims nearly all the panel width.
+2. **Section dividers** — ✅ drop the hard full-width `border-b` ladder entirely; use soft `bg-subtle` surface on the active section + spacing. (The ruled ladder is the biggest source of the "stiff" feel.)
+3. **Prototype file** — ✅ keep `design-exploration/filter-panel-redesign.html` in the branch as a design record.
 
 ## Prototype artifact
 
