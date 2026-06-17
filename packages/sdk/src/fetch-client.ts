@@ -11660,12 +11660,6 @@ export enum AgentDeclarativeNameMatch {
     Any = "any",
     All = "all"
 }
-export enum AssetTypeEnum {
-    Image = "IMAGE",
-    Video = "VIDEO",
-    Audio = "AUDIO",
-    Other = "OTHER"
-}
 export enum Kind3 {
     Search = "search"
 }
