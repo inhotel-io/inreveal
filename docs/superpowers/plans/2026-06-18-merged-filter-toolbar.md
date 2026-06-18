@@ -22,10 +22,12 @@
 ## File Structure
 
 **New files:**
+
 - `web/src/lib/components/filter-panel/filter-toolbar.svelte` — the single-row toolbar layout primitive (grouping + embedded filters bar). One responsibility: lay out the two controls responsively.
 - `web/src/lib/components/filter-panel/__tests__/filter-toolbar.spec.ts` — unit tests for the primitive.
 
 **Modified files:**
+
 - `web/src/lib/components/filter-panel/active-filters-bar.svelte` — add `embedded` prop.
 - `web/src/lib/components/filter-panel/__tests__/active-filters-bar.spec.ts` — add an `embedded`-mode test.
 - `web/src/lib/components/timeline/TimelineRouteGroupingBar.svelte` — delegate to `FilterToolbar`.
@@ -44,10 +46,12 @@
 ### Task 1: ActiveFiltersBar — `embedded` mode
 
 **Files:**
+
 - Modify: `web/src/lib/components/filter-panel/active-filters-bar.svelte`
 - Test: `web/src/lib/components/filter-panel/__tests__/active-filters-bar.spec.ts`
 
 **Interfaces:**
+
 - Produces: `ActiveFiltersBar` gains prop `embedded?: boolean` (default `false`). When `true`, the root element omits `border-b border-gray-200/60 px-4 py-2.5 dark:border-white/10` (host toolbar supplies spacing/seam); when `false`, behavior is unchanged.
 
 - [ ] **Step 1: Write the failing test**
@@ -136,10 +140,12 @@ git commit -m "feat(web): add embedded mode to active filters bar"
 ### Task 2: `FilterToolbar.svelte` — the single-row primitive
 
 **Files:**
+
 - Create: `web/src/lib/components/filter-panel/filter-toolbar.svelte`
 - Test: `web/src/lib/components/filter-panel/__tests__/filter-toolbar.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `TimelineGroupingControl` (`web/src/lib/components/timeline/TimelineGroupingControl.svelte`), props `grouping`, `onGroupingChange`, `disabled`.
 - Produces: `FilterToolbar` with props:
   - `grouping: TimelineGrouping`
@@ -350,10 +356,12 @@ git commit -m "feat(web): add FilterToolbar single-row layout primitive"
 This updates ~9 consumers at once (archive, trash, locked, favorites, tags, partners, spaces/people, people/[personId], `MapTimelinePanel`, `gallery-viewer`). Only `MapTimelinePanel` passes `filters`/`resultCount` → it gets the real merge; the rest are grouping-only.
 
 **Files:**
+
 - Modify: `web/src/lib/components/timeline/TimelineRouteGroupingBar.svelte`
 - Test: `web/src/lib/components/timeline/TimelineRouteGroupingBar.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `FilterToolbar` (Task 2), `ActiveFiltersBar` with `embedded` (Task 1).
 - Produces: unchanged public props (`grouping`, `filters?`, `resultCount?`, `hidden?`, `class?`, `onGroupingChange`, `onClearTemporalFilter?`).
 
@@ -392,7 +400,7 @@ Replace the entire `{#if !hidden} … {/if}` template block (lines ~46–61) in 
 Update the imports at the top of the `<script>`: remove the now-unused `TimelineGroupingControl` import and add:
 
 ```ts
-  import FilterToolbar from '$lib/components/filter-panel/filter-toolbar.svelte';
+import FilterToolbar from '$lib/components/filter-panel/filter-toolbar.svelte';
 ```
 
 Keep `ActiveFiltersBar`, `buildFilterContext`, `createFilterState`, `twMerge`, the `temporalFilters`/`hasActiveTemporalFilters` deriveds, and `removeTemporalFilter` as-is.
@@ -425,10 +433,12 @@ git commit -m "refactor(web): TimelineRouteGroupingBar renders one merged toolba
 ### Task 4: Migrate the spaces route
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/+page.svelte` (grouping div at ~1061–1068, filters div at ~1071–1084)
 - Test: `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `FilterToolbar` (Task 2). Add import `import FilterToolbar from '$lib/components/filter-panel/filter-toolbar.svelte';`.
 
 TDD shape: the old `space-active-filters-bar-spacing` wrapper is removed and grouping+bar move into one `FilterToolbar` row. Write that expectation first (RED), then implement (GREEN). Symbols below are verified present in `+page.svelte`: `handleRemoveFilter` (`:421`), `handleClearAllFilters` (`:867`), `clearSearch` (`:796`), `committedSearchQuery` (`:776`), `getActiveFilterCount` (import `:10`), `handleTimelineGroupingChange` (`:861`), `smartFacetTotal`/`totalAssetCount`.
@@ -511,10 +521,12 @@ git commit -m "feat(web): merge grouping + filters into one toolbar on spaces pa
 ### Task 5: Migrate the photos route
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte` (grouping at ~540–546, filters at ~548–560)
 - Test: `web/src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts` (grouping testid assertions at ~816–880; `active-filters-bar-stub` at ~632–692)
 
 **Interfaces:**
+
 - Consumes: `FilterToolbar`. Add its import.
 - Note: `photos-page.spec.ts` mocks `ActiveFiltersBar` as `active-filters-bar-stub` and asserts grouping presence via `timeline-desktop-grouping-control`. Both selectors survive: the stub is still rendered (now inside the toolbar snippet, gated by `showFilters`), and `FilterToolbar` keeps the grouping testid on its desktop wrapper.
 
@@ -599,10 +611,12 @@ git commit -m "feat(web): merge grouping + filters into one toolbar on photos pa
 ### Task 6: Migrate the albums route (browse merges; picker stays standalone)
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte` (grouping at ~510–516; picker bar at ~519–531; browse bar at ~532–549)
 - Test: `web/src/routes/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/page.route.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `FilterToolbar`. Add its import.
 - The grouping control only renders in browse-timeline mode (`isBrowseTimeline && !selectionActive`). The **picker** bar (`viewMode === AlbumPageViewMode.SELECT_ASSETS`) has no grouping → keep it as a standalone `ActiveFiltersBar` (it already gets the restyle). Only the **browse** bar merges.
 
@@ -709,9 +723,10 @@ git commit -m "feat(web): merge grouping + filters toolbar on albums browse view
 
 ### Task 7: Map — restore a readable backdrop for the floating bar
 
-The map main page floats `ActiveFiltersBar` over the map (`absolute inset-x-0 top-0 z-10`) and has **no grouping control** there, so it stays a standalone bar (not merged). The restyle made the bar transparent; over map tiles it is now unreadable. Give its wrapper a backdrop. (The map's *panel* grouping+temporal bar is already merged via Task 3's `MapTimelinePanel` → `TimelineRouteGroupingBar`.)
+The map main page floats `ActiveFiltersBar` over the map (`absolute inset-x-0 top-0 z-10`) and has **no grouping control** there, so it stays a standalone bar (not merged). The restyle made the bar transparent; over map tiles it is now unreadable. Give its wrapper a backdrop. (The map's _panel_ grouping+temporal bar is already merged via Task 3's `MapTimelinePanel` → `TimelineRouteGroupingBar`.)
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte` (~282–298)
 - Test: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`
 
@@ -784,6 +799,7 @@ git commit -m "chore(web): lint + format pass for merged filter toolbar"
 ## Self-Review
 
 **Spec coverage:**
+
 - Merge grouping + filters into one row → Tasks 2 (primitive), 3–6 (consumers). ✓
 - "Everywhere" scope → Task 3 covers the ~9 `TimelineRouteGroupingBar` routes; Tasks 4–6 cover the 3 hand-composed routes; Task 7 covers the map. ✓
 - Count leads chips, Clear all far right → delivered by the already-applied `ActiveFiltersBar` restyle + embedded `flex-1` (clear-all `ml-auto`). ✓
