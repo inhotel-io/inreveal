@@ -546,27 +546,29 @@ Expected: FAIL — `photos-active-filters-bar-spacing` still exists.
 Replace the grouping `{#if !showSearchResults && !assetMultiSelectManager.selectionActive}` div and the `{#if hasActiveFilters}` filters div with:
 
 ```svelte
+      {#snippet photoFiltersBar()}
+        <ActiveFiltersBar
+          embedded
+          {filters}
+          searchQuery={committedQuery}
+          onClearSearch={clearSearch}
+          resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
+          {personNames}
+          {tagNames}
+          onRemoveFilter={handleRemoveActiveFilter}
+          onClearAll={handleClearAllFilters}
+        />
+      {/snippet}
       <FilterToolbar
         class="mb-2"
         grouping={timelineGrouping}
         onGroupingChange={handleTimelineGroupingChange}
         showGrouping={!showSearchResults && !assetMultiSelectManager.selectionActive}
         showFilters={hasActiveFilters}
-      >
-        {#snippet filters()}
-          <ActiveFiltersBar
-            embedded
-            {filters}
-            searchQuery={committedQuery}
-            onClearSearch={clearSearch}
-            resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
-            {personNames}
-            {tagNames}
-            onRemoveFilter={handleRemoveActiveFilter}
-            onClearAll={handleClearAllFilters}
-          />
-        {/snippet}
-      </FilterToolbar>
+        filters={photoFiltersBar}
+      />
+
+> ⚠️ **Name the snippet, don't call it `filters`.** A `{#snippet filters()}` inside `<FilterToolbar>` shadows this page's own `filters: FilterState` in Svelte 5, so `{filters}` in the snippet body (and `getActiveFilterCount(filters)`) resolves to the snippet, not the state — it crashes at render. Declare the snippet as a sibling named `photoFiltersBar` and pass `filters={photoFiltersBar}` (the `filters` prop on `FilterToolbar` is the snippet slot; the value you pass is the named snippet). Discovered while implementing Task 4.
 ```
 
 Add `import FilterToolbar from '$lib/components/filter-panel/filter-toolbar.svelte';` to the script imports.
@@ -647,34 +649,34 @@ Remove the grouping `{#if isBrowseTimeline && !assetMultiSelectManager.selection
               }}
             />
           {:else if viewMode !== AlbumPageViewMode.SELECT_ASSETS}
+            {#snippet albumFiltersBar()}
+              <ActiveFiltersBar
+                embedded
+                filters={albumFilters}
+                resultCount={totalAssetCount}
+                personNames={albumPersonNames}
+                tagNames={albumTagNames}
+                onRemoveFilter={(type, id) => {
+                  if (type === 'timeline') {
+                    clearAlbumTemporalFilter();
+                  } else {
+                    albumFilters = handlePhotosRemoveFilter(albumFilters, type, id);
+                  }
+                }}
+                onClearAll={() => {
+                  albumFilters = clearFilters(albumFilters);
+                  temporalAnchor = undefined;
+                }}
+              />
+            {/snippet}
             <FilterToolbar
               class="mb-2"
               grouping={timelineGrouping}
               onGroupingChange={handleTimelineGroupingChange}
               showGrouping={isBrowseTimeline && !assetMultiSelectManager.selectionActive}
               showFilters={getActiveFilterCount(albumFilters) > 0}
-            >
-              {#snippet filters()}
-                <ActiveFiltersBar
-                  embedded
-                  filters={albumFilters}
-                  resultCount={totalAssetCount}
-                  personNames={albumPersonNames}
-                  tagNames={albumTagNames}
-                  onRemoveFilter={(type, id) => {
-                    if (type === 'timeline') {
-                      clearAlbumTemporalFilter();
-                    } else {
-                      albumFilters = handlePhotosRemoveFilter(albumFilters, type, id);
-                    }
-                  }}
-                  onClearAll={() => {
-                    albumFilters = clearFilters(albumFilters);
-                    temporalAnchor = undefined;
-                  }}
-                />
-              {/snippet}
-            </FilterToolbar>
+              filters={albumFiltersBar}
+            />
           {/if}
 ```
 

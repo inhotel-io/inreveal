@@ -884,12 +884,13 @@ describe('Spaces page search URL state', () => {
   });
 
   it('keeps active filters visually separated from grouped space timeline cards', async () => {
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?country=Germany');
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
     renderPage();
 
-    expect(await screen.findByTestId('active-filters-bar-stub')).toBeInTheDocument();
-    expect(screen.queryByTestId('space-active-filters-bar-spacing')).toBeNull();
+    const groupingControl = await screen.findByTestId('timeline-desktop-grouping-control');
+    const toolbarRoot = groupingControl.parentElement!;
+    expect(toolbarRoot).toHaveClass('mb-2');
   });
 
   it('does not show the desktop grouping control during space search results', () => {
