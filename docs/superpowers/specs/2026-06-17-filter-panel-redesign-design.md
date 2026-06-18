@@ -32,12 +32,12 @@ The panel is a **shared component** rendered in 5+ hosts (photos, map, spaces, s
 
 ## Decisions (locked during brainstorming)
 
-| Decision | Choice | Why |
-| --- | --- | --- |
-| Scope | Motion + light polish | Lowest risk; keep today's structure and behavior. |
-| Collapse style | **Option A — width-eased rail** | Keeps the always-visible icon rail (filters one click away); minimal behavior change; preserves the E2E tests that click rail icons. |
-| Visual polish | Approved | Surfaces over hard rules, hairline dividers, breathing year grid, settle easing. |
-| Test impact | Preserve mutual-exclusivity semantics | The collapse implementation keeps the `{#if}` content swap so existing unit/E2E presence assertions stay valid. |
+| Decision       | Choice                                | Why                                                                                                                                  |
+| -------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Scope          | Motion + light polish                 | Lowest risk; keep today's structure and behavior.                                                                                    |
+| Collapse style | **Option A — width-eased rail**       | Keeps the always-visible icon rail (filters one click away); minimal behavior change; preserves the E2E tests that click rail icons. |
+| Visual polish  | Approved                              | Surfaces over hard rules, hairline dividers, breathing year grid, settle easing.                                                     |
+| Test impact    | Preserve mutual-exclusivity semantics | The collapse implementation keeps the `{#if}` content swap so existing unit/E2E presence assertions stay valid.                      |
 
 ## Motion language
 
@@ -55,7 +55,7 @@ A small new module `web/src/lib/components/filter-panel/motion.ts` exports the e
 
 ### 1. Panel collapse — width-eased rail (`filter-panel.svelte`)
 
-**Approach:** introduce a **persistent outer shell** whose width animates, and keep the existing `{#if collapsed}` content swap *inside* it.
+**Approach:** introduce a **persistent outer shell** whose width animates, and keep the existing `{#if collapsed}` content swap _inside_ it.
 
 - The shell is always rendered (when not `hidden`): `overflow-hidden`, `transition-[width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none`, with width driven by a class — expanded `w-64` (256px, **unchanged from today**) vs rail `w-14` (56px, up from today's `w-8`/32px for breathing room — see open question below).
 - Inside the shell, the current `{#if collapsed}` branches are preserved: the collapsed branch keeps `data-testid="collapsed-icon-strip"` (with `expand-panel-btn` and the per-section rail icons + active dot), and the expanded branch keeps `data-testid="discovery-panel"`.
@@ -102,7 +102,7 @@ This is mostly a CSS/animation change, so be deliberate about the boundary betwe
 - `filter-panel.spec.ts` collapse/expand presence assertions (preserved by keeping the `{#if}` swap).
 - E2E `photos-filter-panel`, `map-filter-panel`, `spaces-filter-panel` specs — testids and element visibility preserved; Playwright auto-waiting absorbs the transition.
 
-**Known async touch-point:** `transition:slide` makes the section body's *removal* async. `filter-sections.spec.ts` exercises the row components (e.g. `PeopleFilter`), not `FilterSection` expand/collapse, so it is unaffected. Any assertion elsewhere that checks section-body **absence immediately after collapse** must move to `waitFor`/`tick`; identify these during the red phase (expected to be few or none).
+**Known async touch-point:** `transition:slide` makes the section body's _removal_ async. `filter-sections.spec.ts` exercises the row components (e.g. `PeopleFilter`), not `FilterSection` expand/collapse, so it is unaffected. Any assertion elsewhere that checks section-body **absence immediately after collapse** must move to `waitFor`/`tick`; identify these during the red phase (expected to be few or none).
 
 ## Risks
 

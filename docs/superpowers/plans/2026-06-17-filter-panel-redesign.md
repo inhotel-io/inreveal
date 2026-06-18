@@ -31,6 +31,7 @@
 - [ ] **Step 1: Install workspace dependencies**
 
 Run from the worktree root:
+
 ```bash
 pnpm install
 ```
@@ -38,6 +39,7 @@ pnpm install
 - [ ] **Step 2: Build the TypeScript SDK (web imports depend on it)**
 
 Run:
+
 ```bash
 make build-sdk
 ```
@@ -45,11 +47,13 @@ make build-sdk
 - [ ] **Step 3: Confirm the filter-panel tests are green before any change**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run \
   src/lib/components/filter-panel/__tests__/filter-panel.spec.ts \
   src/lib/components/filter-panel/__tests__/temporal-picker.spec.ts
 ```
+
 Expected: PASS (all tests in both files). This is the baseline — do not proceed if red.
 
 ---
@@ -57,10 +61,12 @@ Expected: PASS (all tests in both files). This is the baseline — do not procee
 ### Task 1: Shared motion module
 
 **Files:**
+
 - Create: `web/src/lib/components/filter-panel/motion.ts`
 - Test: `web/src/lib/components/filter-panel/__tests__/motion.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `export const SETTLE_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'`
   - `export const PANEL_DURATION_MS = 380`
@@ -71,6 +77,7 @@ Expected: PASS (all tests in both files). This is the baseline — do not procee
 - [ ] **Step 1: Write the failing test**
 
 Create `web/src/lib/components/filter-panel/__tests__/motion.spec.ts`:
+
 ```ts
 import { quintOut } from 'svelte/easing';
 import { describe, expect, it } from 'vitest';
@@ -100,14 +107,17 @@ describe('slideMotion', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/motion.spec.ts
 ```
+
 Expected: FAIL — cannot resolve `../motion`.
 
 - [ ] **Step 3: Write the minimal implementation**
 
 Create `web/src/lib/components/filter-panel/motion.ts`:
+
 ```ts
 import { quintOut } from 'svelte/easing';
 
@@ -139,9 +149,11 @@ export function slideMotion(reducedMotion: boolean): SlideMotion {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/motion.spec.ts
 ```
+
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -156,22 +168,26 @@ git commit -m "feat(web): add filter panel motion tokens + slideMotion helper"
 ### Task 2: Sliding, soft-surface filter sections
 
 **Files:**
+
 - Modify: `web/src/lib/components/filter-panel/filter-section.svelte` (whole file)
 - Test: `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts` (add one test)
 
 **Interfaces:**
+
 - Consumes: `slideMotion` from `./motion`; `mediaQueryManager` from `$lib/stores/media-query-manager.svelte`.
 - Produces: no new exports — same `Props` (`title`, `testId`, `children`, `refetching?`, `count?`, `expanded?`, `onToggleExpanded?`).
 
-**Why `transition:slide|local`:** the `filter-section-{testId}` wrapper lives *outside* the `{#if expanded}` body, and existing tests assert that wrapper appears/disappears synchronously when a section's **visibility** is toggled via the toggle row (the parent `{#if visibleSections.has(section)}`). A non-local transition would replay an outro on that parent removal and keep the wrapper in the DOM, breaking those `toBeNull()` assertions. `|local` restricts the slide to the section's own expand/collapse.
+**Why `transition:slide|local`:** the `filter-section-{testId}` wrapper lives _outside_ the `{#if expanded}` body, and existing tests assert that wrapper appears/disappears synchronously when a section's **visibility** is toggled via the toggle row (the parent `{#if visibleSections.has(section)}`). A non-local transition would replay an outro on that parent removal and keep the wrapper in the DOM, breaking those `toBeNull()` assertions. `|local` restricts the slide to the section's own expand/collapse.
 
 Two correctness notes the implementer must respect:
-- The genuinely dangerous test pattern is **asserting `.filter-section-content` is absent immediately after a header *click*** (which flips `isOpen` false and plays the local outro asynchronously). Verified: no such assertion exists today (the header-click tests assert localStorage, and the only content-absence assertions are mount-time from localStorage). Do **not** introduce a post-click absence assertion.
+
+- The genuinely dangerous test pattern is **asserting `.filter-section-content` is absent immediately after a header _click_** (which flips `isOpen` false and plays the local outro asynchronously). Verified: no such assertion exists today (the header-click tests assert localStorage, and the only content-absence assertions are mount-time from localStorage). Do **not** introduce a post-click absence assertion.
 - Default-expanded sections render their body synchronously at mount with **no** intro animation, because `@testing-library/svelte`'s `render()` does not pass `intro: true` and Svelte suppresses intros on first mount. The accordion-persistence tests rely on this — do not enable component-level `intro`.
 
 - [ ] **Step 1: Write the failing test**
 
 Add to `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts` (inside the top-level `describe`, after the existing imports — `FilterPanel`, `render`, `fireEvent` are already imported in this file):
+
 ```ts
 it('renders an expanded section on a soft surface without a hard divider', () => {
   const { getByTestId } = render(FilterPanel, {
@@ -186,14 +202,17 @@ it('renders an expanded section on a soft surface without a hard divider', () =>
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts -t "soft surface"
 ```
+
 Expected: FAIL — current root has `border-b` and no `bg-subtle`.
 
 - [ ] **Step 3: Replace the whole component**
 
 Overwrite `web/src/lib/components/filter-panel/filter-section.svelte` with:
+
 ```svelte
 <script lang="ts">
   import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
@@ -272,17 +291,21 @@ Overwrite `web/src/lib/components/filter-panel/filter-section.svelte` with:
 - [ ] **Step 4: Run the new test + the full filter-panel suite to verify pass + no regressions**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts
 ```
+
 Expected: PASS (all tests, including the new "soft surface" test and every existing collapse/visibility assertion).
 
 - [ ] **Step 5: Type-check**
 
 Run:
+
 ```bash
 cd web && pnpm check
 ```
+
 Expected: 0 errors.
 
 - [ ] **Step 6: Commit**
@@ -297,16 +320,19 @@ git commit -m "feat(web): slide + soft-surface filter sections"
 ### Task 3: Width-eased collapse shell + rail width + toggle polish
 
 **Files:**
+
 - Modify: `web/src/lib/components/filter-panel/filter-panel.svelte` (the render block at the end of the file, ~lines 658–854, plus the toggle-row button classes ~lines 713–718)
 - Test: `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts` (add one test)
 
 **Interfaces:**
+
 - Consumes: nothing new (CSS-only motion via Tailwind + `SETTLE_EASE` value inlined as the arbitrary easing).
 - Produces: a new wrapper element `data-testid="filter-panel-shell"` that owns the animated width and the right border.
 
 - [ ] **Step 1: Write the failing tests**
 
 Add to `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts`:
+
 ```ts
 it('animates the panel width via a persistent shell with a reduced-motion guard', async () => {
   const { getByTestId } = render(FilterPanel, {
@@ -335,14 +361,17 @@ it('gives the toggle-row pills a press-scale and a reduced-motion guard', () => 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts
 ```
+
 Expected: the two new tests FAIL (no `filter-panel-shell` testid; the toggle button has no `active:scale-90` yet) and **every existing test still PASSES**.
 
 - [ ] **Step 3: Wrap the collapse branches in a persistent shell**
 
 In `web/src/lib/components/filter-panel/filter-panel.svelte`, replace the top of the render block. Find:
+
 ```svelte
 {#if hidden}
   <!-- FilterPanel hidden: no assets to filter -->
@@ -352,7 +381,9 @@ In `web/src/lib/components/filter-panel/filter-panel.svelte`, replace the top of
     data-testid="collapsed-icon-strip"
   >
 ```
+
 Replace with:
+
 ```svelte
 {#if hidden}
   <!-- FilterPanel hidden: no assets to filter -->
@@ -370,11 +401,12 @@ Replace with:
       >
 ```
 
-> **Critical boundary (do not skip):** Edit A above ends with the `collapsed-icon-strip` `<div>` *opening*. Everything that currently follows — the expand button, the `{#each config.sections …}` rail buttons, and the strip's **closing `</div>`** (current line ~687) — stays **exactly as it is**. That closing `</div>` now closes the strip inside the new `{#if collapsed}`. The `{:else}` immediately after it is what Step 4 edits next; leave the `</div>{:else}` pair connected.
+> **Critical boundary (do not skip):** Edit A above ends with the `collapsed-icon-strip` `<div>` _opening_. Everything that currently follows — the expand button, the `{#each config.sections …}` rail buttons, and the strip's **closing `</div>`** (current line ~687) — stays **exactly as it is**. That closing `</div>` now closes the strip inside the new `{#if collapsed}`. The `{:else}` immediately after it is what Step 4 edits next; leave the `</div>{:else}` pair connected.
 
 - [ ] **Step 4: Re-point the expanded branch and close the shell**
 
 Still in `filter-panel.svelte`, find the expanded-branch opening:
+
 ```svelte
 {:else}
   <div
@@ -382,7 +414,9 @@ Still in `filter-panel.svelte`, find the expanded-branch opening:
     data-testid="discovery-panel"
   >
 ```
+
 Replace with:
+
 ```svelte
     {:else}
       <div
@@ -390,16 +424,20 @@ Replace with:
         data-testid="discovery-panel"
       >
 ```
+
 > **Critical boundary:** between this `discovery-panel` edit and the closing edit below, the **entire expanded-panel body** — the sticky header, the toggle row, the `{#each}` sections, and the empty-state block — stays **exactly as it is**.
 
 Then find the final closing of the render block:
+
 ```svelte
       {/if}
     </div>
   </div>
 {/if}
 ```
+
 Replace with (adds one extra `</div>` to close the new shell, plus closes the inner `{#if collapsed}`):
+
 ```svelte
           {/if}
         </div>
@@ -408,16 +446,20 @@ Replace with (adds one extra `</div>` to close the new shell, plus closes the in
   </div>
 {/if}
 ```
-> **Note:** indentation in these snippets is illustrative — Svelte ignores it and `make format-web` (Task 5) normalizes it. What matters is the tag/`{/if}` ordering. The final structure must be exactly: `{#if hidden} … {:else} <shell-div> {#if collapsed} <strip>…</strip> {:else} <discovery-panel>…</discovery-panel> {/if} </shell-div> {/if}`. svelte-check (Step 7) catches an *imbalance* but will NOT catch wrong-but-balanced nesting — re-read this structure before running it.
+
+> **Note:** indentation in these snippets is illustrative — Svelte ignores it and `make format-web` (Task 5) normalizes it. What matters is the tag/`{/if}` ordering. The final structure must be exactly: `{#if hidden} … {:else} <shell-div> {#if collapsed} <strip>…</strip> {:else} <discovery-panel>…</discovery-panel> {/if} </shell-div> {/if}`. svelte-check (Step 7) catches an _imbalance_ but will NOT catch wrong-but-balanced nesting — re-read this structure before running it.
 
 - [ ] **Step 5: Polish the toggle-row buttons**
 
 Still in `filter-panel.svelte`, find the toggle button class (around line 715):
+
 ```svelte
             class="relative flex h-[30px] w-[30px] items-center justify-center rounded-lg transition-colors
               {visibleSections.has(section)
 ```
+
 Replace the first line with:
+
 ```svelte
             class="relative flex h-[30px] w-[30px] items-center justify-center rounded-[10px] transition-all duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-90 motion-reduce:transition-none motion-reduce:active:scale-100
               {visibleSections.has(section)
@@ -426,18 +468,22 @@ Replace the first line with:
 - [ ] **Step 6: Run the new tests + full file (HARD GATE)**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts
 ```
+
 Expected: PASS — both new tests pass AND every existing collapse/expand/visibility/persistence assertion stays green (they still toggle `collapsed-icon-strip` ⟺ `discovery-panel` via the inner `{#if collapsed}`).
 **Hard gate:** if any pre-existing test goes red, the shell re-nest is wrong — revert Edits A/B/C and recount the closing tags. **Never** edit an existing assertion to make it pass; those are the regression guard.
 
 - [ ] **Step 7: Type-check**
 
 Run:
+
 ```bash
 cd web && pnpm check
 ```
+
 Expected: 0 errors.
 
 - [ ] **Step 8: Commit**
@@ -452,15 +498,18 @@ git commit -m "feat(web): width-eased collapse shell + rail width + toggle polis
 ### Task 4: Breathing 3-column year grid
 
 **Files:**
+
 - Modify: `web/src/lib/components/filter-panel/temporal-picker.svelte` (year grid ~lines 226–249; month-grid chip classes ~lines 191–224)
 - Test: `web/src/lib/components/filter-panel/__tests__/temporal-picker.spec.ts` (add tests)
 
 **Interfaces:**
+
 - Consumes / Produces: none new. Same props and `data-testid`s (`year-grid`, `year-btn-{year}`, `month-grid`, `month-btn-{month}`).
 
 - [ ] **Step 1: Write the failing tests**
 
 Add inside the existing `describe('TemporalPicker component', ...)` block in `web/src/lib/components/filter-panel/__tests__/temporal-picker.spec.ts` (its `buckets` aggregates to years 2022 + 2023):
+
 ```ts
 it('lays out the year grid in three columns with year buttons as direct grid children', () => {
   const { getByTestId } = render(TemporalPicker, { props: { timeBuckets: buckets } });
@@ -482,14 +531,17 @@ it('guards the year and month chips against reduced motion', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/temporal-picker.spec.ts
 ```
+
 Expected: the two new tests FAIL (the year grid is `flex flex-wrap`, not `grid-cols-3`; the chips lack `motion-reduce:transition-none`); all existing tests PASS.
 
 - [ ] **Step 3: Convert the year grid to a 3-column grid with polished chips**
 
 In `web/src/lib/components/filter-panel/temporal-picker.svelte`, find the year-grid block:
+
 ```svelte
     <!-- Year grid: 4-column flex wrap -->
     <div class="flex flex-wrap gap-1.5" data-testid="year-grid">
@@ -515,7 +567,9 @@ In `web/src/lib/components/filter-panel/temporal-picker.svelte`, find the year-g
       {/each}
     </div>
 ```
+
 Replace with:
+
 ```svelte
     <!-- Year grid: 3-column grid -->
     <div class="grid grid-cols-3 gap-1.5" data-testid="year-grid">
@@ -545,6 +599,7 @@ Replace with:
 - [ ] **Step 4: Add the one-time bar-grow animation (reduced-motion safe)**
 
 In the same file, add a `<style>` block at the end of the file (the component currently has none):
+
 ```svelte
 <style>
   .year-bar {
@@ -569,10 +624,13 @@ In the same file, add a `<style>` block at the end of the file (the component cu
 - [ ] **Step 5: Match the month-grid chips to the year chips (consistency)**
 
 Find the month button class:
+
 ```svelte
           class="flex flex-col items-center rounded-lg border px-2 py-2 transition-all duration-100
 ```
+
 Replace with:
+
 ```svelte
           class="flex flex-col items-center rounded-xl border px-2 py-2 transition-all duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none
 ```
@@ -580,17 +638,21 @@ Replace with:
 - [ ] **Step 6: Run the tests to verify pass + no regressions**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/temporal-picker.spec.ts
 ```
+
 Expected: PASS (all tests in the file).
 
 - [ ] **Step 7: Type-check**
 
 Run:
+
 ```bash
 cd web && pnpm check
 ```
+
 Expected: 0 errors.
 
 - [ ] **Step 8: Commit**
@@ -609,46 +671,57 @@ git commit -m "feat(web): 3-column breathing year grid in temporal picker"
 - [ ] **Step 1: Run the full web unit suite**
 
 Run:
+
 ```bash
 cd web && pnpm test -- --run
 ```
+
 Expected: PASS (entire web suite). If anything outside the filter panel changed unexpectedly, stop and investigate.
 
 - [ ] **Step 2: Type-check the whole web package**
 
 Run:
+
 ```bash
 make check-web
 ```
+
 Expected: 0 errors.
 
 - [ ] **Step 3: Single deferred lint pass**
 
 Run:
+
 ```bash
 make lint-web
 ```
+
 Expected: 0 warnings (the repo enforces `--max-warnings 0`). Fix any findings, then re-run.
 
 - [ ] **Step 4: Format**
 
 Run:
+
 ```bash
 make format-web
 ```
+
 If prettier rewrites anything, review and stage it.
 
 - [ ] **Step 5: Verify the arbitrary easing class actually compiled**
 
 `ease-[cubic-bezier(0.22,1,0.36,1)]` has no precedent in this repo. Build the web app and confirm Tailwind emitted it (spaceless) into the generated CSS:
+
 ```bash
 cd web && pnpm build && grep -rl "cubic-bezier(0.22,1,0.36,1)" .svelte-kit build 2>/dev/null | head
 ```
+
 Expected: at least one CSS file matches. If empty, the class did not compile — confirm it is written spaceless and re-run. (Step 6's manual page check is the visual backstop: a missing easing shows up as a linear/instant transition.)
 
 - [ ] **Step 6: Manual verification (aesthetics — not CI-testable)**
 
 Start the dev stack (`make dev`) and, on the **photos**, **map**, and **spaces** pages, confirm:
+
 - Collapsing the panel **eases its width** down to the icon rail (and back), not a snap.
 - Clicking a section header **slides** the body open/closed; the chevron rotates.
 - Sections sit on **soft surfaces** with no hard full-width divider ladder.
@@ -669,6 +742,7 @@ git commit -m "chore(web): lint + format pass for filter panel redesign" --allow
 ## Self-Review
 
 **Spec coverage:**
+
 - Motion tokens / easing / durations → Task 1 (`motion.ts`) + Global Constraints. ✓
 - Panel width-eased rail collapse (shell, `w-64` ⟺ `w-14`, clip-reveal, preserve `{#if}` swap) → Task 3. ✓
 - Section height-slide via `transition:slide` (matches `setting-accordion`), `|local` to protect visibility tests → Task 2. ✓
@@ -680,6 +754,7 @@ git commit -m "chore(web): lint + format pass for filter panel redesign" --allow
 - Tests stay green; new red→green TDD tests for every testable change → Tasks 1–4; deferred lint → Task 5. ✓
 
 **Intentional fidelity cuts (from the prototype → production):**
+
 - Durations are matched to the approved prototype (panel 420ms, section 300ms, hover 150ms).
 - The prototype's **per-section leading icons** and **count-pill badges** are deliberately NOT carried over: the toggle row already shows the section icons, and surfacing counts as badges would change information display beyond "light polish". The section header keeps today's title + `(0)`-when-empty.
 - The prototype's per-year-chip entrance **stagger** is dropped; the volume bars still grow on load.
