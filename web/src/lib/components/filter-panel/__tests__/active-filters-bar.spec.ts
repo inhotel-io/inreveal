@@ -82,7 +82,7 @@ describe('ActiveFiltersBar', () => {
     expect(chips[0].textContent).not.toContain(',');
   });
 
-  it('should render chip for rating as "\u2605 3+"', () => {
+  it('should render chip for rating as "3+" (star shown as a leading icon)', () => {
     const filters = createFilterState();
     filters.rating = 3;
 
@@ -96,7 +96,7 @@ describe('ActiveFiltersBar', () => {
 
     const chips = getAllByTestId('active-chip');
     expect(chips).toHaveLength(1);
-    expect(chips[0].textContent).toContain('\u2605 3+');
+    expect(chips[0].textContent).toContain('3+');
   });
 
   it('should render chip for media type as "Photos only"', () => {
