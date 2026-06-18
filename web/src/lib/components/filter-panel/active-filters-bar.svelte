@@ -35,6 +35,7 @@
     onClearAll: () => void;
     searchQuery?: string;
     onClearSearch?: () => void;
+    embedded?: boolean;
   }
 
   let {
@@ -46,6 +47,7 @@
     onClearAll,
     searchQuery = '',
     onClearSearch,
+    embedded = false,
   }: Props = $props();
 
   interface Chip {
@@ -149,7 +151,9 @@
 </script>
 
 <div
-  class="flex flex-wrap items-center gap-2 border-b border-gray-200/60 px-4 py-2.5 dark:border-white/10"
+  class="flex flex-wrap items-center gap-2 {embedded
+    ? ''
+    : 'border-b border-gray-200/60 px-4 py-2.5 dark:border-white/10'}"
   data-testid="active-filters-bar"
 >
   {#if resultCount !== undefined}
