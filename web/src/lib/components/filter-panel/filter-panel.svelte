@@ -659,7 +659,7 @@
   <!-- FilterPanel hidden: no assets to filter -->
 {:else}
   <div
-    class="flex h-full flex-shrink-0 overflow-hidden border-r border-gray-200 bg-light transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none dark:border-gray-700 {collapsed
+    class="flex h-full flex-shrink-0 overflow-hidden border-r border-gray-200/60 bg-light transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none dark:border-white/5 {collapsed
       ? 'w-14'
       : 'w-64'}"
     data-testid="filter-panel-shell"
