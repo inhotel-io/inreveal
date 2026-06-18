@@ -629,5 +629,6 @@ describe('ActiveFiltersBar', () => {
     });
     expect(standaloneResult.getByTestId('active-filters-bar').className).toContain('border-b');
     expect(standaloneResult.getByTestId('active-filters-bar').className).toContain('px-4');
+    cleanup();
   });
 });
