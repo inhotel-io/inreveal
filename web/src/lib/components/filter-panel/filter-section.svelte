@@ -22,17 +22,12 @@
   let isOpen = $derived(expanded && !isEmpty);
 </script>
 
-<div
-  class="mx-1.5 mb-0.5 rounded-xl transition-colors duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none {isOpen
-    ? 'bg-subtle'
-    : ''}"
-  data-testid="filter-section-{testId}"
->
+<div class="mx-1.5 mb-0.5" data-testid="filter-section-{testId}">
   <button
     type="button"
-    class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-start {isEmpty
+    class="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-start hover:bg-subtle {isEmpty
       ? 'opacity-50'
-      : ''} {isOpen ? '' : 'hover:bg-subtle'}"
+      : ''}"
     onclick={() => {
       if (!isEmpty && onToggleExpanded) {
         onToggleExpanded();
