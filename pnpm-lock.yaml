@@ -119,7 +119,7 @@ importers:
         version: link:../packages/e2e-auth-server
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@playwright/test':
         specifier: ^1.44.1
         version: 1.60.0
@@ -225,7 +225,7 @@ importers:
         version: 10.0.1(eslint@10.4.0(jiti@2.7.0))
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/byte-size':
         specifier: ^8.1.0
         version: 8.1.2
@@ -324,7 +324,7 @@ importers:
         version: link:../plugin-sdk
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
@@ -343,7 +343,7 @@ importers:
         version: 1.1.1
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../sdk
       '@types/node':
         specifier: ^24.13.2
         version: 24.13.2
@@ -808,7 +808,7 @@ importers:
         version: 0.4.3
       '@immich/sdk':
         specifier: workspace:*
-        version: file:packages/sdk
+        version: link:../packages/sdk
       '@immich/ui':
         specifier: ^0.81.1
         version: 0.81.1(patch_hash=7c8fa3353faeaff394133721d78504acddee05537acfdba49728a2853b5fc33d)(@sveltejs/kit@2.60.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.1.2(svelte@5.56.3(@typescript-eslint/types@8.59.4))(vite@8.0.13(@types/node@24.13.2)(esbuild@0.28.0)(jiti@2.7.0)(sass@1.99.0)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.0)))(svelte@5.56.3(@typescript-eslint/types@8.59.4))(typescript@6.0.3)(vite@8.0.13(@types/node@24.13.2)(esbuild@0.28.0)(jiti@2.7.0)(sass@1.99.0)(terser@5.47.1)(tsx@4.22.3)(yaml@2.9.0)))(svelte@5.56.3(@typescript-eslint/types@8.59.4))
@@ -3436,9 +3436,6 @@ packages:
 
   '@immich/justified-layout-wasm@0.4.3':
     resolution: {integrity: sha512-fpcQ7zPhP3Cp1bEXhONVYSUeIANa2uzaQFGKufUZQo5FO7aFT77szTVChhlCy4XaVy5R4ZvgSkA/1TJmeORz7Q==}
-
-  '@immich/sdk@file:packages/sdk':
-    resolution: {directory: packages/sdk, type: directory}
 
   '@immich/sql-tools@0.5.2':
     resolution: {integrity: sha512-O1SJ+BbeFVsUTF4af1MfagJZM+lPgLjI8lQ3SZNjpo8SGJReSbUl2ii03OKuGni/G0yp2GnRLpOTNSHYGtVrcg==}
@@ -10117,6 +10114,11 @@ packages:
   nan@2.27.0:
     resolution: {integrity: sha512-hC+0LidcL3XE4rp1C4H54KujgXKzbfyTngZTwBByQxsOxCEKZT0MPQ4hOKUH2jU1OYstqdDH4onyHPDzcV0XdQ==}
 
+  nanoid@3.3.12:
+    resolution: {integrity: sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+
   nanoid@5.1.11:
     resolution: {integrity: sha512-v+KEsUv2ps74PaSKv0gHTxTCgMXOIfBEbaqa6w6ISIGC7ZsvHN4N9oJ8d4cmf0n5oTzQz2SLmThbQWhjd/8eKg==}
     engines: {node: ^18 || >=20}
@@ -11259,6 +11261,9 @@ packages:
 
   pump@3.0.4:
     resolution: {integrity: sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==}
+
+  punycode@1.4.1:
+    resolution: {integrity: sha512-jmYNElW7yvO7TV33CjSmvSiE2yco3bV2czu/OzDKdMNVZQWfxCblURLhf+47syQRBntjfLdd/H0egrzIG+oaFQ==}
 
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
@@ -16845,10 +16850,6 @@ snapshots:
 
   '@immich/justified-layout-wasm@0.4.3': {}
 
-  '@immich/sdk@file:packages/sdk':
-    dependencies:
-      '@oazapfts/runtime': 1.2.0
-
   '@immich/sql-tools@0.5.2':
     dependencies:
       commander: 14.0.3
@@ -17324,7 +17325,9 @@ snapshots:
 
   '@mdi/js@7.4.47': {}
 
-  '@mdi/react@1.6.1': {}
+  '@mdi/react@1.6.1':
+    dependencies:
+      prop-types: 15.8.1
 
   '@mdn/browser-compat-data@5.7.6': {}
 
@@ -19168,7 +19171,7 @@ snapshots:
 
   '@types/accepts@1.3.7':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/archiver@7.0.0':
     dependencies:
@@ -19189,7 +19192,7 @@ snapshots:
 
   '@types/bonjour@3.5.13':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/braces@3.0.5': {}
 
@@ -19221,7 +19224,7 @@ snapshots:
   '@types/connect-history-api-fallback@1.5.4':
     dependencies:
       '@types/express-serve-static-core': 5.1.1
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/connect@3.4.38':
     dependencies:
@@ -19242,11 +19245,11 @@ snapshots:
       '@types/connect': 3.4.38
       '@types/express': 5.0.6
       '@types/keygrip': 1.0.6
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/cors@2.8.19':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/d3-array@3.2.2': {}
 
@@ -19373,7 +19376,7 @@ snapshots:
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       '@types/ssh2': 1.15.5
 
   '@types/dockerode@4.0.1':
@@ -19406,7 +19409,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.19.8':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -19467,7 +19470,7 @@ snapshots:
 
   '@types/http-proxy@1.17.17':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/inquirer@8.2.12':
     dependencies:
@@ -19646,11 +19649,11 @@ snapshots:
   '@types/send@0.17.6':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/serve-index@1.9.4':
     dependencies:
@@ -19659,7 +19662,7 @@ snapshots:
   '@types/serve-static@1.15.10':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       '@types/send': 0.17.6
 
   '@types/serve-static@2.2.0':
@@ -19669,7 +19672,7 @@ snapshots:
 
   '@types/sockjs@0.3.36':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
 
   '@types/ssh2-streams@0.1.13':
     dependencies:
@@ -19677,7 +19680,7 @@ snapshots:
 
   '@types/ssh2@0.5.52':
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       '@types/ssh2-streams': 0.1.13
 
   '@types/ssh2@1.15.5':
@@ -23363,7 +23366,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -24522,6 +24525,8 @@ snapshots:
   nan@2.27.0:
     optional: true
 
+  nanoid@3.3.12: {}
+
   nanoid@5.1.11: {}
 
   napi-build-utils@2.0.0:
@@ -25571,7 +25576,11 @@ snapshots:
     dependencies:
       postcss: 8.5.15
 
-  postcss@8.5.15: {}
+  postcss@8.5.15:
+    dependencies:
+      nanoid: 3.3.12
+      picocolors: 1.1.1
+      source-map-js: 1.2.1
 
   postgres-array@2.0.0: {}
 
@@ -25698,7 +25707,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 24.13.2
+      '@types/node': 24.13.1
       long: 5.3.2
 
   protocol-buffers-schema@3.6.1: {}
@@ -25712,6 +25721,8 @@ snapshots:
     dependencies:
       end-of-stream: 1.4.5
       once: 1.4.0
+
+  punycode@1.4.1: {}
 
   punycode@2.3.1: {}
 
@@ -27592,7 +27603,10 @@ snapshots:
     optionalDependencies:
       file-loader: 6.2.0(webpack@5.107.0(postcss@8.5.15))
 
-  url@0.11.4: {}
+  url@0.11.4:
+    dependencies:
+      punycode: 1.4.1
+      qs: 6.15.2
 
   urlpattern-polyfill@8.0.2: {}
 
