@@ -95,7 +95,13 @@ Two coordinate spaces:
   capped at a browser-safe maximum so it never exceeds the render limit.
 
 ```
-maxScrollHeight   = isFirefox ? 17_000_000 : 33_000_000   // instance value, overridable in tests
+maxScrollHeight   = MAX_SCROLL_HEIGHT   // instance $state, overridable in tests; default below
+
+// Module const in VirtualScrollManager. The Firefox UA check is INLINED rather than imported
+// from asset-utils (`isFirefox`), because asset-utils imports TimelineManager, which imports
+// VirtualScrollManager — importing it here would create a circular dependency.
+MAX_SCROLL_HEIGHT = (typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox'))
+                      ? 17_000_000 : 33_000_000
 domHeight         = min(totalViewerHeight, maxScrollHeight)   // = #virtual-timeline height
 logicalScrollMax  = max(0, totalViewerHeight - viewportHeight)
 domScrollMax      = max(0, domHeight - viewportHeight)
@@ -374,8 +380,10 @@ Add to the timeline-manager spec (real manager + fake element + forced small cap
 | `web/src/lib/managers/timeline-manager/timeline-anchor.spec.ts` (or manager spec) | symptom-#2 regression                                                                                                   |
 | `web/src/lib/components/timeline/Timeline.svelte.spec.ts`                         | **new (or recorded manual fallback)** — item 17 template-wiring test                                                    |
 
-Reuses `isFirefox` from `web/src/lib/utils/asset-utils.ts`. New files are limited to the two spec
-files; no new production files, no new classes, no upstream-file restructuring.
+Inlines the Firefox UA check as a module const in `VirtualScrollManager.svelte.ts` — importing
+`isFirefox` from `asset-utils.ts` would create a circular dependency (asset-utils → TimelineManager
+→ VirtualScrollManager). New files are limited to the two spec files; no new production files, no
+new classes, no upstream-file restructuring.
 
 ## 9. Manual verification
 
