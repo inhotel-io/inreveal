@@ -39,7 +39,7 @@ COPY ./web ./web/
 COPY ./i18n ./i18n/
 COPY ./packages/sdk ./packages/sdk/
 RUN --mount=type=cache,id=pnpm-web,target=/buildcache/pnpm-store \
-  pnpm --filter @immich/sdk install --frozen-lockfile && \
+  SHARP_IGNORE_GLOBAL_LIBVIPS=true pnpm --filter @immich/sdk --filter immich-web install --frozen-lockfile --force && \
   pnpm --filter @immich/sdk build && \
   pnpm --filter @immich/sdk --filter immich-web install --frozen-lockfile --force && \
   pnpm --filter immich-web build
