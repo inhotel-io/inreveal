@@ -114,7 +114,7 @@ test.describe('Spaces — Albums UI journey & permission matrix', () => {
     asset = await utils.createAsset(owner.accessToken);
 
     // Album owned by `owner`, with `editor` as album Editor (mirrors the
-    // spaces-albums fixture), both assets attached, then linked into the space.
+    // spaces-albums fixture), the asset attached, then linked into the space.
     // NOTE: `viewer` has NO album_user share — so a viewer reaching the album
     // and its photos proves access flows purely through the space grant.
     album = await utils.createAlbum(owner.accessToken, {
