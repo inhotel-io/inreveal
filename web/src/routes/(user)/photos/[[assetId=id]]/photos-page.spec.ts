@@ -473,7 +473,7 @@ describe('Photos page search URL state', () => {
     });
   });
 
-  it('hydrates has-album from the URL into search results', async () => {
+  it('hydrates has-album from the URL into search results', () => {
     mockPage.url = new URL('https://gallery.test/photos?q=beach&album=has');
 
     renderPage();
