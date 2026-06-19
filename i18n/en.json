@@ -1791,6 +1791,7 @@
   "import_view_photos": "View Photos",
   "import_with_location": "{count} with location",
   "in_albums": "In {count, plural, one {# album} other {# albums}}",
+  "in_any_album": "In an album",
   "in_archive": "In archive",
   "in_year": "In {year}",
   "in_year_selector": "In",
