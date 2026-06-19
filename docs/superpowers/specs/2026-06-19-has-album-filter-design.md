@@ -97,9 +97,9 @@ Buttons (preserve existing test ids, add one):
 
 **Test stubs** — carry `isInAlbum` + new button/data-attr:
 
-- `web/src/test-data/mocks/filter-panel-favorites.stub.svelte`
-- `web/src/test-data/mocks/bindable-filter-panel.stub.svelte`
-- `web/src/test-data/mocks/smart-search-results.stub.svelte`
+- `web/src/test-data/mocks/bindable-filter-panel.stub.svelte` (used by the photos, spaces, and map page specs) — add `selectHasAlbum()`, a `select-has-album-filter` button, and a `data-is-in-album` attribute
+- `web/src/test-data/mocks/smart-search-results.stub.svelte` — add a `data-filter-in-album` attribute
+- (`filter-panel-favorites.stub.svelte` is **not** updated — it has zero importers; dead, like the unused types above.)
 
 **i18n** — `i18n/en.json`:
 
