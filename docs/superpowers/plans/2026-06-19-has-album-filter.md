@@ -281,7 +281,18 @@ it('does not add album inclusion to metadata search when isInAlbum is false', ()
 
   expect(sql).not.toContain('"album_asset"');
 });
+
+// Edge case (unreachable via UI): both album booleans true → the predicates are
+// ANDed, yielding the empty intersection. Documents that no special handling is needed.
+it('ANDs both album predicates when isInAlbum and isNotInAlbum are both true', () => {
+  const sql = buildAssetSearchSql({ isInAlbum: true, isNotInAlbum: true });
+
+  expect(sql).toContain('exists');
+  expect(sql).toContain('not exists');
+});
 ```
+
+> The `not.toContain('not exists')` assertions are safe because, for these minimal option objects, the only `not exists` the builders can emit is the `isNotInAlbum` album predicate (the only other `eb.not(exists(...))` — `isEncoded === false` — is gated behind `isEncoded !== undefined`, which we do not set). The final edge test intentionally sets both to confirm both predicates coexist.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -350,21 +361,73 @@ git commit -m "feat(server): add isInAlbum search SQL predicates (#675)"
 
 ---
 
-## Task 5: Server — `asset.repository.ts` timeline SQL + forwarding
+## Task 5: Server — asset-repository timeline SQL for `isInAlbum`
 
-The two `asset.repository` SQL sites (used by `getTimeBuckets` / `getTimeBucket`) have no offline compile harness, so they are covered by the `timeline.service` forwarding tests (the option reaches the repo) plus the predicate shape proven in Task 4.
+The album predicate lives at two `asset.repository` sites: the module-private helper `withTimeBucketAssetFilters` (used by both `getTimeBuckets` and `getTimeBucketCovers`) and the inline CTE inside `getTimeBucket`. Both consume `TimeBucketOptions extends AssetBuilderOptions`.
+
+> **TDD note — why a compile test, not just forwarding.** `buildTimeBucketOptions` builds its result with `const { … ...options } = dto` and passes the spread `options` straight to the repository, so a `timeline.service` forwarding test would pass via that spread **before any asset.repository change** — it can't drive the SQL red→green. The real red driver is therefore an **offline SQL compile test** on `withTimeBucketAssetFilters` (mirroring `search.repository.spec`'s `offlineKysely` harness). That requires exporting the helper. The forwarding tests are added too, as regression guards (they catch a future `buildTimeBucketOptions` that drops unknown fields), but they are not the red driver.
+>
+> **Residual gap (documented):** `getTimeBucket`'s inline CTE (the second SQL site) is not reachable by an offline `.compile()` (the method calls `.execute()` directly). It is covered by the forwarding guard plus the identical predicate shape proven here and in Task 4. This still **improves** on the status quo, where the existing `isNotInAlbum` timeline SQL has no unit coverage at all.
 
 **Files:**
 
-- Modify: `server/src/repositories/asset.repository.ts` (`AssetBuilderOptions` + 2 SQL sites)
-- Test: `server/src/services/timeline.service.spec.ts`
+- Create: `server/src/repositories/asset.repository.spec.ts`
+- Modify: `server/src/repositories/asset.repository.ts` (`export` the helper, `AssetBuilderOptions` field, 2 SQL sites)
+- Test (regression guards): `server/src/services/timeline.service.spec.ts`
 
 **Interfaces:**
 
-- Consumes: `TimeBucketDto.isInAlbum` (Task 2) — flows through `buildTimeBucketOptions`' `...options` spread unchanged.
-- Produces: `isInAlbum?: boolean` on `AssetBuilderOptions`.
+- Consumes: `TimeBucketDto.isInAlbum` (Task 2) via `buildTimeBucketOptions`' `...options` spread.
+- Produces: exported `withTimeBucketAssetFilters`; `isInAlbum?: boolean` on `AssetBuilderOptions` (⇒ `TimeBucketOptions`).
 
-- [ ] **Step 1: Write the failing tests** — in `server/src/services/timeline.service.spec.ts`, add after the `'should pass false has-no-album through for getTimeBuckets…'` test:
+- [ ] **Step 1: Write the failing SQL compile test (red driver)** — create `server/src/repositories/asset.repository.spec.ts`:
+
+```ts
+import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
+import { withTimeBucketAssetFilters } from 'src/repositories/asset.repository';
+import type { DB } from 'src/schema';
+import { describe, expect, it } from 'vitest';
+
+// Offline Kysely — compiles SQL without executing it. No DB connection needed.
+const offlineKysely = () =>
+  new Kysely<DB>({
+    dialect: {
+      createAdapter: () => new PostgresAdapter(),
+      createDriver: () => new DummyDriver(),
+      createIntrospector: (db) => new PostgresIntrospector(db),
+      createQueryCompiler: () => new PostgresQueryCompiler(),
+    },
+  });
+
+const compileTimeBucketFilters = (options: Record<string, unknown>) =>
+  withTimeBucketAssetFilters(offlineKysely().selectFrom('asset').select('asset.id'), options as any).compile().sql;
+
+describe('withTimeBucketAssetFilters album filters', () => {
+  it('filters timeline assets to album members when isInAlbum is true', () => {
+    const sql = compileTimeBucketFilters({ isInAlbum: true });
+
+    expect(sql).toContain('"album_asset"');
+    expect(sql).toContain('exists');
+    expect(sql).not.toContain('not exists');
+    expect(sql).toContain('"album_asset"."assetId" = "asset"."id"');
+  });
+
+  it('filters timeline assets to non-album members when isNotInAlbum is true', () => {
+    const sql = compileTimeBucketFilters({ isNotInAlbum: true });
+
+    expect(sql).toContain('"album_asset"');
+    expect(sql).toContain('not exists');
+  });
+
+  it('omits the album predicate when isInAlbum is false', () => {
+    const sql = compileTimeBucketFilters({ isInAlbum: false });
+
+    expect(sql).not.toContain('"album_asset"');
+  });
+});
+```
+
+- [ ] **Step 2: Write the forwarding regression guards** — in `server/src/services/timeline.service.spec.ts`, add after the `'should pass false has-no-album through for getTimeBuckets…'` test:
 
 ```ts
 it('should pass has-album through to asset repository for getTimeBuckets', async () => {
@@ -391,18 +454,29 @@ it('should pass has-album through for getTimeBucket', async () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 3: Run tests to verify the red driver fails**
 
-Run: `cd server && pnpm test -- --run src/services/timeline.service.spec.ts`
-Expected: FAIL — `buildTimeBucketOptions` strips `isInAlbum` because `AssetBuilderOptions` does not declare it, so the repo is not called with it. (TypeScript may also error on the unknown property; that confirms the gap.)
+Run:
 
-- [ ] **Step 3a: Add the option field** — in `server/src/repositories/asset.repository.ts`, in `interface AssetBuilderOptions` (after `isNotInAlbum?: boolean;`):
+```bash
+cd server && pnpm test -- --run src/repositories/asset.repository.spec.ts src/services/timeline.service.spec.ts
+```
+
+Expected: the **compile tests FAIL** — `withTimeBucketAssetFilters` is not exported (import error) and emits no album predicate. (The two `timeline.service` guards pass already via the DTO spread — that is expected; they guard against regressions, they are not the red driver.)
+
+- [ ] **Step 4a: Export the helper** — in `server/src/repositories/asset.repository.ts`, change `function withTimeBucketAssetFilters<O>(` to:
+
+```ts
+export function withTimeBucketAssetFilters<O>(
+```
+
+- [ ] **Step 4b: Add the option field** — in `interface AssetBuilderOptions` (after `isNotInAlbum?: boolean;`):
 
 ```ts
   isInAlbum?: boolean;
 ```
 
-- [ ] **Step 3b: Add the SQL** — at **both** `isNotInAlbum` `.$if(…)` sites in `asset.repository.ts` (around lines 279 and 1214), add the mirror immediately after, matching each site's indentation:
+- [ ] **Step 4c: Add the SQL** — at **both** `isNotInAlbum` `.$if(…)` sites in `asset.repository.ts`, add the mirror immediately after, matching each site's indentation. Site one is inside `withTimeBucketAssetFilters` (the shared helper); site two is inside the `getTimeBucket` inline CTE (more deeply nested — match the adjacent `isNotInAlbum` block's indentation there):
 
 ```ts
     .$if(!!options.isInAlbum && !options.albumId, (qb) =>
@@ -412,18 +486,21 @@ Expected: FAIL — `buildTimeBucketOptions` strips `isInAlbum` because `AssetBui
     )
 ```
 
-(The deeper-nested second site uses extra indentation — keep it consistent with the adjacent `isNotInAlbum` block there.)
+- [ ] **Step 5: Run tests to verify they pass**
 
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `cd server && pnpm test -- --run src/services/timeline.service.spec.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+Run:
 
 ```bash
-git add server/src/repositories/asset.repository.ts server/src/services/timeline.service.spec.ts
-git commit -m "feat(server): thread isInAlbum through asset timeline repository (#675)"
+cd server && pnpm test -- --run src/repositories/asset.repository.spec.ts src/services/timeline.service.spec.ts
+```
+
+Expected: PASS (the compile tests now emit the `exists` album predicate; the forwarding guards stay green).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add server/src/repositories/asset.repository.ts server/src/repositories/asset.repository.spec.ts server/src/services/timeline.service.spec.ts
+git commit -m "feat(server): add isInAlbum to asset timeline SQL (#675)"
 ```
 
 ---
@@ -811,20 +888,25 @@ git commit -m "feat(web): add Has album option to AlbumsFilter (#675)"
 - [ ] **Step 1: Write the failing test** — in `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts`, add after the `'should update filters when has-no-album is selected'` test:
 
 ```ts
-it('should update filters when has-album is selected', async () => {
+it('should select has-album and clear has-no-album (mutual exclusivity)', async () => {
   const onFiltersChange = vi.fn();
+  // Start with "Has no album" already active to prove selecting "Has album" clears it.
+  const filters = { ...createFilterState(), isNotInAlbum: true };
 
   render(FilterPanel, {
     props: {
       config: { sections: ['albums' as FilterSection], providers: {} },
       timeBuckets: [],
+      filters,
       onFiltersChange,
     },
   });
 
   await fireEvent.click(screen.getByTestId('albums-has'));
 
-  expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ isInAlbum: true, isNotInAlbum: undefined }));
+  const updated = onFiltersChange.mock.calls.at(-1)![0];
+  expect(updated.isInAlbum).toBe(true);
+  expect(updated.isNotInAlbum).toBeUndefined();
 });
 
 it('should show active state for has-album when collapsed', async () => {
@@ -1466,7 +1548,7 @@ it('hydrates has-album from the URL into search results', async () => {
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run: `cd web && pnpm test -- --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts"`
-Expected: FAIL — the `+page.svelte` suggestions request omits `isInAlbum` (the timeline-options and URL-hydration paths already work from Tasks 12–13, but the inline suggestions provider does not yet pass `isInAlbum`).
+Expected: the **`'narrows photos suggestions…to has-album'` test FAILS** — the `+page.svelte` inline suggestions provider does not yet pass `isInAlbum`. The other two new tests (`buildPhotosTimelineOptions` URL hydration and the `data-filter-in-album` smart-results attribute) already pass from Tasks 8/12/13 + the Step 1 stub change — that is expected; they are integration guards, and the suggestions test is this task's red driver.
 
 - [ ] **Step 4: Implement** — in `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`, in the suggestions-provider request object, after `isNotInAlbum: nextFilters.isNotInAlbum === true ? true : undefined,`:
 
@@ -1685,15 +1767,17 @@ git commit -m "chore(web,server): lint fixes for isInAlbum filter (#675)"
 | search DTOs                                                | 1                                            |
 | time-bucket DTO                                            | 2                                            |
 | gallery-map DTO                                            | 3                                            |
-| search.repository + database.ts SQL                        | 4                                            |
-| asset.repository SQL                                       | 5                                            |
+| search.repository + database.ts SQL                        | 4 (offline compile tests)                    |
+| asset.repository timeline SQL                              | 5 (offline compile test on exported helper)  |
 | shared-space.service mapping                               | 6                                            |
-| timeline.service (no change, forwarded)                    | 5                                            |
+| timeline.service (no change; forwarded via spread)         | 5 (regression guards)                        |
 | SDK / OpenAPI regen                                        | 7                                            |
 | page integration (photos/spaces/map)                       | 16, 17, 18                                   |
-| Edge: both-true intersection                               | covered by SQL (ANDed predicates); no code   |
-| Edge: album-scoped guard no-op                             | 4, 5 (guards mirrored)                       |
+| Edge: both-true intersection                               | 4 (SQL compile test asserts both predicates) |
+| Edge: album-scoped guard no-op                             | 4, 5 (guards mirrored verbatim)              |
 | Edge: `onAlbumAddAssets` no `isInAlbum` branch             | intentionally untouched (documented in spec) |
+
+**Known coverage limit (documented, not a gap to fix):** `getTimeBucket`'s inline-CTE SQL site cannot be reached by an offline `.compile()` (the method executes directly), so it is covered by the Task 5 forwarding guard plus the identical, compile-tested predicate shape from the shared helper and Task 4 — an improvement over the status quo, where the existing `isNotInAlbum` timeline SQL has no unit coverage at all.
 
 **Placeholder scan:** none — every code step shows the exact diff; every test step shows the exact test.
 
