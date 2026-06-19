@@ -115,7 +115,7 @@ emitted coordinate **stays bounded near the viewport** (never emits a 25M transf
 which can itself glitch renderers):
 
 ```
-renderOffset = cachedDomScrollTop − cachedLogicalScrollTop   // 0 when scrollScale == 1
+renderOffset = cachedDomScrollTop − cachedLogicalScrollTop   // = #cachedDomScrollTop − #scrollTop (§4.3); 0 when scrollScale == 1
 domY(item)   = item.top + renderOffset                       // always ≈ domScrollTop ± viewport
 ```
 
@@ -180,7 +180,7 @@ accessor.
 - `override get domScrollTop()` → `this.#scrollableElement?.scrollTop ?? 0` (replaces the old
   `override get scrollTop()`).
 - `scrollTo(logicalTop)` → `this.#scrollableElement?.scrollTo({ top: clamp(this.logicalToDom(logicalTop), 0, this.domScrollMax) })`,
-  then `updateSlidingWindow()`.
+  then `updateSlidingWindow()`. (`clamp` is already imported from `lodash-es` in this file; no new import.)
 - `scrollBy(logicalDelta)` → `this.scrollTo(this.scrollTop + logicalDelta)` (absolute remap;
   correct under any scale). Replaces the direct `#scrollableElement.scrollBy`.
 
@@ -224,6 +224,8 @@ then `scrollTo` maps logical→DOM. This is what fixes symptom #2.
 | 14  | Scrubber arrow-key nudge (`scrollableElement.scrollBy({behavior:'smooth'})`) | DOM-space nudge; `onscroll` → `updateSlidingWindow` converts. Moves ~`delta/scale` logical px (consistent coarsening). No change needed.                                |
 | 15  | Deep link `/photos/<id>` to an old asset                                     | `findTimelineMonthForAsset` loads the month; `scrollToAssetPosition` → `scrollTo(logical)` → DOM. Reachable.                                                            |
 | 16  | `limitedScroll` (content < 2× viewport)                                      | only triggers when `total` is tiny → `scrollScale` always `1`; path unaffected.                                                                                         |
+| 17  | Live asset insert/remove (websocket upsert)                                  | changes `total` → `domHeight`/`scrollScale`/`renderOffset` recompute (same mechanism as resize #8); above-viewport inserts compensated via the `month.height` setter.   |
+| 18  | DOM `scrollTop` integer rounding                                             | browser rounds `scrollTop`; at `scrollScale < 1` a landing target is reached within ≤ ~`1/scrollScale` logical px (≪ one row). Reachability unaffected (see §7).        |
 
 ## 6. Strict TDD plan
 
@@ -274,13 +276,12 @@ Reuse the existing fixture (3 buckets, `totalViewerHeight == 8337`, viewport 158
 injected fake scroll element:
 
 ```ts
+// `scrollTo` already clamps, so the fake stores the value verbatim. `scrollBy` is unused
+// (manager.scrollBy routes through manager.scrollTo → fakeEl.scrollTo).
 const fakeEl = {
   scrollTop: 0,
   scrollTo({ top }) {
     this.scrollTop = top;
-  },
-  scrollBy(_x, y) {
-    this.scrollTop += y;
   },
 } as unknown as HTMLElement;
 timelineManager.scrollableElement = fakeEl;
@@ -297,9 +298,12 @@ timelineManager.scrollableElement = fakeEl;
 12. **scrollBy is logical.** under scaling, `scrollBy(d)` ⇒ `scrollTop` increases by ≈ `d` logical.
 13. **scrollTop is logical end-to-end.** set `fakeEl.scrollTop = domScrollMax; updateSlidingWindow()`
     ⇒ `timelineManager.scrollTop == logical max`, `visibleWindow.top == logical max`.
-14. **Logical scroll stability on height change (edge #9).** scroll into a later month under
-    scaling; grow an earlier month's height; assert `getTimelineTopVisibleAnchor` returns the same
-    month before and after (logical position preserved).
+14. **Logical scroll stability on height change (edge #9).** Deterministic core: under scaling,
+    `scrollBy(Δ)` moves `timelineManager.scrollTop` by exactly `Δ` (logical) — the invariant the
+    existing `month.height` compensation depends on (the setter calls `scrollBy(heightDelta)` when
+    an earlier month grows, lines 297–298 of `timeline-month.svelte.ts`). Because that magnitude is
+    preserved in logical space, the top-visible month stays fixed. (The compensation logic itself
+    is unchanged by this fix; only its `scrollBy`/`scrollTo` calls now convert to DOM space.)
 
 ### 6.3 Anchor regression (symptom #2)
 
@@ -312,12 +316,35 @@ Add to the timeline-manager spec (real manager + fake element + forced small cap
     i.e. no snap-back to the cap boundary.
 16. **Existing anchor unit tests stay green** (clamping to `maxScroll` unchanged).
 
-### 6.4 Full-suite regression
+### 6.4 Component template wiring
 
-17. `cd web && pnpm test -- --run src/lib/managers/timeline-manager` and the new
+17. **`renderOffset` applied to every absolutely-positioned site.** A focused
+    `@testing-library/svelte` component test (the project already uses it) renders `Timeline` with
+    a stubbed manager forced to `scrollScale < 1` and asserts each rendered month/bucket
+    `translate3d` Y equals `top + renderOffset` (skeleton month, loaded month, lead-out spacer,
+    representative bucket), and that `#virtual-timeline` height equals `domHeight`. A forgotten
+    `renderOffset` on one site misplaces that element only under `scrollScale < 1`, which the
+    manager-only tests cannot catch.
+    - **Fallback:** if component-level transform assertions prove impractical in this harness, this
+      item degrades to manual verification (§9 steps 1–2), which must then be performed **and
+      recorded** before merge — not silently skipped.
+
+### 6.5 Coverage boundary (honest accounting)
+
+- **Fully unit-tested (logic):** the scaling model, conversions, `scrollScale`/`domHeight`, logical
+  `scrollTop`, `renderOffset` value + reactivity, `scrollTo`/`scrollBy`, clamping, divide-by-zero
+  guards, tail reachability (symptom #1), anchor snap-back (symptom #2), logical stability
+  invariant.
+- **Indirectly covered:** the three `Timeline.svelte` mixer fixes consume
+  `timelineManager.scrollTop`, whose logical value is asserted by tests 9 and 13.
+- **Template wiring:** covered by item 17 (component test, or recorded manual fallback).
+
+### 6.6 Full-suite regression
+
+18. `cd web && pnpm test -- --run src/lib/managers/timeline-manager` and the new
     `VirtualScrollManager` spec all green.
-18. `cd web && pnpm test` (web unit suite) green — confirms no regression in dependent components.
-19. `make check-web` (svelte-check + tsc) clean.
+19. `cd web && pnpm test` (web unit suite) green — confirms no regression in dependent components.
+20. `make check-web` (svelte-check + tsc) clean.
 
 ## 7. Accepted limitations
 
@@ -328,6 +355,11 @@ Add to the timeline-manager spec (real manager + fake element + forced small cap
   keeps the _logical_ viewport position stable; the proportional DOM remap can introduce ≤ a few px
   of visual drift while month heights firm up on huge libraries. Imperceptible in practice and far
   better than total unreachability. Pixel-exact at `scrollScale == 1` (all normal libraries).
+- **`scrollTo` landing precision at `scrollScale < 1`.** Browsers round `scrollTop` to an integer
+  (device-pixel), so a logical target lands within ≤ ~`1/scrollScale` logical px (≪ one ~235px
+  row even at small scale). Reachability and which month/row is shown are unaffected; only exact
+  intra-row alignment drifts. Exact at `scrollScale == 1`. (Unit tests use an exact-arithmetic fake
+  element, so they assert the ideal mapping.)
 
 ## 8. Files touched
 
@@ -340,9 +372,10 @@ Add to the timeline-manager spec (real manager + fake element + forced small cap
 | `web/src/lib/managers/VirtualScrollManager/VirtualScrollManager.svelte.spec.ts`   | **new** — scaling math tests                                                                                            |
 | `web/src/lib/managers/timeline-manager/timeline-manager.svelte.spec.ts`           | scroll-conversion + reachability + stability tests                                                                      |
 | `web/src/lib/managers/timeline-manager/timeline-anchor.spec.ts` (or manager spec) | symptom-#2 regression                                                                                                   |
+| `web/src/lib/components/timeline/Timeline.svelte.spec.ts`                         | **new (or recorded manual fallback)** — item 17 template-wiring test                                                    |
 
-Reuses `isFirefox` from `web/src/lib/utils/asset-utils.ts`. No new files beyond the spec; no new
-classes; no upstream-file restructuring.
+Reuses `isFirefox` from `web/src/lib/utils/asset-utils.ts`. New files are limited to the two spec
+files; no new production files, no new classes, no upstream-file restructuring.
 
 ## 9. Manual verification
 
