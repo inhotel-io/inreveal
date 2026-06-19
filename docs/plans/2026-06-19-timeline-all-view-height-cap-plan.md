@@ -141,13 +141,21 @@ describe('VirtualScrollManager scaling', () => {
     expect(s.totalViewerHeight + s.renderOffset).toBeCloseTo(s.domHeight, 6);
   });
 
-  it('7. guards against divide-by-zero when content fits the viewport', () => {
-    const s = makeScroller({ body: 500, viewport: 1000, cap: 10_000 });
-    expect(s.logicalScrollMax).toBe(0);
-    expect(s.domToLogical(123)).toBe(0);
-    expect(s.logicalToDom(123)).toBe(0);
-    expect(s.scrollScale).toBe(1);
-    expect(Number.isFinite(s.domToLogical(123))).toBe(true);
+  it('7. guards against divide-by-zero and NaN at the geometry edges', () => {
+    // (a) content fits the viewport → logicalScrollMax == 0 (spec edge #4/#5)
+    const fits = makeScroller({ body: 500, viewport: 1000, cap: 10_000 });
+    expect(fits.logicalScrollMax).toBe(0);
+    expect(fits.domToLogical(123)).toBe(0);
+    expect(fits.logicalToDom(123)).toBe(0);
+    expect(fits.scrollScale).toBe(1);
+    expect(Number.isFinite(fits.domToLogical(123))).toBe(true);
+
+    // (b) zero-height viewport (transient, before layout) → no NaN/Infinity (spec edge #6)
+    const noViewport = makeScroller({ body: 100_000, viewport: 0, cap: 10_000 });
+    expect(noViewport.domHeight).toBe(10_000);
+    expect(Number.isFinite(noViewport.domToLogical(5000))).toBe(true);
+    expect(Number.isFinite(noViewport.logicalToDom(50_000))).toBe(true);
+    expect(Number.isFinite(noViewport.scrollScale)).toBe(true);
   });
 
   it('8. renderOffset reads cached state, updating only after updateSlidingWindow', () => {
@@ -357,10 +365,14 @@ describe('TimelineManager scroll scaling', () => {
     expect(timelineManager.scrollTop).toBeCloseTo(timelineManager.maxScroll, 6); // 7337
   });
 
-  it('11. clamps scrollTo beyond the logical max', () => {
+  it('11. clamps scrollTo to [0, domScrollMax]', () => {
     timelineManager.maxScrollHeight = 4000;
     timelineManager.scrollTo(10 * timelineManager.totalViewerHeight);
-    expect(fakeEl.scrollTop).toBeCloseTo(timelineManager.domScrollMax, 6);
+    expect(fakeEl.scrollTop).toBeCloseTo(timelineManager.domScrollMax, 6); // clamped to bottom
+    timelineManager.scrollTo(0); // top reachable (spec edge #11)
+    expect(fakeEl.scrollTop).toBe(0);
+    timelineManager.scrollTo(-5000); // negative clamped to 0
+    expect(fakeEl.scrollTop).toBe(0);
   });
 
   it('12. scrollBy moves the logical position by the given delta', () => {
@@ -400,7 +412,7 @@ Add these named imports to the existing `@immich/sdk` import (it already imports
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `cd web && pnpm test -- --run src/lib/managers/timeline-manager/timeline-manager.svelte.spec.ts -t "scroll scaling"`
-Expected: FAIL — `scrollTo(1000)` sets `fakeEl.scrollTop` correctly only by luck at scale 1, but tests 10–15 fail because `maxScrollHeight` does not yet affect `domHeight` in `TimelineManager` (its `bodySectionHeight` is derived, so `domHeight`/conversions come from Task 1, but `scrollTo` still writes the raw logical value and there is no `domScrollTop` override → `scrollTop` reads `0`). Concretely expect "expected 7337 to be close to 3000" / "expected 0 to be close to 7337".
+Expected: tests **10–15 FAIL**. Before this task `scrollTo` still writes the raw logical value (no logical→DOM conversion) and there is no `domScrollTop` override, so under a forced small `maxScrollHeight` the element receives the un-scaled value — concretely "expected 7337 to be close to 3000". Test **9 ("inert below the cap") passes already** — it is a regression guard asserting scale-1 behavior is unchanged, not a red driver; it must stay green before and after.
 
 - [ ] **Step 3: Implement the conversion in `TimelineManager`**
 
@@ -596,14 +608,19 @@ describe('Timeline scroll-space scaling', () => {
       },
     ];
     renderTimeline();
-    expect(screen.getByTestId('timeline-month-skeleton')).toHaveStyle('transform: translate3d(0, 1250px, 0)');
+    // assert on the raw inline style so CSS normalization (e.g. `0`→`0px`) can't cause a false negative;
+    // the template emits exactly `translate3d(0,${top + renderOffset}px,0)`
+    const skeleton = screen.getByTestId('timeline-month-skeleton');
+    expect(skeleton.getAttribute('style')).toMatch(/translate3d\(\s*0(?:px)?\s*,\s*1250px\s*,\s*0(?:px)?\s*\)/);
   });
 
   it('offsets the lead-out spacer transform by renderOffset', () => {
     // topSectionHeight 0 + bodySectionHeight 296 + renderOffset 50 = 346
     testState.renderOffset = 50;
     const { getByTestId } = renderTimeline();
-    expect(getByTestId('timeline-leadout')).toHaveStyle('transform: translate3d(0, 346px, 0)');
+    expect(getByTestId('timeline-leadout').getAttribute('style')).toMatch(
+      /translate3d\(\s*0(?:px)?\s*,\s*346px\s*,\s*0(?:px)?\s*\)/,
+    );
   });
 });
 ```
@@ -749,7 +766,23 @@ git commit -m "chore(web): finalize #713 height-cap fix" --allow-empty
 - §4.2 rendering / `renderOffset` → Task 1 (`renderOffset` getter) + Task 3 (transforms, `domHeight` height, representative `renderOffset`, top section left static).
 - §4.3 single logical source → Task 1 (logical `scrollTop`, cached `updateSlidingWindow`) + Task 2 (`domScrollTop` override, `scrollTo`/`scrollBy`) + Task 3 (mixers f).
 - §4.4 inert below cap → Tasks 1 (test 1), 2 (test 9), 3 (default props), 4 (full suite).
-- §5 edge cases 1–7,10,11 → Task 1 tests 1–7 + Task 2 tests 9,10,11. Edge 9 (stability) → Task 2 test 14. Edge 12 (representative) → Task 3. Edges 8/13/14/15/16/17/18 → covered by behavior + manual (Task 4) and noted as not-unit-testable in §6.5.
+- §5 edge cases, item by item:
+  - 1 (below cap) → Task 1 test 1, Task 2 test 9.
+  - 2 (at cap) → Task 1 test 2.
+  - 3 (above cap) → Task 1 test 3, Task 2 test 10.
+  - 4 (`logicalScrollMax == 0`) → Task 1 test 7(a).
+  - 5 (`domScrollMax == 0`) → Task 1 test 7(a).
+  - 6 (zero-height viewport) → Task 1 test 7(b).
+  - 7 (Firefox vs others) → **not unit-tested by design**: a module-eval UA ternary; tests override `maxScrollHeight` instead, and reachability under a small cap is proven (Task 2 test 10). The per-browser cap value is a trivial constant.
+  - 8 (resize) → covered by behavior (heights recompute → derived `domHeight`/`scrollScale`/`renderOffset`); not separately unit-tested.
+  - 9 (async height stability) → Task 2 test 14 (logical-delta invariant).
+  - 10 (`scrollTo > max`) → Task 2 test 11.
+  - 11 (`scrollTo(0)` / negative) → Task 2 test 11.
+  - 12 (representative grouping) → Task 3 (representative renderOffset test; scale 1 in practice).
+  - 13 (scrubber drag) / 15 (deep link) → behavior + recorded manual (Task 4 Step 5).
+  - 14 (scrubber arrow nudge) / 17 (live insert) → no code path change; behavior + manual.
+  - 16 (`limitedScroll`) → **not unit-tested by design**: only fires when content < 2× viewport, where `scrollScale` is always 1, so the existing path is provably unaffected; the inert-below-cap tests (Task 1 test 1, Task 2 test 9) cover scale-1 behavior.
+  - 18 (DOM rounding) → §7 limitation; unit tests use an exact-arithmetic fake element.
 - §6 TDD plan → Tasks 1–4 follow red→green; coverage boundary §6.5 reflected in Task 3 Step 7 note + Task 4 Step 5.
 - §7 limitations → documented; tests use exact-arithmetic fake element (no DOM rounding), consistent with §7.
 - §8 files touched → matches the File Structure table; circular-import avoidance honored (Task 1 inline const).
