@@ -16,6 +16,7 @@ class SmartSearchFacetsDto {
     this.city,
     this.country,
     this.isFavorite,
+    this.isInAlbum,
     this.isNotInAlbum,
     this.language,
     this.make,
@@ -47,6 +48,15 @@ class SmartSearchFacetsDto {
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
   bool? isFavorite;
+
+  /// Filter assets in at least one album
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  bool? isInAlbum;
 
   /// Filter assets not in any album
   ///
@@ -154,6 +164,7 @@ class SmartSearchFacetsDto {
     other.city == city &&
     other.country == country &&
     other.isFavorite == isFavorite &&
+    other.isInAlbum == isInAlbum &&
     other.isNotInAlbum == isNotInAlbum &&
     other.language == language &&
     other.make == make &&
@@ -176,6 +187,7 @@ class SmartSearchFacetsDto {
     (city == null ? 0 : city!.hashCode) +
     (country == null ? 0 : country!.hashCode) +
     (isFavorite == null ? 0 : isFavorite!.hashCode) +
+    (isInAlbum == null ? 0 : isInAlbum!.hashCode) +
     (isNotInAlbum == null ? 0 : isNotInAlbum!.hashCode) +
     (language == null ? 0 : language!.hashCode) +
     (make == null ? 0 : make!.hashCode) +
@@ -193,7 +205,7 @@ class SmartSearchFacetsDto {
     (withSharedSpaces == null ? 0 : withSharedSpaces!.hashCode);
 
   @override
-  String toString() => 'SmartSearchFacetsDto[city=$city, country=$country, isFavorite=$isFavorite, isNotInAlbum=$isNotInAlbum, language=$language, make=$make, model=$model, personIds=$personIds, query=$query, queryAssetId=$queryAssetId, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, withSharedSpaces=$withSharedSpaces]';
+  String toString() => 'SmartSearchFacetsDto[city=$city, country=$country, isFavorite=$isFavorite, isInAlbum=$isInAlbum, isNotInAlbum=$isNotInAlbum, language=$language, make=$make, model=$model, personIds=$personIds, query=$query, queryAssetId=$queryAssetId, rating=$rating, spaceId=$spaceId, spacePersonIds=$spacePersonIds, tagIds=$tagIds, takenAfter=$takenAfter, takenBefore=$takenBefore, type=$type, withSharedSpaces=$withSharedSpaces]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -211,6 +223,11 @@ class SmartSearchFacetsDto {
       json[r'isFavorite'] = this.isFavorite;
     } else {
     //  json[r'isFavorite'] = null;
+    }
+    if (this.isInAlbum != null) {
+      json[r'isInAlbum'] = this.isInAlbum;
+    } else {
+    //  json[r'isInAlbum'] = null;
     }
     if (this.isNotInAlbum != null) {
       json[r'isNotInAlbum'] = this.isNotInAlbum;
@@ -298,6 +315,7 @@ class SmartSearchFacetsDto {
         city: mapValueOfType<String>(json, r'city'),
         country: mapValueOfType<String>(json, r'country'),
         isFavorite: mapValueOfType<bool>(json, r'isFavorite'),
+        isInAlbum: mapValueOfType<bool>(json, r'isInAlbum'),
         isNotInAlbum: mapValueOfType<bool>(json, r'isNotInAlbum'),
         language: mapValueOfType<String>(json, r'language'),
         make: mapValueOfType<String>(json, r'make'),
