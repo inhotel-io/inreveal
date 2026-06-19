@@ -1,5 +1,11 @@
 import { debounce } from 'lodash-es';
 
+// Largest element height the browser renders before clamping the scroll container: Firefox ≈ 17.9M,
+// Chrome/Safari ≈ 33.5M. The Firefox check is inlined (not imported from asset-utils's `isFirefox`)
+// to avoid the circular import asset-utils → TimelineManager → VirtualScrollManager.
+const MAX_SCROLL_HEIGHT =
+  typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox') ? 17_000_000 : 33_000_000;
+
 type LayoutOptions = {
   headerHeight: number;
   rowHeight: number;
@@ -19,6 +25,8 @@ export abstract class VirtualScrollManager {
   #viewportHeight = $state(0);
   #viewportWidth = $state(0);
   #scrollTop = $state(0);
+  maxScrollHeight = $state(MAX_SCROLL_HEIGHT);
+  #cachedDomScrollTop = $state(0);
   #rowHeight = $state(235);
   #headerHeight = $state(48);
   #gap = $state(12);
@@ -37,8 +45,40 @@ export abstract class VirtualScrollManager {
     this.setLayoutOptions();
   }
 
-  get scrollTop() {
+  get domScrollTop(): number {
     return 0;
+  }
+
+  get scrollTop(): number {
+    return this.domToLogical(this.domScrollTop);
+  }
+
+  get renderOffset(): number {
+    return this.#cachedDomScrollTop - this.#scrollTop;
+  }
+
+  get domHeight(): number {
+    return Math.min(this.totalViewerHeight, this.maxScrollHeight);
+  }
+
+  get logicalScrollMax(): number {
+    return Math.max(0, this.totalViewerHeight - this.viewportHeight);
+  }
+
+  get domScrollMax(): number {
+    return Math.max(0, this.domHeight - this.viewportHeight);
+  }
+
+  get scrollScale(): number {
+    return this.logicalScrollMax > 0 ? this.domScrollMax / this.logicalScrollMax : 1;
+  }
+
+  domToLogical(dom: number): number {
+    return this.domScrollMax > 0 ? (dom * this.logicalScrollMax) / this.domScrollMax : 0;
+  }
+
+  logicalToDom(logical: number): number {
+    return this.logicalScrollMax > 0 ? (logical * this.domScrollMax) / this.logicalScrollMax : 0;
   }
 
   get justifiedLayoutOptions() {
@@ -153,8 +193,10 @@ export abstract class VirtualScrollManager {
   }
 
   updateSlidingWindow() {
-    const scrollTop = this.scrollTop;
-    if (this.#scrollTop !== scrollTop) {
+    const domScrollTop = this.domScrollTop;
+    const scrollTop = this.domToLogical(domScrollTop);
+    if (this.#scrollTop !== scrollTop || this.#cachedDomScrollTop !== domScrollTop) {
+      this.#cachedDomScrollTop = domScrollTop;
       this.#scrollTop = scrollTop;
       this.updateViewportProximities();
     }
