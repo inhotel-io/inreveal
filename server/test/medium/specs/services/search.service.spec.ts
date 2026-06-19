@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
+import { AlbumUserRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -376,6 +377,27 @@ describe(SearchService.name, () => {
       const result = await sut.getFilterSuggestions(auth, { spaceId: space.id });
 
       expect(result.people.map((p) => p.name)).toEqual(['Alice Space', 'Zelda Space']);
+    });
+
+    it('returns album facets for a viewer-role user who owns none of the shared album assets (issue #655)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      await ctx.newExif({ assetId: asset.id, country: 'Germany', make: 'Sony' });
+      const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'Ada' });
+      await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+      const { album } = await ctx.newAlbum({ ownerId: owner.id }, [asset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const result = await sut.getFilterSuggestions(auth, { albumId: album.id });
+
+      expect(result.countries).toContain('Germany');
+      expect(result.cameraMakes).toContain('Sony');
+      expect(result.people.map((p) => p.name)).toContain('Ada');
     });
   });
 });

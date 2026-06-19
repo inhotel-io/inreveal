@@ -1195,28 +1195,12 @@ export class SearchRepository {
           ),
         ),
       )
-      .$if(!!options?.albumId && !!options?.timelineSpaceIds?.length, (qb) =>
-        qb.where((eb) =>
-          eb.or([
-            eb('asset.ownerId', '=', anyUuid(userIds)),
-            eb.exists(
-              eb
-                .selectFrom('shared_space_asset')
-                .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                .where('shared_space_asset.spaceId', '=', anyUuid(options!.timelineSpaceIds!)),
-            ),
-            eb.exists(
-              eb
-                .selectFrom('shared_space_library')
-                .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                .where('shared_space_library.spaceId', '=', anyUuid(options!.timelineSpaceIds!)),
-            ),
-          ]),
-        ),
-      )
-      .$if(!!options?.albumId && !options?.timelineSpaceIds?.length, (qb) =>
-        qb.where('asset.ownerId', '=', anyUuid(userIds)),
-      )
+      // Album scope: membership in the album (the $if above) is the only restriction.
+      // The service verifies AlbumRead before calling this, so every asset in a shared
+      // album is a valid filter source regardless of who owns it. This is what lets
+      // viewer-role users (who own none of the album's assets and are in no shared
+      // space) see People/Location/Camera/Tag facets instead of empty (0) counts.
+      // See issue #655.
       .$if(!options?.albumId && !options?.spaceId && !options?.timelineSpaceIds, (qb) =>
         qb.where('asset.ownerId', '=', anyUuid(userIds)),
       )
