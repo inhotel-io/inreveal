@@ -18,15 +18,16 @@ These are **acceptance/characterization tests of behavior that already ships** (
 
 ## Prerequisites
 
-- A running dev stack on `:2283` (`make dev`) — the fixture calls `utils.resetDatabase()`, so this must be a disposable dev/e2e database, **not** a stack with data you care about.
+- A running stack built from **this branch's** source (it must include the space-albums feature + the Albums tab). Point Playwright at whichever local port serves that build. **In this environment that was the `make e2e` stack on `:2285`** (`immich-e2e-server`, v3, DB on `:5435`) — NOT `:2283`, which was an unrelated `make dev` stack from another worktree running an older fork version (2.7.5) without these UI changes. Confirm the port with `curl -s http://127.0.0.1:<port>/api/server/version` and check it is the v3 build before running.
+- The fixture calls `utils.resetDatabase()`, so the target must be a disposable e2e database, **not** a stack with data you care about.
 - Run from the repo root. Single-spec run command (used in every task):
 
   ```bash
-  cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+  cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
     pnpm exec playwright test --project=web spaces-albums-journey
   ```
 
-  `spaces-albums-journey` is a filename substring filter; `PLAYWRIGHT_DISABLE_WEBSERVER=1` reuses the already-running stack.
+  `spaces-albums-journey` is a filename substring filter; `PLAYWRIGHT_DISABLE_WEBSERVER=1` reuses the already-running stack. If the running image is stale, rebuild it first (`make e2e` rebuilds the e2e stack image from current source).
 
 ## File structure
 
@@ -211,7 +212,7 @@ test.describe('Spaces — Albums UI journey & permission matrix', () => {
 Run (dev stack must be up on :2283):
 
 ```bash
-cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
   pnpm exec playwright test --project=web spaces-albums-journey
 ```
 
@@ -262,7 +263,7 @@ test('editor walks the journey and sees manage controls', async ({ context, page
 - [ ] **Step 2: Run the editor test — expect PASS**
 
 ```bash
-cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
   pnpm exec playwright test --project=web spaces-albums-journey -g "editor walks"
 ```
 
@@ -318,7 +319,7 @@ test('viewer walks the journey, reaches photos via the space grant, sees NO mana
 - [ ] **Step 2: Run the viewer test — expect PASS**
 
 ```bash
-cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
   pnpm exec playwright test --project=web spaces-albums-journey -g "viewer walks"
 ```
 
@@ -363,7 +364,7 @@ test('stranger does not see the space and is blocked at every space-albums depth
 - [ ] **Step 2: Run the stranger test — expect PASS**
 
 ```bash
-cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
   pnpm exec playwright test --project=web spaces-albums-journey -g "stranger"
 ```
 
@@ -387,7 +388,7 @@ git commit -m "test(e2e): space-albums UI journey — stranger absent from list 
 - [ ] **Step 1: Run the whole spec (all four tests)**
 
 ```bash
-cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
+cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:2285 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
   pnpm exec playwright test --project=web spaces-albums-journey
 ```
 
