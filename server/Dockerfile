@@ -36,16 +36,19 @@ COPY ./web ./web/
 COPY ./i18n ./i18n/
 COPY ./packages/sdk ./packages/sdk/
 RUN --mount=type=cache,id=pnpm-web,target=/buildcache/pnpm-store \
-  pnpm --filter @immich/sdk --filter immich-web install --frozen-lockfile && \
-  pnpm --filter @immich/sdk --filter immich-web build
+  pnpm --filter @immich/sdk install --frozen-lockfile && \
+  pnpm --filter @immich/sdk build && \
+  pnpm --filter @immich/sdk --filter immich-web install --frozen-lockfile --force && \
+  pnpm --filter immich-web build
 
 FROM builder AS cli
 
 COPY ./packages/sdk ./packages/sdk/
 COPY ./packages/cli ./packages/cli/
 RUN --mount=type=cache,id=pnpm-cli,target=/buildcache/pnpm-store \
-  pnpm --filter @immich/sdk --filter @immich/cli install --frozen-lockfile && \
+  pnpm --filter @immich/sdk install --frozen-lockfile && \
   pnpm --filter @immich/sdk build && \
+  pnpm --filter @immich/sdk --filter @immich/cli install --frozen-lockfile && \
   pnpm --filter @immich/cli build && \
   pnpm --filter @immich/cli --prod --no-optional deploy /output/cli-pruned
 
@@ -71,8 +74,9 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
 # Build plugins
 RUN --mount=type=cache,id=pnpm-packages,target=/buildcache/pnpm-store \
   --mount=type=cache,id=mise-plugin-tools-${TARGETPLATFORM},target=/buildcache/mise \
-  pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter @immich/plugin-core install --frozen-lockfile && \
+  pnpm --filter @immich/sdk install --frozen-lockfile && \
   pnpm --filter @immich/sdk build && \
+  pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter @immich/plugin-core install --frozen-lockfile && \
   mise exec --no-deps --jobs=1 github:extism/js-pdk@1.6.0 -- \
     pnpm --filter @immich/plugin-sdk --filter @immich/plugin-core build
 
