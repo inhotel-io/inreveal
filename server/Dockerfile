@@ -23,7 +23,10 @@ COPY ./server ./server/
 COPY ./packages/sdk ./packages/sdk/
 COPY ./packages/plugin-sdk ./packages/plugin-sdk/
 RUN --mount=type=cache,id=pnpm-server,target=/buildcache/pnpm-store \
-  pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter immich build && \
+  pnpm --filter @immich/sdk install --frozen-lockfile && \
+  pnpm --filter @immich/sdk build && \
+  pnpm --filter @immich/sdk --filter @immich/plugin-sdk --filter immich install --frozen-lockfile && \
+  pnpm --filter @immich/plugin-sdk --filter immich build && \
   pnpm --filter immich --prod --no-optional deploy /output/server-pruned && \
   SHARP_FORCE_GLOBAL_LIBVIPS=true pnpm --dir /output/server-pruned/node_modules/sharp exec npm run build
 
