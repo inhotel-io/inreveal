@@ -183,16 +183,19 @@ test.describe('Spaces — Albums UI journey & permission matrix', () => {
 
     await gotoSpacesList(page); // hop 1
     await openSpaceFromList(page, space.id); // hops 2–3
-    await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('Owner');
+    // hero-role-badge renders the RAW enum ('owner') with CSS `capitalize`,
+    // which does NOT change textContent — so match case-insensitively.
+    await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('owner', { ignoreCase: true });
 
     await openAlbumsTab(page, space.id); // hop 4
     // hop 5: linked album card present.
     await expect(page.getByTestId('space-album-card-link').filter({ hasText: ALBUM_NAME })).toBeVisible();
     // hop 8: owner gating @ grid — link button + card ⋮ menu. The menu is
-    // rendered only when canManage (opacity-0 until hover, which Playwright
-    // still treats as visible — opacity is not part of its visibility check).
+    // rendered only when canManage but is opacity-0 until hover; assert it is
+    // ATTACHED (present in the DOM) — the precise intent ("the control exists
+    // for this role") and unambiguous vs. the opacity-0 visibility edge.
     await expect(page.getByTestId('link-album-button')).toBeVisible();
-    await expect(page.getByTestId('space-album-card-menu')).toBeVisible();
+    await expect(page.getByTestId('space-album-card-menu')).toBeAttached();
 
     await openAlbumCard(page, space.id, ALBUM_NAME); // hop 6
     // hop 9: owner gating @ detail — add-photos button present.
@@ -240,13 +243,14 @@ test('editor walks the journey and sees manage controls', async ({ context, page
 
   await gotoSpacesList(page); // hop 1
   await openSpaceFromList(page, space.id); // hops 2–3
-  await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('Editor');
+  await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('editor', { ignoreCase: true });
 
   await openAlbumsTab(page, space.id); // hop 4
   await expect(page.getByTestId('space-album-card-link').filter({ hasText: ALBUM_NAME })).toBeVisible(); // hop 5
-  // hop 8: editor gating @ grid (space Editor role → canManage).
+  // hop 8: editor gating @ grid (space Editor role → canManage). Card menu is
+  // opacity-0 until hover, so assert ATTACHED (present), not visible.
   await expect(page.getByTestId('link-album-button')).toBeVisible();
-  await expect(page.getByTestId('space-album-card-menu')).toBeVisible();
+  await expect(page.getByTestId('space-album-card-menu')).toBeAttached();
 
   await openAlbumCard(page, space.id, ALBUM_NAME); // hop 6
   await expect(page.getByTestId('add-photos-button')).toBeVisible(); // hop 9
@@ -293,7 +297,7 @@ test('viewer walks the journey, reaches photos via the space grant, sees NO mana
 
   await gotoSpacesList(page); // hop 1
   await openSpaceFromList(page, space.id); // hops 2–3
-  await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('Viewer');
+  await expect(page.locator('[data-testid="hero-role-badge"]')).toContainText('viewer', { ignoreCase: true });
 
   await openAlbumsTab(page, space.id); // hop 4
   // hop 5: viewer SEES the album (read access via the space grant; viewer has
@@ -417,6 +421,6 @@ git commit -m "style(e2e): prettier-format space-albums journey spec" || echo "n
 ## Notes & fallbacks
 
 - **Sidebar viewport.** The funnel relies on the desktop sidebar. The `web` project uses `devices['Desktop Chrome']` (1280×720), so the sidebar is expanded and the Spaces link is present — no viewport override needed.
-- **Card-menu visibility.** `space-album-card-menu` is rendered (`{#if canManage}`) with `opacity-0` until hover; Playwright's `toBeVisible()` ignores opacity, so it passes for managers and `toHaveCount(0)` is correct for the viewer (not rendered). If a future @immich/ui change makes the opacity-0 element zero-box and `toBeVisible()` flakes for owner/editor, switch those two assertions to `.toBeAttached()` (presence is the real intent).
+- **Card-menu presence.** `space-album-card-menu` is rendered only `{#if canManage}` and is `opacity-0` until hover. Managers assert `.toBeAttached()` (present in the DOM — opacity is irrelevant to attachment); the viewer asserts `.toHaveCount(0)` (not rendered). If you ever need to assert it is interactively reachable, hover the card first (`page.getByTestId('space-album-card').hover()`) then `.toBeVisible()`.
 - **No queue drain.** `utils.createAsset` produces an asset whose timeline focus-container renders without thumbnail generation (same as the existing `spaces-albums.e2e-spec.ts` photo-viewer tests). If hop 7 flakes on a slow machine, add `await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');` to `beforeAll`.
-- **Role-badge text.** `toContainText('Owner'|'Editor'|'Viewer')` mirrors `permission-matrix.e2e-spec.ts`; the `hero-role-badge` wraps `role-badge.svelte`, whose labels resolve to those words.
+- **Role-badge text (case).** `hero-role-badge` (space-hero.svelte:186) renders `{currentRole}` = the raw `SharedSpaceRole` enum, which is lowercase (`server/src/enum.ts:73` → `'owner'`/`'editor'`/`'viewer'`). The visible capitalization is CSS `capitalize`, which does not affect `textContent`. Assert with `{ ignoreCase: true }`. NOTE: `permission-matrix.e2e-spec.ts` uses case-sensitive `toContainText('Owner')` against this same badge — likely a latent failure in that smoke suite; out of scope here but worth a separate look.
