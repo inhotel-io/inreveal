@@ -46,7 +46,7 @@ import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manage
 import { assetViewerManager } from '$lib/managers/asset-viewer-manager.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { eventManager } from '$lib/managers/event-manager.svelte';
-import AssetAddToAlbumModal from '$lib/modals/AssetAddToAlbumModal.svelte';
+import AssetAddToCollectionModal from '$lib/modals/AssetAddToCollectionModal.svelte';
 import AssetTagModal from '$lib/modals/AssetTagModal.svelte';
 import SharedLinkCreateModal from '$lib/modals/SharedLinkCreateModal.svelte';
 import { SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
@@ -65,11 +65,13 @@ export const getAssetBulkActions = ($t: MessageFormatter) => {
   };
 
   const AddToAlbum: ActionItem = {
-    title: $t('add_to_album'),
+    title: $t('add_to_album_or_space'),
     icon: mdiPlus,
     shortcuts: [{ key: 'l' }],
     onAction: () =>
-      modalManager.show(AssetAddToAlbumModal, { assetIds: assetMultiSelectManager.assets.map((asset) => asset.id) }),
+      modalManager.show(AssetAddToCollectionModal, {
+        assetIds: assetMultiSelectManager.assets.map((asset) => asset.id),
+      }),
   };
 
   const RefreshFacesJob: ActionItem = {
@@ -174,11 +176,11 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
   };
 
   const AddToAlbum: ActionItem = {
-    title: $t('add_to_album'),
+    title: $t('add_to_album_or_space'),
     icon: mdiPlus,
     shortcuts: [{ key: 'l' }],
     $if: () => asset.visibility !== AssetVisibility.Locked && !asset.isTrashed,
-    onAction: () => modalManager.show(AssetAddToAlbumModal, { assetIds: [asset.id] }),
+    onAction: () => modalManager.show(AssetAddToCollectionModal, { assetIds: [asset.id] }),
   };
 
   const Offline: ActionItem = {
