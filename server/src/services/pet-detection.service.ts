@@ -21,6 +21,9 @@ export class PetDetectionService extends BaseService {
       // there. The confirmation dialog promises that deletion, so the purge must happen even
       // when detection is disabled — only the reprocessing requeue below is gated on it.
       await this.personRepository.deleteAllPets();
+      // Pets also propagate into shared spaces as their own person rows, so clear those copies
+      // too — otherwise the pets linger in every space's People view after a reset.
+      await this.sharedSpaceRepository.deleteAllPets();
     }
 
     if (!isPetDetectionEnabled(machineLearning)) {
