@@ -145,6 +145,29 @@ describe(PetDetectionService.name, () => {
 
       expect(mocks.person.deleteAllPets).not.toHaveBeenCalled();
     });
+
+    it('should clear existing pet detections on a force reset even when pet detection is disabled', async () => {
+      // Regression test for #718: a user turns pet detection off (so pets stop
+      // reappearing), then clicks Reset. The confirmation dialog promises deletion,
+      // so the reset must still purge every detected pet — the deletion cannot be
+      // short-circuited by the "pet detection disabled" early return. With detection
+      // off there is nothing to reprocess, so no jobs are requeued.
+      expect(await sut.handleQueuePetDetection({ force: true })).toEqual(JobStatus.Skipped);
+
+      expect(mocks.person.deleteAllPets).toHaveBeenCalledTimes(1);
+      expect(mocks.assetJob.streamForPetDetectionJob).not.toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
+
+    it('should not clear existing pet detections when force is false and pet detection is disabled', async () => {
+      // A plain "missing"-style run (force: false) while detection is disabled must
+      // remain a no-op: nothing is deleted and nothing is requeued.
+      expect(await sut.handleQueuePetDetection({ force: false })).toEqual(JobStatus.Skipped);
+
+      expect(mocks.person.deleteAllPets).not.toHaveBeenCalled();
+      expect(mocks.assetJob.streamForPetDetectionJob).not.toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+    });
   });
 
   describe('handlePetDetection', () => {
