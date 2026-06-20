@@ -7,6 +7,7 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/sort_icon_button
 import 'package:immich_mobile/presentation/widgets/memory/memory_lane.widget.dart';
 import 'package:immich_mobile/presentation/widgets/photos_filter/filter_subheader.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/timeline_empty_state.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_selector.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/infrastructure/memory.provider.dart';
@@ -62,6 +63,7 @@ class _MainTimelinePageState extends ConsumerState<MainTimelinePage> {
                 showStorageIndicator: true,
                 appBar: const PhotosTimelineAppBar(),
                 bottomSliverWidget: const _SearchLoadMoreFooter(),
+                emptyWidget: const TimelineEmptyState(),
               ),
             ),
           ),
