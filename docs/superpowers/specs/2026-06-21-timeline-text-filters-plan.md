@@ -91,7 +91,7 @@
 **Goal:** setting a text filter actually drives the timeline result set end-to-end. Depends on Slice 2 (SDK types) + Slice 3.
 
 - [ ] **Test (red):** `lib/utils/__tests__/photos-filter-options.spec.ts` — non-empty fields map onto timeline options (`originalFileName`/`description`/`ocr`); whitespace-only/unset omitted; remove-text-filter clears them. Mirror in `space-filter-options.spec.ts` + `space-search.spec.ts`.
-- [ ] **Impl:** in `photos-filter-options.ts` / `space-filter-options.ts` / `space-search.ts`, set `base.originalFileName`/`base.description`/`base.ocr` from the trimmed `FilterState` fields (alongside `city`/`make`); add the three to the remove-filter handling. (No change to `request-options.ts` / `types.ts` — `getApiRequestOptions` spreads them.) Green.
+- [ ] **Impl:** in `photos-filter-options.ts` / `space-filter-options.ts` (the **timeline** option builders), set `base.originalFileName`/`base.description`/`base.ocr` from the trimmed `FilterState` fields (alongside `city`/`make`); add the three to the remove-filter handling. (No change to `request-options.ts` / `types.ts` — `getApiRequestOptions` spreads them. `space-search.ts` is **intentionally not touched** — it builds the smart-search **facets** DTO, which is the out-of-scope facet-narrowing path and lacks `description`/`originalFileName` fields.) Green.
 - [ ] **Test (red) + verify:** `photos-page.spec.ts` + `spaces-page.spec.ts` — `getTimeBuckets`/`getTimeBucket` called with `description`/`originalFileName`/`ocr` when the URL params are present; absent otherwise. Green; `pnpm check`. Commit.
 
 ### Slice 6 — Web: ⌘K → timeline handoff
