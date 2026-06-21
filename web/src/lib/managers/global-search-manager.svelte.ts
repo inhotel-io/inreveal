@@ -1568,12 +1568,23 @@ export class GlobalSearchManager {
       return;
     }
     const filters: FilterState = { ...(this.searchablePageFiltersProvider?.() ?? createFilterState()) };
-    if (mode === 'metadata') {
-      filters.originalFileName = trimmed;
-    } else if (mode === 'description') {
-      filters.description = trimmed;
-    } else if (mode === 'ocr') {
-      filters.ocr = trimmed;
+    switch (mode) {
+      case 'metadata': {
+        filters.originalFileName = trimmed;
+        break;
+      }
+      case 'description': {
+        filters.description = trimmed;
+        break;
+      }
+      case 'ocr': {
+        filters.ocr = trimmed;
+        break;
+      }
+      case 'smart': {
+        // Unreachable: navigateToFieldResults is only called for field modes.
+        return;
+      }
     }
     // Field results are always a filtered timeline, never a /map view. Target the current
     // searchable page if there is one, else /photos — going through buildSearchDestination
