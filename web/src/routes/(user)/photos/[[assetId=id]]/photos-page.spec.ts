@@ -340,7 +340,7 @@ describe('Photos page search URL state', () => {
 
     expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute(
       'data-sections',
-      'timeline,people,location,camera,tags,rating,media,favorites,albums',
+      'timeline,people,location,camera,tags,rating,media,favorites,albums,text',
     );
   });
 
