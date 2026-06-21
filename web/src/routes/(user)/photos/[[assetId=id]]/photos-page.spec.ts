@@ -354,6 +354,18 @@ describe('Photos page search URL state', () => {
     });
   });
 
+  it('passes description/filename/ocr text filters into photos timeline options from the URL', async () => {
+    mockPage.url = new URL('https://gallery.test/photos?description=beach&filename=IMG&ocr=invoice');
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'beach', originalFileName: 'IMG', ocr: 'invoice' }),
+      );
+    });
+  });
+
   it('passes has-album into photos timeline options when hydrated from the URL', async () => {
     mockPage.url = new URL('https://gallery.test/photos?album=has');
 
