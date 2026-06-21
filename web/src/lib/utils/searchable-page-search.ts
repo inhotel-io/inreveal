@@ -9,6 +9,9 @@ export const SEARCHABLE_PAGE_FILTER_PARAMS = [
   'country',
   'make',
   'model',
+  'description',
+  'filename',
+  'ocr',
   'type',
   'favorite',
   'album',
@@ -26,6 +29,9 @@ export type SearchablePageFilterState = Partial<
     | 'country'
     | 'make'
     | 'model'
+    | 'description'
+    | 'originalFileName'
+    | 'ocr'
     | 'mediaType'
     | 'isFavorite'
     | 'isNotInAlbum'
@@ -174,6 +180,18 @@ export function getSearchablePageFilterState(url: URL): SearchablePageFilterStat
   if (url.searchParams.get('model')) {
     result.model = url.searchParams.get('model') ?? undefined;
   }
+  const description = url.searchParams.get('description')?.trim();
+  if (description) {
+    result.description = description;
+  }
+  const filename = url.searchParams.get('filename')?.trim();
+  if (filename) {
+    result.originalFileName = filename;
+  }
+  const ocr = url.searchParams.get('ocr')?.trim();
+  if (ocr) {
+    result.ocr = ocr;
+  }
   if (mediaType) {
     result.mediaType = mediaType;
   }
@@ -232,6 +250,15 @@ function appendSearchablePageFilterParams(params: URLSearchParams, filters: Filt
   }
   if (filters.model) {
     params.set('model', filters.model);
+  }
+  if (filters.description?.trim()) {
+    params.set('description', filters.description.trim());
+  }
+  if (filters.originalFileName?.trim()) {
+    params.set('filename', filters.originalFileName.trim());
+  }
+  if (filters.ocr?.trim()) {
+    params.set('ocr', filters.ocr.trim());
   }
   if (filters.mediaType !== 'all') {
     params.set('type', filters.mediaType);
