@@ -25,6 +25,7 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
+import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import { Route } from '$lib/route';
@@ -1554,6 +1555,28 @@ export class GlobalSearchManager {
     return buildSearchablePageUrl(new URL('/photos', page.url), text, this.searchSortOrder, filters) ?? '/photos';
   }
 
+  /**
+   * Navigate the current searchable page (or `/photos`) to a full result set filtered by the
+   * active field-search mode. The current filters are preserved and the one text field is
+   * AND-ed in, so "See all" / Enter from a field mode lands on the filterable timeline rather
+   * than dropping the mode into a smart `?q=` search.
+   */
+  private navigateToFieldResults(text: string, mode: SearchMode): void {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+    const filters: FilterState = { ...(this.searchablePageFiltersProvider?.() ?? createFilterState()) };
+    if (mode === 'metadata') {
+      filters.originalFileName = trimmed;
+    } else if (mode === 'description') {
+      filters.description = trimmed;
+    } else if (mode === 'ocr') {
+      filters.ocr = trimmed;
+    }
+    void goto(this.buildSearchDestination('', filters));
+  }
+
   async applySearchSort(sortOrder: SearchablePageSortOrder, text = this.query) {
     this.searchSortOrder = sortOrder;
 
@@ -1595,6 +1618,20 @@ export class GlobalSearchManager {
         this.clearQueryOnNextModalOpen = false;
         void goto(searchablePageUrl);
       }
+      return;
+    }
+
+    // Field-search modes (filename / description / OCR) bypass typed-search parsing and route to
+    // the filtered timeline so the selected mode is honoured instead of becoming a smart search.
+    if (this.mode === 'metadata' || this.mode === 'description' || this.mode === 'ocr') {
+      addEntry({
+        kind: 'query',
+        id: `query:${trimmed.toLowerCase()}`,
+        text: trimmed,
+        lastUsed: Date.now(),
+      });
+      this.clearQueryOnNextModalOpen = true;
+      this.navigateToFieldResults(trimmed, this.mode);
       return;
     }
 
