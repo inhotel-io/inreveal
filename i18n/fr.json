@@ -1675,6 +1675,7 @@
   "filter_sort_newest_first": "Trier : du plus récent au plus ancien",
   "filter_sort_oldest_first": "Trier : du plus ancien au plus récent",
   "filter_tags": "Filtrer par étiquettes",
+  "filter_text": "Texte",
   "filter_to": "Au",
   "filters": "Filtres",
   "find_them_fast": "Pour les retrouver rapidement par leur nom",

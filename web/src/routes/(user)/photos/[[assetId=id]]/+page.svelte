@@ -278,7 +278,7 @@
   };
 
   const filterConfig: FilterPanelConfig = {
-    sections: ['timeline', 'people', 'location', 'camera', 'tags', 'rating', 'media', 'favorites', 'albums'],
+    sections: ['timeline', 'people', 'location', 'camera', 'tags', 'rating', 'media', 'favorites', 'albums', 'text'],
     suggestionsProvider: async (nextFilters: FilterState) => {
       if (!showSearchResults) {
         return loadPhotoFilterSuggestions(nextFilters);
