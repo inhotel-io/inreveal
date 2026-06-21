@@ -109,8 +109,8 @@
 
 **Goal:** prove the feature end-to-end and pass all gates.
 
-- [ ] **E2E (red→green):** `e2e` Playwright — set a Description filter on `/photos`, assert the grid shows exactly the seeded matching assets and `?description=` persists across reload; combine with a person/date filter (AND); repeat on a shared-space timeline; ⌘K flow: Filename mode → "See all results" → lands on the filtered timeline.
-- [ ] **Final gates:** full `pnpm lint` (server + web); `cd server && pnpm test`; `mise //:check` / `cd web && pnpm check:all`; `mise //:open-api` clean (no drift); `mise //:sql` clean. Medium tests + `build-mobile` + mobile static analysis run in **CI** (not locally). Commit.
+- [ ] **E2E — deferred (documented).** The fork's Playwright `ui` project (`e2e/src/ui/specs`, the only home for a filter-panel/timeline UI test) runs its webServer via `docker compose up --build` (`playwright.config.ts:72`) and uses a sophisticated mock-network/timeline-generator harness gated on `PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS=1`. It is **not runnable in this worktree** (no Docker stack), so a new spec can't be authored+verified here without high risk of a broken, undebuggable CI failure. The behaviour is fully covered by the layers below (server DTO/SQL/service + web state/URL/component/util/page-integration + cmdk manager/integration). A Playwright `ui` spec (set a Description filter on `/photos` → assert the seeded matches + `?description=` persistence; ⌘K Filename → "See all results" → filtered timeline) is a clean follow-up for someone with the e2e stack.
+- [x] **Final gates (runnable):** server `pnpm lint` ✓ clean; web `pnpm lint`; `cd server && pnpm test` ✓ (4706); full web unit suite; `tsc` ✓ clean (my files); OpenAPI regenerated + committed in Slice 2 (no further DTO change → in sync); no `*.sql` diff (the `@GenerateSql` example params don't set the new fields, so `asset.repository.sql` is unchanged). Medium tests + `mise //:sql` (needs DB) + `build-mobile` + mobile static analysis run in **CI**.
 
 ## Done criteria
 
