@@ -43,6 +43,7 @@ import {
   hasSpacePeople,
   isStaleAssetForeignKeyConstraint,
   removeUndefinedKeys,
+  tokenizeForSearch,
   truncatedDate,
   unnest,
   withAnyTagId,
@@ -113,6 +114,9 @@ interface AssetBuilderOptions {
   country?: string;
   make?: string;
   model?: string;
+  originalFileName?: string;
+  description?: string;
+  ocr?: string;
   rating?: number;
   takenAfter?: string;
   takenBefore?: string;
@@ -256,6 +260,7 @@ export function withTimeBucketAssetFilters<O>(
         !!options.country ||
         !!options.make ||
         !!options.model ||
+        !!options.description ||
         options.rating !== undefined,
       (qb) => {
         let q = qb.innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId');
@@ -284,6 +289,13 @@ export function withTimeBucketAssetFilters<O>(
         }
         if (options.rating !== undefined) {
           q = q.where('asset_exif.rating', '>=', options.rating) as any;
+        }
+        if (options.description) {
+          q = q.where(
+            sql`f_unaccent(asset_exif.description)`,
+            'ilike',
+            sql`'%' || f_unaccent(${options.description}) || '%'`,
+          ) as any;
         }
 
         return q;
@@ -362,6 +374,18 @@ export function withTimeBucketAssetFilters<O>(
       qb.where('asset.duplicateId', options.isDuplicate ? 'is not' : 'is', null),
     )
     .$if(!!options.tagIds?.length, (qb) => withAnyTagId(qb, options.tagIds!))
+    .$if(!!options.originalFileName, (qb) =>
+      qb.where(
+        sql`f_unaccent(asset."originalFileName")`,
+        'ilike',
+        sql`'%' || f_unaccent(${options.originalFileName}) || '%'`,
+      ),
+    )
+    .$if(!!options.ocr, (qb) =>
+      qb
+        .innerJoin('ocr_search', 'asset.id', 'ocr_search.assetId')
+        .where(() => sql`f_unaccent(ocr_search.text) %>> f_unaccent(${tokenizeForSearch(options.ocr!).join(' ')})`),
+    )
     .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
     .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!)));
 }

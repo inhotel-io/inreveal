@@ -89,20 +89,14 @@ if (options.description) {
 )
 ```
 
-`TimeBucketOptions extends AssetBuilderOptions`, which already declares all three (`asset.repository.ts:85`), so **no option-type change**. `tokenizeForSearch` is already imported from `src/utils/database`.
+Add `originalFileName?` / `description?` / `ocr?` to `AssetBuilderOptions` (`asset.repository.ts:86`, alongside `city`/`make`/`model`) — `TimeBucketOptions` inherits them. Add `tokenizeForSearch` to the `src/utils/database` import.
 
 **Service — `server/src/services/timeline.service.ts`** — **no change.** `buildTimeBucketOptions` destructures a fixed set and spreads `...options` (`:50,91`), so the new DTO fields flow into `TimeBucketOptions` automatically.
 
-**Migration — `server/src/schema/migrations-gallery/`**
+**Index — schema decorator + fork migration** (mirrors the person-name trigram index, the most recent analogue):
 
-New fork migration (round timestamp, e.g. `1781000000000`) adding a GIN trigram index for description parity with filename/OCR:
-
-```sql
-CREATE INDEX IF NOT EXISTS "idx_asset_exif_description_trigram"
-  ON "asset_exif" USING gin (f_unaccent("description") gin_trgm_ops);
-```
-
-`down()` drops it. Place in `migrations-gallery/` (never touched by rebases); `postbuild` copies it into `dist/schema/migrations/`. Verify `f_unaccent` is `IMMUTABLE` in this schema (it is — the existing `originalFileName`/`ocr_search` trigram indexes use the same expression).
+1. **Schema decorator** on `server/src/schema/tables/asset-exif.table.ts` — `@Index({ name: 'idx_asset_exif_description_trigram', using: 'gin', expression: 'f_unaccent("description") gin_trgm_ops' })` (same shape as `asset.table.ts`'s `asset_originalFilename_trigram_idx` and `person.table.ts`'s `idx_person_name_trigram`). Required so the schema-drift check matches the DB.
+2. **Fork migration** `server/src/schema/migrations-gallery/1782000000000-AddAssetExifDescriptionTrigramIndex.ts` — `up()` runs `CREATE INDEX IF NOT EXISTS … USING gin (f_unaccent("description") gin_trgm_ops)` **and** an `INSERT INTO "migration_overrides" … ON CONFLICT DO NOTHING` row registering the expression index (the fork pattern for `f_unaccent` indexes sql-tools can't otherwise reconcile); `down()` drops the index + deletes the override. Place in `migrations-gallery/` (never touched by rebases); `postbuild` copies it into `dist/schema/migrations/`. `f_unaccent` is already `IMMUTABLE` (the existing `originalFileName`/`ocr_search` trigram indexes use it).
 
 ### 2. Web — `FilterState` + the "Text" filter section
 
