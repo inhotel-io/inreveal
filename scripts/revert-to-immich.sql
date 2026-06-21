@@ -557,6 +557,12 @@ DELETE FROM "migration_overrides" WHERE "name" = 'trigger_asset_ocr_delete_audit
 DROP TABLE IF EXISTS "integrity_report";
 DROP INDEX IF EXISTS "asset_createdAt_idx";
 
+-- 1782000000000-AddAssetExifDescriptionTrigramIndex added a fork-only GIN
+-- trigram index on asset_exif.description (for timeline description filtering)
+-- that v2.7.5 does not have, plus its migration_overrides registration row.
+DROP INDEX IF EXISTS "idx_asset_exif_description_trigram";
+DELETE FROM "migration_overrides" WHERE "name" = 'index_idx_asset_exif_description_trigram';
+
 -- -----------------------------------------------------------------------------
 -- 8. Delete Gallery + post-v<branding upstream.version> upstream migration rows
 --    from kysely_migrations.
@@ -602,6 +608,7 @@ DELETE FROM "kysely_migrations"
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
    '1778800000000-ReconcileFaceIdentityIndexOverrides',
    '1778800000000-TrimSpacePersonNameIndex',
+   '1782000000000-AddAssetExifDescriptionTrigramIndex',
 
    -- Post-v2.7.5 upstream migrations pulled in by rebase. Paired with the
    -- schema rollbacks in step 7 above.
