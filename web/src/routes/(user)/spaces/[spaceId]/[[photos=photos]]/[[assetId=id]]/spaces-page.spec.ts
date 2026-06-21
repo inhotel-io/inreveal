@@ -726,6 +726,19 @@ describe('Spaces page search URL state', () => {
     expect(gotoMock).not.toHaveBeenCalled();
   });
 
+  it('passes description/filename/ocr text filters into space timeline options from the URL', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?description=beach&filename=IMG&ocr=invoice');
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(buildSpaceTimelineOptions).toHaveBeenCalledWith(
+        'space-1',
+        expect.objectContaining({ description: 'beach', originalFileName: 'IMG', ocr: 'invoice' }),
+      );
+    });
+  });
+
   it('clicking a space month bucket zooms without mutating filters or URL state', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?people=person-1');
 
