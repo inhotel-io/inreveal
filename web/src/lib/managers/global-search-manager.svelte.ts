@@ -33,6 +33,7 @@ import { addEntry, getEntries, makePlaceId, removeEntry, type RecentEntry } from
 import { getGlobalPersonHref } from '$lib/utils/global-person-route';
 import {
   buildSearchablePageUrl,
+  getSearchablePageBasePath,
   getSearchablePageState,
   type SearchablePageSortOrder,
 } from '$lib/utils/searchable-page-search';
@@ -1574,7 +1575,13 @@ export class GlobalSearchManager {
     } else if (mode === 'ocr') {
       filters.ocr = trimmed;
     }
-    void goto(this.buildSearchDestination('', filters));
+    // Field results are always a filtered timeline, never a /map view. Target the current
+    // searchable page if there is one, else /photos — going through buildSearchDestination
+    // would route /map through its `q=` special-case and drop the text filter entirely.
+    // Ephemeral URL object for destination construction only; no reactive state is retained.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const base = getSearchablePageBasePath(page.url.pathname) ? page.url : new URL('/photos', page.url);
+    void goto(buildSearchablePageUrl(base, '', this.searchSortOrder, filters) ?? '/photos');
   }
 
   async applySearchSort(sortOrder: SearchablePageSortOrder, text = this.query) {

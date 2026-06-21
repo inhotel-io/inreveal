@@ -46,6 +46,15 @@ describe('TextFilter', () => {
     });
   });
 
+  it('resets the input when the field is cleared externally (chip removal / clearFilters)', async () => {
+    const { rerender } = render(TextFilter, { props: { description: 'beach', onChange: vi.fn() } });
+    expect((screen.getByTestId('text-filter-description') as HTMLInputElement).value).toBe('beach');
+
+    await rerender({ description: undefined, onChange: vi.fn() });
+
+    expect((screen.getByTestId('text-filter-description') as HTMLInputElement).value).toBe('');
+  });
+
   it('keeps the three inputs independent', async () => {
     const onChange = vi.fn();
     render(TextFilter, { props: { onChange, debounceMs: 250 } });

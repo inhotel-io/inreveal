@@ -6475,6 +6475,19 @@ describe('field-search mode navigation (filename / description / ocr)', () => {
     expect(dest).toContain('people=p1');
   });
 
+  it('field navigation opened on /map targets /photos, not a map ?q= search', async () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/map');
+    m.mode = 'metadata';
+
+    await m.activateSearch('IMG_001');
+
+    const dest = lastGoto();
+    expect(dest).toContain('/photos');
+    expect(dest).toContain('filename=IMG_001');
+    expect(dest).not.toContain('/map');
+  });
+
   it('smart mode keeps the typed-search ?q= navigation (no regression)', async () => {
     const m = new GlobalSearchManager();
     m.mode = 'smart';
