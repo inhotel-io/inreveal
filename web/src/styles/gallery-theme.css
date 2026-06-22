@@ -231,3 +231,8 @@ div:has(> [data-testid='admin-page-header']) {
 .bg-light.shrink-0.absolute {
   background-color: var(--gallery-chrome);
 }
+/* Inset the admin page title (Job Queues, Users, …) off the panel edge — same
+ * treatment as the timeline header. */
+[data-testid='admin-page-header'] {
+  padding-inline: 1.25rem;
+}
