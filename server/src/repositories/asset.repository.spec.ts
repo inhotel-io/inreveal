@@ -17,6 +17,9 @@ const offlineKysely = () =>
 const compileTimeBucketFilters = (options: Record<string, unknown>) =>
   withTimeBucketAssetFilters(offlineKysely().selectFrom('asset').select('asset.id'), options as any).compile().sql;
 
+const compileTimeBucketFiltersFull = (options: Record<string, unknown>) =>
+  withTimeBucketAssetFilters(offlineKysely().selectFrom('asset').select('asset.id'), options as any).compile();
+
 describe('withTimeBucketAssetFilters album filters', () => {
   it('filters timeline assets to album members when isInAlbum is true', () => {
     const sql = compileTimeBucketFilters({ isInAlbum: true });
@@ -79,5 +82,23 @@ describe('withTimeBucketAssetFilters text filters', () => {
     expect(sql.toLowerCase()).not.toContain('ilike');
     expect(sql).not.toContain('"ocr_search"');
     expect(sql).not.toContain('"originalFileName"');
+  });
+});
+
+describe('withTimeBucketAssetFilters text filters escape LIKE wildcards', () => {
+  it('escapes %, _ and backslash in originalFileName so they match literally', () => {
+    const { sql, parameters } = compileTimeBucketFiltersFull({ originalFileName: String.raw`IMG_50%\x` });
+
+    // ilike pattern must declare a custom escape char so the escapes are honoured
+    expect(sql.toLowerCase()).toContain('escape');
+    // the bound value is escaped: _ -> \_, % -> \%, \ -> \\
+    expect(parameters).toContain(String.raw`IMG\_50\%\\x`);
+  });
+
+  it('escapes %, _ and backslash in description so they match literally', () => {
+    const { sql, parameters } = compileTimeBucketFiltersFull({ description: '100%_done' });
+
+    expect(sql.toLowerCase()).toContain('escape');
+    expect(parameters).toContain(String.raw`100\%\_done`);
   });
 });

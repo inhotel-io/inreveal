@@ -40,6 +40,15 @@ describe('searchable page URL state', () => {
       '/photos?q=sunset&people=person-1&city=Berlin&view=timeline&sort=asc',
     );
   });
+
+  it('drops the transient `at` grid scroll target so filter changes do not re-scroll to a stale asset', () => {
+    const url = new URL('https://gallery.test/photos?at=asset-123&view=timeline');
+
+    const result = buildSearchablePageUrl(url, '', 'desc', { ...createFilterState(), originalFileName: '20' });
+
+    expect(result).not.toContain('at=');
+    expect(result).toContain('filename=20');
+  });
 });
 
 describe('typed filter URL state', () => {

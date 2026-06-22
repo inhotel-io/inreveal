@@ -246,6 +246,16 @@ const addBucketInterval = (bucketStart: string, bucketSize: TimeBucketSize): str
   }
 };
 
+// Escape ILIKE wildcards so user-supplied filter text matches literally — e.g. a filename
+// search for "IMG_2024" must not treat "_" as a single-char wildcard, and "%" must not match
+// everything. Pairs with an `ESCAPE '\'` clause on the ILIKE. Backslash is escaped first so it
+// does not double-escape the wildcard escapes added afterwards.
+const escapeLikePattern = (value: string): string =>
+  value
+    .replaceAll('\\', String.raw`\\`)
+    .replaceAll('%', String.raw`\%`)
+    .replaceAll('_', String.raw`\_`);
+
 export function withTimeBucketAssetFilters<O>(
   qb: SelectQueryBuilder<DB, 'asset', O>,
   options: TimeBucketOptions,
@@ -294,7 +304,7 @@ export function withTimeBucketAssetFilters<O>(
           q = q.where(
             sql`f_unaccent(asset_exif.description)`,
             'ilike',
-            sql`'%' || f_unaccent(${options.description}) || '%'`,
+            sql`'%' || f_unaccent(${escapeLikePattern(options.description)}) || '%' escape '\\'`,
           ) as any;
         }
 
@@ -378,7 +388,7 @@ export function withTimeBucketAssetFilters<O>(
       qb.where(
         sql`f_unaccent(asset."originalFileName")`,
         'ilike',
-        sql`'%' || f_unaccent(${options.originalFileName}) || '%'`,
+        sql`'%' || f_unaccent(${escapeLikePattern(options.originalFileName!)}) || '%' escape '\\'`,
       ),
     )
     .$if(!!options.ocr, (qb) =>
