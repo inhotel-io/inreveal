@@ -35,7 +35,7 @@
   --immich-ui-default-border: #dde3ea;
   --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page (Google) */
   --immich-fg: 31 31 31; /* #1f1f1f */
-  --immich-dark-bg: 19 19 20; /* #131314 — Google dark page */
+  --immich-dark-bg: 16 17 19; /* #101113 — chrome (darker than content) */
   --immich-dark-fg: 227 227 227; /* #e3e3e3 */
   --immich-dark-gray: 40 41 42; /* #28292a */
 }
@@ -54,11 +54,11 @@
   --immich-ui-primary-200: #0b57d0;
   --immich-ui-primary-100: #08409a;
   --immich-ui-primary-50: #001d35;
-  --immich-ui-light: #1e1f20; /* surface/panel (dark) — Google M3 elevated, lifts over #131314 page */
+  --immich-ui-light: #202124; /* surface/content (dark) — lighter, lifts over the darker chrome */
   --immich-ui-dark: #e3e3e3; /* fg text (dark) */
   --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
-  --immich-ui-gray: #28292a; /* subtle surface (dark) */
-  --immich-ui-default-border: #3c4043; /* Google dark divider */
+  --immich-ui-gray: #2d2e31; /* subtle surface (dark) */
+  --immich-ui-default-border: #3c3f43; /* Google dark divider */
 }
 
 @theme {
@@ -70,10 +70,10 @@
   --color-gray-400: #bdc1c6;
   --color-gray-500: #9aa0a6;
   --color-gray-600: #5f6368;
-  --color-gray-700: #3c4043;
-  --color-gray-800: #28292a;
-  --color-gray-900: #1e1f20;
-  --color-gray-950: #131314;
+  --color-gray-700: #3c3f43;
+  --color-gray-800: #2d2e31;
+  --color-gray-900: #202124;
+  --color-gray-950: #101113;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
@@ -108,10 +108,10 @@
  * Unlayered so it beats the sidebar's `bg-light` utility. */
 :root,
 .light {
-  --gallery-chrome: #f0f4f9;
+  --gallery-chrome: #e9edf3;
 }
 .dark {
-  --gallery-chrome: #131314;
+  --gallery-chrome: #101113;
 }
 #dashboard-navbar,
 #sidebar {
