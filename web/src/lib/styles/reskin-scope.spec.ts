@@ -16,6 +16,12 @@ describe('isInScope', () => {
   it('fails when app.css gains a non-import line', () => {
     const r = isInScope(['web/src/app.css'], [importLine, '.foo { color: red; }']);
     expect(r.ok).toBe(false);
+    expect(r.violations).toHaveLength(1);
+    expect(r.violations[0]).toContain('web/src/app.css');
+  });
+  it('allows app.css with no added lines (deletion-only diff)', () => {
+    const r = isInScope(['web/src/app.css'], []);
+    expect(r.ok).toBe(true);
   });
   it('allows font assets and package manifests', () => {
     const r = isInScope(['web/src/lib/assets/fonts/dm-sans.woff2', 'web/package.json'], []);

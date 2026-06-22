@@ -4,6 +4,11 @@ import { execSync } from 'node:child_process';
 import { isInScope } from '../src/lib/styles/reskin-scope.mjs';
 
 const base = process.argv[2] ?? 'main';
+// base is interpolated into a git command below; allow only ref-safe characters.
+if (!/^[\w\-./]+$/.test(base)) {
+  console.error(`Invalid base ref: ${base}`);
+  process.exit(2);
+}
 const changed = execSync(`git diff --name-only ${base}...HEAD`, { encoding: 'utf8' })
   .split('\n')
   .map((s) => s.trim())
