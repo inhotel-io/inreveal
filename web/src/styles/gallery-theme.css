@@ -195,6 +195,14 @@ body {
 [data-testid='discovery-panel']::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in oklab, var(--immich-ui-muted) 65%, transparent);
 }
+
+/* Collapsed filter panel: the w-14 strip leaves a lot of empty space around the
+ * 24px icons. Tighten it so the icons read as centered, and drop the now-
+ * redundant right divider. Scoped to the collapsed state via :has. */
+[data-testid='filter-panel-shell']:has(> [data-testid='collapsed-icon-strip']) {
+  width: 3rem;
+  border-inline-end-width: 0;
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
