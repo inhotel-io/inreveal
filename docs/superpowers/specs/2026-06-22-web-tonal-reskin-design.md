@@ -1,4 +1,8 @@
-# Web Frontend Re-skin — Soft Periwinkle "Elevated Tonal" Brand
+# Web Frontend Re-skin — Google Photos-style Brand
+
+> Originally specced as a "Soft Periwinkle Elevated Tonal" brand; during live
+> tuning it became a faithful **Google Photos** clone. See §3 for the as-built
+> direction (the periwinkle values throughout earlier sections are historical).
 
 **Date:** 2026-06-22
 **Status:** Design approved, ready for implementation planning
@@ -6,10 +10,9 @@
 
 ## 1. Goal
 
-Re-skin the Gallery web frontend to a soft periwinkle, Material-You-style **tonal**
-brand that aligns the app with the marketing site's design language — **without**
-broadly editing component markup, so the fork keeps rebasing cleanly onto upstream
-Immich.
+Re-skin the Gallery web frontend to a **Google Photos-style** brand (final
+direction; see §3) — **without** broadly editing component markup, so the fork
+keeps rebasing cleanly onto upstream Immich.
 
 The single governing principle:
 
@@ -53,74 +56,77 @@ Measured across 534 `.svelte` components in `web/src`:
 The "scary" large numbers (gray, rounded, dark:) are all **centrally coverable** by
 remapping palettes/scales in the theme layer, not by per-site edits.
 
-## 3. Approved design direction — A+ "Elevated Tonal" periwinkle
+## 3. Design direction — Google Photos look (as-built)
 
-Decided after live mockup iteration (see `.superpowers/brainstorm/` artifacts).
+> **Evolution note.** Brainstorming landed on a periwinkle "elevated tonal A+"
+> direction, but during live tuning the user steered it to a faithful **Google
+> Photos** clone. The final, shipped direction (recorded here) supersedes the
+> periwinkle values. Two notable departures from the original plan: the primary
+> button is a **solid** accent (not the elevated-tonal pale pill — the
+> `@immich/ui` filled Button exposes no clean hook, and solid is what Google
+> does), and the surfaces are Google's **neutral** grays, not a periwinkle-tinted
+> paper/ink. The values below are what's in `web/src/styles/gallery-theme.css`.
 
-- **Hue:** soft periwinkle blue (Material-You "tonal" reference the user supplied).
-- **Tonal containers:** navigation-active, chips, and surface containers use a pale
-  periwinkle fill + dark navy text in light mode; this **inverts** in dark mode to a
-  deep periwinkle container + light periwinkle text.
-- **Primary action & selection = "elevated tonal":** rather than a flat pale pill
-  (lowest emphasis, fails contrast on bright/dark photos) or a harsh solid fill, the
-  primary CTA and selection states use a tonal fill **lifted** with a hairline ring +
-  soft shadow + deeper text. Keeps the gentle feel while staying legible.
-- **Typography:** **DM Sans** (body) + **Bricolage Grotesque** (display/headings),
-  replacing GoogleSans. JetBrains Mono for mono.
-- **Shape:** marketing radius scale; generous, pill buttons.
-- **Shadows:** soft, slightly tinted.
-- **Intentional light/dark asymmetry:** light tonal is gentler; dark tonal/selection is
-  a touch more saturated because dark mode is where low-contrast tonal is riskiest.
-  This is deliberate and standard.
+- **Accent:** Google blue — `#0b57d0` (light) / `#a8c7fa` (dark). Solid primary
+  button; tonal active-nav pill via the existing `bg-primary/10 text-primary`.
+- **Surfaces — two-tone chrome (the signature Google layered look):** the page +
+  navbar + sidebar take a "chrome" tint; the timeline/content is a distinct
+  surface, rendered as a **rounded floating panel** (16px radius, 8px chrome
+  gutter). Google flips elevation per mode: light = white content on gray chrome;
+  dark = darker content on lighter chrome.
+- **Typography:** **DM Sans** (body) + **Bricolage Grotesque** (headings),
+  replacing GoogleSans; GoogleSansCode kept for mono (avoids a second app.css edit).
+- **Shape:** moderate radius scale; radius scales **down** with element size
+  (small controls like date inputs/chips were dialed back from the generous scale).
 
-### Token values (starting point — to be regenerated cleanly, see §9 open items)
+### Token values (as-built — `gallery-theme.css`)
 
-Primary periwinkle ramp (light-mode reference values):
-
-```
---primary-50:  #f4f7fe
---primary-100: #e6edfd
---primary-200: #cdddfb   /* primary container: tonal nav/chip/CTA fill (light) */
---primary-300: #aec7f8   /* selected-tile outline (light) */
---primary-400: #84a4f1
---primary-500: #5b82ea
---primary-600: #3f6fe0   /* solid accent: focus ring, links, meter fill */
---primary-700: #3257c6
---primary-800: #2c469f
---primary-900: #283f7d
---primary-950: #1b2a4e   /* on-primary-container: navy text/icon (light) */
-```
-
-Neutrals (cool "paper/ink" family; replaces Tailwind's default warm-gray):
+Primary (Google blue), light ramp:
 
 ```
-Light: bg #ffffff · surface #ffffff · surface-2/muted #eef2fb · border #e3e8f2
-       fg #1a1f29 · fg-muted #5a6573
-Dark:  bg #0c1014 · surface #14191f · surface-2 #1d2632 · border #28313d
-       fg #e8edf4 · fg-muted #8c99a9
+50 #eaf1fc · 100 #d3e3fd · 200 #abc8fb · 300 #7eabf7 · 400 #4285f4
+500 #0b57d0 (button) · 600 #0a4dba (focus/links) · 700 #0842a0 · 800 #073688
+900 #052a6b · 950 #001d35 (on-container)        legacy --immich-primary: 11 87 208
 ```
 
-Elevated-tonal treatment:
+Dark ramp (inverted): `950 #eef4fe … 500 #a8c7fa (accent) … 50 #001d35`; legacy `--immich-dark-primary: 168 199 250`.
+
+Neutrals (Google Material) + two-tone:
 
 ```
-LIGHT
-  Primary CTA   bg #c4d7fb · text #15224a · border 1px #a6c2f6 · shadow 0 7px 16px rgba(63,111,224,.26)
-  Selection     fill #dbe7fc · tick #1b2a4e · ring 2px #ffffff · shadow 0 2px 6px rgba(30,50,100,.30) · outline #9cbcf6
-  Nav active    bg #cdddfb · text #1b2a4e
-DARK
-  Primary CTA   bg #2c4068 · text #d8e4fc · border 1px #45609a · shadow 0 8px 22px rgba(8,16,40,.65)
-  Selection     fill #3f5891 · tick #ffffff · ring 2px #0c1014 (separator) · shadow 0 2px 8px rgba(0,0,0,.6) · outline #7ea6f2
-  Nav active    bg #283a5e · text #cdddfb
+LIGHT  chrome (page/navbar/sidebar) #e9edf3 · content/surface #ffffff
+       fg #1f1f1f · muted #5f6368 · border #dde3ea · subtle(bg-subtle) #dde3ea
+       (gray ramp 50–600 = Google cool neutrals; secondary text uses gray-400→#6e7378,
+        gray-500→#5f6368 in light only, for readability on white)
+DARK   chrome (page/navbar/sidebar) #1e1f20 · content/surface #131314
+       fg #e3e3e3 · muted #9aa0a6 · border #3c3f43 · subtle(bg-subtle) #2a2b2e
+       (gray ramp 700–950 = #3c3f43 / #2d2e31 / #1e1f20 / #131314)
 ```
 
-Radius (Tailwind `--radius-*`, tune during impl): sm 8 · md 12 · lg 16 · xl 22 · 2xl 28 · 3xl 36; `rounded-full` stays pill.
+Radius (`--radius-*`): sm .5rem · md .75rem · lg 1rem · xl 1.375rem · 2xl 1.75rem · 3xl 2.25rem (`rounded-full` stays pill). Content panel = 16px.
 
-Shadows (soft tinted): `--shadow-sm 0 1px 2px rgba(26,31,41,.07)` · `--shadow-md 0 10px 30px rgba(40,55,95,.10)` · `--shadow-lg 0 18px 44px rgba(40,55,95,.14)` (heavier in dark).
+Shadows (soft): `--shadow-sm 0 1px 2px rgb(26 31 41 /.07)` · `--shadow-md 0 10px 30px rgb(40 55 95 /.1)` · `--shadow-lg 0 18px 44px rgb(40 55 95 /.14)`.
 
-> These hexes are the hand-tuned mockup values. Before merge, regenerate the full
-> 50–950 ramp from a single locked seed (tints.dev or an oklch script, matching how
-> `@immich/ui/theme/default.css` was generated) so hovers, tints, and the dark ramp
-> derive consistently.
+### As-built additions beyond the pure token layer
+
+Matching Google needed more than recoloring tokens. These live in the same
+fork-owned `gallery-theme.css` as **global CSS rules keyed on stable hooks**
+(testids/ids/class-signatures) — still **zero component-markup edits** (guard-
+verified), but they are the "override tier" the spec anticipated, with documented
+coupling that degrades gracefully if upstream restructures:
+
+- **Two-tone chrome:** `body`, `#dashboard-navbar`, `#sidebar`, `<main>` (rounded
+  panel + gutter + `overflow:clip`), and the admin `AppShellSidebar`
+  (`.bg-light.absolute.shrink-0`).
+- **Admin pages** (`@immich/ui` AppShell): drop `AppShellHeader` border, round the
+  content panel (`:has(> [data-testid='admin-page-header'])`), inset the title.
+- **Page-header inset** (`main > div:has([data-testid='page-header-title-row'])`).
+- **Search bar** taller + larger bare magnifier + darker light placeholder
+  (`[data-testid='cmdk-input-trigger']`).
+- **Filter panel:** subtle hover-aware scrollbar (`[data-testid='discovery-panel']`),
+  smaller radii on temporal-picker controls, tightened collapsed strip.
+- **`bg-subtle` nudged off the chrome color** so nav-item hovers are visible.
+- **Light-mode secondary-text** mid-grays darkened for WCAG-AA readability.
 
 ## 4. Architecture — units & interfaces
 
