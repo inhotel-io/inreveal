@@ -75,4 +75,10 @@ describe('L3 typography', () => {
   it('applies the display font to headings', () => {
     expect(css).toMatch(/h1,\s*h2,\s*h3[\s\S]*font-family:\s*var\(--font-display\)/);
   });
+  it('declares the font tokens inside the @theme block', () => {
+    const theme = css.match(/@theme\s*\{[\s\S]*?\n\}/);
+    expect(theme, '@theme block present').not.toBeNull();
+    expect(theme[0]).toMatch(/--font-sans:\s*['"]DM Sans Variable['"]/);
+    expect(theme[0]).toMatch(/--font-display:\s*['"]Bricolage Grotesque Variable['"]/);
+  });
 });
