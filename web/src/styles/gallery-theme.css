@@ -8,6 +8,9 @@
  * the :root,.light block (matching upstream app.css), NOT in .dark.
  */
 
+@import '@fontsource-variable/dm-sans';
+@import '@fontsource-variable/bricolage-grotesque';
+
 :root,
 .light {
   /* extended per level (Tasks 4–6) */
@@ -82,4 +85,18 @@
   --shadow-sm: 0 1px 2px rgb(26 31 41 / 0.07);
   --shadow-md: 0 10px 30px rgb(40 55 95 / 0.1);
   --shadow-lg: 0 18px 44px rgb(40 55 95 / 0.14);
+
+  --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'GoogleSansCode', ui-monospace, monospace;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
 }

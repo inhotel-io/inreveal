@@ -58,3 +58,21 @@ describe('L2 neutrals', () => {
     expect(contrastRatio(t.dark['--immich-ui-muted'], t.dark['--immich-ui-light'])).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('L3 typography', () => {
+  const { readFileSync } = require('node:fs');
+  const { resolve } = require('node:path');
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/gallery-theme.css'), 'utf8');
+
+  it('imports the self-hosted variable fonts', () => {
+    expect(css).toMatch(/@import\s+['"]@fontsource-variable\/dm-sans['"]/);
+    expect(css).toMatch(/@import\s+['"]@fontsource-variable\/bricolage-grotesque['"]/);
+  });
+  it('sets sans + display font tokens', () => {
+    expect(css).toMatch(/--font-sans:\s*['"]DM Sans Variable['"]/);
+    expect(css).toMatch(/--font-display:\s*['"]Bricolage Grotesque Variable['"]/);
+  });
+  it('applies the display font to headings', () => {
+    expect(css).toMatch(/h1,\s*h2,\s*h3[\s\S]*font-family:\s*var\(--font-display\)/);
+  });
+});
