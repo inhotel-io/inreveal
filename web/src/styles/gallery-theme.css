@@ -12,9 +12,33 @@
 .light {
   /* extended per level (Tasks 4–6) */
   --gallery-theme: light;
+  --immich-ui-primary-50: #f4f7fe;
+  --immich-ui-primary-100: #e6edfd;
+  --immich-ui-primary-200: #cdddfb; /* primary container */
+  --immich-ui-primary-300: #aec7f8;
+  --immich-ui-primary-400: #84a4f1;
+  --immich-ui-primary-500: #5b82ea;
+  --immich-ui-primary-600: #3f6fe0; /* solid accent: button fill, focus, links */
+  --immich-ui-primary-700: #3257c6;
+  --immich-ui-primary-800: #2c469f;
+  --immich-ui-primary-900: #283f7d;
+  --immich-ui-primary-950: #1b2a4e; /* on-primary-container */
+  --immich-primary: 63 111 224; /* #3f6fe0 — legacy rgb triplet */
+  --immich-dark-primary: 126 166 242; /* #7ea6f2 — mode-agnostic, used by dark: utilities */
 }
 
 .dark {
   /* only --immich-ui-* ramps differ per mode (Tasks 4–5) */
   --gallery-theme: dark;
+  --immich-ui-primary-950: #f4f7fe;
+  --immich-ui-primary-900: #e6edfd;
+  --immich-ui-primary-800: #cdddfb;
+  --immich-ui-primary-700: #aec7f8;
+  --immich-ui-primary-600: #84a4f1;
+  --immich-ui-primary-500: #7ea6f2; /* accent on dark */
+  --immich-ui-primary-400: #5b82ea;
+  --immich-ui-primary-300: #3f6fe0;
+  --immich-ui-primary-200: #2c469f;
+  --immich-ui-primary-100: #283f7d;
+  --immich-ui-primary-50: #1b2a4e;
 }
