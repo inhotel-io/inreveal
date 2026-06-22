@@ -29,7 +29,11 @@ describe('isInScope', () => {
   });
   it('allows the root monorepo lockfile and the spec/plan docs', () => {
     const r = isInScope(
-      ['pnpm-lock.yaml', 'docs/superpowers/specs/2026-06-22-web-tonal-reskin-design.md', 'docs/superpowers/plans/2026-06-22-web-tonal-reskin.md'],
+      [
+        'pnpm-lock.yaml',
+        'docs/superpowers/specs/2026-06-22-web-tonal-reskin-design.md',
+        'docs/superpowers/plans/2026-06-22-web-tonal-reskin.md',
+      ],
       [],
     );
     expect(r.ok).toBe(true);

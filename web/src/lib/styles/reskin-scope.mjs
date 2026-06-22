@@ -12,6 +12,11 @@ export const ALLOWED_PREFIXES = [
 // pnpm-lock.yaml is the single monorepo lockfile at the repo root (not under web/).
 export const ALLOWED_EXACT = new Set(['web/package.json', 'pnpm-lock.yaml', 'e2e/package.json']);
 
+/**
+ * @param {string[]} changedPaths
+ * @param {string[]} appCssAddedLines
+ * @returns {{ ok: boolean, violations: string[] }}
+ */
 export function isInScope(changedPaths, appCssAddedLines) {
   const violations = [];
   for (const p of changedPaths) {

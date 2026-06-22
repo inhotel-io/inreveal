@@ -78,7 +78,7 @@ describe('L3 typography', () => {
   it('declares the font tokens inside the @theme block', () => {
     const theme = css.match(/@theme\s*\{[\s\S]*?\n\}/);
     expect(theme, '@theme block present').not.toBeNull();
-    expect(theme[0]).toMatch(/--font-sans:\s*['"]DM Sans Variable['"]/);
-    expect(theme[0]).toMatch(/--font-display:\s*['"]Bricolage Grotesque Variable['"]/);
+    expect(theme![0]).toMatch(/--font-sans:\s*['"]DM Sans Variable['"]/);
+    expect(theme![0]).toMatch(/--font-display:\s*['"]Bricolage Grotesque Variable['"]/);
   });
 });
