@@ -224,3 +224,10 @@ div:has(> [data-testid='admin-page-header']) {
   margin: 8px;
   height: calc(100% - 16px); /* offset the vertical margin so it doesn't overflow the scroller */
 }
+/* The admin sidebar (@immich/ui AppShellSidebar) hardcodes bg-light (surface);
+ * recolor it to the chrome tint so it matches the navbar + timeline sidebar.
+ * Class signature is unique to AppShellSidebar (the timeline #sidebar is
+ * `relative`, not `absolute`); degrades to bg-light if upstream changes it. */
+.bg-light.shrink-0.absolute {
+  background-color: var(--gallery-chrome);
+}
