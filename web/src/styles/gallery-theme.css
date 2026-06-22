@@ -128,6 +128,21 @@ body {
 #dashboard-navbar > div {
   border-bottom-width: 0;
 }
+
+/* Search bar (navbar global-search trigger), Google-style: a touch taller, a
+ * larger magnifier with no icon-button background. Keyed on the stable
+ * cmdk-input-trigger testid; the magnifier is the trigger's leading <span>. */
+[data-testid='cmdk-input-trigger'] {
+  height: 3rem;
+}
+[data-testid='cmdk-input-trigger'] > span {
+  background: transparent;
+  box-shadow: none;
+}
+[data-testid='cmdk-input-trigger'] > span svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
