@@ -1,7 +1,14 @@
 // Pure scope-guard logic — NO node builtins, so it type-checks cleanly via the
 // spec import and is reused by the CLI at web/scripts/reskin-scope.mjs.
-export const ALLOWED_PREFIXES = ['web/src/styles/', 'web/src/lib/styles/', 'web/scripts/', 'web/src/lib/assets/fonts/'];
-export const ALLOWED_EXACT = new Set(['web/package.json', 'web/pnpm-lock.yaml']);
+export const ALLOWED_PREFIXES = [
+  'web/src/styles/',
+  'web/src/lib/styles/',
+  'web/scripts/',
+  'web/src/lib/assets/fonts/',
+  'docs/superpowers/', // the spec + plan docs for this work
+];
+// pnpm-lock.yaml is the single monorepo lockfile at the repo root (not under web/).
+export const ALLOWED_EXACT = new Set(['web/package.json', 'pnpm-lock.yaml']);
 
 export function isInScope(changedPaths, appCssAddedLines) {
   const violations = [];
