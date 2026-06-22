@@ -207,3 +207,20 @@ main {
 main > div:has([data-testid='page-header-title-row']) {
   padding-inline: 1.25rem;
 }
+
+/* Admin pages use @immich/ui's AppShell (not the <main> layout above), so they
+ * miss the treatments. Bring them in line:
+ *  1. drop the AppShellHeader's own bottom border (navbar already has none),
+ *  2/3. make the admin content a rounded floating panel with a chrome gutter —
+ *       which also spaces the title off the sidebar. Keyed on the admin-page-header
+ *       testid (its parent div is the content panel). */
+header:has(#dashboard-navbar) {
+  border-bottom-width: 0;
+}
+div:has(> [data-testid='admin-page-header']) {
+  background-color: var(--immich-ui-light);
+  border-radius: 16px;
+  overflow: clip;
+  margin: 8px;
+  height: calc(100% - 16px); /* offset the vertical margin so it doesn't overflow the scroller */
+}
