@@ -35,9 +35,9 @@
   --immich-ui-default-border: #e3e8f2;
   --immich-bg: 255 255 255;
   --immich-fg: 26 31 41; /* #1a1f29 */
-  --immich-dark-bg: 12 16 20; /* #0c1014 */
-  --immich-dark-fg: 232 237 244; /* #e8edf4 */
-  --immich-dark-gray: 29 38 50; /* #1d2632 */
+  --immich-dark-bg: 10 10 10; /* #0a0a0a — near-black, neutral */
+  --immich-dark-fg: 237 237 237; /* #ededed */
+  --immich-dark-gray: 33 33 33; /* #212121 */
 }
 
 .dark {
@@ -54,15 +54,15 @@
   --immich-ui-primary-200: #2c469f;
   --immich-ui-primary-100: #283f7d;
   --immich-ui-primary-50: #1b2a4e;
-  --immich-ui-light: #14191f; /* surface/bg (dark) */
-  --immich-ui-dark: #e8edf4; /* fg text (dark) */
-  --immich-ui-muted: #9aa6b0;
-  --immich-ui-gray: #1d2632;
-  --immich-ui-default-border: #28313d;
+  --immich-ui-light: #121212; /* surface (dark) — neutral, subtle lift over #0a0a0a bg */
+  --immich-ui-dark: #ededed; /* fg text (dark) */
+  --immich-ui-muted: #a1a1aa;
+  --immich-ui-gray: #1c1c1c;
+  --immich-ui-default-border: #2a2a2a;
 }
 
 @theme {
-  /* cool paper/ink gray ramp — retints all *-gray-* utilities */
+  /* gray ramp — cool paper/ink in light (50–600); neutral near-black in dark (700–950) */
   --color-gray-50: #f7f9fc;
   --color-gray-100: #eef2fb;
   --color-gray-200: #e3e8f2;
@@ -70,10 +70,10 @@
   --color-gray-400: #9aa6b8;
   --color-gray-500: #6b7688;
   --color-gray-600: #505b6b;
-  --color-gray-700: #3a4350;
-  --color-gray-800: #232a34;
-  --color-gray-900: #161b22;
-  --color-gray-950: #0c1014;
+  --color-gray-700: #2a2a2a;
+  --color-gray-800: #1c1c1c;
+  --color-gray-900: #121212;
+  --color-gray-950: #0a0a0a;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
