@@ -101,10 +101,13 @@
   }
 }
 
-/* Two-tone chrome (Google Photos): the navbar + sidebar take a distinct page
- * tint while the timeline/content keeps the lighter surface (body `bg-light`).
- * Couples to upstream ids #dashboard-navbar / #sidebar — if upstream renames
- * either, chrome simply falls back to the surface color (degrades, not breaks).
+/* Two-tone chrome + rounded content panel (Google Photos):
+ * - the page (body) takes the chrome tint; the navbar + sidebar match it
+ * - the timeline (<main>) is the distinct surface with a rounded top-left
+ *   where it meets the navbar + sidebar. Light = white content on gray chrome;
+ *   dark = darker content on lighter chrome (Google flips elevation per mode).
+ * Couples to upstream ids #dashboard-navbar / #sidebar and the <main> content
+ * column — if upstream restructures these, the styling degrades, not breaks.
  * Unlayered so it beats the sidebar's `bg-light` utility. */
 :root,
 .light {
@@ -113,7 +116,15 @@
 .dark {
   --gallery-chrome: #1e1f20;
 }
+body {
+  background-color: var(--gallery-chrome);
+}
 #dashboard-navbar,
 #sidebar {
   background-color: var(--gallery-chrome);
+}
+main {
+  background-color: var(--immich-ui-light);
+  border-start-start-radius: 16px;
+  overflow: clip;
 }
