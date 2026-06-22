@@ -25,6 +25,16 @@
   --immich-ui-primary-950: #1b2a4e; /* on-primary-container */
   --immich-primary: 63 111 224; /* #3f6fe0 — legacy rgb triplet */
   --immich-dark-primary: 126 166 242; /* #7ea6f2 — mode-agnostic, used by dark: utilities */
+  --immich-ui-light: #ffffff; /* surface/bg */
+  --immich-ui-dark: #1a1f29; /* fg text */
+  --immich-ui-muted: #5a6573;
+  --immich-ui-gray: #eef2fb; /* subtle surface */
+  --immich-ui-default-border: #e3e8f2;
+  --immich-bg: 255 255 255;
+  --immich-fg: 26 31 41; /* #1a1f29 */
+  --immich-dark-bg: 12 16 20; /* #0c1014 */
+  --immich-dark-fg: 232 237 244; /* #e8edf4 */
+  --immich-dark-gray: 29 38 50; /* #1d2632 */
 }
 
 .dark {
@@ -41,4 +51,35 @@
   --immich-ui-primary-200: #2c469f;
   --immich-ui-primary-100: #283f7d;
   --immich-ui-primary-50: #1b2a4e;
+  --immich-ui-light: #14191f; /* surface/bg (dark) */
+  --immich-ui-dark: #e8edf4; /* fg text (dark) */
+  --immich-ui-muted: #9aa6b0;
+  --immich-ui-gray: #1d2632;
+  --immich-ui-default-border: #28313d;
+}
+
+@theme {
+  /* cool paper/ink gray ramp — retints all *-gray-* utilities */
+  --color-gray-50: #f7f9fc;
+  --color-gray-100: #eef2fb;
+  --color-gray-200: #e3e8f2;
+  --color-gray-300: #cfd6e3;
+  --color-gray-400: #9aa6b8;
+  --color-gray-500: #6b7688;
+  --color-gray-600: #505b6b;
+  --color-gray-700: #3a4350;
+  --color-gray-800: #232a34;
+  --color-gray-900: #161b22;
+  --color-gray-950: #0c1014;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.375rem;
+  --radius-2xl: 1.75rem;
+  --radius-3xl: 2.25rem;
+
+  --shadow-sm: 0 1px 2px rgb(26 31 41 / 0.07);
+  --shadow-md: 0 10px 30px rgb(40 55 95 / 0.1);
+  --shadow-lg: 0 18px 44px rgb(40 55 95 / 0.14);
 }

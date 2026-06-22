@@ -36,3 +36,25 @@ describe('L1 accent', () => {
   // surface), which solid-token contrast math can't model — it is covered by the
   // axe scan in Task 8, intentionally not by a fast unit test here.
 });
+
+describe('L2 neutrals', () => {
+  const t = readThemeTokens();
+  it('defines neutral anchors in both modes', () => {
+    for (const name of ['--immich-ui-light', '--immich-ui-dark', '--immich-ui-muted', '--immich-ui-default-border']) {
+      expect(t.light[name], `light ${name}`).toBeDefined();
+      expect(t.dark[name], `dark ${name}`).toBeDefined();
+    }
+  });
+  it('defines legacy bg tokens (mode-agnostic, in light block)', () => {
+    expect(t.light['--immich-bg']).toBeDefined();
+    expect(t.light['--immich-dark-bg']).toBeDefined();
+  });
+  it('body text meets AA on surface (light + dark)', () => {
+    expect(contrastRatio(t.light['--immich-ui-dark'], t.light['--immich-ui-light'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(t.dark['--immich-ui-dark'], t.dark['--immich-ui-light'])).toBeGreaterThanOrEqual(4.5);
+  });
+  it('muted text meets AA on surface (light + dark)', () => {
+    expect(contrastRatio(t.light['--immich-ui-muted'], t.light['--immich-ui-light'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(t.dark['--immich-ui-muted'], t.dark['--immich-ui-light'])).toBeGreaterThanOrEqual(4.5);
+  });
+});
