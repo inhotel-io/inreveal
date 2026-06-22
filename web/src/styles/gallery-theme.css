@@ -35,7 +35,7 @@
   --immich-ui-default-border: #dde3ea;
   --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page (Google) */
   --immich-fg: 31 31 31; /* #1f1f1f */
-  --immich-dark-bg: 16 17 19; /* #101113 — chrome (darker than content) */
+  --immich-dark-bg: 19 19 20; /* #131314 — content/page (darker than chrome) */
   --immich-dark-fg: 227 227 227; /* #e3e3e3 */
   --immich-dark-gray: 40 41 42; /* #28292a */
 }
@@ -54,10 +54,10 @@
   --immich-ui-primary-200: #0b57d0;
   --immich-ui-primary-100: #08409a;
   --immich-ui-primary-50: #001d35;
-  --immich-ui-light: #202124; /* surface/content (dark) — lighter, lifts over the darker chrome */
+  --immich-ui-light: #131314; /* surface/content (dark) — darker than the chrome (Google) */
   --immich-ui-dark: #e3e3e3; /* fg text (dark) */
   --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
-  --immich-ui-gray: #2d2e31; /* subtle surface (dark) */
+  --immich-ui-gray: #1e1f20; /* subtle surface (dark) */
   --immich-ui-default-border: #3c3f43; /* Google dark divider */
 }
 
@@ -72,8 +72,8 @@
   --color-gray-600: #5f6368;
   --color-gray-700: #3c3f43;
   --color-gray-800: #2d2e31;
-  --color-gray-900: #202124;
-  --color-gray-950: #101113;
+  --color-gray-900: #1e1f20;
+  --color-gray-950: #131314;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
@@ -111,7 +111,7 @@
   --gallery-chrome: #e9edf3;
 }
 .dark {
-  --gallery-chrome: #101113;
+  --gallery-chrome: #1e1f20;
 }
 #dashboard-navbar,
 #sidebar {
