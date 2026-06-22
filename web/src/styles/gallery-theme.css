@@ -160,6 +160,31 @@ body {
 [data-testid='temporal-picker'] [data-testid='month-grid'] > button {
   border-radius: 10px;
 }
+
+/* Filter panel scrollbar — keep it subtle: thin, transparent track, a faint
+ * thumb that firms up only on hover. Adapts to light/dark via --immich-ui-muted. */
+[data-testid='discovery-panel'] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--immich-ui-muted) 25%, transparent) transparent;
+}
+[data-testid='discovery-panel']::-webkit-scrollbar {
+  width: 8px;
+}
+[data-testid='discovery-panel']::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-testid='discovery-panel']::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--immich-ui-muted) 25%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+[data-testid='discovery-panel']:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--immich-ui-muted) 45%, transparent);
+}
+[data-testid='discovery-panel']::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--immich-ui-muted) 65%, transparent);
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
