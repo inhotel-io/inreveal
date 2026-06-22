@@ -143,6 +143,11 @@ body {
   width: 1.5rem;
   height: 1.5rem;
 }
+/* Darken the search placeholder in light mode (it was gray-500 ≈ too faint);
+ * dark mode keeps its lighter placeholder. */
+:root:not(.dark) [data-testid='cmdk-input-trigger'] input::placeholder {
+  color: #5f6368;
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
