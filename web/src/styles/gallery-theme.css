@@ -123,6 +123,11 @@ body {
 #sidebar {
   background-color: var(--gallery-chrome);
 }
+/* Drop the navbar's bottom divider — the chrome/content two-tone already
+ * separates it (targets the navbar's inner grid row that carries `border-b`). */
+#dashboard-navbar > div {
+  border-bottom-width: 0;
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
