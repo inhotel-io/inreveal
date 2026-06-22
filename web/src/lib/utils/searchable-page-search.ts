@@ -120,6 +120,13 @@ export function buildSearchablePageUrl(
   const trimmedQuery = query.trim();
   const params = new URLSearchParams(url.searchParams);
 
+  // `at` is a one-shot grid scroll target left over from closing the asset viewer. It must not
+  // survive a search/filter change: the layout re-seeds `gridScrollTarget` from it on every
+  // navigation, so a stale `at` makes the timeline re-scroll to (and focus) that asset on each
+  // keystroke — stealing focus from the filter inputs and loading the asset's non-matching
+  // buckets behind a "0 results" empty state.
+  params.delete('at');
+
   if (trimmedQuery) {
     params.set('q', trimmedQuery);
     if (sortOrder === 'relevance') {
