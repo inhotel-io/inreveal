@@ -129,3 +129,9 @@ main {
   overflow: clip;
   margin: 8px; /* chrome gutter so all four rounded corners read as a floating panel */
 }
+/* Inset main's direct children (the page header + the content/timeline) so the
+ * title, actions, and grid clear the 16px rounded corners instead of hugging
+ * them. Both children share the inset so header + content stay left-aligned. */
+main > div {
+  padding-inline: 1rem;
+}
