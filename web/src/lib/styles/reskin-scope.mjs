@@ -6,9 +6,10 @@ export const ALLOWED_PREFIXES = [
   'web/scripts/',
   'web/src/lib/assets/fonts/',
   'docs/superpowers/', // the spec + plan docs for this work
+  'e2e/src/specs/web/reskin-', // the re-skin hardening e2e specs (+ their snapshots)
 ];
 // pnpm-lock.yaml is the single monorepo lockfile at the repo root (not under web/).
-export const ALLOWED_EXACT = new Set(['web/package.json', 'pnpm-lock.yaml']);
+export const ALLOWED_EXACT = new Set(['web/package.json', 'pnpm-lock.yaml', 'e2e/package.json']);
 
 export function isInScope(changedPaths, appCssAddedLines) {
   const violations = [];

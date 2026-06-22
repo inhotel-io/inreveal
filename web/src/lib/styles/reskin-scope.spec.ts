@@ -35,4 +35,16 @@ describe('isInScope', () => {
     expect(r.ok).toBe(true);
     expect(r.violations).toEqual([]);
   });
+  it('allows the re-skin e2e specs + e2e manifest', () => {
+    const r = isInScope(
+      [
+        'e2e/src/specs/web/reskin-computed.e2e-spec.ts',
+        'e2e/src/specs/web/reskin-visual.e2e-spec.ts-snapshots/_photos-light.png',
+        'e2e/package.json',
+      ],
+      [],
+    );
+    expect(r.ok).toBe(true);
+    expect(r.violations).toEqual([]);
+  });
 });
