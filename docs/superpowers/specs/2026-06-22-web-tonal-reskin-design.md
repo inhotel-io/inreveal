@@ -73,7 +73,7 @@ Decided after live mockup iteration (see `.superpowers/brainstorm/` artifacts).
   a touch more saturated because dark mode is where low-contrast tonal is riskiest.
   This is deliberate and standard.
 
-### Token values (starting point — to be regenerated cleanly, see §6 risks)
+### Token values (starting point — to be regenerated cleanly, see §9 open items)
 
 Primary periwinkle ramp (light-mode reference values):
 
@@ -152,34 +152,99 @@ The genuinely-not-tokenizable part. The default `@immich/ui` primary button is a
 fill + white text; the tonal treatment needs `bg=primary-200 / text=primary-950 / ring /
 shadow`, which is a different anatomy, not a color swap. Implemented as **fork-owned CSS
 overriding `@immich/ui` Button's primary/filled variant class hooks** (and the app's
-selection/nav classes), living in Unit A or a sibling `gallery-overrides.css`. No
+selection/nav classes), living in a sibling `web/src/styles/gallery-overrides.css`. No
 component markup is edited. Each override selector and its upstream coupling is documented
-inline.
+inline, and is guarded by the computed-style test in §5.
 
 ### Unit D — The one upstream-owned edit
 
 A **single** line in `web/src/app.css`: `@import './styles/gallery-theme.css';` placed
-after the `@immich/ui` theme import. This is the only upstream-owned file we modify; a
-one-line import virtually never conflicts.
+after the `@immich/ui` theme import (and `gallery-overrides.css` once Unit C exists). This
+is the only upstream-owned file we modify; a one-line import virtually never conflicts.
 
-### Unit E (Tier 2, optional) — Hardcoded-color cleanup
+### Unit E (Level 7, optional) — Hardcoded-color cleanup
 
 Isolated, clearly-labeled commits migrating the 23 files of hardcoded blues + 15 files of
 hex literals to token utilities. Kept separate so they never tangle with the theme layer.
 
-## 5. Scope & phasing
+## 5. Testing strategy — TDD where it has teeth
 
-### Tier 1 — ships the look (~80–90% of visual impact, near-zero rebase tax)
+A visual re-skin has two kinds of properties: **objective/functional** ones we can assert
+(contrast, token completeness, the override actually applying, the rebase-safety
+invariant) and **subjective/aesthetic** ones we cannot (does it "feel right"). We apply
+**real TDD to the first kind** and are honest that the second is baseline-locked or manual.
+No TDD theater on raw CSS values that carry no functional assertion.
 
-Units A–D: the theme file (ramps, neutral remap, radius, fonts, shadows, both modes) +
-self-hosted fonts + tonal nav/containers + elevated-tonal primary button override +
-selection treatment + a visual QA sweep. **Estimate: 2–4 focused days** (mostly design
-tuning + QA, not mechanical edits).
+### Test-first (red → green → refactor) — drives implementation
 
-### Tier 2 — polish (optional, modest rebase tax on touched files)
+1. **Contrast / WCAG AA** — the highest-value tests; they directly harden the design's
+   main risk (low-contrast tonal). A pure `contrastRatio(fg, bg)` utility (vitest unit,
+   self-tested against known pairs) asserts, **for both light and dark**:
+   - body `fg` on `bg`/`surface` ≥ 4.5:1; `fg-muted` on `surface` ≥ 4.5:1
+   - `on-primary-container` text on `primary-container` (the tonal pairs: nav-active,
+     chips) ≥ 4.5:1
+   - elevated CTA text on CTA fill ≥ 4.5:1
+   - focus ring / link accent vs adjacent surface ≥ 3:1 (UI/graphical threshold)
+   - selection badge legibility: check tick vs fill ≥ 4.5:1, **and** the ring/outline
+     vs both a white and a black backdrop ≥ 3:1 (so selection survives any photo)
+     Written first against the intended token values; they stay red until the ramp is
+     tuned to pass. This is genuine TDD and is what makes the tonal direction safe.
 
-Unit E cleanup + a full contrast/accessibility audit + any small per-component tweaks
-surfaced in QA. **Estimate: +3–6 days.**
+2. **Token completeness** — vitest test that parses `gallery-theme.css` and asserts every
+   required token name (`--immich-ui-*` scales, neutrals, `--radius-*`, fonts, shadows) is
+   defined under **both** `:root/.light` and `.dark`. Catches the classic "forgot a dark
+   value" regression. The CSS file is the single source of truth the test reads, so no
+   value can drift between code and test.
+
+3. **`@immich/ui` Button override correctness** — a Playwright (real-browser) test that
+   renders the primary Button and asserts computed `background-color` / `color` /
+   `box-shadow` / `border` match the elevated-tonal treatment in **both** modes. This is
+   the guard that catches an `@immich/ui` upgrade silently reverting the button to solid
+   (the brittleness risk in §7). Written first; red until Unit C lands.
+
+4. **Rebase-safety guard** — a node/vitest test asserting the change set stays within the
+   fork-owned allowlist (`gallery-theme.css`, `gallery-overrides.css`, the fonts dir, and
+   an `app.css` diff that is _only_ the import line) and introduces no broad
+   component-markup color edits. Encodes §1's invariant as an automated gate; wired into
+   CI at Level 6. Written first as the definition of done for the token levels.
+
+### Baseline-locked (real coverage, not test-first)
+
+5. **Visual regression** — Playwright screenshot baselines for key screens (timeline,
+   albums, spaces, search, asset viewer chrome, a dialog, an empty state, the multi-select
+   bar) in light + dark. Captured **after** each level's look is approved, then they guard
+   against regressions on every future upstream rebase — the payoff being that a rebase
+   which disturbs the theme fails CI. These cannot be written test-first (no "correct"
+   pixels exist before the design does). Baselines must be generated in the CI/Docker
+   runner so OS font rendering is deterministic.
+
+### Manual (not automatable)
+
+6. **Aesthetic QA** — a documented per-screen checklist and human sign-off across real
+   content in both modes. The only gate for "does it look good."
+
+**Test homes** (per repo conventions): vitest (web) for the contrast utility,
+token-completeness parser, and rebase-safety guard; Playwright (`e2e`/web) for the
+computed-style override test, the `axe` accessibility scan (Level 6), and visual
+regression. Each implementation level below names which of tests 1–5 gate it, and follows
+red→green→refactor for the test-first ones.
+
+## 6. Implementation levels — biggest impact / least change first
+
+Ordered by **visual impact ÷ change size & risk**. Every level is independently shippable
+and the look improves monotonically, so we can **stop after any level**. Pure token levels
+(L1–L3) carry ~zero rebase tax; override levels (L4–L5) add a little; L6 hardens; L7 is
+optional cleanup.
+
+| Level                                         | What changes                                                                                                                                                                 | Why here                                                                                                                                                     | Tests that gate it (written first)                                                                                                                                                                       | Rough effort |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **L1 · Accent recolor**                       | Define the periwinkle `--immich-ui-primary-*` + legacy `--immich-primary*` ramp (light+dark) in `gallery-theme.css`; add the one `app.css` import.                           | Highest leverage: one file recolors all 349 `@immich/ui` files + 178 `immich-primary` uses at once. Largest shift for the smallest change, zero rebase risk. | Token completeness (primary ramp); contrast (accent/focus/link on surface); rebase-safety guard established.                                                                                             | ~0.5 day     |
+| **L2 · Neutrals + radius + shadows**          | Remap Tailwind `--color-gray-*` to cool paper/ink; set `--radius-*` and `--shadow-*` (light+dark).                                                                           | Token-only; reshapes surface character + roundness across ~600 `rounded-*` and 1166 gray usages. Still one file.                                             | Token completeness (neutrals/radius/shadow); contrast (`fg`/`fg-muted` on `bg`/`surface`).                                                                                                               | ~0.5–1 day   |
+| **L3 · Typography**                           | Self-host DM Sans + Bricolage (Unit B); set `--font-sans`/`--font-display`/`--font-mono`; `@layer base` heading rule; remove GoogleSans faces.                               | Whole-app type identity. Adds assets but still no component edits.                                                                                           | Computed font-family on body + an `h1` (Playwright); assert no GoogleSans reference remains; fonts load (no fallback).                                                                                   | ~0.5–1 day   |
+| **L4 · Tonal containers**                     | Point nav-active / chips / selected-surface at the container + on-container pair (mostly via L1 primary-container semantics; remainder via Unit C fork CSS on stable hooks). | Delivers the signature tonal sidebar/chips look from the approved mockup. First override coupling begins here.                                               | Contrast (on-container vs container, light+dark); computed-style on active nav + a chip; visual-regression baseline (sidebar, chips).                                                                    | ~0.5–1 day   |
+| **L5 · Elevated-tonal CTA + selection**       | Unit C core: override `@immich/ui` Button primary variant to elevated-tonal (bg/text/ring/shadow); selection check/outline states.                                           | Highest change/rebase-risk but smallest incremental visual delta (polish on the primary action) — so it comes last among the look levels.                    | Button-override computed-style test (light+dark — the brittleness guard); contrast (CTA, selection tick/fill, ring vs black & white); visual-regression (CTA, dialog, selection over bright/dark photo). | ~1–2 days    |
+| **L6 · Hardening & lock**                     | No new visuals: add `axe` a11y scan across key screens (light+dark), the full visual-regression baseline set, and wire the rebase-safety guard into CI.                      | Locks the design and defends it on every future rebase.                                                                                                      | This level _is_ the test net (1–5 all green in CI).                                                                                                                                                      | ~1–2 days    |
+| **L7 · Hardcoded-color cleanup** _(optional)_ | Migrate the 23 hardcoded-blue + 15 hex files to token utilities, in isolated commits.                                                                                        | Low visual impact (periwinkle ≈ blue), so optional; improves correctness/consistency.                                                                        | Extend the guard to flag new hardcoded colors; re-run the §2 grep, assert count → ~0.                                                                                                                    | ~1 day       |
 
 ### Explicitly OUT of scope (YAGNI)
 
@@ -188,34 +253,40 @@ surfaced in QA. **Estimate: +3–6 days.**
 - Replacing `@immich/ui` or rewriting component anatomy.
 - Mobile (Flutter) and any ML/server change.
 
-## 6. Risks & mitigations
+## 7. Risks & mitigations
 
-| Risk                                                                                   | Mitigation                                                                                                                                                |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@immich/ui` Button override (Unit C) is brittle across package upgrades               | Pin/track the `@immich/ui` version; document override selectors; re-verify on every bump.                                                                 |
-| Global Tailwind gray remap shifts a place that assumed literal gray                    | Stay within a cool-neutral family (subtle shifts); catch in the QA sweep.                                                                                 |
-| Tonal low-contrast fails WCAG, esp. selection over bright (light) / dark (dark) photos | The elevated treatment (ring + shadow + deeper text) + an AA audit in Tier 2; dark selection intentionally punchier.                                      |
-| Periwinkle accent diverges the app's primary from the marketing site's `#1d64d8` blue  | Accepted, deliberate — same hue family, softer treatment; documented brand decision.                                                                      |
-| Cross-repo token drift (platform `tokens.css` vs vendored copy in Gallery)             | Values are **vendored** (copied), not imported — the repos are separate. Document the source path + a manual sync note; consider a sync script in Tier 2. |
-| Font licensing/weight bloat                                                            | DM Sans & Bricolage are OFL; subset to used weights; ship variable `woff2`.                                                                               |
+| Risk                                                                                   | Mitigation                                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@immich/ui` Button override (Unit C) is brittle across package upgrades               | The L5 computed-style test fails the build if the override stops applying; pin/track the `@immich/ui` version; document override selectors; re-verify on every bump. |
+| Global Tailwind gray remap shifts a place that assumed literal gray                    | Stay within a cool-neutral family (subtle shifts); L2 contrast tests + the visual-regression baselines catch breakage.                                               |
+| Tonal low-contrast fails WCAG, esp. selection over bright (light) / dark (dark) photos | First-class, test-first contrast assertions at L1/L2/L4/L5 + the `axe` scan at L6; dark selection intentionally punchier.                                            |
+| Periwinkle accent diverges the app's primary from the marketing site's `#1d64d8` blue  | Accepted, deliberate — same hue family, softer treatment; documented brand decision.                                                                                 |
+| Cross-repo token drift (platform `tokens.css` vs vendored copy in Gallery)             | Values are **vendored** (copied), not imported — the repos are separate. Document the source path + a manual sync note; consider a sync script in Level 7.           |
+| Font licensing/weight bloat                                                            | DM Sans & Bricolage are OFL; subset to used weights; ship variable `woff2`.                                                                                          |
 
-## 7. Verification
+## 8. Verification & acceptance
 
-- **Visual QA, light + dark**, across: Photos timeline, Albums, Spaces, Search, Map,
-  asset viewer chrome, settings, dialogs/modals, empty states, multi-select bar.
-- **Accessibility:** primary CTA, selection states, and tonal text pairs meet **WCAG AA**;
-  explicitly check the two stress cases (selection on a bright photo in light mode; on a
-  dark photo in dark mode).
+- **Per-level gates:** each level merges only when its test-first checks from §5 (tests
+  1–5 as named in the §6 table) are green and the aesthetic checklist for that level is
+  signed off.
+- **CI guards (from L6 on):** the rebase-safety guard, the visual-regression suite, and
+  the `axe` accessibility scan run on every PR — so future upstream rebases that disturb
+  the theme fail loudly.
 - **Build/lint clean:** `make check-web` (svelte-check + tsc) and `make lint-web`.
-- **Rebase-safety check (the acceptance gate for Tier 1):** the diff is essentially _one
-  new file (Unit A, optionally a sibling overrides file) + one import line (Unit D) + the
-  self-hosted font assets_. No broad component-markup recoloring. Re-run the hardcoded-
-  color grep from §2 and confirm leftovers are limited to the blue family (acceptable) or
-  deferred to Tier 2.
+- **Rebase-safety acceptance (the core invariant):** the diff for L1–L4 is essentially
+  _`gallery-theme.css` (+ `gallery-overrides.css`) + one `app.css` import line + font
+  assets_, with no broad component-markup recoloring — now enforced by the automated guard
+  rather than a manual grep.
+- **Aesthetic sign-off:** manual QA across the key screens in both modes.
 
-## 8. Open items to resolve during planning
+## 9. Open items to resolve during planning
 
 - Final ramp regeneration: choose the locked `--primary-500` seed and generation method.
-- Confirm `@immich/ui` Button's actual variant class hooks for the Unit C override (read
-  the installed package; the selectors above are placeholders until verified).
+- Confirm `@immich/ui` Button's actual variant class hooks for the Unit C override and the
+  L5 computed-style test (read the installed package; the selectors above are placeholders
+  until verified).
 - Decide whether `--font-display` applies to all headings or only top-level page titles.
+- Confirm the visual-regression toolchain: Playwright `toHaveScreenshot` config and a
+  deterministic CI/Docker runner for font rendering, plus where baselines are stored.
+- Confirm the contrast/completeness tests read `gallery-theme.css` directly (chosen) vs a
+  typed token module — i.e. tokens stay authored in CSS, tests parse that file.
