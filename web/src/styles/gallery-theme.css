@@ -129,3 +129,9 @@ main {
   overflow: clip;
   margin: 8px; /* chrome gutter so all four rounded corners read as a floating panel */
 }
+/* Inset ONLY the page header row (title + actions: Albums, Settings, …) so it
+ * clears the panel's rounded corners. Keyed on the stable page-header-title-row
+ * testid; the timeline/content keeps its tighter gutter untouched. */
+main > div:has([data-testid='page-header-title-row']) {
+  padding-inline: 1.25rem;
+}
