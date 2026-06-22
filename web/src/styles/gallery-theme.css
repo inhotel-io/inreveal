@@ -15,19 +15,19 @@
 .light {
   /* extended per level (Tasks 4–6) */
   --gallery-theme: light;
-  --immich-ui-primary-50: #f4f7fe;
-  --immich-ui-primary-100: #e6edfd;
-  --immich-ui-primary-200: #cdddfb; /* primary container */
-  --immich-ui-primary-300: #aec7f8;
-  --immich-ui-primary-400: #84a4f1;
-  --immich-ui-primary-500: #5b82ea;
-  --immich-ui-primary-600: #3f6fe0; /* solid accent: button fill, focus, links */
-  --immich-ui-primary-700: #3257c6;
-  --immich-ui-primary-800: #2c469f;
-  --immich-ui-primary-900: #283f7d;
-  --immich-ui-primary-950: #1b2a4e; /* on-primary-container */
-  --immich-primary: 63 111 224; /* #3f6fe0 — legacy rgb triplet */
-  --immich-dark-primary: 126 166 242; /* #7ea6f2 — mode-agnostic, used by dark: utilities */
+  --immich-ui-primary-50: #eaf1fc;
+  --immich-ui-primary-100: #d3e3fd; /* primary container (Google secondary container) */
+  --immich-ui-primary-200: #abc8fb;
+  --immich-ui-primary-300: #7eabf7;
+  --immich-ui-primary-400: #4285f4;
+  --immich-ui-primary-500: #0b57d0; /* Google primary — button fill */
+  --immich-ui-primary-600: #0a4dba; /* solid accent: focus, links */
+  --immich-ui-primary-700: #0842a0;
+  --immich-ui-primary-800: #073688;
+  --immich-ui-primary-900: #052a6b;
+  --immich-ui-primary-950: #001d35; /* on-primary-container */
+  --immich-primary: 11 87 208; /* #0b57d0 — Google blue */
+  --immich-dark-primary: 168 199 250; /* #a8c7fa — Google blue (dark), mode-agnostic */
   --immich-ui-light: #ffffff; /* surface/panel — white content area (Google) */
   --immich-ui-dark: #1f1f1f; /* fg text — Google near-black */
   --immich-ui-muted: #5f6368; /* Google secondary text */
@@ -43,17 +43,17 @@
 .dark {
   /* only --immich-ui-* ramps differ per mode (Tasks 4–5) */
   --gallery-theme: dark;
-  --immich-ui-primary-950: #f4f7fe;
-  --immich-ui-primary-900: #e6edfd;
-  --immich-ui-primary-800: #cdddfb;
-  --immich-ui-primary-700: #aec7f8;
-  --immich-ui-primary-600: #84a4f1;
-  --immich-ui-primary-500: #7ea6f2; /* accent on dark */
-  --immich-ui-primary-400: #5b82ea;
-  --immich-ui-primary-300: #3f6fe0;
-  --immich-ui-primary-200: #2c469f;
-  --immich-ui-primary-100: #283f7d;
-  --immich-ui-primary-50: #1b2a4e;
+  --immich-ui-primary-950: #eef4fe;
+  --immich-ui-primary-900: #dce8fd;
+  --immich-ui-primary-800: #c9dcfc;
+  --immich-ui-primary-700: #bcd3fb;
+  --immich-ui-primary-600: #b0ccfb;
+  --immich-ui-primary-500: #a8c7fa; /* Google blue accent on dark */
+  --immich-ui-primary-400: #5b9af6;
+  --immich-ui-primary-300: #2e7df0;
+  --immich-ui-primary-200: #0b57d0;
+  --immich-ui-primary-100: #08409a;
+  --immich-ui-primary-50: #001d35;
   --immich-ui-light: #1e1f20; /* surface/panel (dark) — Google M3 elevated, lifts over #131314 page */
   --immich-ui-dark: #e3e3e3; /* fg text (dark) */
   --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
@@ -99,4 +99,21 @@
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
+}
+
+/* Two-tone chrome (Google Photos): the navbar + sidebar take a distinct page
+ * tint while the timeline/content keeps the lighter surface (body `bg-light`).
+ * Couples to upstream ids #dashboard-navbar / #sidebar — if upstream renames
+ * either, chrome simply falls back to the surface color (degrades, not breaks).
+ * Unlayered so it beats the sidebar's `bg-light` utility. */
+:root,
+.light {
+  --gallery-chrome: #f0f4f9;
+}
+.dark {
+  --gallery-chrome: #131314;
+}
+#dashboard-navbar,
+#sidebar {
+  background-color: var(--gallery-chrome);
 }
