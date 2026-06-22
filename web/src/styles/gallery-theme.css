@@ -28,16 +28,16 @@
   --immich-ui-primary-950: #1b2a4e; /* on-primary-container */
   --immich-primary: 63 111 224; /* #3f6fe0 — legacy rgb triplet */
   --immich-dark-primary: 126 166 242; /* #7ea6f2 — mode-agnostic, used by dark: utilities */
-  --immich-ui-light: #ffffff; /* surface/bg */
-  --immich-ui-dark: #1a1f29; /* fg text */
-  --immich-ui-muted: #5a6573;
-  --immich-ui-gray: #eef2fb; /* subtle surface */
-  --immich-ui-default-border: #e3e8f2;
-  --immich-bg: 255 255 255;
-  --immich-fg: 26 31 41; /* #1a1f29 */
-  --immich-dark-bg: 10 10 10; /* #0a0a0a — near-black, neutral */
-  --immich-dark-fg: 237 237 237; /* #ededed */
-  --immich-dark-gray: 33 33 33; /* #212121 */
+  --immich-ui-light: #ffffff; /* surface/panel — white content area (Google) */
+  --immich-ui-dark: #1f1f1f; /* fg text — Google near-black */
+  --immich-ui-muted: #5f6368; /* Google secondary text */
+  --immich-ui-gray: #e9eef6; /* subtle surface (cool) */
+  --immich-ui-default-border: #dde3ea;
+  --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page (Google) */
+  --immich-fg: 31 31 31; /* #1f1f1f */
+  --immich-dark-bg: 19 19 20; /* #131314 — Google dark page */
+  --immich-dark-fg: 227 227 227; /* #e3e3e3 */
+  --immich-dark-gray: 40 41 42; /* #28292a */
 }
 
 .dark {
@@ -54,26 +54,26 @@
   --immich-ui-primary-200: #2c469f;
   --immich-ui-primary-100: #283f7d;
   --immich-ui-primary-50: #1b2a4e;
-  --immich-ui-light: #121212; /* surface (dark) — neutral, subtle lift over #0a0a0a bg */
-  --immich-ui-dark: #ededed; /* fg text (dark) */
-  --immich-ui-muted: #a1a1aa;
-  --immich-ui-gray: #1c1c1c;
-  --immich-ui-default-border: #2a2a2a;
+  --immich-ui-light: #1e1f20; /* surface/panel (dark) — Google M3 elevated, lifts over #131314 page */
+  --immich-ui-dark: #e3e3e3; /* fg text (dark) */
+  --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
+  --immich-ui-gray: #28292a; /* subtle surface (dark) */
+  --immich-ui-default-border: #3c4043; /* Google dark divider */
 }
 
 @theme {
-  /* gray ramp — cool paper/ink in light (50–600); neutral near-black in dark (700–950) */
-  --color-gray-50: #f7f9fc;
-  --color-gray-100: #eef2fb;
-  --color-gray-200: #e3e8f2;
-  --color-gray-300: #cfd6e3;
-  --color-gray-400: #9aa6b8;
-  --color-gray-500: #6b7688;
-  --color-gray-600: #505b6b;
-  --color-gray-700: #2a2a2a;
-  --color-gray-800: #1c1c1c;
-  --color-gray-900: #121212;
-  --color-gray-950: #0a0a0a;
+  /* gray ramp — Google Material neutral surfaces (cool off-white light, neutral dark) */
+  --color-gray-50: #f8fafd;
+  --color-gray-100: #f0f4f9;
+  --color-gray-200: #e9eef6;
+  --color-gray-300: #dde3ea;
+  --color-gray-400: #bdc1c6;
+  --color-gray-500: #9aa0a6;
+  --color-gray-600: #5f6368;
+  --color-gray-700: #3c4043;
+  --color-gray-800: #28292a;
+  --color-gray-900: #1e1f20;
+  --color-gray-950: #131314;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
