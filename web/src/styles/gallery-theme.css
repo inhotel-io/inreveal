@@ -31,7 +31,7 @@
   --immich-ui-light: #ffffff; /* surface/panel — white content area (Google) */
   --immich-ui-dark: #1f1f1f; /* fg text — Google near-black */
   --immich-ui-muted: #5f6368; /* Google secondary text */
-  --immich-ui-gray: #e9eef6; /* subtle surface (cool) */
+  --immich-ui-gray: #dde3ea; /* subtle surface — distinct from chrome so hovers show */
   --immich-ui-default-border: #dde3ea;
   --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page (Google) */
   --immich-fg: 31 31 31; /* #1f1f1f */
@@ -57,7 +57,7 @@
   --immich-ui-light: #131314; /* surface/content (dark) — darker than the chrome (Google) */
   --immich-ui-dark: #e3e3e3; /* fg text (dark) */
   --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
-  --immich-ui-gray: #1e1f20; /* subtle surface (dark) */
+  --immich-ui-gray: #2a2b2e; /* subtle surface (dark) — lighter than chrome so hovers show */
   --immich-ui-default-border: #3c3f43; /* Google dark divider */
 }
 
