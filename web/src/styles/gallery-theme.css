@@ -148,6 +148,18 @@ body {
 :root:not(.dark) [data-testid='cmdk-input-trigger'] input::placeholder {
   color: #5f6368;
 }
+
+/* Temporal filter (From/To inputs + year/month chips): the generous global
+ * radius scale over-rounds these small controls into near-pills. Radius should
+ * scale down with element size — tidy input + chip radii, scoped to the picker
+ * so larger buttons/cards elsewhere keep their roundness. */
+[data-testid='temporal-picker'] input {
+  border-radius: 8px;
+}
+[data-testid='temporal-picker'] [data-testid='year-grid'] > button,
+[data-testid='temporal-picker'] [data-testid='month-grid'] > button {
+  border-radius: 10px;
+}
 main {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
