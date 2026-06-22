@@ -575,7 +575,7 @@ git commit -m "feat(web): L2 — cool paper/ink neutrals, marketing radius scale
 
 - Produces: `@fontsource-variable` imports + `--font-sans`/`--font-display`/`--font-mono` in `@theme` + an `@layer base` heading rule applying `--font-display`.
 
-> Mono stays `'GoogleSansCode'` (its `@font-face` already lives in `app.css`) to preserve the single-app.css-edit invariant. This is a deliberate deviation from spec §3's JetBrains Mono suggestion — adding JetBrains would mean another dep with no visible payoff (mono is rare in the UI). The unused GoogleSans (sans) `@font-face` also stays in `app.css`; `--font-sans` is simply overridden here, so no `app.css` edit is needed for fonts.
+> Mono stays `'GoogleSansCode'` (its `@font-face` already lives in `app.css`) to preserve the single-app.css-edit invariant. This is a deliberate deviation from spec §3's JetBrains Mono suggestion — adding JetBrains would mean another dep with no visible payoff (mono is rare in the UI). The unused prior (sans) `@font-face` also stays in `app.css`; `--font-sans` is simply overridden here, so no `app.css` edit is needed for fonts.
 
 - [ ] **Step 1: Add the font packages**
 
@@ -616,7 +616,7 @@ Expected: FAIL — font imports/tokens absent.
 @import '@fontsource-variable/bricolage-grotesque';
 ```
 
-- [ ] **Step 5: Add font tokens to the existing `@theme` block** (overrides app.css's GoogleSans `--font-sans`):
+- [ ] **Step 5: Add font tokens to the existing `@theme` block** (overrides app.css's prior `--font-sans`):
 
 ```css
 --font-sans: 'DM Sans Variable', ui-sans-serif, system-ui, sans-serif;

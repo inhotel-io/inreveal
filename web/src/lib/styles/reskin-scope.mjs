@@ -1,5 +1,6 @@
-// Pure scope-guard logic — NO node builtins, so it type-checks cleanly via the
-// spec import and is reused by the CLI at web/scripts/reskin-scope.mjs.
+// Pure scope-guard logic for the re-skin's "fork-owned files only" invariant —
+// no node builtins, so it type-checks cleanly. Unit-tested in reskin-scope.spec.ts;
+// run ad hoc with: git diff --name-only main...HEAD | (feed to isInScope).
 export const ALLOWED_PREFIXES = [
   'web/src/styles/',
   'web/src/lib/styles/',
@@ -14,13 +15,19 @@ export const ALLOWED_EXACT = new Set(['web/package.json', 'pnpm-lock.yaml', 'e2e
 export function isInScope(changedPaths, appCssAddedLines) {
   const violations = [];
   for (const p of changedPaths) {
-    if (ALLOWED_EXACT.has(p)) continue;
-    if (ALLOWED_PREFIXES.some((prefix) => p.startsWith(prefix))) continue;
+    if (ALLOWED_EXACT.has(p)) {
+      continue;
+    }
+    if (ALLOWED_PREFIXES.some((prefix) => p.startsWith(prefix))) {
+      continue;
+    }
     if (p === 'web/src/app.css') {
       const offending = appCssAddedLines
         .map((l) => l.trim())
         .filter((l) => l.length > 0 && !/^@import\s+['"]\.\/styles\/gallery-theme\.css['"];$/.test(l));
-      if (offending.length > 0) violations.push(`web/src/app.css (non-import additions: ${offending.join(' | ')})`);
+      if (offending.length > 0) {
+        violations.push(`web/src/app.css (non-import additions: ${offending.join(' | ')})`);
+      }
       continue;
     }
     violations.push(p);

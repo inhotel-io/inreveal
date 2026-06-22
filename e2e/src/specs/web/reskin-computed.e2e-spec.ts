@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 // Deterministic, auth-free guards that the fork-owned theme layer actually
 // applies in the browser (the vitest specs only parse the CSS file; these prove
 // the @theme remap + the .dark token flip reach the rendered DOM). Values are
-// the final Google-aligned palette in web/src/styles/gallery-theme.css.
+// the final palette in web/src/styles/gallery-theme.css.
 const toRgb = (hex: string): string => {
   const h = hex.replace('#', '');
   return `rgb(${Number.parseInt(h.slice(0, 2), 16)}, ${Number.parseInt(h.slice(2, 4), 16)}, ${Number.parseInt(h.slice(4, 6), 16)})`;
@@ -27,7 +27,7 @@ const readAccent = (page: import('@playwright/test').Page) =>
   });
 
 test.describe('re-skin computed styles', () => {
-  test('gray utilities are remapped to the Google neutral ramp', async ({ page }) => {
+  test('gray utilities are remapped to the neutral ramp', async ({ page }) => {
     await page.goto('/');
     await waitForTheme(page);
     const bg = await page.evaluate(() => {
@@ -49,8 +49,8 @@ test.describe('re-skin computed styles', () => {
     await page.evaluate(() => document.documentElement.classList.add('dark'));
     const dark = await readAccent(page);
 
-    expect(light).toBe(toRgb('#0b57d0')); // Google primary (light)
-    expect(dark).toBe(toRgb('#a8c7fa')); // Google primary (dark)
+    expect(light).toBe(toRgb('#0b57d0')); // primary (light)
+    expect(dark).toBe(toRgb('#a8c7fa')); // primary (dark)
     expect(light).not.toBe(dark);
   });
 });

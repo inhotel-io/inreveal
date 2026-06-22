@@ -1,7 +1,7 @@
-# Web Frontend Re-skin — Google Photos-style Brand
+# Web Frontend Re-skin — Layered Photo-app Brand
 
 > Originally specced as a "Soft Periwinkle Elevated Tonal" brand; during live
-> tuning it became a faithful **Google Photos** clone. See §3 for the as-built
+> tuning it became a clean, layered photo-app aesthetic. See §3 for the as-built
 > direction (the periwinkle values throughout earlier sections are historical).
 
 **Date:** 2026-06-22
@@ -10,7 +10,7 @@
 
 ## 1. Goal
 
-Re-skin the Gallery web frontend to a **Google Photos-style** brand (final
+Re-skin the Gallery web frontend to a clean, **layered photo-app** brand (final
 direction; see §3) — **without** broadly editing component markup, so the fork
 keeps rebasing cleanly onto upstream Immich.
 
@@ -31,7 +31,7 @@ The single governing principle:
 - The app's entire visual identity is already **token-driven** from a small block in
   `web/src/app.css`: it imports `@immich/ui/theme/default.css` and defines the
   `--immich-ui-*` color scales plus legacy `--immich-*` vars, fonts, spacing, and
-  breakpoints. The fork has **already** diverged this file once (GoogleSans fonts),
+  breakpoints. The fork has **already** diverged this file once (custom fonts),
   so it is a known fork-touched file.
 - The marketing site's identity is **itself** a token file
   (`platform: libs/shared/brand/tokens.css`): `--ink`, `--paper`, `--blue #1d64d8`,
@@ -56,32 +56,33 @@ Measured across 534 `.svelte` components in `web/src`:
 The "scary" large numbers (gray, rounded, dark:) are all **centrally coverable** by
 remapping palettes/scales in the theme layer, not by per-site edits.
 
-## 3. Design direction — Google Photos look (as-built)
+## 3. Design direction — layered photo-app look (as-built)
 
 > **Evolution note.** Brainstorming landed on a periwinkle "elevated tonal A+"
-> direction, but during live tuning the user steered it to a faithful **Google
-> Photos** clone. The final, shipped direction (recorded here) supersedes the
-> periwinkle values. Two notable departures from the original plan: the primary
-> button is a **solid** accent (not the elevated-tonal pale pill — the
-> `@immich/ui` filled Button exposes no clean hook, and solid is what Google
-> does), and the surfaces are Google's **neutral** grays, not a periwinkle-tinted
+> direction, but during live tuning the user steered it to a clean, layered
+> photo-app aesthetic. The final, shipped direction (recorded here) supersedes
+> the periwinkle values. Two notable departures from the original plan: the
+> primary button is a **solid** accent (not the elevated-tonal pale pill — the
+> `@immich/ui` filled Button exposes no clean hook, and solid is the more legible
+> convention), and the surfaces are **neutral** grays, not a periwinkle-tinted
 > paper/ink. The values below are what's in `web/src/styles/gallery-theme.css`.
 
-- **Accent:** Google blue — `#0b57d0` (light) / `#a8c7fa` (dark). Solid primary
+- **Accent:** a clear blue — `#0b57d0` (light) / `#a8c7fa` (dark). Solid primary
   button; tonal active-nav pill via the existing `bg-primary/10 text-primary`.
-- **Surfaces — two-tone chrome (the signature Google layered look):** the page +
+- **Surfaces — two-tone chrome (the signature layered look):** the page +
   navbar + sidebar take a "chrome" tint; the timeline/content is a distinct
   surface, rendered as a **rounded floating panel** (16px radius, 8px chrome
-  gutter). Google flips elevation per mode: light = white content on gray chrome;
+  gutter). Elevation flips per mode: light = white content on gray chrome;
   dark = darker content on lighter chrome.
 - **Typography:** **DM Sans** (body) + **Bricolage Grotesque** (headings),
-  replacing GoogleSans; GoogleSansCode kept for mono (avoids a second app.css edit).
+  replacing the prior bundled sans; the bundled mono font is kept (avoids a
+  second app.css edit).
 - **Shape:** moderate radius scale; radius scales **down** with element size
   (small controls like date inputs/chips were dialed back from the generous scale).
 
 ### Token values (as-built — `gallery-theme.css`)
 
-Primary (Google blue), light ramp:
+Primary (blue), light ramp:
 
 ```
 50 #eaf1fc · 100 #d3e3fd · 200 #abc8fb · 300 #7eabf7 · 400 #4285f4
@@ -91,12 +92,12 @@ Primary (Google blue), light ramp:
 
 Dark ramp (inverted): `950 #eef4fe … 500 #a8c7fa (accent) … 50 #001d35`; legacy `--immich-dark-primary: 168 199 250`.
 
-Neutrals (Google Material) + two-tone:
+Neutrals (Material-style) + two-tone:
 
 ```
 LIGHT  chrome (page/navbar/sidebar) #e9edf3 · content/surface #ffffff
        fg #1f1f1f · muted #5f6368 · border #dde3ea · subtle(bg-subtle) #dde3ea
-       (gray ramp 50–600 = Google cool neutrals; secondary text uses gray-400→#6e7378,
+       (gray ramp 50–600 = cool neutrals; secondary text uses gray-400→#6e7378,
         gray-500→#5f6368 in light only, for readability on white)
 DARK   chrome (page/navbar/sidebar) #1e1f20 · content/surface #131314
        fg #e3e3e3 · muted #9aa0a6 · border #3c3f43 · subtle(bg-subtle) #2a2b2e
@@ -109,7 +110,7 @@ Shadows (soft): `--shadow-sm 0 1px 2px rgb(26 31 41 /.07)` · `--shadow-md 0 10p
 
 ### As-built additions beyond the pure token layer
 
-Matching Google needed more than recoloring tokens. These live in the same
+The layered look needed more than recoloring tokens. These live in the same
 fork-owned `gallery-theme.css` as **global CSS rules keyed on stable hooks**
 (testids/ids/class-signatures) — still **zero component-markup edits** (guard-
 verified), but they are the "override tier" the spec anticipated, with documented
@@ -150,7 +151,7 @@ global `@layer base` rules. No logic. Upstream never creates or touches this pat
 
 DM Sans + Bricolage Grotesque variable `woff2` under `web/src/lib/assets/fonts/`, with
 `@font-face` declarations (placed in Unit A to keep the `app.css` edit minimal). Replaces
-the existing GoogleSans `@font-face` blocks. Subset to used weights; both are SIL OFL.
+the existing bundled-sans `@font-face` blocks. Subset to used weights; both are SIL OFL.
 
 ### Unit C — Elevated-tonal component override CSS (fork-owned)
 
@@ -246,7 +247,7 @@ optional cleanup.
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | **L1 · Accent recolor**                       | Define the periwinkle `--immich-ui-primary-*` + legacy `--immich-primary*` ramp (light+dark) in `gallery-theme.css`; add the one `app.css` import.                           | Highest leverage: one file recolors all 349 `@immich/ui` files + 178 `immich-primary` uses at once. Largest shift for the smallest change, zero rebase risk. | Token completeness (primary ramp); contrast (accent/focus/link on surface); rebase-safety guard established.                                                                                             | ~0.5 day     |
 | **L2 · Neutrals + radius + shadows**          | Remap Tailwind `--color-gray-*` to cool paper/ink; set `--radius-*` and `--shadow-*` (light+dark).                                                                           | Token-only; reshapes surface character + roundness across ~600 `rounded-*` and 1166 gray usages. Still one file.                                             | Token completeness (neutrals/radius/shadow); contrast (`fg`/`fg-muted` on `bg`/`surface`).                                                                                                               | ~0.5–1 day   |
-| **L3 · Typography**                           | Self-host DM Sans + Bricolage (Unit B); set `--font-sans`/`--font-display`/`--font-mono`; `@layer base` heading rule; remove GoogleSans faces.                               | Whole-app type identity. Adds assets but still no component edits.                                                                                           | Computed font-family on body + an `h1` (Playwright); assert no GoogleSans reference remains; fonts load (no fallback).                                                                                   | ~0.5–1 day   |
+| **L3 · Typography**                           | Self-host DM Sans + Bricolage (Unit B); set `--font-sans`/`--font-display`/`--font-mono`; `@layer base` heading rule; remove the bundled-sans faces.                         | Whole-app type identity. Adds assets but still no component edits.                                                                                           | Computed font-family on body + an `h1` (Playwright); assert no prior-sans-font reference remains; fonts load (no fallback).                                                                              | ~0.5–1 day   |
 | **L4 · Tonal containers**                     | Point nav-active / chips / selected-surface at the container + on-container pair (mostly via L1 primary-container semantics; remainder via Unit C fork CSS on stable hooks). | Delivers the signature tonal sidebar/chips look from the approved mockup. First override coupling begins here.                                               | Contrast (on-container vs container, light+dark); computed-style on active nav + a chip; visual-regression baseline (sidebar, chips).                                                                    | ~0.5–1 day   |
 | **L5 · Elevated-tonal CTA + selection**       | Unit C core: override `@immich/ui` Button primary variant to elevated-tonal (bg/text/ring/shadow); selection check/outline states.                                           | Highest change/rebase-risk but smallest incremental visual delta (polish on the primary action) — so it comes last among the look levels.                    | Button-override computed-style test (light+dark — the brittleness guard); contrast (CTA, selection tick/fill, ring vs black & white); visual-regression (CTA, dialog, selection over bright/dark photo). | ~1–2 days    |
 | **L6 · Hardening & lock**                     | No new visuals: add `axe` a11y scan across key screens (light+dark), the full visual-regression baseline set, and wire the rebase-safety guard into CI.                      | Locks the design and defends it on every future rebase.                                                                                                      | This level _is_ the test net (1–5 all green in CI).                                                                                                                                                      | ~1–2 days    |

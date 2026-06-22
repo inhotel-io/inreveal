@@ -13,7 +13,9 @@ const parseVars = (block: string): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const line of block.split('\n')) {
     const m = line.match(/^\s*(--[a-z0-9-]+)\s*:\s*([^;]+);/i);
-    if (m) out[m[1]] = m[2].trim();
+    if (m) {
+      out[m[1]] = m[2].trim();
+    }
   }
   return out;
 };

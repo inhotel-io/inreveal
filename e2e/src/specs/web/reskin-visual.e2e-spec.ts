@@ -1,5 +1,5 @@
-import type { LoginResponseDto } from '@immich/sdk';
 import AxeBuilder from '@axe-core/playwright';
+import type { LoginResponseDto } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { utils } from 'src/utils';
 
@@ -52,7 +52,6 @@ test.describe('re-skin hardening', () => {
         expect(contrast, JSON.stringify(contrast, null, 2)).toEqual([]);
       });
 
-      // eslint-disable-next-line playwright/no-skipped-test
       test.fixme(`visual · ${theme} · ${path}`, async ({ context, page }) => {
         await gotoThemed(context, page, admin.accessToken, path, theme);
         await expect(page).toHaveScreenshot(`${path.replaceAll('/', '_')}-${theme}.png`, {

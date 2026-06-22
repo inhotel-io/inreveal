@@ -1,5 +1,7 @@
 import { contrastRatio } from '$lib/styles/contrast';
 import { readThemeTokens } from '$lib/styles/theme-tokens';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 describe('gallery-theme.css', () => {
   const t = readThemeTokens();
@@ -60,8 +62,6 @@ describe('L2 neutrals', () => {
 });
 
 describe('L3 typography', () => {
-  const { readFileSync } = require('node:fs');
-  const { resolve } = require('node:path');
   const css = readFileSync(resolve(process.cwd(), 'src/styles/gallery-theme.css'), 'utf8');
 
   it('imports the self-hosted variable fonts', () => {

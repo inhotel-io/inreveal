@@ -13,27 +13,26 @@
 
 :root,
 .light {
-  /* extended per level (Tasks 4–6) */
   --gallery-theme: light;
   --immich-ui-primary-50: #eaf1fc;
-  --immich-ui-primary-100: #d3e3fd; /* primary container (Google secondary container) */
+  --immich-ui-primary-100: #d3e3fd; /* primary container */
   --immich-ui-primary-200: #abc8fb;
   --immich-ui-primary-300: #7eabf7;
   --immich-ui-primary-400: #4285f4;
-  --immich-ui-primary-500: #0b57d0; /* Google primary — button fill */
+  --immich-ui-primary-500: #0b57d0; /* primary accent — button fill */
   --immich-ui-primary-600: #0a4dba; /* solid accent: focus, links */
   --immich-ui-primary-700: #0842a0;
   --immich-ui-primary-800: #073688;
   --immich-ui-primary-900: #052a6b;
   --immich-ui-primary-950: #001d35; /* on-primary-container */
-  --immich-primary: 11 87 208; /* #0b57d0 — Google blue */
-  --immich-dark-primary: 168 199 250; /* #a8c7fa — Google blue (dark), mode-agnostic */
-  --immich-ui-light: #ffffff; /* surface/panel — white content area (Google) */
-  --immich-ui-dark: #1f1f1f; /* fg text — Google near-black */
-  --immich-ui-muted: #5f6368; /* Google secondary text */
+  --immich-primary: 11 87 208; /* #0b57d0 — blue accent (legacy rgb) */
+  --immich-dark-primary: 168 199 250; /* #a8c7fa — blue accent (dark), mode-agnostic */
+  --immich-ui-light: #ffffff; /* surface/panel — white content area */
+  --immich-ui-dark: #1f1f1f; /* fg text — near-black */
+  --immich-ui-muted: #5f6368; /* secondary text */
   --immich-ui-gray: #dde3ea; /* subtle surface — distinct from chrome so hovers show */
   --immich-ui-default-border: #dde3ea;
-  --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page (Google) */
+  --immich-bg: 240 244 249; /* #f0f4f9 — cool off-white page */
   --immich-fg: 31 31 31; /* #1f1f1f */
   --immich-dark-bg: 19 19 20; /* #131314 — content/page (darker than chrome) */
   --immich-dark-fg: 227 227 227; /* #e3e3e3 */
@@ -41,28 +40,28 @@
 }
 
 .dark {
-  /* only --immich-ui-* ramps differ per mode (Tasks 4–5) */
+  /* only --immich-ui-* ramps differ per mode */
   --gallery-theme: dark;
   --immich-ui-primary-950: #eef4fe;
   --immich-ui-primary-900: #dce8fd;
   --immich-ui-primary-800: #c9dcfc;
   --immich-ui-primary-700: #bcd3fb;
   --immich-ui-primary-600: #b0ccfb;
-  --immich-ui-primary-500: #a8c7fa; /* Google blue accent on dark */
+  --immich-ui-primary-500: #a8c7fa; /* blue accent on dark */
   --immich-ui-primary-400: #5b9af6;
   --immich-ui-primary-300: #2e7df0;
   --immich-ui-primary-200: #0b57d0;
   --immich-ui-primary-100: #08409a;
   --immich-ui-primary-50: #001d35;
-  --immich-ui-light: #131314; /* surface/content (dark) — darker than the chrome (Google) */
+  --immich-ui-light: #131314; /* surface/content (dark) — darker than the chrome */
   --immich-ui-dark: #e3e3e3; /* fg text (dark) */
-  --immich-ui-muted: #9aa0a6; /* Google secondary text (dark) */
+  --immich-ui-muted: #9aa0a6; /* secondary text (dark) */
   --immich-ui-gray: #2a2b2e; /* subtle surface (dark) — lighter than chrome so hovers show */
-  --immich-ui-default-border: #3c3f43; /* Google dark divider */
+  --immich-ui-default-border: #3c3f43; /* dark divider */
 }
 
 @theme {
-  /* gray ramp — Google Material neutral surfaces (cool off-white light, neutral dark) */
+  /* neutral surface gray ramp (cool off-white in light, neutral dark) */
   --color-gray-50: #f8fafd;
   --color-gray-100: #f0f4f9;
   --color-gray-200: #e9eef6;
@@ -91,11 +90,11 @@
   --font-mono: 'GoogleSansCode', ui-monospace, monospace;
 }
 
-/* Light-mode readability: the Google neutral ramp made the mid grays too faint
- * on white for secondary text (filter labels use text-gray-500; counts /
- * placeholders use text-gray-400). Darken them in LIGHT mode only — dark mode
- * pairs those utilities with dark:text-gray-300/500 and needs the lighter
- * values for text on dark surfaces, so it's left untouched. */
+/* Light-mode readability: the neutral ramp made the mid grays too faint on white
+ * for secondary text (filter labels use text-gray-500; counts / placeholders use
+ * text-gray-400). Darken them in LIGHT mode only — dark mode pairs those utilities
+ * with dark:text-gray-300/500 and needs the lighter values for text on dark
+ * surfaces, so it's left untouched. */
 :root:not(.dark) {
   --color-gray-400: #6e7378;
   --color-gray-500: #5f6368;
@@ -111,11 +110,11 @@
   }
 }
 
-/* Two-tone chrome + rounded content panel (Google Photos):
+/* Two-tone chrome + rounded content panel:
  * - the page (body) takes the chrome tint; the navbar + sidebar match it
  * - the timeline (<main>) is the distinct surface, a rounded floating panel
  *   with an 8px chrome gutter. Light = white content on gray chrome;
- *   dark = darker content on lighter chrome (Google flips elevation per mode).
+ *   dark = darker content on lighter chrome (elevation flips per mode).
  * Couples to upstream ids #dashboard-navbar / #sidebar and the <main> content
  * column — if upstream restructures these, the styling degrades, not breaks.
  * Unlayered so it beats the sidebar's `bg-light` utility. */
@@ -139,9 +138,26 @@ body {
   border-bottom-width: 0;
 }
 
-/* Search bar (navbar global-search trigger), Google-style: a touch taller, a
- * larger magnifier with no icon-button background. Keyed on the stable
- * cmdk-input-trigger testid; the magnifier is the trigger's leading <span>. */
+/* The rounded content panel. Scoped to the user-page-layout <main> via its
+ * direct-child scroll container (absolute + overflow-y-auto) so it does NOT hit
+ * the app's other <main> elements (asset viewer, shared-link pages, workflow
+ * editor), which are full-bleed and must not be clipped/rounded/gutter'd. */
+main:has(> div.absolute.overflow-y-auto) {
+  background-color: var(--immich-ui-light);
+  border-radius: 16px;
+  overflow: clip;
+  margin: 8px; /* chrome gutter so all four rounded corners read as a floating panel */
+}
+/* Inset ONLY the page header row (title + actions: Albums, Settings, …) so it
+ * clears the panel's rounded corners. Keyed on the stable page-header-title-row
+ * testid; the timeline/content keeps its tighter gutter untouched. */
+main > div:has([data-testid='page-header-title-row']) {
+  padding-inline: 1.25rem;
+}
+
+/* Search bar (navbar global-search trigger): a touch taller, a larger magnifier
+ * with no icon-button background. Keyed on the stable cmdk-input-trigger testid;
+ * the magnifier is the trigger's leading <span>. */
 [data-testid='cmdk-input-trigger'] {
   height: 3rem;
 }
@@ -202,18 +218,6 @@ body {
 [data-testid='filter-panel-shell']:has(> [data-testid='collapsed-icon-strip']) {
   width: 3rem;
   border-inline-end-width: 0;
-}
-main {
-  background-color: var(--immich-ui-light);
-  border-radius: 16px;
-  overflow: clip;
-  margin: 8px; /* chrome gutter so all four rounded corners read as a floating panel */
-}
-/* Inset ONLY the page header row (title + actions: Albums, Settings, …) so it
- * clears the panel's rounded corners. Keyed on the stable page-header-title-row
- * testid; the timeline/content keeps its tighter gutter untouched. */
-main > div:has([data-testid='page-header-title-row']) {
-  padding-inline: 1.25rem;
 }
 
 /* Admin pages use @immich/ui's AppShell (not the <main> layout above), so they
