@@ -91,6 +91,16 @@
   --font-mono: 'GoogleSansCode', ui-monospace, monospace;
 }
 
+/* Light-mode readability: the Google neutral ramp made the mid grays too faint
+ * on white for secondary text (filter labels use text-gray-500; counts /
+ * placeholders use text-gray-400). Darken them in LIGHT mode only — dark mode
+ * pairs those utilities with dark:text-gray-300/500 and needs the lighter
+ * values for text on dark surfaces, so it's left untouched. */
+:root:not(.dark) {
+  --color-gray-400: #6e7378;
+  --color-gray-500: #5f6368;
+}
+
 @layer base {
   h1,
   h2,
