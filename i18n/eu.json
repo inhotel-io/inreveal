@@ -645,7 +645,6 @@
   "back_close_deselect": "Atzera, itxi edo desautatu",
   "background_backup_running_error": "Atzeko planoko segurtasun-kopia exekutatzen ari da, ezin da eskuzko segurtasun-kopia hasi",
   "background_location_permission": "Atzeko planoko kokapenaren baimena",
-  "background_location_permission_content": "Atzeko planoan exekutatzen denean sarez aldatzeko, Immichek *beti* izan behar du kokapen zehatzaren sarbidea, aplikazioak Wi-Fi sarearen izena irakur dezan",
   "background_options": "Atzeko planoko aukerak",
   "backup": "Babes-kopia",
   "backup_album_selection_page_albums_device": "Albumak gailuan ({count})",
