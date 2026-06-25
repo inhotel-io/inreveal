@@ -450,6 +450,14 @@ test.describe('Assistant album organizer', () => {
 
     const { session } = await startPortugalPlan(page, admin.accessToken, providerCredentialId);
     const portugalDestination = getPortugalDestination(page);
+    // The plan's thumbnail strip renders below the fold and its images use loading="lazy",
+    // so the broken thumbnail only attempts to load (and triggers the fallback) once it is
+    // scrolled into the viewport. Bring each tile into view before asserting the fallback.
+    const thumbnails = portugalDestination.getByTestId('agent-plan-thumbnail-image');
+    await expect(thumbnails.first()).toBeAttached();
+    for (const thumbnail of await thumbnails.all()) {
+      await thumbnail.scrollIntoViewIfNeeded();
+    }
     await expect(portugalDestination.getByText('Preview unavailable')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Apply 3 selected' })).toBeEnabled();
 
