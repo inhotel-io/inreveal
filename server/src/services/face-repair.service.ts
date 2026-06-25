@@ -468,6 +468,17 @@ export class FaceRepairService extends BaseService {
     };
   }
 
+  getClusterFaces(
+    personId: string,
+    options: { excludeFaceIds: string[]; page: number; size: number },
+  ): Promise<{ faces: { assetFaceId: string }[]; total: number; hasMore: boolean }> {
+    return this.faceRepairRepository.getClusterFacePage(personId, {
+      excludeFaceIds: options.excludeFaceIds,
+      limit: options.size,
+      offset: options.page * options.size,
+    });
+  }
+
   async getPersonFlaggedFaces(
     personId: string,
   ): Promise<{ personId: string; flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }> {
