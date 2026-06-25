@@ -31,10 +31,14 @@ export const estimateCatalogTokens = (tools: unknown[]): { tokens: number; bytes
  *   50_002 (lib-mgmt Slice 1.2, 2026-06-08 — added album.addUsers/removeUsers/updateUserRole op schemas)
  *   50_682 (lib-mgmt Slice 2.2, 2026-06-08 — added asset.setVisibility op schema)
  *   51_513 (lib-mgmt Slice 3.2, 2026-06-08 — added album.delete + space.delete op schemas)
+ *   51_581 (rolling sync onto batch 290, 2026-06-25 — upstream enum/schema content drift across
+ *           batches 268–290; +68 tokens of embedded structural content. Stripping integrity and
+ *           schema structure (enum/type/required) verified intact, so this is a content re-baseline,
+ *           not an optimization regression.)
  * Later slices must assert their catalog token count is strictly < CATALOG_TOKENS_BASELINE.
  * Update this const only when intentionally re-baselining (e.g. after a content addition).
  */
-export const CATALOG_TOKENS_BASELINE = 51_513;
+export const CATALOG_TOKENS_BASELINE = 51_581;
 
 /**
  * Build a real (not mocked) registry for token and order tests.
