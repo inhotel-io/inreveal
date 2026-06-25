@@ -221,6 +221,107 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  describe('POST /admin/face-repair/scan/person/:personId/cluster-faces', () => {
+    const personId = '00000000-0000-4000-a000-000000000010';
+    const faceId = '00000000-0000-4000-a000-000000000011';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post(`/admin/face-repair/scan/person/${personId}/cluster-faces`);
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.getClusterFaces and returns the page', async () => {
+      service.getClusterFaces.mockResolvedValue({ faces: [{ assetFaceId: faceId }], total: 1, hasMore: false });
+      const { status, body } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/scan/person/${personId}/cluster-faces`)
+        .set('Authorization', 'Bearer token')
+        .send({ excludeFaceIds: [faceId], page: 0, size: 50 });
+      expect(status).toBe(201);
+      expect(service.getClusterFaces).toHaveBeenCalledWith(personId, {
+        excludeFaceIds: [faceId],
+        page: 0,
+        size: 50,
+      });
+      expect(body).toMatchObject({ faces: [{ assetFaceId: faceId }], total: 1, hasMore: false });
+    });
+
+    it('rejects size out of range with 400 (E14)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/scan/person/${personId}/cluster-faces`)
+        .set('Authorization', 'Bearer token')
+        .send({ page: 0, size: 0 });
+      expect(status).toBe(400);
+      expect(service.getClusterFaces).not.toHaveBeenCalled();
+    });
+
+    it('rejects a negative page with 400 (E14)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/scan/person/${personId}/cluster-faces`)
+        .set('Authorization', 'Bearer token')
+        .send({ page: -1, size: 50 });
+      expect(status).toBe(400);
+      expect(service.getClusterFaces).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-uuid personId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/scan/person/not-a-uuid/cluster-faces')
+        .set('Authorization', 'Bearer token')
+        .send({ page: 0, size: 50 });
+      expect(status).toBe(400);
+      expect(service.getClusterFaces).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /admin/face-repair/apply', () => {
+    const personId = '00000000-0000-4000-a000-000000000020';
+    const destId = '00000000-0000-4000-a000-000000000021';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/apply');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates the legacy flagged-only apply to service.applyRepair', async () => {
+      service.applyRepair.mockResolvedValue({ moved: 2, skipped: 0 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/apply')
+        .set('Authorization', 'Bearer token')
+        .send({ approvedPersonIds: [personId] });
+      expect(status).toBe(201);
+      expect(service.applyRepair).toHaveBeenCalledWith(expect.objectContaining({ approvedPersonIds: [personId] }));
+    });
+
+    it('passes a manualMove block (empty approvedPersonIds) through to service.applyRepair', async () => {
+      service.applyRepair.mockResolvedValue({ moved: 5, skipped: 0 });
+      const manualMove = { personId, destinationPersonId: destId, entireCluster: true };
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/apply')
+        .set('Authorization', 'Bearer token')
+        .send({ approvedPersonIds: [], manualMove });
+      expect(status).toBe(201);
+      expect(service.applyRepair).toHaveBeenCalledWith(expect.objectContaining({ manualMove }));
+    });
+
+    it('rejects empty approvedPersonIds with no manualMove (400, refine)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/apply')
+        .set('Authorization', 'Bearer token')
+        .send({ approvedPersonIds: [] });
+      expect(status).toBe(400);
+      expect(service.applyRepair).not.toHaveBeenCalled();
+    });
+
+    it('rejects a manualMove missing destinationPersonId with 400 (E17)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/apply')
+        .set('Authorization', 'Bearer token')
+        .send({ approvedPersonIds: [], manualMove: { personId, entireCluster: true } });
+      expect(status).toBe(400);
+      expect(service.applyRepair).not.toHaveBeenCalled();
+    });
+  });
+
   describe('DELETE /admin/face-repair/decline', () => {
     const uuid1 = '00000000-0000-4000-a000-000000000001';
 

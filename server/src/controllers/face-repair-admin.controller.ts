@@ -5,6 +5,8 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import {
   FaceRepairApplyRequestDto,
   FaceRepairApplyResponseDto,
+  FaceRepairClusterFacesRequestDto,
+  FaceRepairClusterFacesResponseDto,
   FaceRepairDeclineCreatedDto,
   FaceRepairDeclineListDto,
   FaceRepairDeclineRemoveRequestDto,
@@ -68,6 +70,19 @@ export class FaceRepairAdminController {
     @Param('personId', new ParseUUIDPipe({ version: '4' })) personId: string,
   ): Promise<FaceRepairPersonFacesDto> {
     return this.service.getPersonFlaggedFaces(personId) as Promise<FaceRepairPersonFacesDto>;
+  }
+
+  @Post('scan/person/:personId/cluster-faces')
+  @Authenticated({ admin: true })
+  @Endpoint({
+    summary: "List a person's cluster faces (paginated, excluding the supplied flagged ids)",
+    history: new HistoryBuilder().added('v1'),
+  })
+  getFaceRepairClusterFaces(
+    @Param('personId', new ParseUUIDPipe({ version: '4' })) personId: string,
+    @Body() dto: FaceRepairClusterFacesRequestDto,
+  ): Promise<FaceRepairClusterFacesResponseDto> {
+    return this.service.getClusterFaces(personId, dto) as Promise<FaceRepairClusterFacesResponseDto>;
   }
 
   @Post('apply')
