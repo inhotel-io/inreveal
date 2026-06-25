@@ -412,6 +412,26 @@ describe('+page.svelte (face-cleanup review)', () => {
     });
   });
 
+  it('Move entire cluster still moves the flagged faces when the Rest load fails (E1 under network failure)', async () => {
+    vi.mocked(getFaceRepairClusterFaces).mockRejectedValue(new Error('network'));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('move-entire-btn'));
+    await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
+
+    await waitFor(() => {
+      expect(applyFaceRepair).toHaveBeenCalledWith({
+        faceRepairApplyRequestDto: {
+          approvedPersonIds: [],
+          excludeFaceIds: [],
+          manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_PERSON_ID, entireCluster: true },
+        },
+      });
+    });
+  });
+
   it('disables Select all and Move entire cluster when there is no primary owner (E17)', async () => {
     vi.mocked(getLatestScan).mockResolvedValue(
       makeCompletedScan([makeScanPerson({})]) as unknown as object, // overwritten below

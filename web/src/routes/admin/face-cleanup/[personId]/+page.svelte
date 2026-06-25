@@ -116,6 +116,7 @@
       }
 
       if (flaggedFaces.length > 0) {
+        vm.setClusterTotal(flaggedFaces.length);
         void loadRestPage();
       }
     } catch {
