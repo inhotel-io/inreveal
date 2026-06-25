@@ -208,3 +208,21 @@ export const FaceRepairDeclineRemovedSchema = z
   .object({ removed: z.number() })
   .meta({ id: 'FaceRepairDeclineRemovedDto' });
 export class FaceRepairDeclineRemovedDto extends createZodDto(FaceRepairDeclineRemovedSchema) {}
+
+export const FaceRepairClusterFacesRequestSchema = z
+  .object({
+    excludeFaceIds: z.array(z.uuidv4()).default([]),
+    page: z.number().int().min(0),
+    size: z.number().int().min(1).max(200),
+  })
+  .meta({ id: 'FaceRepairClusterFacesRequestDto' });
+export class FaceRepairClusterFacesRequestDto extends createZodDto(FaceRepairClusterFacesRequestSchema) {}
+
+export const FaceRepairClusterFacesResponseSchema = z
+  .object({
+    faces: z.array(z.object({ assetFaceId: z.string() })),
+    total: z.number(),
+    hasMore: z.boolean(),
+  })
+  .meta({ id: 'FaceRepairClusterFacesResponseDto' });
+export class FaceRepairClusterFacesResponseDto extends createZodDto(FaceRepairClusterFacesResponseSchema) {}

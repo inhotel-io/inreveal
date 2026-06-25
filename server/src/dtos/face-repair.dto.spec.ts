@@ -1,5 +1,6 @@
 import {
   FaceRepairApplyRequestSchema,
+  FaceRepairClusterFacesRequestSchema,
   FaceRepairDeclineRemoveRequestSchema,
   FaceRepairScanTriggerRequestSchema,
 } from 'src/dtos/face-repair.dto';
@@ -125,5 +126,39 @@ describe('FaceRepairApplyRequestSchema', () => {
 
   it('rejects a non-uuid in approvedPersonIds', () => {
     expect(FaceRepairApplyRequestSchema.safeParse({ approvedPersonIds: ['not-a-uuid'] }).success).toBe(false);
+  });
+});
+
+describe('FaceRepairClusterFacesRequestSchema', () => {
+  const UUID = '00000000-0000-4000-a000-000000000001';
+
+  it('accepts a valid page/size and defaults excludeFaceIds to []', () => {
+    const result = FaceRepairClusterFacesRequestSchema.safeParse({ page: 0, size: 50 });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.excludeFaceIds).toEqual([]);
+    }
+  });
+
+  it('accepts excludeFaceIds and the boundary size of 200', () => {
+    expect(FaceRepairClusterFacesRequestSchema.safeParse({ excludeFaceIds: [UUID], page: 3, size: 200 }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects size below 1 (E14)', () => {
+    expect(FaceRepairClusterFacesRequestSchema.safeParse({ page: 0, size: 0 }).success).toBe(false);
+  });
+
+  it('rejects size above 200 (E14)', () => {
+    expect(FaceRepairClusterFacesRequestSchema.safeParse({ page: 0, size: 201 }).success).toBe(false);
+  });
+
+  it('rejects a negative page (E14)', () => {
+    expect(FaceRepairClusterFacesRequestSchema.safeParse({ page: -1, size: 50 }).success).toBe(false);
+  });
+
+  it('rejects a non-integer size', () => {
+    expect(FaceRepairClusterFacesRequestSchema.safeParse({ page: 0, size: 1.5 }).success).toBe(false);
   });
 });
