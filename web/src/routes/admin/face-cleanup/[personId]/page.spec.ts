@@ -10,6 +10,7 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     getLatestScan: vi.fn(),
     applyFaceRepair: vi.fn(),
     getFaceRepairPersonFaces: vi.fn(),
+    getFaceRepairClusterFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
   };
 });
@@ -86,7 +87,14 @@ vi.mock('$lib/utils/people-utils', () => ({
 }));
 
 import { goto } from '$app/navigation';
-import { applyFaceRepair, getFaceRepairPersonFaces, getLatestScan, type FaceRepairPersonFacesDto } from '@immich/sdk';
+import {
+  applyFaceRepair,
+  getFaceRepairClusterFaces,
+  getFaceRepairPersonFaces,
+  getLatestScan,
+  type FaceRepairClusterFacesResponseDto,
+  type FaceRepairPersonFacesDto,
+} from '@immich/sdk';
 import Page from './+page.svelte';
 
 // ---- helpers ----
@@ -100,6 +108,10 @@ const makeFlaggedFace = (i: number) => ({
 });
 
 const makeFlaggedFaces = (count = 3) => Array.from({ length: count }, (_, i) => makeFlaggedFace(i + 1));
+
+const makeRestFaces = (count: number) => Array.from({ length: count }, (_, i) => ({ assetFaceId: `rest-${i + 1}` }));
+const restResponse = (faces: { assetFaceId: string }[], total: number, hasMore: boolean) =>
+  ({ faces, total, hasMore }) as unknown as FaceRepairClusterFacesResponseDto;
 
 const makeScanPerson = (
   over: Partial<{
@@ -148,6 +160,11 @@ describe('+page.svelte (face-cleanup review)', () => {
       flaggedFaces: makeFlaggedFaces(3),
     } as unknown as FaceRepairPersonFacesDto);
     vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 0, skipped: 0 });
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+      faces: [],
+      total: 0,
+      hasMore: false,
+    } as unknown as FaceRepairClusterFacesResponseDto);
   });
 
   afterEach(() => {
@@ -323,5 +340,89 @@ describe('+page.svelte (face-cleanup review)', () => {
     // No tiles, no action bar
     expect(screen.queryAllByTestId('face-tile')).toHaveLength(0);
     expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
+  });
+
+  it('renders the Rest section with loaded faces and a Load more when there are more', async () => {
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(2), 5, true));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByTestId('rest-section')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
+    expect(screen.getByTestId('rest-load-more')).toBeInTheDocument();
+  });
+
+  it('shows the empty Rest state when the cluster has only flagged faces (E1)', async () => {
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse([], 0, false));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByTestId('rest-empty')).toBeInTheDocument());
+    expect(screen.queryAllByTestId('rest-tile')).toHaveLength(0);
+  });
+
+  it('selecting a Rest tile counts toward the move (re-enables Move after all flagged are excluded)', async () => {
+    vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
+      personId: PERSON_ID,
+      flaggedFaces: makeFlaggedFaces(1),
+    } as unknown as FaceRepairPersonFacesDto);
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(1), 1, false));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(1));
+
+    // Exclude the only flagged face → Move disabled (0 moving).
+    await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+    await waitFor(() => expect(screen.getByTestId('move-btn')).toBeDisabled());
+
+    // Select a Rest face → Move enabled again (1 manual moving).
+    await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
+    await waitFor(() => expect(screen.getByTestId('move-btn')).not.toBeDisabled());
+  });
+
+  it('Select all marks every loaded Rest face selected', async () => {
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(3), 3, false));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(3));
+    await fireEvent.click(screen.getByTestId('select-all-btn'));
+
+    await waitFor(() => {
+      for (const tile of screen.getAllByTestId('rest-tile')) {
+        expect(tile).toHaveAttribute('data-selected', 'true');
+      }
+    });
+  });
+
+  it('Move entire cluster opens a confirm and issues an entireCluster apply (even with an empty Rest, E1)', async () => {
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse([], 0, false));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('move-entire-btn'));
+    await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
+
+    await waitFor(() => {
+      expect(applyFaceRepair).toHaveBeenCalledWith({
+        faceRepairApplyRequestDto: {
+          approvedPersonIds: [],
+          excludeFaceIds: [],
+          manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_PERSON_ID, entireCluster: true },
+        },
+      });
+    });
+  });
+
+  it('disables Select all and Move entire cluster when there is no primary owner (E17)', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([makeScanPerson({})]) as unknown as object, // overwritten below
+    );
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([{ ...makeScanPerson(), suspectedOwners: [] }]) as unknown as object,
+    );
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(2), 2, false));
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
+    expect(screen.getByTestId('select-all-btn')).toBeDisabled();
   });
 });

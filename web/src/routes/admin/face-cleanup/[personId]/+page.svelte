@@ -5,6 +5,7 @@
   import {
     applyFaceRepair,
     declineFaceRepair,
+    getFaceRepairClusterFaces,
     getFaceRepairPersonFaces,
     getLatestScan,
     getPeopleThumbnailPath,
@@ -67,6 +68,19 @@
   let applying = $state(false);
   let applyError = $state<string | null>(null);
 
+  // Rest-of-cluster (server-paginated) state.
+  const REST_PAGE_SIZE = 48;
+  let restFaces = $state<{ assetFaceId: string }[]>([]);
+  let restTotal = $state(0);
+  let restPage = $state(0);
+  let restHasMore = $state(false);
+  let restLoading = $state(false);
+  let showEntireConfirm = $state(false);
+
+  // An entire-cluster move covers ALL eligible faces: the Rest (which excludes the flagged ids) plus the
+  // still-flagged faces. This is why "Move entire cluster" works even when the Rest is empty.
+  const clusterTotal = $derived(restTotal + flaggedFaces.length);
+
   // Lazy-load chunk size
   const CHUNK_SIZE = 48;
   let visibleCount = $state(CHUNK_SIZE);
@@ -100,6 +114,10 @@
       if (scan?.persons) {
         scanPerson = scan.persons.find((p) => p.personId === personId) ?? null;
       }
+
+      if (flaggedFaces.length > 0) {
+        void loadRestPage();
+      }
     } catch {
       // leave empty — graceful state below handles it
     } finally {
@@ -109,6 +127,49 @@
 
   const handleLoadMore = () => {
     visibleCount = Math.min(visibleCount + CHUNK_SIZE, flaggedFaces.length);
+  };
+
+  const loadRestPage = async () => {
+    if (restLoading) {
+      return;
+    }
+    restLoading = true;
+    try {
+      const result = await getFaceRepairClusterFaces({
+        personId,
+        faceRepairClusterFacesRequestDto: {
+          excludeFaceIds: flaggedFaces.map((f) => f.assetFaceId),
+          page: restPage,
+          size: REST_PAGE_SIZE,
+        },
+      });
+      restFaces = [...restFaces, ...result.faces];
+      restTotal = result.total;
+      restHasMore = result.hasMore;
+      restPage += 1;
+      vm.setClusterTotal(restTotal + flaggedFaces.length);
+    } catch {
+      // graceful — leave the Rest section empty
+    } finally {
+      restLoading = false;
+    }
+  };
+
+  const handleSelectAllRest = () => {
+    vm.selectAllLoaded(restFaces.map((f) => f.assetFaceId));
+  };
+
+  const handleMoveEntireCluster = () => {
+    if (!ownerPersonId) {
+      return;
+    }
+    showEntireConfirm = true;
+  };
+
+  const confirmMoveEntireCluster = async () => {
+    showEntireConfirm = false;
+    vm.setEntireCluster(true);
+    await handleMove();
   };
 
   // Toggle a per-face decline. Declines persist immediately (a durable "leave it" judgment), so the undo here
@@ -151,10 +212,7 @@
     applyError = null;
     try {
       await applyFaceRepair({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [personId],
-          excludeFaceIds: [...vm.excludeFaceIds(), ...vm.declinedFaceIds()],
-        },
+        faceRepairApplyRequestDto: vm.applyPayload({ personId, destinationPersonId: ownerPersonId }),
       });
       void goto(Route.faceCleanup());
     } catch (error: unknown) {
@@ -405,6 +463,93 @@
           </div>
         {/if}
       </div>
+
+      <!-- Rest of this cluster (paginated) -->
+      <div
+        class="mt-5 overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700"
+        data-testid="rest-section"
+      >
+        <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+          <h3 class="text-sm font-semibold">
+            {$t('admin.face_cleanup_review_rest_title', { values: { count: restTotal.toLocaleString() } })}
+            <span class="ml-2 font-normal text-gray-400">
+              {$t('admin.face_cleanup_review_rest_hint', { values: { owner: ownerName } })}
+            </span>
+          </h3>
+          <div class="flex-1"></div>
+          <button
+            type="button"
+            onclick={handleSelectAllRest}
+            disabled={!ownerPersonId || restFaces.length === 0}
+            class="text-sm font-semibold text-primary hover:underline disabled:opacity-40"
+            data-testid="select-all-btn"
+          >
+            {$t('admin.face_cleanup_review_select_all')}
+          </button>
+          <Button
+            color="secondary"
+            size="small"
+            disabled={!ownerPersonId}
+            onclick={handleMoveEntireCluster}
+            data-testid="move-entire-btn"
+          >
+            {$t('admin.face_cleanup_review_move_entire')}
+          </Button>
+        </div>
+
+        {#if restTotal === 0 && !restLoading}
+          <div class="py-12 text-center text-sm text-gray-400" data-testid="rest-empty">
+            {$t('admin.face_cleanup_review_rest_empty')}
+          </div>
+        {:else}
+          <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 dark:bg-gray-800/50 sm:grid-cols-6 lg:grid-cols-8">
+            {#each restFaces as face (face.assetFaceId)}
+              {@const selected = vm.isManualSelected(face.assetFaceId)}
+              <div class="relative aspect-square">
+                <button
+                  type="button"
+                  class={[
+                    'absolute inset-0 overflow-hidden rounded-xl border-2 transition-all',
+                    selected ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100',
+                  ].join(' ')}
+                  onclick={() => vm.toggleManual(face.assetFaceId)}
+                  data-testid="rest-tile"
+                  data-faceid={face.assetFaceId}
+                  data-selected={selected}
+                >
+                  <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
+                  {#if selected}
+                    <div
+                      class="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </div>
+                    <div
+                      class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[10px] font-semibold text-white"
+                    >
+                      {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
+                    </div>
+                  {/if}
+                </button>
+              </div>
+            {/each}
+          </div>
+          {#if restHasMore}
+            <div class="border-t border-gray-200 px-4 py-3 text-center dark:border-gray-700">
+              <button
+                type="button"
+                onclick={loadRestPage}
+                class="text-sm font-semibold text-primary hover:underline"
+                data-testid="rest-load-more"
+              >
+                {$t('admin.face_cleanup_review_load_more', { values: { count: restTotal - restFaces.length } })}
+              </button>
+            </div>
+          {/if}
+        {/if}
+      </div>
     {/if}
   </div>
 
@@ -436,6 +581,29 @@
           <Icon icon={mdiArrowRight} size="16" />
           {$t('admin.face_cleanup_review_move', { values: { count: vm.movingCount.toLocaleString() } })}
         </Button>
+      </div>
+    </div>
+  {/if}
+
+  {#if showEntireConfirm}
+    <div class="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" data-testid="entire-confirm">
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h3 class="text-lg font-semibold">{$t('admin.face_cleanup_review_move_entire_confirm_title')}</h3>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          {$t('admin.face_cleanup_review_move_entire_confirm_body', {
+            values: { count: clusterTotal.toLocaleString(), owner: ownerName },
+          })}
+        </p>
+        <div class="mt-5 flex justify-end gap-3">
+          <Button color="secondary" onclick={() => (showEntireConfirm = false)} data-testid="entire-confirm-cancel">
+            {$t('admin.face_cleanup_review_cancel')}
+          </Button>
+          <Button color="primary" onclick={confirmMoveEntireCluster} data-testid="entire-confirm-cta">
+            {$t('admin.face_cleanup_review_move_entire_confirm_cta', {
+              values: { count: clusterTotal.toLocaleString() },
+            })}
+          </Button>
+        </div>
       </div>
     </div>
   {/if}
