@@ -15,30 +15,46 @@ class FaceRepairApplyRequestDto {
   FaceRepairApplyRequestDto({
     this.approvedPersonIds = const [],
     this.excludeFaceIds = const [],
+    this.manualMove,
   });
 
   List<String> approvedPersonIds;
 
   List<String> excludeFaceIds;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  FaceRepairApplyRequestDtoManualMove? manualMove;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairApplyRequestDto &&
     _deepEquality.equals(other.approvedPersonIds, approvedPersonIds) &&
-    _deepEquality.equals(other.excludeFaceIds, excludeFaceIds);
+    _deepEquality.equals(other.excludeFaceIds, excludeFaceIds) &&
+    other.manualMove == manualMove;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (approvedPersonIds.hashCode) +
-    (excludeFaceIds.hashCode);
+    (excludeFaceIds.hashCode) +
+    (manualMove == null ? 0 : manualMove!.hashCode);
 
   @override
-  String toString() => 'FaceRepairApplyRequestDto[approvedPersonIds=$approvedPersonIds, excludeFaceIds=$excludeFaceIds]';
+  String toString() => 'FaceRepairApplyRequestDto[approvedPersonIds=$approvedPersonIds, excludeFaceIds=$excludeFaceIds, manualMove=$manualMove]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'approvedPersonIds'] = this.approvedPersonIds;
       json[r'excludeFaceIds'] = this.excludeFaceIds;
+    if (this.manualMove != null) {
+      json[r'manualMove'] = this.manualMove;
+    } else {
+    //  json[r'manualMove'] = null;
+    }
     return json;
   }
 
@@ -57,6 +73,7 @@ class FaceRepairApplyRequestDto {
         excludeFaceIds: json[r'excludeFaceIds'] is Iterable
             ? (json[r'excludeFaceIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        manualMove: FaceRepairApplyRequestDtoManualMove.fromJson(json[r'manualMove']),
       );
     }
     return null;
@@ -104,7 +121,6 @@ class FaceRepairApplyRequestDto {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'approvedPersonIds',
   };
 }
 

@@ -156,6 +156,7 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**createFace**](doc//FacesApi.md#createface) | **POST** /faces | Create a face
 *FacesApi* | [**declineFaceRepair**](doc//FacesApi.md#declinefacerepair) | **POST** /admin/face-repair/decline | Decline flagged faces / dismiss flagged persons
 *FacesApi* | [**deleteFace**](doc//FacesApi.md#deleteface) | **DELETE** /faces/{id} | Delete a face
+*FacesApi* | [**getFaceRepairClusterFaces**](doc//FacesApi.md#getfacerepairclusterfaces) | **POST** /admin/face-repair/scan/person/{personId}/cluster-faces | List a person's cluster faces (paginated, excluding the supplied flagged ids)
 *FacesApi* | [**getFaceRepairDeclines**](doc//FacesApi.md#getfacerepairdeclines) | **GET** /admin/face-repair/decline | List face-repair declines
 *FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
 *FacesApi* | [**getFaceRepairScanDefaults**](doc//FacesApi.md#getfacerepairscandefaults) | **GET** /admin/face-repair/scan/defaults | Get effective face-repair scan defaults
@@ -493,7 +494,11 @@ Class | Method | HTTP request | Description
  - [ExifResponseDto](doc//ExifResponseDto.md)
  - [FaceDto](doc//FaceDto.md)
  - [FaceRepairApplyRequestDto](doc//FaceRepairApplyRequestDto.md)
+ - [FaceRepairApplyRequestDtoManualMove](doc//FaceRepairApplyRequestDtoManualMove.md)
  - [FaceRepairApplyResponseDto](doc//FaceRepairApplyResponseDto.md)
+ - [FaceRepairClusterFacesRequestDto](doc//FaceRepairClusterFacesRequestDto.md)
+ - [FaceRepairClusterFacesResponseDto](doc//FaceRepairClusterFacesResponseDto.md)
+ - [FaceRepairClusterFacesResponseDtoFacesInner](doc//FaceRepairClusterFacesResponseDtoFacesInner.md)
  - [FaceRepairDeclineCreatedDto](doc//FaceRepairDeclineCreatedDto.md)
  - [FaceRepairDeclineListDto](doc//FaceRepairDeclineListDto.md)
  - [FaceRepairDeclineListDtoDeclinesInner](doc//FaceRepairDeclineListDtoDeclinesInner.md)

@@ -120,8 +120,14 @@ export type FaceRepairResponseDto = {
     };
 };
 export type FaceRepairApplyRequestDto = {
-    approvedPersonIds: string[];
+    approvedPersonIds?: string[];
     excludeFaceIds?: string[];
+    manualMove?: {
+        destinationPersonId: string;
+        entireCluster?: boolean;
+        faceIds?: string[];
+        personId: string;
+    };
 };
 export type FaceRepairApplyResponseDto = {
     moved: number;
@@ -189,6 +195,18 @@ export type FaceRepairPersonFacesDto = {
         suspectedOwnerId: string;
     }[];
     personId: string;
+};
+export type FaceRepairClusterFacesRequestDto = {
+    excludeFaceIds?: string[];
+    page: number;
+    size: number;
+};
+export type FaceRepairClusterFacesResponseDto = {
+    faces: {
+        assetFaceId: string;
+    }[];
+    hasMore: boolean;
+    total: number;
 };
 export type SetMaintenanceModeDto = {
     action: MaintenanceAction;
@@ -4358,6 +4376,22 @@ export function getFaceRepairPersonFaces({ personId }: {
     }>(`/admin/face-repair/scan/person/${encodeURIComponent(personId)}`, {
         ...opts
     }));
+}
+/**
+ * List a person's cluster faces (paginated, excluding the supplied flagged ids)
+ */
+export function getFaceRepairClusterFaces({ personId, faceRepairClusterFacesRequestDto }: {
+    personId: string;
+    faceRepairClusterFacesRequestDto: FaceRepairClusterFacesRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairClusterFacesResponseDto;
+    }>(`/admin/face-repair/scan/person/${encodeURIComponent(personId)}/cluster-faces`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairClusterFacesRequestDto
+    })));
 }
 /**
  * Set maintenance mode

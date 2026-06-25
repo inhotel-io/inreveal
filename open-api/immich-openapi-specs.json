@@ -1000,6 +1000,65 @@
         ]
       }
     },
+    "/admin/face-repair/scan/person/{personId}/cluster-faces": {
+      "post": {
+        "operationId": "getFaceRepairClusterFaces",
+        "parameters": [
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairClusterFacesRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairClusterFacesResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List a person's cluster faces (paginated, excluding the supplied flagged ids)",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/maintenance": {
       "post": {
         "description": "Put Immich into or take it out of maintenance mode",
@@ -23438,12 +23497,12 @@
       "FaceRepairApplyRequestDto": {
         "properties": {
           "approvedPersonIds": {
+            "default": [],
             "items": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
-            "minItems": 1,
             "type": "array"
           },
           "excludeFaceIds": {
@@ -23453,11 +23512,38 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "manualMove": {
+            "properties": {
+              "destinationPersonId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              },
+              "entireCluster": {
+                "type": "boolean"
+              },
+              "faceIds": {
+                "items": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "personId": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "personId",
+              "destinationPersonId"
+            ],
+            "type": "object"
           }
         },
-        "required": [
-          "approvedPersonIds"
-        ],
         "type": "object"
       },
       "FaceRepairApplyResponseDto": {
@@ -23472,6 +23558,64 @@
         "required": [
           "moved",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "FaceRepairClusterFacesRequestDto": {
+        "properties": {
+          "excludeFaceIds": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "page": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "size": {
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "size"
+        ],
+        "type": "object"
+      },
+      "FaceRepairClusterFacesResponseDto": {
+        "properties": {
+          "faces": {
+            "items": {
+              "properties": {
+                "assetFaceId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "assetFaceId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "faces",
+          "hasMore",
+          "total"
         ],
         "type": "object"
       },
