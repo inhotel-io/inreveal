@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { JobName } from 'src/enum';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
@@ -76,6 +76,173 @@ describe(FaceRepairService.name, () => {
       vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 0, skipped: 1 });
       await sut.applyRepair({ approvedPersonIds: ['p1'] });
       expect(mocks.faceRepairScan.removePersonsFromLatestScan).not.toHaveBeenCalled();
+    });
+
+    it('rejects a self-move (destination === source) with BadRequestException (E18)', async () => {
+      await expect(
+        sut.applyRepair({
+          approvedPersonIds: [],
+          manualMove: { personId: 'p1', destinationPersonId: 'p1', entireCluster: true },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mocks.job.isActive).not.toHaveBeenCalled();
+    });
+
+    it('entire-cluster (empty approvedPersonIds): still runs the 409 guard (E10)', async () => {
+      mocks.job.isActive.mockResolvedValue(true);
+      await expect(
+        sut.applyRepair({
+          approvedPersonIds: [],
+          manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('entire-cluster: enumerates eligible faces → routes all to destination; no flagged plan built (E4)', async () => {
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        (async function* () {
+          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
+          yield { assetFaceId: 'b', personId: 'p1', ownerId: 'o', embedding: '' };
+        })(),
+      );
+      const planSpy = vi.spyOn(sut, 'buildRepairPlan');
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: '' } as any);
+
+      const r = await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+      });
+
+      expect(planSpy).not.toHaveBeenCalled();
+      expect(execSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toRepair: [
+            { assetFaceId: 'a', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+            { assetFaceId: 'b', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+          ],
+        }),
+      );
+      expect(r).toEqual({ moved: 2, skipped: 0 });
+    });
+
+    it('entireCluster supersedes faceIds when both are supplied (E19)', async () => {
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        (async function* () {
+          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
+        })(),
+      );
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: '' } as any);
+
+      await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', faceIds: ['ignored'], entireCluster: true },
+      });
+
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([
+        { assetFaceId: 'a', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+      ]);
+    });
+
+    it('partial add: merges flagged (→ suspects) and manual picks (→ primary) into one executeRepair (E5)', async () => {
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
+      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
+        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' }]),
+      );
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(5);
+
+      await sut.applyRepair({
+        approvedPersonIds: ['p1'],
+        manualMove: { personId: 'p1', destinationPersonId: 'primary', faceIds: ['m1'] },
+      });
+
+      expect(execSpy).toHaveBeenCalledTimes(1);
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([
+        { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' },
+        { assetFaceId: 'm1', currentPersonId: 'p1', suspectedOwnerId: 'primary' },
+      ]);
+      expect(mocks.person.delete).not.toHaveBeenCalled(); // source survives (E5)
+    });
+
+    it('auto-deletes an emptied UNNAMED source and drops it from the snapshot (E4)', async () => {
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        (async function* () {
+          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
+        })(),
+      );
+      vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: '' } as any);
+
+      await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+      });
+
+      expect(mocks.person.delete).toHaveBeenCalledWith(['p1']);
+      expect(mocks.faceRepairScan.removePersonsFromLatestScan).toHaveBeenCalledWith(['p1']);
+    });
+
+    it('keeps an emptied NAMED source (not deleted) but still drops it from the snapshot (E12)', async () => {
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        (async function* () {
+          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
+        })(),
+      );
+      vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: 'Pierre' } as any);
+
+      await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+      });
+
+      expect(mocks.person.delete).not.toHaveBeenCalled();
+      expect(mocks.faceRepairScan.removePersonsFromLatestScan).toHaveBeenCalledWith(['p1']);
+    });
+
+    it('empty manualMove (no faceIds, entireCluster false) + empty approvedPersonIds → no-op, no guards (E11)', async () => {
+      const r = await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q' },
+      });
+      expect(r).toEqual({ moved: 0, skipped: 0 });
+      expect(mocks.job.isActive).not.toHaveBeenCalled();
+    });
+
+    it('idempotency: person in approvedPersonIds AND entireCluster passes both sets to one executeRepair (E9)', async () => {
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
+      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
+        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' }]),
+      );
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        (async function* () {
+          yield { assetFaceId: 'f1', personId: 'p1', ownerId: 'o', embedding: '' };
+          yield { assetFaceId: 'f2', personId: 'p1', ownerId: 'o', embedding: '' };
+        })(),
+      );
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: '' } as any);
+
+      await sut.applyRepair({
+        approvedPersonIds: ['p1'],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+      });
+
+      // applyRepair passes both sets to ONE executeRepair; the still-on-source re-check (real DB, Slice 4)
+      // makes the duplicate f1 a no-op so it moves once.
+      expect(execSpy).toHaveBeenCalledTimes(1);
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([
+        { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' },
+        { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+        { assetFaceId: 'f2', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+      ]);
     });
   });
 

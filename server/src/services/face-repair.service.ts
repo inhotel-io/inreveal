@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
 import { FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
@@ -514,10 +514,22 @@ export class FaceRepairService extends BaseService {
     return { removed };
   }
 
-  async applyRepair(input: { approvedPersonIds: string[]; excludeFaceIds?: string[] }): Promise<RepairExecution> {
-    if (input.approvedPersonIds.length === 0) {
+  async applyRepair(input: {
+    approvedPersonIds: string[];
+    excludeFaceIds?: string[];
+    manualMove?: { personId: string; destinationPersonId: string; faceIds?: string[]; entireCluster?: boolean };
+  }): Promise<RepairExecution> {
+    const manualMove = input.manualMove;
+    if (manualMove && manualMove.destinationPersonId === manualMove.personId) {
+      throw new BadRequestException('Cannot move a cluster into itself');
+    }
+
+    const hasManualWork = !!manualMove && (manualMove.entireCluster === true || (manualMove.faceIds?.length ?? 0) > 0);
+    const hasFlagged = input.approvedPersonIds.length > 0;
+    if (!hasFlagged && !hasManualWork) {
       return { moved: 0, skipped: 0 };
     }
+
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to apply while facial recognition is active');
     }
@@ -526,21 +538,68 @@ export class FaceRepairService extends BaseService {
     if (latest && (latest.status === 'pending' || latest.status === 'running')) {
       throw new ConflictException('Refusing to apply while a scan is in progress');
     }
-    const plan = await this.buildRepairPlan({
-      ...(await this.resolvePlanParams(latest)),
-      personIds: input.approvedPersonIds,
-      approvedPersonIds: input.approvedPersonIds,
-    });
-    const exclude = new Set(input.excludeFaceIds);
-    const scopedPlan = { ...plan, toRepair: plan.toRepair.filter((face) => !exclude.has(face.assetFaceId)) };
-    const result = await this.executeRepair(scopedPlan);
 
-    // Drop the resolved persons from the latest scan snapshot so the console reflects the change immediately
-    // (the persisted report is a point-in-time snapshot; without this the applied rows reappear on refetch).
+    const toRepair: FlaggedFace[] = [];
+    if (hasFlagged) {
+      const plan = await this.buildRepairPlan({
+        ...(await this.resolvePlanParams(latest)),
+        personIds: input.approvedPersonIds,
+        approvedPersonIds: input.approvedPersonIds,
+      });
+      const exclude = new Set(input.excludeFaceIds);
+      for (const face of plan.toRepair) {
+        if (!exclude.has(face.assetFaceId)) {
+          toRepair.push(face);
+        }
+      }
+    }
+
+    if (hasManualWork && manualMove) {
+      const manualFaceIds = manualMove.entireCluster
+        ? await this.collectClusterFaceIds(manualMove.personId)
+        : (manualMove.faceIds ?? []);
+      for (const assetFaceId of manualFaceIds) {
+        toRepair.push({
+          assetFaceId,
+          currentPersonId: manualMove.personId,
+          suspectedOwnerId: manualMove.destinationPersonId,
+        });
+      }
+    }
+
+    const result = await this.executeRepair({
+      toRepair,
+      reviewOnlyFaces: [],
+      reviewOnlyPersonIds: [],
+      unAttributableFaces: [],
+      perPerson: [],
+    });
+
     if (result.moved > 0) {
-      await this.faceRepairScanRepository.removePersonsFromLatestScan(input.approvedPersonIds);
+      const personsToDrop = new Set(input.approvedPersonIds);
+      if (hasManualWork && manualMove) {
+        const remaining = await this.faceRepairRepository.countEligibleFaces({ personId: manualMove.personId });
+        if (remaining === 0) {
+          personsToDrop.add(manualMove.personId);
+          const source = await this.personRepository.getById(manualMove.personId);
+          if (source && (!source.name || source.name.trim().length === 0)) {
+            await this.personRepository.delete([manualMove.personId]);
+          }
+        }
+      }
+      if (personsToDrop.size > 0) {
+        await this.faceRepairScanRepository.removePersonsFromLatestScan([...personsToDrop]);
+      }
     }
 
     return result;
+  }
+
+  private async collectClusterFaceIds(personId: string): Promise<string[]> {
+    const ids: string[] = [];
+    for await (const row of this.faceRepairRepository.streamEligibleFaces({ personId })) {
+      ids.push(row.assetFaceId);
+    }
+    return ids;
   }
 }
