@@ -57,6 +57,42 @@ export class FaceRepairRepository {
     return Number(count);
   }
 
+  // Paginated list of a person's eligible faces minus a caller-supplied exclude list (the already-shown
+  // flagged ids). Mirrors streamEligibleFaces' filter exactly — including the face_search join — so `total`
+  // and the returned page are precisely the set an entire-cluster move enumerates and moves. Ordered by
+  // asset_face.id for a stable offset cursor.
+  async getClusterFacePage(
+    personId: string,
+    options: { excludeFaceIds: string[]; limit: number; offset: number },
+  ): Promise<{ faces: { assetFaceId: string }[]; total: number; hasMore: boolean }> {
+    const base = this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .$if(options.excludeFaceIds.length > 0, (qb) => qb.where('asset_face.id', 'not in', options.excludeFaceIds));
+
+    const { count } = await base.select((eb) => eb.fn.countAll().as('count')).executeTakeFirstOrThrow();
+    const total = Number(count);
+
+    const rows = await base
+      .select(['asset_face.id as assetFaceId'])
+      .orderBy('asset_face.id')
+      .limit(options.limit)
+      .offset(options.offset)
+      .execute();
+
+    return {
+      faces: rows.map((row) => ({ assetFaceId: row.assetFaceId })),
+      total,
+      hasMore: options.offset + rows.length < total,
+    };
+  }
+
   // Re-attribute the given faces from `fromPersonId` to `toPersonId` ONLY if they are still assigned to
   // `fromPersonId` and machine-learning-sourced (eligibility re-check at write — a face moved by a concurrent
   // job since planning is skipped). Returns the ids actually moved (so the caller links identities for exactly
