@@ -123,8 +123,23 @@ export const FaceRepairScanStatusSchema = z
   .meta({ id: 'FaceRepairScanStatusDto' });
 export class FaceRepairScanStatusDto extends createZodDto(FaceRepairScanStatusSchema) {}
 
+const FaceRepairManualMoveSchema = z.object({
+  personId: z.uuidv4(),
+  destinationPersonId: z.uuidv4(),
+  faceIds: z.array(z.uuidv4()).optional(),
+  entireCluster: z.boolean().optional(),
+});
+
 export const FaceRepairApplyRequestSchema = z
-  .object({ approvedPersonIds: z.array(z.uuidv4()).min(1), excludeFaceIds: z.array(z.uuidv4()).optional() })
+  .object({
+    approvedPersonIds: z.array(z.uuidv4()).default([]),
+    excludeFaceIds: z.array(z.uuidv4()).optional(),
+    manualMove: FaceRepairManualMoveSchema.optional(),
+  })
+  .refine((value) => value.approvedPersonIds.length > 0 || value.manualMove !== undefined, {
+    error: 'approvedPersonIds must be non-empty unless manualMove is provided',
+    path: ['approvedPersonIds'],
+  })
   .meta({ id: 'FaceRepairApplyRequestDto' });
 export class FaceRepairApplyRequestDto extends createZodDto(FaceRepairApplyRequestSchema) {}
 

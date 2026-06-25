@@ -1,4 +1,8 @@
-import { FaceRepairDeclineRemoveRequestSchema, FaceRepairScanTriggerRequestSchema } from 'src/dtos/face-repair.dto';
+import {
+  FaceRepairApplyRequestSchema,
+  FaceRepairDeclineRemoveRequestSchema,
+  FaceRepairScanTriggerRequestSchema,
+} from 'src/dtos/face-repair.dto';
 import { describe, expect, it } from 'vitest';
 
 // face_repair_decline.id is a UUID v7 (@PrimaryGeneratedUuidV7Column). The remove DTO must accept it —
@@ -69,5 +73,57 @@ describe('FaceRepairScanTriggerRequestSchema', () => {
 
   it('rejects maxAttributionDistance at or below 0', () => {
     expect(FaceRepairScanTriggerRequestSchema.safeParse({ params: { maxAttributionDistance: 0 } }).success).toBe(false);
+  });
+});
+
+describe('FaceRepairApplyRequestSchema', () => {
+  const UUID_A = '00000000-0000-4000-a000-000000000001';
+  const UUID_B = '00000000-0000-4000-a000-000000000002';
+  const UUID_C = '00000000-0000-4000-a000-000000000003';
+
+  it('accepts the legacy flagged-only apply (non-empty approvedPersonIds, no manualMove)', () => {
+    expect(FaceRepairApplyRequestSchema.safeParse({ approvedPersonIds: [UUID_A] }).success).toBe(true);
+  });
+
+  it('accepts an entire-cluster apply: empty approvedPersonIds WITH manualMove', () => {
+    const result = FaceRepairApplyRequestSchema.safeParse({
+      approvedPersonIds: [],
+      manualMove: { personId: UUID_A, destinationPersonId: UUID_B, entireCluster: true },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('defaults approvedPersonIds to [] when omitted but manualMove is present', () => {
+    const result = FaceRepairApplyRequestSchema.safeParse({
+      manualMove: { personId: UUID_A, destinationPersonId: UUID_B, faceIds: [UUID_C] },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.approvedPersonIds).toEqual([]);
+    }
+  });
+
+  it('rejects a request that would do nothing: empty approvedPersonIds AND no manualMove', () => {
+    expect(FaceRepairApplyRequestSchema.safeParse({ approvedPersonIds: [] }).success).toBe(false);
+    expect(FaceRepairApplyRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('rejects a manualMove missing destinationPersonId (E17)', () => {
+    const result = FaceRepairApplyRequestSchema.safeParse({
+      approvedPersonIds: [],
+      manualMove: { personId: UUID_A, entireCluster: true },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a manualMove with a non-array faceIds', () => {
+    const result = FaceRepairApplyRequestSchema.safeParse({
+      manualMove: { personId: UUID_A, destinationPersonId: UUID_B, faceIds: 'nope' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-uuid in approvedPersonIds', () => {
+    expect(FaceRepairApplyRequestSchema.safeParse({ approvedPersonIds: ['not-a-uuid'] }).success).toBe(false);
   });
 });
