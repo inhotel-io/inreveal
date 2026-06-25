@@ -7,7 +7,9 @@ ended up contaminated with another person's photos. The Face Cleanup console fin
 admin **re-home** the impostor faces to their true owner.
 
 The affected person keeps all of their real faces, their name, and their thumbnail. This tool is **not** a
-person-merge and **never empties a cluster** — it only moves the faces that don't belong.
+person-merge: by default it only moves the scan-flagged impostor faces and leaves the cluster intact. An admin
+can also open the **whole cluster** to add faces the scan missed, or move an entire _unnamed_ cluster into its
+owner in one action — see [Seeing the whole cluster](#seeing-the-whole-cluster).
 
 ## When to use it
 
@@ -36,6 +38,34 @@ If someone's People page shows photos that clearly belong to a different person,
 
 Clean **owner-first**: start with the people that have the smallest flagged percentage. Rows marked `bad-target`
 mean their suspected owner is itself flagged — resolving the owners first turns those rows green in the next scan.
+
+## Seeing the whole cluster
+
+The review page opens on the scan's **suggestions** — the impostor faces the detector flagged. But the scan only
+flags the faces it is confident about, and sometimes you want to act on the rest of the cluster too. Below the
+suggestions, the **Rest of this cluster** section lists every other face still assigned to the person, loaded a
+page at a time (clusters can hold thousands of faces, so the list pages with **Load more** rather than loading
+them all at once).
+
+Two extra actions sit on that section:
+
+- **Add individual faces.** Click any face in the Rest section to add it to the move. It goes to the same
+  destination already shown on the screen (the cluster's primary suspected owner) — the same place the suggested
+  faces are heading. Use **Select all loaded** to add every face currently on screen. The Stays/Moves strip and
+  the **Move N faces** button update live to include your picks.
+- **Move the entire cluster.** When the unnamed cluster is _entirely_ one person, **Move entire cluster** moves
+  _every_ remaining face — suggestions included — to the primary owner in one action. Because this empties the
+  cluster, it asks for confirmation first.
+
+### Emptied clusters
+
+Moving an entire **unnamed** cluster into its owner empties it; the now-empty unnamed cluster is **deleted** so no
+orphan placeholder is left behind — the result reads like a clean merge into the owner. A **named** person emptied
+this way is **kept** (its name is deliberate state) and simply drops off the console.
+
+The destination is always the one owner shown on the screen — there is no per-face destination picker. If the scan
+snapshot no longer knows a primary owner for the cluster, the add-faces and move-entire-cluster actions are
+disabled (the suggestions can still be applied to their per-face owners as usual).
 
 ## Unattributable faces
 
