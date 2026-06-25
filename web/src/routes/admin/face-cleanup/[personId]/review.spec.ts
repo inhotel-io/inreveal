@@ -54,7 +54,7 @@ describe('createReviewModel', () => {
     const vm = createReviewModel([]);
     vm.toggleManual('m1');
     vm.selectAllLoaded(['m1', 'm2', 'm3']);
-    expect(vm.manualFaceIds().toSorted()).toEqual(['m1', 'm2', 'm3']);
+    expect([...vm.manualFaceIds()].sort()).toEqual(['m1', 'm2', 'm3']);
     vm.clearManual();
     expect(vm.manualFaceIds()).toEqual([]);
   });
@@ -75,7 +75,7 @@ describe('createReviewModel', () => {
     vm.selectAllLoaded(['m1', 'm2']);
     const payload = vm.applyPayload({ personId: 'p1', destinationPersonId: 'owner' });
     expect(payload.approvedPersonIds).toEqual(['p1']);
-    expect([...(payload.excludeFaceIds ?? [])].toSorted()).toEqual(['a', 'b']);
+    expect([...(payload.excludeFaceIds ?? [])].sort()).toEqual(['a', 'b']);
     expect(payload.manualMove).toEqual({ personId: 'p1', destinationPersonId: 'owner', faceIds: ['m1', 'm2'] });
   });
 

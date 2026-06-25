@@ -12,6 +12,23 @@ const plan = (toRepair: { assetFaceId: string; currentPersonId: string; suspecte
     perPerson: [],
   }) as any;
 
+// Async-iterable stub for streamEligibleFaces mocks (no async generator → satisfies require-await).
+const asyncIterableOf = <T>(items: T[]): AsyncIterableIterator<T> => {
+  let index = 0;
+  const iterator: AsyncIterableIterator<T> = {
+    next: () =>
+      Promise.resolve(
+        index < items.length
+          ? { value: items[index++], done: false }
+          : { value: undefined as unknown as T, done: true },
+      ),
+    [Symbol.asyncIterator]() {
+      return iterator;
+    },
+  };
+  return iterator;
+};
+
 describe(FaceRepairService.name, () => {
   let sut: FaceRepairService;
   let mocks: ServiceMocks;
@@ -100,10 +117,10 @@ describe(FaceRepairService.name, () => {
 
     it('entire-cluster: enumerates eligible faces → routes all to destination; no flagged plan built (E4)', async () => {
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
-        (async function* () {
-          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
-          yield { assetFaceId: 'b', personId: 'p1', ownerId: 'o', embedding: '' };
-        })(),
+        asyncIterableOf([
+          { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' },
+          { assetFaceId: 'b', personId: 'p1', ownerId: 'o', embedding: '' },
+        ]),
       );
       const planSpy = vi.spyOn(sut, 'buildRepairPlan');
       const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
@@ -129,9 +146,7 @@ describe(FaceRepairService.name, () => {
 
     it('entireCluster supersedes faceIds when both are supplied (E19)', async () => {
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
-        (async function* () {
-          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
-        })(),
+        asyncIterableOf([{ assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' }]),
       );
       const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
       mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
@@ -170,9 +185,7 @@ describe(FaceRepairService.name, () => {
 
     it('auto-deletes an emptied UNNAMED source and drops it from the snapshot (E4)', async () => {
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
-        (async function* () {
-          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
-        })(),
+        asyncIterableOf([{ assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' }]),
       );
       vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
       mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
@@ -189,9 +202,7 @@ describe(FaceRepairService.name, () => {
 
     it('keeps an emptied NAMED source (not deleted) but still drops it from the snapshot (E12)', async () => {
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
-        (async function* () {
-          yield { assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' };
-        })(),
+        asyncIterableOf([{ assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' }]),
       );
       vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
       mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
@@ -221,10 +232,10 @@ describe(FaceRepairService.name, () => {
         plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' }]),
       );
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
-        (async function* () {
-          yield { assetFaceId: 'f1', personId: 'p1', ownerId: 'o', embedding: '' };
-          yield { assetFaceId: 'f2', personId: 'p1', ownerId: 'o', embedding: '' };
-        })(),
+        asyncIterableOf([
+          { assetFaceId: 'f1', personId: 'p1', ownerId: 'o', embedding: '' },
+          { assetFaceId: 'f2', personId: 'p1', ownerId: 'o', embedding: '' },
+        ]),
       );
       const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
       mocks.faceRepair.countEligibleFaces.mockResolvedValue(0);
