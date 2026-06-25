@@ -199,13 +199,11 @@ export class FaceRepairService extends BaseService {
       }
 
       const identity = await this.faceIdentityRepository.ensurePersonIdentity(to);
-      for (const assetFaceId of movedIds) {
-        await this.faceIdentityRepository.replaceFaceIdentity({
-          assetFaceId,
-          identityId: identity.id,
-          source: 'manual',
-        });
-      }
+      await this.faceIdentityRepository.replaceFaceIdentities({
+        assetFaceIds: movedIds,
+        identityId: identity.id,
+        source: 'manual',
+      });
       moved += movedIds.length;
       affectedPersonIds.add(from);
       affectedPersonIds.add(to);

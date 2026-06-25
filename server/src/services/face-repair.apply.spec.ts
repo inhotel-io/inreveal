@@ -94,13 +94,8 @@ describe(FaceRepairService.name, () => {
       );
 
       expect(mocks.faceRepair.reattributeFaces).toHaveBeenCalledWith('p1', 'q', ['f1', 'f2']);
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: 'f1',
-        identityId: 'identQ',
-        source: 'manual',
-      });
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: 'f2',
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith({
+        assetFaceIds: ['f1', 'f2'],
         identityId: 'identQ',
         source: 'manual',
       });
