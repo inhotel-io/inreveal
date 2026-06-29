@@ -1406,6 +1406,7 @@ export class SharedSpaceAlbumSync extends BaseSync {
       .selectFrom('shared_space_album_user')
       .select(['albumId as id', 'createId'])
       .where('userId', '=', userId)
+      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .$if(!!afterCreateId, (qb) => qb.where('createId', '>=', afterCreateId!))
       .where('createId', '<', nowId)
       .orderBy('createId', 'asc')
@@ -1529,6 +1530,7 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
       .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
+      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
 }
@@ -1545,6 +1547,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
   getBackfill(options: SyncBackfillOptions, albumId: string, userId: string) {
     return this.backfillQuery('album_asset', options)
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .innerJoin('album', 'album.id', 'album_asset.albumId')
       .select(columns.syncAlbumAsset)
       .select((eb) =>
         eb
@@ -1557,6 +1560,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       )
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
+      .where('album.deletedAt', 'is', null)
       .stream();
   }
 
@@ -1579,6 +1583,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send updates for assets that the client already knows about
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
+      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
 
@@ -1600,6 +1605,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       )
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
+      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
 }
@@ -1612,9 +1618,11 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
   getBackfill(options: SyncBackfillOptions, albumId: string) {
     return this.backfillQuery('album_asset', options)
       .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
+      .innerJoin('album', 'album.id', 'album_asset.albumId')
       .select(columns.syncAssetExif)
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
+      .where('album.deletedAt', 'is', null)
       .stream();
   }
 
@@ -1628,6 +1636,7 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send exif updates for assets that the client already knows about
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
+      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
 
@@ -1640,6 +1649,7 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
       .select(columns.syncAssetExif)
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
+      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
 }
