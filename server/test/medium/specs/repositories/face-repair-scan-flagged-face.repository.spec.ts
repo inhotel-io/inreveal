@@ -168,8 +168,10 @@ describe('FaceRepairScanRepository flagged faces', () => {
       { assetFaceId: f2, personId: p2.id, suspectedOwnerId: owner.id },
     ]);
 
-    expect((await sut.getScanFlaggedFaces(scan.id, p1.id)).map((r) => r.assetFaceId)).toEqual([f1]);
-    expect((await sut.getScanFlaggedFaces(scan.id, p2.id)).map((r) => r.assetFaceId)).toEqual([f2]);
+    const p1Rows = await sut.getScanFlaggedFaces(scan.id, p1.id);
+    const p2Rows = await sut.getScanFlaggedFaces(scan.id, p2.id);
+    expect(p1Rows.map((r) => r.assetFaceId)).toEqual([f1]);
+    expect(p2Rows.map((r) => r.assetFaceId)).toEqual([f2]);
   });
 
   it("keeps a second scan's rows independent and cascade-deletes on scan delete (E7, E8)", async () => {
@@ -195,7 +197,8 @@ describe('FaceRepairScanRepository flagged faces', () => {
     const scanB = await sut.createScan({ requestedBy: null, params: PARAMS });
     const fb = await seedEligibleFace(ctx, user.id, person.id);
     await sut.replaceScanFlaggedFaces(scanB.id, [{ assetFaceId: fb, personId: person.id, suspectedOwnerId: owner.id }]);
-    expect((await sut.getScanFlaggedFaces(scanB.id, person.id)).map((r) => r.assetFaceId)).toEqual([fb]);
+    const scanBRows = await sut.getScanFlaggedFaces(scanB.id, person.id);
+    expect(scanBRows.map((r) => r.assetFaceId)).toEqual([fb]);
   });
 
   it('replaceScanFlaggedFaces is idempotent (re-write replaces prior rows for the scan)', async () => {
@@ -210,6 +213,7 @@ describe('FaceRepairScanRepository flagged faces', () => {
     await sut.replaceScanFlaggedFaces(scan.id, [{ assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id }]);
     await sut.replaceScanFlaggedFaces(scan.id, [{ assetFaceId: f2, personId: person.id, suspectedOwnerId: owner.id }]);
 
-    expect((await sut.getScanFlaggedFaces(scan.id, person.id)).map((r) => r.assetFaceId)).toEqual([f2]);
+    const rows = await sut.getScanFlaggedFaces(scan.id, person.id);
+    expect(rows.map((r) => r.assetFaceId)).toEqual([f2]);
   });
 });

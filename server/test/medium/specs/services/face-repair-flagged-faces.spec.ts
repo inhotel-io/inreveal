@@ -142,7 +142,7 @@ describe('FaceRepairService.getPersonFlaggedFaces (scan-backed)', () => {
     const { user } = await ctx.newUser();
     const { person, leakedFaceIds } = await seedOverCapPerson(ctx, user.id, { leakedCount: 6, genuineCount: 4 });
 
-    const { scanId } = await sut.triggerScan(user.id, undefined);
+    const { scanId } = await sut.triggerScan(user.id);
     await sut.handleFaceRepairScan({ scanId });
     expect((await sut.getLatestScanStatus())!.status).toBe('completed');
 
