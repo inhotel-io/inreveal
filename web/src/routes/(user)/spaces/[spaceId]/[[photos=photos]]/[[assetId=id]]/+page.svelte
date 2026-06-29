@@ -200,6 +200,7 @@
             ? AssetTypeEnum.Image
             : AssetTypeEnum.Video,
       isFavorite: nextFilters.isFavorite,
+      isInAlbum: nextFilters.isInAlbum === true ? true : undefined,
       isNotInAlbum: nextFilters.isNotInAlbum === true ? true : undefined,
       takenAfter: context?.takenAfter,
       takenBefore: context?.takenBefore,
