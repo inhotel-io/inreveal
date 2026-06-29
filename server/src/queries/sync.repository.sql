@@ -2171,7 +2171,7 @@ from
 where
   "shared_space_album"."updateId" < $1
   and "shared_space_album"."updateId" <= $2
-  and "shared_space_album"."updateId" >= $3
+  and "shared_space_album"."updateId" > $3
   and "shared_space_album"."spaceId" = $4
 order by
   "shared_space_album"."updateId" asc
@@ -2246,7 +2246,7 @@ from
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
-  and "album_asset"."updateId" >= $3
+  and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
 order by
   "album_asset"."updateId" asc
@@ -2360,7 +2360,7 @@ from
 where
   "album_asset"."updateId" < $3
   and "album_asset"."updateId" <= $4
-  and "album_asset"."updateId" >= $5
+  and "album_asset"."updateId" > $5
   and "album_asset"."albumId" = $6
   and "album"."deletedAt" is null
 order by
@@ -2524,7 +2524,7 @@ from
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
-  and "album_asset"."updateId" >= $3
+  and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
   and "album"."deletedAt" is null
 order by
