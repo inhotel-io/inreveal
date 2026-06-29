@@ -17,6 +17,7 @@ import { StorageRepository } from 'src/repositories/storage.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
+import { AlbumService } from 'src/services/album.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { TimelineService } from 'src/services/timeline.service';
 import { newMediumService } from 'test/medium.factory';
@@ -863,5 +864,183 @@ describe('onAlbumAssetsRemove (medium)', () => {
     const faceIds = facesAfter.map((f) => f.assetFaceId);
     expect(faceIds).not.toContain(face1Id);
     expect(faceIds).toContain(face2Id);
+  });
+});
+
+describe('removeAssets (medium) — multi-path face retention', () => {
+  it('retains face for asset still reachable via linked album after direct removal, removes face for direct-only asset', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'RemoveAssetsRetentionAlbum' });
+
+    // assetX: direct-added AND in linked album → face must be RETAINED after removeAssets
+    const { asset: assetX } = await ctx.newAsset({ ownerId: user.id });
+    // assetY: direct-added ONLY → face must be REMOVED after removeAssets
+    const { asset: assetY } = await ctx.newAsset({ ownerId: user.id });
+
+    // Add assetX to the album
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetX.id });
+
+    // Link album to space
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    // Direct-add both assets to space
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetX.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetY.id });
+
+    // Create asset faces for assetX and assetY
+    const { result: faceXId } = await ctx.newAssetFace({ assetId: assetX.id });
+    const { result: faceYId } = await ctx.newAssetFace({ assetId: assetY.id });
+
+    // Create a space person and link both faces to it
+    const repo = ctx.get(SharedSpaceRepository);
+    const spacePerson = await repo.createPerson({
+      spaceId: space.id,
+      name: 'MultiPathPerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await repo.addPersonFaces([
+      { personId: spacePerson.id, assetFaceId: faceXId },
+      { personId: spacePerson.id, assetFaceId: faceYId },
+    ]);
+
+    // Verify both faces exist before removal
+    const facesBefore = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceXId);
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceYId);
+
+    // Remove both assets from the space's direct list
+    await sut.removeAssets(authFromUser(user), space.id, { assetIds: [assetX.id, assetY.id] });
+
+    // After removeAssets:
+    // - faceX must be RETAINED (assetX still reachable via linked album)
+    // - faceY must be REMOVED (assetY has no other path)
+    const facesAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    const remainingIds = facesAfter.map((f) => f.assetFaceId);
+    expect(remainingIds).toContain(faceXId);
+    expect(remainingIds).not.toContain(faceYId);
+  });
+});
+
+/**
+ * Wire SharedSpaceService + AlbumService sharing a real EventRepository so that
+ * AlbumService.delete emits AlbumDelete and the SharedSpaceService.onAlbumDelete
+ * handler fires synchronously (mirrors production: emit runs handlers before returning).
+ */
+const setupWithAlbumDelete = () => {
+  // SharedSpaceService context — supplies all real face/space repos and the sut
+  const spaceResult = newMediumService(SharedSpaceService, {
+    database: defaultDatabase,
+    real: [
+      AccessRepository,
+      AlbumRepository,
+      AlbumUserRepository,
+      AssetRepository,
+      SharedSpaceRepository,
+      UserRepository,
+    ],
+    mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
+  });
+  spaceResult.ctx.getMock(JobRepository).queue.mockResolvedValue();
+  spaceResult.ctx.getMock(JobRepository).queueAll.mockResolvedValue();
+
+  // Real EventRepository (no setup() call needed — emit/onEvent work without it).
+  // We manually register onAlbumDelete from the SharedSpaceService instance.
+  const realEventRepo = new EventRepository(null as any, new ConfigRepository(), LoggingRepository.create());
+  (realEventRepo as any).emitHandlers['AlbumDelete'] = [
+    {
+      event: 'AlbumDelete',
+      priority: 0,
+      server: false,
+      handler: spaceResult.sut.onAlbumDelete.bind(spaceResult.sut),
+      label: 'SharedSpaceService.onAlbumDelete',
+    },
+  ];
+
+  // AlbumService context — only needs AccessRepository + AlbumRepository to be real.
+  const albumResult = newMediumService(AlbumService, {
+    database: defaultDatabase,
+    real: [AccessRepository, AlbumRepository, UserRepository],
+    mock: [EventRepository, LoggingRepository],
+  });
+
+  // Swap the mocked eventRepository on AlbumService with our wired real one.
+  (albumResult.sut as any).eventRepository = realEventRepo;
+
+  return { spaceSut: spaceResult.sut, albumSut: albumResult.sut, ctx: spaceResult.ctx };
+};
+
+describe('SharedSpaceService — onAlbumDelete face cleanup', () => {
+  it('removes face for album-only asset but retains face for asset with another space path when album is deleted', async () => {
+    const { spaceSut: _spaceSut, albumSut, ctx } = setupWithAlbumDelete();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'DeleteFaceTestAlbum' });
+
+    // assetX: only reachable via album A — face should be REMOVED when album is deleted
+    const { asset: assetX } = await ctx.newAsset({ ownerId: user.id });
+    // assetZ: reachable via album A AND directly added to space — face should be RETAINED
+    const { asset: assetZ } = await ctx.newAsset({ ownerId: user.id });
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetX.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetZ.id });
+
+    // Link album to space
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    // Direct-add assetZ to space (gives it a second path besides the album)
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetZ.id });
+
+    // Seed asset faces
+    const { result: faceXId } = await ctx.newAssetFace({ assetId: assetX.id });
+    const { result: faceZId } = await ctx.newAssetFace({ assetId: assetZ.id });
+
+    // Create a space person and link both faces to it
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    const spacePerson = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'DeleteTestPerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await spaceRepo.addPersonFaces([
+      { personId: spacePerson.id, assetFaceId: faceXId },
+      { personId: spacePerson.id, assetFaceId: faceZId },
+    ]);
+
+    // Verify both faces exist before delete
+    const facesBefore = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceXId);
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceZId);
+
+    // Delete the album via the real AlbumService (triggers AlbumDelete event → onAlbumDelete)
+    const ownerAuth = factory.auth({ user: { id: user.id, email: user.email } });
+    await albumSut.delete(ownerAuth, album.id);
+
+    // After delete: faceX (album-only path) must be gone; faceZ (direct path survives) must remain
+    const facesAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesAfter.map((f) => f.assetFaceId)).not.toContain(faceXId);
+    expect(facesAfter.map((f) => f.assetFaceId)).toContain(faceZId);
   });
 });

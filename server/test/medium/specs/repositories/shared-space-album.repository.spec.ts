@@ -156,6 +156,34 @@ describe('getAlbumAssetIdsWithoutOtherSpacePath', () => {
   });
 });
 
+describe('getAssetCount — soft-deleted album', () => {
+  it('getAssetCount excludes assets from a soft-deleted linked album', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'SoftDeletedAlbum' });
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: a3 } = await ctx.newAsset({ ownerId: user.id });
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a3.id });
+
+    await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    // Before soft-delete: all 3 assets counted
+    expect(await sut.getAssetCount(space.id)).toBe(3);
+
+    // Soft-delete the album (link row survives via FK deferral)
+    await ctx.softDeleteAlbum(album.id);
+
+    // After soft-delete: album assets must NOT be counted
+    expect(await sut.getAssetCount(space.id)).toBe(0);
+  });
+});
+
 describe('getAlbumAssetCount', () => {
   it('returns 3 for an album with 3 live assets, then 2 after one is soft-deleted', async () => {
     const { ctx, sut } = setup();
@@ -251,6 +279,77 @@ describe('AccessRepository.album.checkSpaceLinkedAlbumReadAccess', () => {
     // DISTINCT ensures the album appears exactly once
     expect([...result]).toHaveLength(1);
     expect(result.has(album.id)).toBe(true);
+  });
+});
+
+describe('AccessRepository.person.checkSharedSpaceAccess — album leg', () => {
+  it('GRANT — person whose only visible face is on an asset in a linked album is returned', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'PersonReadAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'AlbumFacePerson' });
+    await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+    const result = await accessRepo.person.checkSharedSpaceAccess(member.id, new Set([person.id]));
+
+    expect(result.has(person.id)).toBe(true);
+  });
+
+  it('DENY — non-member gets empty set for person accessible only via linked album', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { user: owner } = await ctx.newUser();
+    const { user: nonMember } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'PersonDenyAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'DenyAlbumPerson' });
+    await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+    const result = await accessRepo.person.checkSharedSpaceAccess(nonMember.id, new Set([person.id]));
+
+    expect(result.has(person.id)).toBe(false);
+  });
+});
+
+describe('getRecentAssets and getNewAssetCount — album leg (C2 consistency)', () => {
+  it('album-only space: getRecentAssets returns album image assets, getNewAssetCount counts them, both equal getAssetCount', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'RecentAlbum' });
+
+    const thumbhash = Buffer.from('deadbeef', 'hex');
+    const createdAt = new Date('2024-01-01T00:00:00Z');
+    const { asset: a1 } = await ctx.newAsset({ ownerId: user.id, thumbhash, createdAt });
+    const { asset: a2 } = await ctx.newAsset({ ownerId: user.id, thumbhash, createdAt });
+    const { asset: a3 } = await ctx.newAsset({ ownerId: user.id, thumbhash, createdAt });
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a2.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a3.id });
+
+    await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    const recentAssets = await sut.getRecentAssets(space.id);
+    expect(recentAssets).toHaveLength(3);
+    const recentIds = recentAssets.map((a) => a.id);
+    expect(recentIds).toContain(a1.id);
+    expect(recentIds).toContain(a2.id);
+    expect(recentIds).toContain(a3.id);
+
+    const newCount = await sut.getNewAssetCount(space.id, new Date(0));
+    expect(newCount).toBe(3);
+
+    const totalCount = await sut.getAssetCount(space.id);
+    expect(totalCount).toBe(newCount);
   });
 });
 
