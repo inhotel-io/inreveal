@@ -39,6 +39,7 @@ describe(FaceRepairService.name, () => {
     mocks.faceRepairScan.completeScan.mockResolvedValue();
     mocks.faceRepairScan.failScan.mockResolvedValue();
     mocks.faceRepairScan.pruneSupersededScans.mockResolvedValue();
+    mocks.faceRepairScan.replaceScanFlaggedFaces.mockResolvedValue();
 
     // Default: facial recognition not active; createScan returns a scan row
     mocks.job.isActive.mockResolvedValue(false);
@@ -117,6 +118,27 @@ describe(FaceRepairService.name, () => {
       await expect(sut.runScan('scan-1')).rejects.toThrow('boom');
 
       expect(mocks.faceRepairScan.failScan).toHaveBeenCalledWith('scan-1', expect.stringContaining('boom'));
+    });
+
+    it("persists the scan's flagged faces (toRepair + reviewOnlyFaces) before completing", async () => {
+      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
+        toRepair: [{ assetFaceId: 'face-1', currentPersonId: 'P', suspectedOwnerId: 'Q' }],
+        reviewOnlyFaces: [{ assetFaceId: 'face-2', currentPersonId: 'P', suspectedOwnerId: 'R', reason: 'over-cap' }],
+        reviewOnlyPersonIds: [],
+        unAttributableFaces: [],
+        perPerson: [{ personId: 'P', eligible: 5, flagged: 2, flaggedFraction: 0.4 }],
+      } as any);
+
+      await sut.runScan('scan-1');
+
+      expect(mocks.faceRepairScan.replaceScanFlaggedFaces).toHaveBeenCalledWith('scan-1', [
+        { assetFaceId: 'face-1', personId: 'P', suspectedOwnerId: 'Q' },
+        { assetFaceId: 'face-2', personId: 'P', suspectedOwnerId: 'R' },
+      ]);
+      // persisted before the scan is marked completed
+      const persistOrder = mocks.faceRepairScan.replaceScanFlaggedFaces.mock.invocationCallOrder[0];
+      const completeOrder = mocks.faceRepairScan.completeScan.mock.invocationCallOrder[0];
+      expect(persistOrder).toBeLessThan(completeOrder);
     });
   });
 

@@ -383,7 +383,15 @@ export class FaceRepairService extends BaseService {
       // Step 9: compute totals
       const { totals } = summarizeRepairPlan(plan);
 
-      // Step 10: persist completed scan
+      // Step 10: persist flagged faces then mark scan completed
+      await this.faceRepairScanRepository.replaceScanFlaggedFaces(
+        scanId,
+        allFlaggedFaces.map((f) => ({
+          assetFaceId: f.assetFaceId,
+          personId: f.currentPersonId,
+          suspectedOwnerId: f.suspectedOwnerId,
+        })),
+      );
       await this.faceRepairScanRepository.completeScan(scanId, { totals, persons: enriched });
 
       // Step 11: prune old scans
@@ -481,11 +489,23 @@ export class FaceRepairService extends BaseService {
     personId: string,
   ): Promise<{ personId: string; flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }> {
     const latest = await this.faceRepairScanRepository.getLatestScan();
-    const plan = await this.buildRepairPlan({
-      ...(await this.resolvePlanParams(latest)),
-      personIds: [personId],
-    });
-    const flaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => ({
+    if (!latest) {
+      return { personId, flaggedFaces: [] };
+    }
+    const stored = await this.faceRepairScanRepository.getScanFlaggedFaces(latest.id, personId);
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps();
+    const byPerson = new Map([
+      [
+        personId,
+        stored.map((s) => ({
+          assetFaceId: s.assetFaceId,
+          currentPersonId: personId,
+          suspectedOwnerId: s.suspectedOwnerId,
+        })),
+      ],
+    ]);
+    applyDeclineFilters(byPerson, declineMaps);
+    const flaggedFaces = (byPerson.get(personId) ?? []).map((f) => ({
       assetFaceId: f.assetFaceId,
       suspectedOwnerId: f.suspectedOwnerId,
     }));
