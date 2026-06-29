@@ -70,20 +70,24 @@ only inert rows that the next scan's prune reclaims. New `migrations-gallery` mi
   chunked bulk insert (1000/chunk, mirroring existing bulk-insert patterns). `scanId` is always fresh per scan, so
   this is insert-only; a defensive `delete where scanId` first keeps it idempotent if a scan is somehow re-run.
 - `getScanFlaggedFaces(scanId, personId): Promise<{ assetFaceId; suspectedOwnerId }[]>` — selects the stored rows
-  for `(scanId, personId)` **inner-joined to `asset_face` + `asset`** with the exact eligibility predicate used
-  elsewhere (`asset_face.personId = :personId`, `sourceType = MachineLearning`, `asset_face.deletedAt is null`,
-  `asset_face.isVisible = true`, `asset.deletedAt is null`), ordered by `asset_face.id`. The join makes the read
-  **self-correcting**: a face moved off the person (or made non-eligible) since the scan is excluded with no
-  coupling to the apply path.
+  for `(scanId, personId)` **inner-joined to `asset` + `asset_face` + `face_search`**, mirroring
+  `streamEligibleFaces` **exactly** (`asset_face.personId = :personId`, `sourceType = MachineLearning`,
+  `asset_face.deletedAt is null`, `asset_face.isVisible = true`, `asset.deletedAt is null`, **and a
+  `face_search` row exists**), ordered by `asset_face.id`. Mirroring the same eligibility filter the scan used
+  (incl. the `face_search` join — consistent with the add-faces `getClusterFacePage`) keeps the read **faithful to
+  today's result and self-correcting**: a face moved off the person, made non-eligible, or whose embedding was
+  removed since the scan is excluded, with no coupling to the apply path.
 
 ### 3. Write path — `runScan` persists what it already computed
 
-In `runScan`, on the success path (where it currently builds the report + calls `completeScan`), persist the
-union of `plan.toRepair` + `plan.reviewOnlyFaces` as flagged-face rows for the new `scanId`:
-`replaceScanFlaggedFaces(scanId, [...toRepair, ...reviewOnlyFaces].map(f => ({ assetFaceId: f.assetFaceId,
-personId: f.currentPersonId, suspectedOwnerId: f.suspectedOwnerId })))`. (`applyDeclineFilters` already ran
-inside `buildRepairPlan`, so faces declined _at scan time_ are already excluded — same as today.) Persist before
-`completeScan` so the rows exist once the scan is marked `completed`.
+In `runScan`, reuse the **existing** `allFlaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces]` local
+(already built at `face-repair.service.ts:347` to derive the per-person enrichment) and persist it as flagged-face
+rows for the new `scanId`: `replaceScanFlaggedFaces(scanId, allFlaggedFaces.map(f => ({ assetFaceId: f.assetFaceId,
+personId: f.currentPersonId, suspectedOwnerId: f.suspectedOwnerId })))`. (`applyDeclineFilters` already ran inside
+`buildRepairPlan`, so faces declined _at scan time_ are already excluded — same as today.) Persist **before**
+`completeScan` (line 387) so the rows exist once status flips to `completed`; `pruneSupersededScans` (line 390)
+runs after and cascade-drops the superseded scans' rows. If `runScan` throws after the persist but before
+`completeScan`, the scan is marked `failed` and the rows are inert — see E15.
 
 ### 4. Read path — `getPersonFlaggedFaces` (service)
 
@@ -109,22 +113,24 @@ keys off `getLatestScan`); a running re-scan with no rows yet yields an empty li
 
 ## Edge cases (all must be covered by tests — see Testing)
 
-| #   | Case                                                                                  | Expected behaviour                                                                                                      |
-| --- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| E1  | Person with flagged faces, fresh scan                                                 | Review returns **exactly** the scan's `toRepair` + `reviewOnlyFaces` for the person (`{assetFaceId,suspectedOwnerId}`). |
-| E2  | A flagged face **moved off** the person after the scan                                | Excluded from review (still-on-person join); no row deletion needed.                                                    |
-| E3  | A flagged face **declined (face-level)** after the scan                               | Excluded via `applyDeclineFilters` (same semantics as today).                                                           |
-| E4  | A **person-level decline** for the suspected owner created after the scan             | All matching faces excluded via `applyDeclineFilters`.                                                                  |
-| E5  | A flagged face becomes **non-visible / soft-deleted / on a deleted asset** after scan | Excluded by the eligibility join.                                                                                       |
-| E6  | No latest scan, or person not in the scan                                             | Empty `flaggedFaces` (matches today's empty state).                                                                     |
-| E7  | Scan **re-run** (new `scanId`)                                                        | Review reads the **new** scan's rows; old rows are cascade-dropped when prune runs.                                     |
-| E8  | Scan row **deleted/superseded**                                                       | Its flagged-face rows are **cascade-deleted** (FK ON DELETE CASCADE).                                                   |
-| E9  | Read path performance                                                                 | `getPersonFlaggedFaces` issues **no vector search** and does **not** call `buildRepairPlan` (asserted).                 |
-| E10 | Person with **thousands** of flagged faces                                            | Bounded indexed read (no KNN); returns the full set.                                                                    |
-| E11 | Two persons flagged in the same scan                                                  | `getScanFlaggedFaces` is scoped to `(scanId, personId)` — each person sees only their own faces.                        |
-| E12 | A re-scan is **running** (rows not yet written)                                       | Empty during the scan (transient); fills in on `completeScan`.                                                          |
-| E13 | Face flagged at scan time that a fresh recompute would no longer flag                 | **Still shown** (snapshot semantics) as long as it's still on the person + not declined — intended; asserted.           |
-| E14 | Both `toRepair` **and** `reviewOnlyFaces` for a person                                | Both kinds are persisted and returned (union), matching today's `getPersonFlaggedFaces`.                                |
+| #   | Case                                                                                                                      | Expected behaviour                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | Person with flagged faces, fresh scan                                                                                     | Review returns **exactly** the scan's `toRepair` + `reviewOnlyFaces` for the person (`{assetFaceId,suspectedOwnerId}`).                                                                                                          |
+| E2  | A flagged face **moved off** the person after the scan                                                                    | Excluded from review (still-on-person join); no row deletion needed.                                                                                                                                                             |
+| E3  | A flagged face **declined (face-level)** after the scan                                                                   | Excluded via `applyDeclineFilters` (same semantics as today).                                                                                                                                                                    |
+| E4  | A **person-level decline** for the suspected owner created after the scan                                                 | All matching faces excluded via `applyDeclineFilters`.                                                                                                                                                                           |
+| E5  | A flagged face becomes **non-visible / soft-deleted / on a deleted asset / loses its `face_search` embedding** after scan | Excluded by the eligibility join (mirrors `streamEligibleFaces`, incl. the `face_search` inner join).                                                                                                                            |
+| E6  | No latest scan, or person not in the scan                                                                                 | Empty `flaggedFaces` (matches today's empty state).                                                                                                                                                                              |
+| E7  | Scan **re-run** (new `scanId`)                                                                                            | Review reads the **new** scan's rows; old rows are cascade-dropped when prune runs.                                                                                                                                              |
+| E8  | Scan row **deleted/superseded**                                                                                           | Its flagged-face rows are **cascade-deleted** (FK ON DELETE CASCADE).                                                                                                                                                            |
+| E9  | Read path performance                                                                                                     | `getPersonFlaggedFaces` issues **no vector search** and does **not** call `buildRepairPlan` (asserted).                                                                                                                          |
+| E10 | Person with **thousands** of flagged faces                                                                                | Bounded indexed read (no KNN); returns the full set.                                                                                                                                                                             |
+| E11 | Two persons flagged in the same scan                                                                                      | `getScanFlaggedFaces` is scoped to `(scanId, personId)` — each person sees only their own faces.                                                                                                                                 |
+| E12 | A re-scan is **running** (rows not yet written)                                                                           | Empty during the scan (transient); fills in on `completeScan`.                                                                                                                                                                   |
+| E13 | Face flagged at scan time that a fresh recompute would no longer flag                                                     | **Still shown** (snapshot semantics) as long as it's still on the person + not declined — intended; asserted.                                                                                                                    |
+| E14 | Both `toRepair` **and** `reviewOnlyFaces` for a person                                                                    | Both kinds are persisted and returned (union), matching today's `getPersonFlaggedFaces`.                                                                                                                                         |
+| E15 | Scan **fails** after the flagged-face persist but before `completeScan`                                                   | Scan is marked `failed` and lists no persons (not reachable from the console); its rows are inert and the next scan's `pruneSupersededScans` cascade-drops them. Asserted at the repo level (cascade) — no special cleanup code. |
+| E16 | A flagged face's `personId` deleted by the add-faces **auto-delete**                                                      | Orphaned rows (no FK on `personId`) are harmless: the person can't be reviewed, the read filters by `personId`, and the rows are pruned by the next scan.                                                                        |
 
 ## Testing — **TDD is mandatory**
 
@@ -179,8 +185,10 @@ Ordered so each ships working, independently testable software; TDD throughout. 
   registration + `revert-to-immich` `DROP TABLE`) and the two `FaceRepairScanRepository` methods
   (`replaceScanFlaggedFaces`, `getScanFlaggedFaces` with the eligibility join).
 - **Tests (medium):** repo write/read (E1), still-on-person + eligibility exclusion (E2, E5), `(scanId,personId)`
-  scoping (E11), cascade on scan delete (E8), independent second scan (E7); migration reversibility.
-- **Edges:** E1, E2, E5, E7, E8, E11.
+  scoping (E11), cascade on scan delete (E8), independent second scan (E7); migration reversibility. The cascade
+  test (E8) + `(scanId, personId)` scoping (E11) + the read's `personId` filter also cover E15 (failed-scan rows
+  pruned) and E16 (orphaned rows after a person auto-delete) — no extra code, but assert the cascade explicitly.
+- **Edges:** E1, E2, E5, E7, E8, E11 (and E15/E16 via cascade + scoping).
 - **Done when:** medium repo spec green; `make check-server` + `make sql` clean.
 
 ### Slice 2 — Service wiring (persist on scan, read on review), remove recompute
