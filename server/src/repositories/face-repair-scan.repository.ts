@@ -1,5 +1,6 @@
 import { Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { SourceType } from 'src/enum';
 import { DB } from 'src/schema';
 import { FaceRepairScanTable } from 'src/schema/tables/face-repair-scan.table';
 
@@ -227,6 +228,48 @@ export class FaceRepairScanRepository {
       };
     });
     return { ...scan, persons: refreshed as unknown as RepairScanRow['persons'] };
+  }
+
+  async replaceScanFlaggedFaces(
+    scanId: string,
+    faces: { assetFaceId: string; personId: string; suspectedOwnerId: string }[],
+  ): Promise<void> {
+    await this.db.deleteFrom('face_repair_scan_flagged_face').where('scanId', '=', scanId).execute();
+    for (let index = 0; index < faces.length; index += 1000) {
+      const chunk = faces.slice(index, index + 1000);
+      await this.db
+        .insertInto('face_repair_scan_flagged_face')
+        .values(
+          chunk.map((face) => ({
+            scanId,
+            assetFaceId: face.assetFaceId,
+            personId: face.personId,
+            suspectedOwnerId: face.suspectedOwnerId,
+          })),
+        )
+        .execute();
+    }
+  }
+
+  async getScanFlaggedFaces(
+    scanId: string,
+    personId: string,
+  ): Promise<{ assetFaceId: string; suspectedOwnerId: string }[]> {
+    return this.db
+      .selectFrom('face_repair_scan_flagged_face as ff')
+      .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select(['ff.assetFaceId as assetFaceId', 'ff.suspectedOwnerId as suspectedOwnerId'])
+      .where('ff.scanId', '=', scanId)
+      .where('ff.personId', '=', personId)
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .orderBy('ff.assetFaceId')
+      .execute();
   }
 
   async enrichReportPersons(
