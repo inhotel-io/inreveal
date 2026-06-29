@@ -112,7 +112,7 @@ Add to the exported tables array (next to `FaceRepairScanTable,` ~line 129):
 Add to the `DB` interface map (next to `face_repair_scan: FaceRepairScanTable;` ~line 251):
 
 ```ts
-  face_repair_scan_flagged_face: FaceRepairScanFlaggedFaceTable;
+face_repair_scan_flagged_face: FaceRepairScanFlaggedFaceTable;
 ```
 
 - [ ] **Step 3: Write the migration**
@@ -188,9 +188,9 @@ git commit -m "feat(server): face_repair_scan_flagged_face table + migration"
   `FaceRepairScanRepository.createScan`.
 - Produces (Slice 2 consumes):
   - `replaceScanFlaggedFaces(scanId: string, faces: { assetFaceId: string; personId: string; suspectedOwnerId:
-    string }[]): Promise<void>`
+string }[]): Promise<void>`
   - `getScanFlaggedFaces(scanId: string, personId: string): Promise<{ assetFaceId: string; suspectedOwnerId:
-    string }[]>`
+string }[]>`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -317,7 +317,11 @@ describe('FaceRepairScanRepository flagged faces', () => {
       personId: person.id,
       sourceType: SourceType.MachineLearning,
     });
-    await ctx.database.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', deletedFace.id).execute();
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ deletedAt: new Date() })
+      .where('id', '=', deletedFace.id)
+      .execute();
     await ctx.database.insertInto('face_search').values({ faceId: deletedFace.id, embedding: EMBEDDING }).execute();
 
     // face with no face_search embedding

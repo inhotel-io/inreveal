@@ -21,9 +21,9 @@ the real scan→review flow against Postgres.
 ## Global Constraints
 
 - Depends on Slice 1: `FaceRepairScanRepository.replaceScanFlaggedFaces(scanId, { assetFaceId, personId,
-  suspectedOwnerId }[])` and `getScanFlaggedFaces(scanId, personId) → { assetFaceId, suspectedOwnerId }[]`.
+suspectedOwnerId }[])` and `getScanFlaggedFaces(scanId, personId) → { assetFaceId, suspectedOwnerId }[]`.
 - `getPersonFlaggedFaces` keeps its exact return type `{ personId, flaggedFaces: { assetFaceId, suspectedOwnerId
-  }[] }` — DO NOT change the controller/DTO/web. The recompute (`buildRepairPlan`) is **removed** from this method.
+}[] }` — DO NOT change the controller/DTO/web. The recompute (`buildRepairPlan`) is **removed** from this method.
 - Read path reuses `applyDeclineFilters` (`src/utils/face-repair.ts`) with `getDeclineMaps()` so faces declined
   since the scan are filtered with identical semantics; the Map passed in uses `currentPersonId: personId`
   (`FlaggedLike` requires it).
@@ -64,81 +64,81 @@ to the `beforeEach` (next to the other `faceRepairScan` mock defaults ~line 41),
 `describe('runScan', …)` block:
 
 ```ts
-    it('persists the scan’s flagged faces (toRepair + reviewOnlyFaces) before completing', async () => {
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
-        toRepair: [{ assetFaceId: 'face-1', currentPersonId: 'P', suspectedOwnerId: 'Q' }],
-        reviewOnlyFaces: [{ assetFaceId: 'face-2', currentPersonId: 'P', suspectedOwnerId: 'R', reason: 'over-cap' }],
-        reviewOnlyPersonIds: [],
-        unAttributableFaces: [],
-        perPerson: [{ personId: 'P', eligible: 5, flagged: 2, flaggedFraction: 0.4 }],
-      } as any);
+it('persists the scan’s flagged faces (toRepair + reviewOnlyFaces) before completing', async () => {
+  vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
+    toRepair: [{ assetFaceId: 'face-1', currentPersonId: 'P', suspectedOwnerId: 'Q' }],
+    reviewOnlyFaces: [{ assetFaceId: 'face-2', currentPersonId: 'P', suspectedOwnerId: 'R', reason: 'over-cap' }],
+    reviewOnlyPersonIds: [],
+    unAttributableFaces: [],
+    perPerson: [{ personId: 'P', eligible: 5, flagged: 2, flaggedFraction: 0.4 }],
+  } as any);
 
-      await sut.runScan('scan-1');
+  await sut.runScan('scan-1');
 
-      expect(mocks.faceRepairScan.replaceScanFlaggedFaces).toHaveBeenCalledWith('scan-1', [
-        { assetFaceId: 'face-1', personId: 'P', suspectedOwnerId: 'Q' },
-        { assetFaceId: 'face-2', personId: 'P', suspectedOwnerId: 'R' },
-      ]);
-      // persisted before the scan is marked completed
-      const persistOrder = mocks.faceRepairScan.replaceScanFlaggedFaces.mock.invocationCallOrder[0];
-      const completeOrder = mocks.faceRepairScan.completeScan.mock.invocationCallOrder[0];
-      expect(persistOrder).toBeLessThan(completeOrder);
-    });
+  expect(mocks.faceRepairScan.replaceScanFlaggedFaces).toHaveBeenCalledWith('scan-1', [
+    { assetFaceId: 'face-1', personId: 'P', suspectedOwnerId: 'Q' },
+    { assetFaceId: 'face-2', personId: 'P', suspectedOwnerId: 'R' },
+  ]);
+  // persisted before the scan is marked completed
+  const persistOrder = mocks.faceRepairScan.replaceScanFlaggedFaces.mock.invocationCallOrder[0];
+  const completeOrder = mocks.faceRepairScan.completeScan.mock.invocationCallOrder[0];
+  expect(persistOrder).toBeLessThan(completeOrder);
+});
 ```
 
 (b) In `server/src/services/face-repair.person.spec.ts`: **replace** the entire `describe('getPersonFlaggedFaces', …)`
 block (its tests mock `buildRepairPlan`, which no longer exists on this path) with:
 
 ```ts
-  describe('getPersonFlaggedFaces', () => {
-    const noDeclines = { declinedFaceOwners: new Map(), dismissedPersons: new Map() };
+describe('getPersonFlaggedFaces', () => {
+  const noDeclines = { declinedFaceOwners: new Map(), dismissedPersons: new Map() };
 
-    it('reads the latest scan’s stored flagged faces (no recompute / no KNN)', async () => {
-      const planSpy = vi.spyOn(sut, 'buildRepairPlan');
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
-      mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
+  it('reads the latest scan’s stored flagged faces (no recompute / no KNN)', async () => {
+    const planSpy = vi.spyOn(sut, 'buildRepairPlan');
+    mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
+    mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
+      { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
+      { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
+    ]);
+    mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue(noDeclines as any);
+
+    const result = await sut.getPersonFlaggedFaces('p1');
+
+    expect(mocks.faceRepairScan.getScanFlaggedFaces).toHaveBeenCalledWith('scan-1', 'p1');
+    expect(result).toEqual({
+      personId: 'p1',
+      flaggedFaces: [
         { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
         { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
-      ]);
-      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue(noDeclines as any);
-
-      const result = await sut.getPersonFlaggedFaces('p1');
-
-      expect(mocks.faceRepairScan.getScanFlaggedFaces).toHaveBeenCalledWith('scan-1', 'p1');
-      expect(result).toEqual({
-        personId: 'p1',
-        flaggedFaces: [
-          { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
-          { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
-        ],
-      });
-      expect(planSpy).not.toHaveBeenCalled(); // E9: no recompute
-      expect(mocks.search.searchFaces).not.toHaveBeenCalled(); // E9: no KNN
+      ],
     });
-
-    it('filters faces declined since the scan (E3)', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
-      mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
-        { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
-        { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
-      ]);
-      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue({
-        declinedFaceOwners: new Map([['f1', new Set(['q1'])]]),
-        dismissedPersons: new Map(),
-      } as any);
-
-      const result = await sut.getPersonFlaggedFaces('p1');
-      expect(result.flaggedFaces).toEqual([{ assetFaceId: 'f2', suspectedOwnerId: 'q2' }]);
-    });
-
-    it('returns empty when there is no scan (E6)', async () => {
-      // eslint-disable-next-line unicorn/no-useless-undefined
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue(undefined);
-      const result = await sut.getPersonFlaggedFaces('p1');
-      expect(result).toEqual({ personId: 'p1', flaggedFaces: [] });
-      expect(mocks.faceRepairScan.getScanFlaggedFaces).not.toHaveBeenCalled();
-    });
+    expect(planSpy).not.toHaveBeenCalled(); // E9: no recompute
+    expect(mocks.search.searchFaces).not.toHaveBeenCalled(); // E9: no KNN
   });
+
+  it('filters faces declined since the scan (E3)', async () => {
+    mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
+    mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
+      { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
+      { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
+    ]);
+    mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue({
+      declinedFaceOwners: new Map([['f1', new Set(['q1'])]]),
+      dismissedPersons: new Map(),
+    } as any);
+
+    const result = await sut.getPersonFlaggedFaces('p1');
+    expect(result.flaggedFaces).toEqual([{ assetFaceId: 'f2', suspectedOwnerId: 'q2' }]);
+  });
+
+  it('returns empty when there is no scan (E6)', async () => {
+    // eslint-disable-next-line unicorn/no-useless-undefined
+    mocks.faceRepairScan.getLatestScan.mockResolvedValue(undefined);
+    const result = await sut.getPersonFlaggedFaces('p1');
+    expect(result).toEqual({ personId: 'p1', flaggedFaces: [] });
+    expect(mocks.faceRepairScan.getScanFlaggedFaces).not.toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 2: Run to verify red**
@@ -182,14 +182,14 @@ In `server/src/services/face-repair.service.ts`:
 existing `allFlaggedFaces` local (built at line 347):
 
 ```ts
-      await this.faceRepairScanRepository.replaceScanFlaggedFaces(
-        scanId,
-        allFlaggedFaces.map((f) => ({
-          assetFaceId: f.assetFaceId,
-          personId: f.currentPersonId,
-          suspectedOwnerId: f.suspectedOwnerId,
-        })),
-      );
+await this.faceRepairScanRepository.replaceScanFlaggedFaces(
+  scanId,
+  allFlaggedFaces.map((f) => ({
+    assetFaceId: f.assetFaceId,
+    personId: f.currentPersonId,
+    suspectedOwnerId: f.suspectedOwnerId,
+  })),
+);
 ```
 
 - [ ] **Step 4: Run to verify green**
@@ -304,21 +304,42 @@ const seedOverCapPerson = async (ctx: Ctx, ownerId: string, opts: { leakedCount:
   const { person: ownerQ } = await ctx.newPerson({ ownerId, name: '' });
   for (let i = 0; i < 10; i++) {
     const { asset } = await ctx.newAsset({ ownerId });
-    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: ownerQ.id, sourceType: SourceType.MachineLearning });
-    await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+    const { assetFace } = await ctx.newAssetFace({
+      assetId: asset.id,
+      personId: ownerQ.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+      .execute();
   }
   const { person } = await ctx.newPerson({ ownerId, name: '' });
   const leakedFaceIds: string[] = [];
   for (let i = 0; i < opts.leakedCount; i++) {
     const { asset } = await ctx.newAsset({ ownerId });
-    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id, sourceType: SourceType.MachineLearning });
-    await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('first') }).execute();
+    const { assetFace } = await ctx.newAssetFace({
+      assetId: asset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+      .execute();
     leakedFaceIds.push(assetFace.id);
   }
   for (let i = 0; i < opts.genuineCount; i++) {
     const { asset } = await ctx.newAsset({ ownerId });
-    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id, sourceType: SourceType.MachineLearning });
-    await db.insertInto('face_search').values({ faceId: assetFace.id, embedding: axisEmbedding('second') }).execute();
+    const { assetFace } = await ctx.newAssetFace({
+      assetId: asset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+      .execute();
   }
   return { person, ownerQ, leakedFaceIds };
 };
@@ -404,9 +425,14 @@ describe('FaceRepairService.getPersonFlaggedFaces (scan-backed)', () => {
     const { person } = await ctx.newPerson({ ownerId: user.id });
     const { person: owner } = await ctx.newPerson({ ownerId: user.id });
     const f1 = await seedEligibleFace(ctx, user.id, person.id);
-    await seedCompletedScanWithFlagged(scanRepo, [{ assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id }]);
+    await seedCompletedScanWithFlagged(scanRepo, [
+      { assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id },
+    ]);
 
-    await sut.createDeclines({ persons: [{ personId: person.id, suspectedOwnerIds: [owner.id] }], declinedBy: user.id });
+    await sut.createDeclines({
+      persons: [{ personId: person.id, suspectedOwnerIds: [owner.id] }],
+      declinedBy: user.id,
+    });
 
     const result = await sut.getPersonFlaggedFaces(person.id);
     expect(result.flaggedFaces).toEqual([]);
@@ -418,7 +444,9 @@ describe('FaceRepairService.getPersonFlaggedFaces (scan-backed)', () => {
     const { person } = await ctx.newPerson({ ownerId: user.id });
     const { person: owner } = await ctx.newPerson({ ownerId: user.id });
     const f1 = await seedEligibleFace(ctx, user.id, person.id);
-    await seedCompletedScanWithFlagged(scanRepo, [{ assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id }]);
+    await seedCompletedScanWithFlagged(scanRepo, [
+      { assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id },
+    ]);
 
     // Delete the suspected owner — a fresh recompute could no longer flag f1, but the read is a snapshot.
     await db.deleteFrom('person').where('id', '=', owner.id).execute();
@@ -449,7 +477,9 @@ describe('FaceRepairService.getPersonFlaggedFaces (scan-backed)', () => {
     const { person } = await ctx.newPerson({ ownerId: user.id });
     const { person: owner } = await ctx.newPerson({ ownerId: user.id });
     const f1 = await seedEligibleFace(ctx, user.id, person.id);
-    await seedCompletedScanWithFlagged(scanRepo, [{ assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id }]);
+    await seedCompletedScanWithFlagged(scanRepo, [
+      { assetFaceId: f1, personId: person.id, suspectedOwnerId: owner.id },
+    ]);
 
     // A newer scan (no rows yet) becomes the latest.
     await scanRepo.createScan({ requestedBy: null, params: PARAMS });
@@ -508,8 +538,8 @@ git commit -m "test(server): medium e2e for scan-backed getPersonFlaggedFaces"
 - **Placeholders:** none — full code + commands. The two "confirm method names" notes point at the sibling spec,
   not unresolved TBDs.
 - **Type consistency:** `getPersonFlaggedFaces` return type unchanged; the read maps stored `{ assetFaceId,
-  suspectedOwnerId }` → `applyDeclineFilters` `FlaggedLike` (`+ currentPersonId`) → output `{ assetFaceId,
-  suspectedOwnerId }`. `runScan` persists `{ assetFaceId, personId: currentPersonId, suspectedOwnerId }` matching
+suspectedOwnerId }` → `applyDeclineFilters` `FlaggedLike` (`+ currentPersonId`) → output `{ assetFaceId,
+suspectedOwnerId }`. `runScan` persists `{ assetFaceId, personId: currentPersonId, suspectedOwnerId }` matching
   Slice 1's `replaceScanFlaggedFaces` signature.
 - **Existing tests:** the old `getPersonFlaggedFaces` unit tests (mocking `buildRepairPlan`) are replaced; the
   pre-existing `runScan` tests keep passing (the new awaited `replaceScanFlaggedFaces` is mocked in `beforeEach`).
