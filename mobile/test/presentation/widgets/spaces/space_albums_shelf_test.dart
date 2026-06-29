@@ -10,7 +10,7 @@ import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:mocktail/mocktail.dart';
 
-import '../../../unit/presentation_context.dart';
+import '../../../unit/presentation/presentation_context.dart';
 
 class _MockAssetService extends Mock implements AssetService {}
 
