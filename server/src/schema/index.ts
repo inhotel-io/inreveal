@@ -44,6 +44,7 @@ import { AssetTable } from 'src/schema/tables/asset.table';
 import { FaceIdentityFaceTable } from 'src/schema/tables/face-identity-face.table';
 import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
+import { FaceRepairScanFlaggedFaceTable } from 'src/schema/tables/face-repair-scan-flagged-face.table';
 import { FaceRepairScanTable } from 'src/schema/tables/face-repair-scan.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { GeodataPlacesTable } from 'src/schema/tables/geodata-places.table';
@@ -126,6 +127,7 @@ export class ImmichDatabase {
     FaceIdentityTable,
     FaceIdentityFaceTable,
     FaceRepairDeclineTable,
+    FaceRepairScanFlaggedFaceTable,
     FaceRepairScanTable,
     FaceSearchTable,
     GeodataPlacesTable,
@@ -248,6 +250,7 @@ export interface DB {
   face_identity: FaceIdentityTable;
   face_identity_face: FaceIdentityFaceTable;
   face_repair_decline: FaceRepairDeclineTable;
+  face_repair_scan_flagged_face: FaceRepairScanFlaggedFaceTable;
   face_repair_scan: FaceRepairScanTable;
 
   geodata_places: GeodataPlacesTable;
