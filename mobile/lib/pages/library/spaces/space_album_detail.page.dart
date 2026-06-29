@@ -8,10 +8,10 @@ import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widg
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
-import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album_actions.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 
@@ -39,26 +39,47 @@ class SpaceAlbumDetailPage extends ConsumerStatefulWidget {
 }
 
 class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
+  String? _spaceName;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpaceName();
+  }
+
+  Future<void> _loadSpaceName() async {
+    try {
+      final space = await ref.read(sharedSpaceApiRepositoryProvider).get(widget.spaceId);
+      if (mounted) {
+        setState(() => _spaceName = space.name);
+      }
+    } catch (_) {
+      // Best-effort — the subtitle simply won't render until the name loads.
+    }
+  }
+
   /// Add photos to this album by pushing the asset-selection timeline, then
-  /// calling the regular album addAssets endpoint (D3 — server enforces
-  /// space-editor permission), then nudging sync.
+  /// calling the server-only add path (D3 — server enforces space-editor
+  /// permission), then nudging sync.
+  ///
+  /// Routes through [SpaceAlbumActions.addAssets] (REST add only, no local
+  /// `remote_album_asset` junction write) so an absorbed linked album — one
+  /// with no local `remote_album` row — does not hit the junction FK and
+  /// surface a false "Failed to add photos" toast (mobile F1).
   Future<void> _addPhotos() async {
     final newAssets = await context.pushRoute<Set<BaseAsset>>(DriftAssetSelectionTimelineRoute());
     if (newAssets == null || newAssets.isEmpty) return;
 
     // Filter to remote assets only (local assets can't be added to a space
     // album via the REST endpoint — the server requires remote asset ids).
-    final remoteAssets = newAssets.whereType<RemoteAsset>().toSet();
-    if (remoteAssets.isEmpty) return;
+    final remoteAssetIds = newAssets.whereType<RemoteAsset>().map((a) => a.id).toList();
+    if (remoteAssetIds.isEmpty) return;
 
     try {
-      final count = await ref.read(remoteAlbumProvider.notifier).addAssetsToAlbum(widget.albumId, remoteAssets);
+      final count = await ref.read(spaceAlbumActionsProvider).addAssets(widget.albumId, remoteAssetIds);
       if (context.mounted && count > 0) {
         ImmichToast.show(context: context, msg: 'Added $count photos to album', toastType: ToastType.success);
       }
-      // Nudge sync so the new assets appear in Drift without waiting for the
-      // next scheduled sync cycle.
-      await _triggerSync();
     } catch (_) {
       if (context.mounted) {
         ImmichToast.show(context: context, msg: 'Failed to add photos', toastType: ToastType.error);
@@ -143,6 +164,7 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
         appBar: SpaceAlbumAppBar(
           canEdit: widget.canEdit,
           album: album,
+          spaceName: _spaceName,
           onAddPhotos: widget.canEdit ? _addPhotos : () {},
           onToggleTimeline: widget.canEdit ? _toggleTimeline : () {},
           onUnlink: widget.canEdit ? _unlink : () {},
@@ -171,6 +193,7 @@ class SpaceAlbumAppBar extends StatelessWidget {
     super.key,
     required this.canEdit,
     this.album,
+    this.spaceName,
     this.onAddPhotos,
     this.onToggleTimeline,
     this.onUnlink,
@@ -178,6 +201,10 @@ class SpaceAlbumAppBar extends StatelessWidget {
 
   final bool canEdit;
   final SpaceAlbum? album;
+
+  /// The name of the parent shared space, used for the app bar subtitle.
+  /// Null until the space metadata has loaded (subtitle is hidden until then).
+  final String? spaceName;
 
   /// Called when the editor taps "Add photos" in the kebab.
   final VoidCallback? onAddPhotos;
@@ -190,14 +217,26 @@ class SpaceAlbumAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showSubtitle = album != null && spaceName != null;
     return SliverAppBar(
       floating: true,
       pinned: false,
-      title: album != null ? Text(album!.name) : null,
+      title: album != null
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(album!.name),
+                if (showSubtitle)
+                  Text('${album!.assetCount} photos · in $spaceName', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            )
+          : null,
       actions: [
         SpaceAlbumKebab(
           canEdit: canEdit,
           showInTimeline: album?.showInTimeline ?? true,
+          toggleEnabled: album != null,
           onAddPhotos: onAddPhotos ?? () {},
           onToggleTimeline: onToggleTimeline ?? () {},
           onUnlink: onUnlink ?? () {},
