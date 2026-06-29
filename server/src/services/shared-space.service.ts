@@ -777,9 +777,12 @@ export class SharedSpaceService extends BaseService {
       data: { count: dto.assetIds.length },
     });
 
-    await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, dto.assetIds);
-    await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
-    await this.queueSpacePersonMetadataBackfill();
+    const orphanedAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, dto.assetIds);
+    if (orphanedAssetIds.length > 0) {
+      await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
+      await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+      await this.queueSpacePersonMetadataBackfill();
+    }
   }
 
   async getMapMarkers(auth: AuthDto, id: string) {
@@ -2796,6 +2799,31 @@ export class SharedSpaceService extends BaseService {
       }
     } catch (error) {
       this.logger.error(`Failed to sync space people after adding assets to album ${albumId}: ${error}`);
+    }
+  }
+
+  @OnEvent({ name: 'AlbumDelete' })
+  async onAlbumDelete({ albumId }: ArgOf<'AlbumDelete'>): Promise<void> {
+    try {
+      const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+      let anyOrphanWork = false;
+      for (const space of spaces) {
+        if (!space.faceRecognitionEnabled) {
+          continue;
+        }
+        const orphaned = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(space.spaceId, albumId);
+        if (orphaned.length === 0) {
+          continue;
+        }
+        await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
+        await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
+        anyOrphanWork = true;
+      }
+      if (anyOrphanWork) {
+        await this.queueSpacePersonMetadataBackfill();
+      }
+    } catch (error) {
+      this.logger.error(`Failed to sync space people after deleting album ${albumId}: ${error}`);
     }
   }
 
