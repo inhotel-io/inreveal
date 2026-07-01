@@ -4001,6 +4001,72 @@ describe(FaceIdentityRepository.name, () => {
       expect(resolved).toEqual(expect.objectContaining({ accessible: true, allAttachedProfilesRepairable: false }));
     });
 
+    // Issue #733: cross-library / cross-owner merge. The actor sees the person via their own profile
+    // and a shared space they can repair, but the identity also carries another user's personal
+    // `person` (from that user's external library). resolveRepairRefs must surface that owner so the
+    // service can gate the merge (admin-only) and notify the owner; the merge, once authorized,
+    // rewrites the other owner's `person.identityId` onto the target.
+    it('surfaces the other owner and rewrites their profile for a cross-library merge', async () => {
+      const { ctx, sut } = setup();
+      const { user: actorA } = await ctx.newUser();
+      const { user: userB } = await ctx.newUser();
+
+      // A's own person (A's external library) -> target identity IX.
+      const { person: personA } = await ctx.newPerson({ ownerId: actorA.id, name: 'Ada' });
+      const identityIX = await sut.ensurePersonIdentity(personA.id);
+
+      // A shared space A can repair (Editor) surfaces the cross-library person as a space-person.
+      const { space } = await ctx.newSharedSpace({ createdById: actorA.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actorA.id, role: SharedSpaceRole.Editor });
+
+      // Source identity IZ carries the space-person AND user B's own person (B's external library).
+      const identityIZ = await ctx.database
+        .insertInto('face_identity')
+        .values({ type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const spacePersonIZ = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, identityId: identityIZ.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const { person: personB } = await ctx.newPerson({ ownerId: userB.id, name: 'Ada' });
+      await ctx.database
+        .updateTable('person')
+        .set({ identityId: identityIZ.id })
+        .where('id', '=', personB.id)
+        .execute();
+
+      const resolved = await sut.resolveRepairRefs(actorA.id, {
+        target: { type: 'person', id: personA.id },
+        sources: [{ type: 'space-person', id: spacePersonIZ.id, spaceId: space.id }],
+      });
+
+      // Not repairable by the actor, but the other owner is surfaced for gating + notification.
+      expect(resolved).toEqual(
+        expect.objectContaining({
+          accessible: true,
+          allAttachedProfilesRepairable: false,
+          hasScopedProfileConflict: false,
+          impactedOwnerIds: [userB.id],
+        }),
+      );
+
+      // The admin-approved merge rewrites B's person onto the target identity.
+      await sut.mergeIdentities({
+        targetIdentityId: identityIX.id,
+        sourceIdentityIds: [identityIZ.id],
+        source: 'manual',
+      });
+
+      const movedPersonB = await ctx.database
+        .selectFrom('person')
+        .select('identityId')
+        .where('id', '=', personB.id)
+        .executeTakeFirstOrThrow();
+      expect(movedPersonB.identityId).toBe(identityIX.id);
+    });
+
     it('reports same-owner personal repair as a scoped profile conflict', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();

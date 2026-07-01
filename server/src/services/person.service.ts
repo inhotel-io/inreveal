@@ -1,10 +1,17 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Insertable } from 'kysely';
 import { isAbsolute } from 'node:path';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { Chunked, OnEvent, OnJob } from 'src/decorators';
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
+import { mapNotification } from 'src/dtos/notification.dto';
 import {
   AssetFaceCreateDto,
   AssetFaceDeleteDto,
@@ -35,6 +42,8 @@ import {
   ImmichWorker,
   JobName,
   JobStatus,
+  NotificationLevel,
+  NotificationType,
   Permission,
   PersonPathType,
   QueueJobStatus,
@@ -74,6 +83,18 @@ const FACE_IDENTITY_BACKFILL_CHUNK_SIZE = 1000;
  * maintenance, or a manual run) starts a fresh chain.
  */
 export const FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS = 5;
+
+/**
+ * Machine-readable error codes for the cross-owner scoped-merge boundary (issue #733). Returned in
+ * the exception body so the web client can render descriptive UX (an enable hint or a strong
+ * confirmation) instead of a raw error string.
+ */
+export const CROSS_OWNER_MERGE_ERROR_CODE = {
+  /** The merge crosses an owner boundary and is not permitted (non-admin, or admin with the toggle off). */
+  blocked: 'cross_owner_merge_blocked',
+  /** Admin, toggle on: the merge is permitted but must be explicitly confirmed before it commits. */
+  confirmationRequired: 'cross_owner_merge_confirmation_required',
+} as const;
 
 @Injectable()
 export class PersonService extends BaseService {
@@ -187,9 +208,16 @@ export class PersonService extends BaseService {
     if (!resolved.accessible) {
       throw new BadRequestException('One or more people were not found or are not accessible');
     }
-    if (!resolved.allAttachedProfilesRepairable) {
-      throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
+
+    // A merge across an owner boundary rewrites another user's `person.identityId` and re-links their
+    // faces. It is blocked by default and only permitted for an admin when the instance opts in
+    // (issue #733). Non-admins and admins-with-the-toggle-off get a descriptive, machine-readable
+    // error; admins-with-the-toggle-on must explicitly confirm before it commits.
+    const isCrossOwnerMerge = !resolved.allAttachedProfilesRepairable;
+    if (isCrossOwnerMerge) {
+      await this.authorizeCrossOwnerMerge(auth, dto, resolved.impactedOwnerIds);
     }
+
     if (resolved.hasScopedProfileConflict) {
       throw new BadRequestException('Cannot merge people that already have separate profiles in the same scope');
     }
@@ -200,6 +228,73 @@ export class PersonService extends BaseService {
       source: 'manual',
     });
     await this.queueSpacePersonMetadataBackfill();
+
+    if (isCrossOwnerMerge) {
+      await this.notifyCrossOwnerMergeOwners(resolved.impactedOwnerIds);
+    }
+  }
+
+  /**
+   * Enforce the admin-gated cross-owner merge policy (issue #733). Throws unless the actor is an
+   * admin, the `server.mergePeopleAcrossOwners` toggle is on, and the admin has confirmed. Never
+   * widen this: non-admins are always blocked and the toggle defaults off.
+   */
+  private async authorizeCrossOwnerMerge(
+    auth: AuthDto,
+    dto: MergeScopedPeopleDto,
+    impactedOwnerIds: string[],
+  ): Promise<void> {
+    if (!auth.user.isAdmin) {
+      throw new ForbiddenException({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
+        message:
+          'This person also appears in another user’s library, so merging would modify people and faces owned by someone else. Only an administrator can merge people across owners.',
+      });
+    }
+
+    const { server } = await this.getConfig({ withCache: false });
+    if (!server.mergePeopleAcrossOwners) {
+      throw new ForbiddenException({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
+        message:
+          'This person also appears in another user’s library, so merging would modify people and faces owned by someone else. An administrator can enable cross-owner merges in the server settings.',
+      });
+    }
+
+    if (!dto.confirmCrossOwner) {
+      throw new ConflictException({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.confirmationRequired,
+        message:
+          'This merge will modify people and faces owned by other users and may not be cleanly reversible. Confirm to continue.',
+        impactedOwnerCount: impactedOwnerIds.length,
+      });
+    }
+  }
+
+  /**
+   * Notify every other owner whose people/faces were modified by an admin cross-owner merge. The
+   * owner set is a superset of the involved identities' non-actor `person` owners, so it also covers
+   * any owner whose profile is dropped or relabelled by conflict handling.
+   */
+  private async notifyCrossOwnerMergeOwners(impactedOwnerIds: string[]): Promise<void> {
+    // Best-effort: the merge has already committed, so a failed notification must not fail the
+    // request (which would wrongly imply the merge did not happen) nor skip the other owners.
+    for (const userId of impactedOwnerIds) {
+      try {
+        const item = await this.notificationRepository.create({
+          userId,
+          type: NotificationType.SystemMessage,
+          level: NotificationLevel.Warning,
+          title: 'Your people were affected by an administrator merge',
+          description:
+            'An administrator merged people that include faces from your library. Some of your people may now be grouped differently.',
+          data: JSON.stringify({ kind: 'cross-owner-people-merge' }),
+        });
+        this.websocketRepository.clientSend('on_notification', userId, mapNotification(item));
+      } catch (error) {
+        this.logger.warn(`Failed to notify owner ${userId} of a cross-owner people merge: ${error}`);
+      }
+    }
   }
 
   async detachScopedPerson(auth: AuthDto, dto: DetachScopedPersonDto): Promise<void> {

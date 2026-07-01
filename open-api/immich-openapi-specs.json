@@ -25838,6 +25838,10 @@
       },
       "MergeScopedPeopleDto": {
         "properties": {
+          "confirmCrossOwner": {
+            "description": "Admin acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge.",
+            "type": "boolean"
+          },
           "sources": {
             "description": "Source scoped profiles",
             "items": {
@@ -34068,6 +34072,10 @@
             "description": "Login page message",
             "type": "string"
           },
+          "mergePeopleAcrossOwners": {
+            "description": "Allow administrators to merge people/faces across different owners and libraries",
+            "type": "boolean"
+          },
           "publicUsers": {
             "description": "Public users",
             "type": "boolean"
@@ -34076,6 +34084,7 @@
         "required": [
           "externalDomain",
           "loginPageMessage",
+          "mergePeopleAcrossOwners",
           "publicUsers"
         ],
         "type": "object"

@@ -178,6 +178,12 @@ export type RepairRefsResolution =
       type: string;
       allAttachedProfilesRepairable: boolean;
       hasScopedProfileConflict: boolean;
+      /**
+       * Distinct owners of `person` profiles attached to the involved identities that are NOT the
+       * acting user. These are the users whose private people/faces a cross-owner merge would
+       * modify — used to gate admin cross-owner merges and to notify each affected owner.
+       */
+      impactedOwnerIds: string[];
     };
 
 export type DetachRefResolution =
@@ -1211,9 +1217,10 @@ export class FaceIdentityRepository {
       ),
     ];
     const identityIds = [...new Set([target.identityId, ...sourceIdentityIds])];
-    const [allAttachedProfilesRepairable, hasScopedProfileConflict] = await Promise.all([
+    const [allAttachedProfilesRepairable, hasScopedProfileConflict, impactedOwnerIds] = await Promise.all([
       this.areAttachedProfilesRepairable(actorUserId, identityIds),
       this.hasRepairProfileConflict(target.identityId, sourceIdentityIds),
+      this.getInaccessibleAttachedOwnerIds(actorUserId, identityIds),
     ]);
 
     return {
@@ -1223,7 +1230,29 @@ export class FaceIdentityRepository {
       type: target.identityType,
       allAttachedProfilesRepairable,
       hasScopedProfileConflict,
+      impactedOwnerIds,
     };
+  }
+
+  /**
+   * Owners (other than the actor) of `person` profiles attached to the involved identities. A
+   * cross-owner merge rewrites these owners' `person.identityId` and re-links their faces, so this
+   * set both gates admin cross-owner merges and identifies who to notify afterwards.
+   */
+  private async getInaccessibleAttachedOwnerIds(actorUserId: string, identityIds: string[]): Promise<string[]> {
+    if (identityIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('person')
+      .select('ownerId')
+      .distinct()
+      .where('identityId', 'in', identityIds)
+      .where('ownerId', '!=', actorUserId)
+      .execute();
+
+    return rows.map((row) => row.ownerId);
   }
 
   async resolveDetachRef(actorUserId: string, profileRef: ScopedPersonProfileRefDto): Promise<DetachRefResolution> {

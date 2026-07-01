@@ -1651,6 +1651,8 @@ export type PeopleFaceStatisticsResponseDto = {
     unassignedFaceCount: number;
 };
 export type MergeScopedPeopleDto = {
+    /** Admin acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge. */
+    confirmCrossOwner?: boolean;
     /** Source scoped profiles */
     sources: ScopedPersonProfileRefDto[];
     /** Target scoped profile */
@@ -3234,6 +3236,8 @@ export type SystemConfigServerDto = {
     externalDomain: string;
     /** Login page message */
     loginPageMessage: string;
+    /** Allow administrators to merge people/faces across different owners and libraries */
+    mergePeopleAcrossOwners: boolean;
     /** Public users */
     publicUsers: boolean;
 };

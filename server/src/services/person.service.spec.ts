@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
@@ -12,6 +12,8 @@ import {
   JobName,
   JobStatus,
   MetadataKey,
+  NotificationLevel,
+  NotificationType,
   QueueJobStatus,
   QueueName,
   SourceType,
@@ -19,7 +21,11 @@ import {
   UserMetadataKey,
 } from 'src/enum';
 import { FaceSearchResult } from 'src/repositories/search.repository';
-import { FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS, PersonService } from 'src/services/person.service';
+import {
+  CROSS_OWNER_MERGE_ERROR_CODE,
+  FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS,
+  PersonService,
+} from 'src/services/person.service';
 import { StorageService } from 'src/services/storage.service';
 import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
@@ -52,6 +58,25 @@ const recognitionCounts = (overrides: Partial<QueueStatisticsDto> = {}) =>
 
 const prefsMetadata = (minimumFaces: number) =>
   [{ key: UserMetadataKey.Preferences, value: { people: { minimumFaces } } }] as any;
+
+// Cross-owner scoped-merge (#733) resolution + request fixtures.
+const crossOwnerResolution = (overrides: Record<string, unknown> = {}) =>
+  ({
+    accessible: true,
+    targetIdentityId: 'identity-1',
+    sourceIdentityIds: ['identity-2'],
+    type: 'person',
+    allAttachedProfilesRepairable: false,
+    hasScopedProfileConflict: false,
+    impactedOwnerIds: ['owner-b'],
+    ...overrides,
+  }) as any;
+
+const crossOwnerMergeDto = (overrides: Record<string, unknown> = {}) => ({
+  target: { type: 'person' as const, id: newUuid() },
+  sources: [{ type: 'space-person' as const, id: newUuid(), spaceId: newUuid() }],
+  ...overrides,
+});
 
 describe(PersonService.name, () => {
   let sut: PersonService;
@@ -4742,24 +4767,89 @@ describe(PersonService.name, () => {
       });
     });
 
-    it('rejects global merge when an involved identity has inaccessible attached profiles', async () => {
-      const auth = AuthFactory.create();
-      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
-        accessible: true,
-        targetIdentityId: 'identity-1',
-        sourceIdentityIds: ['identity-2'],
-        type: 'person',
-        allAttachedProfilesRepairable: false,
+    it('blocks a non-admin cross-owner merge with the descriptive machine-readable error', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution());
+
+      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
+      });
+      expect(String((error as any).getResponse().message)).toMatch(/another user/i);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('blocks an admin cross-owner merge with an enable hint when the toggle is off', async () => {
+      const auth = AuthFactory.create({ isAdmin: true });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: false } });
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution());
+
+      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
+      });
+      expect(String((error as any).getResponse().message)).toMatch(/administrator can enable/i);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+    });
+
+    it('requires explicit confirmation before an admin commits a cross-owner merge', async () => {
+      const auth = AuthFactory.create({ isAdmin: true });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
+        crossOwnerResolution({ impactedOwnerIds: ['owner-b', 'owner-c'] }),
+      );
+
+      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.confirmationRequired,
+        impactedOwnerCount: 2,
+      });
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('performs an admin cross-owner merge and notifies every affected owner when confirmed', async () => {
+      const auth = AuthFactory.create({ isAdmin: true });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
+        crossOwnerResolution({ impactedOwnerIds: ['owner-b', 'owner-c'] }),
+      );
+      mocks.faceIdentity.mergeIdentities.mockResolvedValue({
+        personalProfileConflictCount: 0,
+        spaceProfileConflictCount: 0,
+      });
+      mocks.notification.create.mockResolvedValue({
+        id: 'notif-1',
+        createdAt: newDate(),
+        level: NotificationLevel.Warning,
+        type: NotificationType.SystemMessage,
+        title: 'People affected',
+        description: 'desc',
+        data: null,
+        readAt: null,
       } as any);
 
-      await expect(
-        sut.mergeScopedPeople(auth, {
-          target: { type: 'person', id: newUuid() },
-          sources: [{ type: 'space-person', id: newUuid(), spaceId: newUuid() }],
-        }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await sut.mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }));
 
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
+        targetIdentityId: 'identity-1',
+        sourceIdentityIds: ['identity-2'],
+        source: 'manual',
+      });
+      // Each affected owner (including any whose profile is dropped/relabelled by conflict handling)
+      // must be notified.
+      expect(mocks.notification.create).toHaveBeenCalledTimes(2);
+      expect(mocks.notification.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-b' }));
+      expect(mocks.notification.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-c' }));
+      expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_notification', 'owner-b', expect.any(Object));
+      expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_notification', 'owner-c', expect.any(Object));
     });
 
     it('rejects same-person repair when the scoped profiles conflict in the same owner or space', async () => {

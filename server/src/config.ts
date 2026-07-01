@@ -220,6 +220,7 @@ export type SystemConfig = {
     externalDomain: string;
     loginPageMessage: string;
     publicUsers: boolean;
+    mergePeopleAcrossOwners: boolean;
   };
   classification: {
     enabled: boolean;
@@ -455,6 +456,7 @@ export const defaults = Object.freeze<SystemConfig>({
     externalDomain: '',
     loginPageMessage: '',
     publicUsers: true,
+    mergePeopleAcrossOwners: false,
   },
   notifications: {
     smtp: {

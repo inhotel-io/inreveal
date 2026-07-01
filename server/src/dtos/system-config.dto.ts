@@ -341,6 +341,9 @@ const SystemConfigServerSchema = z
       .describe('External domain'),
     loginPageMessage: z.string().describe('Login page message'),
     publicUsers: configBool.describe('Public users'),
+    mergePeopleAcrossOwners: configBool.describe(
+      'Allow administrators to merge people/faces across different owners and libraries',
+    ),
   })
   .meta({ id: 'SystemConfigServerDto' });
 
