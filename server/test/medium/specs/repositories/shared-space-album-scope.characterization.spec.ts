@@ -121,8 +121,8 @@ describe('A. timeline album leg + showInTimeline gate (asset.repository.getTimeB
   });
 });
 
-describe('B. current (PRE-FIX) A1 soft-delete-hole behavior — Slice 15 flips these', () => {
-  it('PRE-FIX: isFaceInSpace returns true for a face whose only path is a SOFT-DELETED album', async () => {
+describe('B. A1 soft-delete-hole FIX (Slice 15) — a soft-deleted album is no longer a live path', () => {
+  it('isFaceInSpace returns false for a face whose only path is a SOFT-DELETED album', async () => {
     const { ctx, shared } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -134,11 +134,11 @@ describe('B. current (PRE-FIX) A1 soft-delete-hole behavior — Slice 15 flips t
 
     await ctx.softDeleteAlbum(album.id);
 
-    // HOLE: album leg omits album.deletedAt, so the face still resolves. Slice 15 -> false.
-    expect(await shared.isFaceInSpace(space.id, faceId)).toBe(true);
+    // FIXED: album leg now guards album.deletedAt, so a soft-deleted album is not a path.
+    expect(await shared.isFaceInSpace(space.id, faceId)).toBe(false);
   });
 
-  it('PRE-FIX: getSpaceAssetAdder attributes via a SOFT-DELETED album', async () => {
+  it('getSpaceAssetAdder does not attribute via a SOFT-DELETED album', async () => {
     const { ctx, shared } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -149,12 +149,12 @@ describe('B. current (PRE-FIX) A1 soft-delete-hole behavior — Slice 15 flips t
 
     await ctx.softDeleteAlbum(album.id);
 
-    // HOLE: album leg omits album.deletedAt, so the adder is still found. Slice 15 -> undefined.
+    // FIXED: album leg now guards album.deletedAt, so no adder is resolved via the trashed album.
     const adder = await shared.getSpaceAssetAdder(space.id, asset.id);
-    expect(adder?.addedById).toBe(user.id);
+    expect(adder).toBeUndefined();
   });
 
-  it('PRE-FIX: getAlbumAssetIdsWithoutOtherSpacePath treats a SOFT-DELETED other album as a live path (retains)', async () => {
+  it('getAlbumAssetIdsWithoutOtherSpacePath treats a SOFT-DELETED other album as no path (cleans up)', async () => {
     const { ctx, shared } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -168,13 +168,13 @@ describe('B. current (PRE-FIX) A1 soft-delete-hole behavior — Slice 15 flips t
 
     await ctx.softDeleteAlbum(albumB.id);
 
-    // HOLE: branch 2 omits album.deletedAt, so soft-deleted albumB counts as another
-    // path and X is EXCLUDED (its space face is retained). Slice 15 -> [x.id].
+    // FIXED: branch 2 now guards album.deletedAt, so soft-deleted albumB is not a path and
+    // X (reachable only via trashed albums) is returned for face cleanup.
     const result = await shared.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
-    expect(result).not.toContain(x.id);
+    expect(result).toContain(x.id);
   });
 
-  it('PRE-FIX: getAssetIdsWithoutOtherSpacePath treats a SOFT-DELETED album as a live path (retains)', async () => {
+  it('getAssetIdsWithoutOtherSpacePath treats a SOFT-DELETED album as no path (cleans up)', async () => {
     const { ctx, shared } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -185,9 +185,9 @@ describe('B. current (PRE-FIX) A1 soft-delete-hole behavior — Slice 15 flips t
 
     await ctx.softDeleteAlbum(album.id);
 
-    // HOLE: branch 2 omits album.deletedAt, so soft-deleted album counts as a path and
-    // X is EXCLUDED (no cleanup). Slice 15 -> [x.id].
+    // FIXED: branch 2 now guards album.deletedAt, so the soft-deleted album is not a path and
+    // X is returned for face cleanup.
     const result = await shared.getAssetIdsWithoutOtherSpacePath(space.id, [x.id]);
-    expect(result).not.toContain(x.id);
+    expect(result).toContain(x.id);
   });
 });
