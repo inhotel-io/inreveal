@@ -27,7 +27,10 @@ class PersonApiRepository extends ApiRepository {
   /// app (see `AssetService.get`), which keeps mobile at parity with web. See issue #727.
   Future<List<DriftPerson>> getAssetPeople(String assetId) async {
     final info = await checkNull(_apiService.assetsApi.getAssetInfo(assetId));
-    return info.people.where((person) => !person.isHidden).map((person) => _toDriftPerson(person, info.ownerId)).toList();
+    return info.people
+        .where((person) => !person.isHidden)
+        .map((person) => _toDriftPerson(person, info.ownerId))
+        .toList();
   }
 
   static DriftPerson _toDriftPerson(PersonWithFacesResponseDto dto, String ownerId) {
