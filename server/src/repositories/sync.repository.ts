@@ -10,7 +10,6 @@ import { accessibleSpaceAlbums, accessibleSpaces } from 'src/utils/shared-space-
 // Re-export the relocated scoping helpers so existing `sync.repository` importers
 // keep working after the definitions moved to the fork-owned scope module.
 
-
 export type SyncBackfillOptions = {
   nowId: string;
   afterUpdateId?: string;
@@ -1638,4 +1637,4 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
   }
 }
 
-export {accessibleSpaceAlbums, accessibleSpaces} from 'src/utils/shared-space-album-scope';
+export { accessibleSpaceAlbums, accessibleSpaces } from 'src/utils/shared-space-album-scope';

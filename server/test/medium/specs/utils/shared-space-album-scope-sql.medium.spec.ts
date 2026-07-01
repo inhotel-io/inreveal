@@ -27,7 +27,9 @@ const kyselyIds = async (spaceId: string, requireAlbumNotDeleted = true): Promis
   const rows = await db
     .selectFrom('asset')
     .select('asset.id')
-    .where((eb) => spaceAlbumAssetExists(eb, { correlateAssetId: 'asset.id', scope: { spaceId }, requireAlbumNotDeleted }))
+    .where((eb) =>
+      spaceAlbumAssetExists(eb, { correlateAssetId: 'asset.id', scope: { spaceId }, requireAlbumNotDeleted }),
+    )
     .execute();
   return new Set(rows.map((r) => r.id));
 };
