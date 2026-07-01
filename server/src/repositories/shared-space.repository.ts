@@ -1638,6 +1638,9 @@ export class SharedSpaceRepository {
 
     const albumRow = await this.db
       .selectFrom('shared_space_album')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+      )
       .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
       .select('shared_space_album.addedById')
@@ -2084,6 +2087,9 @@ export class SharedSpaceRepository {
           eb.exists(
             eb
               .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
               .innerJoin('album_asset as other', 'other.albumId', 'shared_space_album.albumId')
               .whereRef('other.assetId', '=', 'album_asset.assetId')
               .where('shared_space_album.spaceId', '=', spaceId)
@@ -2133,6 +2139,9 @@ export class SharedSpaceRepository {
           eb.exists(
             eb
               .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
               .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
               .whereRef('album_asset.assetId', '=', 'asset.id')
               .where('shared_space_album.spaceId', '=', spaceId),
@@ -2471,6 +2480,9 @@ export class SharedSpaceRepository {
           .union(
             this.db
               .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
               .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
               .innerJoin('asset', 'asset.id', 'album_asset.assetId')
               .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
