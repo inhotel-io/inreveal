@@ -239,7 +239,9 @@ class _ExpandedBackgroundState extends ConsumerState<_ExpandedBackground> with S
                     elevation: 3,
                     child: CircleAvatar(
                       maxRadius: 84 / 2,
-                      backgroundImage: RemoteImageProvider(url: getFaceThumbnailUrl(widget.person.id)),
+                      backgroundImage: RemoteImageProvider(
+                        url: getPersonThumbnailUrl(widget.person.id, spaceId: widget.person.spaceId),
+                      ),
                     ),
                   ),
                 ),

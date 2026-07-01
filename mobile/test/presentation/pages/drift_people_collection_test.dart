@@ -9,6 +9,7 @@ import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/presentation/pages/drift_people_collection.page.dart';
+import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/providers/infrastructure/people.provider.dart';
 
 import '../../test_utils.dart';
@@ -153,6 +154,46 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Shared Sam'), findsOneWidget);
+    });
+
+    // A space-only person's id is a shared_space_person id with no row in the owner-only
+    // person table, so its avatar must resolve via the membership-gated space thumbnail
+    // endpoint (not /people/{id}/thumbnail, which 404s), matching the web People page.
+    String? avatarUrl(WidgetTester tester, String personId) {
+      final avatar = tester.widget<CircleAvatar>(
+        find.byWidgetPredicate((w) => w is CircleAvatar && w.key == ValueKey(personId)),
+      );
+      final provider = avatar.backgroundImage;
+      return provider is RemoteImageProvider ? provider.url : null;
+    }
+
+    testWidgets('builds a space person\'s avatar from the space thumbnail endpoint', (tester) async {
+      await tester.pumpConsumerWidget(
+        const DriftPeopleCollectionPage(),
+        overrides: [
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
+            (ref, sortBy) async => [_person('sp', 'Shared Sam', spaceId: 'space-1')],
+          ),
+          driftSpaceEditableProvider.overrideWith((ref, spaceId) async => true),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(avatarUrl(tester, 'sp'), endsWith('/shared-spaces/space-1/people/sp/thumbnail'));
+    });
+
+    testWidgets('builds a personal person\'s avatar from the owner thumbnail endpoint', (tester) async {
+      await tester.pumpConsumerWidget(
+        const DriftPeopleCollectionPage(),
+        overrides: [
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
+            (ref, sortBy) async => [_person('me', 'Personal Pat')],
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(avatarUrl(tester, 'me'), endsWith('/people/me/thumbnail'));
     });
   });
 }
