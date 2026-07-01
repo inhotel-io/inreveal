@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SERVER_ROOT = join(import.meta.dirname, '..', '..');
+const SERVER_ROOT = join(__dirname, '..', '..');
 
 const SCOPING_FILES = [
   'src/repositories/shared-space.repository.ts',
