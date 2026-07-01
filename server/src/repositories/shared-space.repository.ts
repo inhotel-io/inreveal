@@ -16,6 +16,7 @@ import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-perso
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, searchAssetBuilder } from 'src/utils/database';
+import { spaceAlbumAssetExists } from 'src/utils/shared-space-album-scope';
 
 const visibleSpaceAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
 
@@ -1320,17 +1321,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (j) =>
-                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .select('shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset_face.assetId')
-              .whereRef('shared_space_album.spaceId', '=', 'shared_space_person.spaceId'),
-          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .executeTakeFirst();
@@ -1368,17 +1362,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (j) =>
-                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .select('shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset_face.assetId')
-              .whereRef('shared_space_album.spaceId', '=', 'shared_space_person.spaceId'),
-          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .orderBy('asset.fileCreatedAt', 'desc')
@@ -1706,17 +1693,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .where('shared_space_library.spaceId', '=', spaceId),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (j) =>
-                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .select('shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset_face.assetId')
-              .where('shared_space_album.spaceId', '=', spaceId),
-          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceId },
+          }),
         ]),
       )
       .where('person.identityId', 'is not', null)
@@ -1913,17 +1893,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (j) =>
-                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .select('shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset_face.assetId')
-              .whereRef('shared_space_album.spaceId', '=', 'shared_space_person.spaceId'),
-          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .executeTakeFirst();
@@ -1963,17 +1936,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (j) =>
-                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .select('shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset_face.assetId')
-              .whereRef('shared_space_album.spaceId', '=', 'shared_space_person.spaceId'),
-          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .orderBy('asset.fileCreatedAt', 'desc')
