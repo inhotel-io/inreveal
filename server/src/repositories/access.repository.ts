@@ -5,6 +5,7 @@ import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
+import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
 
 class ActivityAccess {
   constructor(private db: Kysely<DB>) {}
@@ -703,33 +704,13 @@ class PersonAccess {
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .where((eb) =>
-              eb.or([
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_asset')
-                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
-                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                    .where('shared_space_member.userId', '=', userId),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_library')
-                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
-                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                    .where('shared_space_member.userId', '=', userId),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_album')
-                    .innerJoin('album', (j) =>
-                      j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-                    )
-                    .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
-                    .whereRef('album_asset.assetId', '=', 'asset.id')
-                    .where('shared_space_member.userId', '=', userId),
-                ),
-              ]),
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { memberUserId: userId },
+                }),
+              ),
             ),
         ),
       )
