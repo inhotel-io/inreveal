@@ -122,16 +122,26 @@ class PersonApiRepository extends ApiRepository {
     final info = await checkNull(_apiService.assetsApi.getAssetInfo(assetId));
     return info.people
         .where((person) => !person.isHidden)
-        .map((person) => _toDriftPerson(person, info.ownerId))
+        .map((person) => _toDriftPerson(person, info.ownerId, info.resolvedSpaceId))
         .toList();
   }
 
-  static DriftPerson _toDriftPerson(PersonWithFacesResponseDto dto, String ownerId) {
+  static DriftPerson _toDriftPerson(PersonWithFacesResponseDto dto, String ownerId, String? resolvedSpaceId) {
     // The asset-info DTO does not carry created/faceAsset fields; the people strip does
     // not render them, so mirror updatedAt and leave the face-asset unset.
     final updatedAt = dto.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    // Face-tap → person detail: for a Space-shared person the asset-info endpoint carries the
+    // space-person id (dto.spacePersonId) separately from the global identity id (dto.id), and
+    // the space id lives on the asset (resolvedSpaceId). Map such a person shape-identical to
+    // the People-page one — id = space-person id, spaceId set — so buildPersonTimelineRouteService
+    // takes the space branch and the detail page loads photos (and the thumbnail routes to the
+    // membership-gated space endpoint), mirroring web. Both ids must be present: the space assets
+    // endpoint needs the (spaceId, space-person id) pair. Personal/owned people keep the global id
+    // and null spaceId (owner-scoped local query + owner thumbnail). See issue #727.
+    final spacePersonId = dto.spacePersonId;
+    final isSpacePerson = spacePersonId != null && resolvedSpaceId != null;
     return DriftPerson(
-      id: dto.id,
+      id: isSpacePerson ? spacePersonId : dto.id,
       createdAt: updatedAt,
       updatedAt: updatedAt,
       ownerId: ownerId,
@@ -140,6 +150,7 @@ class PersonApiRepository extends ApiRepository {
       isHidden: dto.isHidden,
       color: dto.color,
       birthDate: dto.birthDate,
+      spaceId: isSpacePerson ? resolvedSpaceId : null,
     );
   }
 
