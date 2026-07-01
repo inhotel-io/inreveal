@@ -22,13 +22,15 @@ class PersonApiRepository extends ApiRepository {
   /// app (see `AssetService.get`), which keeps mobile at parity with web. See issue #727.
   Future<List<Person>> getAssetPeople(String assetId) async {
     final info = await checkNull(_apiService.assetsApi.getAssetInfo(assetId));
-    return info.people.where((person) => !person.isHidden).map(_toAssetPerson).toList();
+    final people = info.people.orElse(null) ?? const <PersonResponseDto>[];
+    return people.where((person) => !person.isHidden).map(_toAssetPerson).toList();
   }
 
   // The unified Person model carries no owner/created/face-asset/hidden/colour fields, and
   // updatedAt is nullable — so the epoch-0 sentinel the old DriftPerson mapping needed is gone.
-  static Person _toAssetPerson(PersonWithFacesResponseDto dto) =>
-      Person(id: dto.id, name: dto.name, updatedAt: dto.updatedAt, birthDate: dto.birthDate);
+  // v3 openapi wraps optional person fields in Optional<...?> → unwrap with orElse.
+  static Person _toAssetPerson(PersonResponseDto dto) =>
+      Person(id: dto.id, name: dto.name, updatedAt: dto.updatedAt.orElse(null), birthDate: dto.birthDate);
 
 >>>>>>> 904bed7527c (fix(mobile): show faces on Space-shared assets (#727) (#735))
   Future<Person> update(String id, {String? name, DateTime? birthday}) async {
