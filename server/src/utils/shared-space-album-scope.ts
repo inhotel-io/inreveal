@@ -51,6 +51,41 @@ export interface SpaceAlbumAssetOptions {
 }
 
 /**
+ * Spaces a user can access — created OR a member. Relocated here (from
+ * sync.repository.ts) so the whole "accessible*" scoping family lives in one
+ * fork-owned module; sync.repository.ts re-exports it for its existing callers.
+ *
+ * Usage: `.where('shared_space.id', 'in', (eb) => accessibleSpaces(eb, userId))`
+ */
+export function accessibleSpaces(eb: ExpressionBuilder<DB, keyof DB>, userId: string) {
+  return eb
+    .selectFrom('shared_space')
+    .select('shared_space.id')
+    .where('shared_space.createdById', '=', userId)
+    .union(
+      eb
+        .selectFrom('shared_space_member')
+        .select('shared_space_member.spaceId as id')
+        .where('shared_space_member.userId', '=', userId),
+    );
+}
+
+/**
+ * Album ids linked to spaces the user can access, excluding soft-deleted albums
+ * (A1). Relocated from sync.repository.ts; re-exported from there.
+ *
+ * Usage: `.where('album.id', 'in', (eb) => accessibleSpaceAlbums(eb, userId))`
+ */
+export function accessibleSpaceAlbums(eb: ExpressionBuilder<DB, keyof DB>, userId: string) {
+  return eb
+    .selectFrom('shared_space_album')
+    .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+    .select('shared_space_album.albumId as id')
+    .where('album.deletedAt', 'is', null)
+    .where('shared_space_album.spaceId', 'in', (e) => accessibleSpaces(e, userId));
+}
+
+/**
  * The single definition of the linked-album access path, as an `EXISTS (...)`
  * predicate. Negate with `eb.not(spaceAlbumAssetExists(...))` for anti-join /
  * "no other space path" uses.
@@ -87,7 +122,11 @@ export function spaceAlbumAssetExists(
         qb.where('shared_space_album.spaceId', '=', anyUuid((scope as { spaceIds: string[] }).spaceIds)),
       )
       .$if('spaceIdRef' in scope, (qb) =>
-        qb.whereRef('shared_space_album.spaceId', '=', (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef),
+        qb.whereRef(
+          'shared_space_album.spaceId',
+          '=',
+          (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef,
+        ),
       )
       .$if(!!options.requireShowInTimeline, (qb) => qb.where('shared_space_album.showInTimeline', '=', true))
       .$if(!!options.excludeAlbumId, (qb) => qb.where('shared_space_album.albumId', '!=', options.excludeAlbumId!)),
@@ -126,7 +165,11 @@ export function spaceDirectAssetExists(
         qb.where('shared_space_asset.spaceId', '=', anyUuid((scope as { spaceIds: string[] }).spaceIds)),
       )
       .$if('spaceIdRef' in scope, (qb) =>
-        qb.whereRef('shared_space_asset.spaceId', '=', (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef),
+        qb.whereRef(
+          'shared_space_asset.spaceId',
+          '=',
+          (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef,
+        ),
       ),
   );
 }
@@ -154,7 +197,11 @@ export function spaceLibraryAssetExists(
         qb.where('shared_space_library.spaceId', '=', anyUuid((scope as { spaceIds: string[] }).spaceIds)),
       )
       .$if('spaceIdRef' in scope, (qb) =>
-        qb.whereRef('shared_space_library.spaceId', '=', (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef),
+        qb.whereRef(
+          'shared_space_library.spaceId',
+          '=',
+          (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef,
+        ),
       ),
   );
 }

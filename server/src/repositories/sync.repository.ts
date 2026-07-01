@@ -5,6 +5,11 @@ import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { DB } from 'src/schema';
 import { SyncAck } from 'src/types';
+import { accessibleSpaceAlbums, accessibleSpaces } from 'src/utils/shared-space-album-scope';
+
+// Re-export the relocated scoping helpers so existing `sync.repository` importers
+// keep working after the definitions moved to the fork-owned scope module.
+
 
 export type SyncBackfillOptions = {
   nowId: string;
@@ -864,18 +869,8 @@ class AssetOcrSync extends BaseSync {
 // `SharedSpaceService.create`, so iterating via `shared_space_member` for backfill
 // enumeration is sufficient — the OR'd creator path here is for query filtering
 // only and protects against direct DB inserts that bypass the service.
-export function accessibleSpaces(eb: ExpressionBuilder<DB, keyof DB>, userId: string) {
-  return eb
-    .selectFrom('shared_space')
-    .select('shared_space.id')
-    .where('shared_space.createdById', '=', userId)
-    .union(
-      eb
-        .selectFrom('shared_space_member')
-        .select('shared_space_member.spaceId as id')
-        .where('shared_space_member.userId', '=', userId),
-    );
-}
+// `accessibleSpaces` is defined in the fork-owned scope module and re-exported at
+// the bottom of this file (see the re-export near the imports).
 
 const SHARED_SPACE_SYNC_COLUMNS = [
   'shared_space.id',
@@ -1140,20 +1135,9 @@ export class SharedSpaceToAssetSync extends BaseSync {
   }
 }
 
-// `accessibleSpaceAlbums` returns albums linked to spaces the user belongs to,
-// excluding soft-deleted albums. Used by SharedSpaceAlbumToAssetSync.getDeletes
-// and SharedSpaceAlbumAssetSync / SharedSpaceAlbumAssetExifSync for scoping.
-//
-// Usage:
-//   .where('album.id', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-export function accessibleSpaceAlbums(eb: ExpressionBuilder<DB, keyof DB>, userId: string) {
-  return eb
-    .selectFrom('shared_space_album')
-    .innerJoin('album', 'album.id', 'shared_space_album.albumId')
-    .select('shared_space_album.albumId as id')
-    .where('album.deletedAt', 'is', null)
-    .where('shared_space_album.spaceId', 'in', (e) => accessibleSpaces(e, userId));
-}
+// `accessibleSpaceAlbums` (album-id scope) and `accessibleSpaces` (space-id scope)
+// now live in the fork-owned scope module and are re-exported here for the sync
+// classes below and any other existing importers. See src/utils/shared-space-album-scope.ts.
 
 // `accessibleLibraries` is the source-of-truth scoping subquery used by every
 // library sync class. A user can access a library via direct ownership OR via
@@ -1653,3 +1637,5 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
       .stream();
   }
 }
+
+export {accessibleSpaceAlbums, accessibleSpaces} from 'src/utils/shared-space-album-scope';
