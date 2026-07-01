@@ -140,6 +140,10 @@
   <div
     class={[
       'grid items-center gap-3 border-b border-gray-200 px-4 py-3 text-sm transition-colors last:border-b-0 dark:border-gray-700',
+      // content-visibility:auto lets the browser skip layout/paint of off-screen rows (native row virtualization,
+      // no JS) so hundreds/thousands of flagged persons don't all paint on mount (B3); the intrinsic-size hint
+      // keeps the scrollbar stable. Find-in-page and selection still work because the DOM nodes remain present.
+      '[content-visibility:auto] [contain-intrinsic-size:auto_4rem]',
       isSelected ? 'bg-primary-50 dark:bg-primary-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
     ].join(' ')}
     style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 10rem"
@@ -160,6 +164,7 @@
       <img
         src={thumbUrl(person.personId)}
         alt=""
+        loading="lazy"
         class="size-10 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
       />
       <div class="min-w-0">
@@ -210,6 +215,7 @@
         <img
           src={thumbUrl(primaryOwner.ownerPersonId)}
           alt=""
+          loading="lazy"
           class="size-6 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
         />
         <div class="min-w-0">

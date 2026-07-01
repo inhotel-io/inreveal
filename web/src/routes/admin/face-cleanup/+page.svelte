@@ -66,7 +66,7 @@
   let scanning = $state(false);
   let applying = $state(false);
   let applyError = $state<string | null>(null);
-  let pollTimer = $state<ReturnType<typeof setInterval> | null>(null);
+  let pollTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
   // Filter / search state
   let filter = $state<'all' | 'review-first' | 'confident' | 'named'>('all');
@@ -126,28 +126,37 @@
     }
   };
 
-  const pollOnce = () => {
-    fetchLatestScan()
-      .then(() => {
+  const POLL_MIN_MS = 2000;
+  const POLL_MAX_MS = 15_000;
+  let pollDelay = POLL_MIN_MS;
+
+  // Self-rescheduling poll with capped backoff (N3): a fixed 2s interval fired hundreds of near-identical status
+  // requests across a long scan. Each successful poll grows the delay toward POLL_MAX_MS; it stops as soon as the
+  // scan is no longer active. fetchLatestScan swallows its own transient errors, so polling keeps going on a blip.
+  const scheduleNextPoll = () => {
+    pollTimer = setTimeout(() => {
+      void fetchLatestScan().then(() => {
         if (scan && !isActive(scan.status)) {
           stopPolling();
+          return;
         }
-      })
-      .catch(() => {
-        // ignore poll errors
+        pollDelay = Math.min(Math.round(pollDelay * 1.5), POLL_MAX_MS);
+        scheduleNextPoll();
       });
+    }, pollDelay);
   };
 
   const startPolling = () => {
     if (pollTimer) {
       return;
     }
-    pollTimer = setInterval(pollOnce, 2000);
+    pollDelay = POLL_MIN_MS;
+    scheduleNextPoll();
   };
 
   const stopPolling = () => {
     if (pollTimer) {
-      clearInterval(pollTimer);
+      clearTimeout(pollTimer);
       pollTimer = null;
     }
   };

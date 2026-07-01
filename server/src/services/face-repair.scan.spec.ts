@@ -5,12 +5,10 @@ import { EligibleFaceRow } from 'src/repositories/face-repair.repository';
 import { FaceRepairService, RepairPlan } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
 
-/** Sync generator cast to AsyncIterableIterator for the progress test mock. */
-function singleFaceStream(): AsyncIterableIterator<EligibleFaceRow> {
-  return (function* () {
-    yield { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' };
-  })() as unknown as AsyncIterableIterator<EligibleFaceRow>;
-}
+/** A single eligible-face page for the progress test mock (keyset scan reads pages, not a cursor). */
+const singleFacePage = (): EligibleFaceRow[] => [
+  { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' },
+];
 
 /** A minimal RepairPlan with one flagged person P → suspected owner Q */
 const makePlan = (): RepairPlan => ({
@@ -99,7 +97,8 @@ describe(FaceRepairService.name, () => {
 
     it('reports progress at least once during the stream', async () => {
       // Let buildRepairPlan run for real — mock its underlying repos so one candidate flows through.
-      mocks.faceRepair.streamEligibleFaces.mockReturnValue(singleFaceStream());
+      // A single-face page (< SCAN_PAGE_SIZE) ends the keyset scan after one page.
+      mocks.faceRepair.getEligibleFacePage.mockResolvedValue(singleFacePage());
       mocks.search.searchFaces.mockResolvedValue([]);
 
       await sut.runScan('scan-1');
