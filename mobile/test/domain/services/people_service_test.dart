@@ -56,5 +56,15 @@ void main() {
       verify(() => mockRepository.getAssetPeople('own-asset')).called(1);
       verifyNever(() => mockApiRepository.getAssetPeople(any()));
     });
+
+    // The supplementary people strip is best-effort for non-owned assets: a network/server
+    // failure must silently hide it (empty list) rather than surface a visible error.
+    test('returns no people when the server fetch fails for a non-owned asset', () async {
+      when(() => mockApiRepository.getAssetPeople(any())).thenThrow(Exception('network down'));
+
+      final result = await sut.getAssetPeople('shared-asset', ownedByCurrentUser: false);
+
+      expect(result, isEmpty);
+    });
   });
 }

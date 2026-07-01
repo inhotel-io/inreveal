@@ -33,7 +33,7 @@ class PersonApiRepository extends ApiRepository {
   static DriftPerson _toDriftPerson(PersonWithFacesResponseDto dto, String ownerId) {
     // The asset-info DTO does not carry created/faceAsset fields; the people strip does
     // not render them, so mirror updatedAt and leave the face-asset unset.
-    final updatedAt = dto.updatedAt ?? DateTime.now();
+    final updatedAt = dto.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
     return DriftPerson(
       id: dto.id,
       createdAt: updatedAt,
