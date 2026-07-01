@@ -16,7 +16,7 @@
 // touches it; each upstream call site shrinks to a single, stable helper call.
 //
 // See docs / data/sa-abstraction-spec-t8/report.md for the full design + slices.
-import { Expression, ExpressionBuilder, ReferenceExpression, SqlBool } from 'kysely';
+import { Expression, ExpressionBuilder, RawBuilder, ReferenceExpression, sql, SqlBool } from 'kysely';
 import { DB } from 'src/schema';
 import { anyUuid, asUuid } from 'src/utils/database';
 
@@ -179,4 +179,43 @@ export function spaceAssetPathBranches(
       requireShowInTimeline: options.requireShowInTimeline,
     }),
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Raw-SQL family — for the sites that author queries with `sql``` tagged
+// templates (face-identity.repository.ts, shared-space.repository.ts stats).
+// These emit the SAME album path as the Kysely helpers above; the equivalence is
+// pinned by test/medium/specs/utils/shared-space-album-scope-sql.medium.spec.ts.
+// ---------------------------------------------------------------------------
+
+export interface SpaceAlbumAssetSqlOptions {
+  /** Raw fragment for the outer asset id, e.g. sql`asset.id`. */
+  assetIdColumn: RawBuilder<unknown>;
+  /**
+   * Raw JOIN fragment that scopes `shared_space_album.spaceId` to the target
+   * space(s), placed directly after `FROM shared_space_album`, e.g.
+   * sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`.
+   */
+  spaceScopeJoin: RawBuilder<unknown>;
+  /** A1 invariant: require `album.deletedAt IS NULL`. Default true. */
+  requireAlbumNotDeleted?: boolean;
+}
+
+/**
+ * Raw-SQL analogue of `spaceAlbumAssetExists` — an `EXISTS (...)` fragment over
+ * the linked-album access path, for interpolation into `sql``` queries.
+ */
+export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): RawBuilder<SqlBool> {
+  const albumJoin =
+    (options.requireAlbumNotDeleted ?? true)
+      ? sql`INNER JOIN album ON album.id = shared_space_album."albumId" AND album."deletedAt" IS NULL`
+      : sql``;
+  return sql<SqlBool>`EXISTS (
+              SELECT 1
+              FROM shared_space_album
+              ${options.spaceScopeJoin}
+              ${albumJoin}
+              INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+              WHERE album_asset."assetId" = ${options.assetIdColumn}
+            )`;
 }
