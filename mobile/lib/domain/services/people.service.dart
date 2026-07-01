@@ -14,7 +14,7 @@ class DriftPeopleService {
     return _repository.get(personId);
   }
 
-  Future<List<DriftPerson>> getAssetPeople(String assetId) {
+  Future<List<DriftPerson>> getAssetPeople(String assetId, {required bool ownedByCurrentUser}) {
     return _repository.getAssetPeople(assetId);
   }
 

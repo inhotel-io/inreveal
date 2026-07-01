@@ -26,7 +26,7 @@ class PeopleDetails extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final peopleFuture = ref.watch(driftPeopleAssetProvider(asset.id));
+    final peopleFuture = ref.watch(driftPeopleAssetProvider(asset));
 
     Future<void> showNameEditModal(DriftPerson person) async {
       await showDialog(
@@ -37,7 +37,7 @@ class PeopleDetails extends ConsumerWidget {
         },
       );
 
-      ref.invalidate(driftPeopleAssetProvider(asset.id));
+      ref.invalidate(driftPeopleAssetProvider(asset));
     }
 
     return peopleFuture.when(
