@@ -4004,8 +4004,8 @@ describe(FaceIdentityRepository.name, () => {
     // Issue #733: cross-library / cross-owner merge. The actor sees the person via their own profile
     // and a shared space they can repair, but the identity also carries another user's personal
     // `person` (from that user's external library). resolveRepairRefs must surface that owner so the
-    // service can gate the merge (admin-only) and notify the owner; the merge, once authorized,
-    // rewrites the other owner's `person.identityId` onto the target.
+    // service can gate the merge (permitted only when the instance toggle is on, then confirmed); the
+    // merge, once authorized, rewrites the other owner's `person.identityId` onto the target.
     it('surfaces the other owner and rewrites their profile for a cross-library merge', async () => {
       const { ctx, sut } = setup();
       const { user: actorA } = await ctx.newUser();

@@ -317,7 +317,7 @@
         createCrossOwnerMergeHandlers(),
       );
       if (!committed) {
-        // Cross-owner merge was blocked or the admin declined the confirmation — nothing merged.
+        // Cross-owner merge was blocked or the user declined the confirmation — nothing merged.
         return;
       }
     }

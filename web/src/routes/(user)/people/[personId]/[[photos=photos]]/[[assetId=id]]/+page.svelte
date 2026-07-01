@@ -207,7 +207,7 @@
   // Runs a scoped merge, transparently handling the cross-owner boundary (issue #733):
   // - a descriptive `blocked` error is shown as a clean toast (never the raw server string);
   // - a `confirmationRequired` response prompts a strong confirmation, then re-runs with the
-  //   admin acknowledgement so the server commits the cross-owner merge.
+  //   acknowledgement so the server commits the cross-owner merge.
   // Returns the number of merged people, or `undefined` when nothing was merged (blocked/declined).
   const mergeScopedPeopleWithCrossOwnerConfirmation = async (
     targetPerson: PersonResponseDto,
@@ -236,7 +236,7 @@
     if (usesScopedRepair) {
       mergedCount = await mergeScopedPeopleWithCrossOwnerConfirmation(targetPerson, sourcePeople);
       if (mergedCount === undefined) {
-        // Cross-owner merge was blocked or the admin declined the confirmation — nothing merged.
+        // Cross-owner merge was blocked or the user declined the confirmation — nothing merged.
         return;
       }
     } else {
