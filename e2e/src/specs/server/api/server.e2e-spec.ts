@@ -91,12 +91,15 @@ describe('/server', () => {
     it('should respond with the server version', async () => {
       const { status, body } = await request(app).get('/server/version');
       expect(status).toBe(200);
-      expect(body).toEqual({
-        major: expect.any(Number),
-        minor: expect.any(Number),
-        patch: expect.any(Number),
-        prerelease: expect.anything(),
-      });
+      expect(body.major).toEqual(expect.any(Number));
+      expect(body.minor).toEqual(expect.any(Number));
+      expect(body.patch).toEqual(expect.any(Number));
+      // Fork adaptation: the fork builds on GA-tagged upstream (v3.0.0) and tagged fork
+      // releases, both of which have no prerelease, so the server legitimately returns
+      // prerelease: null (see server/src/services/version.service.spec.ts). Upstream's
+      // `prerelease: expect.anything()` rejects that null because upstream only ever
+      // e2e-builds dev versions. Accept null or a numeric prerelease.
+      expect(body.prerelease === null || typeof body.prerelease === 'number').toBe(true);
     });
   });
 
