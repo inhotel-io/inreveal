@@ -12,6 +12,10 @@ vi.mock('@immich/sdk', () => ({
 
 const httpError = (status: number, data: Record<string, unknown>) => ({ __http: true, status, data, message: 'raw' });
 
+// Void endpoints (e.g. /people/same-person) return the body unparsed, so `data` is a raw string.
+const httpErrorRaw = (status: number, data: Record<string, unknown>) =>
+  httpError(status, JSON.stringify(data) as unknown as Record<string, unknown>);
+
 const dto = {
   target: { type: 'person', id: 'target' },
   sources: [{ type: 'space-person', id: 'source', spaceId: 'space-1' }],
@@ -22,6 +26,18 @@ describe('getCrossOwnerMergeErrorCode', () => {
     expect(getCrossOwnerMergeErrorCode(httpError(403, { code: 'cross_owner_merge_blocked' }))).toBe(
       CrossOwnerMergeErrorCode.Blocked,
     );
+  });
+
+  it('reads the code from a raw (unparsed) string body', () => {
+    expect(getCrossOwnerMergeErrorCode(httpErrorRaw(403, { code: 'cross_owner_merge_blocked' }))).toBe(
+      CrossOwnerMergeErrorCode.Blocked,
+    );
+  });
+
+  it('returns undefined for a non-json string body', () => {
+    expect(
+      getCrossOwnerMergeErrorCode(httpError(500, 'Internal Server Error' as unknown as Record<string, unknown>)),
+    ).toBeUndefined();
   });
 
   it('returns undefined for non-http errors', () => {
@@ -61,6 +77,40 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
     expect(confirmCrossOwner).not.toHaveBeenCalled();
     expect(mergeScopedPeople).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onBlocked (not a rethrow) when the blocked code arrives in a raw string body', async () => {
+    vi.mocked(mergeScopedPeople).mockRejectedValueOnce(
+      httpErrorRaw(403, { code: CrossOwnerMergeErrorCode.Blocked, message: 'An administrator can enable it.' }),
+    );
+    const confirmCrossOwner = vi.fn();
+    const onBlocked = vi.fn();
+
+    const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(false);
+    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(confirmCrossOwner).not.toHaveBeenCalled();
+    expect(mergeScopedPeople).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the confirm dialog and re-runs with the acknowledgement when the code arrives in a raw string body', async () => {
+    vi.mocked(mergeScopedPeople)
+      .mockRejectedValueOnce(
+        httpErrorRaw(409, { code: CrossOwnerMergeErrorCode.ConfirmationRequired, impactedOwnerCount: 2 }),
+      )
+      .mockResolvedValueOnce(undefined as never);
+    const confirmCrossOwner = vi.fn().mockResolvedValue(true);
+    const onBlocked = vi.fn();
+
+    const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(true);
+    expect(confirmCrossOwner).toHaveBeenCalledTimes(1);
+    expect(mergeScopedPeople).toHaveBeenCalledTimes(2);
+    expect(mergeScopedPeople).toHaveBeenLastCalledWith({
+      mergeScopedPeopleDto: { ...dto, confirmCrossOwner: true },
+    });
   });
 
   it('re-runs with the cross-owner acknowledgement once the admin confirms', async () => {

@@ -17,8 +17,23 @@ export const CrossOwnerMergeErrorCode = {
 } as const;
 
 /** Read the machine-readable cross-owner merge error code from a thrown SDK error, if present. */
-export const getCrossOwnerMergeErrorCode = (error: unknown): string | undefined =>
-  isHttpError(error) ? (error.data as { code?: string } | undefined)?.code : undefined;
+export const getCrossOwnerMergeErrorCode = (error: unknown): string | undefined => {
+  if (!isHttpError(error)) {
+    return undefined;
+  }
+
+  // errors for endpoints without return types (e.g. /people/same-person) aren't parsed as json
+  let data = error.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      // Not a JSON string
+    }
+  }
+
+  return (data as { code?: string } | undefined)?.code;
+};
 
 export interface CrossOwnerMergeHandlers {
   /** Ask the admin to confirm a cross-owner merge. Resolves true to proceed. */

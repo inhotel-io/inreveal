@@ -279,9 +279,9 @@ export class PersonService extends BaseService {
   }
 
   /**
-   * Notify every other owner whose people/faces were modified by an admin cross-owner merge. The
-   * owner set is a superset of the involved identities' non-actor `person` owners, so it also covers
-   * any owner whose profile is dropped or relabelled by conflict handling.
+   * Notify the other owners whose people/faces were modified by an admin cross-owner merge. This set
+   * is exactly the involved identities' non-actor personal `person` owners; shared-space members
+   * whose grouping the merge regroups are not `person` owners and are not notified here.
    */
   private async notifyCrossOwnerMergeOwners(impactedOwnerIds: string[]): Promise<void> {
     // Best-effort: the merge has already committed, so a failed notification must not fail the
