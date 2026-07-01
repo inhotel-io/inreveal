@@ -5,14 +5,33 @@ import 'package:immich_mobile/infrastructure/repositories/people.repository.dart
 import 'package:immich_mobile/providers/infrastructure/db.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/repositories/person_api.repository.dart';
+import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 
 final driftPeopleRepositoryProvider = Provider<DriftPeopleRepository>(
   (ref) => DriftPeopleRepository(ref.watch(driftProvider)),
 );
 
 final driftPeopleServiceProvider = Provider<DriftPeopleService>(
-  (ref) => DriftPeopleService(ref.watch(driftPeopleRepositoryProvider), ref.watch(personApiRepositoryProvider)),
+  (ref) => DriftPeopleService(
+    ref.watch(driftPeopleRepositoryProvider),
+    ref.watch(personApiRepositoryProvider),
+    ref.watch(sharedSpaceApiRepositoryProvider),
+  ),
 );
+
+/// Whether the viewer may edit Space-scoped people in [spaceId] (owner or editor role),
+/// mirroring the web People page (isSpaceEditor). Cached per space for the container lifetime
+/// and re-resolved on login change; defaults to editable until resolved and fails open, since
+/// the server enforces the role on every write. Personal/owned people (null spaceId) never
+/// consult this — they are always editable by their owner.
+final driftSpaceEditableProvider = FutureProvider.family<bool, String>((ref, spaceId) async {
+  final userId = ref.watch(currentUserProvider.select((user) => user?.id));
+  if (userId == null) {
+    return true;
+  }
+  final repository = ref.watch(sharedSpaceApiRepositoryProvider);
+  return repository.isSpaceEditor(spaceId, userId);
+});
 
 final driftPeopleAssetProvider = FutureProvider.family<List<DriftPerson>, ({String id, String ownerId})>((
   ref,

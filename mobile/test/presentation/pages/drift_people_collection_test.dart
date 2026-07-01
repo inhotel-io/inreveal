@@ -14,7 +14,7 @@ import 'package:immich_mobile/providers/infrastructure/people.provider.dart';
 import '../../test_utils.dart';
 import '../../widget_tester_extensions.dart';
 
-DriftPerson _person(String id, String name) => DriftPerson(
+DriftPerson _person(String id, String name, {String? spaceId}) => DriftPerson(
   id: id,
   createdAt: DateTime(2024, 1, 1),
   updatedAt: DateTime(2024, 1, 1),
@@ -23,6 +23,7 @@ DriftPerson _person(String id, String name) => DriftPerson(
   isFavorite: false,
   isHidden: false,
   color: null,
+  spaceId: spaceId,
 );
 
 void main() {
@@ -103,6 +104,55 @@ void main() {
       expect(find.byKey(const ValueKey('bo')), findsNothing);
       expect(find.byKey(const ValueKey('zo')), findsWidgets);
       expect(isBefore(tester, 'zo', 'al'), isTrue);
+    });
+
+    // The page lists non-owned shared-space people; the rename affordance must be gated to
+    // owner-or-space-editor exactly like the web People page (issue #727 sibling). A personal
+    // person (null spaceId) and a space person the viewer can edit both show "add a name" for
+    // an empty name; a viewer-only space person shows a read-only name and no add-a-name.
+    testWidgets('shows the add-a-name affordance for an editable space person', (tester) async {
+      await tester.pumpConsumerWidget(
+        const DriftPeopleCollectionPage(),
+        overrides: [
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
+            (ref, sortBy) async => [_person('sp', '', spaceId: 'space-1')],
+          ),
+          driftSpaceEditableProvider.overrideWith((ref, spaceId) async => true),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('add_a_name'), findsOneWidget);
+    });
+
+    testWidgets('hides the add-a-name affordance for a viewer-only space person', (tester) async {
+      await tester.pumpConsumerWidget(
+        const DriftPeopleCollectionPage(),
+        overrides: [
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
+            (ref, sortBy) async => [_person('sp', '', spaceId: 'space-1')],
+          ),
+          driftSpaceEditableProvider.overrideWith((ref, spaceId) async => false),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('add_a_name'), findsNothing);
+    });
+
+    testWidgets('still renders a viewer-only space person\'s name read-only', (tester) async {
+      await tester.pumpConsumerWidget(
+        const DriftPeopleCollectionPage(),
+        overrides: [
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
+            (ref, sortBy) async => [_person('sp', 'Shared Sam', spaceId: 'space-1')],
+          ),
+          driftSpaceEditableProvider.overrideWith((ref, spaceId) async => false),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Shared Sam'), findsOneWidget);
     });
   });
 }

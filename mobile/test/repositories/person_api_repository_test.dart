@@ -20,6 +20,7 @@ void main() {
     bool isFavorite = false,
     int numberOfAssets = 0,
     bool isHidden = false,
+    api.ScopedPrimaryProfile? primaryProfile,
   }) => api.PersonResponseDto(
     id: id,
     name: name,
@@ -28,6 +29,7 @@ void main() {
     isFavorite: isFavorite,
     numberOfAssets: numberOfAssets,
     birthDate: null,
+    primaryProfile: primaryProfile,
   );
 
   api.PeopleResponseDto peopleResponse(List<api.PersonResponseDto> people, {bool hasNextPage = false}) =>
@@ -129,6 +131,56 @@ void main() {
       stubGetAllPeople(() async => null);
 
       expect(() => repository.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.name), throwsA(isA<Exception>()));
+    });
+
+    // Space-scoped people must carry their spaceId so edits route to the editor-gated
+    // shared-space endpoint and the page can gate the edit affordance, mirroring web
+    // (getSpaceProfile / isSpacePrimary). Personal/owned people stay null (always editable).
+    test('carries spaceId from a space-person primaryProfile', () async {
+      stubGetAllPeople(
+        () async => peopleResponse([
+          personDto(
+            'space-person',
+            name: 'Alice',
+            primaryProfile: api.ScopedPrimaryProfile(
+              id: 'profile-1',
+              spaceId: 'space-1',
+              type: api.ScopedPrimaryProfileTypeEnum.spacePerson,
+            ),
+          ),
+        ]),
+      );
+
+      final result = await repository.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.name);
+
+      expect(result.single.spaceId, 'space-1');
+    });
+
+    test('leaves spaceId null for a user-person primaryProfile', () async {
+      stubGetAllPeople(
+        () async => peopleResponse([
+          personDto(
+            'user-person',
+            name: 'Bob',
+            primaryProfile: api.ScopedPrimaryProfile(
+              id: 'profile-2',
+              type: api.ScopedPrimaryProfileTypeEnum.userPerson,
+            ),
+          ),
+        ]),
+      );
+
+      final result = await repository.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.name);
+
+      expect(result.single.spaceId, isNull);
+    });
+
+    test('leaves spaceId null when there is no primaryProfile', () async {
+      stubGetAllPeople(() async => peopleResponse([personDto('plain', name: 'Carol')]));
+
+      final result = await repository.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.name);
+
+      expect(result.single.spaceId, isNull);
     });
   });
 }

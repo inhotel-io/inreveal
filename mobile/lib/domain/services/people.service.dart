@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/infrastructure/repositories/people.repository.dart';
 import 'package:immich_mobile/repositories/person_api.repository.dart';
+import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:logging/logging.dart';
 
 class DriftPeopleService {
   final DriftPeopleRepository _repository;
   final PersonApiRepository _personApiRepository;
+  final SharedSpaceApiRepository _sharedSpaceApiRepository;
   final _log = Logger("DriftPeopleService");
 
-  DriftPeopleService(this._repository, this._personApiRepository);
+  DriftPeopleService(this._repository, this._personApiRepository, this._sharedSpaceApiRepository);
 
   Future<DriftPerson?> get(String personId) {
     return _repository.get(personId);
@@ -57,13 +59,28 @@ class DriftPeopleService {
     }
   }
 
-  Future<int> updateName(String personId, String name) async {
-    await _personApiRepository.update(personId, name: name);
-    return _repository.updateName(personId, name);
+  /// Renames [person], routing on its profile exactly like the web People page:
+  /// a Space-scoped person (spaceId != null) goes to the editor-gated shared-space endpoint
+  /// with no local write (no local row exists for it); a personal/owned person goes to the
+  /// owner-only person endpoint and its local Drift row is updated. Returns a non-zero value
+  /// on success so callers can treat both paths uniformly.
+  Future<int> updateName(DriftPerson person, String name) async {
+    final spaceId = person.spaceId;
+    if (spaceId != null) {
+      await _sharedSpaceApiRepository.updateSpacePerson(spaceId, person.id, name: name);
+      return 1;
+    }
+    await _personApiRepository.update(person.id, name: name);
+    return _repository.updateName(person.id, name);
   }
 
-  Future<int> updateBrithday(String personId, DateTime birthday) async {
-    await _personApiRepository.update(personId, birthday: birthday);
-    return _repository.updateBirthday(personId, birthday);
+  Future<int> updateBrithday(DriftPerson person, DateTime birthday) async {
+    final spaceId = person.spaceId;
+    if (spaceId != null) {
+      await _sharedSpaceApiRepository.updateSpacePerson(spaceId, person.id, birthday: birthday);
+      return 1;
+    }
+    await _personApiRepository.update(person.id, birthday: birthday);
+    return _repository.updateBirthday(person.id, birthday);
   }
 }

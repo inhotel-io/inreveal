@@ -93,6 +93,11 @@ class PersonApiRepository extends ApiRepository {
     // needs id/name/thumbnail (edits are sent to the server by id), so mirror updatedAt and
     // leave ownerId unset for these server-resolved (possibly non-owned) people.
     final updatedAt = dto.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    // Carry the Space scope so edits route to the editor-gated shared-space endpoint (not the
+    // owner-only person endpoint) and so the page can gate the edit affordance, mirroring web
+    // (person.service.ts getSpaceProfile / people/+page.svelte isSpacePrimary).
+    final profile = dto.primaryProfile;
+    final spaceId = profile?.type == ScopedPrimaryProfileTypeEnum.spacePerson ? profile?.spaceId : null;
     return DriftPerson(
       id: dto.id,
       createdAt: updatedAt,
@@ -103,6 +108,7 @@ class PersonApiRepository extends ApiRepository {
       isHidden: dto.isHidden,
       color: dto.color,
       birthDate: dto.birthDate,
+      spaceId: spaceId,
     );
   }
 

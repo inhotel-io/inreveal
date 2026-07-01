@@ -30,7 +30,7 @@ class _DriftPersonNameEditFormState extends ConsumerState<DriftPersonBirthdayEdi
 
   void saveBirthday() async {
     try {
-      final result = await ref.read(driftPeopleServiceProvider).updateBrithday(widget.person.id, _selectedDate);
+      final result = await ref.read(driftPeopleServiceProvider).updateBrithday(widget.person, _selectedDate);
 
       if (result != 0) {
         ref.invalidate(driftGetAllPeopleProvider);

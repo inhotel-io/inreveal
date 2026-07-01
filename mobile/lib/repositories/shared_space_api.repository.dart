@@ -41,6 +41,37 @@ class SharedSpaceApiRepository extends ApiRepository {
     return response;
   }
 
+  /// Whether [userId] may edit Space-scoped people in [spaceId] (owner or editor role).
+  /// Mirrors the web resolveSpaceEditable (person.service.ts): the server enforces the role
+  /// on every write, so a membership-lookup failure fails open (returns true) rather than
+  /// hiding a working action. `getMembers` only requires membership, so viewers can call it.
+  Future<bool> isSpaceEditor(String spaceId, String userId) async {
+    try {
+      final members = await getMembers(spaceId);
+      for (final member in members) {
+        if (member.userId == userId) {
+          return member.role == SharedSpaceRole.owner || member.role == SharedSpaceRole.editor;
+        }
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Edits a Space-scoped person via the editor-gated shared-space endpoint. Personal/owned
+  /// people must NOT use this — they go through the owner-only [PersonApiRepository.update].
+  Future<SharedSpacePersonResponseDto> updateSpacePerson(
+    String spaceId,
+    String personId, {
+    String? name,
+    DateTime? birthday,
+  }) async {
+    final birthdayUtc = birthday == null ? null : DateTime.utc(birthday.year, birthday.month, birthday.day);
+    final dto = SharedSpacePersonUpdateDto(name: name, birthDate: birthdayUtc);
+    return await checkNull(_api.updateSpacePerson(spaceId, personId, dto));
+  }
+
   Future<SharedSpaceMemberResponseDto> addMember(
     String spaceId,
     String userId, {
