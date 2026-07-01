@@ -4042,7 +4042,7 @@ describe(FaceIdentityRepository.name, () => {
         sources: [{ type: 'space-person', id: spacePersonIZ.id, spaceId: space.id }],
       });
 
-      // Not repairable by the actor, but the other owner is surfaced for gating + notification.
+      // Not repairable by the actor, but the other owner is surfaced so the cross-owner merge can be gated.
       expect(resolved).toEqual(
         expect.objectContaining({
           accessible: true,
@@ -4052,7 +4052,7 @@ describe(FaceIdentityRepository.name, () => {
         }),
       );
 
-      // The admin-approved merge rewrites B's person onto the target identity.
+      // The confirmed cross-owner merge rewrites B's person onto the target identity.
       await sut.mergeIdentities({
         targetIdentityId: identityIX.id,
         sourceIdentityIds: [identityIZ.id],

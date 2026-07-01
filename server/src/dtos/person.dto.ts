@@ -73,7 +73,7 @@ const MergeScopedPeopleSchema = z
       .boolean()
       .optional()
       .describe(
-        'Admin acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge.',
+        'Acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge.',
       ),
   })
   .meta({ id: 'MergeScopedPeopleDto' });

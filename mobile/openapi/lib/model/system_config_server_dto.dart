@@ -25,7 +25,7 @@ class SystemConfigServerDto {
   /// Login page message
   String loginPageMessage;
 
-  /// Allow administrators to merge people/faces across different owners and libraries
+  /// Allow merging people/faces across different owners and external libraries
   bool mergePeopleAcrossOwners;
 
   /// Public users

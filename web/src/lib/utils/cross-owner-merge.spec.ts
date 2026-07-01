@@ -113,7 +113,7 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     });
   });
 
-  it('re-runs with the cross-owner acknowledgement once the admin confirms', async () => {
+  it('re-runs with the cross-owner acknowledgement once the user confirms', async () => {
     vi.mocked(mergeScopedPeople)
       .mockRejectedValueOnce(
         httpError(409, { code: CrossOwnerMergeErrorCode.ConfirmationRequired, impactedOwnerCount: 2 }),
@@ -132,7 +132,7 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     });
   });
 
-  it('does not merge when the admin declines the confirmation', async () => {
+  it('does not merge when the user declines the confirmation', async () => {
     vi.mocked(mergeScopedPeople).mockRejectedValueOnce(
       httpError(409, { code: CrossOwnerMergeErrorCode.ConfirmationRequired, impactedOwnerCount: 1 }),
     );

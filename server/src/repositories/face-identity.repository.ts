@@ -181,7 +181,7 @@ export type RepairRefsResolution =
       /**
        * Distinct owners of `person` profiles attached to the involved identities that are NOT the
        * acting user. These are the users whose private people/faces a cross-owner merge would
-       * modify — used to gate admin cross-owner merges and to notify each affected owner.
+       * modify — used to gate cross-owner merges (permitted only when the instance toggle is on).
        */
       impactedOwnerIds: string[];
     };
@@ -1236,8 +1236,8 @@ export class FaceIdentityRepository {
 
   /**
    * Owners (other than the actor) of `person` profiles attached to the involved identities. A
-   * cross-owner merge rewrites these owners' `person.identityId` and re-links their faces, so this
-   * set both gates admin cross-owner merges and identifies who to notify afterwards.
+   * cross-owner merge rewrites these owners' `person.identityId` and re-links their faces, so a
+   * non-empty set is what gates the (instance-toggle-permitted) cross-owner merge.
    */
   private async getInaccessibleAttachedOwnerIds(actorUserId: string, identityIds: string[]): Promise<string[]> {
     if (identityIds.length === 0) {

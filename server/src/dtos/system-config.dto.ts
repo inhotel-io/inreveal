@@ -342,7 +342,7 @@ const SystemConfigServerSchema = z
     loginPageMessage: z.string().describe('Login page message'),
     publicUsers: configBool.describe('Public users'),
     mergePeopleAcrossOwners: configBool.describe(
-      'Allow administrators to merge people/faces across different owners and libraries',
+      'Allow merging people/faces across different owners and external libraries',
     ),
   })
   .meta({ id: 'SystemConfigServerDto' });

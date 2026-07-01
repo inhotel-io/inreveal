@@ -272,10 +272,10 @@ This separation ensures that members' personal libraries remain private while al
 
 Occasionally the same real person is split across more than one owner — for example a space person assembled from several members' photos, or a person tied to a [connected external library](#connected-libraries-admin). Merging those entries crosses an owner boundary, so it modifies people and faces owned by other users and may not be cleanly reversible.
 
-Cross-owner merges are **blocked by default**:
+Cross-owner merges are **off by default** and gated by an instance-wide setting:
 
-- Regular members can never perform them — the merge stops with a message explaining that the person also appears in another user's library.
-- A server admin can allow them by enabling **Cross-Owner People Merges** in [Server Settings](/administration/system-settings#cross-owner-people-merges). Even then, the admin is asked to confirm before the merge commits, and every affected owner is notified afterward that their people may now be grouped differently.
+- **When the setting is off**, cross-owner merges are blocked for everyone — the merge stops with a message explaining that the person also appears in another user's library.
+- **A server admin enables the feature** by turning on **Cross-Owner People Merges** in [Server Settings](/administration/system-settings#cross-owner-people-merges). Once enabled, it becomes a normal action for any user with merge access; the user is asked to confirm before the merge commits, since it changes other users' people.
 
 Merges that stay within a single owner (the usual Editor merge above) are unaffected.
 

@@ -10,9 +10,9 @@ import { get } from 'svelte/store';
  * boundary (issue #733). Mirrors `CROSS_OWNER_MERGE_ERROR_CODE` in the server's person service.
  */
 export const CrossOwnerMergeErrorCode = {
-  /** The merge is not permitted (non-admin, or admin with the instance toggle off). */
+  /** The merge is not permitted because the instance toggle is off. */
   Blocked: 'cross_owner_merge_blocked',
-  /** Admin with the toggle on: the merge is permitted but must be explicitly confirmed first. */
+  /** The instance toggle is on: the merge is permitted but must be explicitly confirmed first. */
   ConfirmationRequired: 'cross_owner_merge_confirmation_required',
 } as const;
 
@@ -36,7 +36,7 @@ export const getCrossOwnerMergeErrorCode = (error: unknown): string | undefined 
 };
 
 export interface CrossOwnerMergeHandlers {
-  /** Ask the admin to confirm a cross-owner merge. Resolves true to proceed. */
+  /** Ask the user to confirm a cross-owner merge. Resolves true to proceed. */
   confirmCrossOwner: () => Promise<boolean>;
   /** Surface the server's descriptive "blocked" message (never the raw truncated string). */
   onBlocked: (message: string | undefined) => void;
@@ -65,13 +65,12 @@ export const createCrossOwnerMergeHandlers = (): CrossOwnerMergeHandlers => ({
 });
 
 /**
- * Run a scoped people-merge, transparently handling the admin-gated cross-owner boundary
- * (issue #733):
+ * Run a scoped people-merge, transparently handling the cross-owner boundary (issue #733):
  * - a `blocked` response invokes `onBlocked` with the server's descriptive message;
  * - a `confirmationRequired` response asks `confirmCrossOwner`, and — only if accepted — re-runs the
- *   merge with the admin acknowledgement so the server commits it.
+ *   merge with the acknowledgement so the server commits it.
  *
- * Returns `true` when the merge committed, `false` when it was blocked or the admin declined. Any
+ * Returns `true` when the merge committed, `false` when it was blocked or the user declined. Any
  * other error propagates to the caller.
  */
 export const runScopedMergeWithCrossOwnerConfirmation = async (

@@ -11,7 +11,6 @@ import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { Chunked, OnEvent, OnJob } from 'src/decorators';
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
-import { mapNotification } from 'src/dtos/notification.dto';
 import {
   AssetFaceCreateDto,
   AssetFaceDeleteDto,
@@ -42,8 +41,6 @@ import {
   ImmichWorker,
   JobName,
   JobStatus,
-  NotificationLevel,
-  NotificationType,
   Permission,
   PersonPathType,
   QueueJobStatus,
@@ -90,9 +87,9 @@ export const FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS = 5;
  * confirmation) instead of a raw error string.
  */
 export const CROSS_OWNER_MERGE_ERROR_CODE = {
-  /** The merge crosses an owner boundary and is not permitted (non-admin, or admin with the toggle off). */
+  /** The merge crosses an owner boundary and is not permitted because the instance toggle is off. */
   blocked: 'cross_owner_merge_blocked',
-  /** Admin, toggle on: the merge is permitted but must be explicitly confirmed before it commits. */
+  /** The instance toggle is on: the merge is permitted but must be explicitly confirmed before it commits. */
   confirmationRequired: 'cross_owner_merge_confirmation_required',
 } as const;
 
@@ -210,19 +207,18 @@ export class PersonService extends BaseService {
     }
 
     // A cross-owner merge rewrites another user's `person.identityId` and re-links their faces. It is
-    // blocked by default and only permitted for an admin when the instance opts in (issue #733).
-    // Non-admins and admins-with-the-toggle-off get a descriptive, machine-readable error;
-    // admins-with-the-toggle-on must explicitly confirm before it commits. This admin loosening
-    // applies only to genuine cross-owner merges (another user's personal person). A merge that is
-    // non-repairable for any other reason — e.g. an involved identity has a shared-space profile in
-    // a space the actor cannot repair, with no other-owner personal person — impacts no identifiable
-    // owner to gate on or notify and stays hard-blocked regardless of the admin toggle.
-    const isCrossOwnerMerge = !resolved.allAttachedProfilesRepairable && resolved.impactedOwnerIds.length > 0;
+    // blocked by default and only permitted once the instance opts in via the
+    // `server.mergePeopleAcrossOwners` toggle (issue #733); with the toggle off every user gets a
+    // descriptive, machine-readable error, and with it on any user must explicitly confirm before it
+    // commits. This loosening applies only to genuine cross-owner merges (another user's personal
+    // person). A merge that is non-repairable for any other reason — e.g. an involved identity has a
+    // shared-space profile in a space the actor cannot repair, with no other-owner personal person —
+    // impacts no identifiable owner to gate on and stays hard-blocked regardless of the toggle.
     if (!resolved.allAttachedProfilesRepairable) {
-      if (!isCrossOwnerMerge) {
+      if (resolved.impactedOwnerIds.length === 0) {
         throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
       }
-      await this.authorizeCrossOwnerMerge(auth, dto, resolved.impactedOwnerIds);
+      await this.authorizeCrossOwnerMerge(dto, resolved.impactedOwnerIds);
     }
 
     if (resolved.hasScopedProfileConflict) {
@@ -235,30 +231,15 @@ export class PersonService extends BaseService {
       source: 'manual',
     });
     await this.queueSpacePersonMetadataBackfill();
-
-    if (isCrossOwnerMerge) {
-      await this.notifyCrossOwnerMergeOwners(resolved.impactedOwnerIds);
-    }
   }
 
   /**
-   * Enforce the admin-gated cross-owner merge policy (issue #733). Throws unless the actor is an
-   * admin, the `server.mergePeopleAcrossOwners` toggle is on, and the admin has confirmed. Never
-   * widen this: non-admins are always blocked and the toggle defaults off.
+   * Enforce the cross-owner merge policy (issue #733). A cross-owner merge is blocked unless the
+   * instance has opted in via the `server.mergePeopleAcrossOwners` toggle; once enabled it is a
+   * normal action available to any user with merge access, but it must be explicitly confirmed
+   * before it commits. The toggle defaults off.
    */
-  private async authorizeCrossOwnerMerge(
-    auth: AuthDto,
-    dto: MergeScopedPeopleDto,
-    impactedOwnerIds: string[],
-  ): Promise<void> {
-    if (!auth.user.isAdmin) {
-      throw new ForbiddenException({
-        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
-        message:
-          'This person also appears in another user’s library, so merging would modify people and faces owned by someone else. Only an administrator can merge people across owners.',
-      });
-    }
-
+  private async authorizeCrossOwnerMerge(dto: MergeScopedPeopleDto, impactedOwnerIds: string[]): Promise<void> {
     const { server } = await this.getConfig({ withCache: false });
     if (!server.mergePeopleAcrossOwners) {
       throw new ForbiddenException({
@@ -275,32 +256,6 @@ export class PersonService extends BaseService {
           'This merge will modify people and faces owned by other users and may not be cleanly reversible. Confirm to continue.',
         impactedOwnerCount: impactedOwnerIds.length,
       });
-    }
-  }
-
-  /**
-   * Notify the other owners whose people/faces were modified by an admin cross-owner merge. This set
-   * is exactly the involved identities' non-actor personal `person` owners; shared-space members
-   * whose grouping the merge regroups are not `person` owners and are not notified here.
-   */
-  private async notifyCrossOwnerMergeOwners(impactedOwnerIds: string[]): Promise<void> {
-    // Best-effort: the merge has already committed, so a failed notification must not fail the
-    // request (which would wrongly imply the merge did not happen) nor skip the other owners.
-    for (const userId of impactedOwnerIds) {
-      try {
-        const item = await this.notificationRepository.create({
-          userId,
-          type: NotificationType.SystemMessage,
-          level: NotificationLevel.Warning,
-          title: 'Your people were affected by an administrator merge',
-          description:
-            'An administrator merged people that include faces from your library. Some of your people may now be grouped differently.',
-          data: JSON.stringify({ kind: 'cross-owner-people-merge' }),
-        });
-        this.websocketRepository.clientSend('on_notification', userId, mapNotification(item));
-      } catch (error) {
-        this.logger.warn(`Failed to notify owner ${userId} of a cross-owner people merge: ${error}`);
-      }
     }
   }
 

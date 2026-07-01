@@ -12,8 +12,6 @@ import {
   JobName,
   JobStatus,
   MetadataKey,
-  NotificationLevel,
-  NotificationType,
   QueueJobStatus,
   QueueName,
   SourceType,
@@ -4767,23 +4765,10 @@ describe(PersonService.name, () => {
       });
     });
 
-    it('blocks a non-admin cross-owner merge with the descriptive machine-readable error', async () => {
+    it('blocks a cross-owner merge for any user when the toggle is off', async () => {
+      // A non-admin stands in for "any authenticated user with merge access": the gate is the
+      // instance toggle, not admin status (issue #733 revision).
       const auth = AuthFactory.create({ isAdmin: false });
-      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution());
-
-      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
-
-      expect(error).toBeInstanceOf(ForbiddenException);
-      expect((error as ForbiddenException).getResponse()).toMatchObject({
-        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
-      });
-      expect(String((error as any).getResponse().message)).toMatch(/another user/i);
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.notification.create).not.toHaveBeenCalled();
-    });
-
-    it('blocks an admin cross-owner merge with an enable hint when the toggle is off', async () => {
-      const auth = AuthFactory.create({ isAdmin: true });
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: false } });
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution());
 
@@ -4795,10 +4780,11 @@ describe(PersonService.name, () => {
       });
       expect(String((error as any).getResponse().message)).toMatch(/administrator can enable/i);
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
     });
 
-    it('requires explicit confirmation before an admin commits a cross-owner merge', async () => {
-      const auth = AuthFactory.create({ isAdmin: true });
+    it('requires explicit confirmation before a cross-owner merge commits when the toggle is on', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
         crossOwnerResolution({ impactedOwnerIds: ['owner-b', 'owner-c'] }),
@@ -4812,11 +4798,10 @@ describe(PersonService.name, () => {
         impactedOwnerCount: 2,
       });
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.notification.create).not.toHaveBeenCalled();
     });
 
-    it('performs an admin cross-owner merge and notifies every affected owner when confirmed', async () => {
-      const auth = AuthFactory.create({ isAdmin: true });
+    it('performs a cross-owner merge for any user when the toggle is on and confirmed, without notifying owners', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
         crossOwnerResolution({ impactedOwnerIds: ['owner-b', 'owner-c'] }),
@@ -4825,16 +4810,6 @@ describe(PersonService.name, () => {
         personalProfileConflictCount: 0,
         spaceProfileConflictCount: 0,
       });
-      mocks.notification.create.mockResolvedValue({
-        id: 'notif-1',
-        createdAt: newDate(),
-        level: NotificationLevel.Warning,
-        type: NotificationType.SystemMessage,
-        title: 'People affected',
-        description: 'desc',
-        data: null,
-        readAt: null,
-      } as any);
 
       await sut.mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }));
 
@@ -4843,17 +4818,14 @@ describe(PersonService.name, () => {
         sourceIdentityIds: ['identity-2'],
         source: 'manual',
       });
-      // Each affected owner (including any whose profile is dropped/relabelled by conflict handling)
-      // must be notified.
-      expect(mocks.notification.create).toHaveBeenCalledTimes(2);
-      expect(mocks.notification.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-b' }));
-      expect(mocks.notification.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-c' }));
-      expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_notification', 'owner-b', expect.any(Object));
-      expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_notification', 'owner-c', expect.any(Object));
+      // Affected owners are intentionally not notified (issue #733 revision): once the instance opts
+      // in, a cross-owner merge is a normal action and commits silently.
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+      expect(mocks.websocket.clientSend).not.toHaveBeenCalled();
     });
 
-    it('hard-blocks a merge that is non-repairable only because of a shared-space profile, regardless of admin/toggle', async () => {
-      const auth = AuthFactory.create({ isAdmin: true });
+    it('hard-blocks a merge that is non-repairable only because of a shared-space profile, regardless of the toggle', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
       // Non-repairable, but no other-owner personal person is involved (impactedOwnerIds empty).
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution({ impactedOwnerIds: [] }));
