@@ -58,9 +58,10 @@ test.describe('Cross-owner people merge', () => {
 
     const actorAsset = await utils.createAsset(actor.accessToken);
     const otherAsset = await utils.createAsset(otherOwner.accessToken);
-    await utils.addSpaceAssets(actor.accessToken, space.id, [actorAsset.id]);
 
-    // Mint identities: targetPerson -> T, otherOwnerPerson -> S.
+    // Mint identities: targetPerson -> T, otherOwnerPerson -> S. The target's asset is deliberately
+    // NOT added to the space, so identity T has no space profile and the cross-owner merge does not
+    // trip the same-scope-conflict guard.
     await utils.createFace({ assetId: actorAsset.id, personId: targetPerson.id });
     const otherFace = await utils.createFace({ assetId: otherAsset.id, personId: otherOwnerPerson.id });
     const otherOwnerRow = await db.query(`SELECT "identityId" FROM "person" WHERE id = $1`, [otherOwnerPerson.id]);
@@ -71,14 +72,42 @@ test.describe('Cross-owner people merge', () => {
     const spacePerson = await db.query(
       `INSERT INTO "shared_space_person"
          ("spaceId", name, "isHidden", "faceCount", "assetCount", "representativeFaceId", "identityId", "type")
-       VALUES ($1, 'Ada Shared', false, 1, 1, $2, $3, 'person')
+       VALUES ($1, 'Ada Shared', false, 3, 3, $2, $3, 'person')
        RETURNING id`,
       [space.id, otherFace, identityS],
     );
+    const sharedPersonId = spacePerson.rows[0].id as string;
     await db.query(`INSERT INTO "shared_space_person_face" ("personId", "assetFaceId") VALUES ($1, $2)`, [
-      spacePerson.rows[0].id,
+      sharedPersonId,
       otherFace,
     ]);
+
+    // Give identity S three actor-accessible faces inside the space so "Ada Shared" clears the
+    // minimum-face-count threshold and surfaces as a candidate in the actor's merge selector
+    // (getAllPeople?withSharedSpaces=true). The faces sit on actor-owned in-space assets and attach
+    // to identity S so they resolve to the same "Ada Shared" space-person.
+    const spaceAssets = await Promise.all([
+      utils.createAsset(actor.accessToken),
+      utils.createAsset(actor.accessToken),
+      utils.createAsset(actor.accessToken),
+    ]);
+    await utils.addSpaceAssets(
+      actor.accessToken,
+      space.id,
+      spaceAssets.map((asset) => asset.id),
+    );
+    for (const asset of spaceAssets) {
+      const faceRow = await db.query(`INSERT INTO "asset_face" ("assetId") VALUES ($1) RETURNING id`, [asset.id]);
+      const assetFaceId = faceRow.rows[0].id as string;
+      await db.query(
+        `INSERT INTO "face_identity_face" ("assetFaceId", "identityId", "source") VALUES ($1, $2, 'manual')`,
+        [assetFaceId, identityS],
+      );
+      await db.query(`INSERT INTO "shared_space_person_face" ("personId", "assetFaceId") VALUES ($1, $2)`, [
+        sharedPersonId,
+        assetFaceId,
+      ]);
+    }
 
     baseConfig = await utils.getSystemConfig(admin.accessToken);
   });

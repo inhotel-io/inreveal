@@ -68,7 +68,6 @@ const setupCrossOwnerMerge = async (): Promise<CrossOwnerFixture> => {
     utils.createAsset(actor.accessToken),
     utils.createAsset(otherOwner.accessToken),
   ]);
-  await utils.addSpaceAssets(actor.accessToken, space.id, [actorAsset.id]);
 
   // createFace mints a face_identity for each person and points person.identityId at it:
   //   targetPerson -> identity T, otherOwnerPerson -> identity S.
