@@ -4860,6 +4860,21 @@ describe(PersonService.name, () => {
       expect(mocks.notification.create).not.toHaveBeenCalled();
     });
 
+    it('surfaces the same-scope conflict (400) before asking for cross-owner confirmation', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
+        crossOwnerResolution({ impactedOwnerIds: ['owner-b'], hasScopedProfileConflict: true }),
+      );
+
+      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).message).toMatch(/separate profiles in the same scope/i);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+    });
+
     it('rejects same-person repair when the scoped profiles conflict in the same owner or space', async () => {
       const auth = AuthFactory.create();
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({

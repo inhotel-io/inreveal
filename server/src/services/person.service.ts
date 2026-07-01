@@ -206,6 +206,13 @@ export class PersonService extends BaseService {
       throw new BadRequestException('One or more people were not found or are not accessible');
     }
 
+    // A same-scope profile conflict is a terminal 400: the merge can never commit. Surface it before
+    // the cross-owner confirmation below so the user is not asked to acknowledge a strong/danger
+    // dialog and re-submit only to then hard-fail on a merge that could never have completed.
+    if (resolved.hasScopedProfileConflict) {
+      throw new BadRequestException('Cannot merge people that already have separate profiles in the same scope');
+    }
+
     // A cross-owner merge rewrites another user's `person.identityId` and re-links their faces. It is
     // blocked by default and only permitted once the instance opts in via the
     // `server.mergePeopleAcrossOwners` toggle (issue #733); with the toggle off every user gets a
@@ -221,10 +228,6 @@ export class PersonService extends BaseService {
         throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
       }
       await this.authorizeCrossOwnerMerge(dto, resolved.impactedOwnerIds);
-    }
-
-    if (resolved.hasScopedProfileConflict) {
-      throw new BadRequestException('Cannot merge people that already have separate profiles in the same scope');
     }
 
     await this.faceIdentityRepository.mergeIdentities({
