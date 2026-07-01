@@ -209,12 +209,19 @@ export class PersonService extends BaseService {
       throw new BadRequestException('One or more people were not found or are not accessible');
     }
 
-    // A merge across an owner boundary rewrites another user's `person.identityId` and re-links their
-    // faces. It is blocked by default and only permitted for an admin when the instance opts in
-    // (issue #733). Non-admins and admins-with-the-toggle-off get a descriptive, machine-readable
-    // error; admins-with-the-toggle-on must explicitly confirm before it commits.
-    const isCrossOwnerMerge = !resolved.allAttachedProfilesRepairable;
-    if (isCrossOwnerMerge) {
+    // A cross-owner merge rewrites another user's `person.identityId` and re-links their faces. It is
+    // blocked by default and only permitted for an admin when the instance opts in (issue #733).
+    // Non-admins and admins-with-the-toggle-off get a descriptive, machine-readable error;
+    // admins-with-the-toggle-on must explicitly confirm before it commits. This admin loosening
+    // applies only to genuine cross-owner merges (another user's personal person). A merge that is
+    // non-repairable for any other reason — e.g. an involved identity has a shared-space profile in
+    // a space the actor cannot repair, with no other-owner personal person — impacts no identifiable
+    // owner to gate on or notify and stays hard-blocked regardless of the admin toggle.
+    const isCrossOwnerMerge = !resolved.allAttachedProfilesRepairable && resolved.impactedOwnerIds.length > 0;
+    if (!resolved.allAttachedProfilesRepairable) {
+      if (!isCrossOwnerMerge) {
+        throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
+      }
       await this.authorizeCrossOwnerMerge(auth, dto, resolved.impactedOwnerIds);
     }
 

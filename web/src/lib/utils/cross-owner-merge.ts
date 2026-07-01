@@ -1,5 +1,9 @@
 import { getServerErrorMessage } from '$lib/utils/handle-error';
 import { isHttpError, mergeScopedPeople, type MergeScopedPeopleDto } from '@immich/sdk';
+import { modalManager, toastManager } from '@immich/ui';
+import { mdiAlertOutline } from '@mdi/js';
+import { t } from 'svelte-i18n';
+import { get } from 'svelte/store';
 
 /**
  * Machine-readable error codes returned by the server when a scoped people-merge crosses an owner
@@ -22,6 +26,28 @@ export interface CrossOwnerMergeHandlers {
   /** Surface the server's descriptive "blocked" message (never the raw truncated string). */
   onBlocked: (message: string | undefined) => void;
 }
+
+/**
+ * The standard cross-owner merge handlers shared by every scoped-merge entry point (the people
+ * detail page, the space people detail page, and the merge-suggestion modal): a strong danger
+ * confirmation dialog and a descriptive blocked-merge toast, all using i18n.
+ */
+export const createCrossOwnerMergeHandlers = (): CrossOwnerMergeHandlers => ({
+  confirmCrossOwner: () => {
+    const $t = get(t);
+    return modalManager.showDialog({
+      title: $t('merge_people_across_owners'),
+      prompt: $t('merge_people_across_owners_confirmation'),
+      confirmText: $t('merge'),
+      confirmColor: 'danger',
+      icon: mdiAlertOutline,
+    });
+  },
+  onBlocked: (message) => {
+    const $t = get(t);
+    toastManager.danger(message ?? $t('cannot_merge_people'));
+  },
+});
 
 /**
  * Run a scoped people-merge, transparently handling the admin-gated cross-owner boundary

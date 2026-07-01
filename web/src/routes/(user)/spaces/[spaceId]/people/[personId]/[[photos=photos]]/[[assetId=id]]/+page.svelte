@@ -28,7 +28,10 @@
   import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
   import { Route } from '$lib/route';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
-  import { runScopedMergeWithCrossOwnerConfirmation } from '$lib/utils/cross-owner-merge';
+  import {
+    createCrossOwnerMergeHandlers,
+    runScopedMergeWithCrossOwnerConfirmation,
+  } from '$lib/utils/cross-owner-merge';
   import { handleError } from '$lib/utils/handle-error';
   import { locale } from '$lib/stores/preferences.store';
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
@@ -57,7 +60,6 @@
   import {
     mdiAccountBoxOutline,
     mdiAccountMultipleCheckOutline,
-    mdiAlertOutline,
     mdiArrowLeft,
     mdiCalendarEditOutline,
     mdiDotsVertical,
@@ -312,17 +314,7 @@
     } else {
       const committed = await runScopedMergeWithCrossOwnerConfirmation(
         { target: targetRef, sources: sourceRefs },
-        {
-          confirmCrossOwner: () =>
-            modalManager.showDialog({
-              title: $t('merge_people_across_owners'),
-              prompt: $t('merge_people_across_owners_confirmation'),
-              confirmText: $t('merge'),
-              confirmColor: 'danger',
-              icon: mdiAlertOutline,
-            }),
-          onBlocked: (message) => toastManager.danger(message ?? $t('cannot_merge_people')),
-        },
+        createCrossOwnerMergeHandlers(),
       );
       if (!committed) {
         // Cross-owner merge was blocked or the admin declined the confirmation — nothing merged.

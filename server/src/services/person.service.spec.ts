@@ -4852,6 +4852,22 @@ describe(PersonService.name, () => {
       expect(mocks.websocket.clientSend).toHaveBeenCalledWith('on_notification', 'owner-c', expect.any(Object));
     });
 
+    it('hard-blocks a merge that is non-repairable only because of a shared-space profile, regardless of admin/toggle', async () => {
+      const auth = AuthFactory.create({ isAdmin: true });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      // Non-repairable, but no other-owner personal person is involved (impactedOwnerIds empty).
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution({ impactedOwnerIds: [] }));
+
+      const error = await sut
+        .mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }))
+        .catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).message).toMatch(/inaccessible attached profiles/i);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+    });
+
     it('rejects same-person repair when the scoped profiles conflict in the same owner or space', async () => {
       const auth = AuthFactory.create();
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({

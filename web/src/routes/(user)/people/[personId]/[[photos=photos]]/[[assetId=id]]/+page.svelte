@@ -45,7 +45,10 @@
   import { locale } from '$lib/stores/preferences.store';
   import { websocketEvents } from '$lib/stores/websocket';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
-  import { runScopedMergeWithCrossOwnerConfirmation } from '$lib/utils/cross-owner-merge';
+  import {
+    createCrossOwnerMergeHandlers,
+    runScopedMergeWithCrossOwnerConfirmation,
+  } from '$lib/utils/cross-owner-merge';
   import { handleError } from '$lib/utils/handle-error';
   import { isExternalUrl } from '$lib/utils/navigation';
   import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
@@ -73,13 +76,7 @@
     toastManager,
     type ActionItem,
   } from '@immich/ui';
-  import {
-    mdiAccountBoxOutline,
-    mdiAccountMultipleCheckOutline,
-    mdiAlertOutline,
-    mdiArrowLeft,
-    mdiDotsVertical,
-  } from '@mdi/js';
+  import { mdiAccountBoxOutline, mdiAccountMultipleCheckOutline, mdiArrowLeft, mdiDotsVertical } from '@mdi/js';
   import { DateTime } from 'luxon';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -221,17 +218,7 @@
         target: toScopedPersonRef(targetPerson),
         sources: sourcePeople.map((sourcePerson) => toScopedPersonRef(sourcePerson)),
       },
-      {
-        confirmCrossOwner: () =>
-          modalManager.showDialog({
-            title: $t('merge_people_across_owners'),
-            prompt: $t('merge_people_across_owners_confirmation'),
-            confirmText: $t('merge'),
-            confirmColor: 'danger',
-            icon: mdiAlertOutline,
-          }),
-        onBlocked: (message) => toastManager.danger(message ?? $t('cannot_merge_people')),
-      },
+      createCrossOwnerMergeHandlers(),
     );
     return committed ? sourcePeople.length : undefined;
   };
