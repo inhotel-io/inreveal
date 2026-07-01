@@ -13,7 +13,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SERVER_ROOT = join(__dirname, '..', '..');
+// Server root — vitest runs with cwd at server/ (matches face-identity-query-shape.spec.ts).
+const SERVER_ROOT = process.cwd();
 
 const SCOPING_FILES = [
   'src/repositories/shared-space.repository.ts',
@@ -32,7 +33,8 @@ const SCOPING_FILES = [
 
 // A shared_space_library reference has "album coverage" if any of these appear
 // within +-WINDOW lines: the raw album table, or a fork album-scope helper call.
-const ALBUM_MARKER = /shared_space_album|spaceAlbumAssetExists|spaceAssetPathBranches|spaceAlbumAssetExistsSql|accessibleSpaceAlbums/;
+const ALBUM_MARKER =
+  /shared_space_album|spaceAlbumAssetExists|spaceAssetPathBranches|spaceAlbumAssetExistsSql|accessibleSpaceAlbums/;
 const LIBRARY_REF = /\bshared_space_library\b/;
 const WINDOW = 45;
 
@@ -60,12 +62,25 @@ const ALLOWLIST: Record<string, string> = {
   // album arm, so an album-only asset is invisible to them. Flagged for follow-up;
   // NOT fixed here (unplanned behavior change).
   findSpaceForAssetAndUser: 'GUARD-DISCOVERED gap: union(direct,library) omits album arm (pre-existing, follow-up)',
-  getPersonalThumbnailForSpacePerson: 'GUARD-DISCOVERED gap: or(direct,library) omits album arm (pre-existing, follow-up)',
+  getPersonalThumbnailForSpacePerson:
+    'GUARD-DISCOVERED gap: or(direct,library) omits album arm (pre-existing, follow-up)',
 };
 
 const DECL = /^\s*(?:export\s+)?(?:async\s+)?(?:function\s+)?([A-Za-z0-9_]+)\s*[(<]/;
 const NON_DECL = new Set([
-  'if', 'for', 'while', 'switch', 'catch', 'return', 'eb', 'qb', 'join', 'map', 'filter', 'forEach', 'then',
+  'if',
+  'for',
+  'while',
+  'switch',
+  'catch',
+  'return',
+  'eb',
+  'qb',
+  'join',
+  'map',
+  'filter',
+  'forEach',
+  'then',
 ]);
 
 const enclosingFn = (lines: string[], i: number): string => {
