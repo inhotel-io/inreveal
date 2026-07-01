@@ -5,11 +5,7 @@ import { Kysely } from 'kysely';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
-import {
-  spaceAlbumAssetExists,
-  spaceAssetPathBranches,
-  type SpaceScope,
-} from 'src/utils/shared-space-album-scope';
+import { spaceAlbumAssetExists, spaceAssetPathBranches, type SpaceScope } from 'src/utils/shared-space-album-scope';
 import { newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
@@ -178,7 +174,9 @@ describe('spaceAlbumAssetExists — album leg', () => {
       .selectFrom('asset_face')
       .select('asset_face.id')
       .where('asset_face.id', '=', faceId)
-      .where((eb) => spaceAlbumAssetExists(eb, { correlateAssetId: 'asset_face.assetId', scope: { spaceId: space.id } }))
+      .where((eb) =>
+        spaceAlbumAssetExists(eb, { correlateAssetId: 'asset_face.assetId', scope: { spaceId: space.id } }),
+      )
       .execute();
     expect(rows).toHaveLength(1);
   });
