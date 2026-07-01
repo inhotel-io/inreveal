@@ -30,6 +30,12 @@ abstract class DriftPerson with _$DriftPerson {
     required bool isHidden,
     required String? color,
     DateTime? birthDate,
+
+    /// Non-null when this person is a Space-scoped identity resolved from the server (the
+    /// People-page shared-space list). Personal/owned people are always null. Edits to a
+    /// Space person must route through the editor-gated shared-space endpoint, never the
+    /// owner-only person endpoint.
+    String? spaceId,
   }) = _DriftPerson;
 }
 
