@@ -1,5 +1,4 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/services/people.service.dart';
 import 'package:immich_mobile/infrastructure/repositories/people.repository.dart';
@@ -15,10 +14,13 @@ final driftPeopleServiceProvider = Provider<DriftPeopleService>(
   (ref) => DriftPeopleService(ref.watch(driftPeopleRepositoryProvider), ref.watch(personApiRepositoryProvider)),
 );
 
-final driftPeopleAssetProvider = FutureProvider.family<List<DriftPerson>, RemoteAsset>((ref, asset) async {
+final driftPeopleAssetProvider = FutureProvider.family<List<DriftPerson>, ({String id, String ownerId})>((
+  ref,
+  key,
+) async {
   final service = ref.watch(driftPeopleServiceProvider);
   final currentUserId = ref.watch(currentUserProvider.select((user) => user?.id));
-  return service.getAssetPeople(asset.id, ownedByCurrentUser: asset.ownerId == currentUserId);
+  return service.getAssetPeople(key.id, ownedByCurrentUser: key.ownerId == currentUserId);
 });
 
 final driftGetAllPeopleProvider = FutureProvider.family<List<DriftPerson>, PeopleSortBy>((ref, sortBy) async {
