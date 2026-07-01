@@ -25,6 +25,10 @@ void main() {
     color: null,
   );
 
+  setUpAll(() {
+    registerFallbackValue(PeopleSortBy.photoCount);
+  });
+
   setUp(() {
     mockRepository = MockDriftPeopleRepository();
     mockApiRepository = MockPersonApiRepository();
@@ -65,6 +69,41 @@ void main() {
       final result = await sut.getAssetPeople('shared-asset', ownedByCurrentUser: false);
 
       expect(result, isEmpty);
+    });
+  });
+
+  group('getAllPeopleWithSharedSpaces', () {
+    // Regression test for the People-page sibling of issue #727: the web People page shows
+    // people from Space-shared assets (getAllPeople withSharedSpaces:true), but the mobile
+    // People page read only the owner-scoped local Drift DB and so was empty for a viewer
+    // who owns no people. The service must surface the server's shared-space-inclusive list.
+    test('returns the server shared-space-inclusive people list', () async {
+      // The local sync DB is owner-scoped: a viewer who owns no people gets nothing from it.
+      when(() => mockRepository.getAllPeople(sortBy: any(named: 'sortBy'))).thenAnswer((_) async => <DriftPerson>[]);
+      when(
+        () => mockApiRepository.getAllPeopleWithSharedSpaces(sortBy: any(named: 'sortBy')),
+      ).thenAnswer((_) async => [person('space-person')]);
+
+      final result = await sut.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.photoCount);
+
+      expect(result, [person('space-person')]);
+      verify(() => mockApiRepository.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.photoCount)).called(1);
+    });
+
+    // Offline / server failure must not blank the page: the viewer's own people still render
+    // from the owner-scoped local sync DB (their shared-space people are simply unavailable).
+    test('falls back to the local sync DB when the server fetch fails', () async {
+      when(
+        () => mockApiRepository.getAllPeopleWithSharedSpaces(sortBy: any(named: 'sortBy')),
+      ).thenThrow(Exception('offline'));
+      when(
+        () => mockRepository.getAllPeople(sortBy: any(named: 'sortBy')),
+      ).thenAnswer((_) async => [person('local-person')]);
+
+      final result = await sut.getAllPeopleWithSharedSpaces(sortBy: PeopleSortBy.name);
+
+      expect(result, [person('local-person')]);
+      verify(() => mockRepository.getAllPeople(sortBy: PeopleSortBy.name)).called(1);
     });
   });
 }

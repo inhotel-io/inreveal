@@ -19,6 +19,93 @@ class PersonApiRepository extends ApiRepository {
     return dto.people.map(_toPerson).toList();
   }
 
+  /// Fetches the People-page list from the server, including people the viewer can see on
+  /// assets shared with them through a Space (`withSharedSpaces: true`), exactly like the
+  /// web People page (`getAllPeople({ withSharedSpaces: true })`).
+  ///
+  /// The local sync DB is owner-scoped and never receives shared-space people, so the
+  /// mobile People page must read this RBAC-projected list to stay at parity with web.
+  /// This is the People-page sibling of issue #727.
+  Future<List<DriftPerson>> getAllPeopleWithSharedSpaces({required PeopleSortBy sortBy}) async {
+    final dtos = <PersonResponseDto>[];
+    var page = 1;
+    // The server pages people (default 500, max 1000 per page). Walk every page so a large
+    // library isn't silently capped, matching the local query which returns all people. The
+    // page ceiling guards against a server that never clears hasNextPage.
+    const maxPages = 100;
+    while (page <= maxPages) {
+      final response = await checkNull(
+        _api.getAllPeople(withSharedSpaces: true, withHidden: false, page: page, size: 1000),
+      );
+      dtos.addAll(response.people);
+      if (response.hasNextPage != true || response.people.isEmpty) {
+        break;
+      }
+      page += 1;
+    }
+    // The server returns identity-projected people in name order; re-sort client-side to
+    // honour the People page's sort setting, exactly like the web page (sortPeople).
+    dtos.sort((a, b) => _comparePeople(a, b, sortBy));
+    return dtos.map(_personToDriftPerson).toList();
+  }
+
+  // Mirrors the web comparePeople / the local Drift ORDER BY: favorites first, named before
+  // unnamed, then name/asset-count depending on the sort mode, with id as the tiebreaker.
+  // Hidden people are excluded server-side (withHidden:false), so isHidden is not compared.
+  static int _comparePeople(PersonResponseDto a, PersonResponseDto b, PeopleSortBy sortBy) {
+    final aFavorite = a.isFavorite ?? false;
+    final bFavorite = b.isFavorite ?? false;
+    if (aFavorite != bFavorite) {
+      return aFavorite ? -1 : 1;
+    }
+
+    final aName = a.name.trim();
+    final bName = b.name.trim();
+    final aHasName = aName.isNotEmpty;
+    final bHasName = bName.isNotEmpty;
+    if (aHasName != bHasName) {
+      return aHasName ? -1 : 1;
+    }
+
+    final nameCompare = aName.toLowerCase().compareTo(bName.toLowerCase());
+    // Most assets first.
+    final countCompare = (b.numberOfAssets ?? 0).compareTo(a.numberOfAssets ?? 0);
+    if (aHasName && sortBy == PeopleSortBy.name) {
+      if (nameCompare != 0) {
+        return nameCompare;
+      }
+      if (countCompare != 0) {
+        return countCompare;
+      }
+    } else {
+      if (countCompare != 0) {
+        return countCompare;
+      }
+      if (nameCompare != 0) {
+        return nameCompare;
+      }
+    }
+    return a.id.compareTo(b.id);
+  }
+
+  static DriftPerson _personToDriftPerson(PersonResponseDto dto) {
+    // The people endpoint does not carry created/faceAsset/ownerId; the People grid only
+    // needs id/name/thumbnail (edits are sent to the server by id), so mirror updatedAt and
+    // leave ownerId unset for these server-resolved (possibly non-owned) people.
+    final updatedAt = dto.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return DriftPerson(
+      id: dto.id,
+      createdAt: updatedAt,
+      updatedAt: updatedAt,
+      ownerId: '',
+      name: dto.name,
+      isFavorite: dto.isFavorite ?? false,
+      isHidden: dto.isHidden,
+      color: dto.color,
+      birthDate: dto.birthDate,
+    );
+  }
+
   /// Fetches the people visible on [assetId] from the server.
   ///
   /// The local sync DB only ever receives faces for assets the viewer owns, so for an

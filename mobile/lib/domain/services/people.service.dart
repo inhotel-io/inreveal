@@ -38,6 +38,25 @@ class DriftPeopleService {
     return _repository.getAllPeople(sortBy: sortBy);
   }
 
+  /// People for the global People page: the viewer's own people AND people on assets shared
+  /// with them through a Space, matching the web People page (which calls the server with
+  /// withSharedSpaces:true). The local sync DB is owner-scoped and never receives
+  /// shared-space people, so this reads the server's unified, RBAC-projected list. This is
+  /// the People-page sibling of issue #727.
+  ///
+  /// Kept separate from [getAllPeople] so the owner-scoped, local-first surfaces (the photos
+  /// filter people picker, the library people card) are unaffected.
+  Future<List<DriftPerson>> getAllPeopleWithSharedSpaces({PeopleSortBy sortBy = PeopleSortBy.photoCount}) async {
+    try {
+      return await _personApiRepository.getAllPeopleWithSharedSpaces(sortBy: sortBy);
+    } catch (error, stackTrace) {
+      // Offline / server failure: fall back to the owner-scoped local list so the viewer's
+      // own people still render (their shared-space people are unavailable offline).
+      _log.warning("Failed to fetch people from the server; using the local sync DB", error, stackTrace);
+      return _repository.getAllPeople(sortBy: sortBy);
+    }
+  }
+
   Future<int> updateName(String personId, String name) async {
     await _personApiRepository.update(personId, name: name);
     return _repository.updateName(personId, name);

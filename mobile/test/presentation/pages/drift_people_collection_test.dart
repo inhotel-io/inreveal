@@ -64,7 +64,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const DriftPeopleCollectionPage(),
         overrides: [
-          driftGetAllPeopleProvider.overrideWith(
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
             (ref, sortBy) async => sortBy == PeopleSortBy.photoCount
                 ? [_person('zoe', 'Zoe'), _person('alice', 'Alice')]
                 : [_person('alice', 'Alice'), _person('zoe', 'Zoe')],
@@ -88,7 +88,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const DriftPeopleCollectionPage(),
         overrides: [
-          driftGetAllPeopleProvider.overrideWith(
+          driftGetAllPeopleWithSharedSpacesProvider.overrideWith(
             (ref, sortBy) async => [_person('zo', 'Zora'), _person('al', 'Alora'), _person('bo', 'Bob')],
           ),
         ],

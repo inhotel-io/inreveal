@@ -27,3 +27,14 @@ final driftGetAllPeopleProvider = FutureProvider.family<List<DriftPerson>, Peopl
   final service = ref.watch(driftPeopleServiceProvider);
   return service.getAllPeople(sortBy: sortBy);
 });
+
+/// People for the global People page — the viewer's own people plus people on Space-shared
+/// assets, matching the web People page. Kept distinct from [driftGetAllPeopleProvider] so
+/// the owner-scoped, local-first people picker and library card stay local. See issue #727.
+final driftGetAllPeopleWithSharedSpacesProvider = FutureProvider.family<List<DriftPerson>, PeopleSortBy>((
+  ref,
+  sortBy,
+) async {
+  final service = ref.watch(driftPeopleServiceProvider);
+  return service.getAllPeopleWithSharedSpaces(sortBy: sortBy);
+});

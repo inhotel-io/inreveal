@@ -37,7 +37,7 @@ class _DriftPeopleCollectionPageState extends ConsumerState<DriftPeopleCollectio
     final sortBy = ref.watch(
       settingsProvider.select((settings) => peopleSortByFromSettingIndex(settings.get(Setting.peopleSortBy))),
     );
-    final people = ref.watch(driftGetAllPeopleProvider(sortBy));
+    final people = ref.watch(driftGetAllPeopleWithSharedSpacesProvider(sortBy));
 
     return LayoutBuilder(
       builder: (context, constraints) {

@@ -34,6 +34,7 @@ class _DriftPersonNameEditFormState extends ConsumerState<DriftPersonBirthdayEdi
 
       if (result != 0) {
         ref.invalidate(driftGetAllPeopleProvider);
+        ref.invalidate(driftGetAllPeopleWithSharedSpacesProvider);
         context.pop<DateTime>(_selectedDate);
       }
     } catch (error) {
