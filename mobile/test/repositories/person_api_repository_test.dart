@@ -7,10 +7,15 @@ import 'package:openapi/api.dart' as api;
 
 class MockPeopleApi extends Mock implements api.PeopleApi {}
 
+class MockAssetsApi extends Mock implements api.AssetsApi {}
+
+class MockAssetInfo extends Mock implements api.AssetResponseDto {}
+
 class MockApiService extends Mock implements ApiService {}
 
 void main() {
   late MockPeopleApi mockApi;
+  late MockAssetsApi mockAssetsApi;
   late MockApiService mockApiService;
   late PersonApiRepository repository;
 
@@ -46,11 +51,103 @@ void main() {
     ).thenAnswer((_) => answer());
   }
 
+  api.PersonWithFacesResponseDto personWithFaces(
+    String id, {
+    String name = '',
+    bool isHidden = false,
+    String? spacePersonId,
+  }) => api.PersonWithFacesResponseDto(
+    id: id,
+    name: name,
+    thumbnailPath: '',
+    isHidden: isHidden,
+    birthDate: null,
+    spacePersonId: spacePersonId,
+  );
+
+  void stubAssetInfo({
+    required List<api.PersonWithFacesResponseDto> people,
+    required String ownerId,
+    String? resolvedSpaceId,
+  }) {
+    final info = MockAssetInfo();
+    when(() => info.people).thenReturn(people);
+    when(() => info.ownerId).thenReturn(ownerId);
+    when(() => info.resolvedSpaceId).thenReturn(resolvedSpaceId);
+    when(() => mockAssetsApi.getAssetInfo(any())).thenAnswer((_) async => info);
+  }
+
   setUp(() {
     mockApi = MockPeopleApi();
+    mockAssetsApi = MockAssetsApi();
     mockApiService = MockApiService();
     when(() => mockApiService.peopleApi).thenReturn(mockApi);
+    when(() => mockApiService.assetsApi).thenReturn(mockAssetsApi);
     repository = PersonApiRepository(mockApiService);
+  });
+
+  // Face-tap entry to the person detail page (open a photo → info → tap a face). The asset-info
+  // endpoint carries the space-person id separately (spacePersonId) from the global identity id
+  // (dto.id), and the space id on the asset (resolvedSpaceId). To make the face-tap DriftPerson
+  // shape-identical to the People-page one — so buildPersonTimelineRouteService takes the space
+  // branch and the detail page loads photos — a shared-space person must be mapped with
+  // id = spacePersonId and spaceId = resolvedSpaceId. This is the face-tap sibling of #727/#737.
+  group('getAssetPeople space-person mapping', () {
+    test('maps a shared-space person to id=spacePersonId and spaceId=resolvedSpaceId', () async {
+      stubAssetInfo(
+        people: [personWithFaces('global-1', name: 'Alice', spacePersonId: 'space-person-1')],
+        ownerId: 'admin',
+        resolvedSpaceId: 'space-1',
+      );
+
+      final result = await repository.getAssetPeople('asset-1');
+
+      expect(result.single.id, 'space-person-1');
+      expect(result.single.spaceId, 'space-1');
+      expect(result.single.name, 'Alice');
+    });
+
+    test('keeps the global id and null spaceId for a personal person (no spacePersonId)', () async {
+      stubAssetInfo(
+        people: [personWithFaces('global-2', name: 'Bob')],
+        ownerId: 'me',
+        resolvedSpaceId: null,
+      );
+
+      final result = await repository.getAssetPeople('asset-2');
+
+      expect(result.single.id, 'global-2');
+      expect(result.single.spaceId, isNull);
+    });
+
+    test('stays on the owner path when the asset has no resolvedSpaceId even if spacePersonId is set', () async {
+      // The space assets endpoint needs BOTH ids; without a resolved space id there is no space
+      // to query, so fall back to the owner-scoped shape rather than build an unroutable person.
+      stubAssetInfo(
+        people: [personWithFaces('global-3', name: 'Carol', spacePersonId: 'space-person-3')],
+        ownerId: 'me',
+        resolvedSpaceId: null,
+      );
+
+      final result = await repository.getAssetPeople('asset-3');
+
+      expect(result.single.id, 'global-3');
+      expect(result.single.spaceId, isNull);
+    });
+
+    test('excludes hidden people', () async {
+      stubAssetInfo(
+        people: [
+          personWithFaces('visible', name: 'Dan'),
+          personWithFaces('hidden', name: 'Eve', isHidden: true),
+        ],
+        ownerId: 'me',
+      );
+
+      final result = await repository.getAssetPeople('asset-4');
+
+      expect(result.map((p) => p.id), ['visible']);
+    });
   });
 
   group('getAllPeopleWithSharedSpaces', () {
