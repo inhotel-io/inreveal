@@ -293,9 +293,7 @@
     return getPeopleThumbnailUrl(person);
   };
 
-  const loadMergePeople = async () => {
-    return getSpacePeople({ id: space.id, limit: PAGE_SIZE });
-  };
+  const loadMergePeople = () => getSpacePeople({ id: space.id, limit: PAGE_SIZE });
 
   const mergePeople = async (targetPerson: ScopedMergeCandidate, selectedPeople: ScopedMergeCandidate[]) => {
     const targetRef = toScopedPersonRef(targetPerson);
