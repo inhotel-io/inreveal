@@ -174,6 +174,12 @@ Overrides the domain name in shared links and email notifications. The URL shoul
 
 The administrator can set a custom message on the login screen (the message will be displayed to all users).
 
+### Cross-Owner People Merges
+
+Allows administrators to merge people and faces that span different owners and external libraries (for example a [Shared Space](/features/shared-spaces) person built from several members' photos). Because such a merge modifies other users' people and faces, it notifies each affected owner and may not be cleanly reversible.
+
+This setting is **off by default**. When it is disabled, cross-owner merges are blocked for everyone. Non-admins can never perform them, and even with the setting enabled an admin must explicitly confirm each cross-owner merge before it commits.
+
 ## Storage Template
 
 Gallery supports a custom [Storage Template](/administration/storage-template). Learn more about this feature and its configuration [here](/administration/storage-template).
