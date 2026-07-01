@@ -4042,13 +4042,16 @@ describe(FaceIdentityRepository.name, () => {
         sources: [{ type: 'space-person', id: spacePersonIZ.id, spaceId: space.id }],
       });
 
-      // Not repairable by the actor, but the other owner is surfaced so the cross-owner merge can be gated.
+      // Not repairable by the actor, but the other owner is surfaced so the cross-owner merge can be
+      // gated. No attached space profile sits in a space the actor cannot repair, so it is a clean
+      // cross-owner-personal merge that may commit once confirmed.
       expect(resolved).toEqual(
         expect.objectContaining({
           accessible: true,
           allAttachedProfilesRepairable: false,
           hasScopedProfileConflict: false,
           impactedOwnerIds: [userB.id],
+          hasInaccessibleAttachedSpaceProfile: false,
         }),
       );
 
@@ -4065,6 +4068,67 @@ describe(FaceIdentityRepository.name, () => {
         .where('id', '=', personB.id)
         .executeTakeFirstOrThrow();
       expect(movedPersonB.identityId).toBe(identityIX.id);
+    });
+
+    // Issue #733 (mixed case): the identity carries another owner's personal person (surfacing an
+    // impacted owner) AND a shared-space profile in a space the actor cannot repair. The merge cannot
+    // be cleanly split, so resolveRepairRefs must flag `hasInaccessibleAttachedSpaceProfile` to keep
+    // it hard-blocked even though a cross-owner-personal merge would otherwise be allowed.
+    it('flags an inaccessible attached space profile alongside the other owner (mixed cross-owner case)', async () => {
+      const { ctx, sut } = setup();
+      const { user: actorA } = await ctx.newUser();
+      const { user: userB } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+
+      // A's own person -> target identity IX.
+      const { person: personA } = await ctx.newPerson({ ownerId: actorA.id, name: 'Ada' });
+      await sut.ensurePersonIdentity(personA.id);
+
+      // A shared space A can repair (Editor) surfaces the source as a space-person A can resolve.
+      const { space: accessibleSpace } = await ctx.newSharedSpace({ createdById: actorA.id });
+      await ctx.newSharedSpaceMember({ spaceId: accessibleSpace.id, userId: actorA.id, role: SharedSpaceRole.Editor });
+
+      // A private space A is not a member of also carries the same identity as a space-person.
+      const { space: privateSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: privateSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+
+      // Source identity IZ carries the resolvable space-person, an inaccessible-space space-person,
+      // AND user B's own person (other owner).
+      const identityIZ = await ctx.database
+        .insertInto('face_identity')
+        .values({ type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const spacePersonIZ = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: accessibleSpace.id, identityId: identityIZ.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: privateSpace.id, identityId: identityIZ.id, type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const { person: personB } = await ctx.newPerson({ ownerId: userB.id, name: 'Ada' });
+      await ctx.database
+        .updateTable('person')
+        .set({ identityId: identityIZ.id })
+        .where('id', '=', personB.id)
+        .execute();
+
+      const resolved = await sut.resolveRepairRefs(actorA.id, {
+        target: { type: 'person', id: personA.id },
+        sources: [{ type: 'space-person', id: spacePersonIZ.id, spaceId: accessibleSpace.id }],
+      });
+
+      expect(resolved).toEqual(
+        expect.objectContaining({
+          accessible: true,
+          allAttachedProfilesRepairable: false,
+          impactedOwnerIds: [userB.id],
+          hasInaccessibleAttachedSpaceProfile: true,
+        }),
+      );
     });
 
     it('reports same-owner personal repair as a scoped profile conflict', async () => {

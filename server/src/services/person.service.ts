@@ -211,11 +211,13 @@ export class PersonService extends BaseService {
     // `server.mergePeopleAcrossOwners` toggle (issue #733); with the toggle off every user gets a
     // descriptive, machine-readable error, and with it on any user must explicitly confirm before it
     // commits. This loosening applies only to genuine cross-owner merges (another user's personal
-    // person). A merge that is non-repairable for any other reason — e.g. an involved identity has a
-    // shared-space profile in a space the actor cannot repair, with no other-owner personal person —
-    // impacts no identifiable owner to gate on and stays hard-blocked regardless of the toggle.
+    // person). It stays hard-blocked regardless of the toggle when there is no identifiable other
+    // owner to authorize, OR when an involved identity also has a shared-space profile in a space the
+    // actor cannot repair (viewer / non-member): merging would regroup that space's people (which the
+    // actor could not otherwise touch) and the identity cannot be cleanly split, so the toggle path
+    // covers only other users' personal people.
     if (!resolved.allAttachedProfilesRepairable) {
-      if (resolved.impactedOwnerIds.length === 0) {
+      if (resolved.impactedOwnerIds.length === 0 || resolved.hasInaccessibleAttachedSpaceProfile) {
         throw new ForbiddenException('Cannot merge identities with inaccessible attached profiles');
       }
       await this.authorizeCrossOwnerMerge(dto, resolved.impactedOwnerIds);

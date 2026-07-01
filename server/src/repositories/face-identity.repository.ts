@@ -184,6 +184,13 @@ export type RepairRefsResolution =
        * modify — used to gate cross-owner merges (permitted only when the instance toggle is on).
        */
       impactedOwnerIds: string[];
+      /**
+       * True if any involved identity has a `shared_space_person` in a space where the actor lacks a
+       * repair role (viewer / non-member). Such a merge would regroup a space the actor cannot
+       * repair, and the identity cannot be cleanly split, so it stays hard-blocked even when a
+       * cross-owner personal merge would otherwise be permitted.
+       */
+      hasInaccessibleAttachedSpaceProfile: boolean;
     };
 
 export type DetachRefResolution =
@@ -1217,10 +1224,16 @@ export class FaceIdentityRepository {
       ),
     ];
     const identityIds = [...new Set([target.identityId, ...sourceIdentityIds])];
-    const [allAttachedProfilesRepairable, hasScopedProfileConflict, impactedOwnerIds] = await Promise.all([
+    const [
+      allAttachedProfilesRepairable,
+      hasScopedProfileConflict,
+      impactedOwnerIds,
+      hasInaccessibleAttachedSpaceProfile,
+    ] = await Promise.all([
       this.areAttachedProfilesRepairable(actorUserId, identityIds),
       this.hasRepairProfileConflict(target.identityId, sourceIdentityIds),
       this.getInaccessibleAttachedOwnerIds(actorUserId, identityIds),
+      this.hasInaccessibleAttachedSpaceProfile(actorUserId, identityIds),
     ]);
 
     return {
@@ -1231,6 +1244,7 @@ export class FaceIdentityRepository {
       allAttachedProfilesRepairable,
       hasScopedProfileConflict,
       impactedOwnerIds,
+      hasInaccessibleAttachedSpaceProfile,
     };
   }
 
@@ -1253,6 +1267,31 @@ export class FaceIdentityRepository {
       .execute();
 
     return rows.map((row) => row.ownerId);
+  }
+
+  /**
+   * True if any involved identity has a `shared_space_person` in a space where the actor lacks a
+   * repair role (viewer / non-member). Space-scoped counterpart of the personal-owner check: it keeps
+   * the toggle-gated cross-owner path limited to other users' personal people and hard-blocks merges
+   * that would otherwise regroup a space the actor cannot repair.
+   */
+  private async hasInaccessibleAttachedSpaceProfile(actorUserId: string, identityIds: string[]): Promise<boolean> {
+    if (identityIds.length === 0) {
+      return false;
+    }
+
+    const spaceRows = await this.db
+      .selectFrom('shared_space_person')
+      .leftJoin('shared_space_member', (join) =>
+        join
+          .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+          .on('shared_space_member.userId', '=', actorUserId),
+      )
+      .select(['shared_space_person.id', 'shared_space_member.role'])
+      .where('shared_space_person.identityId', 'in', identityIds)
+      .execute();
+
+    return spaceRows.some((row) => !this.isRepairRole(row.role));
   }
 
   async resolveDetachRef(actorUserId: string, profileRef: ScopedPersonProfileRefDto): Promise<DetachRefResolution> {

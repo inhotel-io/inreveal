@@ -67,6 +67,7 @@ const crossOwnerResolution = (overrides: Record<string, unknown> = {}) =>
     allAttachedProfilesRepairable: false,
     hasScopedProfileConflict: false,
     impactedOwnerIds: ['owner-b'],
+    hasInaccessibleAttachedSpaceProfile: false,
     ...overrides,
   }) as any;
 
@@ -4829,6 +4830,25 @@ describe(PersonService.name, () => {
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
       // Non-repairable, but no other-owner personal person is involved (impactedOwnerIds empty).
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(crossOwnerResolution({ impactedOwnerIds: [] }));
+
+      const error = await sut
+        .mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }))
+        .catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).message).toMatch(/inaccessible attached profiles/i);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(mocks.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('hard-blocks a cross-owner merge that also touches a shared-space profile the actor cannot repair, regardless of the toggle', async () => {
+      const auth = AuthFactory.create({ isAdmin: false });
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      // Mixed case: an other-owner personal person (impactedOwnerIds>0) AND a shared-space profile in
+      // a space the actor can only view — the identity cannot be cleanly split, so it stays blocked.
+      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
+        crossOwnerResolution({ impactedOwnerIds: ['owner-b'], hasInaccessibleAttachedSpaceProfile: true }),
+      );
 
       const error = await sut
         .mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }))
