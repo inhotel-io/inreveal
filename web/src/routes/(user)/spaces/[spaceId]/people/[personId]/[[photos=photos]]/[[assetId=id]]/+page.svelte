@@ -28,6 +28,7 @@
   import RepresentativeFacePickerModal from '$lib/modals/RepresentativeFacePickerModal.svelte';
   import { Route } from '$lib/route';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import { runScopedMergeWithCrossOwnerConfirmation } from '$lib/utils/cross-owner-merge';
   import { handleError } from '$lib/utils/handle-error';
   import { locale } from '$lib/stores/preferences.store';
   import { getSpacePersonFaceThumbnailUrl } from '$lib/utils/people-utils';
@@ -39,7 +40,6 @@
     getSpacePersonFaces,
     getSpacePeople,
     mergeSpacePeople,
-    mergeScopedPeople,
     RepresentativeFaceSource,
     searchPerson,
     SharedSpaceRole,
@@ -57,6 +57,7 @@
   import {
     mdiAccountBoxOutline,
     mdiAccountMultipleCheckOutline,
+    mdiAlertOutline,
     mdiArrowLeft,
     mdiCalendarEditOutline,
     mdiDotsVertical,
@@ -302,18 +303,32 @@
       targetRef.spaceId === space.id &&
       sourceRefs.every((ref) => ref.type === ScopedPersonProfileType.SpacePerson && ref.spaceId === space.id);
 
-    await (canUseSameSpaceMerge
-      ? mergeSpacePeople({
-          id: space.id,
-          personId: targetRef.id,
-          sharedSpacePersonMergeDto: { ids: selectedPeople.map(({ id }) => id) },
-        })
-      : mergeScopedPeople({
-          mergeScopedPeopleDto: {
-            target: targetRef,
-            sources: sourceRefs,
-          },
-        }));
+    if (canUseSameSpaceMerge) {
+      await mergeSpacePeople({
+        id: space.id,
+        personId: targetRef.id,
+        sharedSpacePersonMergeDto: { ids: selectedPeople.map(({ id }) => id) },
+      });
+    } else {
+      const committed = await runScopedMergeWithCrossOwnerConfirmation(
+        { target: targetRef, sources: sourceRefs },
+        {
+          confirmCrossOwner: () =>
+            modalManager.showDialog({
+              title: $t('merge_people_across_owners'),
+              prompt: $t('merge_people_across_owners_confirmation'),
+              confirmText: $t('merge'),
+              confirmColor: 'danger',
+              icon: mdiAlertOutline,
+            }),
+          onBlocked: (message) => toastManager.danger(message ?? $t('cannot_merge_people')),
+        },
+      );
+      if (!committed) {
+        // Cross-owner merge was blocked or the admin declined the confirmation — nothing merged.
+        return;
+      }
+    }
 
     toastManager.success($t('spaces_people_merged'));
     // Return the surviving target, not the page's route person — after an auto-swap

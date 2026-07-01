@@ -45,6 +45,7 @@
   import { locale } from '$lib/stores/preferences.store';
   import { websocketEvents } from '$lib/stores/websocket';
   import { createUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import { runScopedMergeWithCrossOwnerConfirmation } from '$lib/utils/cross-owner-merge';
   import { handleError } from '$lib/utils/handle-error';
   import { isExternalUrl } from '$lib/utils/navigation';
   import { isSpaceScopedPerson, toScopedPersonRef } from '$lib/utils/scoped-person-ref';
@@ -58,7 +59,6 @@
     getAllPeople,
     getPerson,
     mergePerson,
-    mergeScopedPeople,
     searchPerson,
     Type2 as ScopedPersonProfileType,
     type PersonFaceResponseDto,
@@ -73,7 +73,13 @@
     toastManager,
     type ActionItem,
   } from '@immich/ui';
-  import { mdiAccountBoxOutline, mdiAccountMultipleCheckOutline, mdiArrowLeft, mdiDotsVertical } from '@mdi/js';
+  import {
+    mdiAccountBoxOutline,
+    mdiAccountMultipleCheckOutline,
+    mdiAlertOutline,
+    mdiArrowLeft,
+    mdiDotsVertical,
+  } from '@mdi/js';
   import { DateTime } from 'luxon';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -201,6 +207,35 @@
     return data.people;
   };
 
+  // Runs a scoped merge, transparently handling the cross-owner boundary (issue #733):
+  // - a descriptive `blocked` error is shown as a clean toast (never the raw server string);
+  // - a `confirmationRequired` response prompts a strong confirmation, then re-runs with the
+  //   admin acknowledgement so the server commits the cross-owner merge.
+  // Returns the number of merged people, or `undefined` when nothing was merged (blocked/declined).
+  const mergeScopedPeopleWithCrossOwnerConfirmation = async (
+    targetPerson: PersonResponseDto,
+    sourcePeople: PersonResponseDto[],
+  ): Promise<number | undefined> => {
+    const committed = await runScopedMergeWithCrossOwnerConfirmation(
+      {
+        target: toScopedPersonRef(targetPerson),
+        sources: sourcePeople.map((sourcePerson) => toScopedPersonRef(sourcePerson)),
+      },
+      {
+        confirmCrossOwner: () =>
+          modalManager.showDialog({
+            title: $t('merge_people_across_owners'),
+            prompt: $t('merge_people_across_owners_confirmation'),
+            confirmText: $t('merge'),
+            confirmColor: 'danger',
+            icon: mdiAlertOutline,
+          }),
+        onBlocked: (message) => toastManager.danger(message ?? $t('cannot_merge_people')),
+      },
+    );
+    return committed ? sourcePeople.length : undefined;
+  };
+
   const mergePeople = async (targetCandidate: PersonResponseDto, selectedPeople: PersonResponseDto[]) => {
     const targetPerson = person;
     const sourcePeople =
@@ -209,20 +244,22 @@
         : [targetCandidate, ...selectedPeople.filter((selectedPerson) => selectedPerson.id !== targetPerson.id)];
     const usesScopedRepair =
       isSpaceScopedPerson(targetPerson) || sourcePeople.some((sourcePerson) => isSpaceScopedPerson(sourcePerson));
-    const mergedCount = await (usesScopedRepair
-      ? (async () => {
-          await mergeScopedPeople({
-            mergeScopedPeopleDto: {
-              target: toScopedPersonRef(targetPerson),
-              sources: sourcePeople.map((sourcePerson) => toScopedPersonRef(sourcePerson)),
-            },
-          });
-          return sourcePeople.length;
-        })()
-      : mergePerson({
-          id: targetPerson.id,
-          mergePersonDto: { ids: sourcePeople.map(({ id }) => id) },
-        }).then((results) => results.filter(({ success }) => success).length));
+
+    let mergedCount: number | undefined;
+    if (usesScopedRepair) {
+      mergedCount = await mergeScopedPeopleWithCrossOwnerConfirmation(targetPerson, sourcePeople);
+      if (mergedCount === undefined) {
+        // Cross-owner merge was blocked or the admin declined the confirmation — nothing merged.
+        return;
+      }
+    } else {
+      const results = await mergePerson({
+        id: targetPerson.id,
+        mergePersonDto: { ids: sourcePeople.map(({ id }) => id) },
+      });
+      mergedCount = results.filter(({ success }) => success).length;
+    }
+
     const mergedPerson = await getPerson({ id: targetPerson.id });
     toastManager.primary($t('merged_people_count', { values: { count: mergedCount } }));
     return mergedPerson;
