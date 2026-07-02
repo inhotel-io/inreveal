@@ -45,7 +45,7 @@ class _DriftLockedFolderPageState extends ConsumerState<DriftLockedFolderPage> w
     }
     if (state == AppLifecycleState.paused) {
       unawaited(ref.read(authProvider.notifier).lockPinCode());
-      unawaited(context.navigateTo(const TabShellRoute()));
+      unawaited(context.navigateTo(const GalleryTabShellRoute()));
       return;
     }
     setState(() {
