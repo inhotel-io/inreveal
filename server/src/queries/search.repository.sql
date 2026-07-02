@@ -50,30 +50,35 @@ from
 where
   (
     "asset"."ownerId" = any ($3::uuid[])
-    or exists (
-      select
-      from
-        "shared_space_asset"
-      where
-        "shared_space_asset"."assetId" = "asset"."id"
-        and "shared_space_asset"."spaceId" = any ($4::uuid[])
-    )
-    or exists (
-      select
-      from
-        "shared_space_library"
-      where
-        "shared_space_library"."libraryId" = "asset"."libraryId"
-        and "shared_space_library"."spaceId" = any ($5::uuid[])
+    or (
+      "asset"."visibility" = $4
+      and (
+        exists (
+          select
+          from
+            "shared_space_asset"
+          where
+            "shared_space_asset"."assetId" = "asset"."id"
+            and "shared_space_asset"."spaceId" = any ($5::uuid[])
+        )
+        or exists (
+          select
+          from
+            "shared_space_library"
+          where
+            "shared_space_library"."libraryId" = "asset"."libraryId"
+            and "shared_space_library"."spaceId" = any ($6::uuid[])
+        )
+      )
     )
   )
   and "asset"."deletedAt" is null
 order by
   "asset"."fileCreatedAt" desc
 limit
-  $6
-offset
   $7
+offset
+  $8
 
 -- SearchRepository.searchStatistics
 select
@@ -141,21 +146,26 @@ from
     where
       (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+          )
         )
       )
       and exists (
@@ -167,25 +177,25 @@ from
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "shared_space_person_face"."personId" = $4::uuid
+          and "shared_space_person_face"."personId" = $5::uuid
       )
-      and "asset"."fileCreatedAt" >= $5
-      and "asset_exif"."lensModel" = $6
-      and "asset"."isFavorite" = $7
+      and "asset"."fileCreatedAt" >= $6
+      and "asset_exif"."lensModel" = $7
+      and "asset"."isFavorite" = $8
       and "asset"."deletedAt" is null
-      and (smart_search.embedding <=> $8) <= $9
+      and (smart_search.embedding <=> $9) <= $10
     order by
-      smart_search.embedding <=> $10
+      smart_search.embedding <=> $11
     limit
-      $11
+      $12
   ) as "candidates"
 order by
   "candidates"."fileCreatedAt" desc nulls last,
   "candidates"."id"
 limit
-  $12
-offset
   $13
+offset
+  $14
 commit
 
 -- SearchRepository.getSmartSearchFacets
@@ -204,25 +214,30 @@ drop as (
   where
     (
       "asset"."ownerId" = any ($1::uuid[])
-      or exists (
-        select
-        from
-          "shared_space_asset"
-        where
-          "shared_space_asset"."assetId" = "asset"."id"
-          and "shared_space_asset"."spaceId" = any ($2::uuid[])
-      )
-      or exists (
-        select
-        from
-          "shared_space_library"
-        where
-          "shared_space_library"."libraryId" = "asset"."libraryId"
-          and "shared_space_library"."spaceId" = any ($3::uuid[])
+      or (
+        "asset"."visibility" = $2
+        and (
+          exists (
+            select
+            from
+              "shared_space_asset"
+            where
+              "shared_space_asset"."assetId" = "asset"."id"
+              and "shared_space_asset"."spaceId" = any ($3::uuid[])
+          )
+          or exists (
+            select
+            from
+              "shared_space_library"
+            where
+              "shared_space_library"."libraryId" = "asset"."libraryId"
+              and "shared_space_library"."spaceId" = any ($4::uuid[])
+          )
+        )
       )
     )
     and "asset"."deletedAt" is null
-    and (smart_search.embedding <=> $4) <= $5
+    and (smart_search.embedding <=> $5) <= $6
     and "smart_search"."embedding" is not null
 )
 create index smart_search_facet_candidates_asset_id_idx on smart_search_facet_candidates ("id")
@@ -887,11 +902,10 @@ from
   "asset_exif"
   inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
-  "visibility" = $1
-  and "deletedAt" is null
+  "deletedAt" is null
   and "state" is not null
-  and "state" != $2
-  and "asset"."ownerId" = any ($3::uuid[])
+  and "state" != $1
+  and "asset"."ownerId" = any ($2::uuid[])
 
 -- SearchRepository.getCities
 select distinct
@@ -905,12 +919,11 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
-      and "asset"."ownerId" = any ($2::uuid[])
+      "asset"."deletedAt" is null
+      and "asset"."ownerId" = any ($1::uuid[])
   )
   and "city" is not null
-  and "city" != $3
+  and "city" != $2
 order by
   "city"
 
@@ -921,11 +934,10 @@ from
   "asset_exif"
   inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
-  "visibility" = $1
-  and "deletedAt" is null
+  "deletedAt" is null
   and "make" is not null
-  and "make" != $2
-  and "asset"."ownerId" = any ($3::uuid[])
+  and "make" != $1
+  and "asset"."ownerId" = any ($2::uuid[])
 
 -- SearchRepository.getCameraModels
 select distinct
@@ -934,11 +946,10 @@ from
   "asset_exif"
   inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
-  "visibility" = $1
-  and "deletedAt" is null
+  "deletedAt" is null
   and "model" is not null
-  and "model" != $2
-  and "asset"."ownerId" = any ($3::uuid[])
+  and "model" != $1
+  and "asset"."ownerId" = any ($2::uuid[])
 
 -- SearchRepository.getCameraLensModels
 select distinct
@@ -947,11 +958,10 @@ from
   "asset_exif"
   inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
-  "visibility" = $1
-  and "deletedAt" is null
+  "deletedAt" is null
   and "lensModel" is not null
-  and "lensModel" != $2
-  and "asset"."ownerId" = any ($3::uuid[])
+  and "lensModel" != $1
+  and "asset"."ownerId" = any ($2::uuid[])
 
 -- SearchRepository.getAccessibleTags
 select distinct
@@ -962,9 +972,8 @@ from
   inner join "tag_asset" on "tag"."id" = "tag_asset"."tagId"
   inner join "asset" on "tag_asset"."assetId" = "asset"."id"
 where
-  "asset"."visibility" = $1
-  and "asset"."deletedAt" is null
-  and "asset"."ownerId" = any ($2::uuid[])
+  "asset"."deletedAt" is null
+  and "asset"."ownerId" = any ($1::uuid[])
 order by
   "tag"."value"
 
@@ -980,17 +989,16 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
+      "asset"."deletedAt" is null
       and (
-        "asset"."ownerId" = any ($2::uuid[])
+        "asset"."ownerId" = any ($1::uuid[])
         or exists (
           select
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            and "shared_space_asset"."spaceId" = any ($2::uuid[])
         )
         or exists (
           select
@@ -998,10 +1006,10 @@ where
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
+            and "shared_space_library"."spaceId" = any ($3::uuid[])
         )
       )
-      and "asset"."fileCreatedAt" >= $5
+      and "asset"."fileCreatedAt" >= $4
       and exists (
         select
         from
@@ -1011,11 +1019,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
+          and "face_identity_face"."identityId" = $5::uuid
       )
   )
   and "country" is not null
-  and "country" != $7
+  and "country" != $6
 order by
   "country"
 select distinct
@@ -1029,17 +1037,16 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
+      "asset"."deletedAt" is null
       and (
-        "asset"."ownerId" = any ($2::uuid[])
+        "asset"."ownerId" = any ($1::uuid[])
         or exists (
           select
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            and "shared_space_asset"."spaceId" = any ($2::uuid[])
         )
         or exists (
           select
@@ -1047,10 +1054,10 @@ where
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
+            and "shared_space_library"."spaceId" = any ($3::uuid[])
         )
       )
-      and "asset"."fileCreatedAt" >= $5
+      and "asset"."fileCreatedAt" >= $4
       and exists (
         select
         from
@@ -1060,11 +1067,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
+          and "face_identity_face"."identityId" = $5::uuid
       )
   )
   and "make" is not null
-  and "make" != $7
+  and "make" != $6
 order by
   "make"
 select distinct
@@ -1080,17 +1087,16 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
+      "asset"."deletedAt" is null
       and (
-        "asset"."ownerId" = any ($2::uuid[])
+        "asset"."ownerId" = any ($1::uuid[])
         or exists (
           select
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            and "shared_space_asset"."spaceId" = any ($2::uuid[])
         )
         or exists (
           select
@@ -1098,10 +1104,10 @@ where
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
+            and "shared_space_library"."spaceId" = any ($3::uuid[])
         )
       )
-      and "asset"."fileCreatedAt" >= $5
+      and "asset"."fileCreatedAt" >= $4
       and exists (
         select
         from
@@ -1111,7 +1117,7 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
+          and "face_identity_face"."identityId" = $5::uuid
       )
   )
 order by
@@ -1124,17 +1130,16 @@ WITH
       from
         "asset"
       where
-        "asset"."visibility" = $1
-        and "asset"."deletedAt" is null
+        "asset"."deletedAt" is null
         and (
-          "asset"."ownerId" = any ($2::uuid[])
+          "asset"."ownerId" = any ($1::uuid[])
           or exists (
             select
             from
               "shared_space_asset"
             where
               "shared_space_asset"."assetId" = "asset"."id"
-              and "shared_space_asset"."spaceId" = any ($3::uuid[])
+              and "shared_space_asset"."spaceId" = any ($2::uuid[])
           )
           or exists (
             select
@@ -1142,10 +1147,10 @@ WITH
               "shared_space_library"
             where
               "shared_space_library"."libraryId" = "asset"."libraryId"
-              and "shared_space_library"."spaceId" = any ($4::uuid[])
+              and "shared_space_library"."spaceId" = any ($3::uuid[])
           )
         )
-        and "asset"."fileCreatedAt" >= $5
+        and "asset"."fileCreatedAt" >= $4
     )
   ),
   identity_faces AS (
@@ -1172,7 +1177,7 @@ WITH
     FROM
       person
     WHERE
-      person."ownerId" = $6
+      person."ownerId" = $5
       AND person."identityId" IS NOT NULL
       AND EXISTS (
         SELECT
@@ -1202,9 +1207,9 @@ WITH
     FROM
       shared_space_person
       LEFT JOIN shared_space_person_alias ON shared_space_person_alias."personId" = shared_space_person.id
-      AND shared_space_person_alias."userId" = $7
+      AND shared_space_person_alias."userId" = $6
     WHERE
-      shared_space_person."spaceId" = any ($8::uuid[])
+      shared_space_person."spaceId" = any ($7::uuid[])
       AND shared_space_person."identityId" IS NOT NULL
       AND EXISTS (
         SELECT
@@ -1304,17 +1309,16 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
+      "asset"."deletedAt" is null
       and (
-        "asset"."ownerId" = any ($2::uuid[])
+        "asset"."ownerId" = any ($1::uuid[])
         or exists (
           select
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            and "shared_space_asset"."spaceId" = any ($2::uuid[])
         )
         or exists (
           select
@@ -1322,10 +1326,10 @@ where
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
+            and "shared_space_library"."spaceId" = any ($3::uuid[])
         )
       )
-      and "asset"."fileCreatedAt" >= $5
+      and "asset"."fileCreatedAt" >= $4
       and exists (
         select
         from
@@ -1335,11 +1339,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
+          and "face_identity_face"."identityId" = $5::uuid
       )
   )
   and "rating" is not null
-  and "rating" > $7
+  and "rating" > $6
 order by
   "rating"
 select distinct
@@ -1353,17 +1357,16 @@ where
     from
       "asset"
     where
-      "asset"."visibility" = $1
-      and "asset"."deletedAt" is null
+      "asset"."deletedAt" is null
       and (
-        "asset"."ownerId" = any ($2::uuid[])
+        "asset"."ownerId" = any ($1::uuid[])
         or exists (
           select
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            and "shared_space_asset"."spaceId" = any ($2::uuid[])
         )
         or exists (
           select
@@ -1371,10 +1374,10 @@ where
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($4::uuid[])
+            and "shared_space_library"."spaceId" = any ($3::uuid[])
         )
       )
-      and "asset"."fileCreatedAt" >= $5
+      and "asset"."fileCreatedAt" >= $4
       and exists (
         select
         from
@@ -1384,7 +1387,7 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $6::uuid
+          and "face_identity_face"."identityId" = $5::uuid
       )
   )
 order by
