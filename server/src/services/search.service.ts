@@ -209,7 +209,11 @@ export class SearchService extends BaseService {
     const userIds = await this.getUserIdsToSearch(auth, dto.visibility);
     const timelineSpaceIds = await this.getTimelineSpaceIds(auth, dto.withSharedSpaces || !!dto.albumIds?.length);
     const resolvedDto = await this.resolveScopedPersonFilters(auth, { ...dto, timelineSpaceIds });
-    const items = await this.searchRepository.searchRandom(dto.size || 250, { ...resolvedDto, userIds });
+    const items = await this.searchRepository.searchRandom(dto.size || 250, {
+      ...resolvedDto,
+      userIds,
+      visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
+    });
     return items.map((item) => mapAsset(item, { auth }));
   }
 
