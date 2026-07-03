@@ -42,6 +42,11 @@ export function createFaceCleanupModel(
   const reviewFirst = persons.filter((p) => p.recommendation === 'review-first');
   const confident = persons.filter((p) => p.recommendation === 'confident');
 
+  // Precompute id sets so canSelect is O(1) (B4). It's called once per row on every render and again inside
+  // toggle; at hundreds/thousands of persons the previous per-call find()+some() made it O(n) → O(n²) per render.
+  const reviewFirstIds = new SvelteSet(reviewFirst.map((p) => p.personId));
+  const confidentIds = new SvelteSet(confident.map((p) => p.personId));
+
   const prev = options?.prev ?? null;
   const currentIds = new SvelteSet(persons.map((p) => p.personId));
   // Ids the previous model knew about — for those, the user's selection choice wins; anything newly
@@ -68,12 +73,12 @@ export function createFaceCleanupModel(
     },
 
     canSelect(id: string): boolean {
-      const person = reviewFirst.find((p) => p.personId === id);
-      if (person) {
+      if (reviewFirstIds.has(id)) {
+        // review-first persons are only selectable once opened (reviewed)
         return opened.has(id);
       }
       // confident persons are always selectable
-      return confident.some((p) => p.personId === id);
+      return confidentIds.has(id);
     },
 
     toggle(id: string): void {

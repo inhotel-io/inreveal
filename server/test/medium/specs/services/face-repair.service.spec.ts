@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { JobName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
@@ -460,6 +461,7 @@ const setupRepair = (db?: Kysely<DB>) => {
       PersonRepository,
       FaceIdentityRepository,
       FaceRepairDeclineRepository,
+      DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
@@ -828,6 +830,7 @@ const setupRunRepair = (db?: Kysely<DB>) => {
       ConfigRepository,
       SystemMetadataRepository,
       FaceRepairDeclineRepository,
+      DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
@@ -1298,7 +1301,12 @@ describe('FaceRepairService decline filter', () => {
         .execute();
     }
 
-    // Find the suspected owner for all leaked faces, then decline all of them
+    // Run a scan first so the flagged snapshot is persisted (apply reads that snapshot, not a live recompute),
+    // using the same params as planParams so it flags exactly the leaked faces.
+    const { scanId } = await sut.triggerScan(user.id, planParams);
+    await sut.handleFaceRepairScan({ scanId });
+
+    // Find the suspected owner for all leaked faces, then decline all of them POST-scan
     const plan0 = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
     const leakedToRepair = plan0.toRepair.filter(
       (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
@@ -1309,7 +1317,7 @@ describe('FaceRepairService decline filter', () => {
       declinedBy: null,
     });
 
-    // applyRepair with alexia approved — declined faces must not be moved
+    // applyRepair with alexia approved — the post-scan declines must be filtered from the snapshot, moving 0
     const result = await sut.applyRepair({ approvedPersonIds: [alexia.id] });
     expect(result.moved).toBe(0);
 

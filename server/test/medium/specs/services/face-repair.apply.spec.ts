@@ -1,6 +1,7 @@
 import { Kysely } from 'kysely';
 import { JobName, SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
@@ -47,6 +48,7 @@ const setup = () => {
       SearchRepository,
       PersonRepository,
       ConfigRepository,
+      DatabaseRepository,
       SystemMetadataRepository,
     ],
     mock: [LoggingRepository, JobRepository],
@@ -117,6 +119,20 @@ beforeAll(async () => {
 
 afterEach(() => db.deleteFrom('face_repair_scan').execute());
 
+// Run a real scan so the flagged-face snapshot is persisted — apply reads that snapshot (it no longer
+// recomputes the plan via ANN in the request), so a scan must run before any apply that acts on flagged faces.
+const runScan = async (
+  sut: FaceRepairService,
+  jobMock: Mocked<JobRepository>,
+  userId: string,
+  overrides?: Parameters<FaceRepairService['triggerScan']>[1],
+) => {
+  jobMock.queue.mockResolvedValue();
+  const { scanId } = await sut.triggerScan(userId, overrides);
+  await sut.handleFaceRepairScan({ scanId });
+  return scanId;
+};
+
 // ── Case 1: approve subset re-homes only approved; unapproved untouched ─────────────────────────
 
 describe('FaceRepairService.applyRepair: approve subset', () => {
@@ -141,6 +157,7 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
       embedding: thirdAxisEmbedding(),
     });
 
+    await runScan(sut, jobMock, user.id);
     const result = await sut.applyRepair({ approvedPersonIds: [p1.id] });
 
     // P1's flagged faces should have been moved to their suspected owner.
@@ -167,7 +184,7 @@ describe('FaceRepairService.applyRepair: approve subset', () => {
 // ── Stored scan params govern apply ─────────────────────────────────────────────────────────────
 
 describe('FaceRepairService.applyRepair: honors stored scan params', () => {
-  it("re-plans with the latest scan's stored params, not config defaults", async () => {
+  it("applies the tuned scan's persisted snapshot, not a fresh recompute under config defaults", async () => {
     const { sut, ctx, jobMock } = setup();
     jobMock.queue.mockResolvedValue(); // triggerScan enqueues the scan job; we run it inline below
     const { user } = await ctx.newUser();
@@ -181,8 +198,8 @@ describe('FaceRepairService.applyRepair: honors stored scan params', () => {
     expect(tuned!.status).toBe('completed');
     expect(tuned!.totals!.flaggedFaces).toBe(0); // sanity: the tuned params flag nothing
 
-    // Apply must compute under the SAME stored params -> nothing moves. With config defaults
-    // (voteMargin 2) it would move all 6 leaked faces — the pre-fix regression.
+    // Apply reads the tuned scan's persisted (empty) snapshot -> nothing moves. A fresh recompute under
+    // config defaults (voteMargin 2) would move all 6 leaked faces — the pre-fix regression this guards.
     const result = await sut.applyRepair({ approvedPersonIds: [person.id] });
     expect(result.moved).toBe(0);
 
@@ -197,7 +214,7 @@ describe('FaceRepairService.applyRepair: honors stored scan params', () => {
 
 describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
   it('excludes the specified face ids — only remaining approved faces are re-homed', async () => {
-    const { sut, ctx } = setup();
+    const { sut, ctx, jobMock } = setup();
     const { user } = await ctx.newUser();
 
     // P1 over-cap: 6 leaked faces.
@@ -210,6 +227,7 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
       genuineCount: 4,
     });
 
+    await runScan(sut, jobMock, user.id);
     const excludedFaceId = p1Leaked[0];
     const result = await sut.applyRepair({
       approvedPersonIds: [p1.id],
@@ -244,7 +262,7 @@ describe('FaceRepairService.applyRepair: excludeFaceIds', () => {
 
 describe('FaceRepairService.applyRepair: idempotent re-apply', () => {
   it('second applyRepair with same approvedPersonIds returns moved: 0 (faces already re-homed)', async () => {
-    const { sut, ctx } = setup();
+    const { sut, ctx, jobMock } = setup();
     const { user } = await ctx.newUser();
 
     const { person: p1 } = await seedOverCapPerson(ctx, user.id, {
@@ -252,11 +270,13 @@ describe('FaceRepairService.applyRepair: idempotent re-apply', () => {
       genuineCount: 4,
     });
 
+    await runScan(sut, jobMock, user.id);
     // First apply: should move the over-cap faces to their suspected owner.
     const first = await sut.applyRepair({ approvedPersonIds: [p1.id] });
     expect(first.moved).toBeGreaterThan(0);
 
     // Second apply: scoped to the same personIds, but the faces no longer belong to P1 → nothing to re-home.
+    // The snapshot's still-on-person join drops the moved faces, so there is nothing left to move.
     const second = await sut.applyRepair({ approvedPersonIds: [p1.id] });
     expect(second.moved).toBe(0);
     expect(second.skipped).toBe(0);

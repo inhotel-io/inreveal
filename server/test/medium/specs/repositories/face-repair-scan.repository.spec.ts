@@ -3,6 +3,7 @@ import {
   FaceRepairScanRepository,
   RepairScanParams,
   RepairScanPerson,
+  ScanInProgressError,
 } from 'src/repositories/face-repair-scan.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
@@ -48,6 +49,35 @@ describe(FaceRepairScanRepository.name, () => {
     expect(latest?.id).toBe(scan.id);
     expect(latest?.params).toEqual(PARAMS);
     expect(latest?.persons).toEqual([]);
+  });
+
+  it('single-flight (M2): two concurrent createScan calls — one wins, the other throws ScanInProgressError', async () => {
+    // The classic race: both transactions SELECT no in-flight row (neither sees the other's uncommitted insert),
+    // then both INSERT. The partial unique index makes the second collide, translated to ScanInProgressError.
+    const results = await Promise.allSettled([
+      sut.createScan({ requestedBy: null, params: PARAMS }),
+      sut.createScan({ requestedBy: null, params: PARAMS }),
+    ]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(ScanInProgressError);
+
+    // Exactly one in-flight scan row persisted — the index held.
+    const inFlight = await db
+      .selectFrom('face_repair_scan')
+      .select('id')
+      .where('status', 'in', ['pending', 'running'])
+      .execute();
+    expect(inFlight).toHaveLength(1);
+  });
+
+  it('single-flight: createScan rejects with ScanInProgressError while a running scan exists', async () => {
+    const first = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.updateScanProgress(first.id, { status: 'running' });
+    await expect(sut.createScan({ requestedBy: null, params: PARAMS })).rejects.toBeInstanceOf(ScanInProgressError);
   });
 
   it('advances progress, then completes with totals + persons and finishedAt', async () => {

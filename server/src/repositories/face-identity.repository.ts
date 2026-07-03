@@ -2291,18 +2291,21 @@ export class FaceIdentityRepository {
       .executeTakeFirstOrThrow();
   }
 
-  async replaceFaceIdentities(input: {
-    assetFaceIds: string[];
-    identityId: string;
-    source: FaceIdentityFaceSource;
-    confidence?: number | null;
-  }): Promise<void> {
+  async replaceFaceIdentities(
+    input: {
+      assetFaceIds: string[];
+      identityId: string;
+      source: FaceIdentityFaceSource;
+      confidence?: number | null;
+    },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<void> {
     if (input.assetFaceIds.length === 0) {
       return;
     }
     for (let index = 0; index < input.assetFaceIds.length; index += 1000) {
       const chunk = input.assetFaceIds.slice(index, index + 1000);
-      await this.db
+      await db
         .insertInto('face_identity_face')
         .values(
           chunk.map((assetFaceId) => ({

@@ -13,7 +13,7 @@ part of openapi.api;
 class FaceRepairScanTriggerRequestDto {
   /// Returns a new [FaceRepairScanTriggerRequestDto] instance.
   FaceRepairScanTriggerRequestDto({
-    this.params,
+    this.params = const Optional.absent(),
   });
 
   ///
@@ -22,7 +22,7 @@ class FaceRepairScanTriggerRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  FaceRepairScanTriggerRequestDtoParams? params;
+  Optional<FaceRepairScanTriggerRequestDtoParams?> params;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairScanTriggerRequestDto &&
@@ -38,10 +38,9 @@ class FaceRepairScanTriggerRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.params != null) {
-      json[r'params'] = this.params;
-    } else {
-    //  json[r'params'] = null;
+    if (this.params.isPresent) {
+      final value = this.params.value;
+      json[r'params'] = value;
     }
     return json;
   }
@@ -55,7 +54,7 @@ class FaceRepairScanTriggerRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairScanTriggerRequestDto(
-        params: FaceRepairScanTriggerRequestDtoParams.fromJson(json[r'params']),
+        params: json.containsKey(r'params') ? Optional.present(FaceRepairScanTriggerRequestDtoParams.fromJson(json[r'params'])) : const Optional.absent(),
       );
     }
     return null;

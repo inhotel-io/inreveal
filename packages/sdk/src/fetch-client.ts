@@ -88,8 +88,8 @@ export type FaceRepairRequestDto = {
 export type FaceRepairResponseDto = {
     dryRun: boolean;
     executed?: {
-        requeued: number;
-        unassigned: number;
+        moved: number;
+        skipped: number;
     };
     mutated: boolean;
     report: {
@@ -118,6 +118,95 @@ export type FaceRepairResponseDto = {
             toRepair: number;
         };
     };
+};
+export type FaceRepairApplyRequestDto = {
+    approvedPersonIds?: string[];
+    excludeFaceIds?: string[];
+    manualMove?: {
+        destinationPersonId: string;
+        entireCluster?: boolean;
+        faceIds?: string[];
+        personId: string;
+    };
+};
+export type FaceRepairApplyResponseDto = {
+    moved: number;
+    skipped: number;
+};
+export type FaceRepairDeclineRemoveRequestDto = {
+    faces?: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    ids?: string[];
+};
+export type FaceRepairDeclineRemovedDto = {
+    removed: number;
+};
+export type FaceRepairDeclineListDto = {
+    declines: {
+        assetFaceId: string | null;
+        createdAt: string;
+        id: string;
+        personId: string | null;
+        personName: string | null;
+        personThumbnailFaceId: string | null;
+        suspectedOwnerId: string | null;
+        suspectedOwnerName: string | null;
+        suspectedOwnerThumbnailFaceId: string | null;
+        "type": string;
+    }[];
+};
+export type FaceRepairDeclineRequestDto = {
+    faces?: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    persons?: {
+        personId: string;
+        suspectedOwnerIds: string[];
+    }[];
+};
+export type FaceRepairDeclineCreatedDto = {
+    created: number;
+};
+export type FaceRepairScanTriggerRequestDto = {
+    params?: {
+        largeClusterThreshold?: number;
+        maxAttributionDistance?: number;
+        maxDistance?: number;
+        maxFlaggedFraction?: number;
+        minFaces?: number;
+        voteMargin?: number;
+        voteWindow?: number;
+    };
+};
+export type FaceRepairScanTriggerResponseDto = {
+    scanId: string;
+};
+export type FaceRepairScanDefaultsDto = {
+    maxDistance: number;
+    maxFlaggedFraction: number;
+    minFaces: number;
+};
+export type FaceRepairPersonFacesDto = {
+    flaggedFaces: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    personId: string;
+};
+export type FaceRepairClusterFacesRequestDto = {
+    excludeFaceIds?: string[];
+    page: number;
+    size: number;
+};
+export type FaceRepairClusterFacesResponseDto = {
+    faces: {
+        assetFaceId: string;
+    }[];
+    hasMore: boolean;
+    total: number;
 };
 export type IntegrityReportResponseDto = {
     items: {
@@ -4400,6 +4489,128 @@ export function runFaceRepair({ faceRepairRequestDto }: {
         ...opts,
         method: "POST",
         body: faceRepairRequestDto
+    })));
+}
+/**
+ * Apply face re-attribution for approved persons
+ */
+export function applyFaceRepair({ faceRepairApplyRequestDto }: {
+    faceRepairApplyRequestDto: FaceRepairApplyRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairApplyResponseDto;
+    }>("/admin/face-repair/apply", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairApplyRequestDto
+    })));
+}
+/**
+ * Remove face-repair declines
+ */
+export function removeFaceRepairDeclines({ faceRepairDeclineRemoveRequestDto }: {
+    faceRepairDeclineRemoveRequestDto: FaceRepairDeclineRemoveRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairDeclineRemovedDto;
+    }>("/admin/face-repair/decline", oazapfts.json({
+        ...opts,
+        method: "DELETE",
+        body: faceRepairDeclineRemoveRequestDto
+    })));
+}
+/**
+ * List face-repair declines
+ */
+export function getFaceRepairDeclines(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairDeclineListDto;
+    }>("/admin/face-repair/decline", {
+        ...opts
+    }));
+}
+/**
+ * Decline flagged faces / dismiss flagged persons
+ */
+export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
+    faceRepairDeclineRequestDto: FaceRepairDeclineRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairDeclineCreatedDto;
+    }>("/admin/face-repair/decline", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairDeclineRequestDto
+    })));
+}
+/**
+ * Trigger a face-repair scan
+ */
+export function triggerScan({ faceRepairScanTriggerRequestDto }: {
+    faceRepairScanTriggerRequestDto: FaceRepairScanTriggerRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairScanTriggerResponseDto;
+    }>("/admin/face-repair/scan", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairScanTriggerRequestDto
+    })));
+}
+/**
+ * Get effective face-repair scan defaults
+ */
+export function getFaceRepairScanDefaults(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairScanDefaultsDto;
+    }>("/admin/face-repair/scan/defaults", {
+        ...opts
+    }));
+}
+/**
+ * Get the latest face-repair scan
+ */
+export function getLatestScan(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: object;
+    }>("/admin/face-repair/scan/latest", {
+        ...opts
+    }));
+}
+/**
+ * Get a person's flagged faces for review
+ */
+export function getFaceRepairPersonFaces({ personId }: {
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairPersonFacesDto;
+    }>(`/admin/face-repair/scan/person/${encodeURIComponent(personId)}`, {
+        ...opts
+    }));
+}
+/**
+ * List a person's cluster faces (paginated, excluding the supplied flagged ids)
+ */
+export function getFaceRepairClusterFaces({ personId, faceRepairClusterFacesRequestDto }: {
+    personId: string;
+    faceRepairClusterFacesRequestDto: FaceRepairClusterFacesRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairClusterFacesResponseDto;
+    }>(`/admin/face-repair/scan/person/${encodeURIComponent(personId)}/cluster-faces`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairClusterFacesRequestDto
     })));
 }
 /**
@@ -9666,6 +9877,7 @@ export enum JobName {
     FacialRecognition = "FacialRecognition",
     FaceIdentityBackfill = "FaceIdentityBackfill",
     FaceIdentityMaintenanceAfterRecognition = "FaceIdentityMaintenanceAfterRecognition",
+    FaceRepairScan = "FaceRepairScan",
     FileDelete = "FileDelete",
     FileMigrationQueueAll = "FileMigrationQueueAll",
     LibraryDeleteCheck = "LibraryDeleteCheck",

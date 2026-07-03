@@ -594,6 +594,11 @@ export class JobRepository {
         }
         return { jobId: `shared-space-person-metadata-backfill/${scope}`, removeOnFail: true };
       }
+      case JobName.FaceRepairScan: {
+        // Fixed jobId so BullMQ dedupes concurrent scan enqueues into one (single-flight, complementing the DB
+        // partial unique index). removeOnComplete/Fail frees the id once the scan finishes so the next can run.
+        return { jobId: JobName.FaceRepairScan, removeOnComplete: true, removeOnFail: true };
+      }
       default: {
         return null;
       }

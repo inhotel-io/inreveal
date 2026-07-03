@@ -13,14 +13,14 @@ part of openapi.api;
 class FaceRepairApplyRequestDto {
   /// Returns a new [FaceRepairApplyRequestDto] instance.
   FaceRepairApplyRequestDto({
-    this.approvedPersonIds = const [],
-    this.excludeFaceIds = const [],
-    this.manualMove,
+    this.approvedPersonIds = const Optional.present(const []),
+    this.excludeFaceIds = const Optional.present(const []),
+    this.manualMove = const Optional.absent(),
   });
 
-  List<String> approvedPersonIds;
+  Optional<List<String>?> approvedPersonIds;
 
-  List<String> excludeFaceIds;
+  Optional<List<String>?> excludeFaceIds;
 
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -28,7 +28,7 @@ class FaceRepairApplyRequestDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  FaceRepairApplyRequestDtoManualMove? manualMove;
+  Optional<FaceRepairApplyRequestDtoManualMove?> manualMove;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairApplyRequestDto &&
@@ -48,12 +48,17 @@ class FaceRepairApplyRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'approvedPersonIds'] = this.approvedPersonIds;
-      json[r'excludeFaceIds'] = this.excludeFaceIds;
-    if (this.manualMove != null) {
-      json[r'manualMove'] = this.manualMove;
-    } else {
-    //  json[r'manualMove'] = null;
+    if (this.approvedPersonIds.isPresent) {
+      final value = this.approvedPersonIds.value;
+      json[r'approvedPersonIds'] = value;
+    }
+    if (this.excludeFaceIds.isPresent) {
+      final value = this.excludeFaceIds.value;
+      json[r'excludeFaceIds'] = value;
+    }
+    if (this.manualMove.isPresent) {
+      final value = this.manualMove.value;
+      json[r'manualMove'] = value;
     }
     return json;
   }
@@ -67,13 +72,13 @@ class FaceRepairApplyRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairApplyRequestDto(
-        approvedPersonIds: json[r'approvedPersonIds'] is Iterable
+        approvedPersonIds: json.containsKey(r'approvedPersonIds') ? Optional.present(json[r'approvedPersonIds'] is Iterable
             ? (json[r'approvedPersonIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        excludeFaceIds: json[r'excludeFaceIds'] is Iterable
+            : const []) : const Optional.absent(),
+        excludeFaceIds: json.containsKey(r'excludeFaceIds') ? Optional.present(json[r'excludeFaceIds'] is Iterable
             ? (json[r'excludeFaceIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
-        manualMove: FaceRepairApplyRequestDtoManualMove.fromJson(json[r'manualMove']),
+            : const []) : const Optional.absent(),
+        manualMove: json.containsKey(r'manualMove') ? Optional.present(FaceRepairApplyRequestDtoManualMove.fromJson(json[r'manualMove'])) : const Optional.absent(),
       );
     }
     return null;

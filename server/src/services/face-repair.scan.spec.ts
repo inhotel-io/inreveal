@@ -5,12 +5,10 @@ import { EligibleFaceRow } from 'src/repositories/face-repair.repository';
 import { FaceRepairService, RepairPlan } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
 
-/** Sync generator cast to AsyncIterableIterator for the progress test mock. */
-function singleFaceStream(): AsyncIterableIterator<EligibleFaceRow> {
-  return (function* () {
-    yield { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' };
-  })() as unknown as AsyncIterableIterator<EligibleFaceRow>;
-}
+/** A single eligible-face page for the progress test mock (keyset scan reads pages, not a cursor). */
+const singleFacePage = (): EligibleFaceRow[] => [
+  { assetFaceId: 'face-1', ownerId: 'user-1', personId: 'P', embedding: '[0.1,0.2,0.3]' },
+];
 
 /** A minimal RepairPlan with one flagged person P → suspected owner Q */
 const makePlan = (): RepairPlan => ({
@@ -39,6 +37,7 @@ describe(FaceRepairService.name, () => {
     mocks.faceRepairScan.completeScan.mockResolvedValue();
     mocks.faceRepairScan.failScan.mockResolvedValue();
     mocks.faceRepairScan.pruneSupersededScans.mockResolvedValue();
+    mocks.faceRepairScan.replaceScanFlaggedFaces.mockResolvedValue();
 
     // Default: facial recognition not active; createScan returns a scan row
     mocks.job.isActive.mockResolvedValue(false);
@@ -98,7 +97,8 @@ describe(FaceRepairService.name, () => {
 
     it('reports progress at least once during the stream', async () => {
       // Let buildRepairPlan run for real — mock its underlying repos so one candidate flows through.
-      mocks.faceRepair.streamEligibleFaces.mockReturnValue(singleFaceStream());
+      // A single-face page (< SCAN_PAGE_SIZE) ends the keyset scan after one page.
+      mocks.faceRepair.getEligibleFacePage.mockResolvedValue(singleFacePage());
       mocks.search.searchFaces.mockResolvedValue([]);
 
       await sut.runScan('scan-1');
@@ -117,6 +117,27 @@ describe(FaceRepairService.name, () => {
       await expect(sut.runScan('scan-1')).rejects.toThrow('boom');
 
       expect(mocks.faceRepairScan.failScan).toHaveBeenCalledWith('scan-1', expect.stringContaining('boom'));
+    });
+
+    it("persists the scan's flagged faces (toRepair + reviewOnlyFaces) before completing", async () => {
+      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
+        toRepair: [{ assetFaceId: 'face-1', currentPersonId: 'P', suspectedOwnerId: 'Q' }],
+        reviewOnlyFaces: [{ assetFaceId: 'face-2', currentPersonId: 'P', suspectedOwnerId: 'R', reason: 'over-cap' }],
+        reviewOnlyPersonIds: [],
+        unAttributableFaces: [],
+        perPerson: [{ personId: 'P', eligible: 5, flagged: 2, flaggedFraction: 0.4 }],
+      } as any);
+
+      await sut.runScan('scan-1');
+
+      expect(mocks.faceRepairScan.replaceScanFlaggedFaces).toHaveBeenCalledWith('scan-1', [
+        { assetFaceId: 'face-1', personId: 'P', suspectedOwnerId: 'Q' },
+        { assetFaceId: 'face-2', personId: 'P', suspectedOwnerId: 'R' },
+      ]);
+      // persisted before the scan is marked completed
+      const persistOrder = mocks.faceRepairScan.replaceScanFlaggedFaces.mock.invocationCallOrder[0];
+      const completeOrder = mocks.faceRepairScan.completeScan.mock.invocationCallOrder[0];
+      expect(persistOrder).toBeLessThan(completeOrder);
     });
   });
 

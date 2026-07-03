@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { JobName, SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import {
@@ -37,6 +38,7 @@ const setup = () => {
       SearchRepository,
       PersonRepository,
       ConfigRepository,
+      DatabaseRepository,
       SystemMetadataRepository,
     ],
     mock: [LoggingRepository, JobRepository],

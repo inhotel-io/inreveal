@@ -1,6 +1,16 @@
+import {
+  applyFaceRepair,
+  getFaceRepairClusterFaces,
+  getFaceRepairPersonFaces,
+  getLatestScan,
+  type FaceRepairClusterFacesResponseDto,
+  type FaceRepairPersonFacesDto,
+} from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goto } from '$app/navigation';
+import Page from './+page.svelte';
 
 // Mock @immich/sdk before any imports that use it
 vi.mock('@immich/sdk', async (importOriginal) => {
@@ -85,17 +95,6 @@ vi.mock('$lib/utils/people-utils', () => ({
   getPersonFaceThumbnailUrl: (personId: string, faceId: string) => `/api/people/${personId}/faces/${faceId}/thumbnail`,
   getSpacePersonFaceThumbnailUrl: vi.fn(),
 }));
-
-import { goto } from '$app/navigation';
-import {
-  applyFaceRepair,
-  getFaceRepairClusterFaces,
-  getFaceRepairPersonFaces,
-  getLatestScan,
-  type FaceRepairClusterFacesResponseDto,
-  type FaceRepairPersonFacesDto,
-} from '@immich/sdk';
-import Page from './+page.svelte';
 
 // ---- helpers ----
 
