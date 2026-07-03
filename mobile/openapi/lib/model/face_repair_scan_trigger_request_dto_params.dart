@@ -13,13 +13,13 @@ part of openapi.api;
 class FaceRepairScanTriggerRequestDtoParams {
   /// Returns a new [FaceRepairScanTriggerRequestDtoParams] instance.
   FaceRepairScanTriggerRequestDtoParams({
-    this.largeClusterThreshold,
-    this.maxAttributionDistance,
-    this.maxDistance,
-    this.maxFlaggedFraction,
-    this.minFaces,
-    this.voteMargin,
-    this.voteWindow,
+    this.largeClusterThreshold = const Optional.absent(),
+    this.maxAttributionDistance = const Optional.absent(),
+    this.maxDistance = const Optional.absent(),
+    this.maxFlaggedFraction = const Optional.absent(),
+    this.minFaces = const Optional.absent(),
+    this.voteMargin = const Optional.absent(),
+    this.voteWindow = const Optional.absent(),
   });
 
   /// Minimum value: 1
@@ -30,8 +30,9 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? largeClusterThreshold;
+  Optional<int?> largeClusterThreshold;
 
+  /// Minimum value: 0
   /// Maximum value: 2
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -39,8 +40,9 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  num? maxAttributionDistance;
+  Optional<num?> maxAttributionDistance;
 
+  /// Minimum value: 0
   /// Maximum value: 2
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -48,7 +50,7 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  num? maxDistance;
+  Optional<num?> maxDistance;
 
   /// Minimum value: 0
   /// Maximum value: 1
@@ -58,7 +60,7 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  num? maxFlaggedFraction;
+  Optional<num?> maxFlaggedFraction;
 
   /// Minimum value: 1
   /// Maximum value: 9007199254740991
@@ -68,7 +70,7 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? minFaces;
+  Optional<int?> minFaces;
 
   /// Minimum value: 0
   /// Maximum value: 9007199254740991
@@ -78,7 +80,7 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? voteMargin;
+  Optional<int?> voteMargin;
 
   /// Minimum value: 1
   /// Maximum value: 9007199254740991
@@ -88,7 +90,7 @@ class FaceRepairScanTriggerRequestDtoParams {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? voteWindow;
+  Optional<int?> voteWindow;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairScanTriggerRequestDtoParams &&
@@ -116,40 +118,33 @@ class FaceRepairScanTriggerRequestDtoParams {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.largeClusterThreshold != null) {
-      json[r'largeClusterThreshold'] = this.largeClusterThreshold;
-    } else {
-    //  json[r'largeClusterThreshold'] = null;
+    if (this.largeClusterThreshold.isPresent) {
+      final value = this.largeClusterThreshold.value;
+      json[r'largeClusterThreshold'] = value;
     }
-    if (this.maxAttributionDistance != null) {
-      json[r'maxAttributionDistance'] = this.maxAttributionDistance;
-    } else {
-    //  json[r'maxAttributionDistance'] = null;
+    if (this.maxAttributionDistance.isPresent) {
+      final value = this.maxAttributionDistance.value;
+      json[r'maxAttributionDistance'] = value;
     }
-    if (this.maxDistance != null) {
-      json[r'maxDistance'] = this.maxDistance;
-    } else {
-    //  json[r'maxDistance'] = null;
+    if (this.maxDistance.isPresent) {
+      final value = this.maxDistance.value;
+      json[r'maxDistance'] = value;
     }
-    if (this.maxFlaggedFraction != null) {
-      json[r'maxFlaggedFraction'] = this.maxFlaggedFraction;
-    } else {
-    //  json[r'maxFlaggedFraction'] = null;
+    if (this.maxFlaggedFraction.isPresent) {
+      final value = this.maxFlaggedFraction.value;
+      json[r'maxFlaggedFraction'] = value;
     }
-    if (this.minFaces != null) {
-      json[r'minFaces'] = this.minFaces;
-    } else {
-    //  json[r'minFaces'] = null;
+    if (this.minFaces.isPresent) {
+      final value = this.minFaces.value;
+      json[r'minFaces'] = value;
     }
-    if (this.voteMargin != null) {
-      json[r'voteMargin'] = this.voteMargin;
-    } else {
-    //  json[r'voteMargin'] = null;
+    if (this.voteMargin.isPresent) {
+      final value = this.voteMargin.value;
+      json[r'voteMargin'] = value;
     }
-    if (this.voteWindow != null) {
-      json[r'voteWindow'] = this.voteWindow;
-    } else {
-    //  json[r'voteWindow'] = null;
+    if (this.voteWindow.isPresent) {
+      final value = this.voteWindow.value;
+      json[r'voteWindow'] = value;
     }
     return json;
   }
@@ -163,19 +158,13 @@ class FaceRepairScanTriggerRequestDtoParams {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairScanTriggerRequestDtoParams(
-        largeClusterThreshold: mapValueOfType<int>(json, r'largeClusterThreshold'),
-        maxAttributionDistance: json[r'maxAttributionDistance'] == null
-            ? null
-            : num.parse('${json[r'maxAttributionDistance']}'),
-        maxDistance: json[r'maxDistance'] == null
-            ? null
-            : num.parse('${json[r'maxDistance']}'),
-        maxFlaggedFraction: json[r'maxFlaggedFraction'] == null
-            ? null
-            : num.parse('${json[r'maxFlaggedFraction']}'),
-        minFaces: mapValueOfType<int>(json, r'minFaces'),
-        voteMargin: mapValueOfType<int>(json, r'voteMargin'),
-        voteWindow: mapValueOfType<int>(json, r'voteWindow'),
+        largeClusterThreshold: json.containsKey(r'largeClusterThreshold') ? Optional.present(json[r'largeClusterThreshold'] == null ? null : int.parse('${json[r'largeClusterThreshold']}')) : const Optional.absent(),
+        maxAttributionDistance: json.containsKey(r'maxAttributionDistance') ? Optional.present(json[r'maxAttributionDistance'] == null ? null : num.parse('${json[r'maxAttributionDistance']}')) : const Optional.absent(),
+        maxDistance: json.containsKey(r'maxDistance') ? Optional.present(json[r'maxDistance'] == null ? null : num.parse('${json[r'maxDistance']}')) : const Optional.absent(),
+        maxFlaggedFraction: json.containsKey(r'maxFlaggedFraction') ? Optional.present(json[r'maxFlaggedFraction'] == null ? null : num.parse('${json[r'maxFlaggedFraction']}')) : const Optional.absent(),
+        minFaces: json.containsKey(r'minFaces') ? Optional.present(json[r'minFaces'] == null ? null : int.parse('${json[r'minFaces']}')) : const Optional.absent(),
+        voteMargin: json.containsKey(r'voteMargin') ? Optional.present(json[r'voteMargin'] == null ? null : int.parse('${json[r'voteMargin']}')) : const Optional.absent(),
+        voteWindow: json.containsKey(r'voteWindow') ? Optional.present(json[r'voteWindow'] == null ? null : int.parse('${json[r'voteWindow']}')) : const Optional.absent(),
       );
     }
     return null;

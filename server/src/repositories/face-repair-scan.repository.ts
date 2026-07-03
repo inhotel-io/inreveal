@@ -1,7 +1,12 @@
 import { Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
+import { PostgresError } from 'postgres';
+import { SourceType } from 'src/enum';
 import { DB } from 'src/schema';
 import { FaceRepairScanTable } from 'src/schema/tables/face-repair-scan.table';
+
+// The partial unique index enforcing at most one in-flight scan (see face-repair-scan.table.ts).
+const IN_FLIGHT_INDEX = 'face_repair_scan_in_flight_uq';
 
 export type RepairScanStatus = 'pending' | 'running' | 'completed' | 'failed';
 
@@ -67,25 +72,35 @@ export class FaceRepairScanRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   async createScan(input: { requestedBy: string | null; params: RepairScanParams }): Promise<RepairScanRow> {
-    return this.db.transaction().execute(async (trx) => {
-      const inFlight = await trx
-        .selectFrom('face_repair_scan')
-        .select('id')
-        .where('status', 'in', ['pending', 'running'])
-        .executeTakeFirst();
-      if (inFlight) {
+    try {
+      return await this.db.transaction().execute(async (trx) => {
+        const inFlight = await trx
+          .selectFrom('face_repair_scan')
+          .select('id')
+          .where('status', 'in', ['pending', 'running'])
+          .executeTakeFirst();
+        if (inFlight) {
+          throw new ScanInProgressError();
+        }
+        return trx
+          .insertInto('face_repair_scan')
+          .values({
+            status: 'pending',
+            requestedBy: input.requestedBy,
+            params: input.params as unknown as Insertable<FaceRepairScanTable>['params'],
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+      });
+    } catch (error) {
+      // Race-safe backstop for the SELECT-then-INSERT above: two concurrent createScan transactions each read no
+      // in-flight row (neither sees the other's uncommitted insert), then collide on the partial unique index.
+      // Translate that collision into the same typed "already in progress" signal callers already handle.
+      if ((error as PostgresError)?.code === '23505' && (error as PostgresError)?.constraint_name === IN_FLIGHT_INDEX) {
         throw new ScanInProgressError();
       }
-      return trx
-        .insertInto('face_repair_scan')
-        .values({
-          status: 'pending',
-          requestedBy: input.requestedBy,
-          params: input.params as unknown as Insertable<FaceRepairScanTable>['params'],
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
-    });
+      throw error;
+    }
   }
 
   getLatestScan(): Promise<RepairScanRow | undefined> {
@@ -227,6 +242,78 @@ export class FaceRepairScanRepository {
       };
     });
     return { ...scan, persons: refreshed as unknown as RepairScanRow['persons'] };
+  }
+
+  async replaceScanFlaggedFaces(
+    scanId: string,
+    faces: { assetFaceId: string; personId: string; suspectedOwnerId: string }[],
+  ): Promise<void> {
+    await this.db.deleteFrom('face_repair_scan_flagged_face').where('scanId', '=', scanId).execute();
+    for (let index = 0; index < faces.length; index += 1000) {
+      const chunk = faces.slice(index, index + 1000);
+      await this.db
+        .insertInto('face_repair_scan_flagged_face')
+        .values(
+          chunk.map((face) => ({
+            scanId,
+            assetFaceId: face.assetFaceId,
+            personId: face.personId,
+            suspectedOwnerId: face.suspectedOwnerId,
+          })),
+        )
+        .execute();
+    }
+  }
+
+  async getScanFlaggedFaces(
+    scanId: string,
+    personId: string,
+  ): Promise<{ assetFaceId: string; suspectedOwnerId: string }[]> {
+    return this.db
+      .selectFrom('face_repair_scan_flagged_face as ff')
+      .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select(['ff.assetFaceId as assetFaceId', 'ff.suspectedOwnerId as suspectedOwnerId'])
+      .where('ff.scanId', '=', scanId)
+      .where('ff.personId', '=', personId)
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .orderBy('ff.assetFaceId')
+      .execute();
+  }
+
+  // Multi-person variant of getScanFlaggedFaces used by the apply path: read the persisted flagged-face
+  // snapshot for a set of approved persons instead of recomputing the plan via per-face ANN in the request
+  // (the scan already computed and stored exactly these rows). The eligibility join mirrors
+  // streamEligibleFaces / getScanFlaggedFaces exactly, and `asset_face.personId = ff.personId` keeps the read
+  // self-correcting: a face moved off its recorded person since the scan is silently dropped, so applying the
+  // stored snapshot is safe. `personId` is returned so the caller can route each face from its recorded person.
+  async getScanFlaggedFacesForPersons(
+    scanId: string,
+    personIds: string[],
+  ): Promise<{ assetFaceId: string; personId: string; suspectedOwnerId: string }[]> {
+    if (personIds.length === 0) {
+      return [];
+    }
+    return this.db
+      .selectFrom('face_repair_scan_flagged_face as ff')
+      .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select(['ff.assetFaceId as assetFaceId', 'ff.personId as personId', 'ff.suspectedOwnerId as suspectedOwnerId'])
+      .where('ff.scanId', '=', scanId)
+      .where('ff.personId', 'in', personIds)
+      .whereRef('asset_face.personId', '=', 'ff.personId')
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .orderBy('ff.assetFaceId')
+      .execute();
   }
 
   async enrichReportPersons(

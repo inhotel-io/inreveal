@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, ForeignKeyColumn, Generated, Table, Timestamp } from '@immich/sql-tools';
+import { Column, CreateDateColumn, ForeignKeyColumn, Generated, Index, Table, Timestamp } from '@immich/sql-tools';
 import { PrimaryGeneratedUuidV7Column } from 'src/decorators';
 import {
   RepairScanParams,
@@ -8,7 +8,16 @@ import {
 } from 'src/repositories/face-repair-scan.repository';
 import { UserTable } from 'src/schema/tables/user.table';
 
+// Partial unique index on `status` restricted to in-flight rows: the DB-level single-flight guard. It makes the
+// SELECT-then-INSERT in createScan race-safe — two concurrent triggers can't both persist an in-flight scan (the
+// second collides here and is translated to ScanInProgressError).
 @Table('face_repair_scan')
+@Index({
+  name: 'face_repair_scan_in_flight_uq',
+  columns: ['status'],
+  unique: true,
+  where: `"status" IN ('pending', 'running')`,
+})
 export class FaceRepairScanTable {
   @PrimaryGeneratedUuidV7Column()
   id!: Generated<string>;

@@ -312,7 +312,7 @@
             class="size-14 flex-none rounded-xl object-cover shadow-[0_0_0_3px_#e8f6ec,0_0_0_4px_#2fa84f] dark:shadow-[0_0_0_3px_rgba(47,168,79,0.2),0_0_0_4px_#2fa84f]"
           />
           <div>
-            <div class="text-xs font-bold uppercase tracking-widest text-green-600" data-testid="stays-label">
+            <div class="text-xs font-bold tracking-widest text-green-600 uppercase" data-testid="stays-label">
               {$t('admin.face_cleanup_review_stays_label', { values: { name: personName } })}
             </div>
             <div class="mt-1 text-base font-semibold">{personName}</div>
@@ -334,7 +334,7 @@
         <!-- Moves side -->
         <div class="flex items-center justify-end gap-3 bg-white p-4 text-right dark:bg-gray-800">
           <div>
-            <div class="text-xs font-bold uppercase tracking-widest text-primary" data-testid="moves-label">
+            <div class="text-xs font-bold tracking-widest text-primary uppercase" data-testid="moves-label">
               {$t('admin.face_cleanup_review_moves_label')}
             </div>
             <div class="mt-1 text-base font-semibold">{ownerName}</div>
@@ -381,7 +381,7 @@
         </div>
 
         <!-- Tiles -->
-        <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 dark:bg-gray-800/50 sm:grid-cols-6 lg:grid-cols-8">
+        <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 sm:grid-cols-6 lg:grid-cols-8 dark:bg-gray-800/50">
           {#each visibleFaces as face (face.assetFaceId)}
             {@const excluded = vm.isExcluded(face.assetFaceId)}
             {@const declined = vm.isDeclined(face.assetFaceId)}
@@ -419,7 +419,7 @@
                 {:else}
                   <!-- Checkmark -->
                   <div
-                    class="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
+                    class="absolute top-1.5 left-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
                       <path d="M20 6 9 17l-5-5" />
@@ -427,7 +427,7 @@
                   </div>
                   <!-- Destination tag -->
                   <div
-                    class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[10px] font-semibold text-white"
+                    class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent px-1.5 pt-3 pb-1 text-[10px] font-semibold text-white"
                   >
                     {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
                   </div>
@@ -503,7 +503,7 @@
             {$t('admin.face_cleanup_review_rest_empty')}
           </div>
         {:else}
-          <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 dark:bg-gray-800/50 sm:grid-cols-6 lg:grid-cols-8">
+          <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 sm:grid-cols-6 lg:grid-cols-8 dark:bg-gray-800/50">
             {#each restFaces as face (face.assetFaceId)}
               {@const selected = vm.isManualSelected(face.assetFaceId)}
               <div class="relative aspect-square">
@@ -521,14 +521,14 @@
                   <img src={faceThumbnailUrl(face.assetFaceId)} alt="" class="size-full object-cover" loading="lazy" />
                   {#if selected}
                     <div
-                      class="absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
+                      class="absolute top-1.5 left-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white bg-primary shadow-sm"
                     >
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
                         <path d="M20 6 9 17l-5-5" />
                       </svg>
                     </div>
                     <div
-                      class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3 text-[10px] font-semibold text-white"
+                      class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent px-1.5 pt-3 pb-1 text-[10px] font-semibold text-white"
                     >
                       {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
                     </div>

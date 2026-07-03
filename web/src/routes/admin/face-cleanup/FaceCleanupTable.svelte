@@ -1,5 +1,5 @@
 <script lang="ts">
-  import UserAvatar from '$lib/components/shared-components/user-avatar.svelte';
+  import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import { Route } from '$lib/route';
   import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
@@ -78,7 +78,7 @@
 <div class="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700">
   <!-- Column header -->
   <div
-    class="grid items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-700 dark:bg-gray-800"
+    class="grid items-center gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold tracking-wider text-gray-400 uppercase dark:border-gray-700 dark:bg-gray-800"
     style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 10rem"
   >
     <div></div>
@@ -93,11 +93,11 @@
   <!-- Review-first group -->
   {#if showReviewGroup && visibleReviewFirst.length > 0}
     <div
-      class="flex items-center gap-2 bg-amber-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+      class="flex items-center gap-2 bg-amber-50 px-4 py-3 text-xs font-semibold tracking-wide text-amber-700 uppercase dark:bg-amber-900/20 dark:text-amber-400"
     >
       <Icon icon={mdiAlertCircle} size="16" />
       <span>{$t('admin.face_cleanup_group_review')}</span>
-      <span class="font-normal normal-case tracking-normal text-gray-400">
+      <span class="font-normal tracking-normal text-gray-400 normal-case">
         {$t('admin.face_cleanup_group_review_sub')}
       </span>
     </div>
@@ -109,11 +109,11 @@
   <!-- Confident group -->
   {#if showConfidentGroup && visibleConfident.length > 0}
     <div
-      class="flex items-center gap-2 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+      class="flex items-center gap-2 bg-gray-50 px-4 py-3 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:bg-gray-800 dark:text-gray-400"
     >
       <Icon icon={mdiCheckCircle} size="16" />
       <span>{$t('admin.face_cleanup_group_confident')}</span>
-      <span class="font-normal normal-case tracking-normal text-gray-400">
+      <span class="font-normal tracking-normal text-gray-400 normal-case">
         {$t('admin.face_cleanup_group_confident_sub')}
       </span>
     </div>
@@ -140,6 +140,10 @@
   <div
     class={[
       'grid items-center gap-3 border-b border-gray-200 px-4 py-3 text-sm transition-colors last:border-b-0 dark:border-gray-700',
+      // content-visibility:auto lets the browser skip layout/paint of off-screen rows (native row virtualization,
+      // no JS) so hundreds/thousands of flagged persons don't all paint on mount (B3); the intrinsic-size hint
+      // keeps the scrollbar stable. Find-in-page and selection still work because the DOM nodes remain present.
+      '[content-visibility:auto] [contain-intrinsic-size:auto_4rem]',
       isSelected ? 'bg-primary-50 dark:bg-primary-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
     ].join(' ')}
     style="grid-template-columns: 2.5rem 2.3fr 1.2fr 1.5fr 1.6fr 8rem 10rem"
@@ -148,7 +152,7 @@
     <div>
       <input
         type="checkbox"
-        class="size-5 cursor-pointer rounded accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+        class="size-5 cursor-pointer rounded-sm accent-primary disabled:cursor-not-allowed disabled:opacity-40"
         checked={isSelected}
         disabled={!canSelect}
         onchange={(e) => handleCheckbox(person, (e.target as HTMLInputElement).checked)}
@@ -160,13 +164,14 @@
       <img
         src={thumbUrl(person.personId)}
         alt=""
+        loading="lazy"
         class="size-10 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
       />
       <div class="min-w-0">
         {#if person.personName}
           <div class="truncate font-semibold">{person.personName}</div>
         {:else}
-          <div class="truncate font-medium italic text-gray-400">{$t('admin.face_cleanup_unnamed')}</div>
+          <div class="truncate font-medium text-gray-400 italic">{$t('admin.face_cleanup_unnamed')}</div>
         {/if}
         <div class="mt-0.5 font-mono text-xs text-gray-400">
           {person.personId.slice(0, 8)} · {person.faceCount.toLocaleString()}
@@ -210,6 +215,7 @@
         <img
           src={thumbUrl(primaryOwner.ownerPersonId)}
           alt=""
+          loading="lazy"
           class="size-6 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
         />
         <div class="min-w-0">
