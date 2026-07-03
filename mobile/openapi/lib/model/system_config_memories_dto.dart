@@ -16,7 +16,7 @@ class SystemConfigMemoriesDto {
     required this.birthday,
     required this.recentTrips,
     required this.retentionDays,
-    this.types = const {},
+    this.types = const Optional.present(const {}),
   });
 
   /// Birthday memories
@@ -32,7 +32,7 @@ class SystemConfigMemoriesDto {
   int retentionDays;
 
   /// Per-type memory availability overrides
-  Map<String, bool> types;
+  Optional<Map<String, bool>?> types;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is SystemConfigMemoriesDto &&
@@ -57,7 +57,10 @@ class SystemConfigMemoriesDto {
       json[r'birthday'] = this.birthday;
       json[r'recentTrips'] = this.recentTrips;
       json[r'retentionDays'] = this.retentionDays;
-      json[r'types'] = this.types;
+    if (this.types.isPresent) {
+      final value = this.types.value;
+      json[r'types'] = value;
+    }
     return json;
   }
 
@@ -73,7 +76,7 @@ class SystemConfigMemoriesDto {
         birthday: mapValueOfType<bool>(json, r'birthday')!,
         recentTrips: mapValueOfType<bool>(json, r'recentTrips')!,
         retentionDays: mapValueOfType<int>(json, r'retentionDays')!,
-        types: mapCastOfType<String, bool>(json, r'types') ?? const {},
+        types: json.containsKey(r'types') ? Optional.present(mapCastOfType<String, bool>(json, r'types')) : const Optional.absent(),
       );
     }
     return null;

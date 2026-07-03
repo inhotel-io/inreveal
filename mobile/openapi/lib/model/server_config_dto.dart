@@ -21,6 +21,7 @@ class ServerConfigDto {
     required this.maintenanceMode,
     required this.mapDarkStyleUrl,
     required this.mapLightStyleUrl,
+    required this.minFaces,
     required this.oauthButtonText,
     required this.publicUsers,
     required this.trashDays,
@@ -51,6 +52,12 @@ class ServerConfigDto {
   /// Map light style URL
   String mapLightStyleUrl;
 
+  /// People min faces server default
+  ///
+  /// Minimum value: -9007199254740991
+  /// Maximum value: 9007199254740991
+  int minFaces;
+
   /// OAuth button text
   String oauthButtonText;
 
@@ -79,6 +86,7 @@ class ServerConfigDto {
     other.maintenanceMode == maintenanceMode &&
     other.mapDarkStyleUrl == mapDarkStyleUrl &&
     other.mapLightStyleUrl == mapLightStyleUrl &&
+    other.minFaces == minFaces &&
     other.oauthButtonText == oauthButtonText &&
     other.publicUsers == publicUsers &&
     other.trashDays == trashDays &&
@@ -95,13 +103,14 @@ class ServerConfigDto {
     (maintenanceMode.hashCode) +
     (mapDarkStyleUrl.hashCode) +
     (mapLightStyleUrl.hashCode) +
+    (minFaces.hashCode) +
     (oauthButtonText.hashCode) +
     (publicUsers.hashCode) +
     (trashDays.hashCode) +
     (userDeleteDelay.hashCode);
 
   @override
-  String toString() => 'ServerConfigDto[availableMemoryTypes=$availableMemoryTypes, externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
+  String toString() => 'ServerConfigDto[availableMemoryTypes=$availableMemoryTypes, externalDomain=$externalDomain, isInitialized=$isInitialized, isOnboarded=$isOnboarded, loginPageMessage=$loginPageMessage, maintenanceMode=$maintenanceMode, mapDarkStyleUrl=$mapDarkStyleUrl, mapLightStyleUrl=$mapLightStyleUrl, minFaces=$minFaces, oauthButtonText=$oauthButtonText, publicUsers=$publicUsers, trashDays=$trashDays, userDeleteDelay=$userDeleteDelay]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -113,6 +122,7 @@ class ServerConfigDto {
       json[r'maintenanceMode'] = this.maintenanceMode;
       json[r'mapDarkStyleUrl'] = this.mapDarkStyleUrl;
       json[r'mapLightStyleUrl'] = this.mapLightStyleUrl;
+      json[r'minFaces'] = this.minFaces;
       json[r'oauthButtonText'] = this.oauthButtonText;
       json[r'publicUsers'] = this.publicUsers;
       json[r'trashDays'] = this.trashDays;
@@ -139,6 +149,7 @@ class ServerConfigDto {
         maintenanceMode: mapValueOfType<bool>(json, r'maintenanceMode')!,
         mapDarkStyleUrl: mapValueOfType<String>(json, r'mapDarkStyleUrl')!,
         mapLightStyleUrl: mapValueOfType<String>(json, r'mapLightStyleUrl')!,
+        minFaces: mapValueOfType<int>(json, r'minFaces')!,
         oauthButtonText: mapValueOfType<String>(json, r'oauthButtonText')!,
         publicUsers: mapValueOfType<bool>(json, r'publicUsers')!,
         trashDays: mapValueOfType<int>(json, r'trashDays')!,
@@ -198,6 +209,7 @@ class ServerConfigDto {
     'maintenanceMode',
     'mapDarkStyleUrl',
     'mapLightStyleUrl',
+    'minFaces',
     'oauthButtonText',
     'publicUsers',
     'trashDays',

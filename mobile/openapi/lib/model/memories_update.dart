@@ -13,9 +13,9 @@ part of openapi.api;
 class MemoriesUpdate {
   /// Returns a new [MemoriesUpdate] instance.
   MemoriesUpdate({
-    this.duration,
-    this.enabled,
-    this.types = const {},
+    this.duration = const Optional.absent(),
+    this.enabled = const Optional.absent(),
+    this.types = const Optional.present(const {}),
   });
 
   /// Memory duration in seconds
@@ -28,7 +28,7 @@ class MemoriesUpdate {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  int? duration;
+  Optional<int?> duration;
 
   /// Whether memories are enabled
   ///
@@ -37,10 +37,10 @@ class MemoriesUpdate {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? enabled;
+  Optional<bool?> enabled;
 
   /// Per-memory-type enable overrides, keyed by memory type
-  Map<String, bool> types;
+  Optional<Map<String, bool>?> types;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is MemoriesUpdate &&
@@ -60,17 +60,18 @@ class MemoriesUpdate {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.duration != null) {
-      json[r'duration'] = this.duration;
-    } else {
-    //  json[r'duration'] = null;
+    if (this.duration.isPresent) {
+      final value = this.duration.value;
+      json[r'duration'] = value;
     }
-    if (this.enabled != null) {
-      json[r'enabled'] = this.enabled;
-    } else {
-    //  json[r'enabled'] = null;
+    if (this.enabled.isPresent) {
+      final value = this.enabled.value;
+      json[r'enabled'] = value;
     }
-      json[r'types'] = this.types;
+    if (this.types.isPresent) {
+      final value = this.types.value;
+      json[r'types'] = value;
+    }
     return json;
   }
 
@@ -83,9 +84,9 @@ class MemoriesUpdate {
       final json = value.cast<String, dynamic>();
 
       return MemoriesUpdate(
-        duration: mapValueOfType<int>(json, r'duration'),
-        enabled: mapValueOfType<bool>(json, r'enabled'),
-        types: mapCastOfType<String, bool>(json, r'types') ?? const {},
+        duration: json.containsKey(r'duration') ? Optional.present(json[r'duration'] == null ? null : int.parse('${json[r'duration']}')) : const Optional.absent(),
+        enabled: json.containsKey(r'enabled') ? Optional.present(mapValueOfType<bool>(json, r'enabled')) : const Optional.absent(),
+        types: json.containsKey(r'types') ? Optional.present(mapCastOfType<String, bool>(json, r'types')) : const Optional.absent(),
       );
     }
     return null;
