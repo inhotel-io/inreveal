@@ -1,9 +1,8 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
-import { writable } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import FeatureSettings from './feature-settings.svelte';
+import FeatureSettings from './FeatureSettings.svelte';
 
 const mocks = vi.hoisted(() => ({
   preferences: {} as Record<string, unknown>,
@@ -34,11 +33,15 @@ vi.mock(import('@immich/sdk'), async (importOriginal) => {
   return { ...actual, updateMyPreferences: mocks.updateMyPreferences };
 });
 
-// The accordion reads a context-provided store; render the memories section pre-opened.
-vi.mock(
-  import('$lib/components/shared-components/settings/setting-accordion-state.svelte'),
-  () => ({ getAccordionState: () => writable(new Set<string>(['memories'])) }) as never,
-);
+// SettingAccordion drives open/close through accordionManager (which navigates via goto);
+// stub it to keep the memories section open and avoid SvelteKit navigation in tests.
+vi.mock(import('$lib/managers/accordion-manager.svelte'), () => ({
+  accordionManager: {
+    isOpen: (key: string) => key === 'memories',
+    open: vi.fn(),
+    close: vi.fn(),
+  } as never,
+}));
 
 describe('FeatureSettings memory types', () => {
   beforeEach(() => {
