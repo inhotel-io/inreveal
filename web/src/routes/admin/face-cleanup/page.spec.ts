@@ -1,6 +1,8 @@
+import { applyFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import Page from './+page.svelte';
 
 // Mock @immich/sdk before any imports that use it
 vi.mock('@immich/sdk', async (importOriginal) => {
@@ -80,9 +82,6 @@ vi.mock('$lib/components/layouts/AdminPageLayout.svelte', async () => {
   const { default: stub } = await import('@test-data/mocks/sidebar.stub.svelte');
   return { default: stub };
 });
-
-import { applyFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
-import Page from './+page.svelte';
 
 // ---- helpers ----
 

@@ -57,7 +57,7 @@
         <label for="adv-sensitivity" class="text-sm font-medium text-gray-900 dark:text-gray-100">
           {$t('admin.face_cleanup_advanced_sensitivity')}
         </label>
-        <span class="font-mono text-sm tabular-nums text-gray-500 dark:text-gray-300">{maxDistance.toFixed(2)}</span>
+        <span class="font-mono text-sm text-gray-500 tabular-nums dark:text-gray-300">{maxDistance.toFixed(2)}</span>
       </div>
       <input
         id="adv-sensitivity"
@@ -95,7 +95,7 @@
         <label for="adv-cap" class="text-sm font-medium text-gray-900 dark:text-gray-100">
           {$t('admin.face_cleanup_advanced_cap')}
         </label>
-        <span class="font-mono text-sm tabular-nums text-gray-500 dark:text-gray-300">
+        <span class="font-mono text-sm text-gray-500 tabular-nums dark:text-gray-300">
           {maxFlaggedFraction.toFixed(2)}
         </span>
       </div>

@@ -13,13 +13,13 @@ part of openapi.api;
 class FaceRepairDeclineRemoveRequestDto {
   /// Returns a new [FaceRepairDeclineRemoveRequestDto] instance.
   FaceRepairDeclineRemoveRequestDto({
-    this.faces = const [],
-    this.ids = const [],
+    this.faces = const Optional.present(const []),
+    this.ids = const Optional.present(const []),
   });
 
-  List<FaceRepairDeclineRemoveRequestDtoFacesInner> faces;
+  Optional<List<FaceRepairDeclineRemoveRequestDtoFacesInner>?> faces;
 
-  List<String> ids;
+  Optional<List<String>?> ids;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairDeclineRemoveRequestDto &&
@@ -37,8 +37,14 @@ class FaceRepairDeclineRemoveRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'faces'] = this.faces;
-      json[r'ids'] = this.ids;
+    if (this.faces.isPresent) {
+      final value = this.faces.value;
+      json[r'faces'] = value;
+    }
+    if (this.ids.isPresent) {
+      final value = this.ids.value;
+      json[r'ids'] = value;
+    }
     return json;
   }
 
@@ -51,10 +57,10 @@ class FaceRepairDeclineRemoveRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairDeclineRemoveRequestDto(
-        faces: FaceRepairDeclineRemoveRequestDtoFacesInner.listFromJson(json[r'faces']),
-        ids: json[r'ids'] is Iterable
+        faces: json.containsKey(r'faces') ? Optional.present(FaceRepairDeclineRemoveRequestDtoFacesInner.listFromJson(json[r'faces'])) : const Optional.absent(),
+        ids: json.containsKey(r'ids') ? Optional.present(json[r'ids'] is Iterable
             ? (json[r'ids'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
       );
     }
     return null;

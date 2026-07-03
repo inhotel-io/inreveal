@@ -13,12 +13,12 @@ part of openapi.api;
 class FaceRepairClusterFacesRequestDto {
   /// Returns a new [FaceRepairClusterFacesRequestDto] instance.
   FaceRepairClusterFacesRequestDto({
-    this.excludeFaceIds = const [],
+    this.excludeFaceIds = const Optional.present(const []),
     required this.page,
     required this.size,
   });
 
-  List<String> excludeFaceIds;
+  Optional<List<String>?> excludeFaceIds;
 
   /// Minimum value: 0
   /// Maximum value: 9007199254740991
@@ -46,7 +46,10 @@ class FaceRepairClusterFacesRequestDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-      json[r'excludeFaceIds'] = this.excludeFaceIds;
+    if (this.excludeFaceIds.isPresent) {
+      final value = this.excludeFaceIds.value;
+      json[r'excludeFaceIds'] = value;
+    }
       json[r'page'] = this.page;
       json[r'size'] = this.size;
     return json;
@@ -61,9 +64,9 @@ class FaceRepairClusterFacesRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairClusterFacesRequestDto(
-        excludeFaceIds: json[r'excludeFaceIds'] is Iterable
+        excludeFaceIds: json.containsKey(r'excludeFaceIds') ? Optional.present(json[r'excludeFaceIds'] is Iterable
             ? (json[r'excludeFaceIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
         page: mapValueOfType<int>(json, r'page')!,
         size: mapValueOfType<int>(json, r'size')!,
       );

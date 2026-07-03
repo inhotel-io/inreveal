@@ -33,6 +33,8 @@ describe(FaceRepairService.name, () => {
   let sut: FaceRepairService;
   let mocks: ServiceMocks;
 
+  const noDeclines = { declinedFaceOwners: new Map(), dismissedPersons: new Map() };
+
   beforeEach(() => {
     ({ sut, mocks } = newTestService(FaceRepairService));
 
@@ -40,6 +42,12 @@ describe(FaceRepairService.name, () => {
     mocks.job.isActive.mockResolvedValue(false);
     // eslint-disable-next-line unicorn/no-useless-undefined
     mocks.faceRepairScan.getLatestScan.mockResolvedValue(undefined);
+    mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([]);
+    mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue(noDeclines as any);
+    // executeRepair wraps each route's writes in a transaction — run the callback with a stub trx.
+    mocks.database.transaction.mockImplementation((cb: any) => cb({}));
+    // Default: an emptied source has no remaining faces of any kind (delete gate open unless a test overrides).
+    mocks.faceRepair.countAllFaces.mockResolvedValue(0);
   });
 
   describe('applyRepair', () => {
@@ -60,14 +68,59 @@ describe(FaceRepairService.name, () => {
       await expect(sut.applyRepair({ approvedPersonIds: ['p1'] })).rejects.toThrow(ConflictException);
     });
 
+    it('reads the persisted flagged-face snapshot for approved persons — no plan rebuild, no KNN (B1/M1)', async () => {
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'q' },
+      ]);
+      const planSpy = vi.spyOn(sut, 'buildRepairPlan');
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+
+      await sut.applyRepair({ approvedPersonIds: ['p1'] });
+
+      // Apply consumes exactly the reviewed snapshot (latest scan's stored rows), never re-plans via ANN.
+      expect(mocks.faceRepairScan.getScanFlaggedFacesForPersons).toHaveBeenCalledWith('scan1', ['p1']);
+      expect(planSpy).not.toHaveBeenCalled();
+      expect(mocks.search.searchFaces).not.toHaveBeenCalled();
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([
+        { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+      ]);
+    });
+
+    it('approvedPersonIds with no latest scan → nothing to apply (no snapshot to read)', async () => {
+      // beforeEach leaves getLatestScan → undefined
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 0, skipped: 0 });
+      const r = await sut.applyRepair({ approvedPersonIds: ['p1'] });
+      expect(mocks.faceRepairScan.getScanFlaggedFacesForPersons).not.toHaveBeenCalled();
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([]);
+      expect(r).toEqual({ moved: 0, skipped: 0 });
+    });
+
+    it('filters faces declined since the scan before applying (governance)', async () => {
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'q' },
+        { assetFaceId: 'f2', personId: 'p1', suspectedOwnerId: 'q' },
+      ]);
+      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue({
+        declinedFaceOwners: new Map([['f1', new Set(['q'])]]),
+        dismissedPersons: new Map(),
+      } as any);
+      const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+
+      await sut.applyRepair({ approvedPersonIds: ['p1'] });
+
+      expect(execSpy.mock.calls[0][0].toRepair).toEqual([
+        { assetFaceId: 'f2', currentPersonId: 'p1', suspectedOwnerId: 'q' },
+      ]);
+    });
+
     it('drops excludeFaceIds from toRepair before executeRepair', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
-        plan([
-          { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' },
-          { assetFaceId: 'f2', currentPersonId: 'p1', suspectedOwnerId: 'q' },
-        ]),
-      );
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'q' },
+        { assetFaceId: 'f2', personId: 'p1', suspectedOwnerId: 'q' },
+      ]);
       const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
       await sut.applyRepair({ approvedPersonIds: ['p1'], excludeFaceIds: ['f2'] });
       expect(execSpy).toHaveBeenCalledWith(
@@ -76,20 +129,20 @@ describe(FaceRepairService.name, () => {
     });
 
     it('prunes the applied persons from the latest scan snapshot after a successful move', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
-        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' }]),
-      );
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'q' },
+      ]);
       vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
       await sut.applyRepair({ approvedPersonIds: ['p1'] });
       expect(mocks.faceRepairScan.removePersonsFromLatestScan).toHaveBeenCalledWith(['p1']);
     });
 
     it('does not prune the scan when nothing moved', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
-        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'gone' }]),
-      );
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'gone' },
+      ]);
       vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 0, skipped: 1 });
       await sut.applyRepair({ approvedPersonIds: ['p1'] });
       expect(mocks.faceRepairScan.removePersonsFromLatestScan).not.toHaveBeenCalled();
@@ -163,10 +216,10 @@ describe(FaceRepairService.name, () => {
     });
 
     it('partial add: merges flagged (→ suspects) and manual picks (→ primary) into one executeRepair (E5)', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
-        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' }]),
-      );
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'qsuspect' },
+      ]);
       const execSpy = vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 2, skipped: 0 });
       mocks.faceRepair.countEligibleFaces.mockResolvedValue(5);
 
@@ -200,6 +253,25 @@ describe(FaceRepairService.name, () => {
       expect(mocks.faceRepairScan.removePersonsFromLatestScan).toHaveBeenCalledWith(['p1']);
     });
 
+    it('does NOT delete an emptied unnamed source that still has hidden/manual faces (A2)', async () => {
+      mocks.faceRepair.streamEligibleFaces.mockReturnValue(
+        asyncIterableOf([{ assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' }]),
+      );
+      vi.spyOn(sut, 'executeRepair').mockResolvedValue({ moved: 1, skipped: 0 });
+      mocks.faceRepair.countEligibleFaces.mockResolvedValue(0); // no eligible (ML/visible) faces remain
+      mocks.faceRepair.countAllFaces.mockResolvedValue(2); // but hidden/Manual faces survive → must not delete
+      mocks.person.getById.mockResolvedValue({ id: 'p1', name: '' } as any);
+
+      await sut.applyRepair({
+        approvedPersonIds: [],
+        manualMove: { personId: 'p1', destinationPersonId: 'q', entireCluster: true },
+      });
+
+      expect(mocks.person.delete).not.toHaveBeenCalled();
+      // Still dropped from the snapshot (no eligible faces left to review).
+      expect(mocks.faceRepairScan.removePersonsFromLatestScan).toHaveBeenCalledWith(['p1']);
+    });
+
     it('keeps an emptied NAMED source (not deleted) but still drops it from the snapshot (E12)', async () => {
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
         asyncIterableOf([{ assetFaceId: 'a', personId: 'p1', ownerId: 'o', embedding: '' }]),
@@ -227,10 +299,10 @@ describe(FaceRepairService.name, () => {
     });
 
     it('idempotency: person in approvedPersonIds AND entireCluster passes both sets to one executeRepair (E9)', async () => {
-      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ status: 'completed' } as any);
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue(
-        plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'qsuspect' }]),
-      );
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan1', status: 'completed' } as any);
+      mocks.faceRepairScan.getScanFlaggedFacesForPersons.mockResolvedValue([
+        { assetFaceId: 'f1', personId: 'p1', suspectedOwnerId: 'qsuspect' },
+      ]);
       mocks.faceRepair.streamEligibleFaces.mockReturnValue(
         asyncIterableOf([
           { assetFaceId: 'f1', personId: 'p1', ownerId: 'o', embedding: '' },
@@ -271,12 +343,16 @@ describe(FaceRepairService.name, () => {
         ]),
       );
 
-      expect(mocks.faceRepair.reattributeFaces).toHaveBeenCalledWith('p1', 'q', ['f1', 'f2']);
-      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith({
-        assetFaceIds: ['f1', 'f2'],
-        identityId: 'identQ',
-        source: 'manual',
-      });
+      // Called inside a transaction — the 4th/2nd arg is the trx handle.
+      expect(mocks.faceRepair.reattributeFaces).toHaveBeenCalledWith('p1', 'q', ['f1', 'f2'], expect.anything());
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        {
+          assetFaceIds: ['f1', 'f2'],
+          identityId: 'identQ',
+          source: 'manual',
+        },
+        expect.anything(),
+      );
       // Never re-queues facial recognition — that is what re-clustered faces back to the wrong person.
       // (queueAll is only used for thumbnail regen, and only when a representative face was repointed.)
       expect(mocks.job.queueAll).not.toHaveBeenCalled();

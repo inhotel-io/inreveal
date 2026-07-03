@@ -123,6 +123,7 @@ DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
 
 -- Face identities
+DROP TABLE IF EXISTS "face_repair_scan_flagged_face" CASCADE;
 DROP TABLE IF EXISTS "face_repair_decline" CASCADE;
 DROP TABLE IF EXISTS "face_repair_scan" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
@@ -326,6 +327,8 @@ DELETE FROM "kysely_migrations"
    '1778800000000-TrimSpacePersonNameIndex',
    '1780000000000-AddFaceRepairScan',
    '1781000000000-AddFaceRepairDecline',
+   '1782000000000-AddFaceRepairScanFlaggedFace',
+   '1783000000000-AddFaceRepairScanInFlightIndex',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
