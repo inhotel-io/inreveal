@@ -1,7 +1,12 @@
 import {
-  decideReattribution,
+  ClassifyContext,
+  ClassifyPersonInput,
   ReattributionNeighbor,
   ReattributionTally,
+  applyDeclineFilters,
+  classifyFlaggedPerson,
+  decideReattribution,
+  isSubset,
   tallyReattribution,
 } from 'src/utils/face-repair';
 
@@ -142,5 +147,160 @@ describe('tallyReattribution', () => {
     // 'A' < 'B' lexically — A must win regardless of input order
     expect(t1.topOtherPersonId).toBe('A');
     expect(t2.topOtherPersonId).toBe('A');
+  });
+});
+
+const ctx = (over: Partial<ClassifyContext> = {}): ClassifyContext => ({
+  reviewOnlyPersonIds: new Set<string>(),
+  largeClusterThreshold: 50,
+  ...over,
+});
+
+const person = (over: Partial<ClassifyPersonInput> = {}): ClassifyPersonInput => ({
+  personId: 'person-1',
+  personName: null,
+  faceCount: 10,
+  suspectedOwnerIds: ['owner-1'],
+  ...over,
+});
+
+describe('classifyFlaggedPerson', () => {
+  it('confident: unnamed, small, single clean owner', () => {
+    expect(classifyFlaggedPerson(person(), ctx())).toEqual({ recommendation: 'confident', reviewReasons: [] });
+  });
+
+  it('review-first: named person (even with one clean owner)', () => {
+    expect(classifyFlaggedPerson(person({ personName: 'Jula' }), ctx())).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['named'],
+    });
+  });
+
+  it('treats empty / whitespace name as unnamed', () => {
+    expect(classifyFlaggedPerson(person({ personName: '' }), ctx()).reviewReasons).toEqual([]);
+    expect(classifyFlaggedPerson(person({ personName: '   ' }), ctx()).reviewReasons).toEqual([]);
+  });
+
+  it('large-cluster boundary: 50 is confident, 51 is review-first', () => {
+    expect(classifyFlaggedPerson(person({ faceCount: 50 }), ctx()).recommendation).toBe('confident');
+    expect(classifyFlaggedPerson(person({ faceCount: 51 }), ctx())).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['large-cluster'],
+    });
+  });
+
+  it('uses the ctx largeClusterThreshold, not a hard-coded 50', () => {
+    const c = ctx({ largeClusterThreshold: 10 });
+    expect(classifyFlaggedPerson(person({ faceCount: 10 }), c).recommendation).toBe('confident');
+    expect(classifyFlaggedPerson(person({ faceCount: 11 }), c).reviewReasons).toEqual(['large-cluster']);
+  });
+
+  it('review-first: more than one distinct suspected owner', () => {
+    expect(classifyFlaggedPerson(person({ suspectedOwnerIds: ['owner-1', 'owner-2'] }), ctx()).reviewReasons).toEqual([
+      'multiple-owners',
+    ]);
+  });
+
+  it('does NOT flag multiple-owners when the same owner repeats', () => {
+    expect(
+      classifyFlaggedPerson(person({ suspectedOwnerIds: ['owner-1', 'owner-1', 'owner-1'] }), ctx()).reviewReasons,
+    ).toEqual([]);
+  });
+
+  it('review-first: suspected owner is itself in reviewOnlyPersonIds (bad-target)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['owner-1']) });
+    expect(classifyFlaggedPerson(person(), c).reviewReasons).toEqual(['bad-target']);
+  });
+
+  it('review-first: the person itself is over-cap (own id in reviewOnlyPersonIds)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1']) });
+    expect(classifyFlaggedPerson(person(), c)).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['over-cap'],
+    });
+  });
+
+  it('over-cap: a fully-contaminated unnamed small cluster is never confident', () => {
+    // 100% flagged toward ONE clean owner used to classify confident (auto-selected) — approving it would
+    // empty the cluster. The person's own over-cap status must force review-first.
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1']) });
+    const result = classifyFlaggedPerson(person({ personName: null, faceCount: 8 }), c);
+    expect(result.recommendation).toBe('review-first');
+    expect(result.reviewReasons).toContain('over-cap');
+  });
+
+  it('accumulates reasons in deterministic order (named + large + multi + bad-target)', () => {
+    const c = ctx({ reviewOnlyPersonIds: new Set(['person-1', 'owner-2']) });
+    const result = classifyFlaggedPerson(
+      person({ personName: 'Jula', faceCount: 99, suspectedOwnerIds: ['owner-1', 'owner-2'] }),
+      c,
+    );
+    expect(result).toEqual({
+      recommendation: 'review-first',
+      reviewReasons: ['over-cap', 'named', 'large-cluster', 'multiple-owners', 'bad-target'],
+    });
+  });
+});
+
+const f = (assetFaceId: string, currentPersonId: string, suspectedOwnerId: string) => ({
+  assetFaceId,
+  currentPersonId,
+  suspectedOwnerId,
+});
+
+describe('isSubset', () => {
+  it('true when every element is present', () => {
+    expect(isSubset(new Set(['a']), new Set(['a', 'b']))).toBe(true);
+  });
+  it('false when an element is missing', () => {
+    expect(isSubset(new Set(['a', 'c']), new Set(['a', 'b']))).toBe(false);
+  });
+});
+
+describe('applyDeclineFilters', () => {
+  it('drops a face declined toward its current suspected owner', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map(),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
+  });
+
+  it('keeps a declined face if a DIFFERENT owner is now suspected (evidence changed)', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'R')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map(),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1']);
+  });
+
+  it('drops a whole dismissed person when its suspected set is a subset of the fingerprint', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map(),
+      dismissedPersons: new Map([['P', new Set(['Q', 'R'])]]),
+    });
+    expect(flagged.get('P')).toEqual([]);
+  });
+
+  it('re-surfaces a dismissed person when a NEW suspected owner appears', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map(),
+      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1', 'face2']);
+  });
+
+  it('applies face-level before person-level (a re-flagged new-owner face keeps the person)', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
+      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    });
+    // face1 dropped (declined); face2 toward NEW owner S keeps the person on the board
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
 });

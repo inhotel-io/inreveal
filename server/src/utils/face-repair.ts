@@ -1,3 +1,8 @@
+export interface DeclineMaps {
+  declinedFaceOwners: Map<string, Set<string>>; // assetFaceId -> Set<suspectedOwnerId>
+  dismissedPersons: Map<string, Set<string>>; // personId -> Set<suspectedOwnerId>
+}
+
 export interface ReattributionNeighbor {
   assetFaceId: string;
   personId: string | null;
@@ -86,4 +91,85 @@ export const decideReattribution = (tally: ReattributionTally, params: FlagParam
 
   const flagged = topOtherCount - ownCount >= params.voteMargin || ownCount < params.minFaces;
   return { flagged, suspectedOwnerId: flagged ? topOtherPersonId : null };
+};
+
+export function isSubset(subset: Set<string>, superset: Set<string>): boolean {
+  for (const value of subset) {
+    if (!superset.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+interface FlaggedLike {
+  assetFaceId: string;
+  currentPersonId: string;
+  suspectedOwnerId: string;
+}
+
+// Mutates flaggedByPerson in place. (1) face-level: drop any face declined toward its current suspected owner.
+// (2) person-level: if the person was dismissed and its REMAINING suspected-owner set is a subset of the stored
+// fingerprint (no new evidence), drop the whole person. Face-level runs first so a face re-flagged toward a new
+// owner keeps its person surfaced.
+export function applyDeclineFilters<T extends FlaggedLike>(flaggedByPerson: Map<string, T[]>, maps: DeclineMaps): void {
+  for (const [personId, faces] of flaggedByPerson) {
+    const kept = faces.filter((face) => !maps.declinedFaceOwners.get(face.assetFaceId)?.has(face.suspectedOwnerId));
+    const fingerprint = maps.dismissedPersons.get(personId);
+    if (fingerprint && kept.length > 0) {
+      const currentOwners = new Set(kept.map((face) => face.suspectedOwnerId));
+      if (isSubset(currentOwners, fingerprint)) {
+        flaggedByPerson.set(personId, []);
+        continue;
+      }
+    }
+    flaggedByPerson.set(personId, kept);
+  }
+}
+
+export type ClassifyRecommendation = 'confident' | 'review-first';
+export type ClassifyReason = 'over-cap' | 'named' | 'large-cluster' | 'multiple-owners' | 'bad-target';
+
+export interface ClassifyPersonInput {
+  personId: string;
+  personName: string | null; // null or '' (whitespace-only) = unnamed
+  faceCount: number;
+  suspectedOwnerIds: string[]; // owner person ids for this person's flagged faces (may repeat)
+}
+
+export interface ClassifyContext {
+  reviewOnlyPersonIds: ReadonlySet<string>;
+  largeClusterThreshold: number;
+}
+
+export interface ClassifyDecision {
+  recommendation: ClassifyRecommendation;
+  reviewReasons: ClassifyReason[];
+}
+
+// A flagged person is "review-first" if ANY reason applies; otherwise "confident". Reason order is fixed
+// (over-cap → named → large-cluster → multiple-owners → bad-target) so output is deterministic.
+// `over-cap` covers the person's OWN over-cap status: most/all of its faces are leaving, so approving it can
+// empty the cluster — that must never happen via silent auto-select, only via explicit per-person review.
+export const classifyFlaggedPerson = (person: ClassifyPersonInput, ctx: ClassifyContext): ClassifyDecision => {
+  const reviewReasons: ClassifyReason[] = [];
+
+  if (ctx.reviewOnlyPersonIds.has(person.personId)) {
+    reviewReasons.push('over-cap');
+  }
+  if (person.personName !== null && person.personName.trim() !== '') {
+    reviewReasons.push('named');
+  }
+  if (person.faceCount > ctx.largeClusterThreshold) {
+    reviewReasons.push('large-cluster');
+  }
+  const distinctOwners = new Set(person.suspectedOwnerIds);
+  if (distinctOwners.size > 1) {
+    reviewReasons.push('multiple-owners');
+  }
+  if ([...distinctOwners].some((ownerId) => ctx.reviewOnlyPersonIds.has(ownerId))) {
+    reviewReasons.push('bad-target');
+  }
+
+  return { recommendation: reviewReasons.length > 0 ? 'review-first' : 'confident', reviewReasons };
 };
