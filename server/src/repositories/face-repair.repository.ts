@@ -1,4 +1,4 @@
-import { Kysely, sql } from 'kysely';
+import { Kysely, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { SourceType } from 'src/enum';
 import { DB } from 'src/schema';
@@ -40,6 +40,45 @@ export class FaceRepairRepository {
       .stream();
   }
 
+  // Keyset-paginated page of eligible faces (id > afterId, ordered by id). Unlike streamEligibleFaces' cursor
+  // this releases the pooled connection between pages, so a long full-library scan does not pin one of the pool's
+  // connections — nor hold an open portal's MVCC snapshot on asset_face/asset/face_search — for its entire
+  // multi-minute duration (B6: that snapshot blocks autovacuum from reclaiming dead tuples on three of the
+  // hottest tables). Mirrors streamEligibleFaces' eligibility filter exactly.
+  getEligibleFacePage(options: {
+    ownerId?: string;
+    personId?: string;
+    personIds?: string[];
+    afterId?: string;
+    limit: number;
+  }): Promise<EligibleFaceRow[]> {
+    return this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select([
+        'asset_face.id as assetFaceId',
+        'asset_face.personId as personId',
+        'asset.ownerId as ownerId',
+        sql<string>`face_search.embedding`.as('embedding'),
+      ])
+      .where('asset_face.personId', 'is not', null)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
+      .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
+      .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
+        qb.where('asset_face.personId', 'in', options.personIds!),
+      )
+      .$if(!!options.afterId, (qb) => qb.where('asset_face.id', '>', options.afterId!))
+      .orderBy('asset_face.id')
+      .limit(options.limit)
+      .$narrowType<{ personId: string }>()
+      .execute();
+  }
+
   async countEligibleFaces(options: { ownerId?: string; personId?: string }): Promise<number> {
     const { count } = await this.db
       .selectFrom('asset_face')
@@ -53,6 +92,21 @@ export class FaceRepairRepository {
       .where('asset.deletedAt', 'is', null)
       .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
+      .executeTakeFirstOrThrow();
+    return Number(count);
+  }
+
+  // Count ALL of a person's still-present faces — any source type, visible or hidden — not just the
+  // ML+visible "eligible" set. Used as the delete gate for an emptied manual-move source (A2): countEligibleFaces
+  // can read 0 while the person still holds hidden or Manual-sourced faces, and deleting it then orphans those
+  // survivors (the FK's onDelete: SET NULL nulls their personId). Only a person with zero remaining faces is safe
+  // to delete.
+  async countAllFaces(personId: string): Promise<number> {
+    const { count } = await this.db
+      .selectFrom('asset_face')
+      .select((eb) => eb.fn.countAll().as('count'))
+      .where('personId', '=', personId)
+      .where('deletedAt', 'is', null)
       .executeTakeFirstOrThrow();
     return Number(count);
   }
@@ -98,26 +152,42 @@ export class FaceRepairRepository {
   // job since planning is skipped). Returns the ids actually moved (so the caller links identities for exactly
   // those). Writing the destination directly is what makes the move durable: recognition re-clusters an
   // unassigned face to its nearest neighbour, which for a contaminated cluster is the original wrong person.
-  async reattributeFaces(fromPersonId: string, toPersonId: string, assetFaceIds: string[]): Promise<string[]> {
+  async reattributeFaces(
+    fromPersonId: string,
+    toPersonId: string,
+    assetFaceIds: string[],
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<string[]> {
     if (assetFaceIds.length === 0) {
       return [];
     }
-    const rows = await this.db
-      .updateTable('asset_face')
-      .set({ personId: toPersonId })
-      .where('id', 'in', assetFaceIds)
-      .where('personId', '=', fromPersonId)
-      .where('sourceType', '=', sql.lit(SourceType.MachineLearning))
-      .where('deletedAt', 'is', null)
-      .where('isVisible', '=', true)
-      .returning('id')
-      .execute();
-    return rows.map((row) => row.id);
+    // Chunk the IN-list so an entire-cluster move of a person with more than the Postgres bind-parameter limit
+    // (65,535) faces doesn't blow up as one oversized statement (L3). Each chunk re-checks still-on-source.
+    const movedIds: string[] = [];
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const chunk = assetFaceIds.slice(index, index + 1000);
+      const rows = await db
+        .updateTable('asset_face')
+        .set({ personId: toPersonId })
+        .where('id', 'in', chunk)
+        .where('personId', '=', fromPersonId)
+        .where('sourceType', '=', sql.lit(SourceType.MachineLearning))
+        .where('deletedAt', 'is', null)
+        .where('isVisible', '=', true)
+        .returning('id')
+        .execute();
+      for (const row of rows) {
+        movedIds.push(row.id);
+      }
+    }
+    return movedIds;
   }
 
   // Repoint any dangling representative face: if a person's faceAssetId no longer belongs to it (or is null),
   // reset it to any remaining assigned, visible, non-deleted face (or null if none remain). Returns the ids of
-  // persons whose representative face actually changed so callers can regenerate their thumbnails.
+  // persons whose representative face actually changed so callers can regenerate their thumbnails — a fully
+  // drained person whose faceAssetId was already NULL is excluded (the SET yields NULL again: a no-op that would
+  // otherwise queue a wasted thumbnail regen for a faceless person — A3).
   async reconcileRepresentativeFaces(personIds: string[]): Promise<string[]> {
     if (personIds.length === 0) {
       return [];
@@ -147,6 +217,24 @@ export class FaceRepairRepository {
                 .whereRef('current.id', '=', 'person.faceAssetId')
                 .whereRef('current.personId', '=', 'person.id'),
             ),
+          ),
+        ]),
+      )
+      // Skip the null→null no-op: an already-null faceAssetId with no remaining face doesn't change, so it
+      // must not be returned (no thumbnail to regenerate). Keep it only if it has a stale (non-null) pointer to
+      // clear, or a remaining face to repoint to.
+      .where((eb) =>
+        eb.or([
+          eb('person.faceAssetId', 'is not', null),
+          eb.exists(
+            eb
+              .selectFrom('asset_face as candidate')
+              .innerJoin('asset', 'asset.id', 'candidate.assetId')
+              .select(sql`1`.as('one'))
+              .whereRef('candidate.personId', '=', 'person.id')
+              .where('candidate.deletedAt', 'is', null)
+              .where('candidate.isVisible', '=', true)
+              .where('asset.deletedAt', 'is', null),
           ),
         ]),
       )

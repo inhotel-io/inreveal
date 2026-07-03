@@ -11,17 +11,20 @@ describe(FaceRepairService.name, () => {
   });
 
   describe('getPersonFlaggedFaces', () => {
-    it('returns flaggedFaces combining toRepair and reviewOnlyFaces for the given personId', async () => {
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
-        toRepair: [{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q1' }],
-        reviewOnlyFaces: [{ assetFaceId: 'f2', currentPersonId: 'p1', suspectedOwnerId: 'q2', reason: 'over-cap' }],
-        reviewOnlyPersonIds: [],
-        unAttributableFaces: [],
-        perPerson: [],
-      } as any);
+    const noDeclines = { declinedFaceOwners: new Map(), dismissedPersons: new Map() };
+
+    it("reads the latest scan's stored flagged faces (no recompute / no KNN)", async () => {
+      const planSpy = vi.spyOn(sut, 'buildRepairPlan');
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
+      mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
+        { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
+        { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
+      ]);
+      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue(noDeclines as any);
 
       const result = await sut.getPersonFlaggedFaces('p1');
 
+      expect(mocks.faceRepairScan.getScanFlaggedFaces).toHaveBeenCalledWith('scan-1', 'p1');
       expect(result).toEqual({
         personId: 'p1',
         flaggedFaces: [
@@ -29,34 +32,31 @@ describe(FaceRepairService.name, () => {
           { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
         ],
       });
+      expect(planSpy).not.toHaveBeenCalled(); // E9: no recompute
+      expect(mocks.search.searchFaces).not.toHaveBeenCalled(); // E9: no KNN
     });
 
-    it('returns empty flaggedFaces when the person has no flagged faces', async () => {
-      vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
-        toRepair: [],
-        reviewOnlyFaces: [],
-        reviewOnlyPersonIds: [],
-        unAttributableFaces: [],
-        perPerson: [],
+    it('filters faces declined since the scan (E3)', async () => {
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
+      mocks.faceRepairScan.getScanFlaggedFaces.mockResolvedValue([
+        { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
+        { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
+      ]);
+      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue({
+        declinedFaceOwners: new Map([['f1', new Set(['q1'])]]),
+        dismissedPersons: new Map(),
       } as any);
 
-      const result = await sut.getPersonFlaggedFaces('p-clean');
-
-      expect(result).toEqual({ personId: 'p-clean', flaggedFaces: [] });
+      const result = await sut.getPersonFlaggedFaces('p1');
+      expect(result.flaggedFaces).toEqual([{ assetFaceId: 'f2', suspectedOwnerId: 'q2' }]);
     });
 
-    it('scopes buildRepairPlan to the given personId only', async () => {
-      const spy = vi.spyOn(sut, 'buildRepairPlan').mockResolvedValue({
-        toRepair: [],
-        reviewOnlyFaces: [],
-        reviewOnlyPersonIds: [],
-        unAttributableFaces: [],
-        perPerson: [],
-      } as any);
-
-      await sut.getPersonFlaggedFaces('person-xyz');
-
-      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ personIds: ['person-xyz'] }));
+    it('returns empty when there is no scan (E6)', async () => {
+      // eslint-disable-next-line unicorn/no-useless-undefined
+      mocks.faceRepairScan.getLatestScan.mockResolvedValue(undefined);
+      const result = await sut.getPersonFlaggedFaces('p1');
+      expect(result).toEqual({ personId: 'p1', flaggedFaces: [] });
+      expect(mocks.faceRepairScan.getScanFlaggedFaces).not.toHaveBeenCalled();
     });
   });
 });

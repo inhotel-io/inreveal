@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable } from '@nestjs/comm
 import { OnJob } from 'src/decorators';
 import { FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
-import { RepairScanRow, ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
+import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
@@ -43,6 +43,26 @@ const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;
 export const DEFAULT_LARGE_CLUSTER_THRESHOLD = 50;
 
 const SCAN_PROGRESS_INTERVAL = 200;
+// Keyset page size for the eligible-face scan (B6: paged, not a single streaming cursor) and the number of
+// per-face ANN searches run concurrently within a page (B2: the scan was strictly serial — one round-trip per
+// face with the DB core idle in between). 8 stays comfortably under the pg pool cap (max 10) with headroom for
+// the page query and any concurrent work.
+const SCAN_PAGE_SIZE = 500;
+const SCAN_SEARCH_CONCURRENCY = 8;
+
+// Map over items with a bounded number of concurrent workers, preserving input order in the result. Small local
+// helper (no p-limit dependency) used to fan out the scan's per-face vector searches.
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  let next = 0;
+  const runWorker = async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      results[index] = await fn(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runWorker));
+  return results;
+}
 // In-flight scans whose last heartbeat is older than this are considered lost (worker crash, Redis failure
 // between row insert and enqueue) and failed, so they can't block new scans and applies forever.
 const STALE_SCAN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -192,18 +212,24 @@ export class FaceRepairService extends BaseService {
         continue;
       }
 
-      const movedIds = await this.faceRepairRepository.reattributeFaces(from, to, faceIds);
+      // Wrap the re-attribution and its identity relink in one transaction (A1). Without this a crash between
+      // the two writes leaves a face on `to` still carrying `from`'s identity, which a later FaceIdentityBackfill
+      // can resolve back to `from` and silently revert the approved move. One transaction makes the pair atomic.
+      const movedIds = await this.databaseRepository.transaction(async (trx) => {
+        const ids = await this.faceRepairRepository.reattributeFaces(from, to, faceIds, trx);
+        if (ids.length > 0) {
+          const identity = await this.faceIdentityRepository.ensurePersonIdentity(to, trx);
+          await this.faceIdentityRepository.replaceFaceIdentities(
+            { assetFaceIds: ids, identityId: identity.id, source: 'manual' },
+            trx,
+          );
+        }
+        return ids;
+      });
       skipped += faceIds.length - movedIds.length;
       if (movedIds.length === 0) {
         continue;
       }
-
-      const identity = await this.faceIdentityRepository.ensurePersonIdentity(to);
-      await this.faceIdentityRepository.replaceFaceIdentities({
-        assetFaceIds: movedIds,
-        identityId: identity.id,
-        source: 'manual',
-      });
       moved += movedIds.length;
       affectedPersonIds.add(from);
       affectedPersonIds.add(to);
@@ -255,26 +281,50 @@ export class FaceRepairService extends BaseService {
   async *findReattributionCandidates(options: {
     ownerId?: string;
     personId?: string;
+    personIds?: string[];
     maxDistance: number;
     voteWindow: number;
   }): AsyncIterableIterator<ReattributionCandidate> {
-    for await (const face of this.faceRepairRepository.streamEligibleFaces(options)) {
-      const matches = await this.searchRepository.searchFaces({
-        userIds: [face.ownerId],
-        embedding: face.embedding,
-        maxDistance: options.maxDistance,
-        numResults: options.voteWindow,
-        hasPerson: true,
+    // Keyset-paginate the eligible set (B6) and fan the per-face ANN searches out with bounded concurrency (B2)
+    // rather than streaming a single cursor and awaiting one search at a time. Each page releases its DB
+    // connection before the searches run, and the searches within a page run ~SCAN_SEARCH_CONCURRENCY at a time.
+    let afterId: string | undefined;
+    for (;;) {
+      const page = await this.faceRepairRepository.getEligibleFacePage({
+        ownerId: options.ownerId,
+        personId: options.personId,
+        personIds: options.personIds,
+        afterId,
+        limit: SCAN_PAGE_SIZE,
       });
-      // searchFaces includes the query face itself — drop it by id.
-      const neighbors = matches
-        .filter((match) => match.id !== face.assetFaceId)
-        .map((match) => ({ assetFaceId: match.id, personId: match.personId, distance: match.distance }));
-      yield {
-        assetFaceId: face.assetFaceId,
-        currentPersonId: face.personId,
-        ...tallyReattribution(face.personId, neighbors),
-      };
+      if (page.length === 0) {
+        return;
+      }
+      const candidates = await mapWithConcurrency(page, SCAN_SEARCH_CONCURRENCY, async (face) => {
+        const matches = await this.searchRepository.searchFaces({
+          userIds: [face.ownerId],
+          embedding: face.embedding,
+          maxDistance: options.maxDistance,
+          numResults: options.voteWindow,
+          hasPerson: true,
+        });
+        // searchFaces includes the query face itself — drop it by id.
+        const neighbors = matches
+          .filter((match) => match.id !== face.assetFaceId)
+          .map((match) => ({ assetFaceId: match.id, personId: match.personId, distance: match.distance }));
+        return {
+          assetFaceId: face.assetFaceId,
+          currentPersonId: face.personId,
+          ...tallyReattribution(face.personId, neighbors),
+        };
+      });
+      for (const candidate of candidates) {
+        yield candidate;
+      }
+      afterId = page.at(-1)!.assetFaceId;
+      if (page.length < SCAN_PAGE_SIZE) {
+        return;
+      }
     }
   }
 
@@ -383,7 +433,15 @@ export class FaceRepairService extends BaseService {
       // Step 9: compute totals
       const { totals } = summarizeRepairPlan(plan);
 
-      // Step 10: persist completed scan
+      // Step 10: persist flagged faces then mark scan completed
+      await this.faceRepairScanRepository.replaceScanFlaggedFaces(
+        scanId,
+        allFlaggedFaces.map((f) => ({
+          assetFaceId: f.assetFaceId,
+          personId: f.currentPersonId,
+          suspectedOwnerId: f.suspectedOwnerId,
+        })),
+      );
       await this.faceRepairScanRepository.completeScan(scanId, { totals, persons: enriched });
 
       // Step 11: prune old scans
@@ -449,23 +507,6 @@ export class FaceRepairService extends BaseService {
     return this.faceRepairScanRepository.withCurrentNames(scan);
   }
 
-  // The review page and apply must re-plan with the SAME params the dashboard's scan ran with — otherwise a
-  // tuned (Advanced) scan shows one face set while review/apply silently compute another. Scan params are
-  // fully resolved at trigger time, so stored values win; config/defaults only apply when no scan exists.
-  private async resolvePlanParams(latest: RepairScanRow | undefined | null) {
-    const stored = latest?.params ?? undefined;
-    const { machineLearning } = await this.getConfig({ withCache: true });
-    const recognition = machineLearning.facialRecognition;
-    return {
-      maxDistance: stored?.maxDistance ?? recognition.maxDistance,
-      minFaces: stored?.minFaces ?? recognition.minFaces,
-      voteWindow: stored?.voteWindow ?? DEFAULT_VOTE_WINDOW,
-      voteMargin: stored?.voteMargin ?? DEFAULT_VOTE_MARGIN,
-      maxAttributionDistance: stored?.maxAttributionDistance ?? DEFAULT_MAX_ATTRIBUTION_DISTANCE,
-      maxFlaggedFraction: stored?.maxFlaggedFraction ?? DEFAULT_MAX_FLAGGED_FRACTION,
-    };
-  }
-
   getClusterFaces(
     personId: string,
     options: { excludeFaceIds: string[]; page: number; size: number },
@@ -481,11 +522,26 @@ export class FaceRepairService extends BaseService {
     personId: string,
   ): Promise<{ personId: string; flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }> {
     const latest = await this.faceRepairScanRepository.getLatestScan();
-    const plan = await this.buildRepairPlan({
-      ...(await this.resolvePlanParams(latest)),
+    if (!latest) {
+      return { personId, flaggedFaces: [] };
+    }
+    const stored = await this.faceRepairScanRepository.getScanFlaggedFaces(latest.id, personId);
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
       personIds: [personId],
+      assetFaceIds: stored.map((s) => s.assetFaceId),
     });
-    const flaggedFaces = [...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => ({
+    const byPerson = new Map([
+      [
+        personId,
+        stored.map((s) => ({
+          assetFaceId: s.assetFaceId,
+          currentPersonId: personId,
+          suspectedOwnerId: s.suspectedOwnerId,
+        })),
+      ],
+    ]);
+    applyDeclineFilters(byPerson, declineMaps);
+    const flaggedFaces = (byPerson.get(personId) ?? []).map((f) => ({
       assetFaceId: f.assetFaceId,
       suspectedOwnerId: f.suspectedOwnerId,
     }));
@@ -540,16 +596,39 @@ export class FaceRepairService extends BaseService {
     }
 
     const toRepair: FlaggedFace[] = [];
-    if (hasFlagged) {
-      const plan = await this.buildRepairPlan({
-        ...(await this.resolvePlanParams(latest)),
+    if (hasFlagged && latest) {
+      // Consume the already-persisted flagged-face snapshot from the reviewed scan instead of recomputing the
+      // plan via one per-face ANN query in the request (B1: that exceeded reverse-proxy/gateway timeouts at
+      // scale). Reading `latest.id`'s stored rows also means apply acts on the exact set the admin reviewed —
+      // getPersonFlaggedFaces reads the same rows — rather than re-planning against whatever scan happens to be
+      // latest, closing the M1 governance gap. The read's still-on-person eligibility join keeps it safe: a face
+      // moved off its cluster since the scan is silently dropped, and executeRepair re-checks at write time.
+      const stored = await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(
+        latest.id,
+        input.approvedPersonIds,
+      );
+      const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
         personIds: input.approvedPersonIds,
-        approvedPersonIds: input.approvedPersonIds,
+        assetFaceIds: stored.map((s) => s.assetFaceId),
       });
+      const byPerson = new Map<string, FlaggedFace[]>();
+      for (const face of stored) {
+        const list = byPerson.get(face.personId) ?? [];
+        list.push({
+          assetFaceId: face.assetFaceId,
+          currentPersonId: face.personId,
+          suspectedOwnerId: face.suspectedOwnerId,
+        });
+        byPerson.set(face.personId, list);
+      }
+      // Respect declines made after the scan (during review): same filtering the review page applies at read.
+      applyDeclineFilters(byPerson, declineMaps);
       const exclude = new Set(input.excludeFaceIds);
-      for (const face of plan.toRepair) {
-        if (!exclude.has(face.assetFaceId)) {
-          toRepair.push(face);
+      for (const faces of byPerson.values()) {
+        for (const face of faces) {
+          if (!exclude.has(face.assetFaceId)) {
+            toRepair.push(face);
+          }
         }
       }
     }
@@ -582,8 +661,14 @@ export class FaceRepairService extends BaseService {
         if (remaining === 0) {
           personsToDrop.add(manualMove.personId);
           const source = await this.personRepository.getById(manualMove.personId);
+          // Only delete a truly empty source: countEligibleFaces ignores hidden/Manual faces, so gate the delete
+          // on countAllFaces to avoid orphaning survivors via the FK's onDelete: SET NULL (A2). It still leaves
+          // the (drained) person in personsToDrop so the console snapshot no longer surfaces it.
           if (source && (!source.name || source.name.trim().length === 0)) {
-            await this.personRepository.delete([manualMove.personId]);
+            const remainingAll = await this.faceRepairRepository.countAllFaces(manualMove.personId);
+            if (remainingAll === 0) {
+              await this.personRepository.delete([manualMove.personId]);
+            }
           }
         }
       }

@@ -14,8 +14,8 @@ class FaceRepairApplyRequestDtoManualMove {
   /// Returns a new [FaceRepairApplyRequestDtoManualMove] instance.
   FaceRepairApplyRequestDtoManualMove({
     required this.destinationPersonId,
-    this.entireCluster,
-    this.faceIds = const [],
+    this.entireCluster = const Optional.absent(),
+    this.faceIds = const Optional.present(const []),
     required this.personId,
   });
 
@@ -27,9 +27,9 @@ class FaceRepairApplyRequestDtoManualMove {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? entireCluster;
+  Optional<bool?> entireCluster;
 
-  List<String> faceIds;
+  Optional<List<String>?> faceIds;
 
   String personId;
 
@@ -54,12 +54,14 @@ class FaceRepairApplyRequestDtoManualMove {
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'destinationPersonId'] = this.destinationPersonId;
-    if (this.entireCluster != null) {
-      json[r'entireCluster'] = this.entireCluster;
-    } else {
-    //  json[r'entireCluster'] = null;
+    if (this.entireCluster.isPresent) {
+      final value = this.entireCluster.value;
+      json[r'entireCluster'] = value;
     }
-      json[r'faceIds'] = this.faceIds;
+    if (this.faceIds.isPresent) {
+      final value = this.faceIds.value;
+      json[r'faceIds'] = value;
+    }
       json[r'personId'] = this.personId;
     return json;
   }
@@ -74,10 +76,10 @@ class FaceRepairApplyRequestDtoManualMove {
 
       return FaceRepairApplyRequestDtoManualMove(
         destinationPersonId: mapValueOfType<String>(json, r'destinationPersonId')!,
-        entireCluster: mapValueOfType<bool>(json, r'entireCluster'),
-        faceIds: json[r'faceIds'] is Iterable
+        entireCluster: json.containsKey(r'entireCluster') ? Optional.present(mapValueOfType<bool>(json, r'entireCluster')) : const Optional.absent(),
+        faceIds: json.containsKey(r'faceIds') ? Optional.present(json[r'faceIds'] is Iterable
             ? (json[r'faceIds'] as Iterable).cast<String>().toList(growable: false)
-            : const [],
+            : const []) : const Optional.absent(),
         personId: mapValueOfType<String>(json, r'personId')!,
       );
     }
