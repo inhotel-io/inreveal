@@ -329,6 +329,10 @@ export interface ISharedSpacePersonDedupJob extends IBaseJob {
   pass?: number;
 }
 
+export interface IFaceRepairScanJob extends IBaseJob {
+  scanId: string;
+}
+
 export interface ISharedSpacePersonMetadataBackfillJob extends IBaseJob {
   cursor?: string;
   identityId?: string;
@@ -597,7 +601,10 @@ export type JobItem =
 
   // Classification
   | { name: JobName.AssetClassifyQueueAll; data: IBaseJob }
-  | { name: JobName.AssetClassify; data: IEntityJob };
+  | { name: JobName.AssetClassify; data: IEntityJob }
+
+  // Face Repair
+  | { name: JobName.FaceRepairScan; data: IFaceRepairScanJob };
 
 export type VectorExtension = (typeof VECTOR_EXTENSIONS)[number];
 
