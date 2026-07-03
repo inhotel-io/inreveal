@@ -23,7 +23,7 @@
 <br/>
 
 > [!NOTE]
-> This is a **community fork** of [Immich](https://github.com/immich-app/immich) with additional features and improvements. Currently based on **Immich v2.7.5**. We regularly sync with upstream to stay up to date. See [What's Different](#whats-different-from-upstream-immich) below.
+> This is a **community fork** of [Immich](https://github.com/immich-app/immich) with additional features and improvements. Currently based on **Immich v3.0.1**. We regularly sync with upstream to stay up to date. See [What's Different](#whats-different-from-upstream-immich) below.
 
 > [!TIP]
 > **Noodle Gallery mobile apps are out!** Back up your photos and browse your library on the go. [Download on the App Store](https://apps.apple.com/il/app/noodle-gallery/id6761776289) · [Get it on Google Play](https://play.google.com/store/apps/details?id=de.opennoodle.gallery)
@@ -254,8 +254,8 @@ Pre-built Docker images are published to GitHub Container Registry (GHCR) under 
 ### Tags
 
 - **`release`** / **`release-cuda`** — most recent published build (like upstream's `release` tag)
-- **`v4`** — floats to the latest v4.x.x release (set `IMMICH_VERSION=v4` to auto-update within major version)
-- **`v4.2.6`** — pinned version using [semantic versioning](https://semver.org/)
+- **`v5`** — floats to the latest v5.x.x release (set `IMMICH_VERSION=v5` to auto-update within major version)
+- **`v5.0.0`** — pinned version using [semantic versioning](https://semver.org/)
 
 ### Publishing
 
