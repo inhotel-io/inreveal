@@ -29,7 +29,7 @@
 > **Noodle Gallery mobile apps are out!** Back up your photos and browse your library on the go. [Download on the App Store](https://apps.apple.com/il/app/noodle-gallery/id6761776289) · [Get it on Google Play](https://play.google.com/store/apps/details?id=de.opennoodle.gallery)
 
 > [!TIP]
-> **Already running Immich?** Switching to Gallery is a three-line config change — two image names in your `docker-compose.yml` and `IMMICH_VERSION=v4` in your `.env`. Your library and database are fully compatible. See the [install guide](https://opennoodle.de/install/#migrate-from-immich).
+> **Already running Immich?** Switching to Gallery is a three-line config change — two image names in your `docker-compose.yml` and `IMMICH_VERSION=v5` in your `.env`. Your library and database are fully compatible. See the [install guide](https://opennoodle.de/install/#migrate-from-immich).
 >
 > **Not for you?** A one-command [switch-back script](https://docs.opennoodle.de/guides/switch-back-to-immich) cleans up Gallery-specific tables and columns and puts you back on upstream Immich. Your photos and videos never move.
 
@@ -117,7 +117,7 @@ docker exec -t immich_postgres pg_dumpall -c -U postgres | gzip > immich-db-back
 Set the version in your `.env` file:
 
 ```bash
-IMMICH_VERSION=v4
+IMMICH_VERSION=v5
 ```
 
 Change the image references in your `docker-compose.yml`:
