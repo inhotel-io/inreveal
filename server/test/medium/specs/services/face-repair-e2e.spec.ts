@@ -63,6 +63,7 @@ const setupRepair = (db: Kysely<DB>) => {
       PersonRepository,
       FaceIdentityRepository,
       ConfigRepository,
+      DatabaseRepository,
       SystemMetadataRepository,
     ],
     mock: [LoggingRepository, JobRepository],

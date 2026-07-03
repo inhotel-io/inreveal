@@ -16,6 +16,59 @@ class FacesApi {
 
   final ApiClient apiClient;
 
+  /// Apply face re-attribution for approved persons
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairApplyRequestDto] faceRepairApplyRequestDto (required):
+  Future<Response> applyFaceRepairWithHttpInfo(FaceRepairApplyRequestDto faceRepairApplyRequestDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/apply';
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairApplyRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Apply face re-attribution for approved persons
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairApplyRequestDto] faceRepairApplyRequestDto (required):
+  Future<FaceRepairApplyResponseDto?> applyFaceRepair(FaceRepairApplyRequestDto faceRepairApplyRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await applyFaceRepairWithHttpInfo(faceRepairApplyRequestDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairApplyResponseDto',) as FaceRepairApplyResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Create a face
   ///
   /// Create a new face that has not been discovered by facial recognition. The content of the bounding box is considered a face.
@@ -63,6 +116,59 @@ class FacesApi {
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+  }
+
+  /// Decline flagged faces / dismiss flagged persons
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairDeclineRequestDto] faceRepairDeclineRequestDto (required):
+  Future<Response> declineFaceRepairWithHttpInfo(FaceRepairDeclineRequestDto faceRepairDeclineRequestDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/decline';
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairDeclineRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Decline flagged faces / dismiss flagged persons
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairDeclineRequestDto] faceRepairDeclineRequestDto (required):
+  Future<FaceRepairDeclineCreatedDto?> declineFaceRepair(FaceRepairDeclineRequestDto faceRepairDeclineRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await declineFaceRepairWithHttpInfo(faceRepairDeclineRequestDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairDeclineCreatedDto',) as FaceRepairDeclineCreatedDto;
+    
+    }
+    return null;
   }
 
   /// Delete a face
@@ -117,6 +223,208 @@ class FacesApi {
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+  }
+
+  /// List a person's cluster faces (paginated, excluding the supplied flagged ids)
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [FaceRepairClusterFacesRequestDto] faceRepairClusterFacesRequestDto (required):
+  Future<Response> getFaceRepairClusterFacesWithHttpInfo(String personId, FaceRepairClusterFacesRequestDto faceRepairClusterFacesRequestDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan/person/{personId}/cluster-faces'
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairClusterFacesRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// List a person's cluster faces (paginated, excluding the supplied flagged ids)
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  ///
+  /// * [FaceRepairClusterFacesRequestDto] faceRepairClusterFacesRequestDto (required):
+  Future<FaceRepairClusterFacesResponseDto?> getFaceRepairClusterFaces(String personId, FaceRepairClusterFacesRequestDto faceRepairClusterFacesRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairClusterFacesWithHttpInfo(personId, faceRepairClusterFacesRequestDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairClusterFacesResponseDto',) as FaceRepairClusterFacesResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// List face-repair declines
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getFaceRepairDeclinesWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/decline';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// List face-repair declines
+  Future<FaceRepairDeclineListDto?> getFaceRepairDeclines({ Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairDeclinesWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairDeclineListDto',) as FaceRepairDeclineListDto;
+    
+    }
+    return null;
+  }
+
+  /// Get a person's flagged faces for review
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  Future<Response> getFaceRepairPersonFacesWithHttpInfo(String personId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan/person/{personId}'
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get a person's flagged faces for review
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  Future<FaceRepairPersonFacesDto?> getFaceRepairPersonFaces(String personId, { Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairPersonFacesWithHttpInfo(personId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairPersonFacesDto',) as FaceRepairPersonFacesDto;
+    
+    }
+    return null;
+  }
+
+  /// Get effective face-repair scan defaults
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getFaceRepairScanDefaultsWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan/defaults';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get effective face-repair scan defaults
+  Future<FaceRepairScanDefaultsDto?> getFaceRepairScanDefaults({ Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairScanDefaultsWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairScanDefaultsDto',) as FaceRepairScanDefaultsDto;
+    
+    }
+    return null;
   }
 
   /// Retrieve faces for asset
@@ -183,6 +491,51 @@ class FacesApi {
     return null;
   }
 
+  /// Get the latest face-repair scan
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getLatestScanWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan/latest';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the latest face-repair scan
+  Future<Object?> getLatestScan({ Future<void>? abortTrigger, }) async {
+    final response = await getLatestScanWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'Object',) as Object;
+    
+    }
+    return null;
+  }
+
   /// Re-assign a face to another person
   ///
   /// Re-assign the face provided in the body to the person identified by the id in the path parameter.
@@ -245,6 +598,59 @@ class FacesApi {
     return null;
   }
 
+  /// Remove face-repair declines
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairDeclineRemoveRequestDto] faceRepairDeclineRemoveRequestDto (required):
+  Future<Response> removeFaceRepairDeclinesWithHttpInfo(FaceRepairDeclineRemoveRequestDto faceRepairDeclineRemoveRequestDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/decline';
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairDeclineRemoveRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'DELETE',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Remove face-repair declines
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairDeclineRemoveRequestDto] faceRepairDeclineRemoveRequestDto (required):
+  Future<FaceRepairDeclineRemovedDto?> removeFaceRepairDeclines(FaceRepairDeclineRemoveRequestDto faceRepairDeclineRemoveRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await removeFaceRepairDeclinesWithHttpInfo(faceRepairDeclineRemoveRequestDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairDeclineRemovedDto',) as FaceRepairDeclineRemovedDto;
+    
+    }
+    return null;
+  }
+
   /// Run face re-attribution repair
   ///
   /// Note: This method returns the HTTP [Response].
@@ -293,6 +699,59 @@ class FacesApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairResponseDto',) as FaceRepairResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Trigger a face-repair scan
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairScanTriggerRequestDto] faceRepairScanTriggerRequestDto (required):
+  Future<Response> triggerScanWithHttpInfo(FaceRepairScanTriggerRequestDto faceRepairScanTriggerRequestDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/scan';
+
+    // ignore: prefer_final_locals
+    Object? postBody = faceRepairScanTriggerRequestDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Trigger a face-repair scan
+  ///
+  /// Parameters:
+  ///
+  /// * [FaceRepairScanTriggerRequestDto] faceRepairScanTriggerRequestDto (required):
+  Future<FaceRepairScanTriggerResponseDto?> triggerScan(FaceRepairScanTriggerRequestDto faceRepairScanTriggerRequestDto, { Future<void>? abortTrigger, }) async {
+    final response = await triggerScanWithHttpInfo(faceRepairScanTriggerRequestDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairScanTriggerResponseDto',) as FaceRepairScanTriggerResponseDto;
     
     }
     return null;

@@ -1,4 +1,4 @@
-import { Insertable, Kysely } from 'kysely';
+import { Insertable, Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
@@ -83,12 +83,29 @@ export class FaceRepairDeclineRepository {
     });
   }
 
-  // Load every decline into the two lookup maps the planner consults. The decline set is admin-curated and
-  // bounded, so loading all rows is cheap relative to the face scan.
-  async getDeclineMaps(): Promise<DeclineMaps> {
+  // Load declines into the two lookup maps the planner consults. The full-library scan loads everything (no
+  // scope). The review/apply read paths, which know exactly which persons and faces are in play, pass a scope so
+  // the load stays bounded as `type='face'` rows accumulate over the instance's lifetime — a scoped read only
+  // fetches the declines that can affect the faces/persons being planned.
+  async getDeclineMaps(scope?: { personIds?: string[]; assetFaceIds?: string[] }): Promise<DeclineMaps> {
+    const faceIds = scope?.assetFaceIds ?? [];
+    const personIds = scope?.personIds ?? [];
     const rows = await this.db
       .selectFrom('face_repair_decline')
       .select(['type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'suspectedOwnerIds'])
+      .$if(scope !== undefined, (qb) =>
+        qb.where((eb) => {
+          const conditions = [];
+          if (faceIds.length > 0) {
+            conditions.push(eb.and([eb('type', '=', 'face'), eb('assetFaceId', 'in', faceIds)]));
+          }
+          if (personIds.length > 0) {
+            conditions.push(eb.and([eb('type', '=', 'person'), eb('personId', 'in', personIds)]));
+          }
+          // Empty scope → match nothing (never load the whole table on an unscoped-looking read).
+          return conditions.length > 0 ? eb.or(conditions) : sql<boolean>`false`;
+        }),
+      )
       .execute();
     const declinedFaceOwners = new Map<string, Set<string>>();
     const dismissedPersons = new Map<string, Set<string>>();

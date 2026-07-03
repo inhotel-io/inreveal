@@ -270,6 +270,8 @@ export class BaseService {
       ctx.eventRepository,
       ctx.faceIdentityRepository,
       ctx.faceRepairRepository,
+      ctx.faceRepairScanRepository,
+      ctx.faceRepairDeclineRepository,
       ctx.integrityRepository,
       ctx.jobRepository,
       ctx.libraryRepository,
@@ -513,7 +515,10 @@ export class BaseService {
     return new ImmichStreamResponse({
       stream,
       contentType: 'image/jpeg',
-      cacheControl: CacheControl.PrivateWithoutCache,
+      // A face crop is immutable for a given faceId (the bounding box and source preview don't change), so let
+      // the browser cache it (B5). Without this the review grid re-fetched — and the server re-decoded, cropped
+      // and re-encoded — every visible tile on every visit.
+      cacheControl: CacheControl.PrivateWithCache,
     });
   }
 
