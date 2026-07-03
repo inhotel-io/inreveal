@@ -132,6 +132,8 @@ DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
 
 -- Face identities
+DROP TABLE IF EXISTS "face_repair_decline" CASCADE;
+DROP TABLE IF EXISTS "face_repair_scan" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
 DROP TABLE IF EXISTS "face_identity" CASCADE;
 
@@ -384,6 +386,8 @@ DELETE FROM "kysely_migrations"
    '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
    '1779309791424-SharedSpaceAlbumAssetAuditTable',
+   '1780000000000-AddFaceRepairScan',
+   '1781000000000-AddFaceRepairDecline',
    '1781181889688-SharedSpaceLibraryAssetAuditTable',
    '1782000000000-AddAssetExifDescriptionTrigramIndex',
    '1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger',

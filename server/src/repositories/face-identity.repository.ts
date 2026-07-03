@@ -2291,6 +2291,38 @@ export class FaceIdentityRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async replaceFaceIdentities(input: {
+    assetFaceIds: string[];
+    identityId: string;
+    source: FaceIdentityFaceSource;
+    confidence?: number | null;
+  }): Promise<void> {
+    if (input.assetFaceIds.length === 0) {
+      return;
+    }
+    for (let index = 0; index < input.assetFaceIds.length; index += 1000) {
+      const chunk = input.assetFaceIds.slice(index, index + 1000);
+      await this.db
+        .insertInto('face_identity_face')
+        .values(
+          chunk.map((assetFaceId) => ({
+            assetFaceId,
+            identityId: input.identityId,
+            source: input.source,
+            confidence: input.confidence ?? null,
+          })),
+        )
+        .onConflict((oc) =>
+          oc.column('assetFaceId').doUpdateSet({
+            identityId: input.identityId,
+            source: input.source,
+            confidence: input.confidence ?? null,
+          }),
+        )
+        .execute();
+    }
+  }
+
   @GenerateSql({ params: [{ personId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }] })
   async linkPersonFaces(input: LinkPersonFacesInput, db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
     await db

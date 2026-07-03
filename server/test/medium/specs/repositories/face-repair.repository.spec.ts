@@ -23,6 +23,21 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+type Ctx = ReturnType<typeof setup>['ctx'];
+
+const EMBEDDING = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
+
+const seedEligibleFace = async (ctx: Ctx, userId: string, personId: string): Promise<string> => {
+  const { asset } = await ctx.newAsset({ ownerId: userId });
+  const { assetFace } = await ctx.newAssetFace({
+    assetId: asset.id,
+    personId,
+    sourceType: SourceType.MachineLearning,
+  });
+  await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: EMBEDDING }).execute();
+  return assetFace.id;
+};
+
 describe('FaceRepairRepository.streamEligibleFaces', () => {
   it('yields ML-sourced, visible, assigned, embedded, non-deleted faces', async () => {
     const { sut, ctx } = setup();
@@ -194,11 +209,12 @@ describe('FaceRepairRepository.streamEligibleFaces', () => {
   });
 });
 
-describe('FaceRepairRepository.unassignFacesFromPerson', () => {
-  it('sets personId to NULL for requested faces still on that person and returns their ids', async () => {
+describe('FaceRepairRepository.reattributeFaces', () => {
+  it('moves requested faces still on the source person to the destination and returns their ids', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
     const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
@@ -209,9 +225,9 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
     const { asset: assetC } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceC } = await ctx.newAssetFace({ assetId: assetC.id, personId: person.id });
 
-    const unassigned = await sut.unassignFacesFromPerson(person.id, [faceA.id, faceB.id]);
+    const moved = await sut.reattributeFaces(person.id, owner.id, [faceA.id, faceB.id]);
 
-    expect(unassigned.toSorted()).toEqual([faceA.id, faceB.id].toSorted());
+    expect(moved.toSorted()).toEqual([faceA.id, faceB.id].toSorted());
 
     const rows = await ctx.database
       .selectFrom('asset_face')
@@ -219,24 +235,25 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
       .where('id', 'in', [faceA.id, faceB.id, faceC.id])
       .execute();
     const byId = Object.fromEntries(rows.map((r) => [r.id, r.personId]));
-    expect(byId[faceA.id]).toBeNull();
-    expect(byId[faceB.id]).toBeNull();
+    expect(byId[faceA.id]).toBe(owner.id);
+    expect(byId[faceB.id]).toBe(owner.id);
     expect(byId[faceC.id]).toBe(person.id);
   });
 
-  it('eligibility re-check: skips faces already moved to another person', async () => {
+  it('eligibility re-check: skips faces already moved off the source person', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person: personP } = await ctx.newPerson({ ownerId: user.id });
     const { person: personQ } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
-    // face x is on person Q at unassign time (simulates concurrent move)
+    // face x is on person Q at apply time (simulates concurrent move)
     const { asset: assetX } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: faceX } = await ctx.newAssetFace({ assetId: assetX.id, personId: personQ.id });
 
-    const unassigned = await sut.unassignFacesFromPerson(personP.id, [faceX.id]);
+    const moved = await sut.reattributeFaces(personP.id, owner.id, [faceX.id]);
 
-    expect(unassigned).toHaveLength(0);
+    expect(moved).toHaveLength(0);
     const row = await ctx.database
       .selectFrom('asset_face')
       .select('personId')
@@ -245,10 +262,11 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
     expect(row.personId).toBe(personQ.id);
   });
 
-  it('eligibility re-check: does not unassign manual-sourced faces', async () => {
+  it('eligibility re-check: does not move manual-sourced faces', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
     const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
 
     const { asset } = await ctx.newAsset({ ownerId: user.id });
     const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
@@ -258,9 +276,9 @@ describe('FaceRepairRepository.unassignFacesFromPerson', () => {
       .where('id', '=', manualFace.id)
       .execute();
 
-    const unassigned = await sut.unassignFacesFromPerson(person.id, [manualFace.id]);
+    const moved = await sut.reattributeFaces(person.id, owner.id, [manualFace.id]);
 
-    expect(unassigned).toHaveLength(0);
+    expect(moved).toHaveLength(0);
     const row = await ctx.database
       .selectFrom('asset_face')
       .select('personId')
@@ -317,5 +335,164 @@ describe('FaceRepairRepository.reconcileRepresentativeFaces', () => {
       .where('id', '=', person.id)
       .executeTakeFirstOrThrow();
     expect(updated.faceAssetId).toBe(faceA.id);
+  });
+});
+
+describe('FaceRepairRepository.getClusterFacePage', () => {
+  it('returns only eligible same-person faces, minus excludeFaceIds, with a correct total', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: other } = await ctx.newPerson({ ownerId: user.id });
+
+    // 4 eligible faces on `person`
+    const eligible = [
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+    ];
+
+    // exclude two of them (the "flagged" ids the client already holds)
+    const excludeFaceIds = [eligible[0], eligible[1]];
+    const remaining = [eligible[2], eligible[3]];
+
+    // skip: eligible face on a DIFFERENT person
+    await seedEligibleFace(ctx, user.id, other.id);
+
+    // skip: manual-sourced face on `person`
+    const { asset: am } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: am.id, personId: person.id });
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ sourceType: 'manual' as SourceType })
+      .where('id', '=', manualFace.id)
+      .execute();
+    await ctx.database.insertInto('face_search').values({ faceId: manualFace.id, embedding: EMBEDDING }).execute();
+
+    // skip: not-visible face on `person`
+    const { asset: anv } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: notVisible } = await ctx.newAssetFace({
+      assetId: anv.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+      isVisible: false,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: notVisible.id, embedding: EMBEDDING }).execute();
+
+    // skip: soft-deleted face on `person`
+    const { asset: ad } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: deletedFace } = await ctx.newAssetFace({
+      assetId: ad.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ deletedAt: new Date() })
+      .where('id', '=', deletedFace.id)
+      .execute();
+    await ctx.database.insertInto('face_search').values({ faceId: deletedFace.id, embedding: EMBEDDING }).execute();
+
+    // skip: face on a soft-deleted asset
+    const { asset: deletedAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceOnDeletedAsset } = await ctx.newAssetFace({
+      assetId: deletedAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database
+      .insertInto('face_search')
+      .values({ faceId: faceOnDeletedAsset.id, embedding: EMBEDDING })
+      .execute();
+    await ctx.softDeleteAsset(deletedAsset.id);
+
+    // skip: face with NO face_search row (mirrors streamEligibleFaces' inner join)
+    const { asset: anofs } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAssetFace({ assetId: anofs.id, personId: person.id, sourceType: SourceType.MachineLearning });
+
+    const page = await sut.getClusterFacePage(person.id, { excludeFaceIds, limit: 50, offset: 0 });
+
+    expect(page.total).toBe(2);
+    expect(page.hasMore).toBe(false);
+    expect(page.faces.map((f) => f.assetFaceId).toSorted()).toEqual(remaining.toSorted());
+  });
+
+  it('paginates with a stable order: disjoint pages whose union is the full filtered set', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const ids = [
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+    ];
+
+    const page0 = await sut.getClusterFacePage(person.id, { excludeFaceIds: [], limit: 2, offset: 0 });
+    const page1 = await sut.getClusterFacePage(person.id, { excludeFaceIds: [], limit: 2, offset: 2 });
+    const page2 = await sut.getClusterFacePage(person.id, { excludeFaceIds: [], limit: 2, offset: 4 });
+
+    expect(page0.total).toBe(5);
+    expect(page0.faces).toHaveLength(2);
+    expect(page0.hasMore).toBe(true);
+
+    expect(page1.faces).toHaveLength(2);
+    expect(page1.hasMore).toBe(true);
+
+    expect(page2.faces).toHaveLength(1);
+    expect(page2.hasMore).toBe(false);
+
+    const union = [...page0.faces, ...page1.faces, ...page2.faces].map((f) => f.assetFaceId);
+    expect(new Set(union).size).toBe(5); // pages are disjoint
+    expect(union.toSorted()).toEqual(ids.toSorted()); // union = full filtered set
+  });
+
+  it('applies excludeFaceIds before pagination so total/hasMore stay correct across a page boundary', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const ids = [
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+      await seedEligibleFace(ctx, user.id, person.id),
+    ];
+    const excludeFaceIds = [ids[0], ids[1]]; // filtered set = 3
+
+    const page0 = await sut.getClusterFacePage(person.id, { excludeFaceIds, limit: 2, offset: 0 });
+    const page1 = await sut.getClusterFacePage(person.id, { excludeFaceIds, limit: 2, offset: 2 });
+
+    expect(page0.total).toBe(3);
+    expect(page0.faces).toHaveLength(2);
+    expect(page0.hasMore).toBe(true);
+
+    expect(page1.total).toBe(3);
+    expect(page1.faces).toHaveLength(1);
+    expect(page1.hasMore).toBe(false);
+
+    const union = [...page0.faces, ...page1.faces].map((f) => f.assetFaceId);
+    expect(union).not.toContain(ids[0]);
+    expect(union).not.toContain(ids[1]);
+    expect(union.toSorted()).toEqual([ids[2], ids[3], ids[4]].toSorted());
+  });
+
+  it('returns an empty page (total 0, hasMore false) when every visible face is excluded', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const a = await seedEligibleFace(ctx, user.id, person.id);
+    const b = await seedEligibleFace(ctx, user.id, person.id);
+
+    const page = await sut.getClusterFacePage(person.id, { excludeFaceIds: [a, b], limit: 50, offset: 0 });
+
+    expect(page.total).toBe(0);
+    expect(page.faces).toEqual([]);
+    expect(page.hasMore).toBe(false);
   });
 });

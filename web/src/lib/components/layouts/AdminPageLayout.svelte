@@ -11,6 +11,7 @@
     mdiBookshelf,
     mdiCog,
     mdiCloudSyncOutline,
+    mdiFaceRecognition,
     mdiServer,
     mdiTrayFull,
     mdiWrench,
@@ -39,6 +40,7 @@
       <NavbarItem title={$t('users')} href={Route.users()} icon={mdiAccountMultipleOutline} />
       <NavbarItem title={$t('external_libraries')} href={Route.libraries()} icon={mdiBookshelf} />
       <NavbarItem title={$t('admin.queues')} href={Route.queues()} icon={mdiTrayFull} />
+      <NavbarItem title={$t('admin.face_cleanup')} href={Route.faceCleanup()} icon={mdiFaceRecognition} />
       <NavbarItem title={$t('settings')} href={Route.systemSettings()} icon={mdiCog} />
       <NavbarItem title={$t('admin.maintenance_settings')} href={Route.systemMaintenance()} icon={mdiWrench} />
       <NavbarItem title="Storage Migration" href={Route.storageMigration()} icon={mdiCloudSyncOutline} />

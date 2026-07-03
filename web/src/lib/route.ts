@@ -164,6 +164,11 @@ export const Route = {
   workflows: () => '/workflows',
   viewWorkflow: ({ id }: { id: string }) => `/workflows/${id}`,
 
+  // face cleanup
+  faceCleanup: () => '/admin/face-cleanup',
+  viewFaceCleanupPerson: ({ id }: { id: string }) => `/admin/face-cleanup/${id}`,
+  faceCleanupDeclined: () => '/admin/face-cleanup/declined',
+
   // queues
   queues: () => '/admin/queues',
   viewQueue: ({ name }: { name: QueueName }) => `/admin/queues/${asQueueSlug(name)}`,
