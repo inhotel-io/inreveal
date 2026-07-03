@@ -13,7 +13,7 @@ part of openapi.api;
 class MergeScopedPeopleDto {
   /// Returns a new [MergeScopedPeopleDto] instance.
   MergeScopedPeopleDto({
-    this.confirmCrossOwner,
+    this.confirmCrossOwner = const Optional.absent(),
     this.sources = const [],
     required this.target,
   });
@@ -25,7 +25,7 @@ class MergeScopedPeopleDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  bool? confirmCrossOwner;
+  Optional<bool?> confirmCrossOwner;
 
   /// Source scoped profiles
   List<ScopedPersonProfileRefDto> sources;
@@ -50,10 +50,9 @@ class MergeScopedPeopleDto {
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.confirmCrossOwner != null) {
-      json[r'confirmCrossOwner'] = this.confirmCrossOwner;
-    } else {
-    //  json[r'confirmCrossOwner'] = null;
+    if (this.confirmCrossOwner.isPresent) {
+      final value = this.confirmCrossOwner.value;
+      json[r'confirmCrossOwner'] = value;
     }
       json[r'sources'] = this.sources;
       json[r'target'] = this.target;
@@ -69,7 +68,7 @@ class MergeScopedPeopleDto {
       final json = value.cast<String, dynamic>();
 
       return MergeScopedPeopleDto(
-        confirmCrossOwner: mapValueOfType<bool>(json, r'confirmCrossOwner'),
+        confirmCrossOwner: json.containsKey(r'confirmCrossOwner') ? Optional.present(mapValueOfType<bool>(json, r'confirmCrossOwner')) : const Optional.absent(),
         sources: ScopedPersonProfileRefDto.listFromJson(json[r'sources']),
         target: ScopedPersonProfileRefDto.fromJson(json[r'target'])!,
       );

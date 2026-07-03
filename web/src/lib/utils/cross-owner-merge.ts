@@ -1,9 +1,9 @@
-import { getServerErrorMessage } from '$lib/utils/handle-error';
 import { isHttpError, mergeScopedPeople, type MergeScopedPeopleDto } from '@immich/sdk';
 import { modalManager, toastManager } from '@immich/ui';
 import { mdiAlertOutline } from '@mdi/js';
 import { t } from 'svelte-i18n';
 import { get } from 'svelte/store';
+import { getServerErrorMessage } from '$lib/utils/handle-error';
 
 /**
  * Machine-readable error codes returned by the server when a scoped people-merge crosses an owner
