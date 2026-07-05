@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { renderWithTooltips } from '$tests/helpers';
+import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
 import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
 import SpaceAlbumsTable from '$lib/components/spaces/space-albums-table.svelte';
 
@@ -55,5 +57,41 @@ describe('SpaceAlbumsTable', () => {
     render(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1, a2], canManage: false });
     expect(screen.getByTestId('space-album-row-a-1')).toBeInTheDocument();
     expect(screen.getByTestId('space-album-row-a-2')).toBeInTheDocument();
+  });
+
+  describe('grouped rendering', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      spaceAlbumViewSettings.reset();
+    });
+
+    it('renders a collapsible header per group with name and count', () => {
+      spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+      const groups = [
+        { id: '2024', name: '2024', albums: [a1] },
+        { id: '2020', name: '2020', albums: [a2] },
+      ];
+      render(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1, a2], canManage: false, groups, grouped: true });
+      const header2024 = screen.getByTestId('space-album-group-header-2024');
+      expect(header2024).toHaveTextContent('2024');
+      expect(header2024).toHaveTextContent('1');
+      expect(screen.getByTestId('space-album-group-header-2020')).toHaveTextContent('2020');
+      expect(screen.getByTestId('space-album-row-a-1')).toBeInTheDocument();
+      expect(screen.getByTestId('space-album-row-a-2')).toBeInTheDocument();
+    });
+
+    it('collapsing a group marks its header collapsed and hides its rows', async () => {
+      spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+      const groups = [
+        { id: '2024', name: '2024', albums: [a1] },
+        { id: '2020', name: '2020', albums: [a2] },
+      ];
+      render(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1, a2], canManage: false, groups, grouped: true });
+      expect(screen.getByTestId('space-album-group-header-2024')).toHaveAttribute('aria-expanded', 'true');
+      toggleSpaceAlbumGroupCollapsing('2024');
+      await waitFor(() =>
+        expect(screen.getByTestId('space-album-group-header-2024')).toHaveAttribute('aria-expanded', 'false'),
+      );
+    });
   });
 });
