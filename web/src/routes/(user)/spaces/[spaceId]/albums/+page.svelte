@@ -33,7 +33,7 @@
     currentMember?.role === SharedSpaceRole.Owner || currentMember?.role === SharedSpaceRole.Editor,
   );
 
-  const linkedAlbumIds = $derived(albums.map((a) => a.albumId));
+  const linkedAlbumIds = $derived(albums.map((a) => a.id));
 
   async function reload() {
     try {
@@ -52,7 +52,7 @@
       return;
     }
     try {
-      await unlinkAlbum({ id: space.id, albumId: album.albumId });
+      await unlinkAlbum({ id: space.id, albumId: album.id });
       await reload();
       // Refresh the [spaceId] layout's cached linkedAlbums so other tabs (and a re-mount of this
       // page on tab navigation) reflect the change without a full page refresh.
@@ -66,10 +66,10 @@
     try {
       await updateSharedSpaceAlbum({
         id: space.id,
-        albumId: album.albumId,
+        albumId: album.id,
         sharedSpaceAlbumLinkUpdateDto: { showInTimeline: !album.showInTimeline },
       });
-      albums = albums.map((a) => (a.albumId === album.albumId ? { ...a, showInTimeline: !album.showInTimeline } : a));
+      albums = albums.map((a) => (a.id === album.id ? { ...a, showInTimeline: !album.showInTimeline } : a));
       // Keep the layout's cached linkedAlbums in sync so the timeline tab + a re-mount reflect it.
       await invalidateAll();
     } catch (error) {
@@ -125,7 +125,7 @@
   {:else}
     <div class="px-4 pt-4">
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-        {#each albums as album (album.albumId)}
+        {#each albums as album (album.id)}
           <SpaceAlbumCard
             spaceId={space.id}
             {album}

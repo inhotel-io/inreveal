@@ -65,13 +65,20 @@ const BASE_SPACE: SharedSpaceResponseDto = {
 
 function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
   return {
-    albumId: 'album-1',
+    id: 'album-1',
     albumName: 'Vacation',
     assetCount: 5,
     albumThumbnailAssetId: null,
     showInTimeline: true,
     addedById: null,
+    linkedAt: '2026-01-01T00:00:00.000Z',
+    albumUsers: [],
+    description: '',
     createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    shared: false,
+    hasSharedLink: false,
+    isActivityEnabled: false,
     ...overrides,
   };
 }
@@ -121,7 +128,7 @@ describe('Space albums page', () => {
   });
 
   it('renders one card per album', () => {
-    renderPage([makeAlbum({ albumId: 'a-1', albumName: 'Trip' }), makeAlbum({ albumId: 'a-2', albumName: 'Home' })]);
+    renderPage([makeAlbum({ id: 'a-1', albumName: 'Trip' }), makeAlbum({ id: 'a-2', albumName: 'Home' })]);
     expect(screen.getAllByTestId('space-album-card')).toHaveLength(2);
   });
 
@@ -153,7 +160,7 @@ describe('Space albums page', () => {
   describe('interactions', () => {
     it('clicking "Link album" opens the SpaceLinkAlbumModal with the linked album ids', async () => {
       modalManagerMock.show.mockResolvedValue(undefined);
-      renderPage([makeAlbum({ albumId: 'album-1' })], SharedSpaceRole.Editor);
+      renderPage([makeAlbum({ id: 'album-1' })], SharedSpaceRole.Editor);
 
       await fireEvent.click(screen.getByTestId('link-album-button'));
 
@@ -167,7 +174,7 @@ describe('Space albums page', () => {
 
     it('reloads and invalidates layout data when the modal reports linked albums', async () => {
       modalManagerMock.show.mockResolvedValue(2);
-      sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ albumId: 'av-1', albumName: 'Road Trip' })]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ id: 'av-1', albumName: 'Road Trip' })]);
       renderPage([], SharedSpaceRole.Editor);
 
       await fireEvent.click(screen.getByTestId('empty-link-album-button'));
@@ -191,7 +198,7 @@ describe('Space albums page', () => {
       modalManagerMock.showDialog.mockResolvedValue(true);
       sdkMock.unlinkAlbum.mockResolvedValue(undefined as never);
       sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
-      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation' });
+      const album = makeAlbum({ id: 'album-1', albumName: 'Vacation' });
       renderPage([album], SharedSpaceRole.Editor);
 
       // Find the card's ⋯ menu button and open it
@@ -214,7 +221,7 @@ describe('Space albums page', () => {
       modalManagerMock.showDialog.mockResolvedValue(true);
       sdkMock.unlinkAlbum.mockResolvedValue(undefined as never);
       sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
-      renderPage([makeAlbum({ albumId: 'album-1', albumName: 'Vacation' })], SharedSpaceRole.Editor);
+      renderPage([makeAlbum({ id: 'album-1', albumName: 'Vacation' })], SharedSpaceRole.Editor);
 
       const menuButton = screen.getByTestId('space-album-card-menu').querySelector('button');
       await fireEvent.click(menuButton!);
@@ -226,7 +233,7 @@ describe('Space albums page', () => {
 
     it('toggle show-in-timeline calls updateSharedSpaceAlbum and flips optimistic state', async () => {
       sdkMock.updateSharedSpaceAlbum.mockResolvedValue(undefined as never);
-      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation', showInTimeline: true });
+      const album = makeAlbum({ id: 'album-1', albumName: 'Vacation', showInTimeline: true });
       renderPage([album], SharedSpaceRole.Editor);
 
       // Open the card's ⋯ context menu
@@ -257,7 +264,7 @@ describe('Space albums page', () => {
       modalManagerMock.showDialog.mockResolvedValue(true);
       sdkMock.unlinkAlbum.mockResolvedValue(undefined as never);
       sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
-      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation' });
+      const album = makeAlbum({ id: 'album-1', albumName: 'Vacation' });
       renderPage([album], SharedSpaceRole.Owner);
 
       const menuContainer = screen.getByTestId('space-album-card-menu');
@@ -273,7 +280,7 @@ describe('Space albums page', () => {
 
     it('owner can toggle show-in-timeline: calls updateSharedSpaceAlbum', async () => {
       sdkMock.updateSharedSpaceAlbum.mockResolvedValue(undefined as never);
-      const album = makeAlbum({ albumId: 'album-1', albumName: 'Vacation', showInTimeline: true });
+      const album = makeAlbum({ id: 'album-1', albumName: 'Vacation', showInTimeline: true });
       renderPage([album], SharedSpaceRole.Owner);
 
       const menuContainer = screen.getByTestId('space-album-card-menu');
