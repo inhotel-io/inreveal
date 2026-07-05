@@ -23,6 +23,7 @@
     canManage: boolean;
     members?: SharedSpaceMemberResponseDto[];
     groupIds?: string[];
+    searchQuery?: string;
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
   }
@@ -34,12 +35,23 @@
     members = [],
     // eslint-disable-next-line no-useless-assignment
     groupIds = $bindable([]),
+    searchQuery = '',
     onUnlink,
     onToggleTimeline,
   }: Props = $props();
 
+  const filtered = $derived.by(() => {
+    const q = (searchQuery ?? '').trim().toLowerCase();
+    if (!q) {
+      return albums;
+    }
+    return albums.filter(
+      (a) => a.albumName.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q),
+    );
+  });
+
   const sorted = $derived(
-    sortAlbums(albums as unknown as AlbumResponseDto[], {
+    sortAlbums(filtered as unknown as AlbumResponseDto[], {
       sortBy: $spaceAlbumViewSettings.sortBy,
       orderBy: $spaceAlbumViewSettings.sortOrder,
     }) as unknown as SharedSpaceLinkedAlbumDto[],
@@ -63,7 +75,9 @@
   });
 </script>
 
-{#if $spaceAlbumViewSettings.view === AlbumViewMode.List}
+{#if filtered.length === 0}
+  <p data-testid="space-albums-no-results" class="p-4 text-center text-gray-500">{$t('space_albums_no_matching')}</p>
+{:else if $spaceAlbumViewSettings.view === AlbumViewMode.List}
   {#if isGrouped}
     <SpaceAlbumsTable {spaceId} albums={sorted} {canManage} {groups} grouped {onUnlink} {onToggleTimeline} />
   {:else}
