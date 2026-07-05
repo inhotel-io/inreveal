@@ -29854,39 +29854,116 @@
       "SharedSpaceLinkedAlbumDto": {
         "properties": {
           "addedById": {
+            "description": "User who linked the album into the space",
             "nullable": true,
-            "type": "string"
-          },
-          "albumId": {
             "type": "string"
           },
           "albumName": {
+            "description": "Album name",
             "type": "string"
           },
           "albumThumbnailAssetId": {
+            "description": "Thumbnail asset ID",
+            "format": "uuid",
             "nullable": true,
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
+          "albumUsers": {
+            "description": "First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically.",
+            "items": {
+              "$ref": "#/components/schemas/AlbumUserResponseDto"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
           "assetCount": {
-            "type": "number"
+            "description": "Number of assets",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "contributorCounts": {
+            "items": {
+              "$ref": "#/components/schemas/ContributorCountResponseDto"
+            },
+            "type": "array"
           },
           "createdAt": {
+            "description": "Creation date",
+            "format": "date-time",
+            "type": "string"
+          },
+          "description": {
+            "description": "Album description",
+            "type": "string"
+          },
+          "endDate": {
+            "description": "End date (latest asset)",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hasSharedLink": {
+            "description": "Has shared link",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Album ID",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
+          "isActivityEnabled": {
+            "description": "Activity feed enabled",
+            "type": "boolean"
+          },
+          "lastModifiedAssetTimestamp": {
+            "description": "Last modified asset timestamp",
+            "format": "date-time",
+            "type": "string"
+          },
+          "linkedAt": {
             "description": "Link creation timestamp",
             "format": "date-time",
             "type": "string"
           },
-          "showInTimeline": {
+          "order": {
+            "$ref": "#/components/schemas/AssetOrder"
+          },
+          "shared": {
+            "description": "Is shared album",
             "type": "boolean"
+          },
+          "showInTimeline": {
+            "description": "Include this album in the space timeline",
+            "type": "boolean"
+          },
+          "startDate": {
+            "description": "Start date (earliest asset)",
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "Last update date",
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
           "addedById",
-          "albumId",
           "albumName",
           "albumThumbnailAssetId",
+          "albumUsers",
           "assetCount",
           "createdAt",
-          "showInTimeline"
+          "description",
+          "hasSharedLink",
+          "id",
+          "isActivityEnabled",
+          "linkedAt",
+          "shared",
+          "showInTimeline",
+          "updatedAt"
         ],
         "type": "object"
       },

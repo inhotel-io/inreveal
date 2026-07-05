@@ -2749,14 +2749,42 @@ export type SharedSpaceActivityResponseDto = {
     userProfileImagePath?: string | null;
 };
 export type SharedSpaceLinkedAlbumDto = {
+    /** User who linked the album into the space */
     addedById: string | null;
-    albumId: string;
+    /** Album name */
     albumName: string;
+    /** Thumbnail asset ID */
     albumThumbnailAssetId: string | null;
+    /** First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically. */
+    albumUsers: AlbumUserResponseDto[];
+    /** Number of assets */
     assetCount: number;
-    /** Link creation timestamp */
+    contributorCounts?: ContributorCountResponseDto[];
+    /** Creation date */
     createdAt: string;
+    /** Album description */
+    description: string;
+    /** End date (latest asset) */
+    endDate?: string;
+    /** Has shared link */
+    hasSharedLink: boolean;
+    /** Album ID */
+    id: string;
+    /** Activity feed enabled */
+    isActivityEnabled: boolean;
+    /** Last modified asset timestamp */
+    lastModifiedAssetTimestamp?: string;
+    /** Link creation timestamp */
+    linkedAt: string;
+    order?: AssetOrder;
+    /** Is shared album */
+    shared: boolean;
+    /** Include this album in the space timeline */
     showInTimeline: boolean;
+    /** Start date (earliest asset) */
+    startDate?: string;
+    /** Last update date */
+    updatedAt: string;
 };
 export type SharedSpaceAlbumLinkUpdateDto = {
     /** Include this album in the space timeline */

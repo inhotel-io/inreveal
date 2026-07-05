@@ -361,7 +361,7 @@ describe('SharedSpaceService — space-album permission matrix', () => {
       await sut3.linkAlbum(authFromUser(spaceOwner3), spaceS3, albumAlreadyLinked3);
       await sut3.linkAlbum(authFromUser(spaceOwner3), spaceS3, albumAlreadyLinked3);
       const links = await ctx3.get(SharedSpaceRepository).getLinkedAlbums(spaceS3);
-      expect(links.filter((l) => l.albumId === albumAlreadyLinked3)).toHaveLength(1);
+      expect(links.filter((l) => l.id === albumAlreadyLinked3)).toHaveLength(1);
     });
   });
 
@@ -435,7 +435,7 @@ describe('SharedSpaceService — space-album permission matrix', () => {
 
       const links = await sut.getLinkedAlbums(authFromUser(o), space.id);
       expect(links).toHaveLength(1);
-      expect(links[0].albumId).toBe(album.id);
+      expect(links[0].id).toBe(album.id);
       expect(links[0].showInTimeline).toBe(false);
     });
 

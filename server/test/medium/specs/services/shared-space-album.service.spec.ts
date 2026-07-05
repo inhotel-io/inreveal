@@ -107,12 +107,12 @@ describe('SharedSpaceService — getLinkedAlbums', () => {
 
     expect(links).toHaveLength(1);
     const link = links[0];
-    expect(link.albumId).toBe(album.id);
+    expect(link.id).toBe(album.id);
     expect(link.albumName).toBe('Linked Album');
     expect(link.showInTimeline).toBe(true);
     expect(link.assetCount).toBe(3);
     expect(link.addedById).toBe(owner.id);
-    expect(typeof link.createdAt).toBe('string');
+    expect(typeof link.linkedAt).toBe('string');
   });
 
   it('returns empty array when no albums are linked', async () => {
@@ -736,7 +736,7 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
 
     // getLinkedAlbums (via SharedSpaceRepository, same DB) should return the link with assetCount=0
     const linkedAlbums = await ctx.get(SharedSpaceRepository).getLinkedAlbums(space.id);
-    const link = linkedAlbums.find((l) => l.albumId === emptyAlbum.id);
+    const link = linkedAlbums.find((l) => l.id === emptyAlbum.id);
     expect(link).toBeDefined();
     const assetCount = await ctx.get(SharedSpaceRepository).getAlbumAssetCount(emptyAlbum.id);
     expect(assetCount).toBe(0);
