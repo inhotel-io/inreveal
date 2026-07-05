@@ -5,6 +5,7 @@ import { init, register, waitLocale } from 'svelte-i18n';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
+import SpaceAlbumsControlsWrapper from '$lib/components/spaces/space-albums-controls.test-wrapper.svelte';
 
 // The persisted store's reset() re-uses its initial object by reference, and in-place field
 // writes (groupBy/collapsedGroups) can leak across tests. Set a fresh object each time.
@@ -35,6 +36,33 @@ beforeEach(() => {
   localStorage.clear();
   spaceAlbumViewSettings.set(freshSpaceSettings());
   albumViewSettings.reset();
+});
+
+describe('SpaceAlbumsControls search input', () => {
+  it('renders a search input with data-testid="space-albums-search"', () => {
+    render(SpaceAlbumsControls);
+    expect(screen.getByTestId('space-albums-search')).toBeInTheDocument();
+  });
+
+  it('reflects the passed searchQuery prop value', () => {
+    render(SpaceAlbumsControls, { searchQuery: 'hello' });
+    const input = screen.getByTestId('space-albums-search') as HTMLInputElement;
+    expect(input.value).toBe('hello');
+  });
+
+  it('propagates typed text upward through bind:searchQuery to the parent state', async () => {
+    // Render via a wrapper that holds its own $state and passes bind:searchQuery.
+    // The wrapper renders a <span data-testid="wrapper-search-query"> with the current state value.
+    // If bind:value={searchQuery} were removed from the input, the span would stay empty
+    // while the input shows the typed text — proving this test catches missing binding.
+    render(SpaceAlbumsControlsWrapper);
+    const input = screen.getByTestId('space-albums-search') as HTMLInputElement;
+    const wrapperState = screen.getByTestId('wrapper-search-query');
+
+    await userEvent.type(input, 'beach');
+
+    expect(wrapperState).toHaveTextContent('beach');
+  });
 });
 
 describe('SpaceAlbumsControls sort dropdown', () => {

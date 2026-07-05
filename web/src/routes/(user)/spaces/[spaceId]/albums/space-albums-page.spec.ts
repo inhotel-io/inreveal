@@ -140,6 +140,11 @@ describe('Space albums page', () => {
     expect(screen.getByTestId('space-albums-view-toggle')).toBeInTheDocument();
   });
 
+  it('renders the search input when albums are present', () => {
+    renderPage([makeAlbum({ id: 'a-1', albumName: 'Trip' })]);
+    expect(screen.getByTestId('space-albums-search')).toBeInTheDocument();
+  });
+
   it('editor sees the "Link album" button', () => {
     renderPage([makeAlbum()], SharedSpaceRole.Editor);
     expect(screen.getByTestId('link-album-button')).toBeInTheDocument();
