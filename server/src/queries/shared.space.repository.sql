@@ -207,19 +207,68 @@ where
 
 -- SharedSpaceRepository.getLinkedAlbums
 select
-  "shared_space_album"."spaceId",
-  "shared_space_album"."albumId",
+  "album".*,
+  (
+    select
+      coalesce(json_agg(agg), '[]')
+    from
+      (
+        select
+          "album_user"."role",
+          (
+            select
+              to_json(obj)
+            from
+              (
+                select
+                  "id",
+                  "name",
+                  "email",
+                  "avatarColor",
+                  "profileImagePath",
+                  "profileChangedAt"
+                from
+                  (
+                    select
+                      1
+                  ) as "dummy"
+              ) as obj
+          ) as "user"
+        from
+          "album_user"
+          inner join "user" on "user"."id" = "album_user"."userId"
+        where
+          "album_user"."albumId" = "album"."id"
+        order by
+          "album_user"."role",
+          "user"."name" asc
+      ) as agg
+  ) as "albumUsers",
+  (
+    select
+      coalesce(json_agg(agg), '[]')
+    from
+      (
+        select
+          "shared_link".*
+        from
+          "shared_link"
+        where
+          "shared_link"."albumId" = "album"."id"
+      ) as agg
+  ) as "sharedLinks",
   "shared_space_album"."addedById",
   "shared_space_album"."showInTimeline",
-  "shared_space_album"."createdAt",
-  "album"."albumName",
-  "album"."albumThumbnailAssetId"
+  "shared_space_album"."createdAt" as "linkedAt"
 from
   "shared_space_album"
   inner join "album" on "album"."id" = "shared_space_album"."albumId"
 where
   "shared_space_album"."spaceId" = $1
   and "album"."deletedAt" is null
+order by
+  "album"."createdAt" desc,
+  "album"."id" asc
 
 -- SharedSpaceRepository.getSpacesLinkedToAlbum
 select
