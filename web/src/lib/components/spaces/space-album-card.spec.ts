@@ -11,13 +11,20 @@ describe('SpaceAlbumCard', () => {
   });
 
   const album = {
-    albumId: 'a-1',
+    id: 'a-1',
     albumName: 'Trip',
     assetCount: 12,
     albumThumbnailAssetId: null,
     showInTimeline: true,
     addedById: null,
-    createdAt: '2026-01-01T00:00:00Z',
+    linkedAt: '2026-01-01T00:00:00Z',
+    albumUsers: [],
+    description: '',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    shared: false,
+    hasSharedLink: false,
+    isActivityEnabled: false,
   };
 
   it('links to the in-space album route', () => {

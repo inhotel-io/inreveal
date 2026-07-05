@@ -33,13 +33,20 @@ const members: SharedSpaceMemberResponseDto[] = [
 
 const linkedAlbums = [
   {
-    albumId: 'album-1',
+    id: 'album-1',
     albumName: 'Vacation',
     assetCount: 5,
     albumThumbnailAssetId: null,
     showInTimeline: true,
     addedById: null,
+    linkedAt: '2026-01-01T00:00:00.000Z',
+    albumUsers: [],
+    description: '',
     createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    shared: false,
+    hasSharedLink: false,
+    isActivityEnabled: false,
   },
 ];
 
@@ -108,7 +115,7 @@ describe('space album detail page load', () => {
   });
 
   it('redirects when the album is present in the space but for a different albumId', async () => {
-    const event = makeEvent({ linkedAlbums: [{ ...linkedAlbums[0], albumId: 'other-album' }] });
+    const event = makeEvent({ linkedAlbums: [{ ...linkedAlbums[0], id: 'other-album' }] });
 
     let thrown: unknown;
     try {

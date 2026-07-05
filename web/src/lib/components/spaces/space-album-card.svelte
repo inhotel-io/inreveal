@@ -51,7 +51,7 @@
     </div>
   {/if}
 
-  <a href="/spaces/{spaceId}/albums/{album.albumId}" data-testid="space-album-card-link">
+  <a href="/spaces/{spaceId}/albums/{album.id}" data-testid="space-album-card-link">
     <!-- Cover image -->
     <div class="relative aspect-square w-full overflow-hidden rounded-xl {album.showInTimeline ? '' : 'opacity-60'}">
       {#if thumbnailUrl}
