@@ -17,6 +17,8 @@
     mdiChevronDown,
     mdiFolderRemoveOutline,
     mdiFormatListBulletedSquare,
+    mdiLinkVariantPlus,
+    mdiPlus,
     mdiUnfoldLessHorizontal,
     mdiUnfoldMoreHorizontal,
     mdiViewGridOutline,
@@ -26,9 +28,12 @@
   interface Props {
     groupIds?: string[];
     searchQuery?: string;
+    canManage?: boolean;
+    onCreate?: () => void;
+    onLink?: () => void;
   }
 
-  let { groupIds = [], searchQuery = $bindable('') }: Props = $props();
+  let { groupIds = [], searchQuery = $bindable(''), canManage = false, onCreate, onLink }: Props = $props();
 
   let showSortMenu = $state(false);
   let showGroupMenu = $state(false);
@@ -222,6 +227,21 @@
         color="secondary"
       >
         <Text class="hidden md:block">{$t('list')}</Text>
+      </Button>
+    {/if}
+
+    {#if canManage}
+      <Button size="small" leadingIcon={mdiPlus} onclick={() => onCreate?.()} data-testid="create-album-button">
+        {$t('create_album')}
+      </Button>
+      <Button
+        size="small"
+        variant="ghost"
+        leadingIcon={mdiLinkVariantPlus}
+        onclick={() => onLink?.()}
+        data-testid="link-album-button"
+      >
+        {$t('spaces_linked_albums_link_album')}
       </Button>
     {/if}
   </div>

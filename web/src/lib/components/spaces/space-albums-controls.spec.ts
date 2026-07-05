@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, within, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
@@ -175,5 +175,27 @@ describe('SpaceAlbumsControls group dropdown', () => {
     render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     await userEvent.click(screen.getByTestId('space-albums-expand-all'));
     expect(get(spaceAlbumViewSettings).collapsedGroups.Year).toEqual([]);
+  });
+});
+
+describe('SpaceAlbumsControls create + link buttons', () => {
+  it('shows Create + Link for editors and invokes the callbacks', async () => {
+    const onCreate = vi.fn();
+    const onLink = vi.fn();
+    render(SpaceAlbumsControls, { canManage: true, onCreate, onLink });
+    await fireEvent.click(screen.getByTestId('create-album-button'));
+    await fireEvent.click(screen.getByTestId('link-album-button'));
+    expect(onCreate).toHaveBeenCalledOnce();
+    expect(onLink).toHaveBeenCalledOnce();
+  });
+
+  it('hides Create + Link for viewers but keeps search/sort/group/view', () => {
+    render(SpaceAlbumsControls, { canManage: false });
+    expect(screen.queryByTestId('create-album-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('link-album-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('space-albums-search')).toBeInTheDocument();
+    expect(screen.getByTestId('space-albums-sort-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('space-albums-group-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('space-albums-view-toggle')).toBeInTheDocument();
   });
 });
