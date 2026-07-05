@@ -25,9 +25,10 @@
 
   interface Props {
     groupIds?: string[];
+    searchQuery?: string;
   }
 
-  let { groupIds = [] }: Props = $props();
+  let { groupIds = [], searchQuery = $bindable('') }: Props = $props();
 
   let showSortMenu = $state(false);
   let showGroupMenu = $state(false);
@@ -96,7 +97,16 @@
 
 <svelte:window onclick={handleClickOutside} />
 
-<div class="flex items-center justify-end gap-2 px-4 py-2" data-testid="space-albums-view-toggle">
+<div class="flex items-center justify-between gap-2 px-4 py-2" data-testid="space-albums-view-toggle">
+  <!-- Search Albums -->
+  <input
+    type="search"
+    data-testid="space-albums-search"
+    bind:value={searchQuery}
+    aria-label={$t('search_albums')}
+    placeholder={$t('search_albums')}
+    class="h-8 w-48 rounded-lg bg-gray-100 px-3 text-sm text-gray-700 placeholder-gray-400 outline-none focus:ring-2 focus:ring-immich-primary sm:w-64 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+  />
   <div class="flex items-center gap-1">
     <!-- Sort Albums -->
     <div class="relative" data-testid="space-albums-sort-container">
