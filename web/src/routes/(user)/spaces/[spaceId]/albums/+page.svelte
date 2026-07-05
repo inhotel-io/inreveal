@@ -125,7 +125,7 @@
       </div>
     </div>
   {:else}
-    <SpaceAlbumsControls />
+    <SpaceAlbumsControls {groupIds} />
     <div class="px-4 pt-4">
       <SpaceAlbumsList
         spaceId={space.id}

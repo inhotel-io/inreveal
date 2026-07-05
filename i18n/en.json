@@ -1622,6 +1622,7 @@
   "grant_permission": "Grant permission",
   "group_albums_by": "Group albums by...",
   "group_country": "Group by country",
+  "group_linked_by": "Group by who linked",
   "group_member_count": "{count, plural, one {# member} other {# members}}",
   "group_no": "No grouping",
   "group_owner": "Group by owner",
