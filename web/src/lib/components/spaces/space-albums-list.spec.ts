@@ -1,9 +1,12 @@
 import { get } from 'svelte/store';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
-import { spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
-import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
+import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { authManager } from '$lib/managers/auth-manager.svelte';
+import { userAdminFactory } from '@test-data/factories/user-factory';
+import type { SharedSpaceLinkedAlbumDto, SharedSpaceMemberResponseDto } from '@immich/sdk';
 import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
@@ -65,6 +68,7 @@ describe('SpaceAlbumsList', () => {
     localStorage.clear();
     spaceAlbumViewSettings.reset();
     albumViewSettings.reset();
+    authManager.setUser(userAdminFactory.build({ id: 'me' }));
   });
 
   it('renders cover cards by default and switches to the table on view=List', async () => {
@@ -129,5 +133,58 @@ describe('SpaceAlbumsList', () => {
     }));
     render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false });
     expect(idsInListOrder()).toEqual(['a', 'b']);
+  });
+
+  describe('grouping (cover mode)', () => {
+    it('renders no group headers when groupBy is None', () => {
+      const albums = [makeAlbum({ id: 'a-1' }), makeAlbum({ id: 'a-2' })];
+      render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false });
+      expect(screen.queryByTestId(/^space-album-group-/)).not.toBeInTheDocument();
+      expect(screen.getAllByTestId('space-album-card')).toHaveLength(2);
+    });
+
+    it('renders a header per year with names and counts when groupBy is Year', () => {
+      const albums = [
+        makeAlbum({ id: 'y2020', endDate: '2020-06-01T00:00:00.000Z' }),
+        makeAlbum({ id: 'y2024a', endDate: '2024-06-01T00:00:00.000Z' }),
+        makeAlbum({ id: 'y2024b', endDate: '2024-07-01T00:00:00.000Z' }),
+      ];
+      spaceAlbumViewSettings.update((s) => ({
+        ...s,
+        groupBy: SpaceAlbumGroupBy.Year,
+        sortBy: AlbumSortBy.MostRecentPhoto,
+        sortOrder: SortOrder.Desc,
+      }));
+      render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false });
+      const header2024 = screen.getByTestId('space-album-group-2024');
+      const header2020 = screen.getByTestId('space-album-group-2020');
+      expect(header2024).toHaveTextContent('2024');
+      expect(header2024).toHaveTextContent('2');
+      expect(header2020).toHaveTextContent('2020');
+      expect(header2020).toHaveTextContent('1');
+    });
+
+    it('collapsing a group marks its header collapsed (aria-expanded=false)', async () => {
+      const albums = [
+        makeAlbum({ id: 'y2020', endDate: '2020-06-01T00:00:00.000Z' }),
+        makeAlbum({ id: 'y2024', endDate: '2024-06-01T00:00:00.000Z' }),
+      ];
+      spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+      render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false });
+      expect(screen.getByTestId('space-album-group-2020')).toHaveAttribute('aria-expanded', 'true');
+      toggleSpaceAlbumGroupCollapsing('2020');
+      await waitFor(() =>
+        expect(screen.getByTestId('space-album-group-2020')).toHaveAttribute('aria-expanded', 'false'),
+      );
+    });
+
+    it('renders member-name headers plus an Unassigned group when groupBy is LinkedBy', () => {
+      const members = [{ userId: 'u1', name: 'Alice' }] as unknown as SharedSpaceMemberResponseDto[];
+      const albums = [makeAlbum({ id: 'a', addedById: 'u1' }), makeAlbum({ id: 'b', addedById: null })];
+      spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.LinkedBy }));
+      render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false, members });
+      expect(screen.getByTestId('space-album-group-u1')).toHaveTextContent('Alice');
+      expect(screen.getByTestId('space-album-group-Unassigned')).toHaveTextContent('Unassigned');
+    });
   });
 });

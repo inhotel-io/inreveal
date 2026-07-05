@@ -28,6 +28,7 @@
   const space = $derived<SharedSpaceResponseDto>(data.space);
   const members = $derived<SharedSpaceMemberResponseDto[]>(data.members);
   let albums = $state<SharedSpaceLinkedAlbumDto[]>(data.linkedAlbums);
+  let groupIds = $state<string[]>([]);
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isEditor = $derived(
@@ -130,6 +131,8 @@
         spaceId={space.id}
         {albums}
         canManage={isEditor}
+        {members}
+        bind:groupIds
         onUnlink={handleUnlink}
         onToggleTimeline={handleToggleTimeline}
       />
