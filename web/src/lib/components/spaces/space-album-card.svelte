@@ -1,10 +1,9 @@
 <script lang="ts">
+  import AlbumCover from '$lib/components/album-page/AlbumCover.svelte';
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
-  import { getAssetMediaUrl } from '$lib/utils';
-  import { type SharedSpaceLinkedAlbumDto } from '@immich/sdk';
-  import { Icon } from '@immich/ui';
-  import { mdiDotsVertical, mdiImageAlbum } from '@mdi/js';
+  import { type AlbumResponseDto, type SharedSpaceLinkedAlbumDto } from '@immich/sdk';
+  import { mdiDotsVertical } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -16,10 +15,6 @@
   }
 
   let { spaceId, album, canManage, onUnlink, onToggleTimeline }: Props = $props();
-
-  let thumbnailUrl = $derived(
-    album.albumThumbnailAssetId ? getAssetMediaUrl({ id: album.albumThumbnailAssetId }) : null,
-  );
 </script>
 
 <div
@@ -54,13 +49,7 @@
   <a href="/spaces/{spaceId}/albums/{album.id}" data-testid="space-album-card-link">
     <!-- Cover image -->
     <div class="relative aspect-square w-full overflow-hidden rounded-xl {album.showInTimeline ? '' : 'opacity-60'}">
-      {#if thumbnailUrl}
-        <img alt={album.albumName} src={thumbnailUrl} class="size-full object-cover" loading="lazy" />
-      {:else}
-        <div class="flex size-full items-center justify-center bg-gray-100 dark:bg-gray-800">
-          <Icon icon={mdiImageAlbum} size="48" class="text-gray-400" />
-        </div>
-      {/if}
+      <AlbumCover album={album as unknown as AlbumResponseDto} class="size-full object-cover" />
     </div>
 
     <!-- Text info -->
