@@ -262,6 +262,218 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Web E2E: Spaces — Albums tab controls journeys
+// Covers: search, sort, group+collapse, view toggle, create, link, viewer gating.
+// Requires the e2e stack (make e2e). Stack absence causes connection refused — CI only.
+// ──────────────────────────────────────────────────────────────────────────────
+test.describe('Spaces — Albums tab controls (search / sort / group / view / create / link / viewer gating)', () => {
+  let ctrlAdmin: LoginResponseDto;
+  let ctrlOwner: LoginResponseDto;
+  let ctrlEditor: LoginResponseDto;
+  let ctrlViewer: LoginResponseDto;
+  let ctrlSpace: SharedSpaceResponseDto;
+  let ctrlAlbumA: AlbumResponseDto;
+  let ctrlAlbumB: AlbumResponseDto;
+  let ctrlAlbumC: AlbumResponseDto;
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    ctrlAdmin = await utils.adminSetup();
+
+    [ctrlOwner, ctrlEditor, ctrlViewer] = await Promise.all([
+      utils.userSetup(ctrlAdmin.accessToken, createUserDto.create('ctrl-owner')),
+      utils.userSetup(ctrlAdmin.accessToken, createUserDto.create('ctrl-editor')),
+      utils.userSetup(ctrlAdmin.accessToken, createUserDto.create('ctrl-viewer')),
+    ]);
+
+    ctrlSpace = await utils.createSpace(ctrlOwner.accessToken, { name: 'Controls Test Space' });
+
+    await utils.addSpaceMember(ctrlOwner.accessToken, ctrlSpace.id, {
+      userId: ctrlEditor.userId,
+      role: SharedSpaceRole.Editor,
+    });
+    await utils.addSpaceMember(ctrlOwner.accessToken, ctrlSpace.id, {
+      userId: ctrlViewer.userId,
+      role: SharedSpaceRole.Viewer,
+    });
+
+    // Seed three albums with distinct names so search/sort/group can be exercised.
+    // Names chosen to be alphabetically distinct: "Alpha Album" < "Beta Album" < "Zeta Album".
+    const [assetA, assetB, assetC] = await Promise.all([
+      utils.createAsset(ctrlOwner.accessToken),
+      utils.createAsset(ctrlOwner.accessToken),
+      utils.createAsset(ctrlOwner.accessToken),
+    ]);
+
+    [ctrlAlbumA, ctrlAlbumB, ctrlAlbumC] = await Promise.all([
+      utils.createAlbum(ctrlOwner.accessToken, { albumName: 'Alpha Album', assetIds: [assetA.id] }),
+      utils.createAlbum(ctrlOwner.accessToken, { albumName: 'Beta Album', assetIds: [assetB.id] }),
+      utils.createAlbum(ctrlOwner.accessToken, { albumName: 'Zeta Album', assetIds: [assetC.id] }),
+    ]);
+
+    await Promise.all([
+      utils.linkSpaceAlbum(ctrlOwner.accessToken, ctrlSpace.id, ctrlAlbumA.id),
+      utils.linkSpaceAlbum(ctrlOwner.accessToken, ctrlSpace.id, ctrlAlbumB.id),
+      utils.linkSpaceAlbum(ctrlOwner.accessToken, ctrlSpace.id, ctrlAlbumC.id),
+    ]);
+  });
+
+  // 1. Search narrows cards and clearing restores all.
+  test('search narrows visible cards to matching albums; clearing restores all', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    // All three cards should be visible initially.
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+
+    // Type a query that matches exactly one album.
+    await page.getByTestId('space-albums-search').fill('Alpha');
+    await expect(page.getByTestId('space-album-card')).toHaveCount(1);
+    await expect(page.getByTestId('space-album-card-link').first()).toContainText('Alpha Album');
+
+    // Clear the search field — all albums return.
+    await page.getByTestId('space-albums-search').fill('');
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+  });
+
+  // 2. Sort by Title reorders the card links.
+  test('sort by Title reorders space-album-card-link hrefs alphabetically', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    // Wait for initial cards.
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+
+    // Open the sort menu and pick "Title" (AlbumSortBy.Title = 'Title').
+    await page.getByTestId('space-albums-sort-btn').click();
+    await expect(page.getByTestId('space-albums-sort-menu')).toBeVisible();
+    await page.getByTestId('space-albums-sort-option-Title').click();
+    await expect(page.getByTestId('space-albums-sort-menu')).not.toBeVisible();
+
+    // After sorting by Title ascending the first card should be Alpha Album.
+    const links = page.getByTestId('space-album-card-link');
+    await expect(links).toHaveCount(3);
+    // First link should point to Alpha Album (smallest alphabetically).
+    await expect(links.first()).toHaveAttribute('href', `/spaces/${ctrlSpace.id}/albums/${ctrlAlbumA.id}`);
+    // Last link should point to Zeta Album.
+    await expect(links.last()).toHaveAttribute('href', `/spaces/${ctrlSpace.id}/albums/${ctrlAlbumC.id}`);
+  });
+
+  // 3. Group by Year renders group headers; clicking a header collapses its cards.
+  test('group by Year renders space-album-group-* headers; clicking header collapses cards', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+
+    // Open group menu and pick Year (SpaceAlbumGroupBy.Year = 'Year').
+    await page.getByTestId('space-albums-group-btn').click();
+    await expect(page.getByTestId('space-albums-group-menu')).toBeVisible();
+    await page.getByTestId('space-albums-group-option-Year').click();
+    await expect(page.getByTestId('space-albums-group-menu')).not.toBeVisible();
+
+    // At least one group header should be rendered (all albums were just created, so same year).
+    const groupHeaders = page.locator('[data-testid^="space-album-group-"]');
+    await expect(groupHeaders).toHaveCount(1);
+
+    // Capture the group id from the first header's testid.
+    const firstHeaderTestId = await groupHeaders.first().getAttribute('data-testid');
+    expect(firstHeaderTestId).toBeTruthy();
+    // The group header is collapsed by clicking it; cards inside should disappear.
+    await groupHeaders.first().click();
+    // After collapse the cards inside the group are no longer visible.
+    await expect(page.getByTestId('space-album-card')).toHaveCount(0);
+
+    // Click the header again to expand — cards return.
+    await groupHeaders.first().click();
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+
+    // Reset grouping to None so subsequent tests are not affected.
+    await page.getByTestId('space-albums-group-btn').click();
+    await page.getByTestId('space-albums-group-option-None').click();
+  });
+
+  // 4. View toggle switches to list rows linking to the space album route.
+  test('view toggle switches to list mode; rows link to /spaces/{id}/albums/{albumId}', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+
+    // The view toggle button (currently showing cover mode) is the "List" button inside
+    // the space-albums-view-toggle container.
+    const viewToggleContainer = page.getByTestId('space-albums-view-toggle');
+    await viewToggleContainer.getByRole('button', { name: /list/i }).click();
+
+    // Card elements should be gone; list rows should appear.
+    await expect(page.getByTestId('space-album-card')).toHaveCount(0);
+
+    // Each row's anchor should link to the correct space album route.
+    const rowA = page.getByTestId(`space-album-row-${ctrlAlbumA.id}`);
+    const rowB = page.getByTestId(`space-album-row-${ctrlAlbumB.id}`);
+    const rowC = page.getByTestId(`space-album-row-${ctrlAlbumC.id}`);
+    await expect(rowA).toBeVisible();
+    await expect(rowA).toHaveAttribute('href', `/spaces/${ctrlSpace.id}/albums/${ctrlAlbumA.id}`);
+    await expect(rowB).toBeVisible();
+    await expect(rowC).toBeVisible();
+
+    // Switch back to cover mode.
+    await viewToggleContainer.getByRole('button', { name: /covers/i }).click();
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+  });
+
+  // 5. Owner: create-album-button navigates to a new /spaces/{id}/albums/{newId} route.
+  test('owner: create-album-button creates an album and navigates to its space route', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    await expect(page.getByTestId('space-album-card')).toHaveCount(3);
+    await expect(page.getByTestId('create-album-button')).toBeVisible();
+
+    await page.getByTestId('create-album-button').click();
+
+    // The page navigates to the new album's detail route inside the space.
+    const spaceAlbumRoutePattern = new RegExp(`/spaces/${ctrlSpace.id}/albums/[^/]+$`);
+    await page.waitForURL(spaceAlbumRoutePattern);
+    expect(page.url()).toMatch(spaceAlbumRoutePattern);
+  });
+
+  // 6. Owner: link-album-button opens the link modal (album-picker testid visible).
+  test('owner: link-album-button opens the link album modal', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlOwner.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    await expect(page.getByTestId('link-album-button')).toBeVisible();
+    await page.getByTestId('link-album-button').click();
+
+    // SpaceLinkAlbumModal renders a FormModal; confirm it opened via the album-picker testid
+    // (always rendered once loading completes) or the modal heading text.
+    await expect(page.getByTestId('album-picker')).toBeVisible();
+  });
+
+  // 7. Viewer gating: write controls absent; read controls present.
+  test('viewer: write controls absent; search / sort / group / view controls present', async ({ context, page }) => {
+    await utils.setAuthCookies(context, ctrlViewer.accessToken);
+    await page.goto(`/spaces/${ctrlSpace.id}/albums`);
+
+    // Read-only controls must be visible.
+    await expect(page.getByTestId('space-albums-search')).toBeVisible();
+    await expect(page.getByTestId('space-albums-sort-btn')).toBeVisible();
+    await expect(page.getByTestId('space-albums-group-btn')).toBeVisible();
+    // The view-toggle container is always rendered.
+    await expect(page.getByTestId('space-albums-view-toggle')).toBeVisible();
+
+    // Write controls must be absent.
+    await expect(page.getByTestId('create-album-button')).not.toBeVisible();
+    await expect(page.getByTestId('link-album-button')).not.toBeVisible();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // API-level e2e: Spaces — linked-album live people sync
 // Requires the e2e stack (make e2e). Skipped automatically when infra unavailable.
 // ──────────────────────────────────────────────────────────────────────────────
