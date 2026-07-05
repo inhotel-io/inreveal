@@ -7,13 +7,15 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
 import SearchAddAllToCollectionModal from './SearchAddAllToCollectionModal.svelte';
 
-const { mockUser, mockAdd, mockCollect } = vi.hoisted(() => ({
+const { mockUser, mockAdd, mockCollect, mockHandleError } = vi.hoisted(() => ({
   mockUser: { current: { id: 'me', isAdmin: false } },
   mockAdd: vi.fn(),
   mockCollect: vi.fn(),
+  mockHandleError: vi.fn(),
 }));
 vi.mock('$lib/services/collection.service', () => ({ addAssetsToCollections: mockAdd }));
 vi.mock('$lib/services/search.service', () => ({ collectSearchResultAssetIds: mockCollect }));
+vi.mock('$lib/utils/handle-error', () => ({ handleError: mockHandleError }));
 vi.mock('$lib/managers/auth-manager.svelte', () => ({
   authManager: {
     get authenticated() {
@@ -109,6 +111,19 @@ describe('SearchAddAllToCollectionModal', () => {
     await fireEvent.click(trip[0]);
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledOnce());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('surfaces an error via handleError and stays open when collection fails', async () => {
+    mockCollect.mockRejectedValue(new Error('boom'));
+    const onClose = vi.fn();
+    render(SearchAddAllToCollectionModal, { ...baseProps(), onClose });
+
+    const trip = await screen.findAllByRole('button', { name: /Trip/ });
+    await fireEvent.click(trip[0]);
+
+    await waitFor(() => expect(mockHandleError).toHaveBeenCalled());
+    expect(mockAdd).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
 

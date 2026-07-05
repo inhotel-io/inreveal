@@ -68,4 +68,24 @@ describe('collectSearchResultAssetIds', () => {
     expect(ids).toEqual([]);
     expect(sdkMock.searchAssets).toHaveBeenCalledTimes(1);
   });
+
+  it('forces pagination fields to override colliding filter terms', async () => {
+    sdkMock.searchAssets.mockResolvedValueOnce(page(['a'], null));
+    await collectSearchResultAssetIds(
+      { size: 5, page: 9, withExif: true, isFavorite: true },
+      { smartSearchEnabled: false, language: 'en' },
+    );
+    expect(sdkMock.searchAssets).toHaveBeenCalledWith({
+      metadataSearchDto: { isFavorite: true, page: 1, size: 1000, withExif: false },
+    });
+  });
+
+  it('uses smart search when queryAssetId is present and smart search is enabled', async () => {
+    sdkMock.searchSmart.mockResolvedValueOnce(page(['x'], null));
+    await collectSearchResultAssetIds({ queryAssetId: 'abc' }, { smartSearchEnabled: true, language: 'en' });
+    expect(sdkMock.searchSmart).toHaveBeenCalledWith({
+      smartSearchDto: { queryAssetId: 'abc', page: 1, size: 1000, withExif: false, language: 'en' },
+    });
+    expect(sdkMock.searchAssets).not.toHaveBeenCalled();
+  });
 });

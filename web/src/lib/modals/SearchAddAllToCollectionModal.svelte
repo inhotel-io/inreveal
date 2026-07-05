@@ -3,6 +3,7 @@
   import CollectionPickerModal from '$lib/modals/CollectionPickerModal.svelte';
   import { addAssetsToCollections } from '$lib/services/collection.service';
   import { collectSearchResultAssetIds, type SearchTerms } from '$lib/services/search.service';
+  import { handleError } from '$lib/utils/handle-error';
   import { LoadingSpinner, Modal, ModalBody } from '@immich/ui';
   import { t } from 'svelte-i18n';
 
@@ -33,6 +34,8 @@
       if (ok) {
         onClose();
       }
+    } catch (error) {
+      handleError(error, $t('loading_search_results_failed'));
     } finally {
       pending = false;
     }
