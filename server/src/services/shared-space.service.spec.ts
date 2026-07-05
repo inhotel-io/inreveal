@@ -59,6 +59,37 @@ const makeMemberResult = (overrides: any = {}) => ({
   ...overrides,
 });
 
+const makeRichRow = (over: Record<string, unknown> = {}) => {
+  const albumId = newUuid();
+  return {
+    id: albumId,
+    albumName: 'My Album',
+    description: '',
+    albumThumbnailAssetId: null,
+    createdAt: new Date('2024-06-01T00:00:00.000Z'),
+    updatedAt: new Date('2024-06-02T00:00:00.000Z'),
+    isActivityEnabled: true,
+    order: AssetOrder.Desc,
+    albumUsers: [{ role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner One' }) }],
+    sharedLinks: [],
+    addedById: newUuid(),
+    showInTimeline: true,
+    linkedAt: new Date('2025-01-01T00:00:00.000Z'),
+    ...over,
+  };
+};
+
+const arrange = (mocks: ServiceMocks, rows: Record<string, unknown>[], metadata: unknown[] = []) => {
+  const auth = factory.auth({ user: { isAdmin: false } });
+  const space = factory.sharedSpace();
+  mocks.sharedSpace.getMember.mockResolvedValue(
+    makeMemberResult({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
+  );
+  mocks.sharedSpace.getLinkedAlbums.mockResolvedValue(rows as any);
+  mocks.album.getMetadataForIds.mockResolvedValue(metadata as any);
+  return { auth, space };
+};
+
 const setupStrictReconciliationFixture = (
   mocks: ServiceMocks,
   overrides: {
@@ -8010,40 +8041,9 @@ describe(SharedSpaceService.name, () => {
   });
 
   describe('getLinkedAlbums', () => {
-    const makeRichRow = (over: Record<string, unknown> = {}) => {
-      const albumId = newUuid();
-      return {
-        id: albumId,
-        albumName: 'My Album',
-        description: '',
-        albumThumbnailAssetId: null,
-        createdAt: new Date('2024-06-01T00:00:00.000Z'),
-        updatedAt: new Date('2024-06-02T00:00:00.000Z'),
-        isActivityEnabled: true,
-        order: AssetOrder.Desc,
-        albumUsers: [{ role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner One' }) }],
-        sharedLinks: [],
-        addedById: newUuid(),
-        showInTimeline: true,
-        linkedAt: new Date('2025-01-01T00:00:00.000Z'),
-        ...over,
-      };
-    };
-
-    const arrange = (rows: Record<string, unknown>[], metadata: unknown[] = []) => {
-      const auth = factory.auth({ user: { isAdmin: false } });
-      const space = factory.sharedSpace();
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
-      );
-      mocks.sharedSpace.getLinkedAlbums.mockResolvedValue(rows as any);
-      mocks.album.getMetadataForIds.mockResolvedValue(metadata as any);
-      return { auth, space };
-    };
-
     it('returns AlbumResponseDto-shaped data + space fields, with album createdAt distinct from linkedAt', async () => {
       const row = makeRichRow();
-      const { auth, space } = arrange([row], [
+      const { auth, space } = arrange(mocks, [row], [
         { albumId: row.id, assetCount: 7, startDate: new Date('2024-06-01'), endDate: new Date('2024-06-30'), lastModifiedAssetTimestamp: new Date('2024-06-30') },
       ]);
 
@@ -8066,7 +8066,7 @@ describe(SharedSpaceService.name, () => {
 
     it('bulk-fetches metadata once and never calls the per-album N+1 count', async () => {
       const rows = [makeRichRow(), makeRichRow()];
-      const { auth, space } = arrange(rows, rows.map((r) => ({ albumId: r.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null })));
+      const { auth, space } = arrange(mocks, rows, rows.map((r) => ({ albumId: r.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null })));
 
       await sut.getLinkedAlbums(auth, space.id);
 
@@ -8076,7 +8076,7 @@ describe(SharedSpaceService.name, () => {
     });
 
     it('returns [] for an empty space and skips the metadata query', async () => {
-      const { auth, space } = arrange([]);
+      const { auth, space } = arrange(mocks, []);
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result).toEqual([]);
       expect(mocks.album.getMetadataForIds).not.toHaveBeenCalled();
@@ -8084,7 +8084,7 @@ describe(SharedSpaceService.name, () => {
 
     it('reports 0 assetCount and null dates for an album with no assets', async () => {
       const row = makeRichRow();
-      const { auth, space } = arrange([row], []);
+      const { auth, space } = arrange(mocks, [row], []);
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].assetCount).toBe(0);
       expect(result[0].startDate).toBeUndefined();
@@ -8098,7 +8098,7 @@ describe(SharedSpaceService.name, () => {
           { role: AlbumUserRole.Editor, user: factory.user({ name: 'Editor' }) },
         ],
       });
-      const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const { auth, space } = arrange(mocks, [row], [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].shared).toBe(true);
       expect(result[0].albumUsers).toHaveLength(2);
@@ -8106,7 +8106,7 @@ describe(SharedSpaceService.name, () => {
 
     it('preserves null addedById, null thumbnail, and showInTimeline=false', async () => {
       const row = makeRichRow({ addedById: null, albumThumbnailAssetId: null, showInTimeline: false });
-      const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const { auth, space } = arrange(mocks, [row], [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].addedById).toBeNull();
       expect(result[0].albumThumbnailAssetId).toBeNull();

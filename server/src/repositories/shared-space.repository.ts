@@ -19,7 +19,7 @@ import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.ta
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, dummy, searchAssetBuilder } from 'src/utils/database';
 
-const withSpaceAlbumUsers = () => (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
+const withSpaceAlbumUsers = (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
   jsonArrayFrom(
     eb
       .selectFrom('album_user')
@@ -451,7 +451,7 @@ export class SharedSpaceRepository {
       .selectFrom('shared_space_album')
       .innerJoin('album', 'album.id', 'shared_space_album.albumId')
       .selectAll('album')
-      .select(withSpaceAlbumUsers())
+      .select(withSpaceAlbumUsers)
       .select(withSpaceAlbumSharedLink)
       .select([
         'shared_space_album.addedById',
