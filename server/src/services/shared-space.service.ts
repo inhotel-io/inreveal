@@ -20,6 +20,7 @@ import {
   SpacePeopleQueryDto,
   SpaceRepresentativeFaceUpdateDto,
 } from 'src/dtos/shared-space-person.dto';
+import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
 import {
   SharedSpaceActivityResponseDto,
   SharedSpaceAlbumLinkUpdateDto,
@@ -38,6 +39,7 @@ import {
   SharedSpaceResponseDto,
   SharedSpaceUpdateDto,
 } from 'src/dtos/shared-space.dto';
+import { AlbumAssetCount } from 'src/repositories/album.repository';
 import {
   AssetType,
   AssetVisibility,
@@ -694,20 +696,26 @@ export class SharedSpaceService extends BaseService {
 
   async getLinkedAlbums(auth: AuthDto, spaceId: string): Promise<SharedSpaceLinkedAlbumDto[]> {
     await this.requireMembership(auth, spaceId);
-    const links = await this.sharedSpaceRepository.getLinkedAlbums(spaceId);
-    const result: SharedSpaceLinkedAlbumDto[] = [];
-    for (const link of links) {
-      result.push({
-        albumId: link.albumId,
-        albumName: link.albumName,
-        addedById: link.addedById,
-        showInTimeline: link.showInTimeline,
-        albumThumbnailAssetId: link.albumThumbnailAssetId,
-        assetCount: await this.sharedSpaceRepository.getAlbumAssetCount(link.albumId),
-        createdAt: (link.createdAt as unknown as Date).toISOString(),
-      });
+    const rows = await this.sharedSpaceRepository.getLinkedAlbums(spaceId);
+    if (rows.length === 0) {
+      return [];
     }
-    return result;
+    const metadata = await this.albumRepository.getMetadataForIds(rows.map((row) => row.id));
+    const byId: Record<string, AlbumAssetCount> = {};
+    for (const m of metadata) {
+      byId[m.albumId] = m;
+    }
+    return rows.map((row) => ({
+      ...mapAlbum(row as unknown as MapAlbumDto),
+      sharedLinks: undefined,
+      startDate: asDateTimeString(byId[row.id]?.startDate ?? undefined),
+      endDate: asDateTimeString(byId[row.id]?.endDate ?? undefined),
+      assetCount: byId[row.id]?.assetCount ?? 0,
+      lastModifiedAssetTimestamp: asDateTimeString(byId[row.id]?.lastModifiedAssetTimestamp ?? undefined),
+      showInTimeline: row.showInTimeline,
+      addedById: row.addedById,
+      linkedAt: (row.linkedAt as unknown as Date).toISOString(),
+    }));
   }
 
   async unlinkLibrary(auth: AuthDto, spaceId: string, libraryId: string): Promise<void> {

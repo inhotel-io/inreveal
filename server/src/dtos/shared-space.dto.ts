@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { AlbumResponseSchema } from 'src/dtos/album.dto';
 import { SharedSpaceRole, UserAvatarColor, UserAvatarColorSchema } from 'src/enum';
 import z from 'zod';
 
@@ -138,17 +139,11 @@ const SharedSpaceAlbumParamSchema = z.object({
   albumId: z.uuidv4(),
 });
 
-const SharedSpaceLinkedAlbumSchema = z
-  .object({
-    albumId: z.string(),
-    albumName: z.string(),
-    addedById: z.string().nullable(),
-    showInTimeline: z.boolean(),
-    assetCount: z.number(),
-    albumThumbnailAssetId: z.string().nullable(),
-    createdAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),
-  })
-  .meta({ id: 'SharedSpaceLinkedAlbumDto' });
+const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.extend({
+  showInTimeline: z.boolean().describe('Include this album in the space timeline'),
+  addedById: z.string().nullable().describe('User who linked the album into the space'),
+  linkedAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),
+}).meta({ id: 'SharedSpaceLinkedAlbumDto' });
 
 export const MAX_SPACE_ASSETS_PER_REQUEST = 10_000;
 

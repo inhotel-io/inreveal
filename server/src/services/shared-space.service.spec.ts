@@ -6,7 +6,9 @@ import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
+  AlbumUserRole,
   AssetFileType,
+  AssetOrder,
   AssetType,
   CacheControl,
   ImageFormat,
@@ -8008,52 +8010,112 @@ describe(SharedSpaceService.name, () => {
   });
 
   describe('getLinkedAlbums', () => {
-    it('should return mapped DTOs with assetCount from the repo', async () => {
+    const makeRichRow = (over: Record<string, unknown> = {}) => {
+      const albumId = newUuid();
+      return {
+        id: albumId,
+        albumName: 'My Album',
+        description: '',
+        albumThumbnailAssetId: null,
+        createdAt: new Date('2024-06-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-06-02T00:00:00.000Z'),
+        isActivityEnabled: true,
+        order: AssetOrder.Desc,
+        albumUsers: [{ role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner One' }) }],
+        sharedLinks: [],
+        addedById: newUuid(),
+        showInTimeline: true,
+        linkedAt: new Date('2025-01-01T00:00:00.000Z'),
+        ...over,
+      };
+    };
+
+    const arrange = (rows: Record<string, unknown>[], metadata: unknown[] = []) => {
       const auth = factory.auth({ user: { isAdmin: false } });
       const space = factory.sharedSpace();
-      const albumId = newUuid();
-      const addedById = newUuid();
-      const createdAt = new Date('2025-01-01T00:00:00.000Z');
-      const member = makeMemberResult({
-        spaceId: space.id,
-        userId: auth.user.id,
-        role: SharedSpaceRole.Viewer,
-      });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
+      );
+      mocks.sharedSpace.getLinkedAlbums.mockResolvedValue(rows as any);
+      mocks.album.getMetadataForIds.mockResolvedValue(metadata as any);
+      return { auth, space };
+    };
 
-      mocks.sharedSpace.getMember.mockResolvedValue(member);
-      mocks.sharedSpace.getLinkedAlbums.mockResolvedValue([
-        {
-          spaceId: space.id,
-          albumId,
-          addedById,
-          showInTimeline: true,
-          createdAt,
-          albumName: 'My Album',
-          albumThumbnailAssetId: null,
-        } as any,
+    it('returns AlbumResponseDto-shaped data + space fields, with album createdAt distinct from linkedAt', async () => {
+      const row = makeRichRow();
+      const { auth, space } = arrange([row], [
+        { albumId: row.id, assetCount: 7, startDate: new Date('2024-06-01'), endDate: new Date('2024-06-30'), lastModifiedAssetTimestamp: new Date('2024-06-30') },
       ]);
-      mocks.sharedSpace.getAlbumAssetCount.mockResolvedValue(7);
 
       const result = await sut.getLinkedAlbums(auth, space.id);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        albumId,
+        id: row.id,
         albumName: 'My Album',
-        addedById,
         showInTimeline: true,
-        albumThumbnailAssetId: null,
+        addedById: row.addedById,
         assetCount: 7,
-        createdAt: createdAt.toISOString(),
+        albumThumbnailAssetId: null,
+        linkedAt: (row.linkedAt as Date).toISOString(),
+        createdAt: (row.createdAt as Date).toISOString(),
       });
-      expect(mocks.sharedSpace.getAlbumAssetCount).toHaveBeenCalledWith(albumId);
+      expect(result[0].createdAt).not.toEqual(result[0].linkedAt);
+      expect(result[0].albumUsers[0].user.name).toBe('Owner One');
     });
 
-    it('should reject non-member with ForbiddenException', async () => {
+    it('bulk-fetches metadata once and never calls the per-album N+1 count', async () => {
+      const rows = [makeRichRow(), makeRichRow()];
+      const { auth, space } = arrange(rows, rows.map((r) => ({ albumId: r.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null })));
+
+      await sut.getLinkedAlbums(auth, space.id);
+
+      expect(mocks.album.getMetadataForIds).toHaveBeenCalledTimes(1);
+      expect(mocks.album.getMetadataForIds).toHaveBeenCalledWith(rows.map((r) => r.id));
+      expect(mocks.sharedSpace.getAlbumAssetCount).not.toHaveBeenCalled();
+    });
+
+    it('returns [] for an empty space and skips the metadata query', async () => {
+      const { auth, space } = arrange([]);
+      const result = await sut.getLinkedAlbums(auth, space.id);
+      expect(result).toEqual([]);
+      expect(mocks.album.getMetadataForIds).not.toHaveBeenCalled();
+    });
+
+    it('reports 0 assetCount and null dates for an album with no assets', async () => {
+      const row = makeRichRow();
+      const { auth, space } = arrange([row], []);
+      const result = await sut.getLinkedAlbums(auth, space.id);
+      expect(result[0].assetCount).toBe(0);
+      expect(result[0].startDate).toBeUndefined();
+      expect(result[0].endDate).toBeUndefined();
+    });
+
+    it('marks a multi-user album as shared', async () => {
+      const row = makeRichRow({
+        albumUsers: [
+          { role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner' }) },
+          { role: AlbumUserRole.Editor, user: factory.user({ name: 'Editor' }) },
+        ],
+      });
+      const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const result = await sut.getLinkedAlbums(auth, space.id);
+      expect(result[0].shared).toBe(true);
+      expect(result[0].albumUsers).toHaveLength(2);
+    });
+
+    it('preserves null addedById, null thumbnail, and showInTimeline=false', async () => {
+      const row = makeRichRow({ addedById: null, albumThumbnailAssetId: null, showInTimeline: false });
+      const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const result = await sut.getLinkedAlbums(auth, space.id);
+      expect(result[0].addedById).toBeNull();
+      expect(result[0].albumThumbnailAssetId).toBeNull();
+      expect(result[0].showInTimeline).toBe(false);
+    });
+
+    it('rejects a non-member with ForbiddenException', async () => {
       const auth = factory.auth({ user: { isAdmin: false } });
-
       mocks.sharedSpace.getMember.mockResolvedValue(void 0 as any);
-
       await expect(sut.getLinkedAlbums(auth, newUuid())).rejects.toThrow(ForbiddenException);
     });
   });
