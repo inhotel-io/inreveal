@@ -2,9 +2,20 @@ import { get } from 'svelte/store';
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { init, register, waitLocale } from 'svelte-i18n';
-import { AlbumSortBy, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
-import { spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
+import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
+
+// The persisted store's reset() re-uses its initial object by reference, and in-place field
+// writes (groupBy/collapsedGroups) can leak across tests. Set a fresh object each time.
+const freshSpaceSettings = () => ({
+  view: AlbumViewMode.Cover,
+  sortBy: AlbumSortBy.MostRecentPhoto,
+  sortOrder: SortOrder.Desc,
+  groupBy: SpaceAlbumGroupBy.None,
+  groupOrder: SortOrder.Desc,
+  collapsedGroups: {},
+});
 
 vi.mock('@immich/ui', async (importOriginal) => {
   const original = await importOriginal<typeof import('@immich/ui')>();
@@ -22,7 +33,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   localStorage.clear();
-  spaceAlbumViewSettings.reset();
+  spaceAlbumViewSettings.set(freshSpaceSettings());
   albumViewSettings.reset();
 });
 
@@ -66,5 +77,75 @@ describe('SpaceAlbumsControls sort dropdown', () => {
     await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
     await userEvent.click(screen.getByTestId('space-albums-sort-option-Title'));
     expect(get(spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Desc);
+  });
+});
+
+describe('SpaceAlbumsControls group dropdown', () => {
+  it('renders a group dropdown trigger button', () => {
+    render(SpaceAlbumsControls);
+    expect(screen.getByTestId('space-albums-group-btn')).toBeInTheDocument();
+  });
+
+  it('lists None / Year / Linked by / Owner when the dropdown is opened', async () => {
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
+    const menu = screen.getByTestId('space-albums-group-menu');
+    expect(within(menu).getByText('No grouping')).toBeInTheDocument();
+    expect(within(menu).getByText('Group by year')).toBeInTheDocument();
+    expect(within(menu).getByText('Group by who linked')).toBeInTheDocument();
+    expect(within(menu).getByText('Group by owner')).toBeInTheDocument();
+  });
+
+  it('writes the selected groupBy to the space store', async () => {
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
+    await userEvent.click(screen.getByTestId('space-albums-group-option-Year'));
+    expect(get(spaceAlbumViewSettings).groupBy).toBe(SpaceAlbumGroupBy.Year);
+  });
+
+  it('never writes to the global albumViewSettings (isolation)', async () => {
+    const before = get(albumViewSettings);
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
+    await userEvent.click(screen.getByTestId('space-albums-group-option-Owner'));
+    expect(get(albumViewSettings)).toEqual(before);
+  });
+
+  it('disables the Year option when sortBy is DateCreated', async () => {
+    spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.DateCreated }));
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
+    expect(screen.getByTestId('space-albums-group-option-Year')).toBeDisabled();
+  });
+
+  it('hides expand/collapse-all buttons when groupBy is None', () => {
+    render(SpaceAlbumsControls);
+    expect(screen.queryByTestId('space-albums-expand-all')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('space-albums-collapse-all')).not.toBeInTheDocument();
+  });
+
+  it('shows expand/collapse-all buttons when a group is selected', () => {
+    spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    expect(screen.getByTestId('space-albums-expand-all')).toBeInTheDocument();
+    expect(screen.getByTestId('space-albums-collapse-all')).toBeInTheDocument();
+  });
+
+  it('collapse-all collapses the provided group ids in the space store', async () => {
+    spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    await userEvent.click(screen.getByTestId('space-albums-collapse-all'));
+    expect(get(spaceAlbumViewSettings).collapsedGroups.Year.sort()).toEqual(['2020', '2024']);
+  });
+
+  it('expand-all clears the collapsed groups in the space store', async () => {
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      groupBy: SpaceAlbumGroupBy.Year,
+      collapsedGroups: { Year: ['2024', '2020'] },
+    }));
+    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    await userEvent.click(screen.getByTestId('space-albums-expand-all'));
+    expect(get(spaceAlbumViewSettings).collapsedGroups.Year).toEqual([]);
   });
 });

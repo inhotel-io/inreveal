@@ -1,18 +1,36 @@
 <script lang="ts">
   import { AlbumSortBy, AlbumViewMode, SortOrder } from '$lib/stores/preferences.store';
-  import { spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+  import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
   import { type AlbumSortOptionMetadata, findSortOptionMetadata, sortOptionsMetadata } from '$lib/utils/album-utils';
+  import {
+    collapseAllSpaceAlbumGroups,
+    expandAllSpaceAlbumGroups,
+    findSpaceGroupOptionMetadata,
+    getSelectedSpaceAlbumGroupOption,
+    spaceGroupOptionsMetadata,
+    type SpaceAlbumGroupOptionMetadata,
+  } from '$lib/utils/space-album-grouping';
   import { Button, Icon, Text } from '@immich/ui';
   import {
     mdiArrowDownThin,
     mdiArrowUpThin,
     mdiChevronDown,
+    mdiFolderRemoveOutline,
     mdiFormatListBulletedSquare,
+    mdiUnfoldLessHorizontal,
+    mdiUnfoldMoreHorizontal,
     mdiViewGridOutline,
   } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
+  interface Props {
+    groupIds?: string[];
+  }
+
+  let { groupIds = [] }: Props = $props();
+
   let showSortMenu = $state(false);
+  let showGroupMenu = $state(false);
 
   const flipOrdering = (ordering: string) => {
     return ordering === SortOrder.Asc ? SortOrder.Desc : SortOrder.Asc;
@@ -28,19 +46,36 @@
     showSortMenu = false;
   };
 
+  const handleChangeGroupBy = ({ id, defaultOrder }: SpaceAlbumGroupOptionMetadata) => {
+    if ($spaceAlbumViewSettings.groupBy === id) {
+      $spaceAlbumViewSettings.groupOrder = flipOrdering($spaceAlbumViewSettings.groupOrder);
+    } else {
+      $spaceAlbumViewSettings.groupBy = id;
+      $spaceAlbumViewSettings.groupOrder = defaultOrder;
+    }
+    showGroupMenu = false;
+  };
+
   const handleToggleView = () => {
     $spaceAlbumViewSettings.view =
       $spaceAlbumViewSettings.view === AlbumViewMode.Cover ? AlbumViewMode.List : AlbumViewMode.Cover;
   };
 
   function handleClickOutside(event: MouseEvent) {
-    if (!(event.target as HTMLElement).closest('[data-testid="space-albums-sort-container"]')) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('[data-testid="space-albums-sort-container"]')) {
       showSortMenu = false;
+    }
+    if (!target.closest('[data-testid="space-albums-group-container"]')) {
+      showGroupMenu = false;
     }
   }
 
   let selectedSortOption = $derived(findSortOptionMetadata($spaceAlbumViewSettings.sortBy));
   let sortIcon = $derived($spaceAlbumViewSettings.sortOrder === SortOrder.Desc ? mdiArrowDownThin : mdiArrowUpThin);
+
+  let selectedGroupOption = $derived(findSpaceGroupOptionMetadata($spaceAlbumViewSettings.groupBy));
+  let isGrouped = $derived(getSelectedSpaceAlbumGroupOption($spaceAlbumViewSettings) !== SpaceAlbumGroupBy.None);
 
   let albumSortByNames: Record<AlbumSortBy, string> = $derived({
     [AlbumSortBy.Title]: $t('sort_title'),
@@ -49,6 +84,13 @@
     [AlbumSortBy.DateCreated]: $t('sort_created'),
     [AlbumSortBy.MostRecentPhoto]: $t('sort_recent'),
     [AlbumSortBy.OldestPhoto]: $t('sort_oldest'),
+  });
+
+  let spaceGroupByNames: Record<SpaceAlbumGroupBy, string> = $derived({
+    [SpaceAlbumGroupBy.None]: $t('group_no'),
+    [SpaceAlbumGroupBy.Year]: $t('group_year'),
+    [SpaceAlbumGroupBy.LinkedBy]: $t('group_linked_by'),
+    [SpaceAlbumGroupBy.Owner]: $t('group_owner'),
   });
 </script>
 
@@ -90,6 +132,65 @@
         </div>
       {/if}
     </div>
+
+    <!-- Group Albums -->
+    <div class="relative" data-testid="space-albums-group-container">
+      <button
+        type="button"
+        title={$t('group_albums_by')}
+        aria-label={$t('group_albums_by')}
+        class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+        data-testid="space-albums-group-btn"
+        onclick={() => (showGroupMenu = !showGroupMenu)}
+      >
+        <Icon icon={mdiFolderRemoveOutline} size="18" />
+        <span class="hidden sm:inline">{spaceGroupByNames[selectedGroupOption.id]}</span>
+        <Icon icon={mdiChevronDown} size="14" />
+      </button>
+
+      {#if showGroupMenu}
+        <div
+          class="absolute top-full right-0 z-10 mt-1 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          data-testid="space-albums-group-menu"
+        >
+          {#each spaceGroupOptionsMetadata as option (option.id)}
+            <button
+              type="button"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-800"
+              class:font-semibold={$spaceAlbumViewSettings.groupBy === option.id}
+              disabled={option.isDisabled()}
+              onclick={() => handleChangeGroupBy(option)}
+              data-testid="space-albums-group-option-{option.id}"
+            >
+              {spaceGroupByNames[option.id]}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    {#if isGrouped}
+      <button
+        type="button"
+        title={$t('expand_all')}
+        aria-label={$t('expand_all')}
+        class="flex items-center rounded-lg p-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+        data-testid="space-albums-expand-all"
+        onclick={() => expandAllSpaceAlbumGroups()}
+      >
+        <Icon icon={mdiUnfoldMoreHorizontal} size="18" />
+      </button>
+      <button
+        type="button"
+        title={$t('collapse_all')}
+        aria-label={$t('collapse_all')}
+        class="flex items-center rounded-lg p-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
+        data-testid="space-albums-collapse-all"
+        onclick={() => collapseAllSpaceAlbumGroups(groupIds)}
+      >
+        <Icon icon={mdiUnfoldLessHorizontal} size="18" />
+      </button>
+    {/if}
 
     <!-- Cover/List Display Toggle -->
     {#if $spaceAlbumViewSettings.view === AlbumViewMode.List}
