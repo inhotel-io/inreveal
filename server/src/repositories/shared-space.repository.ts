@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
+import { ExpressionBuilder, Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
+import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
 import { InjectKysely } from 'nestjs-kysely';
+import { columns } from 'src/database';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
@@ -15,7 +17,26 @@ import { SharedSpacePersonAliasTable } from 'src/schema/tables/shared-space-pers
 import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-person-face.table';
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
-import { anyUuid, searchAssetBuilder } from 'src/utils/database';
+import { anyUuid, dummy, searchAssetBuilder } from 'src/utils/database';
+
+const withSpaceAlbumUsers = () => (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
+  jsonArrayFrom(
+    eb
+      .selectFrom('album_user')
+      .innerJoin('user', 'user.id', 'album_user.userId')
+      .whereRef('album_user.albumId', '=', 'album.id')
+      .select('album_user.role')
+      .select((eb) => jsonObjectFrom(eb.selectFrom(dummy).select(columns.user)).$notNull().as('user'))
+      .orderBy('album_user.role')
+      .orderBy('user.name', 'asc'),
+  )
+    .$notNull()
+    .as('albumUsers');
+
+const withSpaceAlbumSharedLink = (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
+  jsonArrayFrom(
+    eb.selectFrom('shared_link').selectAll('shared_link').whereRef('shared_link.albumId', '=', 'album.id'),
+  ).as('sharedLinks');
 
 const visibleSpaceAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
 
@@ -429,17 +450,18 @@ export class SharedSpaceRepository {
     return this.db
       .selectFrom('shared_space_album')
       .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+      .selectAll('album')
+      .select(withSpaceAlbumUsers())
+      .select(withSpaceAlbumSharedLink)
       .select([
-        'shared_space_album.spaceId',
-        'shared_space_album.albumId',
         'shared_space_album.addedById',
         'shared_space_album.showInTimeline',
-        'shared_space_album.createdAt',
-        'album.albumName',
-        'album.albumThumbnailAssetId',
+        'shared_space_album.createdAt as linkedAt',
       ])
       .where('shared_space_album.spaceId', '=', spaceId)
       .where('album.deletedAt', 'is', null)
+      .orderBy('album.createdAt', 'desc')
+      .orderBy('album.id', 'asc')
       .execute();
   }
 
