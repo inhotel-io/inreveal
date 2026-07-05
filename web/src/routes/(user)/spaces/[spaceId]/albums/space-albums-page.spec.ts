@@ -1,5 +1,6 @@
 import {
   SharedSpaceRole,
+  type AlbumResponseDto,
   type SharedSpaceLinkedAlbumDto,
   type SharedSpaceMemberResponseDto,
   type SharedSpaceResponseDto,
@@ -8,7 +9,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
-import { invalidateAll } from '$app/navigation';
+import { goto, invalidateAll } from '$app/navigation';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -311,6 +312,31 @@ describe('Space albums page', () => {
           sharedSpaceAlbumLinkUpdateDto: { showInTimeline: false },
         }),
       );
+    });
+
+    it('create: creates an album, links it, and navigates to the space album route', async () => {
+      sdkMock.createAlbum.mockResolvedValue({ id: 'new-1', albumName: '' } as AlbumResponseDto);
+      sdkMock.linkAlbum.mockResolvedValue(undefined as never);
+      renderPage([makeAlbum({ id: 'a' })], SharedSpaceRole.Owner);
+      await fireEvent.click(screen.getByTestId('create-album-button'));
+      await waitFor(() => expect(sdkMock.linkAlbum).toHaveBeenCalledWith({ id: BASE_SPACE.id, albumId: 'new-1' }));
+      expect(goto).toHaveBeenCalledWith(`/spaces/${BASE_SPACE.id}/albums/new-1`);
+    });
+
+    it('create succeeds but link fails → toast, no navigation, reload', async () => {
+      sdkMock.createAlbum.mockResolvedValue({ id: 'new-1', albumName: '' } as AlbumResponseDto);
+      sdkMock.linkAlbum.mockRejectedValue(new Error('nope'));
+      renderPage([makeAlbum({ id: 'a' })], SharedSpaceRole.Owner);
+      await fireEvent.click(screen.getByTestId('create-album-button'));
+      await waitFor(() => expect(sdkMock.linkAlbum).toHaveBeenCalled());
+      expect(goto).not.toHaveBeenCalled();
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalled(); // reload
+    });
+
+    it('viewer sees no Create/Link buttons', () => {
+      renderPage([makeAlbum({ id: 'a' })], SharedSpaceRole.Viewer);
+      expect(screen.queryByTestId('create-album-button')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('link-album-button')).not.toBeInTheDocument();
     });
   });
 
