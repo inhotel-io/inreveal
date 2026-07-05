@@ -5,8 +5,8 @@ import {
   type LoginResponseDto,
   type SharedSpaceResponseDto,
 } from '@immich/sdk';
-import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { asBearerAuth, utils } from 'src/utils';
 
 // E2E for the "add all filter results to album/space" feature on the search page.

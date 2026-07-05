@@ -83,9 +83,9 @@ match count, e.g. `＋ Add all 8,200 to…`.
    filter DTO**, from page 1, `size: 1000`, **`withExif: false`** (IDs only → tiny
    payloads), accumulating every matching asset ID.
 5. Hand the collected IDs to the existing `addAssetsToCollections(collections,
-   ids)` — the unchanged album/space add path.
+ids)` — the unchanged album/space add path.
 
-Collecting *after* the user commits means a cancel costs nothing; re-paging from
+Collecting _after_ the user commits means a cancel costs nothing; re-paging from
 page 1 (rather than trusting the ~partial loaded set) guarantees a complete,
 consistent result matching the active filter.
 

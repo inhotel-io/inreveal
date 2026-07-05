@@ -15,9 +15,7 @@ beforeEach(() => {
 
 describe('collectSearchResultAssetIds', () => {
   it('pages through metadata search until nextPage is null and returns all ids', async () => {
-    sdkMock.searchAssets
-      .mockResolvedValueOnce(page(['a', 'b'], '2'))
-      .mockResolvedValueOnce(page(['c'], null));
+    sdkMock.searchAssets.mockResolvedValueOnce(page(['a', 'b'], '2')).mockResolvedValueOnce(page(['c'], null));
 
     const ids = await collectSearchResultAssetIds({ isFavorite: true }, { smartSearchEnabled: false, language: 'en' });
 

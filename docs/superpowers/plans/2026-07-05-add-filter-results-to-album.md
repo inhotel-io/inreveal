@@ -27,10 +27,12 @@
 ### Task 1: Raise the shared-space asset cap 10k → 50k (server)
 
 **Files:**
+
 - Modify: `server/src/dtos/shared-space.dto.ts:130`
 - Test: `server/src/dtos/shared-space.dto.spec.ts` (update existing boundary tests)
 
 **Interfaces:**
+
 - Produces: `MAX_SPACE_ASSETS_PER_REQUEST = 50_000` (server-side), applied by `.max()` to both `SharedSpaceAssetAddDto` and `SharedSpaceAssetRemoveDto`.
 
 - [ ] **Step 1: Update the existing DTO spec to the new boundary (this is the failing test)**
@@ -108,10 +110,12 @@ git commit -m "feat(server): raise shared-space asset cap to 50,000 per request"
 ### Task 2: Raise the cap in the web client + fix the collection guard spec
 
 **Files:**
+
 - Modify: `web/src/lib/constants.ts:77`
 - Test: `web/src/lib/services/collection.service.spec.ts` (update the over-cap case; add an under-new-cap case)
 
 **Interfaces:**
+
 - Produces: web `MAX_SPACE_ASSETS_PER_REQUEST = 50_000`, consumed by `CollectionPickerModal` (`showSpaces` gate) and `collection.service.ts` (space-drop guard).
 
 - [ ] **Step 1: Update `collection.service.spec.ts` to the new boundary (failing test)**
@@ -119,18 +123,18 @@ git commit -m "feat(server): raise shared-space asset cap to 50,000 per request"
 Replace the `'over-cap selection skips spaces but still adds albums'` test (lines 67-72) with these two tests:
 
 ```ts
-  it('selection above the old 10k cap but at/below 50k still adds spaces', async () => {
-    const assetIds = Array.from({ length: 10_001 }, (_, i) => `x${i}`);
-    await expect(addAssetsToCollections([spaceCol('s1')], assetIds)).resolves.toBe(true);
-    expect(addAssetsToSpace).toHaveBeenCalledWith('s1', assetIds, { notify: true });
-  });
+it('selection above the old 10k cap but at/below 50k still adds spaces', async () => {
+  const assetIds = Array.from({ length: 10_001 }, (_, i) => `x${i}`);
+  await expect(addAssetsToCollections([spaceCol('s1')], assetIds)).resolves.toBe(true);
+  expect(addAssetsToSpace).toHaveBeenCalledWith('s1', assetIds, { notify: true });
+});
 
-  it('over-cap (>50k) selection skips spaces but still adds albums', async () => {
-    const assetIds = Array.from({ length: 50_001 }, (_, i) => `x${i}`);
-    await expect(addAssetsToCollections([albumCol('a1'), spaceCol('s1')], assetIds)).resolves.toBe(true);
-    expect(addAssetsToSpace).not.toHaveBeenCalled();
-    expect(addAssetsToAlbums).toHaveBeenCalledWith(['a1'], assetIds, { notify: true }); // total becomes 1 → single path
-  });
+it('over-cap (>50k) selection skips spaces but still adds albums', async () => {
+  const assetIds = Array.from({ length: 50_001 }, (_, i) => `x${i}`);
+  await expect(addAssetsToCollections([albumCol('a1'), spaceCol('s1')], assetIds)).resolves.toBe(true);
+  expect(addAssetsToSpace).not.toHaveBeenCalled();
+  expect(addAssetsToAlbums).toHaveBeenCalledWith(['a1'], assetIds, { notify: true }); // total becomes 1 → single path
+});
 ```
 
 - [ ] **Step 2: Run the spec to verify it fails**
@@ -163,10 +167,12 @@ git commit -m "feat(web): raise space asset cap to 50,000 and update guard spec"
 ### Task 3: i18n keys in all six locales (+ backfill the over-cap notice)
 
 **Files:**
+
 - Modify: `i18n/en.json`, `i18n/de.json`, `i18n/fr.json`, `i18n/it.json`, `i18n/nl.json`, `i18n/es.json`
 - Create (test): `web/src/lib/i18n-add-all.spec.ts`
 
 **Interfaces:**
+
 - Produces i18n keys, consumed by later tasks:
   - `add_all_search_results` — button label (ICU plural, param `count`)
   - `preparing_assets` — in-progress label
@@ -215,24 +221,28 @@ Expected: FAIL — `add_all_search_results` / `preparing_assets` missing everywh
 Add these exact strings at their sorted positions in each file.
 
 `en.json`:
+
 ```json
   "add_all_search_results": "Add all {count, plural, one {# result} other {# results}} to…",
   "preparing_assets": "Preparing assets…",
 ```
 
 `de.json`:
+
 ```json
   "add_all_search_results": "Alle {count, plural, one {# Ergebnis} other {# Ergebnisse}} hinzufügen zu…",
   "preparing_assets": "Objekte werden vorbereitet…",
 ```
 
 `fr.json`:
+
 ```json
   "add_all_search_results": "Ajouter les {count, plural, one {# résultat} other {# résultats}} à…",
   "preparing_assets": "Préparation des éléments…",
 ```
 
 `it.json` (also add the notice below):
+
 ```json
   "add_all_search_results": "Aggiungi tutti i {count, plural, one {# risultato} other {# risultati}} a…",
   "preparing_assets": "Preparazione degli elementi…",
@@ -240,6 +250,7 @@ Add these exact strings at their sorted positions in each file.
 ```
 
 `nl.json` (also add the notice below):
+
 ```json
   "add_all_search_results": "Alle {count, plural, one {# resultaat} other {# resultaten}} toevoegen aan…",
   "preparing_assets": "Items voorbereiden…",
@@ -247,6 +258,7 @@ Add these exact strings at their sorted positions in each file.
 ```
 
 `es.json` (also add the notice below):
+
 ```json
   "add_all_search_results": "Añadir los {count, plural, one {# resultado} other {# resultados}} a…",
   "preparing_assets": "Preparando elementos…",
@@ -272,10 +284,12 @@ git commit -m "feat(i18n): add-all-to-collection strings in en/de/fr/it/nl/es"
 ### Task 4: `collectSearchResultAssetIds` — page the search to gather every matching ID
 
 **Files:**
+
 - Create: `web/src/lib/services/search.service.ts`
 - Test: `web/src/lib/services/search.service.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `type SearchTerms = MetadataSearchDto & Pick<SmartSearchDto, 'query' | 'queryAssetId'>`
   - `collectSearchResultAssetIds(terms: SearchTerms, options: { smartSearchEnabled: boolean; language: string }): Promise<string[]>`
@@ -303,9 +317,7 @@ beforeEach(() => {
 
 describe('collectSearchResultAssetIds', () => {
   it('pages through metadata search until nextPage is null and returns all ids', async () => {
-    sdkMock.searchAssets
-      .mockResolvedValueOnce(page(['a', 'b'], '2'))
-      .mockResolvedValueOnce(page(['c'], null));
+    sdkMock.searchAssets.mockResolvedValueOnce(page(['a', 'b'], '2')).mockResolvedValueOnce(page(['c'], null));
 
     const ids = await collectSearchResultAssetIds({ isFavorite: true }, { smartSearchEnabled: false, language: 'en' });
 
@@ -421,10 +433,12 @@ git commit -m "feat(web): collectSearchResultAssetIds pages search to gather all
 ### Task 5: `SearchAddAllToCollectionModal` — by-filter picker that collects then adds
 
 **Files:**
+
 - Create: `web/src/lib/modals/SearchAddAllToCollectionModal.svelte`
 - Test: `web/src/lib/modals/SearchAddAllToCollectionModal.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `collectSearchResultAssetIds` + `SearchTerms` (Task 4); `addAssetsToCollections` (`web/src/lib/services/collection.service.ts`); `CollectionPickerModal` (existing, prop `assetCount: number`, `onClose(collections?: PickerCollection[])`).
 - Produces (component props): `{ terms: SearchTerms; total: number; smartSearchEnabled: boolean; language: string; onClose: () => void }`.
 
@@ -638,10 +652,12 @@ git commit -m "feat(web): SearchAddAllToCollectionModal collects filter results 
 ### Task 6: `SearchAddAllButton` — the header entry point
 
 **Files:**
+
 - Create: `web/src/lib/components/search/SearchAddAllButton.svelte`
 - Test: `web/src/lib/components/search/SearchAddAllButton.spec.ts`
 
 **Interfaces:**
+
 - Produces (component props): `{ total: number; onclick: () => void }`. Renders nothing when `total <= 0`; otherwise a labeled button with `data-testid="add-all-to-collection"`.
 
 - [ ] **Step 1: Write the failing component test**
@@ -723,9 +739,11 @@ git commit -m "feat(web): SearchAddAllButton header entry point for add-all-to-c
 ### Task 7: Wire the search page — capture `total`, render the button, open the modal
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/search/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 
 **Interfaces:**
+
 - Consumes: `SearchAddAllButton` (Task 6), `SearchAddAllToCollectionModal` (Task 5), `modalManager` (`@immich/ui`).
 - Note: pass the page's existing local `terms` (structurally identical to `SearchTerms`) straight through — do **not** modify the page's type imports (keeps the fork diff minimal).
 
@@ -736,11 +754,12 @@ This task is integration glue over already-tested units; its gate is `npm run ch
 In the `<script>` block: add to the existing `@immich/ui` import (line ~48) the `modalManager` symbol, and add two component imports near the other component imports:
 
 ```ts
-  import { ActionButton, CommandPaletteDefaultProvider, Icon, IconButton, modalManager } from '@immich/ui';
+import { ActionButton, CommandPaletteDefaultProvider, Icon, IconButton, modalManager } from '@immich/ui';
 ```
+
 ```ts
-  import SearchAddAllButton from '$lib/components/search/SearchAddAllButton.svelte';
-  import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+import SearchAddAllButton from '$lib/components/search/SearchAddAllButton.svelte';
+import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
 ```
 
 - [ ] **Step 2: Add the `searchResultTotal` state**
@@ -748,7 +767,7 @@ In the `<script>` block: add to the existing `@immich/ui` import (line ~48) the 
 After `let searchResultAssets: AssetResponseDto[] = $state([]);` (line ~64) add:
 
 ```ts
-  let searchResultTotal = $state(0);
+let searchResultTotal = $state(0);
 ```
 
 - [ ] **Step 3: Reset the total when the query changes**
@@ -756,13 +775,13 @@ After `let searchResultAssets: AssetResponseDto[] = $state([]);` (line ~64) add:
 In `onSearchQueryUpdate` (line ~163), alongside the existing resets:
 
 ```ts
-  async function onSearchQueryUpdate() {
-    nextPage = 1;
-    searchResultAssets = [];
-    searchResultAlbums = [];
-    searchResultTotal = 0;
-    await loadNextPage(true);
-  }
+async function onSearchQueryUpdate() {
+  nextPage = 1;
+  searchResultAssets = [];
+  searchResultAlbums = [];
+  searchResultTotal = 0;
+  await loadNextPage(true);
+}
 ```
 
 - [ ] **Step 4: Capture the total from each search response**
@@ -770,11 +789,11 @@ In `onSearchQueryUpdate` (line ~163), alongside the existing resets:
 In `loadNextPage` (line ~189), right after `searchResultAssets.push(...assets.items);`:
 
 ```ts
-      searchResultAlbums.push(...albums.items);
-      searchResultAssets.push(...assets.items);
-      searchResultTotal = assets.total;
+searchResultAlbums.push(...albums.items);
+searchResultAssets.push(...assets.items);
+searchResultTotal = assets.total;
 
-      nextPage = Number(assets.nextPage) || 0;
+nextPage = Number(assets.nextPage) || 0;
 ```
 
 - [ ] **Step 5: Add the open-modal handler**
@@ -782,14 +801,14 @@ In `loadNextPage` (line ~189), right after `searchResultAssets.push(...assets.it
 Near the other handlers (e.g. after `handleSelectAll`, line ~161):
 
 ```ts
-  const handleAddAllToCollection = () => {
-    modalManager.show(SearchAddAllToCollectionModal, {
-      terms,
-      total: searchResultTotal,
-      smartSearchEnabled,
-      language: $lang,
-    });
-  };
+const handleAddAllToCollection = () => {
+  modalManager.show(SearchAddAllToCollectionModal, {
+    terms,
+    total: searchResultTotal,
+    smartSearchEnabled,
+    language: $lang,
+  });
+};
 ```
 
 - [ ] **Step 6: Render the button above the results grid**
@@ -826,6 +845,7 @@ Expected: all tests pass (including Tasks 2–6).
 - [ ] **Step 9: Manual verification**
 
 Start the dev stack; open a search (e.g. filter by a person or `isNotInAlbum`). Confirm:
+
 - The `Add all N to…` button appears above the grid with the correct total (`N` = server total, not the loaded count).
 - Clicking it opens the album/space picker; picking an album shows the "Preparing assets…" state, then a success toast, and the modal closes.
 - A filter matching >50,000 hides spaces in the picker and shows the notice; albums still work.
@@ -843,6 +863,7 @@ git commit -m "feat(web): add-all-to-collection button on the search results pag
 ## Self-Review
 
 **Spec coverage:**
+
 - Entry point (header button, uses `total`, visible iff `total>0`, no selection) → Tasks 6 + 7. ✔
 - Flow (open picker with count → confirm → page-collect ids `withExif:false` → `addAssetsToCollections`) → Tasks 4 + 5 + 7. ✔
 - Cap 10k→50k in both synced spots → Tasks 1 (server) + 2 (web). ✔

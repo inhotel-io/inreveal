@@ -1,7 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // web/src/lib
 const i18nDir = path.resolve(here, '../../../i18n'); // repo-root/i18n
