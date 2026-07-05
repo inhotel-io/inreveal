@@ -135,6 +135,44 @@ describe('SpaceAlbumsList', () => {
     expect(idsInListOrder()).toEqual(['a', 'b']);
   });
 
+  describe('search filtering', () => {
+    it('filters by album name (case-insensitive)', () => {
+      const albums = [makeAlbum({ id: 'v', albumName: 'Vacation' }), makeAlbum({ id: 'w', albumName: 'Work' })];
+      render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false, searchQuery: 'vac' });
+      expect(screen.getAllByTestId('space-album-card-link')).toHaveLength(1);
+      expect(screen.getByText('Vacation')).toBeInTheDocument();
+    });
+    it('filters by description and does not throw on null description', () => {
+      const albums = [
+        makeAlbum({ id: 'a', albumName: 'A', description: 'beach trip' }),
+        makeAlbum({ id: 'b', albumName: 'B', description: null as unknown as string }),
+      ];
+      expect(() =>
+        render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false, searchQuery: 'beach' }),
+      ).not.toThrow();
+      expect(screen.getAllByTestId('space-album-card-link')).toHaveLength(1);
+    });
+    it('shows a no-matching message when the query matches nothing', () => {
+      render(SpaceAlbumsList, {
+        spaceId: 's-1',
+        albums: [makeAlbum({ id: 'a', albumName: 'Alpha' })],
+        canManage: false,
+        searchQuery: 'zzz',
+      });
+      expect(screen.getByTestId('space-albums-no-results')).toBeInTheDocument();
+      expect(screen.queryAllByTestId('space-album-card-link')).toHaveLength(0);
+    });
+    it('an empty query shows everything', () => {
+      render(SpaceAlbumsList, {
+        spaceId: 's-1',
+        albums: [makeAlbum({ id: 'a' }), makeAlbum({ id: 'b' })],
+        canManage: false,
+        searchQuery: '',
+      });
+      expect(screen.getAllByTestId('space-album-card-link')).toHaveLength(2);
+    });
+  });
+
   describe('grouping (cover mode)', () => {
     it('renders no group headers when groupBy is None', () => {
       const albums = [makeAlbum({ id: 'a-1' }), makeAlbum({ id: 'a-2' })];

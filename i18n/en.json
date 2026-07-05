@@ -2655,6 +2655,7 @@
   "space_albums_empty": "No albums linked yet",
   "space_albums_empty_editor_cta": "Link an album",
   "space_albums_hidden_from_timeline": "Hidden from timeline",
+  "space_albums_no_matching": "No albums match your search",
   "space_albums_page_title": "Albums",
   "space_asset_limit_warning": "You are trying to upload too many photos at once. Import your photos as an external library or use the Add All Photos background job. See the <link>documentation</link> for more info.",
   "space_cover_updated": "Space cover updated",
