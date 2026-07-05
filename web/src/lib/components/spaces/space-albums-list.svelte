@@ -64,7 +64,11 @@
 </script>
 
 {#if $spaceAlbumViewSettings.view === AlbumViewMode.List}
-  <SpaceAlbumsTable {spaceId} albums={sorted} {canManage} {onUnlink} {onToggleTimeline} />
+  {#if isGrouped}
+    <SpaceAlbumsTable {spaceId} albums={sorted} {canManage} {groups} grouped {onUnlink} {onToggleTimeline} />
+  {:else}
+    <SpaceAlbumsTable {spaceId} albums={sorted} {canManage} {onUnlink} {onToggleTimeline} />
+  {/if}
 {:else if isGrouped}
   {#each groups as group (group.id)}
     {@const collapsed = isSpaceAlbumGroupCollapsed($spaceAlbumViewSettings, group.id)}
