@@ -82,4 +82,13 @@ describe('SpaceAlbumCard', () => {
     expect(screen.queryByText('Show in timeline')).not.toBeInTheDocument();
     expect(screen.queryByText('Unlink album')).not.toBeInTheDocument();
   });
+
+  it('renders the album cover image when a thumbnail exists', () => {
+    renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album: { ...album, id: 'a-1', albumThumbnailAssetId: 'thumb-1', albumName: 'Trip' },
+      canManage: false,
+    });
+    expect(screen.getByAltText('Trip')).toBeInTheDocument();
+  });
 });
