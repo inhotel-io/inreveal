@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
-  import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
+  import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
+  import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
   import { handleError } from '$lib/utils/handle-error';
@@ -123,18 +124,15 @@
       </div>
     </div>
   {:else}
+    <SpaceAlbumsControls />
     <div class="px-4 pt-4">
-      <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-        {#each albums as album (album.id)}
-          <SpaceAlbumCard
-            spaceId={space.id}
-            {album}
-            canManage={isEditor}
-            onUnlink={handleUnlink}
-            onToggleTimeline={handleToggleTimeline}
-          />
-        {/each}
-      </div>
+      <SpaceAlbumsList
+        spaceId={space.id}
+        {albums}
+        canManage={isEditor}
+        onUnlink={handleUnlink}
+        onToggleTimeline={handleToggleTimeline}
+      />
     </div>
   {/if}
 </div>

@@ -13,6 +13,7 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
 import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
+import { spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumsPage from './+page.svelte';
@@ -122,6 +123,8 @@ describe('Space albums page', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    localStorage.clear();
+    spaceAlbumViewSettings.reset();
     authManager.setUser(userAdminFactory.build({ id: 'current-user-id' }));
     authManager.setPreferences(preferencesFactory.build());
     sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
@@ -130,6 +133,11 @@ describe('Space albums page', () => {
   it('renders one card per album', () => {
     renderPage([makeAlbum({ id: 'a-1', albumName: 'Trip' }), makeAlbum({ id: 'a-2', albumName: 'Home' })]);
     expect(screen.getAllByTestId('space-album-card')).toHaveLength(2);
+  });
+
+  it('renders the view toggle control', () => {
+    renderPage([makeAlbum({ id: 'a-1', albumName: 'Trip' })]);
+    expect(screen.getByTestId('space-albums-view-toggle')).toBeInTheDocument();
   });
 
   it('editor sees the "Link album" button', () => {
