@@ -91,6 +91,33 @@ albums work; only line numbers moved.
 | Legacy data | **No backfill migration** |
 | Remove semantics | Removing any frame of a stack removes the **whole stack** from the Space |
 
+## Development approach — TDD (mandatory)
+
+Every slice is implemented **test-first**, red → green → refactor:
+
+1. **Red** — write the unit / medium / widget test(s) for the slice's behavior and edge cases
+   first, and run them to confirm they **fail for the right reason** (asserting the missing
+   behavior, not a compile error or a missing fixture).
+2. **Green** — write the minimum implementation to make those tests pass.
+3. **Refactor** — clean up with tests green.
+
+No implementation code is written before a failing test exists for it. A slice is "done" only
+when its **full verification gate** (listed per slice) passes when _you_ run it — a subagent
+reporting "green" is not sufficient; run the real gate (server `tsc` + unit + the slice's medium
+spec; mobile `flutter test`; web `check` + unit) yourself. Notes that bite in this repo:
+
+- New `@GenerateSql`-decorated repository methods require `make sql` **with a running DB** to
+  refresh query docs, or CI's SQL-docs check fails. **Never** run `make sql` without a DB — it
+  deletes all query files.
+- We add **methods to existing repositories** (no new injected repository), so there is **no**
+  `BaseService` constructor / `BaseService.create()` positional-list / medium-factory
+  `newRealRepository` change to make. If a medium test throws "Unable to create repository
+  instance," that is a signal something was mis-wired — not expected here.
+- Mobile tests run on the pinned **Flutter 3.44.1** (`mobile/pubspec.yaml`); bootstrap once with
+  `flutter pub get`, generate localization + keys
+  (`dart run easy_localization:generate -S ../i18n && dart run bin/generate_keys.dart`), then
+  `flutter test <path>`. Drift generated code is committed, so no `build_runner` is needed.
+
 ## Detailed design
 
 ### 1. Server — stack-closure expansion (the load-bearing change)
@@ -126,8 +153,8 @@ stack siblings, and wire it into the direct add/remove paths. No schema change.
   visible after its direct row is removed — `getAssetIdsWithoutOtherSpacePath` already accounts
   for this.
 
-**Repository queries** (`shared-space.repository.ts` or `stack.repository.ts` — placement TBD in
-the plan, following the existing helper-module pattern):
+**Repository queries** — both live in `server/src/repositories/shared-space.repository.ts` next
+to their only callers (`addAssets` / `removeAssets`), each `@GenerateSql`-decorated:
 
 - Add path: `getOwnedTimelineStackSiblingIds(userId, assetIds) → assetId[]` — sibling ids
   sharing a non-null `stackId` with any seed, filtered to `ownerId = userId`,
@@ -196,27 +223,136 @@ With every frame a direct member:
 Both limitations follow directly from the locked decisions (add/remove-only sync depth; no
 backfill).
 
-## Testing plan
+## Edge-case coverage matrix
 
-- **Server unit** — the expansion helper: stack closure correctness; owner + `visibility=Timeline`
-  + non-deleted filtering on the add path; space-scoped sibling resolution on the remove path;
-  seeds retained. `addAssets`/`removeAssets` call it and feed the expanded set to inserts/deletes,
-  face-match jobs, thumbnail-reset, and orphan computation.
-- **Server medium (real DB)** — the end-to-end proof: add a stack's cover → all frames become
-  `shared_space_asset` members; query the Space timeline → one collapsed cover with correct
-  count; promote a different frame to primary → Space still shows the stack; remove one frame →
-  all frames gone (but a frame kept alive by a linked album stays).
-- **Mobile** — Drift query test for aggregated-Space collapse (mirror the existing main-timeline
-  stack test); assert the space-album detail query is unchanged.
-- **Web** — light: assert the Space view renders the collapsed cover with the correct count once
-  all frames are members.
+Every row below has a dedicated test in the slice noted. This is the definition of "full
+coverage" for this feature.
+
+| # | Case | Expected behavior | Slice |
+|---|------|-------------------|-------|
+| E1 | Add a stack **cover** owned by the adder | All timeline-visible siblings of the stack become direct members | S1 |
+| E2 | Add a **non-primary** frame owned by the adder | All siblings **incl. the primary** become members | S1 |
+| E3 | Add an asset **with no stack** | Only that asset is added (expansion is a no-op) | S1 |
+| E4 | Add an asset **not owned** by the adder (shared to them) | No expansion — only that asset is added (owner-scoped guard) | S1 |
+| E5 | A sibling is **Archived / Hidden / Locked** (`visibility != Timeline`) | Excluded from expansion — never pulled into the Space | S1 |
+| E6 | A sibling is **soft-deleted** (`deletedAt` set / trashed) | Excluded from expansion | S1 |
+| E7 | The **seed itself** is non-timeline-visible but explicitly selected | Retained (only auto-pulled siblings are filtered) | S1 |
+| E8 | **Two seeds from the same stack** in one request | Expansion dedupes → each frame inserted once | S1 |
+| E9 | **Mixed batch** (some stacked, some standalone) | Correct union: standalone kept as-is, stacks expanded | S1 |
+| E10 | **Re-add** a stack already partly in the Space | `onConflict doNothing`; idempotent; `inserted.length` counts only new rows | S1 |
+| E11 | Empty `assetIds` | No-op; no sibling query issued | S1 |
+| E12 | `faceRecognitionEnabled` on the Space | `SharedSpaceFaceMatch` queued for **every** expanded frame; disabled → none | S1 |
+| E13 | Add cover, then **promote a different frame to primary** | Space timeline still shows the stack (new primary already a member) | S1 (medium) |
+| E14 | Remove the **cover** | All direct-member frames of the stack are removed | S2 |
+| E15 | Remove a **non-cover** frame | The whole stack's direct members are removed | S2 |
+| E16 | A removed frame is **also visible via a linked album** | Its direct row is deleted, but it **stays visible** via the album path; not counted as a face-orphan | S2 |
+| E17 | The Space **thumbnail** was an expanded (not directly-passed) frame | Thumbnail reset to `null` | S2 |
+| E18 | Passed siblings that are **not members** of the Space | Delete is a harmless no-op | S2 |
+| E19 | Face-orphan cleanup after remove | Runs over the **expanded** set; persons/faces removed only when no other Space path remains | S2 |
+| E20 | Mobile: Space with a 3-frame stack (all members) | **One** collapsed cover tile; bucket count == 1 | S3 |
+| E21 | Mobile: **space-album detail** view | Unchanged — shows all 3 frames (parity with albums) | S3 |
+| E22 | Mobile: **legacy partial stack** (only non-primary frames are members, primary absent) | Collapse yields **0** tiles — consistent with server/web timeline; documented limitation | S3 |
+| E23 | Mobile: bucket-count query and asset query agree after collapse | Same collapsed cardinality | S3 |
+| E24 | Web: Space view after all frames are members | Renders the collapsed cover with the **correct** count | S4 |
+| E25 | Web: space-album detail view | Still uncollapsed (asserts `withStacked` is **not** sent — guards the non-goal) | S4 |
+
+**Known consistent edge (not a bug, not fixed):** a stack whose **primary is non-timeline**
+(e.g. archived) vanishes from the Space timeline entirely (non-primaries collapsed out, primary
+filtered by visibility) — this is identical to how the **main** timeline already behaves. No
+special handling.
+
+## Implementation slices (for `/impl-loop`)
+
+Four vertical slices, each independently implementable, test-first, and shippable. Order:
+S1 → S2 → S3 → S4 (S3/S4 are independently testable via fixtures but describe behavior that S1
+produces in production).
+
+### Slice S1 — Server: adding a stack adds the whole stack
+
+- **Goal:** adding any frame of a stack via add-to-space brings in all the adder's
+  timeline-visible frames of that stack.
+- **Code:**
+  - `server/src/repositories/shared-space.repository.ts` — add `getOwnedTimelineStackSiblingIds(userId, assetIds)` (`@GenerateSql`).
+  - `server/src/services/shared-space.service.ts` — in `addAssets` (`:571`), expand `dto.assetIds`
+    → `expandedAssetIds` (union of seeds + owned/timeline/non-deleted siblings); feed it to the
+    `shared_space_asset` insert **and** the `SharedSpaceFaceMatch` fan-out (`:590`).
+- **Tests (write first):**
+  - Unit — `server/src/services/shared-space.service.spec.ts`: `addAssets` expands and inserts the
+    expanded set; face-match jobs cover the expanded set; empty input short-circuits. Covers
+    E4, E11, E12 (behavioral), E13 wiring.
+  - Medium — `server/test/medium/specs/repositories/shared-space.repository.spec.ts`: the sibling
+    query filters (owner, visibility, deleted), seed retention, dedupe. Covers E1–E9.
+  - Medium — new `server/test/medium/specs/services/shared-space-stacks.service.spec.ts`:
+    end-to-end add → all frames members → Space timeline (`withStacked`) returns one collapsed
+    cover with the right count; re-add idempotency (E10); promote-a-different-primary keeps the
+    stack visible (E13).
+- **Verification gate:** `cd server && pnpm check` (tsc) · `pnpm test -- --run src/services/shared-space.service.spec.ts` · `pnpm test:medium` for the two specs · `make sql` (running DB) to refresh docs for the new `@GenerateSql` method.
+- **Acceptance:** E1–E13 green; adding a stack cover in a real Space makes every frame a member and the Space timeline shows one cover with the correct badge count.
+
+### Slice S2 — Server: removing a stack removes the whole stack
+
+- **Goal:** removing any frame removes all of that stack's direct members from the Space, with
+  correct face-orphan and thumbnail handling, while album-visible frames survive.
+- **Code:**
+  - `server/src/repositories/shared-space.repository.ts` — add `getStackSiblingIdsInSpace(spaceId, assetIds)` (`@GenerateSql`).
+  - `server/src/services/shared-space.service.ts` — in `removeAssets` (`:761`), expand
+    `dto.assetIds` → `expandedAssetIds`; feed it to the delete (`:768`), the thumbnail-reset
+    check (`:775`), and `getAssetIdsWithoutOtherSpacePath` (`:788`).
+- **Tests (write first):**
+  - Unit — `shared-space.service.spec.ts`: `removeAssets` expands and feeds delete + thumbnail +
+    orphan computation the expanded set.
+  - Medium — `shared-space.repository.spec.ts`: `getStackSiblingIdsInSpace` returns only
+    same-stack **direct members** of the given Space (E18).
+  - Medium — `shared-space-stacks.service.spec.ts`: remove cover → all gone (E14); remove
+    non-cover → all gone (E15); frame kept alive by a linked album stays visible & is not a
+    face-orphan (E16, E19); thumbnail reset when an expanded frame was the thumbnail (E17).
+- **Verification gate:** same shape as S1 (tsc · unit · the two medium specs · `make sql`).
+- **Acceptance:** E14–E19 green; removing one frame of an in-Space stack clears the whole stack,
+  except frames still reachable via a linked album.
+
+### Slice S3 — Mobile: collapse the aggregated-Space timeline
+
+- **Goal:** the mobile Space timeline renders a stack as one cover-with-badge; the space-album
+  detail view stays uncollapsed.
+- **Code:** `mobile/lib/infrastructure/repositories/timeline.repository.dart` — add
+  `LEFT JOIN stack_entity ON stack_id = id` + `(stack_id IS NULL OR remote_asset.id = primary_asset_id)`
+  to `_watchSharedSpaceBucket` (`:452`) and `_getSharedSpaceBucketAssets` (`:570`). **Do not**
+  touch `_watchSpaceAlbumBucket` / `_getSpaceAlbumBucketAssets`.
+- **Tests (write first):** `mobile/test/infrastructure/repositories/timeline_repository_test.dart`
+  (and/or `mobile/test/medium/repositories/timeline_repository_test.dart`) — seed a Space with a
+  3-frame stack: aggregated-Space query returns one cover and count == 1 (E20, E23); space-album
+  detail query still returns all 3 (E21); a Space with only non-primary frames returns 0 (E22);
+  non-stacked assets unaffected.
+- **Verification gate:** Flutter 3.44.1 bootstrap (pub get + gen l10n/keys), then
+  `flutter test test/infrastructure/repositories/timeline_repository_test.dart`.
+- **Acceptance:** E20–E23 green.
+
+### Slice S4 — Web guard test + user docs
+
+- **Goal:** lock in web's correct behavior (no production code change expected) and document the
+  MVP workarounds.
+- **Code:** none expected in web app code. Docs: add a short note to the Spaces user doc
+  (`docs/docs/` — run prettier; Docs Build is strict) that (a) stacks are added/removed as a
+  whole, and (b) stacks added before this release, or re-stacked afterward, may need re-adding.
+- **Tests (write first):** `web/src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts`
+  (or the timeline-manager spec) — Space view passes `withStacked: true` and renders the
+  collapsed cover with the correct count once all frames are members (E24); space-album detail
+  builds options **without** `withStacked` (E25). If no web app change is truly needed, S4 is
+  test + docs only.
+- **Verification gate:** `cd web && pnpm check:typescript && pnpm check:svelte && pnpm lint` ·
+  `pnpm test -- --run <spec>` · prettier on any touched markdown.
+- **Acceptance:** E24–E25 green; docs note merged.
 
 ## Files touched (summary)
 
-- `server/src/services/shared-space.service.ts` — expand in `addAssets` / `removeAssets`.
-- `server/src/repositories/shared-space.repository.ts` (and/or `stack.repository.ts`) — new
-  stack-closure queries.
-- `mobile/lib/infrastructure/repositories/timeline.repository.dart` — collapse in
-  `_watchSharedSpaceBucket` and `_getSharedSpaceBucketAssets`.
-- Tests: server unit + medium, mobile Drift, web component.
-- Docs: user-facing note on the re-add workaround for legacy/drift cases.
+| File | Change | Slice |
+|------|--------|-------|
+| `server/src/repositories/shared-space.repository.ts` | two `@GenerateSql` stack-closure queries | S1, S2 |
+| `server/src/services/shared-space.service.ts` | expand in `addAssets` / `removeAssets` | S1, S2 |
+| `server/src/services/shared-space.service.spec.ts` | unit tests | S1, S2 |
+| `server/test/medium/specs/repositories/shared-space.repository.spec.ts` | query medium tests | S1, S2 |
+| `server/test/medium/specs/services/shared-space-stacks.service.spec.ts` (new) | end-to-end medium tests | S1, S2 |
+| `mobile/lib/infrastructure/repositories/timeline.repository.dart` | collapse two aggregated-Space builders | S3 |
+| `mobile/test/infrastructure/repositories/timeline_repository_test.dart` | Drift collapse tests | S3 |
+| `web/src/routes/(user)/spaces/[spaceId]/.../spaces-page.spec.ts` | guard tests | S4 |
+| `docs/docs/…` (Spaces user doc) | re-add-workaround note | S4 |
