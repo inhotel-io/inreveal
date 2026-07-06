@@ -357,6 +357,7 @@ class AssetAccess {
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
           .where('shared_space_asset.spaceId', '=', spaceId)
+          .where((eb) => spaceVisibilityGate(eb))
           .where((eb) =>
             eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
           )
@@ -373,6 +374,7 @@ class AssetAccess {
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
               .where('shared_space_library.spaceId', '=', spaceId)
+              .where((eb) => spaceVisibilityGate(eb))
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),
@@ -391,6 +393,7 @@ class AssetAccess {
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
               .where('shared_space_album.spaceId', '=', spaceId)
+              .where((eb) => spaceVisibilityGate(eb))
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),

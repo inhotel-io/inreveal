@@ -306,3 +306,142 @@ describe('checkSpaceAccess — album path visibility gate', () => {
     expect(after.has(asset.id)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// checkSpaceAccessForSpace — visibility gate (Slice 8)
+// ---------------------------------------------------------------------------
+
+describe('checkSpaceAccessForSpace — visibility gate', () => {
+  it('grants Timeline and Archive; blocks Hidden and Locked (direct path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: archive } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+    const { asset: hidden } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: locked } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+
+    for (const assetId of [timeline.id, archive.id, hidden.id, locked.id]) {
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId });
+    }
+
+    const result = await accessRepo.asset.checkSpaceAccessForSpace(
+      viewer.id,
+      space.id,
+      new Set([timeline.id, archive.id, hidden.id, locked.id]),
+    );
+
+    expect(result.has(timeline.id)).toBe(true);
+    expect(result.has(archive.id)).toBe(true);
+    expect(result.has(hidden.id)).toBe(false);
+    expect(result.has(locked.id)).toBe(false);
+  });
+
+  it('livePhotoVideoId of Locked parent is NOT granted via checkSpaceAccessForSpace', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { asset: video } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: parent } = await ctx.newAsset({
+      ownerId: owner.id,
+      visibility: AssetVisibility.Locked,
+      livePhotoVideoId: video.id,
+    });
+
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: parent.id });
+
+    const result = await accessRepo.asset.checkSpaceAccessForSpace(viewer.id, space.id, new Set([video.id]));
+    expect(result.has(video.id)).toBe(false);
+  });
+
+  it('grants Timeline and Archive from a linked library; blocks Hidden and Locked', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const { asset: timeline } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { asset: hidden } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Hidden,
+    });
+
+    const result = await accessRepo.asset.checkSpaceAccessForSpace(
+      viewer.id,
+      space.id,
+      new Set([timeline.id, hidden.id]),
+    );
+
+    expect(result.has(timeline.id)).toBe(true);
+    expect(result.has(hidden.id)).toBe(false);
+  });
+
+  it('grants Timeline and Archive from a linked album; blocks Hidden and Locked', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'SpaceAccessAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: locked } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: timeline.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: locked.id });
+
+    const result = await accessRepo.asset.checkSpaceAccessForSpace(
+      viewer.id,
+      space.id,
+      new Set([timeline.id, locked.id]),
+    );
+
+    expect(result.has(timeline.id)).toBe(true);
+    expect(result.has(locked.id)).toBe(false);
+  });
+
+  it('added-then-locked: asset added while Timeline, flipped to Locked → excluded', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+    const before = await accessRepo.asset.checkSpaceAccessForSpace(viewer.id, space.id, new Set([asset.id]));
+    expect(before.has(asset.id)).toBe(true);
+
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Locked })
+      .where('id', '=', asset.id)
+      .execute();
+
+    const after = await accessRepo.asset.checkSpaceAccessForSpace(viewer.id, space.id, new Set([asset.id]));
+    expect(after.has(asset.id)).toBe(false);
+  });
+});

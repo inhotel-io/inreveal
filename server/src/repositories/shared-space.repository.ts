@@ -1810,10 +1810,38 @@ export class SharedSpaceRepository {
   getPersonAssetIds(personId: string) {
     return this.db
       .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
       .select('asset_face.assetId')
       .distinct()
       .where('shared_space_person_face.personId', '=', personId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+            requireShowInTimeline: true,
+          }),
+        ]),
+      )
       .execute();
   }
 
