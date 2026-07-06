@@ -683,13 +683,12 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
     expect(accessedIds).toContain(motion.id);
   });
 
-  it('Test 6: locked (Visibility.Locked) asset in linked album — checkSpaceAccess does NOT filter by visibility', async () => {
-    // checkSpaceAccess does NOT filter asset.visibility for ANY space path (album/library/direct) —
-    // this is pre-existing behavior inherited from libraries/direct adds, NOT introduced by space albums;
-    // locked-asset exclusion across all space paths would be a separate cross-cutting change (out of scope)
-    //
-    // PARITY: album-linked Locked assets and direct-added Locked assets must behave identically —
-    // both are returned by checkSpaceAccess with no visibility filtering applied on either path.
+  it('Test 6: locked (Visibility.Locked) asset in linked album — checkSpaceAccess EXCLUDES hidden/locked (Slice 3 fix)', async () => {
+    // Slice 3 security fix: checkSpaceAccess now applies the spaceVisibilityGate
+    // (asset.visibility IN (Archive, Timeline)) to ALL three access paths — direct,
+    // library, and album. Hidden/Locked assets must NEVER be exposed via the space gate.
+    // The owner's own Locked assets are still readable via checkOwnerAccess (with
+    // hasElevatedPermission=true), which runs before checkSpaceAccess in access.ts.
     const { ctx } = setup();
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
@@ -714,9 +713,9 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
       new Set([albumLockedAsset.id, directLockedAsset.id]),
     );
 
-    // Pinned: both locked assets are returned — visibility is NOT filtered on either the album-branch or the direct-add path
-    expect(accessedIds).toContain(albumLockedAsset.id);
-    expect(accessedIds).toContain(directLockedAsset.id);
+    // Fixed: Locked assets are excluded from checkSpaceAccess on both album-branch and direct-add path
+    expect(accessedIds.has(albumLockedAsset.id)).toBe(false);
+    expect(accessedIds.has(directLockedAsset.id)).toBe(false);
   });
 
   it('Test 7: empty album link is a no-op (zero assets, timeline unchanged)', async () => {
