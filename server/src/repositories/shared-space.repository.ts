@@ -375,6 +375,61 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  /**
+   * Slice 4.B DIRECT-path purge: when the owner flips one of these assets OUT of
+   * the space-shareable visibility set (Timeline/Archive) to Hidden or Locked,
+   * the `shared_space_asset` join row is NOT deleted, so the delete-audit trigger
+   * never fires and already-synced member devices keep the bytes. Emit a
+   * `shared_space_asset_audit` tombstone for every join row referencing the given
+   * assets so `SharedSpaceToAssetSync.getDeletes` purges those devices.
+   *
+   * `shared_space_asset_audit` is space-only (NOT shared with normal album sync),
+   * so writing to it here does not bleed into non-space behavior. `id` and
+   * `deletedAt` are DB-generated (immich_uuid_v7 / clock_timestamp), giving every
+   * tombstone a fresh id > any prior checkpoint.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitDirectAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_asset_audit')
+      .columns(['spaceId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('shared_space_asset')
+          .select(['shared_space_asset.spaceId', 'shared_space_asset.assetId'])
+          .where('shared_space_asset.assetId', 'in', assetIds),
+      )
+      .execute();
+  }
+
+  /**
+   * Slice 4.B DIRECT-path restore: when the owner flips one of these assets back
+   * INTO the space-shareable set (Timeline/Archive), the join row already exists
+   * but its `updateId` is unchanged, so `SharedSpaceToAssetSync.getUpserts` (gated
+   * by `updateId` > checkpoint) won't re-add it to devices that purged it. Touch
+   * the referencing rows so the `updated_at` BEFORE-UPDATE trigger bumps
+   * `updateId = immich_uuid_v7(clock_timestamp())` and getUpserts re-emits.
+   *
+   * Over-emitting a restore for an already-visible asset is harmless (the device
+   * simply re-upserts a join row it already has).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitDirectAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('shared_space_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .execute();
+  }
+
   // ==========================================
   // Shared Space Library Link CRUD
   // ==========================================

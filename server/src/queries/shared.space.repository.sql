@@ -166,6 +166,24 @@ where
   "spaceId" = $1
   and "assetId" in ($2)
 
+-- SharedSpaceRepository.emitDirectAssetVisibilityPurge
+insert into
+  "shared_space_asset_audit" ("spaceId", "assetId")
+select
+  "shared_space_asset"."spaceId",
+  "shared_space_asset"."assetId"
+from
+  "shared_space_asset"
+where
+  "shared_space_asset"."assetId" in ($1)
+
+-- SharedSpaceRepository.emitDirectAssetVisibilityRestore
+update "shared_space_asset"
+set
+  "updatedAt" = clock_timestamp()
+where
+  "assetId" in ($1)
+
 -- SharedSpaceRepository.removeLibrary
 delete from "shared_space_library"
 where
