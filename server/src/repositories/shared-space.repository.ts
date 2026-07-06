@@ -347,6 +347,7 @@ export class SharedSpaceRepository {
       .where('seed.stackId', 'is not', null)
       .where('sibling.ownerId', '=', userId)
       .where('sibling.deletedAt', 'is', null)
+      .where('sibling.isOffline', '=', false)
       .where('sibling.visibility', 'in', visibleSpaceAssetVisibilities)
       .execute();
 

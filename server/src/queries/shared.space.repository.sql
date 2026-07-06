@@ -160,7 +160,8 @@ where
   and "seed"."stackId" is not null
   and "sibling"."ownerId" = $2
   and "sibling"."deletedAt" is null
-  and "sibling"."visibility" in ($3, $4)
+  and "sibling"."isOffline" = $3
+  and "sibling"."visibility" in ($4, $5)
 
 -- SharedSpaceRepository.getEditableByAssetIds
 select distinct

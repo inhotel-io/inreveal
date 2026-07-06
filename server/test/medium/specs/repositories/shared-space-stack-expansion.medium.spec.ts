@@ -111,6 +111,18 @@ describe('SharedSpaceRepository.getOwnedStackSiblingIds', () => {
     expect(new Set(result)).toEqual(new Set([primary.id]));
   });
 
+  it('excludes offline siblings, matching the canonical space-eligible filter (E6b)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: offline } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, offline.id]);
+
+    const result = await sut.getOwnedStackSiblingIds(user.id, [primary.id]);
+
+    expect(new Set(result)).toEqual(new Set([primary.id]));
+  });
+
   it('dedupes when two seeds share a stack (E8)', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
@@ -145,7 +157,7 @@ describe('SharedSpaceRepository.getOwnedStackSiblingIds', () => {
   });
 });
 
-const addWholeStack = async (ctx: any, sut: SharedSpaceRepository, spaceId: string, userId: string, seedId: string) => {
+const addWholeStack = async (sut: SharedSpaceRepository, spaceId: string, userId: string, seedId: string) => {
   const siblings = await sut.getOwnedStackSiblingIds(userId, [seedId]);
   const expanded = [...new Set([seedId, ...siblings])];
   return sut.addAssets(expanded.map((assetId) => ({ spaceId, assetId, addedById: userId })));
@@ -172,7 +184,7 @@ describe('stack-in-space composition (E10/E13)', () => {
     const { asset: child2 } = await ctx.newAsset({ ownerId: user.id });
     await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id, child2.id]);
 
-    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+    await addWholeStack(sut, space.id, user.id, primary.id);
 
     expect(await sut.getAssetCount(space.id)).toBe(3);
     await expect(bucketCount(ctx, space.id)).resolves.toBe(1);
@@ -187,7 +199,7 @@ describe('stack-in-space composition (E10/E13)', () => {
     const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
     const { stack } = await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
 
-    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+    await addWholeStack(sut, space.id, user.id, primary.id);
     await ctx.get(StackRepository).update(stack.id, { id: stack.id, primaryAssetId: child1.id });
 
     await expect(bucketCount(ctx, space.id)).resolves.toBe(1);
@@ -202,8 +214,8 @@ describe('stack-in-space composition (E10/E13)', () => {
     const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
     await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
 
-    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
-    const secondInsert = await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+    await addWholeStack(sut, space.id, user.id, primary.id);
+    const secondInsert = await addWholeStack(sut, space.id, user.id, primary.id);
 
     expect(secondInsert).toHaveLength(0);
     expect(await sut.getAssetCount(space.id)).toBe(2);
