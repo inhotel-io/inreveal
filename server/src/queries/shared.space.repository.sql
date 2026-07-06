@@ -149,6 +149,19 @@ from
       and "asset"."visibility" in ($11, $12)
   ) as "combined"
 
+-- SharedSpaceRepository.getOwnedStackSiblingIds
+select distinct
+  "sibling"."id" as "assetId"
+from
+  "asset" as "seed"
+  inner join "asset" as "sibling" on "sibling"."stackId" = "seed"."stackId"
+where
+  "seed"."id" in ($1)
+  and "seed"."stackId" is not null
+  and "sibling"."ownerId" = $2
+  and "sibling"."deletedAt" is null
+  and "sibling"."visibility" in ($3, $4)
+
 -- SharedSpaceRepository.getEditableByAssetIds
 select distinct
   "shared_space_asset"."spaceId"
