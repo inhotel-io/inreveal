@@ -1,7 +1,9 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility } from 'src/enum';
+import { AssetVisibility, TimeBucketSize } from 'src/enum';
+import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { StackRepository } from 'src/repositories/stack.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
@@ -140,5 +142,70 @@ describe('SharedSpaceRepository.getOwnedStackSiblingIds', () => {
     const { sut } = setup();
     const result = await sut.getOwnedStackSiblingIds('00000000-0000-0000-0000-000000000000', []);
     expect(result).toEqual([]);
+  });
+});
+
+const addWholeStack = async (ctx: any, sut: SharedSpaceRepository, spaceId: string, userId: string, seedId: string) => {
+  const siblings = await sut.getOwnedStackSiblingIds(userId, [seedId]);
+  const expanded = [...new Set([seedId, ...siblings])];
+  return sut.addAssets(expanded.map((assetId) => ({ spaceId, assetId, addedById: userId })));
+};
+
+const bucketCount = async (ctx: any, spaceId: string) => {
+  const buckets = await ctx.get(AssetRepository).getTimeBuckets({
+    spaceId,
+    visibility: AssetVisibility.Timeline,
+    bucketSize: TimeBucketSize.Year,
+    withStacked: true,
+  });
+  return buckets.reduce((sum: number, b: { count: number }) => sum + b.count, 0);
+};
+
+describe('stack-in-space composition (E10/E13)', () => {
+  it('collapses to one cover after the whole stack is added (E1/E13)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child2 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id, child2.id]);
+
+    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+
+    expect(await sut.getAssetCount(space.id)).toBe(3);
+    await expect(bucketCount(ctx, space.id)).resolves.toBe(1);
+  });
+
+  it('keeps the stack visible after promoting a different primary (E13)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    const { stack } = await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+
+    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+    await ctx.get(StackRepository).update(stack.id, { id: stack.id, primaryAssetId: child1.id });
+
+    await expect(bucketCount(ctx, space.id)).resolves.toBe(1);
+  });
+
+  it('is idempotent on re-add (E10)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+
+    await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+    const secondInsert = await addWholeStack(ctx, sut, space.id, user.id, primary.id);
+
+    expect(secondInsert).toHaveLength(0);
+    expect(await sut.getAssetCount(space.id)).toBe(2);
   });
 });
