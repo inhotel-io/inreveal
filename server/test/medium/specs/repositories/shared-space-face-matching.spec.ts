@@ -454,6 +454,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       const faceIds: string[] = [];
       for (let i = 0; i < 3; i++) {
         const { asset } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
         const faceId = await createFaceWithEmbedding(ctx, { assetId: asset.id, personId: person.id });
         faceIds.push(faceId);
       }
@@ -540,7 +541,15 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       await ctx.database.deleteFrom('person').where('id', '=', person5.id).execute();
 
       const persons = await sut.getPersonsBySpaceId(space.id, { withHidden: true, petsEnabled: true });
-      expect(persons).toHaveLength(5);
+      const personIds = persons.map((p) => p.id);
+      // SP1, SP2, SP3, SP5 have visible in-scope faces → listed (4 persons).
+      // SP4's only face is soft-deleted → excluded by the unconditional visibility gate.
+      expect(personIds).toContain(sp1.id);
+      expect(personIds).toContain(sp2.id);
+      expect(personIds).toContain(sp3.id);
+      expect(personIds).not.toContain(sp4.id); // all faces soft-deleted → no visible face
+      expect(personIds).toContain(sp5.id); // face is visible even though global person was deleted
+      expect(persons).toHaveLength(4);
     });
 
     it('should return correct results with takenAfter temporal filter', async () => {
@@ -595,6 +604,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
       const { result: person } = await ctx.newPerson({ ownerId: user.id, thumbnailPath: '' });
       const faceId = await createFaceWithEmbedding(ctx, { assetId: asset.id, personId: person.id });
 
@@ -616,6 +626,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
       const faceId = await createFaceWithEmbedding(ctx, { assetId: asset.id, personId: null });
 
       const sp = await sut.createPerson({
@@ -636,6 +647,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
       const { result: person } = await ctx.newPerson({
         ownerId: user.id,
         name: 'Soon Deleted',

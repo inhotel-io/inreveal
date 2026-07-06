@@ -878,6 +878,148 @@ describe('matrix: space people-facets — getPersonsBySpaceId', () => {
     const after = await spaceRepo.getPersonsBySpaceId(space.id, { withHidden: true, petsEnabled: false });
     expect(after.map((p) => p.id)).not.toContain(person.id);
   });
+
+  it('regression: person with a MIX of visible + hidden faces IS still listed', async () => {
+    // A person has two faces: one on a Timeline asset (visible) and one on a Hidden asset.
+    // Since ≥1 visible face exists, the person MUST appear in the list.
+    const { spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: tlAsset.id });
+    const { result: tlFaceId } = await ctx.newAssetFace({ assetId: tlAsset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: tlFaceId, embedding: newEmbedding() }).execute();
+
+    const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenAsset.id });
+    const { result: hiddenFaceId } = await ctx.newAssetFace({ assetId: hiddenAsset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: hiddenFaceId, embedding: newEmbedding() }).execute();
+
+    const person = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'MixPerson',
+      representativeFaceId: tlFaceId,
+      type: 'person',
+    });
+    await spaceRepo.addPersonFaces(
+      [
+        { personId: person.id, assetFaceId: tlFaceId },
+        { personId: person.id, assetFaceId: hiddenFaceId },
+      ],
+      { skipRecount: true },
+    );
+    await spaceRepo.recountPersons([person.id]);
+
+    const people = await spaceRepo.getPersonsBySpaceId(space.id, { withHidden: true, petsEnabled: false });
+    expect(people.map((p) => p.id)).toContain(person.id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 11b: countPersonsBySpaceId — must match the getPersonsBySpaceId list
+// A person with only hidden/locked faces must be excluded from the count too.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matrix: countPersonsBySpaceId — visibility consistency', () => {
+  it('excludes a person backed only by Hidden faces from the count', async () => {
+    const { spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    // Visible person (Timeline face)
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: tlAsset.id });
+    const { result: tlFaceId } = await ctx.newAssetFace({ assetId: tlAsset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: tlFaceId, embedding: newEmbedding() }).execute();
+    const visiblePerson = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'TLPerson',
+      representativeFaceId: tlFaceId,
+      type: 'person',
+    });
+    await spaceRepo.addPersonFaces([{ personId: visiblePerson.id, assetFaceId: tlFaceId }], { skipRecount: true });
+    await spaceRepo.recountPersons([visiblePerson.id]);
+
+    // Hidden-only person
+    const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenAsset.id });
+    const { result: hiddenFaceId } = await ctx.newAssetFace({ assetId: hiddenAsset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: hiddenFaceId, embedding: newEmbedding() }).execute();
+    const hiddenOnlyPerson = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'HiddenOnlyPerson',
+      representativeFaceId: hiddenFaceId,
+      type: 'person',
+    });
+    await spaceRepo.addPersonFaces([{ personId: hiddenOnlyPerson.id, assetFaceId: hiddenFaceId }], {
+      skipRecount: true,
+    });
+    await spaceRepo.recountPersons([hiddenOnlyPerson.id]);
+
+    const { total } = await spaceRepo.countPersonsBySpaceId(space.id, { petsEnabled: false });
+    // Only the Timeline-backed person should be counted
+    expect(total).toBe(1);
+  });
+
+  it('excludes a person backed only by Locked faces from the count', async () => {
+    const { spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedAsset.id });
+    const { result: lockedFaceId } = await ctx.newAssetFace({ assetId: lockedAsset.id });
+    await ctx.database.insertInto('face_search').values({ faceId: lockedFaceId, embedding: newEmbedding() }).execute();
+    const person = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'LockedOnlyPerson',
+      representativeFaceId: lockedFaceId,
+      type: 'person',
+    });
+    await spaceRepo.addPersonFaces([{ personId: person.id, assetFaceId: lockedFaceId }], { skipRecount: true });
+    await spaceRepo.recountPersons([person.id]);
+
+    const { total } = await spaceRepo.countPersonsBySpaceId(space.id, { petsEnabled: false });
+    expect(total).toBe(0);
+  });
+
+  it('count matches list: list and count agree on persons with visible faces only', async () => {
+    const { spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    // Two visible persons (Timeline), one hidden-only
+    for (const [name, vis] of [
+      ['Alice', AssetVisibility.Timeline] as const,
+      ['Bob', AssetVisibility.Archive] as const,
+      ['Ghost', AssetVisibility.Hidden] as const,
+    ]) {
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: vis });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+      const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id });
+      await ctx.database.insertInto('face_search').values({ faceId, embedding: newEmbedding() }).execute();
+      const p = await spaceRepo.createPerson({
+        spaceId: space.id,
+        name,
+        representativeFaceId: faceId,
+        type: 'person',
+      });
+      await spaceRepo.addPersonFaces([{ personId: p.id, assetFaceId: faceId }], { skipRecount: true });
+      await spaceRepo.recountPersons([p.id]);
+    }
+
+    const list = await spaceRepo.getPersonsBySpaceId(space.id, { withHidden: false, petsEnabled: false });
+    const { total } = await spaceRepo.countPersonsBySpaceId(space.id, { petsEnabled: false });
+
+    // 2 visible persons (Timeline + Archive); Ghost excluded
+    expect(list).toHaveLength(2);
+    expect(total).toBe(2);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

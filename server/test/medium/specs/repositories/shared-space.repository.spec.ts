@@ -1591,6 +1591,7 @@ describe(SharedSpaceRepository.name, () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
       // Create a global person with empty thumbnailPath
       const { result: person } = await ctx.newPerson({ ownerId: user.id, thumbnailPath: '' });
@@ -1602,6 +1603,8 @@ describe(SharedSpaceRepository.name, () => {
         representativeFaceId: face.id,
         type: 'person',
       });
+      await sut.addPersonFaces([{ personId: spacePerson.id, assetFaceId: face.id }], { skipRecount: true });
+      await sut.recountPersons([spacePerson.id]);
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
@@ -1660,6 +1663,7 @@ describe(SharedSpaceRepository.name, () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
       // Create a face with no personId (default is null)
       const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id });
@@ -1670,6 +1674,8 @@ describe(SharedSpaceRepository.name, () => {
         representativeFaceId: face.id,
         type: 'person',
       });
+      await sut.addPersonFaces([{ personId: spacePerson.id, assetFaceId: face.id }], { skipRecount: true });
+      await sut.recountPersons([spacePerson.id]);
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
@@ -1677,24 +1683,39 @@ describe(SharedSpaceRepository.name, () => {
       expect(result[0].id).toBe(spacePerson.id);
     });
 
-    it('should return space persons whose representative face was deleted', async () => {
+    it('should return space persons whose representative face was deleted (but has a second visible face)', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
       const { result: person } = await ctx.newPerson({ ownerId: user.id, thumbnailPath: '/thumb.jpg' });
-      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      const { assetFace: representativeFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+      // Second face on the same in-scope asset — will remain visible after the representative is deleted
+      const { assetFace: secondFace } = await ctx.newAssetFace({ assetId: asset.id });
 
       const spacePerson = await sut.createPerson({
         spaceId: space.id,
         name: 'Deleted Face Person',
-        representativeFaceId: face.id,
+        representativeFaceId: representativeFace.id,
         type: 'person',
       });
+      await sut.addPersonFaces(
+        [
+          { personId: spacePerson.id, assetFaceId: representativeFace.id },
+          { personId: spacePerson.id, assetFaceId: secondFace.id },
+        ],
+        { skipRecount: true },
+      );
+      await sut.recountPersons([spacePerson.id]);
 
-      // Soft-delete the representative face
-      await ctx.database.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', face.id).execute();
+      // Soft-delete the representative face; second face keeps the person visible
+      await ctx.database
+        .updateTable('asset_face')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', representativeFace.id)
+        .execute();
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
@@ -1707,6 +1728,7 @@ describe(SharedSpaceRepository.name, () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
       const { result: person } = await ctx.newPerson({
         ownerId: user.id,
@@ -1715,12 +1737,14 @@ describe(SharedSpaceRepository.name, () => {
       });
       const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
 
-      await sut.createPerson({
+      const spacePerson = await sut.createPerson({
         spaceId: space.id,
         name: '',
         representativeFaceId: face.id,
         type: 'person',
       });
+      await sut.addPersonFaces([{ personId: spacePerson.id, assetFaceId: face.id }], { skipRecount: true });
+      await sut.recountPersons([spacePerson.id]);
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
@@ -1733,27 +1757,26 @@ describe(SharedSpaceRepository.name, () => {
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
 
-      const charlie = await sut.createPerson({
-        spaceId: space.id,
-        name: 'Charlie',
-        representativeFaceId: null,
-        type: 'person',
-        assetCount: 10,
-      });
-      const alice = await sut.createPerson({
-        spaceId: space.id,
-        name: 'Alice',
-        representativeFaceId: null,
-        type: 'person',
-        assetCount: 1,
-      });
-      const bob = await sut.createPerson({
-        spaceId: space.id,
-        name: 'Bob',
-        representativeFaceId: null,
-        type: 'person',
-        assetCount: 5,
-      });
+      // Shared asset in the space — all three persons get a face on it so they pass the visibility gate
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+      const createPersonWithFace = async (name: string, assetCount: number) => {
+        const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id });
+        const p = await sut.createPerson({
+          spaceId: space.id,
+          name,
+          representativeFaceId: face.id,
+          type: 'person',
+          assetCount,
+        });
+        await sut.addPersonFaces([{ personId: p.id, assetFaceId: face.id }], { skipRecount: true });
+        return p;
+      };
+
+      const charlie = await createPersonWithFace('Charlie', 10);
+      const alice = await createPersonWithFace('Alice', 1);
+      const bob = await createPersonWithFace('Bob', 5);
 
       const result = await sut.getPersonsBySpaceId(space.id, {});
 
@@ -1764,10 +1787,19 @@ describe(SharedSpaceRepository.name, () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+      // Each person needs at least one visible face on an in-space asset.
+      // We use a shared asset so all persons pass the visibility gate.
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
       const { result: globalBob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
       const { assetFace: bobFace } = await ctx.newAssetFace({ assetId: asset.id, personId: globalBob.id });
+
+      const addFace = async (personId: string) => {
+        const { assetFace: f } = await ctx.newAssetFace({ assetId: asset.id });
+        await sut.addPersonFaces([{ personId, assetFaceId: f.id }], { skipRecount: true });
+      };
 
       const charlie = await sut.createPerson({
         spaceId: space.id,
@@ -1776,6 +1808,8 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         assetCount: 5,
       });
+      await addFace(charlie.id);
+
       const hiddenAlice = await sut.createPerson({
         spaceId: space.id,
         name: 'Alice Hidden',
@@ -1784,6 +1818,8 @@ describe(SharedSpaceRepository.name, () => {
         assetCount: 50,
         isHidden: true,
       });
+      await addFace(hiddenAlice.id);
+
       const bob = await sut.createPerson({
         id: '00000000-0000-4000-8000-000000000001',
         spaceId: space.id,
@@ -1792,6 +1828,8 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         assetCount: 1,
       });
+      await sut.addPersonFaces([{ personId: bob.id, assetFaceId: bobFace.id }], { skipRecount: true });
+
       const whitespaceName = await sut.createPerson({
         spaceId: space.id,
         name: '   ',
@@ -1799,6 +1837,8 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         assetCount: 20,
       });
+      await addFace(whitespaceName.id);
+
       const unnamedMany = await sut.createPerson({
         id: 'ffffffff-ffff-4fff-bfff-ffffffffffff',
         spaceId: space.id,
@@ -1807,6 +1847,8 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         assetCount: 10,
       });
+      await addFace(unnamedMany.id);
+
       const alice = await sut.createPerson({
         spaceId: space.id,
         name: 'Alice',
@@ -1814,6 +1856,7 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         assetCount: 5,
       });
+      await addFace(alice.id);
 
       const result = await sut.getPersonsBySpaceId(space.id, { withHidden: true });
 

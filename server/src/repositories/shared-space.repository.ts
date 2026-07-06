@@ -886,51 +886,49 @@ export class SharedSpaceRepository {
           ]),
         ),
       )
-      .$if(!!options.takenAfter || !!options.takenBefore, (qb) =>
-        qb.where((eb) =>
-          eb.exists(
-            eb
-              .selectFrom('shared_space_person_face as spf2')
-              .innerJoin('asset_face as af2', 'af2.id', 'spf2.assetFaceId')
-              .innerJoin('asset', 'asset.id', 'af2.assetId')
-              .whereRef('spf2.personId', '=', 'shared_space_person.id')
-              .where('af2.deletedAt', 'is', null)
-              .where('af2.isVisible', '=', true)
-              .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false)
-              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-              .where((spaceEb) =>
-                spaceEb.or([
-                  spaceEb.exists(
-                    spaceEb
-                      .selectFrom('shared_space_asset')
-                      .select('shared_space_asset.assetId')
-                      .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                      .where('shared_space_asset.spaceId', '=', spaceId),
-                  ),
-                  spaceEb.exists(
-                    spaceEb
-                      .selectFrom('shared_space_library')
-                      .select('shared_space_library.libraryId')
-                      .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                      .where('shared_space_library.spaceId', '=', spaceId),
-                  ),
-                  spaceEb.exists(
-                    spaceEb
-                      .selectFrom('shared_space_album')
-                      .innerJoin('album', (j) =>
-                        j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-                      )
-                      .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-                      .select('shared_space_album.albumId')
-                      .whereRef('album_asset.assetId', '=', 'asset.id')
-                      .where('shared_space_album.spaceId', '=', spaceId),
-                  ),
-                ]),
-              )
-              .$if(!!options.takenAfter, (qb2) => qb2.where('asset.fileCreatedAt', '>=', options.takenAfter!))
-              .$if(!!options.takenBefore, (qb2) => qb2.where('asset.fileCreatedAt', '<', options.takenBefore!)),
-          ),
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('shared_space_person_face as spf2')
+            .innerJoin('asset_face as af2', 'af2.id', 'spf2.assetFaceId')
+            .innerJoin('asset', 'asset.id', 'af2.assetId')
+            .whereRef('spf2.personId', '=', 'shared_space_person.id')
+            .where('af2.deletedAt', 'is', null)
+            .where('af2.isVisible', '=', true)
+            .where('asset.deletedAt', 'is', null)
+            .where('asset.isOffline', '=', false)
+            .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+            .where((spaceEb) =>
+              spaceEb.or([
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_asset')
+                    .select('shared_space_asset.assetId')
+                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_asset.spaceId', '=', spaceId),
+                ),
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_library')
+                    .select('shared_space_library.libraryId')
+                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                    .where('shared_space_library.spaceId', '=', spaceId),
+                ),
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_album')
+                    .innerJoin('album', (j) =>
+                      j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+                    )
+                    .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                    .select('shared_space_album.albumId')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_album.spaceId', '=', spaceId),
+                ),
+              ]),
+            )
+            .$if(!!options.takenAfter, (qb2) => qb2.where('asset.fileCreatedAt', '>=', options.takenAfter!))
+            .$if(!!options.takenBefore, (qb2) => qb2.where('asset.fileCreatedAt', '<', options.takenBefore!)),
         ),
       )
       .orderBy('shared_space_person.isHidden', 'asc')
@@ -982,9 +980,9 @@ export class SharedSpaceRepository {
               OR "shared_space_person"."assetCount" >= ${minimumFaceCount}
             )
           `;
-    const datePersonFilter =
-      options.takenAfter || options.takenBefore
-        ? sql`
+    // Always require at least one visible, in-scope face (visibility already enforced by asset_scope CTE).
+    // The date bounds are already applied to asset_scope, so this naturally enforces date filtering too.
+    const visibleFaceFilter = sql`
             AND EXISTS (
               SELECT 1
               FROM "shared_space_person_face"
@@ -994,8 +992,7 @@ export class SharedSpaceRepository {
                 AND "asset_face"."deletedAt" IS NULL
                 AND "asset_face"."isVisible" = true
             )
-          `
-        : sql``;
+          `;
     const hasAssignedPersonFaceFilter = !!options.named || !!namePattern;
     const assignedPersonFaceFilter = hasAssignedPersonFaceFilter
       ? sql`
@@ -1071,7 +1068,7 @@ export class SharedSpaceRepository {
           ${namedPersonFilter}
           ${namePersonFilter}
           ${minimumPersonFilter}
-          ${datePersonFilter}
+          ${visibleFaceFilter}
       ),
       "person_keys" AS (
         SELECT "personKey", BOOL_AND("isHidden") AS "allHidden"
