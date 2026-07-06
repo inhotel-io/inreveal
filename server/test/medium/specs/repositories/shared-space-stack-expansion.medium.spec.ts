@@ -289,7 +289,6 @@ const removeWholeStack = async (sut: SharedSpaceRepository, spaceId: string, see
 };
 
 describe('stack-in-space removal composition (E14/E15/E16)', () => {
-
   it('removing the cover removes the whole stack (E14)', async () => {
     const { ctx, sut } = setup();
     const { user } = await ctx.newUser();
