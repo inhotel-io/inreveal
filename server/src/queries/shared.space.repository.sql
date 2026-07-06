@@ -180,6 +180,18 @@ where
   "spaceId" = $1
   and "assetId" in ($2)
 
+-- SharedSpaceRepository.getStackSiblingIdsInSpace
+select distinct
+  "sibling"."id" as "assetId"
+from
+  "asset" as "seed"
+  inner join "asset" as "sibling" on "sibling"."stackId" = "seed"."stackId"
+  inner join "shared_space_asset" on "shared_space_asset"."assetId" = "sibling"."id"
+where
+  "seed"."id" in ($1)
+  and "seed"."stackId" is not null
+  and "shared_space_asset"."spaceId" = $2
+
 -- SharedSpaceRepository.removeLibrary
 delete from "shared_space_library"
 where
