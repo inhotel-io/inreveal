@@ -240,6 +240,7 @@ describe(SharedSpaceService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(SharedSpaceService));
     mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([]);
+    mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([]);
     mocks.sharedSpace.hasPetsBySpaceId.mockResolvedValue(false);
     mocks.sharedSpace.recountPersons.mockResolvedValue(void 0);
     mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);
@@ -2700,6 +2701,56 @@ describe(SharedSpaceService.name, () => {
       );
       expect(mocks.job.queue).not.toHaveBeenCalledWith(
         expect.objectContaining({ name: JobName.FacialRecognitionQueueAll }),
+      );
+    });
+
+    it('should expand removal to same-stack space members (E14/E15)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const cover = newUuid();
+      const sibling1 = newUuid();
+      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+      const space = factory.sharedSpace({ id: spaceId });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
+      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+      mocks.sharedSpace.update.mockResolvedValue(space);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+
+      await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
+
+      expect(mocks.sharedSpace.getStackSiblingIdsInSpace).toHaveBeenCalledWith(spaceId, [cover]);
+      expect(mocks.sharedSpace.removeAssets).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
+      expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
+    });
+
+    it('should reset the thumbnail when it is an expanded (sibling) frame (E17)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const cover = newUuid();
+      const sibling1 = newUuid();
+      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+      const space = factory.sharedSpace({ id: spaceId, thumbnailAssetId: sibling1 });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
+      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+      mocks.sharedSpace.update.mockResolvedValue(space);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+
+      // thumbnail (sibling1) is NOT in the caller's dto.assetIds — only reachable via expansion
+      await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
+
+      expect(mocks.sharedSpace.update).toHaveBeenCalledWith(
+        spaceId,
+        expect.objectContaining({ thumbnailAssetId: null }),
       );
     });
   });

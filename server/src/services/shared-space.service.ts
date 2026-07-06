@@ -769,14 +769,18 @@ export class SharedSpaceService extends BaseService {
     if (!space) {
       throw new NotFoundException('Space not found');
     }
-    await this.sharedSpaceRepository.removeAssets(spaceId, dto.assetIds);
+
+    const siblingIds = await this.sharedSpaceRepository.getStackSiblingIdsInSpace(spaceId, dto.assetIds);
+    const expandedAssetIds = [...new Set([...dto.assetIds, ...siblingIds])];
+
+    await this.sharedSpaceRepository.removeAssets(spaceId, expandedAssetIds);
 
     const lastAddedAt = await this.sharedSpaceRepository.getLastAssetAddedAt(spaceId);
     const updateData: { lastActivityAt: Date | null; thumbnailAssetId?: null } = {
       lastActivityAt: lastAddedAt ?? null,
     };
 
-    if (space?.thumbnailAssetId && dto.assetIds.includes(space.thumbnailAssetId)) {
+    if (space?.thumbnailAssetId && expandedAssetIds.includes(space.thumbnailAssetId)) {
       updateData.thumbnailAssetId = null;
     }
 
@@ -786,10 +790,13 @@ export class SharedSpaceService extends BaseService {
       spaceId,
       userId: auth.user.id,
       type: SharedSpaceActivityType.AssetRemove,
-      data: { count: dto.assetIds.length },
+      data: { count: expandedAssetIds.length },
     });
 
-    const orphanedAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, dto.assetIds);
+    const orphanedAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(
+      spaceId,
+      expandedAssetIds,
+    );
     if (orphanedAssetIds.length > 0) {
       await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
