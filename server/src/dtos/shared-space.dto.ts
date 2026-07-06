@@ -139,11 +139,13 @@ const SharedSpaceAlbumParamSchema = z.object({
   albumId: z.uuidv4(),
 });
 
-const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.extend({
-  showInTimeline: z.boolean().describe('Include this album in the space timeline'),
-  addedById: z.string().nullable().describe('User who linked the album into the space'),
-  linkedAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),
-}).meta({ id: 'SharedSpaceLinkedAlbumDto' });
+const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.omit({ albumUsers: true })
+  .extend({
+    showInTimeline: z.boolean().describe('Include this album in the space timeline'),
+    addedById: z.string().nullable().describe('User who linked the album into the space'),
+    linkedAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),
+  })
+  .meta({ id: 'SharedSpaceLinkedAlbumDto' });
 
 export const MAX_SPACE_ASSETS_PER_REQUEST = 10_000;
 

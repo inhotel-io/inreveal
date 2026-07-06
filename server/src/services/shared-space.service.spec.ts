@@ -8071,7 +8071,8 @@ describe(SharedSpaceService.name, () => {
         createdAt: (row.createdAt as Date).toISOString(),
       });
       expect(result[0].createdAt).not.toEqual(result[0].linkedAt);
-      expect(result[0].albumUsers[0].user.name).toBe('Owner One');
+      // albumUsers must NOT appear in the linked-album DTO (Slice 7 PII strip)
+      expect((result[0] as unknown as Record<string, unknown>)['albumUsers']).toBeUndefined();
     });
 
     it('bulk-fetches metadata once and never calls the per-album N+1 count', async () => {
@@ -8111,7 +8112,7 @@ describe(SharedSpaceService.name, () => {
       expect(result[0].endDate).toBeUndefined();
     });
 
-    it('marks a multi-user album as shared', async () => {
+    it('marks a multi-user album as shared and does NOT expose albumUsers (Slice 7)', async () => {
       const row = makeRichRow({
         albumUsers: [
           { role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner' }) },
@@ -8125,7 +8126,8 @@ describe(SharedSpaceService.name, () => {
       );
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].shared).toBe(true);
-      expect(result[0].albumUsers).toHaveLength(2);
+      // albumUsers must NOT be present in the linked-album DTO (PII strip)
+      expect((result[0] as unknown as Record<string, unknown>)['albumUsers']).toBeUndefined();
     });
 
     it('preserves null addedById, null thumbnail, and showInTimeline=false', async () => {

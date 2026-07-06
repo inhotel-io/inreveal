@@ -705,17 +705,19 @@ export class SharedSpaceService extends BaseService {
     for (const m of metadata) {
       byId[m.albumId] = m;
     }
-    return rows.map((row) => ({
-      ...mapAlbum(row as unknown as MapAlbumDto),
-      sharedLinks: undefined,
-      startDate: asDateTimeString(byId[row.id]?.startDate ?? undefined),
-      endDate: asDateTimeString(byId[row.id]?.endDate ?? undefined),
-      assetCount: byId[row.id]?.assetCount ?? 0,
-      lastModifiedAssetTimestamp: asDateTimeString(byId[row.id]?.lastModifiedAssetTimestamp ?? undefined),
-      showInTimeline: row.showInTimeline,
-      addedById: row.addedById,
-      linkedAt: (row.linkedAt as unknown as Date).toISOString(),
-    }));
+    return rows.map((row) => {
+      const { albumUsers: _albumUsers, ...albumFields } = mapAlbum(row as unknown as MapAlbumDto);
+      return {
+        ...albumFields,
+        startDate: asDateTimeString(byId[row.id]?.startDate ?? undefined),
+        endDate: asDateTimeString(byId[row.id]?.endDate ?? undefined),
+        assetCount: byId[row.id]?.assetCount ?? 0,
+        lastModifiedAssetTimestamp: asDateTimeString(byId[row.id]?.lastModifiedAssetTimestamp ?? undefined),
+        showInTimeline: row.showInTimeline,
+        addedById: row.addedById,
+        linkedAt: (row.linkedAt as unknown as Date).toISOString(),
+      };
+    });
   }
 
   async unlinkLibrary(auth: AuthDto, spaceId: string, libraryId: string): Promise<void> {
