@@ -279,3 +279,63 @@ describe('SharedSpaceRepository.getStackSiblingIdsInSpace', () => {
     expect(result).toEqual([]);
   });
 });
+
+describe('stack-in-space removal composition (E14/E15/E16)', () => {
+  const removeWholeStack = async (sut: SharedSpaceRepository, spaceId: string, seedId: string) => {
+    const siblings = await sut.getStackSiblingIdsInSpace(spaceId, [seedId]);
+    const expanded = [...new Set([seedId, ...siblings])];
+    await sut.removeAssets(spaceId, expanded);
+    return expanded;
+  };
+
+  it('removing the cover removes the whole stack (E14)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primary.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: child1.id, addedById: user.id });
+
+    await removeWholeStack(sut, space.id, primary.id);
+
+    expect(await sut.getAssetCount(space.id)).toBe(0);
+  });
+
+  it('removing a non-cover frame removes the whole stack (E15)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primary.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: child1.id, addedById: user.id });
+
+    await removeWholeStack(sut, space.id, child1.id);
+
+    expect(await sut.getAssetCount(space.id)).toBe(0);
+  });
+
+  it('a frame still reachable via a linked album is not flagged as a face-orphan (E16)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primary.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: child1.id, addedById: user.id });
+    // child1 is ALSO in an album that is linked to the space
+    const { album } = await ctx.newAlbum({ ownerId: user.id }, [child1.id]);
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    const expanded = await removeWholeStack(sut, space.id, primary.id);
+    const orphans = await sut.getAssetIdsWithoutOtherSpacePath(space.id, expanded);
+
+    // primary has no remaining path → orphan; child1 remains via the album → NOT an orphan
+    expect(orphans).toContain(primary.id);
+    expect(orphans).not.toContain(child1.id);
+  });
+});
