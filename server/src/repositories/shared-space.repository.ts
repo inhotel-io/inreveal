@@ -18,7 +18,7 @@ import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-perso
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, dummy, searchAssetBuilder } from 'src/utils/database';
-import { spaceAlbumAssetExists } from 'src/utils/shared-space-album-scope';
+import { spaceAlbumAssetExists, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 const withSpaceAlbumUsers = (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
   jsonArrayFrom(
@@ -39,7 +39,7 @@ const withSpaceAlbumSharedLink = (eb: ExpressionBuilder<DB, 'album' | 'shared_sp
     eb.selectFrom('shared_link').selectAll('shared_link').whereRef('shared_link.albumId', '=', 'album.id'),
   ).as('sharedLinks');
 
-const visibleSpaceAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+const visibleSpaceAssetVisibilities = spaceVisibleAssetVisibilities;
 
 type SpacePersonStatistics = {
   assets: number;
