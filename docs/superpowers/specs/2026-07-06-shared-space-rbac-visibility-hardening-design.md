@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: drive this with `impl-loop` (spec review → per-slice `superpowers:writing-plans` → `superpowers:subagent-driven-development`). Steps use checkbox (`- [ ]`) syntax. Every slice is TDD: failing test first (red), minimal fix (green), refactor.
 >
-> **Rev 2 (2026-07-06):** incorporates two independent code-grounded reviews. Changes vs rev 1: S4 split into query-filter (4.A) + purge-propagation (4.B) with honest matrix cells; S4 album-asset sync corrected to a *grant* surface (no `requireShowInTimeline`); EXIF builders flagged as needing an `asset` join; `downloadAlbumId` added to S2; S10 narrowed to search + edit-gate (map/memory/view stay Timeline-only by design); S11 guard rewritten as a *new* visibility scan + allowlist reconciliation; anchors corrected throughout; edge-case lists completed (livePhoto video part, `isOffline`, soft-deleted album, added-then-flipped replay); own-M3 (column F) corrected for memory/view.
+> **Rev 2 (2026-07-06):** incorporates two independent code-grounded reviews. Changes vs rev 1: S4 split into query-filter (4.A) + purge-propagation (4.B) with honest matrix cells; S4 album-asset sync corrected to a _grant_ surface (no `requireShowInTimeline`); EXIF builders flagged as needing an `asset` join; `downloadAlbumId` added to S2; S10 narrowed to search + edit-gate (map/memory/view stay Timeline-only by design); S11 guard rewritten as a _new_ visibility scan + allowlist reconciliation; anchors corrected throughout; edge-case lists completed (livePhoto video part, `isOffline`, soft-deleted album, added-then-flipped replay); own-M3 (column F) corrected for memory/view.
 
 **Goal:** Close every confirmed way a shared-space member can reach a photo (bytes, thumbnail, EXIF, or existence/metadata) that its owner has made non-shareable (Hidden/Locked), and make the space visibility rule consistent across every surface — enforced by tests that cover the full RBAC matrix.
 
@@ -27,9 +27,9 @@ Every task's requirements implicitly include this section.
    - library arm: `asset.isOffline = false`
    - album arm: `album.deletedAt IS NULL` (A1) **and**, on personal-timeline/projection surfaces (timeline, memory, folder view, people list, statistics), `shared_space_album.showInTimeline = true` (`requireShowInTimeline`). **Not** on explicit browse/grant surfaces (album-asset sync, direct album download/read) — those intentionally expose the whole shared album.
    - **`asset.visibility IN (Archive, Timeline)`** (the canonical set)
-   Where a surface merges the **caller's own** assets through a **separate** `asset.ownerId = caller` branch (search, timeline via `userIds`, sync album-user grant, map), that branch keeps the caller's own resolved visibility (own elevation, M3); only the space-membership branch is restricted to the canonical set. **Surfaces without a separate own branch** (memory, folder view) gate own+space uniformly — see Slice 10 note; they have no own-M3 elevation and are intentionally Timeline-only.
+     Where a surface merges the **caller's own** assets through a **separate** `asset.ownerId = caller` branch (search, timeline via `userIds`, sync album-user grant, map), that branch keeps the caller's own resolved visibility (own elevation, M3); only the space-membership branch is restricted to the canonical set. **Surfaces without a separate own branch** (memory, folder view) gate own+space uniformly — see Slice 10 note; they have no own-M3 elevation and are intentionally Timeline-only.
 
-3. **Visibility-model scope (decision, 2026-07-06, refined in rev 2):** the canonical set closes the Hidden/Locked leaks on **every** surface. For the *Archive-consistency* question: **browse/access surfaces** (timeline, search, download, by-ID read, sync, facets, faces, tags, folder-asset access) expose other members' `Archive`; **resurfacing surfaces** (memory "on this day", map markers) keep `Archive` excluded, matching upstream personal-library behavior. Concretely, Slice 10 aligns only `searchAssetBuilder` (to match the space timeline) and tightens the edit gate; **map/memory/view stay Timeline-only for the space path** (safe — stricter than canonical — and consistent with upstream). This is a deliberate narrowing of the literal "uniform everywhere" because those surfaces gate own+partner+space with a single term and loosening them would both restructure the query and resurface archived content against upstream norms. If full uniformity is later desired, restructure each to give the space path its own gate (tracked, not in this spec).
+3. **Visibility-model scope (decision, 2026-07-06, refined in rev 2):** the canonical set closes the Hidden/Locked leaks on **every** surface. For the _Archive-consistency_ question: **browse/access surfaces** (timeline, search, download, by-ID read, sync, facets, faces, tags, folder-asset access) expose other members' `Archive`; **resurfacing surfaces** (memory "on this day", map markers) keep `Archive` excluded, matching upstream personal-library behavior. Concretely, Slice 10 aligns only `searchAssetBuilder` (to match the space timeline) and tightens the edit gate; **map/memory/view stay Timeline-only for the space path** (safe — stricter than canonical — and consistent with upstream). This is a deliberate narrowing of the literal "uniform everywhere" because those surfaces gate own+partner+space with a single term and loosening them would both restructure the query and resurface archived content against upstream norms. If full uniformity is later desired, restructure each to give the space path its own gate (tracked, not in this spec).
 
 4. **TDD, strictly:** each behavior gets a failing test first, verified red, then the minimal fix, verified green. Negative assertions (Hidden/Locked seeded → asserted absent) are mandatory. Every slice below lists its explicit red step.
 
@@ -64,7 +64,7 @@ export function spaceVisibilityGate(
 ```
 
 Raw-SQL surfaces (face-identity) use the equivalent fragment
-`sql\`"asset"."visibility" IN (${sql.join(spaceVisibleAssetVisibilities)})\`` — this exactly matches the existing pattern at `shared-space.repository.ts:932`.
+`sql\`"asset"."visibility" IN (${sql.join(spaceVisibleAssetVisibilities)})\``— this exactly matches the existing pattern at`shared-space.repository.ts:932`.
 
 `spaceAlbumAssetExistsSql` gains a `requireShowInTimeline?: boolean` option (default `false`, preserving legacy behavior) that, when true, appends `AND "shared_space_album"."showInTimeline" = true`, matching the Kysely `spaceAlbumAssetExists`.
 
@@ -81,31 +81,31 @@ Target state **after** all slices. Every non-trivial cell must be **enforced in 
 - **E — soft-deleted album BLOCKED.**
 - **F — own M3 elevation** (own archived/hidden/locked per own elevation, hidden from others; `n/a` where a surface has no own-elevation branch).
 
-| # | Surface (file) | A | B | C (Hidden/Locked) | D (showInTimeline=false) | E (soft-del album) | F (own M3) | Closed by |
-|---|---|---|---|---|---|---|---|---|
-| 1 | timeline / bucket (`asset.repository.ts` getTimeBucket) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | existing + S9 (faces path) |
-| 2 | search results (`utils/database.ts` searchAssetBuilder, two `=Timeline` terms `:673`,`:685`) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | existing + **S10** (Archive align) |
-| 3 | facets / suggestions / tags (`search.repository.ts`, `tag.repository.ts`) | ✅ | ✅ | **S5** | **S5** | ✅ | ✅ | **S5** |
-| 4 | space people-facets (`search.repository.ts` people via `buildFilteredAssetIds`) | ✅ | ✅ | **S5** | **S5** | ✅ | n/a | **S5** |
-| 5 | map markers (`map.repository.ts`) — **resurfacing: Timeline-only by design** | ✅ | ✅ (Timeline) | ✅ | ✅ | ✅ | n/a | existing |
-| 6 | memory (`memory.repository.ts`) — **resurfacing: Timeline-only by design** | ✅ | ✅ (Timeline) | ✅ | **S9** | ✅ | n/a | existing + **S9** |
-| 7 | view / folders (`view-repository.ts`) — **Timeline-only (no own branch)** | ✅ | ✅ (Timeline) | ✅ | **S9** | ✅ | n/a | existing + **S9** |
-| 8 | people / faces list (`face-identity.repository.ts`, `shared-space.repository.ts`) | ✅ | ✅ | ✅ | **S9** | ✅ | ✅ | existing + **S9** |
-| 9 | face rep-thumbnail (`shared-space.repository.ts` isFaceInSpace `:2480`) | ✅ | ✅ | **S6** | **S6** | **S6** | n/a | **S6** |
-| 10 | asset read/view/download by ID (`access.repository.ts` checkSpaceAccess `:270`) | ✅ | ✅ | **S3** | n/a (browse) | ✅ | ✅ | **S3** |
-| 11 | download-space zip (`download.repository.ts` downloadSpaceId `:41`) | ✅ | ✅ | **S2** | n/a | ✅ | ✅ | **S2** |
-| 11b | album download via space grant (`download.repository.ts` downloadAlbumId `:27`, `AlbumDownload` via `access.ts:240`) | ✅ | ✅ | **S2** (Hidden; Locked already album-stripped) | n/a (browse) | ✅ | ✅ | **S2** |
-| 12 | mobile sync — asset (`sync.repository.ts` SharedSpaceAssetSync `:981` + Exif `:1060`) | ✅ | ✅ | **S4.A** future / **S4.B** purge | n/a | ✅ | ✅ | **S4** |
-| 13 | mobile sync — album asset (grant) (`sync.repository.ts` SharedSpaceAlbumAssetSync `:1528` + Exif `:1599`) | ✅ | ✅ | **S4.A** future / **S4.B** purge | n/a (grant surface) | ✅ | ✅ | **S4** |
-| 14 | getLinkedAlbums (`shared-space.service.ts:697`) — PII | ✅ | ✅ | n/a | n/a | ✅ | n/a | **S7** (strip albumUsers/email) |
-| 15 | getPersonAssetIds (`shared-space.repository.ts:1774`) | ✅ | ✅ | **S8** | **S8** | **S8** | ✅ | **S8** |
-| 16 | attach space people to detail (`access.repository.ts` checkSpaceAccessForSpace `:341`) | ✅ | ✅ | **S8** | n/a | ✅ | ✅ | **S8** |
-| 17 | people/face statistics (`face-identity.repository.ts` getAccessiblePeople*Statistics) | ✅ | ✅ | ✅ | **S9** | ✅ | n/a | existing + **S9** |
-| 18 | asset write via space (`access.repository.ts` checkSpaceEditAccess `:415`) | ✅ | editor+ | **S10** | n/a | ✅ | ✅ | **S10** |
+| #   | Surface (file)                                                                                                       | A   | B             | C (Hidden/Locked)                              | D (showInTimeline=false) | E (soft-del album) | F (own M3) | Closed by                          |
+| --- | -------------------------------------------------------------------------------------------------------------------- | --- | ------------- | ---------------------------------------------- | ------------------------ | ------------------ | ---------- | ---------------------------------- |
+| 1   | timeline / bucket (`asset.repository.ts` getTimeBucket)                                                              | ✅  | ✅            | ✅                                             | ✅                       | ✅                 | ✅         | existing + S9 (faces path)         |
+| 2   | search results (`utils/database.ts` searchAssetBuilder, two `=Timeline` terms `:673`,`:685`)                         | ✅  | ✅            | ✅                                             | ✅                       | ✅                 | ✅         | existing + **S10** (Archive align) |
+| 3   | facets / suggestions / tags (`search.repository.ts`, `tag.repository.ts`)                                            | ✅  | ✅            | **S5**                                         | **S5**                   | ✅                 | ✅         | **S5**                             |
+| 4   | space people-facets (`search.repository.ts` people via `buildFilteredAssetIds`)                                      | ✅  | ✅            | **S5**                                         | **S5**                   | ✅                 | n/a        | **S5**                             |
+| 5   | map markers (`map.repository.ts`) — **resurfacing: Timeline-only by design**                                         | ✅  | ✅ (Timeline) | ✅                                             | ✅                       | ✅                 | n/a        | existing                           |
+| 6   | memory (`memory.repository.ts`) — **resurfacing: Timeline-only by design**                                           | ✅  | ✅ (Timeline) | ✅                                             | **S9**                   | ✅                 | n/a        | existing + **S9**                  |
+| 7   | view / folders (`view-repository.ts`) — **Timeline-only (no own branch)**                                            | ✅  | ✅ (Timeline) | ✅                                             | **S9**                   | ✅                 | n/a        | existing + **S9**                  |
+| 8   | people / faces list (`face-identity.repository.ts`, `shared-space.repository.ts`)                                    | ✅  | ✅            | ✅                                             | **S9**                   | ✅                 | ✅         | existing + **S9**                  |
+| 9   | face rep-thumbnail (`shared-space.repository.ts` isFaceInSpace `:2480`)                                              | ✅  | ✅            | **S6**                                         | **S6**                   | **S6**             | n/a        | **S6**                             |
+| 10  | asset read/view/download by ID (`access.repository.ts` checkSpaceAccess `:270`)                                      | ✅  | ✅            | **S3**                                         | n/a (browse)             | ✅                 | ✅         | **S3**                             |
+| 11  | download-space zip (`download.repository.ts` downloadSpaceId `:41`)                                                  | ✅  | ✅            | **S2**                                         | n/a                      | ✅                 | ✅         | **S2**                             |
+| 11b | album download via space grant (`download.repository.ts` downloadAlbumId `:27`, `AlbumDownload` via `access.ts:240`) | ✅  | ✅            | **S2** (Hidden; Locked already album-stripped) | n/a (browse)             | ✅                 | ✅         | **S2**                             |
+| 12  | mobile sync — asset (`sync.repository.ts` SharedSpaceAssetSync `:981` + Exif `:1060`)                                | ✅  | ✅            | **S4.A** future / **S4.B** purge               | n/a                      | ✅                 | ✅         | **S4**                             |
+| 13  | mobile sync — album asset (grant) (`sync.repository.ts` SharedSpaceAlbumAssetSync `:1528` + Exif `:1599`)            | ✅  | ✅            | **S4.A** future / **S4.B** purge               | n/a (grant surface)      | ✅                 | ✅         | **S4**                             |
+| 14  | getLinkedAlbums (`shared-space.service.ts:697`) — PII                                                                | ✅  | ✅            | n/a                                            | n/a                      | ✅                 | n/a        | **S7** (strip albumUsers/email)    |
+| 15  | getPersonAssetIds (`shared-space.repository.ts:1774`)                                                                | ✅  | ✅            | **S8**                                         | **S8**                   | **S8**             | ✅         | **S8**                             |
+| 16  | attach space people to detail (`access.repository.ts` checkSpaceAccessForSpace `:341`)                               | ✅  | ✅            | **S8**                                         | n/a                      | ✅                 | ✅         | **S8**                             |
+| 17  | people/face statistics (`face-identity.repository.ts` getAccessiblePeople\*Statistics)                               | ✅  | ✅            | ✅                                             | **S9**                   | ✅                 | n/a        | existing + **S9**                  |
+| 18  | asset write via space (`access.repository.ts` checkSpaceEditAccess `:415`)                                           | ✅  | editor+       | **S10**                                        | n/a                      | ✅                 | ✅         | **S10**                            |
 
 **Note on #12/#13-C (honesty):** S4.A closes the leak for any **new/full** device sync (the upsert/backfill streams). S4.B closes the **already-synced-then-hidden** purge (a delete/tombstone on visibility flip). If S4.B's mobile consumption needs a client change, the server-side delete emission is still implemented + tested and the client half is a tracked follow-up — the matrix cell is only fully ✅ once both land.
 
-**Album detail read via space (`GET /albums/:id`, `album.repository.getById` + `withAssets`) is SAFE** — `withAssets` already applies `withDefaultVisibility` (`[Archive, Timeline]`), so it never returns Hidden/Locked. Only the album *download* stream (`downloadAlbumId`, row 11b) lacked the filter. `AlbumRead`/`AlbumDownload` are space-grantable via `checkSpaceLinkedAlbumReadAccess` (`access.ts:189/240`); S11's guard/matrix asserts both.
+**Album detail read via space (`GET /albums/:id`, `album.repository.getById` + `withAssets`) is SAFE** — `withAssets` already applies `withDefaultVisibility` (`[Archive, Timeline]`), so it never returns Hidden/Locked. Only the album _download_ stream (`downloadAlbumId`, row 11b) lacked the filter. `AlbumRead`/`AlbumDownload` are space-grantable via `checkSpaceLinkedAlbumReadAccess` (`access.ts:189/240`); S11's guard/matrix asserts both.
 
 **Provably safe today (regression-guard only):** scope helper, `shared-space.repository` reads, `PersonAccess.checkSharedSpaceAccess`, `linkAlbum`/`unlinkAlbum`/`updateAlbumLink` authorization (Editor + `AlbumUpdate`, cannot self-satisfy via space grant), the "absorbed invariant" (space-linked album absent from plain `GET /albums`), soft-delete face-retention (4 original holes closed; remaining two are S6/S8), token resolution fail-closed. Slice 11 adds a static guard so these cannot regress.
 
@@ -118,11 +118,13 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 ### Slice 1 — Canonical visibility helper + raw-SQL `requireShowInTimeline` (foundation)
 
 **Closes:** none directly; enables S2–S10 and the S11 guard. **Files:**
+
 - Modify `server/src/utils/shared-space-album-scope.ts`: add `spaceVisibleAssetVisibilities`, `spaceVisibilityGate()`, and a `requireShowInTimeline?: boolean` (default `false`) option in `spaceAlbumAssetExistsSql`.
 - Modify `shared-space.repository.ts` / `face-identity.repository.ts` / `person.repository.ts`: replace the three local constant declarations (two names) with an import/alias of the new constant (pure relocation, no behavior change).
 - Test: `server/src/utils/shared-space-album-scope.guard.spec.ts` (extend) + `server/test/medium/specs/utils/shared-space-album-scope-sql.medium.spec.ts` (extend for the new option).
 
 **TDD steps:**
+
 - [ ] **Red (behavioral):** write a medium equivalence test — `spaceAlbumAssetExistsSql({ requireShowInTimeline: true })` produces SQL equal to the Kysely `spaceAlbumAssetExists({ requireShowInTimeline: true })` for a fixture with one `showInTimeline=true` and one `showInTimeline=false` linked album: the raw variant must **exclude** the false one; with the option absent/false, both are included (unchanged legacy behavior). Run red (option does not exist yet).
 - [ ] **Red (relocation guard):** unit assertions that `spaceVisibilityGate(eb)` compiles to `"asset"."visibility" in ('archive','timeline')`, the constant equals `[Archive, Timeline]`, and the two old names resolve to the **same array reference** (`===`) post-consolidation.
 - [ ] Implement helper + option + constant consolidation → green.
@@ -137,6 +139,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #11-C, #11b-C. **Files:** `server/src/repositories/download.repository.ts` — `downloadSpaceId` (`:41`, all three arms) and `downloadAlbumId` (`:27`, add the visibility gate to match `withAssets`/`withDefaultVisibility`). Test: `server/test/medium/specs/repositories/download.repository.spec.ts` (create if absent).
 
 **TDD steps:**
+
 - [ ] **Red (space zip):** seed a space (owner + member); owner adds assets of each visibility (`Timeline`, `Archive`, `Hidden`, `Locked`) via **each** path (direct, library, album). Stream `downloadSpaceId(space.id)`; assert the returned id set = the `{Timeline, Archive}` assets only, across all three arms; `Hidden`/`Locked` absent. Run red (all four returned).
 - [ ] **Red (album via space):** a space member calls the album-download path (`AlbumDownload` satisfied via `checkSpaceLinkedAlbumReadAccess`); `downloadAlbumId(linkedAlbumId)` must return only `{Timeline, Archive}` album assets — a `Hidden` album asset absent. (`Locked` is already stripped from albums by `asset.service.ts:313` — assert it isn't present, documenting that invariant.)
 - [ ] Implement: add `spaceVisibilityGate(eb)` to each `downloadSpaceId` arm; add `withDefaultVisibility`/`spaceVisibilityGate` to `downloadAlbumId`. → green.
@@ -151,6 +154,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #10-C. **Files:** `server/src/repositories/access.repository.ts` (`checkSpaceAccess` `:270`, all three union arms; gates `AssetRead`/`AssetView`/`AssetDownload` per `access.ts:120/137/148`, always **after** `checkOwnerAccess`). Test: `server/test/medium/specs/repositories/access.repository.spec.ts` + e2e `e2e/src/specs/server/api/shared-space.e2e-spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red (medium):** member + another member's assets of each visibility via each path. `checkSpaceAccess(member.id, allIds)` returns only `{Timeline, Archive}`; `Hidden`/`Locked` absent. Run red.
 - [ ] **Red (e2e):** as a plain member, `GET /assets/:id`, `GET /assets/:id/original`, `GET /assets/:id/thumbnail` for another member's `Locked`/`Hidden` in-space asset → `400`/`403`; for `Timeline`/`Archive` → `200`.
 - [ ] Implement: AND `spaceVisibilityGate(eb)` into each union arm (keep `deletedAt`, `isOffline`, `album.deletedAt`). → green.
@@ -169,6 +173,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #12-C / #13-C for any new or full re-sync. **Files:** `sync.repository.ts` — add `spaceVisibilityGate` to `SharedSpaceAssetSync.{getBackfill,getCreates,getUpdates}` and `SharedSpaceAlbumAssetSync` equivalents; for **both EXIF builders**, first add `innerJoin('asset', 'asset.id', '<exif>.assetId')` (they currently have no `asset` join) **then** apply the gate. **Do NOT** apply `requireShowInTimeline` to the album-asset stream — it is an explicit browse/grant surface (`shared_space_album_user`); hiding `showInTimeline=false` assets there would wrongly deny a directly-granted member. Test: `server/test/medium/specs/repositories/sync.repository*.spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red:** seed a space + two members; member A has assets of each visibility (direct) and album-linked assets. Drive the shared-space asset + album-asset sync (+ EXIF) for member B; assert only `{Timeline, Archive}` appear, with EXIF/GPS only for those; `Hidden`/`Locked` absent. Run red.
 - [ ] Implement (add `asset` joins to EXIF builders, apply gate) → green.
 - [ ] Commit `fix(spaces): shared-space sync streams exclude hidden/locked assets and exif`.
@@ -180,6 +185,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #12-C / #13-C for the added-then-hidden device-purge case. **Files:** `server/src/services/asset.service.ts` (`updateAll` `~:312`, where `Locked` already triggers `albumRepository.removeAssetsFromAll`) — on a visibility change **out of** `[Archive, Timeline]` for any in-space asset, emit the sync delete/tombstone so `SharedSpaceToAssetSync.getDeletes` (and the album equivalent) purge the device. Test: `sync.repository`/`asset.service` medium specs.
 
 **TDD steps:**
+
 - [ ] **Red:** member B fully syncs member A's `Timeline` in-space asset (device holds it). Member A flips it to `Hidden` (and separately `Locked`). Drive member B's sync `getDeletes`/checkpoint; assert a **delete/tombstone** event for that asset appears (device would purge). Run red (no delete emitted today).
 - [ ] Implement the tombstone emission on visibility-out-of-set. **Investigation sub-task:** determine the minimal mechanism (insert a `shared_space_asset_audit`/`album_asset_audit` tombstone without deleting the live `shared_space_asset` row, so un-hide restores; or an equivalent checkpoint). If the mobile client cannot consume this without a client change, ship + test the **server-side** emission and open a tracked mobile follow-up — do **not** silently drop the purge. → green.
 - [ ] Commit `fix(spaces): purge shared-space assets from member devices when hidden/locked`.
@@ -193,6 +199,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #3-C/#3-D, #4-C/#4-D. **Anchors (corrected):** `applySuggestionScope` (`search.repository.ts:1186`), `getAccessibleTags` (`:1099`), the people-facet **producer** `buildFilteredAssetIds` (used by `getFilteredIdentityPeople` `:1506`; the consumer `buildFilteredSpacePeopleQuery` `:1467` only filters on the produced id set — the gate belongs in the producer), and `tag.repository.ts getAll` (`:73`, space arms `:94`/`:115`). Test: `search.service.spec.ts`, `search.repository.spec.ts`, `tag.repository.spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red, per surface** (`getSearchSuggestions` city/country/state/camera-make/model/lens, `getFilterSuggestions`, tag suggestions, `getAccessibleTags`, `tag.getAll`, space people-facets): seed another member's `Hidden` (and, for an elevated caller, `Locked`) asset with a **distinct** city/tag/person/camera; assert that value is **absent**. Seed `Timeline` and `Archive` with distinct values → **present**. Seed a `showInTimeline=false` linked-album asset with a distinct value → **absent**. Run red.
 - [ ] Implement: for the space-membership branch in each builder, AND `spaceVisibilityGate(eb)` and pass `requireShowInTimeline: true` on the album arm (`spaceAssetPathBranches({ requireShowInTimeline: true })`). The caller's own branch (e.g. the `timelineSpaceIds` `ownerId` term) keeps caller visibility. → green.
 - [ ] Commit `fix(spaces): filter suggestions/facets/tags to shareable space assets`.
@@ -206,6 +213,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #9-C/D/E. **Files:** `server/src/repositories/shared-space.repository.ts` (`isFaceInSpace` `:2480`). The **direct** arm (`:2484`) has **no `asset` join at all** (only `asset_face.deletedAt`) — add an `asset` join + full gate (`deletedAt`, visibility). The **library** arm (`:2491`) already has `asset.deletedAt`+`isOffline` — add visibility. The **album** arm — add visibility + `album.deletedAt` + `showInTimeline` (projection surface). Mirror the fully-guarded `isAssetInSpace` (`:2433`). Test: `shared-space.repository.spec.ts` + a service test for `getSpacePersonThumbnail` auto path.
 
 **TDD steps:**
+
 - [ ] **Red:** a space person whose representative face's **only** source asset is (per case) another member's `Hidden`, `Locked`, soft-deleted direct asset, or a `showInTimeline=false`/soft-deleted album asset. `isFaceInSpace(space.id, faceId)` returns `false` for each; the auto rep-face thumbnail (`getSpacePersonThumbnail`) is not served. For a face on a `Timeline`/`Archive` asset → `true`. Run red.
 - [ ] Implement → green. Commit `fix(spaces): representative-face thumbnail only from shareable space assets`.
 
@@ -218,6 +226,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #14 PII. **Files:** `shared-space.repository.ts` (`getLinkedAlbums` `:450`, drop `withSpaceAlbumUsers` `:23`), `server/src/dtos/shared-space.dto.ts` (`SharedSpaceLinkedAlbumSchema` `:142` currently extends `AlbumResponseSchema` whose `albumUsers` is **required** and carries `email`; use `.omit({ albumUsers: true })` or a projection schema), `shared-space.service.ts` (`getLinkedAlbums` `:697` mapping). Then SDK regen + web/dart call-site check. Test: `shared-space-album.service.spec.ts` + e2e `shared-space-album.e2e-spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red:** `getLinkedAlbums` for a viewer returns each linked album **without** `albumUsers` and **without** any `email`, while still returning the fields the web UI uses (`id`, `albumName`, `assetCount`, `showInTimeline`, `addedById`, `linkedAt`, thumbnail). Run red.
 - [ ] Implement projection/omit → green.
 - [ ] Regenerate SDK (`pnpm build` → `pnpm sync:open-api` → `make open-api`); `check-web`. Commit `fix(spaces): linked-albums endpoint no longer exposes album-user emails` + a follow-up commit for regenerated SDK/dart.
@@ -231,6 +240,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** #15-C/D/E, #16-C. **Files:** `shared-space.repository.ts` (`getPersonAssetIds` `:1774` — add the OR-of-three-paths membership + `deletedAt`/`isOffline`/`album.deletedAt`/`showInTimeline` + `spaceVisibilityGate`), `access.repository.ts` (`checkSpaceAccessForSpace` `:341` — add `spaceVisibilityGate` to its arms; note it also re-adds `livePhotoVideoId` at `:405/461`). Test: `shared-space.repository.spec.ts`, `access.repository.spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red:** a `shared_space_person_face` row whose asset is another member's `Hidden`/`Locked`, soft-deleted, or in a `showInTimeline=false`/soft-deleted album → `getPersonAssetIds` must not enumerate its id; `Timeline`/`Archive` → enumerated. `checkSpaceAccessForSpace` excludes non-shareable ids (incl. the `livePhotoVideoId` of a `Locked` parent). Run red.
 - [ ] Implement → green. Commit `fix(spaces): scope person-asset ids and space-asset attach to shareable assets`.
 
@@ -243,6 +253,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 **Closes:** the `showInTimeline=false` (D) column on memory, view, people/faces, statistics; and stored-counter staleness. **Files:** `face-identity.repository.ts` (the `spaceAlbumAssetExistsSql` call sites `:902/1021/1162/1642/1787/1902` — pass `requireShowInTimeline: true` where the surface is a **personal-timeline projection**), `memory.repository.ts` + `view-repository.ts` (album arm → `requireShowInTimeline: true`), `shared-space.service.ts` (`updateAlbumLink` `:687` — prune/recount `shared_space_person_face` + `faceCount`/`assetCount` when `showInTimeline` flips false, re-add when true). Test: `face-identity.repository.spec.ts`, `memory.repository.spec.ts`, `view-repository` spec, `shared-space-album.service.spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red:** a `showInTimeline=false` linked album's faces/people do **not** surface in the People tab, memory, or folder view; toggling `showInTimeline` false→true→false updates the people list AND stored counters consistently; after `→false`, `getPersonAssetIds` (S8 surface) no longer enumerates those album assets. Run red.
 - [ ] Implement → green. Commit `fix(spaces): de-timelined albums stop feeding faces/memory/view and recount on toggle`.
 
@@ -253,6 +264,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 ### Slice 10 — Consistency: align `searchAssetBuilder` to `[Archive, Timeline]` + tighten `checkSpaceEditAccess` — matrix #2, #18
 
 **Closes:** #2 (Archive alignment on search — a browse surface, to match the space timeline), #18-C. **Files:**
+
 - `server/src/utils/database.ts` — `searchAssetBuilder` space branch: change the other-member term from `= Timeline` to `spaceVisibilityGate` at **both** sites (`:673` spaceId path **and** `:685` timelineSpaceIds path).
 - `server/src/repositories/access.repository.ts` — `checkSpaceEditAccess` (`:415`, two arms, no album arm) — AND `spaceVisibilityGate` so an editor cannot `AssetUpdate` another member's Hidden/Locked (can't see it → can't edit it).
 
@@ -261,6 +273,7 @@ Order = severity-first; Slice 1 (foundation) enables the rest. Each slice is ind
 Test: `search.service.spec.ts`, `access.repository.spec.ts`.
 
 **TDD steps:**
+
 - [ ] **Red (search):** another member's `Archive` asset in the space now **appears** in `searchMetadata`/`searchLargeAssets` results (previously excluded); `Hidden`/`Locked` still excluded; the caller's own assets resolve per own elevation unchanged (searchAssetBuilder has a separate `userIds`/owner branch — verify). Run red.
 - [ ] **Red (edit):** a space editor cannot `AssetUpdate` another member's `Hidden`/`Locked` in-space asset; can update a `Timeline`/`Archive` one per role. Include the live-photo video part of a `Locked` parent. Run red.
 - [ ] Implement (both `=Timeline` terms in search; edit gate) → green.
@@ -275,7 +288,8 @@ Test: `search.service.spec.ts`, `access.repository.spec.ts`.
 **Closes:** proves every risky cell and prevents any future surface from forgetting the gate. **Files:** extend `server/src/utils/shared-space-album-scope.guard.spec.ts`; create `server/test/medium/specs/repositories/shared-space-visibility-matrix.medium.spec.ts`; extend e2e `shared-space*.e2e-spec.ts`.
 
 **TDD steps:**
-- [ ] **Add a NEW, second static scan** to the guard spec (the existing scan checks that a `shared_space_library` arm has a sibling `shared_space_album` arm — a *different* invariant; do not conflate). The new scan: for every repository query that space-scopes an asset read (joins `shared_space_asset`/`shared_space_library`/`shared_space_album` and returns/selects asset rows), assert it references the visibility gate (`spaceVisibilityGate`/`spaceVisibleAssetVisibilities`/`visibility IN`), or is on the **new visibility allowlist** with a one-line reason. Give the new scan its **own** allowlist (the album-marker allowlist is separate). **Prune the stale entry:** the existing album-marker allowlist entry `getMapMarkers: 'omit album path (pre-existing)'` is now FALSE (`map.repository.ts:160` has the album leg with `requireShowInTimeline: true`) — remove it. Document which allowlist governs `checkSpaceEditAccess` (visibility-gated by S10 but still no album arm → stays on the album-marker allowlist, off the visibility allowlist), `findSpaceForAssetAndUser`, `getPersonalThumbnailForSpacePerson`.
+
+- [ ] **Add a NEW, second static scan** to the guard spec (the existing scan checks that a `shared_space_library` arm has a sibling `shared_space_album` arm — a _different_ invariant; do not conflate). The new scan: for every repository query that space-scopes an asset read (joins `shared_space_asset`/`shared_space_library`/`shared_space_album` and returns/selects asset rows), assert it references the visibility gate (`spaceVisibilityGate`/`spaceVisibleAssetVisibilities`/`visibility IN`), or is on the **new visibility allowlist** with a one-line reason. Give the new scan its **own** allowlist (the album-marker allowlist is separate). **Prune the stale entry:** the existing album-marker allowlist entry `getMapMarkers: 'omit album path (pre-existing)'` is now FALSE (`map.repository.ts:160` has the album leg with `requireShowInTimeline: true`) — remove it. Document which allowlist governs `checkSpaceEditAccess` (visibility-gated by S10 but still no album arm → stays on the album-marker allowlist, off the visibility allowlist), `findSpaceForAssetAndUser`, `getPersonalThumbnailForSpacePerson`.
 - [ ] **Write the matrix medium spec:** a parametrized fixture seeding `{Timeline, Archive, Hidden, Locked}` × `{direct, library, album(showInTimeline=true), album(showInTimeline=false), soft-deleted-album}`, asserting the correct visible set on **every** surface the slices touch: download-space, download-album-via-space, `checkSpaceAccess`, `checkSpaceAccessForSpace`, sync (asset + album), facets/tags, space people-facets, `isFaceInSpace`, `getPersonAssetIds`, timeline, statistics, map, memory, view, `checkSpaceEditAccess`. Each 🔴 cell in the matrix has an assertion here (map/memory/view assert Timeline-only per Global Constraint #3).
 - [ ] **Add e2e negatives** for the HTTP-reachable content leaks: download-space and download-album-via-space and `GET /assets/:id`/original for a Hidden/Locked in-space asset as a non-owner member.
 - [ ] Run the whole matrix green. Commit `test(spaces): exhaustive RBAC visibility matrix + structural regression guard`.
