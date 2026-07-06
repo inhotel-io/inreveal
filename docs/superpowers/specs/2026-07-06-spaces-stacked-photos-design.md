@@ -237,6 +237,19 @@ With every frame a direct member:
 These limitations follow from the locked decisions (add/remove-only sync depth; no backfill) and
 the mobile owner-scoped sync model.
 
+## Follow-ups (out of scope for this change)
+
+- **Main-timeline sibling of the mobile collapse guard.** The viewer's **main** timeline
+  (`mobile/lib/infrastructure/entities/merged_asset.drift`) also merges in a Space's assets when
+  the viewer enables space-timeline integration, and applies the same
+  `stack_id IS NULL OR rae.id = se.primary_asset_id` collapse **without** the `se.id IS NULL`
+  fallback this change added to the aggregated-Space builders. So a non-owned Space stack can
+  still vanish from the *main* timeline for a viewer who integrated the Space. This is
+  **pre-existing** (that file is untouched here; on the base branch only the cover was a member
+  and it was already filtered the same way) and out of scope for #751, but the same one-line
+  `se.id IS NULL` guard (plus a regression test of the same shape) should be applied there as a
+  follow-up so the "no non-owned stack vanishes on mobile" guarantee is uniform.
+
 ## Edge-case coverage matrix
 
 Every row below has a dedicated test in the slice noted. This is the definition of "full
