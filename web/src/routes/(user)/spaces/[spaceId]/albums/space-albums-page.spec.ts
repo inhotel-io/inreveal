@@ -68,6 +68,7 @@ const BASE_SPACE: SharedSpaceResponseDto = {
 function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
   return {
     id: 'album-1',
+    ownerId: 'owner-1',
     albumName: 'Vacation',
     assetCount: 5,
     albumThumbnailAssetId: null,

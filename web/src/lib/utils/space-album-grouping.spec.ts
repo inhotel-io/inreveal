@@ -22,6 +22,7 @@ const CTX: SpaceAlbumGroupingCtx = {
 
 const A = (o: Partial<SharedSpaceLinkedAlbumDto>): SharedSpaceLinkedAlbumDto => ({
   id: 'x',
+  ownerId: 'owner-1',
   albumName: 'A',
   assetCount: 0,
   albumThumbnailAssetId: null,
