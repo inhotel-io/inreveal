@@ -1,7 +1,9 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_album_link.entity.drift.dart';
+import 'package:immich_mobile/infrastructure/entities/stack.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/timeline.repository.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -194,6 +196,70 @@ void main() {
 
       final restored = await sut.sharedSpace(space.id, .none).assetSource(0, 100);
       expect(restored.map((a) => (a as RemoteAsset).id), contains(asset.id));
+    });
+  });
+
+  group('aggregated-space stack collapse (S3)', () {
+    const stackId = 'stack-1';
+    final createdAt = DateTime(2024, 1, 1, 12);
+
+    Future<void> insertStack(String id, String ownerId, String primaryAssetId) => ctx.db
+        .into(ctx.db.stackEntity)
+        .insert(StackEntityCompanion.insert(id: id, ownerId: ownerId, primaryAssetId: primaryAssetId));
+
+    test('collapses a 3-frame stack to its cover in assetSource + bucket count (E20/E23)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final primary = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child1 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child2 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      await insertStack(stackId, user.id, primary.id);
+      for (final a in [primary, child1, child2]) {
+        await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: a.id);
+      }
+
+      // asset query: only the cover survives
+      final assets = await sut.sharedSpace(space.id, GroupAssetsBy.none).assetSource(0, 100);
+      expect(assets.map((a) => (a as RemoteAsset).id).toList(), [primary.id]);
+
+      // bucket-count query agrees: one day bucket with count 1
+      final buckets = await sut.sharedSpace(space.id, GroupAssetsBy.day).bucketSource().first;
+      expect(buckets, hasLength(1));
+      expect((buckets.single as TimeBucket).assetCount, 1);
+    });
+
+    test('does NOT collapse the space-album detail timeline (E21)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum();
+      final primary = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child1 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child2 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      await insertStack(stackId, user.id, primary.id);
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id, showInTimeline: true);
+      for (final a in [primary, child1, child2]) {
+        await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: a.id);
+      }
+
+      final assets = await sut.spaceAlbum(space.id, album.id, GroupAssetsBy.none).assetSource(0, 100);
+      expect(assets.map((a) => (a as RemoteAsset).id).toSet(), {primary.id, child1.id, child2.id});
+    });
+
+    test('legacy partial stack (only non-primary frames are members) yields zero (E22)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final primary = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child1 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      final child2 = await ctx.newRemoteAsset(ownerId: user.id, stackId: stackId, createdAt: createdAt);
+      await insertStack(stackId, user.id, primary.id);
+      // Only the NON-primary frames are direct members; the primary is absent.
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: child1.id);
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: child2.id);
+
+      final assets = await sut.sharedSpace(space.id, GroupAssetsBy.none).assetSource(0, 100);
+      // non-primary frames are collapsed out; the primary isn't a member → nothing shows
+      // (consistent with server/web timeline; documented limitation).
+      expect(assets, isEmpty);
     });
   });
 }

@@ -499,6 +499,11 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
                 _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
             useColumns: false,
           ),
+          leftOuterJoin(
+            _db.stackEntity,
+            _db.stackEntity.id.equalsExp(_db.remoteAssetEntity.stackId),
+            useColumns: false,
+          ),
         ])
         ..where(
           _db.remoteAssetEntity.deletedAt.isNull() &
@@ -506,7 +511,9 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
               _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
               (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
                   _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
-                  _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()),
+                  _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()) &
+              (_db.remoteAssetEntity.stackId.isNull() |
+                  _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
         );
       return countQuery
           .map((row) => row.read(countExp) ?? 0)
@@ -545,6 +552,11 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
               _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
           useColumns: false,
         ),
+        leftOuterJoin(
+          _db.stackEntity,
+          _db.stackEntity.id.equalsExp(_db.remoteAssetEntity.stackId),
+          useColumns: false,
+        ),
       ])
       ..where(
         _db.remoteAssetEntity.deletedAt.isNull() &
@@ -552,7 +564,9 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
                 _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
-                _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()),
+                _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()) &
+            (_db.remoteAssetEntity.stackId.isNull() |
+                _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
       )
       ..groupBy([dateExp])
       ..orderBy([OrderingTerm.desc(dateExp)]);
@@ -605,12 +619,19 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
               _db.remoteAssetEntity.checksum.equalsExp(_db.localAssetEntity.checksum),
               useColumns: false,
             ),
+            leftOuterJoin(
+              _db.stackEntity,
+              _db.stackEntity.id.equalsExp(_db.remoteAssetEntity.stackId),
+              useColumns: false,
+            ),
           ])
           ..where(
             _db.remoteAssetEntity.deletedAt.isNull() &
                 _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
                 _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
-                membership,
+                membership &
+                (_db.remoteAssetEntity.stackId.isNull() |
+                    _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
           )
           ..orderBy([OrderingTerm.desc(_db.remoteAssetEntity.createdAt)])
           ..limit(count, offset: offset);
