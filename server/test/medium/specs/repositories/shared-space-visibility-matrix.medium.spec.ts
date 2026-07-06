@@ -19,8 +19,11 @@
  */
 
 import { Kysely } from 'kysely';
-import { AssetVisibility, TimeBucketSize } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, TimeBucketSize } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { ActivityRepository } from 'src/repositories/activity.repository';
+import { AlbumUserRepository } from 'src/repositories/album-user.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository, TimeBucketOptions } from 'src/repositories/asset.repository';
 import { DownloadRepository } from 'src/repositories/download.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -28,14 +31,16 @@ import { MapRepository } from 'src/repositories/map.repository';
 import { MemoryRepository } from 'src/repositories/memory.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
-import { SyncRepository } from 'src/repositories/sync.repository';
+import { SyncBackfillOptions, SyncRepository } from 'src/repositories/sync.repository';
 import { TagRepository } from 'src/repositories/tag.repository';
+import { UserRepository } from 'src/repositories/user.repository';
 import { ViewRepository } from 'src/repositories/view-repository';
 import { DB } from 'src/schema';
+import { AlbumService } from 'src/services/album.service';
 import { BaseService } from 'src/services/base.service';
 import { upsertTags } from 'src/utils/tag';
 import { newMediumService } from 'test/medium.factory';
-import { newEmbedding } from 'test/small.factory';
+import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
@@ -48,6 +53,9 @@ const setup = () => {
     database: defaultDatabase,
     real: [
       AccessRepository,
+      ActivityRepository,
+      AlbumRepository,
+      AlbumUserRepository,
       AssetRepository,
       DownloadRepository,
       MapRepository,
@@ -56,6 +64,7 @@ const setup = () => {
       SharedSpaceRepository,
       SyncRepository,
       TagRepository,
+      UserRepository,
       ViewRepository,
     ],
     mock: [LoggingRepository],
@@ -63,6 +72,7 @@ const setup = () => {
   return {
     ctx,
     accessRepo: ctx.get(AccessRepository),
+    activityRepo: ctx.get(ActivityRepository),
     assetRepo: ctx.get(AssetRepository),
     downloadRepo: ctx.get(DownloadRepository),
     mapRepo: ctx.get(MapRepository),
@@ -87,6 +97,31 @@ async function collectDownloadIds(stream: AsyncIterable<{ id: string }>): Promis
   }
   return ids;
 }
+
+// Surface 18 helpers (timeline explicit-visibility)
+const BUCKET_WHEN = new Date('2024-07-10T12:00:00.000Z');
+
+const countTimeBuckets = (buckets: Array<{ count: number }>) => buckets.reduce((s, b) => s + Number(b.count), 0);
+
+const makeBucketReadyAsset = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  ownerId: string,
+  vis: AssetVisibility,
+  opts: { libraryId?: string } = {},
+) => {
+  const { asset } = await ctx.newAsset({
+    ownerId,
+    visibility: vis,
+    fileCreatedAt: BUCKET_WHEN,
+    localDateTime: BUCKET_WHEN,
+    width: 400,
+    height: 300,
+    thumbhash: Buffer.from('t'),
+    ...opts,
+  });
+  await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
+  return asset.id;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIXTURE BUILDER
@@ -1429,5 +1464,539 @@ describe('matrix: view/folders (getUniqueOriginalPaths)', () => {
     expect(paths).not.toContain(arPath); // Archive excluded ✓
     expect(paths).not.toContain(hiPath); // Hidden blocked ✓
     expect(paths).not.toContain(noTlPath); // showInTimeline=false excluded ✓
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 18: timeline explicit visibility (spaceId + visibility=HIDDEN/LOCKED)
+// Fix A regression lock in the matrix.
+// Rule: another member's Hidden/Locked in-space assets ABSENT even with explicit
+//   visibility=HIDDEN or visibility=LOCKED passed to the timeline bucket queries;
+//   the owner's OWN Hidden is PRESENT (via timelineSpaceIds + userIds=[owner]).
+//
+// Full coverage lives in timeline-bucket-explicit-visibility.medium.spec.ts.
+// These assertions cross-lock the same guarantees using the matrix fixture.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matrix: timeline explicit-visibility (spaceId + visibility=HIDDEN/LOCKED)', () => {
+  it("visibility=HIDDEN via spaceId does NOT surface another member's Hidden in-space asset", async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    // Direct Hidden + album(shown) Hidden — both must be absent
+    const hiDirect = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Hidden);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiDirect });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'HiddenLeakMx' });
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    const hiAlbum = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Hidden);
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hiAlbum });
+
+    const opts: TimeBucketOptions = {
+      spaceId: space.id,
+      visibility: AssetVisibility.Hidden,
+      bucketSize: TimeBucketSize.Year,
+    };
+
+    // No other-member Hidden assets surface
+    expect(countTimeBuckets(await assetRepo.getTimeBuckets(opts))).toBe(0);
+
+    // getTimeBucketCovers likewise returns nothing
+    const covers = await assetRepo.getTimeBucketCovers({ ...opts, timeBuckets: ['2024-01-01'] });
+    const coverIds = new Set(covers.map((c) => c.representativeAssetId));
+    expect(coverIds.has(hiDirect)).toBe(false);
+    expect(coverIds.has(hiAlbum)).toBe(false);
+  });
+
+  it("visibility=LOCKED via spaceId does NOT surface another member's Locked in-space asset", async () => {
+    const { assetRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const loId = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Locked);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: loId });
+
+    const opts: TimeBucketOptions = {
+      spaceId: space.id,
+      visibility: AssetVisibility.Locked,
+      bucketSize: TimeBucketSize.Year,
+    };
+    expect(countTimeBuckets(await assetRepo.getTimeBuckets(opts))).toBe(0);
+  });
+
+  it("OWN Hidden via timelineSpaceIds IS present (owner's own hidden must not be over-blocked)", async () => {
+    const { assetRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const ownHidden = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Hidden);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: ownHidden });
+
+    const opts: TimeBucketOptions = {
+      userIds: [owner.id],
+      timelineSpaceIds: [space.id],
+      visibility: AssetVisibility.Hidden,
+      bucketSize: TimeBucketSize.Year,
+    };
+    expect(countTimeBuckets(await assetRepo.getTimeBuckets(opts))).toBe(1);
+
+    const covers = await assetRepo.getTimeBucketCovers({ ...opts, timeBuckets: ['2024-01-01'] });
+    const coverIds = new Set(covers.map((c) => c.representativeAssetId));
+    expect(coverIds.has(ownHidden)).toBe(true);
+  });
+
+  it("viewer's Hidden via timelineSpaceIds does NOT surface another member's Hidden album asset", async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'HiddenAlbumMxTS' });
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    const hiAlbum = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Hidden);
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hiAlbum });
+
+    const opts: TimeBucketOptions = {
+      userIds: [viewer.id],
+      timelineSpaceIds: [space.id],
+      visibility: AssetVisibility.Hidden,
+      bucketSize: TimeBucketSize.Year,
+    };
+    expect(countTimeBuckets(await assetRepo.getTimeBuckets(opts))).toBe(0);
+
+    const covers = await assetRepo.getTimeBucketCovers({ ...opts, timeBuckets: ['2024-01-01'] });
+    expect(covers.map((c) => c.representativeAssetId)).not.toContain(hiAlbum);
+  });
+
+  it('regression: visibility=Timeline via spaceId still returns Timeline asset (no over-block)', async () => {
+    const { assetRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const tl = await makeBucketReadyAsset(ctx, owner.id, AssetVisibility.Timeline);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: tl });
+
+    const opts: TimeBucketOptions = {
+      spaceId: space.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Year,
+    };
+    expect(countTimeBuckets(await assetRepo.getTimeBuckets(opts))).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 19: LibraryAssetSync / LibraryAssetExifSync
+// Fix B regression lock.
+// Rule: a viewer receiving a library sync backfill for a space-linked library
+//   sees the owner's Timeline + Archive assets; Hidden + Locked are ABSENT.
+//   The owner syncing their own library sees ALL visibilities.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matrix: LibraryAssetSync — space-linked library visibility gate', () => {
+  const BACKFILL: SyncBackfillOptions = { nowId: NOW_ID, beforeUpdateId: NOW_ID };
+
+  it("viewer's backfill omits another owner's Hidden+Locked library assets; includes Timeline+Archive", async () => {
+    const { syncRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const makeLibAsset = async (vis: AssetVisibility) => {
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: vis, libraryId: library.id });
+      return asset.id;
+    };
+
+    const tlId = await makeLibAsset(AssetVisibility.Timeline);
+    const arId = await makeLibAsset(AssetVisibility.Archive);
+    const hiId = await makeLibAsset(AssetVisibility.Hidden);
+    const loId = await makeLibAsset(AssetVisibility.Locked);
+
+    // Viewer backfill: spaceVisibilityGate → Timeline + Archive only
+    const viewerStream = syncRepo.libraryAsset.getBackfill(BACKFILL, library.id, viewer.id);
+    const viewerIds = new Set<string>();
+    for await (const row of viewerStream) {
+      viewerIds.add(row.id);
+    }
+    expect(viewerIds.has(tlId)).toBe(true); // Timeline ✓
+    expect(viewerIds.has(arId)).toBe(true); // Archive ✓
+    expect(viewerIds.has(hiId)).toBe(false); // Hidden blocked ✓
+    expect(viewerIds.has(loId)).toBe(false); // Locked blocked ✓
+  });
+
+  it("owner's own backfill surfaces all visibilities (ownerId bypass)", async () => {
+    const { syncRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { result: library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const makeLibAsset = async (vis: AssetVisibility) => {
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: vis, libraryId: library.id });
+      return asset.id;
+    };
+
+    const tlId = await makeLibAsset(AssetVisibility.Timeline);
+    const arId = await makeLibAsset(AssetVisibility.Archive);
+    const hiId = await makeLibAsset(AssetVisibility.Hidden);
+    const loId = await makeLibAsset(AssetVisibility.Locked);
+
+    // Owner backfill: ownerId matches → all visibilities present
+    const ownerStream = syncRepo.libraryAsset.getBackfill(BACKFILL, library.id, owner.id);
+    const ownerIds = new Set<string>();
+    for await (const row of ownerStream) {
+      ownerIds.add(row.id);
+    }
+    expect(ownerIds.has(tlId)).toBe(true);
+    expect(ownerIds.has(arId)).toBe(true);
+    expect(ownerIds.has(hiId)).toBe(true); // Own Hidden present ✓
+    expect(ownerIds.has(loId)).toBe(true); // Own Locked present ✓
+  });
+});
+
+describe('matrix: LibraryAssetExifSync — space-linked library visibility gate', () => {
+  const BACKFILL: SyncBackfillOptions = { nowId: NOW_ID, beforeUpdateId: NOW_ID };
+
+  it("viewer's EXIF backfill omits another owner's Hidden+Locked library assets; includes Timeline+Archive", async () => {
+    const { syncRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const makeLibExifAsset = async (vis: AssetVisibility) => {
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: vis, libraryId: library.id });
+      await ctx.newExif({ assetId: asset.id, timeZone: 'UTC', fileSizeInByte: 512 });
+      return asset.id;
+    };
+
+    const tlId = await makeLibExifAsset(AssetVisibility.Timeline);
+    const arId = await makeLibExifAsset(AssetVisibility.Archive);
+    const hiId = await makeLibExifAsset(AssetVisibility.Hidden);
+    const loId = await makeLibExifAsset(AssetVisibility.Locked);
+
+    const viewerStream = syncRepo.libraryAssetExif.getBackfill(BACKFILL, library.id, viewer.id);
+    const viewerIds = new Set<string>();
+    for await (const row of viewerStream) {
+      viewerIds.add(row.assetId as string);
+    }
+    expect(viewerIds.has(tlId)).toBe(true); // Timeline ✓
+    expect(viewerIds.has(arId)).toBe(true); // Archive ✓
+    expect(viewerIds.has(hiId)).toBe(false); // Hidden blocked ✓
+    expect(viewerIds.has(loId)).toBe(false); // Locked blocked ✓
+  });
+
+  it("owner's EXIF backfill surfaces all visibilities (ownerId bypass)", async () => {
+    const { syncRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { result: library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const makeLibExifAsset = async (vis: AssetVisibility) => {
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: vis, libraryId: library.id });
+      await ctx.newExif({ assetId: asset.id, timeZone: 'UTC', fileSizeInByte: 512 });
+      return asset.id;
+    };
+
+    const tlId = await makeLibExifAsset(AssetVisibility.Timeline);
+    const arId = await makeLibExifAsset(AssetVisibility.Archive);
+    const hiId = await makeLibExifAsset(AssetVisibility.Hidden);
+    const loId = await makeLibExifAsset(AssetVisibility.Locked);
+
+    const ownerStream = syncRepo.libraryAssetExif.getBackfill(BACKFILL, library.id, owner.id);
+    const ownerIds = new Set<string>();
+    for await (const row of ownerStream) {
+      ownerIds.add(row.assetId as string);
+    }
+    expect(ownerIds.has(tlId)).toBe(true);
+    expect(ownerIds.has(arId)).toBe(true);
+    expect(ownerIds.has(hiId)).toBe(true); // Own Hidden present ✓
+    expect(ownerIds.has(loId)).toBe(true); // Own Locked present ✓
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 20: activity.search / getStatistics for a space-linked album
+// Fix C regression lock.
+// Rule: activity on Hidden/Locked album assets is ABSENT from search results
+//   and excluded from statistics counts, even when the album is space-linked.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matrix: activity.search — space-linked album hides Hidden/Locked asset activity', () => {
+  it('search() omits activity on Hidden+Locked assets; includes Timeline+Archive', async () => {
+    const { activityRepo, spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ActivityMxAlbum' });
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: arAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+    const { asset: hiAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: loAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+
+    for (const assetId of [tlAsset.id, arAsset.id, hiAsset.id, loAsset.id]) {
+      await ctx.newAlbumAsset({ albumId: album.id, assetId });
+    }
+
+    // One like per asset
+    await activityRepo.create({ albumId: album.id, assetId: tlAsset.id, userId: owner.id, isLiked: true });
+    await activityRepo.create({ albumId: album.id, assetId: arAsset.id, userId: owner.id, isLiked: true });
+    await activityRepo.create({ albumId: album.id, assetId: hiAsset.id, userId: owner.id, isLiked: true });
+    await activityRepo.create({ albumId: album.id, assetId: loAsset.id, userId: owner.id, isLiked: true });
+
+    const results = await activityRepo.search({ albumId: album.id });
+    const assetIds = results.map((r) => r.assetId);
+
+    expect(assetIds).toContain(tlAsset.id); // Timeline ✓
+    expect(assetIds).toContain(arAsset.id); // Archive ✓
+    expect(assetIds).not.toContain(hiAsset.id); // Hidden blocked ✓
+    expect(assetIds).not.toContain(loAsset.id); // Locked blocked ✓
+  });
+
+  it('getStatistics() excludes counts for Hidden+Locked asset activity', async () => {
+    const { activityRepo, spaceRepo, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'StatsMxAlbum' });
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: hiAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: loAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+
+    for (const assetId of [tlAsset.id, hiAsset.id, loAsset.id]) {
+      await ctx.newAlbumAsset({ albumId: album.id, assetId });
+    }
+
+    // 1 comment on each (isLiked=false requires comment IS NOT NULL)
+    await activityRepo.create({
+      albumId: album.id,
+      assetId: tlAsset.id,
+      userId: owner.id,
+      isLiked: false,
+      comment: 'visible',
+    });
+    await activityRepo.create({
+      albumId: album.id,
+      assetId: hiAsset.id,
+      userId: owner.id,
+      isLiked: false,
+      comment: 'hidden',
+    });
+    await activityRepo.create({
+      albumId: album.id,
+      assetId: loAsset.id,
+      userId: owner.id,
+      isLiked: false,
+      comment: 'locked',
+    });
+
+    const stats = await activityRepo.getStatistics({ albumId: album.id });
+    // Only the Timeline comment should count
+    expect(Number(stats.comments)).toBe(1);
+    expect(Number(stats.likes)).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 21: getAlbumInfo email redaction (AlbumService.get)
+// Fix D regression lock.
+// Rule: a space Viewer who has AlbumRead access (via checkSpaceLinkedAlbumReadAccess)
+//   but is NOT an album_user participant gets all albumUser.email fields redacted to ''.
+//   An actual album participant sees real emails.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const setupAlbumService = () => {
+  const result = newMediumService(AlbumService, {
+    database: defaultDatabase,
+    real: [AccessRepository, AlbumRepository, AlbumUserRepository, SharedSpaceRepository, UserRepository],
+    mock: [LoggingRepository],
+  });
+  return result;
+};
+
+describe('matrix: AlbumService.get — email redaction for space-only Viewer', () => {
+  it('redacts albumUser emails for a space Viewer who is not an album participant', async () => {
+    const { sut, ctx } = setupAlbumService();
+    const { user: owner } = await ctx.newUser();
+    const { user: collaborator } = await ctx.newUser(); // album participant
+    const { user: viewer } = await ctx.newUser(); // space viewer, NOT album participant
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'EmailRedactAlbum' });
+
+    // Add collaborator as album_user so albumUsers is non-empty — emails would leak if not redacted
+    await ctx.newAlbumUser({ albumId: album.id, userId: collaborator.id, role: AlbumUserRole.Editor });
+
+    // Link album to space so viewer gets AlbumRead
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });
+    const result = await sut.get(viewerAuth, album.id);
+
+    // albumUsers must be present in the response (viewer can still see that participants exist)
+    expect(result.albumUsers.length).toBeGreaterThan(0);
+
+    // but all email fields must be redacted to '' (space Viewer is not a participant)
+    for (const albumUser of result.albumUsers) {
+      expect(albumUser.user.email).toBe('');
+    }
+  });
+
+  it('does NOT redact emails for an album participant (album_user) accessing via the album', async () => {
+    const { sut, ctx } = setupAlbumService();
+    const { user: owner } = await ctx.newUser();
+    const { user: participant } = await ctx.newUser();
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'EmailNoRedactAlbum' });
+    await ctx.newAlbumUser({ albumId: album.id, userId: participant.id, role: AlbumUserRole.Editor });
+
+    const participantAuth = factory.auth({ user: { id: participant.id, email: participant.email } });
+    const result = await sut.get(participantAuth, album.id);
+
+    // Participant is in albumUsers — emails must NOT be redacted
+    const participantEntry = result.albumUsers.find((u) => u.user.id === participant.id);
+    expect(participantEntry).toBeDefined();
+    expect(participantEntry!.user.email).not.toBe('');
+    expect(participantEntry!.user.email).toContain('@');
+  });
+
+  it('does NOT redact emails for the album owner accessing their own album', async () => {
+    const { sut, ctx } = setupAlbumService();
+    const { user: owner } = await ctx.newUser();
+    const { user: collaborator } = await ctx.newUser();
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'OwnerNoRedactAlbum' });
+    await ctx.newAlbumUser({ albumId: album.id, userId: collaborator.id, role: AlbumUserRole.Editor });
+
+    const ownerAuth = factory.auth({ user: { id: owner.id, email: owner.email } });
+    const result = await sut.get(ownerAuth, album.id);
+
+    // Owner is in albumUsers (role=Owner) — emails must not be redacted for owner
+    for (const albumUser of result.albumUsers) {
+      expect(albumUser.user.email).not.toBe('');
+      expect(albumUser.user.email).toContain('@');
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURFACE 22: album-scoped facets (getFilterSuggestions with albumId)
+// Fix I regression lock.
+// Rule: when scoping suggestions to an albumId, another participant's Hidden
+//   asset's facet values (e.g. country) must NOT appear in the result.
+//   A participant's Archive + Timeline values ARE present.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('matrix: album-scoped facets — getFilterSuggestions excludes Hidden facet values', () => {
+  it("excludes another participant's Hidden-asset facet from album-scoped suggestions", async () => {
+    const { searchRepo, spaceRepo, ctx } = setup();
+    const { user: albumOwner } = await ctx.newUser();
+    const { user: participant } = await ctx.newUser(); // album_user contributor
+    const { user: viewer } = await ctx.newUser(); // space viewer
+
+    const { space } = await ctx.newSharedSpace({ createdById: albumOwner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: albumOwner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: albumOwner.id, albumName: 'FacetMxAlbum' });
+
+    // Add participant as album_user (contributor)
+    await ctx.newAlbumUser({ albumId: album.id, userId: participant.id, role: AlbumUserRole.Editor });
+
+    // Link album to space
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: albumOwner.id });
+
+    // Participant's Timeline asset — country should appear
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: participant.id, visibility: AssetVisibility.Timeline });
+    await ctx.newExif({ assetId: tlAsset.id, country: 'ParticipantTimelineCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: tlAsset.id });
+
+    // Participant's Archive asset — Archive IS present in album-scoped suggestions (spaceVisibilityGate)
+    const { asset: arAsset } = await ctx.newAsset({ ownerId: participant.id, visibility: AssetVisibility.Archive });
+    await ctx.newExif({ assetId: arAsset.id, country: 'ParticipantArchiveCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: arAsset.id });
+
+    // Participant's Hidden asset — country must NOT appear in facets
+    const { asset: hiAsset } = await ctx.newAsset({ ownerId: participant.id, visibility: AssetVisibility.Hidden });
+    await ctx.newExif({ assetId: hiAsset.id, country: 'ParticipantHiddenCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hiAsset.id });
+
+    // Viewer's own Timeline asset in the album
+    const { asset: viewerTl } = await ctx.newAsset({ ownerId: viewer.id, visibility: AssetVisibility.Timeline });
+    await ctx.newExif({ assetId: viewerTl.id, country: 'ViewerTimelineCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: viewerTl.id });
+
+    // Get album-scoped filter suggestions from the viewer's perspective
+    const result = await searchRepo.getFilterSuggestions([viewer.id], { albumId: album.id });
+
+    // Viewer's own Timeline country — present (ownerId bypass)
+    expect(result.countries).toContain('ViewerTimelineCountry');
+    // Participant's Timeline country — present (participant + spaceVisibilityGate)
+    expect(result.countries).toContain('ParticipantTimelineCountry');
+    // Participant's Archive country — present (spaceVisibilityGate includes Archive)
+    expect(result.countries).toContain('ParticipantArchiveCountry');
+    // Participant's Hidden country — ABSENT (spaceVisibilityGate blocks Hidden)
+    expect(result.countries).not.toContain('ParticipantHiddenCountry');
+  });
+
+  it("excludes another participant's Locked-asset facet from album-scoped suggestions", async () => {
+    const { searchRepo, ctx } = setup();
+    const { user: albumOwner } = await ctx.newUser();
+    const { user: participant } = await ctx.newUser();
+
+    const { result: album } = await ctx.newAlbum({ ownerId: albumOwner.id, albumName: 'FacetLockedMxAlbum' });
+    await ctx.newAlbumUser({ albumId: album.id, userId: participant.id, role: AlbumUserRole.Editor });
+
+    // Participant's Timeline asset — should appear
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: participant.id, visibility: AssetVisibility.Timeline });
+    await ctx.newExif({ assetId: tlAsset.id, country: 'ParticipantLockedTLCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: tlAsset.id });
+
+    // Participant's Locked asset — must NOT appear
+    const { asset: loAsset } = await ctx.newAsset({ ownerId: participant.id, visibility: AssetVisibility.Locked });
+    await ctx.newExif({ assetId: loAsset.id, country: 'ParticipantLockedCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: loAsset.id });
+
+    // Ask from albumOwner's perspective (they are a participant)
+    const result = await searchRepo.getFilterSuggestions([albumOwner.id], { albumId: album.id });
+
+    expect(result.countries).toContain('ParticipantLockedTLCountry'); // Timeline ✓
+    expect(result.countries).not.toContain('ParticipantLockedCountry'); // Locked blocked ✓
   });
 });
