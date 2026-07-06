@@ -41,6 +41,11 @@ describe(AssetService.name, () => {
     // handleAssetDeletion now captures affected shared-space people before delete
     // (faces F5); default to empty so unrelated deletion tests don't break.
     mocks.sharedSpace.getSpacePersonsForAsset.mockResolvedValue([]);
+
+    // updateAll now purges/re-adds direct space assets on visibility flip
+    // (Slice 4.B); default to no-op so unrelated update tests don't break.
+    mocks.sharedSpace.emitDirectAssetVisibilityPurge.mockResolvedValue(void 0);
+    mocks.sharedSpace.emitDirectAssetVisibilityRestore.mockResolvedValue(void 0);
   });
 
   describe('getStatistics', () => {
@@ -1026,6 +1031,39 @@ describe(AssetService.name, () => {
       });
 
       expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
+    });
+
+    it.each([[AssetVisibility.Hidden], [AssetVisibility.Locked]])(
+      'should purge direct space assets from member devices when visibility is %s',
+      async (visibility) => {
+        mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+        await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
+
+        expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+        expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([[AssetVisibility.Timeline], [AssetVisibility.Archive]])(
+      'should re-add direct space assets to member devices when visibility is %s',
+      async (visibility) => {
+        mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+        await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
+
+        expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).toHaveBeenCalledWith(['asset-1']);
+        expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should not touch direct space assets when visibility is not provided', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], isFavorite: true });
+
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
     });
 
     it('should not call updateAllExif when no exif fields are provided', async () => {

@@ -111,6 +111,38 @@ describe(ViewRepository.name, () => {
       expect(result).toContain(`/album/folder/${role}-album`);
     });
 
+    it('DENY — album with showInTimeline=false does not expose folder paths in the folder view', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'HiddenTimeline' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: false });
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, originalPath: '/album/no-timeline/IMG.jpg' });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+      const result = await sut.getUniqueOriginalPaths(member.id);
+
+      expect(result).not.toContain('/album/no-timeline');
+    });
+
+    it('GRANT — same album with showInTimeline=true still exposes folder paths', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisibleTimeline' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: true });
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, originalPath: '/album/yes-timeline/IMG.jpg' });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+      const result = await sut.getUniqueOriginalPaths(member.id);
+
+      expect(result).toContain('/album/yes-timeline');
+    });
+
     it('GRANT — member sees the folder even when showInTimeline is disabled', async () => {
       const { ctx, sut } = setup();
       const { member, space } = await seedDirectSpaceAsset(ctx, SharedSpaceRole.Viewer, '/archive/no-timeline/IMG.jpg');
@@ -248,6 +280,40 @@ describe(ViewRepository.name, () => {
         .execute();
 
       await expect(sut.getAssetsByOriginalPath(member.id, path)).resolves.toEqual([]);
+    });
+
+    it('DENY — album with showInTimeline=false does not expose folder contents in the folder view', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'HiddenTimelineContents' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: false });
+      const path = '/album/no-timeline-contents';
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, originalPath: `${path}/IMG.jpg` });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+      const result = await sut.getAssetsByOriginalPath(member.id, path);
+
+      expect(result.map((a) => a.id)).not.toContain(asset.id);
+    });
+
+    it('GRANT — same album with showInTimeline=true still exposes folder contents', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisibleTimelineContents' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, showInTimeline: true });
+      const path = '/album/yes-timeline-contents';
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, originalPath: `${path}/IMG.jpg` });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+      const result = await sut.getAssetsByOriginalPath(member.id, path);
+
+      expect(result.map((a) => a.id)).toContain(asset.id);
     });
   });
 });

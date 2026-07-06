@@ -313,6 +313,18 @@ export class AssetService extends BaseService {
       await this.albumRepository.removeAssetsFromAll(ids);
     }
 
+    // Slice 4.B: a visibility flip deletes no shared_space_asset join row, so the
+    // delete-audit trigger never fires and already-synced member devices keep the
+    // bytes. Explicitly purge (Hidden/Locked) or re-add (Timeline/Archive) the
+    // DIRECT space-asset path so member devices converge. Album-linked and
+    // library paths are separate follow-ups; album+Locked is already covered by
+    // removeAssetsFromAll above.
+    if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
+      await this.sharedSpaceRepository.emitDirectAssetVisibilityPurge(ids);
+    } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
+      await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(ids);
+    }
+
     await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
   }
 

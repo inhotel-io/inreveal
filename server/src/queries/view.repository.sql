@@ -40,9 +40,10 @@ where
       where
         "shared_space_member"."userId" = $5::uuid
         and "album_asset"."assetId" = "asset"."id"
+        and "shared_space_album"."showInTimeline" = $6
     )
   )
-  and "visibility" = $6
+  and "visibility" = $7
   and "deletedAt" is null
   and "fileCreatedAt" is not null
   and "fileModifiedAt" is not null
@@ -92,14 +93,15 @@ where
       where
         "shared_space_member"."userId" = $4::uuid
         and "album_asset"."assetId" = "asset"."id"
+        and "shared_space_album"."showInTimeline" = $5
     )
   )
-  and "visibility" = $5
+  and "visibility" = $6
   and "deletedAt" is null
   and "fileCreatedAt" is not null
   and "fileModifiedAt" is not null
   and "localDateTime" is not null
-  and "originalPath" like $6
-  and "originalPath" not like $7
+  and "originalPath" like $7
+  and "originalPath" not like $8
 order by
-  regexp_replace("asset"."originalPath", $8, $9) asc
+  regexp_replace("asset"."originalPath", $9, $10) asc

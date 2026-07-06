@@ -9,13 +9,13 @@ import { renderWithTooltips } from '$tests/helpers';
 function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
   return {
     id: 'album-1',
+    ownerId: 'owner-1',
     albumName: 'Vacation',
     assetCount: 5,
     albumThumbnailAssetId: null,
     showInTimeline: true,
     addedById: null,
     linkedAt: '2026-01-01T00:00:00.000Z',
-    albumUsers: [],
     description: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',

@@ -246,6 +246,23 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       );
     });
 
+    it('response does NOT expose albumUsers or email (PII guard, Slice 7)', async () => {
+      // Any space member — including a plain Viewer — must not receive albumUsers arrays
+      // or email addresses when listing linked albums. Deep-scan the full response body.
+      const { status, body } = await listAlbums(viewer.accessToken);
+      expect(status).toBe(200);
+
+      const items = body as Array<Record<string, unknown>>;
+      for (const item of items) {
+        // albumUsers must not be present on any linked-album entry
+        expect(item['albumUsers']).toBeUndefined();
+
+        // No email field anywhere in the serialized entry
+        const serialized = JSON.stringify(item);
+        expect(serialized).not.toMatch(/"email"\s*:/);
+      }
+    });
+
     it('absorbed invariant: linked album is NOT returned by GET /albums for space members', async () => {
       // Space membership must not make the album visible via the regular /albums
       // list for members who don't own or have explicit album-user access.

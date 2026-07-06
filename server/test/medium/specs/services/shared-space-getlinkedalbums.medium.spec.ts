@@ -100,21 +100,27 @@ describe('SharedSpaceService.getLinkedAlbums — rich AlbumResponseDto shape', (
     expect(result[0].endDate).toBeUndefined();
   });
 
-  it('returns albumUsers with album owner user id', async () => {
+  it('does NOT expose albumUsers in the DTO (Slice 7 PII strip)', async () => {
+    // albumUsers must not appear — not even an empty array — in getLinkedAlbums output.
+    // The web does not use this field; returning it would leak member email addresses.
     const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();
     const { user: otherUser } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
 
-    // Album owned by otherUser, linked to space
+    // Album owned by otherUser (it has an album_user row), linked to space
     const { result: album } = await ctx.newAlbum({ ownerId: otherUser.id, albumName: 'OtherOwner' });
     await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
 
     const result = await sut.getLinkedAlbums(authFromUser(owner), space.id);
 
     expect(result).toHaveLength(1);
-    expect(result[0].albumUsers[0].user.id).toBe(otherUser.id);
+    // albumUsers must not be present at all
+    expect((result[0] as unknown as Record<string, unknown>)['albumUsers']).toBeUndefined();
+    // No email anywhere in the serialized payload
+    const serialized = JSON.stringify(result[0]);
+    expect(serialized).not.toMatch(/"email"\s*:/);
   });
 
   it('results are in album.createdAt DESC order', async () => {

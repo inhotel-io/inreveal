@@ -94,6 +94,7 @@ export class MemoryRepository implements IBulkAsset {
                 spaceAlbumAssetExists(eb, {
                   correlateAssetId: 'asset.id',
                   scope: { memberUserId: userId },
+                  requireShowInTimeline: true,
                 }),
               ]),
             ),

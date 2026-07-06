@@ -124,6 +124,19 @@ export class TimelineService extends BaseService {
       requireElevatedPermission(auth);
     }
 
+    // Fork RBAC (Fix A) defense-in-depth: a pure space browse (spaceId / spacePersonId, no
+    // per-user timeline) must never request Hidden/Locked — those are owner-private states that
+    // make no sense across a shared scope. The repository query gates other members' Hidden/Locked
+    // regardless, but rejecting here short-circuits the leak vector before it reaches the DB. The
+    // per-user timeline paths (userId / withSharedSpaces) are intentionally untouched so a caller
+    // can still view their OWN hidden assets.
+    const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId;
+    const requestsPrivateVisibility =
+      dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
+    if (spaceBrowse && requestsPrivateVisibility) {
+      throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space');
+    }
+
     if (dto.albumId) {
       await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
     } else if (dto.spaceId) {

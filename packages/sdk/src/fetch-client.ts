@@ -2755,8 +2755,6 @@ export type SharedSpaceLinkedAlbumDto = {
     albumName: string;
     /** Thumbnail asset ID */
     albumThumbnailAssetId: string | null;
-    /** First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically. */
-    albumUsers: AlbumUserResponseDto[];
     /** Number of assets */
     assetCount: number;
     contributorCounts?: ContributorCountResponseDto[];
@@ -2777,6 +2775,8 @@ export type SharedSpaceLinkedAlbumDto = {
     /** Link creation timestamp */
     linkedAt: string;
     order?: AssetOrder;
+    /** User ID of the album owner (non-PII UUID, for group-by-owner) */
+    ownerId: string;
     /** Is shared album */
     shared: boolean;
     /** Include this album in the space timeline */
