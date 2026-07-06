@@ -37,10 +37,7 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
   /** Set visibility on an asset owned by `owner`. */
   const setVisibility = (assetId: string, visibility: AssetVisibility) =>
-    updateAssets(
-      { assetBulkUpdateDto: { ids: [assetId], visibility } },
-      { headers: asBearerAuth(owner.accessToken) },
-    );
+    updateAssets({ assetBulkUpdateDto: { ids: [assetId], visibility } }, { headers: asBearerAuth(owner.accessToken) });
 
   /** Create a fresh space, add owner as owner and member as viewer, return the space id. */
   const freshSpace = async (name: string) => {
