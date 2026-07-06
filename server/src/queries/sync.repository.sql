@@ -1325,6 +1325,7 @@ where
   and "shared_space_asset"."updateId" <= $4
   and "shared_space_asset"."updateId" > $5
   and "shared_space_asset"."spaceId" = $6
+  and "asset"."visibility" in ($7, $8)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1375,6 +1376,7 @@ where
     where
       "shared_space_member"."userId" = $6
   )
+  and "asset"."visibility" in ($7, $8)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1426,6 +1428,7 @@ where
     where
       "shared_space_member"."userId" = $7
   )
+  and "asset"."visibility" in ($8, $9)
 order by
   "asset"."updateId" asc
 
@@ -1460,11 +1463,13 @@ select
 from
   "shared_space_asset" as "shared_space_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "shared_space_asset"."assetId"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
   "shared_space_asset"."updateId" < $1
   and "shared_space_asset"."updateId" <= $2
   and "shared_space_asset"."updateId" > $3
   and "shared_space_asset"."spaceId" = $4
+  and "asset"."visibility" in ($5, $6)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1499,6 +1504,7 @@ select
 from
   "shared_space_asset" as "shared_space_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "shared_space_asset"."assetId"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
   "shared_space_asset"."updateId" < $1
   and "shared_space_asset"."updateId" > $2
@@ -1517,6 +1523,7 @@ where
     where
       "shared_space_member"."userId" = $4
   )
+  and "asset"."visibility" in ($5, $6)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1551,6 +1558,7 @@ select
 from
   "asset_exif" as "asset_exif"
   inner join "shared_space_asset" on "shared_space_asset"."assetId" = "asset_exif"."assetId"
+  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
@@ -1570,6 +1578,7 @@ where
     where
       "shared_space_member"."userId" = $5
   )
+  and "asset"."visibility" in ($6, $7)
 order by
   "asset_exif"."updateId" asc
 
@@ -2372,6 +2381,7 @@ where
   and "album_asset"."updateId" > $5
   and "album_asset"."albumId" = $6
   and "album"."deletedAt" is null
+  and "asset"."visibility" in ($7, $8)
 order by
   "album_asset"."updateId" asc
 
@@ -2434,6 +2444,7 @@ where
           "shared_space_member"."userId" = $8
       )
   )
+  and "asset"."visibility" in ($9, $10)
 order by
   "asset"."updateId" asc
 
@@ -2495,6 +2506,7 @@ where
           "shared_space_member"."userId" = $7
       )
   )
+  and "asset"."visibility" in ($8, $9)
 order by
   "album_asset"."updateId" asc
 
@@ -2530,12 +2542,14 @@ from
   "album_asset" as "album_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "album_asset"."assetId"
   inner join "album" on "album"."id" = "album_asset"."albumId"
+  inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
   and "album"."deletedAt" is null
+  and "asset"."visibility" in ($5, $6)
 order by
   "album_asset"."updateId" asc
 
@@ -2570,6 +2584,7 @@ select
 from
   "asset_exif" as "asset_exif"
   inner join "album_asset" on "album_asset"."assetId" = "asset_exif"."assetId"
+  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
   inner join "shared_space_album_user" on "shared_space_album_user"."albumId" = "album_asset"."albumId"
 where
   "asset_exif"."updateId" < $1
@@ -2600,6 +2615,7 @@ where
           "shared_space_member"."userId" = $6
       )
   )
+  and "asset"."visibility" in ($7, $8)
 order by
   "asset_exif"."updateId" asc
 
@@ -2634,6 +2650,7 @@ select
 from
   "album_asset" as "album_asset"
   inner join "asset_exif" on "asset_exif"."assetId" = "album_asset"."assetId"
+  inner join "asset" on "asset"."id" = "album_asset"."assetId"
   inner join "shared_space_album_user" on "shared_space_album_user"."albumId" = "album_asset"."albumId"
 where
   "album_asset"."updateId" < $1
@@ -2663,5 +2680,6 @@ where
           "shared_space_member"."userId" = $5
       )
   )
+  and "asset"."visibility" in ($6, $7)
 order by
   "album_asset"."updateId" asc
