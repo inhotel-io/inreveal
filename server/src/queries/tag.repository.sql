@@ -69,6 +69,7 @@ where
         "tag_asset"."tagId" = "tag"."id"
         and "asset"."deletedAt" is null
         and "shared_space_member"."userId" = $2::uuid
+        and "asset"."visibility" in ($3, $4)
     )
     or exists (
       select
@@ -80,7 +81,8 @@ where
       where
         "tag_asset"."tagId" = "tag"."id"
         and "asset"."deletedAt" is null
-        and "shared_space_member"."userId" = $3::uuid
+        and "shared_space_member"."userId" = $5::uuid
+        and "asset"."visibility" in ($6, $7)
     )
     or exists (
       select
@@ -95,7 +97,8 @@ where
       where
         "tag_asset"."tagId" = "tag"."id"
         and "asset"."deletedAt" is null
-        and "shared_space_member"."userId" = $4::uuid
+        and "shared_space_member"."userId" = $8::uuid
+        and "asset"."visibility" in ($9, $10)
     )
   )
 order by

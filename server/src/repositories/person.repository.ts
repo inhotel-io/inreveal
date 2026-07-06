@@ -11,6 +11,7 @@ import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
+import { spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 export interface PersonSearchOptions {
   withHidden: boolean;
@@ -60,7 +61,7 @@ export interface PeopleFaceStatisticsOptions {
   minimumFaceCount?: number;
 }
 
-const peopleAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+const peopleAssetVisibilities = spaceVisibleAssetVisibilities;
 
 const isBlank = (value: string | null | undefined) => !value || value.trim().length === 0;
 

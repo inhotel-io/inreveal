@@ -30005,14 +30005,6 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
-          "albumUsers": {
-            "description": "First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically.",
-            "items": {
-              "$ref": "#/components/schemas/AlbumUserResponseDto"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
           "assetCount": {
             "description": "Number of assets",
             "maximum": 9007199254740991,
@@ -30066,6 +30058,10 @@
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
           },
+          "ownerId": {
+            "description": "User ID of the album owner (non-PII UUID, for group-by-owner)",
+            "type": "string"
+          },
           "shared": {
             "description": "Is shared album",
             "type": "boolean"
@@ -30089,7 +30085,6 @@
           "addedById",
           "albumName",
           "albumThumbnailAssetId",
-          "albumUsers",
           "assetCount",
           "createdAt",
           "description",
@@ -30097,6 +30092,7 @@
           "id",
           "isActivityEnabled",
           "linkedAt",
+          "ownerId",
           "shared",
           "showInTimeline",
           "updatedAt"

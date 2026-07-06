@@ -2,6 +2,7 @@
 // (spaceAlbumAssetExistsSql) must return the SAME asset set as the Kysely
 // spaceAlbumAssetExists over identical data + scope (spec §3.4). This is the wire
 // that keeps the two authoring styles from drifting.
+// Slice 1 extension — requireShowInTimeline option equivalence between raw-SQL and Kysely.
 import { Kysely, sql } from 'kysely';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
@@ -101,5 +102,61 @@ describe('raw-SQL album arm ≡ Kysely album arm', () => {
 
     expect(raw).toEqual(kysely);
     expect(raw.size).toBe(kysely.size);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slice 1 — requireShowInTimeline option: raw-SQL ≡ Kysely
+// ---------------------------------------------------------------------------
+
+const kyselyIdsTimeline = async (spaceId: string, requireShowInTimeline: boolean): Promise<Set<string>> => {
+  const rows = await db
+    .selectFrom('asset')
+    .select('asset.id')
+    .where((eb) =>
+      spaceAlbumAssetExists(eb, { correlateAssetId: 'asset.id', scope: { spaceId }, requireShowInTimeline }),
+    )
+    .execute();
+  return new Set(rows.map((r) => r.id));
+};
+
+const rawIdsTimeline = async (spaceId: string, requireShowInTimeline: boolean): Promise<Set<string>> => {
+  const existsFragment = spaceAlbumAssetExistsSql({
+    assetIdColumn: sql`asset.id`,
+    spaceScopeJoin: sql`INNER JOIN shared_space ON shared_space.id = shared_space_album."spaceId" AND shared_space.id = ${spaceId}`,
+    requireShowInTimeline,
+  });
+  const result = await sql<{ id: string }>`SELECT asset.id FROM asset WHERE ${existsFragment}`.execute(db);
+  return new Set(result.rows.map((r) => r.id));
+};
+
+describe('requireShowInTimeline option: raw-SQL ≡ Kysely', () => {
+  it('with requireShowInTimeline=true: matches only the showInTimeline=true album and equals Kysely result', async () => {
+    const { ctx } = setup();
+    const { space, viaShown, viaHidden } = await seedCombos(ctx);
+
+    const kyselyResult = await kyselyIdsTimeline(space.id, true);
+    const rawResult = await rawIdsTimeline(space.id, true);
+
+    // raw-SQL and Kysely must agree
+    expect(rawResult).toEqual(kyselyResult);
+    // only the showInTimeline=true album's asset is matched
+    expect(kyselyResult.has(viaShown.id)).toBe(true);
+    // the showInTimeline=false album's asset is excluded
+    expect(kyselyResult.has(viaHidden.id)).toBe(false);
+  });
+
+  it('with requireShowInTimeline=false (default): both albums matched, raw-SQL equals Kysely result', async () => {
+    const { ctx } = setup();
+    const { space, viaShown, viaHidden } = await seedCombos(ctx);
+
+    const kyselyResult = await kyselyIdsTimeline(space.id, false);
+    const rawResult = await rawIdsTimeline(space.id, false);
+
+    // raw-SQL and Kysely must agree
+    expect(rawResult).toEqual(kyselyResult);
+    // both album assets present (unchanged legacy behavior)
+    expect(kyselyResult.has(viaShown.id)).toBe(true);
+    expect(kyselyResult.has(viaHidden.id)).toBe(true);
   });
 });

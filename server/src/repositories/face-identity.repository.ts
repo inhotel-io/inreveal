@@ -16,7 +16,7 @@ import { FaceIdentityFaceSource, FaceIdentityFaceTable } from 'src/schema/tables
 import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
 import { anyUuid } from 'src/utils/database';
 import { asDateString, asDateTimeString } from 'src/utils/date';
-import { spaceAlbumAssetExistsSql } from 'src/utils/shared-space-album-scope';
+import { spaceAlbumAssetExistsSql, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 export type FaceIdentity = Selectable<FaceIdentityTable>;
 export type FaceIdentityFace = Selectable<FaceIdentityFaceTable>;
@@ -157,7 +157,7 @@ type SpacePersonBackfillIdentityGroup = {
   representativeFaceId: string;
 };
 
-const peopleAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+const peopleAssetVisibilities = spaceVisibleAssetVisibilities;
 const sharedSpaceFaceMatchBackfillTargetInsertChunkSize = 1000;
 
 export type ScopedPersonTokenResolution = {
@@ -915,6 +915,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1034,6 +1035,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1175,6 +1177,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       )
@@ -1679,6 +1682,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1824,6 +1828,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1939,6 +1944,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),

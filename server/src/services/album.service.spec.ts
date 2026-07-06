@@ -899,6 +899,82 @@ describe(AlbumService.name, () => {
         AlbumUserRole.Viewer,
       );
     });
+
+    it('redacts album-user emails when access is via space grant only (not a participant)', async () => {
+      // spaceViewer is NOT in album.albumUsers — access granted only via checkSpaceLinkedAlbumReadAccess
+      const spaceViewer = UserFactory.create();
+      const album = AlbumFactory.from().albumUser().build();
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        {
+          albumId: album.id,
+          assetCount: 0,
+          startDate: null,
+          endDate: null,
+          lastModifiedAssetTimestamp: null,
+        },
+      ]);
+
+      const result = await sut.get(AuthFactory.create(spaceViewer), album.id);
+
+      // albumUsers array must still be present (DTO requires it, web needs it)
+      expect(result.albumUsers.length).toBeGreaterThan(0);
+      // but no email should be exposed
+      for (const albumUser of result.albumUsers) {
+        expect(albumUser.user.email).toBe('');
+      }
+    });
+
+    it('does NOT redact emails when the caller is an album participant (album_user)', async () => {
+      const user = UserFactory.create();
+      const album = AlbumFactory.from().albumUser({ userId: user.id }).build();
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        {
+          albumId: album.id,
+          assetCount: 0,
+          startDate: null,
+          endDate: null,
+          lastModifiedAssetTimestamp: null,
+        },
+      ]);
+
+      const result = await sut.get(AuthFactory.create(user), album.id);
+
+      // Participant should see real emails
+      for (const albumUser of result.albumUsers) {
+        expect(albumUser.user.email).not.toBe('');
+        expect(albumUser.user.email).toContain('@');
+      }
+    });
+
+    it('does NOT redact emails when the caller is the album owner', async () => {
+      const album = AlbumFactory.from().albumUser().build();
+      const { user: owner } = album.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        {
+          albumId: album.id,
+          assetCount: 0,
+          startDate: null,
+          endDate: null,
+          lastModifiedAssetTimestamp: null,
+        },
+      ]);
+
+      const result = await sut.get(AuthFactory.create(owner), album.id);
+
+      for (const albumUser of result.albumUsers) {
+        expect(albumUser.user.email).not.toBe('');
+        expect(albumUser.user.email).toContain('@');
+      }
+    });
   });
 
   describe('addAssets', () => {
