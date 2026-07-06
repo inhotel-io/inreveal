@@ -5,7 +5,7 @@ import { columns } from 'src/database';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { DB } from 'src/schema';
 import { SyncAck } from 'src/types';
-import { accessibleSpaceAlbums, accessibleSpaces } from 'src/utils/shared-space-album-scope';
+import { accessibleSpaceAlbums, accessibleSpaces, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 // Re-export the relocated scoping helpers so existing `sync.repository` importers
 // keep working after the definitions moved to the fork-owned scope module.
@@ -1000,6 +1000,7 @@ export class SharedSpaceAssetSync extends BaseSync {
       )
       .select('shared_space_asset.updateId')
       .where('shared_space_asset.spaceId', '=', spaceId)
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1025,6 +1026,7 @@ export class SharedSpaceAssetSync extends BaseSync {
       )
       .select('shared_space_asset.updateId')
       .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1051,6 +1053,7 @@ export class SharedSpaceAssetSync extends BaseSync {
       .select('asset.updateId')
       .where('shared_space_asset.updateId', '<=', sharedSpaceToAssetAck.updateId)
       .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
   // Note: shared_space_asset_audit cleanup is owned by SharedSpaceToAssetSync below,
@@ -1062,9 +1065,11 @@ export class SharedSpaceAssetExifSync extends BaseSync {
   getBackfill(options: SyncBackfillOptions, spaceId: string) {
     return this.backfillQuery('shared_space_asset', options)
       .innerJoin('asset_exif', 'asset_exif.assetId', 'shared_space_asset.assetId')
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
       .select(columns.syncAssetExif)
       .select('shared_space_asset.updateId')
       .where('shared_space_asset.spaceId', '=', spaceId)
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1072,9 +1077,11 @@ export class SharedSpaceAssetExifSync extends BaseSync {
   getCreates(options: SyncQueryOptions) {
     return this.upsertQuery('shared_space_asset', options)
       .innerJoin('asset_exif', 'asset_exif.assetId', 'shared_space_asset.assetId')
+      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
       .select(columns.syncAssetExif)
       .select('shared_space_asset.updateId')
       .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1082,10 +1089,12 @@ export class SharedSpaceAssetExifSync extends BaseSync {
   getUpdates(options: SyncQueryOptions, sharedSpaceToAssetAck: SyncAck) {
     return this.upsertQuery('asset_exif', options)
       .innerJoin('shared_space_asset', 'shared_space_asset.assetId', 'asset_exif.assetId')
+      .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
       .select(columns.syncAssetExif)
       .select('asset_exif.updateId')
       .where('shared_space_asset.updateId', '<=', sharedSpaceToAssetAck.updateId)
       .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 }
@@ -1544,6 +1553,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
       .where('album.deletedAt', 'is', null)
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1567,6 +1577,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1589,6 +1600,7 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 }
@@ -1602,10 +1614,12 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
     return this.backfillQuery('album_asset', options)
       .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
       .innerJoin('album', 'album.id', 'album_asset.albumId')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
       .select(columns.syncAssetExif)
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
       .where('album.deletedAt', 'is', null)
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1614,12 +1628,14 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
     const userId = options.userId;
     return this.upsertQuery('asset_exif', options)
       .innerJoin('album_asset', 'album_asset.assetId', 'asset_exif.assetId')
+      .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
       .select(columns.syncAssetExif)
       .select('asset_exif.updateId')
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send exif updates for assets that the client already knows about
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 
@@ -1629,10 +1645,12 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
     return this.upsertQuery('album_asset', options)
       .select('album_asset.updateId')
       .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
       .select(columns.syncAssetExif)
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
 }
