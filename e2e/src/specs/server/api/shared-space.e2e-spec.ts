@@ -1362,14 +1362,16 @@ describe('/shared-spaces', () => {
      */
 
     it('member CANNOT read a Locked direct-space asset (GET /assets/:id → 400)', async () => {
+      // Add while Timeline (the add-assets endpoint rejects Locked and filters Hidden), THEN flip —
+      // the real "added-then-locked" scenario the checkSpaceAccess gate must catch.
       const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Read Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
       await updateAssets(
         { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
         { headers: asBearerAuth(user1.accessToken) },
       );
-      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Read Block' });
-      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
-      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}`)
@@ -1379,13 +1381,13 @@ describe('/shared-spaces', () => {
 
     it('member CANNOT download a Locked direct-space asset (GET /assets/:id/original → 400)', async () => {
       const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Download Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
       await updateAssets(
         { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
         { headers: asBearerAuth(user1.accessToken) },
       );
-      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Download Block' });
-      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
-      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}/original`)
@@ -1395,13 +1397,13 @@ describe('/shared-spaces', () => {
 
     it('member CANNOT view thumbnail of a Locked direct-space asset (GET /assets/:id/thumbnail → 400)', async () => {
       const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Thumb Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
       await updateAssets(
         { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
         { headers: asBearerAuth(user1.accessToken) },
       );
-      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Thumb Block' });
-      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
-      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}/thumbnail`)
@@ -1411,13 +1413,13 @@ describe('/shared-spaces', () => {
 
     it('member CANNOT read a Hidden direct-space asset (GET /assets/:id → 400)', async () => {
       const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Hidden Read Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
       await updateAssets(
         { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Hidden } },
         { headers: asBearerAuth(user1.accessToken) },
       );
-      const space = await utils.createSpace(user1.accessToken, { name: 'Hidden Read Block' });
-      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
-      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}`)

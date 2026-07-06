@@ -66,9 +66,9 @@ describe('shared-space visibility negatives (Slice 11)', () => {
   describe('GET /assets/:id — Hidden/Locked blocked; Timeline/Archive allowed', () => {
     it('Hidden direct-space asset → 400 for member', async () => {
       const asset = await utils.createAsset(owner.accessToken);
-      await setVisibility(asset.id, AssetVisibility.Hidden);
       const spaceId = await freshSpace('hidden-read-neg');
       await utils.addSpaceAssets(owner.accessToken, spaceId, [asset.id]);
+      await setVisibility(asset.id, AssetVisibility.Hidden);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}`)
@@ -78,9 +78,9 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
     it('Locked direct-space asset → 400 for member', async () => {
       const asset = await utils.createAsset(owner.accessToken);
-      await setVisibility(asset.id, AssetVisibility.Locked);
       const spaceId = await freshSpace('locked-read-neg');
       await utils.addSpaceAssets(owner.accessToken, spaceId, [asset.id]);
+      await setVisibility(asset.id, AssetVisibility.Locked);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}`)
@@ -120,9 +120,9 @@ describe('shared-space visibility negatives (Slice 11)', () => {
   describe('GET /assets/:id/original — Hidden/Locked blocked', () => {
     it('Hidden direct-space asset → 400', async () => {
       const asset = await utils.createAsset(owner.accessToken);
-      await setVisibility(asset.id, AssetVisibility.Hidden);
       const spaceId = await freshSpace('hidden-original-neg');
       await utils.addSpaceAssets(owner.accessToken, spaceId, [asset.id]);
+      await setVisibility(asset.id, AssetVisibility.Hidden);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}/original`)
@@ -132,9 +132,9 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
     it('Locked direct-space asset → 400', async () => {
       const asset = await utils.createAsset(owner.accessToken);
-      await setVisibility(asset.id, AssetVisibility.Locked);
       const spaceId = await freshSpace('locked-original-neg');
       await utils.addSpaceAssets(owner.accessToken, spaceId, [asset.id]);
+      await setVisibility(asset.id, AssetVisibility.Locked);
 
       const { status } = await request(app)
         .get(`/assets/${asset.id}/original`)
