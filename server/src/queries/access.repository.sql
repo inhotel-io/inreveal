@@ -397,33 +397,36 @@ where
       and (
         exists (
           select
+            1 as "exists"
           from
             "shared_space_asset"
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
           where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_member"."userId" = $3
+            "shared_space_member"."userId" = $3::uuid
+            and "shared_space_asset"."assetId" = "asset"."id"
         )
         or exists (
           select
+            1 as "exists"
           from
             "shared_space_library"
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
           where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_member"."userId" = $4
+            "shared_space_member"."userId" = $4::uuid
+            and "shared_space_library"."libraryId" = "asset"."libraryId"
         )
         or exists (
           select
+            1 as "exists"
           from
             "shared_space_album"
+            inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
             inner join "album" on "album"."id" = "shared_space_album"."albumId"
             and "album"."deletedAt" is null
-            inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
           where
-            "album_asset"."assetId" = "asset"."id"
-            and "shared_space_member"."userId" = $5
+            "shared_space_member"."userId" = $5::uuid
+            and "album_asset"."assetId" = "asset"."id"
         )
       )
   )

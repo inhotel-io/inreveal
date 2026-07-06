@@ -987,12 +987,12 @@ where
     )
     or exists (
       select
-        "shared_space_album"."albumId"
+        1 as "exists"
       from
         "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
         inner join "album" on "album"."id" = "shared_space_album"."albumId"
         and "album"."deletedAt" is null
-        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       where
         "album_asset"."assetId" = "asset_face"."assetId"
         and "shared_space_album"."spaceId" = "shared_space_person"."spaceId"
@@ -1038,12 +1038,12 @@ where
     )
     or exists (
       select
-        "shared_space_album"."albumId"
+        1 as "exists"
       from
         "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
         inner join "album" on "album"."id" = "shared_space_album"."albumId"
         and "album"."deletedAt" is null
-        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       where
         "album_asset"."assetId" = "asset_face"."assetId"
         and "shared_space_album"."spaceId" = "shared_space_person"."spaceId"
@@ -1198,6 +1198,8 @@ select
   "shared_space_album"."addedById"
 from
   "shared_space_album"
+  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+  and "album"."deletedAt" is null
   inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
   inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
@@ -1253,15 +1255,15 @@ where
     )
     or exists (
       select
-        "shared_space_album"."albumId"
+        1 as "exists"
       from
         "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
         inner join "album" on "album"."id" = "shared_space_album"."albumId"
         and "album"."deletedAt" is null
-        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       where
         "album_asset"."assetId" = "asset_face"."assetId"
-        and "shared_space_album"."spaceId" = $4
+        and "shared_space_album"."spaceId" = $4::uuid
     )
   )
   and "person"."identityId" is not null
@@ -1362,12 +1364,12 @@ where
     )
     or exists (
       select
-        "shared_space_album"."albumId"
+        1 as "exists"
       from
         "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
         inner join "album" on "album"."id" = "shared_space_album"."albumId"
         and "album"."deletedAt" is null
-        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       where
         "album_asset"."assetId" = "asset_face"."assetId"
         and "shared_space_album"."spaceId" = "shared_space_person"."spaceId"
@@ -1410,12 +1412,12 @@ where
     )
     or exists (
       select
-        "shared_space_album"."albumId"
+        1 as "exists"
       from
         "shared_space_album"
+        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
         inner join "album" on "album"."id" = "shared_space_album"."albumId"
         and "album"."deletedAt" is null
-        inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       where
         "album_asset"."assetId" = "asset_face"."assetId"
         and "shared_space_album"."spaceId" = "shared_space_person"."spaceId"
@@ -1554,6 +1556,8 @@ where
     select
     from
       "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
       inner join "album_asset" as "other" on "other"."albumId" = "shared_space_album"."albumId"
     where
       "other"."assetId" = "album_asset"."assetId"
@@ -1589,6 +1593,8 @@ where
     select
     from
       "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
       inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
     where
       "album_asset"."assetId" = "asset"."id"
@@ -1868,6 +1874,8 @@ from
       "asset_face"."id"
     from
       "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
       inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       inner join "asset" on "asset"."id" = "album_asset"."assetId"
       inner join "asset_face" on "asset_face"."assetId" = "asset"."id"
