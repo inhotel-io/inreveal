@@ -130,13 +130,18 @@ stack siblings, and wire it into the direct add/remove paths. No schema change.
 - After the existing role/permission checks, expand `dto.assetIds` to the stack closure via a
   new repository query, producing `expandedAssetIds`.
 - **RBAC filter on the auto-pulled siblings:** only expand to siblings that are
-  **`ownerId = auth.user.id`**, **`visibility = Timeline`**, and **`deletedAt IS NULL`**. The
-  owner restriction guarantees the adder already has `AssetRead` on every expanded id (stacks
-  are single-owner), so no additional permission check is needed and there is no throw risk;
-  the visibility/deleted filters prevent pulling Archived/Hidden/Locked/trashed frames into a
-  shared Space (aligned with the in-flight #753/#754 RBAC hardening). Explicitly-selected seed
-  ids are always retained even if they are not timeline-visible — only the _auto-pulled
-  siblings_ are filtered.
+  **`ownerId = auth.user.id`**, **`visibility IN visibleSpaceAssetVisibilities`**, and
+  **`deletedAt IS NULL`**. `visibleSpaceAssetVisibilities` is the existing repo constant
+  `[AssetVisibility.Archive, AssetVisibility.Timeline]` (`shared-space.repository.ts:42`) already
+  used by `bulkAddUserAssets` and `getAssetCount` as the canonical "space-eligible" set —
+  reusing it keeps stack expansion consistent with existing direct membership (archived frames
+  are legitimately space-eligible; the view-time `visibility = Timeline` scope hides them from
+  the aggregated Space timeline). The set **excludes Hidden and Locked** — the RBAC-sensitive
+  tiers we must never pull into a shared Space (aligned with the in-flight #753/#754 hardening).
+  The owner restriction guarantees the adder already has `AssetRead` on every expanded id (stacks
+  are single-owner), so no additional permission check is needed and there is no throw risk.
+  Explicitly-selected seed ids are always retained even if they are not space-eligible — only the
+  _auto-pulled siblings_ are filtered.
 - Use `expandedAssetIds` for **both** the `shared_space_asset` insert **and** the
   `SharedSpaceFaceMatch` job fan-out (`:590`), so faces are matched on all added frames. The
   activity-log `count` continues to reflect `inserted.length` (newly-inserted rows only).
@@ -156,10 +161,10 @@ stack siblings, and wire it into the direct add/remove paths. No schema change.
 **Repository queries** — both live in `server/src/repositories/shared-space.repository.ts` next
 to their only callers (`addAssets` / `removeAssets`), each `@GenerateSql`-decorated:
 
-- Add path: `getOwnedTimelineStackSiblingIds(userId, assetIds) → assetId[]` — sibling ids
+- Add path: `getOwnedStackSiblingIds(userId, assetIds) → assetId[]` — sibling ids
   sharing a non-null `stackId` with any seed, filtered to `ownerId = userId`,
-  `visibility = Timeline`, `deletedAt IS NULL`. The service unions the result with the original
-  seed ids.
+  `visibility IN visibleSpaceAssetVisibilities`, `deletedAt IS NULL`. The service unions the
+  result with the original seed ids.
 - Remove path: `getStackSiblingIdsInSpace(spaceId, assetIds) → assetId[]` — sibling ids sharing a
   stack with any seed that are current direct members (`shared_space_asset`) of `spaceId`.
 
@@ -234,7 +239,8 @@ coverage" for this feature.
 | E2 | Add a **non-primary** frame owned by the adder | All siblings **incl. the primary** become members | S1 |
 | E3 | Add an asset **with no stack** | Only that asset is added (expansion is a no-op) | S1 |
 | E4 | Add an asset **not owned** by the adder (shared to them) | No expansion — only that asset is added (owner-scoped guard) | S1 |
-| E5 | A sibling is **Archived / Hidden / Locked** (`visibility != Timeline`) | Excluded from expansion — never pulled into the Space | S1 |
+| E5 | A sibling is **Hidden or Locked** | Excluded from expansion — never pulled into a shared Space | S1 |
+| E5b | A sibling is **Archived** | **Included** — archived is space-eligible (`visibleSpaceAssetVisibilities`); it is a member but stays hidden from the Timeline-scoped Space view | S1 |
 | E6 | A sibling is **soft-deleted** (`deletedAt` set / trashed) | Excluded from expansion | S1 |
 | E7 | The **seed itself** is non-timeline-visible but explicitly selected | Retained (only auto-pulled siblings are filtered) | S1 |
 | E8 | **Two seeds from the same stack** in one request | Expansion dedupes → each frame inserted once | S1 |
@@ -272,20 +278,23 @@ produces in production).
 - **Goal:** adding any frame of a stack via add-to-space brings in all the adder's
   timeline-visible frames of that stack.
 - **Code:**
-  - `server/src/repositories/shared-space.repository.ts` — add `getOwnedTimelineStackSiblingIds(userId, assetIds)` (`@GenerateSql`).
+  - `server/src/repositories/shared-space.repository.ts` — add `getOwnedStackSiblingIds(userId, assetIds)` (`@GenerateSql`).
   - `server/src/services/shared-space.service.ts` — in `addAssets` (`:571`), expand `dto.assetIds`
-    → `expandedAssetIds` (union of seeds + owned/timeline/non-deleted siblings); feed it to the
-    `shared_space_asset` insert **and** the `SharedSpaceFaceMatch` fan-out (`:590`).
+    → `expandedAssetIds` (union of seeds + owned/space-eligible/non-deleted siblings); feed it to
+    the `shared_space_asset` insert **and** the `SharedSpaceFaceMatch` fan-out (`:590`). Add a
+    default `mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([])` to the service
+    spec's `beforeEach` so existing `addAssets` tests keep passing.
 - **Tests (write first):**
   - Unit — `server/src/services/shared-space.service.spec.ts`: `addAssets` expands and inserts the
     expanded set; face-match jobs cover the expanded set; empty input short-circuits. Covers
     E4, E11, E12 (behavioral), E13 wiring.
-  - Medium — `server/test/medium/specs/repositories/shared-space.repository.spec.ts`: the sibling
-    query filters (owner, visibility, deleted), seed retention, dedupe. Covers E1–E9.
-  - Medium — new `server/test/medium/specs/services/shared-space-stacks.service.spec.ts`:
-    end-to-end add → all frames members → Space timeline (`withStacked`) returns one collapsed
-    cover with the right count; re-add idempotency (E10); promote-a-different-primary keeps the
-    stack visible (E13).
+  - Medium — new `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts`:
+    the `getOwnedStackSiblingIds` filters (owner E4, Hidden/Locked E5, Archived-included E5b,
+    deleted E6, seed retention E7, dedupe E8, mixed E9, no-stack E3, cover E1, non-primary E2,
+    empty E11). Composition E2E: seed a stack, expand + `addAssets` via the repo, then
+    `ctx.get(AssetRepository).getTimeBuckets({ spaceId, visibility: Timeline, withStacked: true })`
+    returns one collapsed cover; re-add idempotency (E10); promote-a-different-primary via
+    `StackRepository.update` keeps the stack visible (E13).
 - **Verification gate:** `cd server && pnpm check` (tsc) · `pnpm test -- --run src/services/shared-space.service.spec.ts` · `pnpm test:medium` for the two specs · `make sql` (running DB) to refresh docs for the new `@GenerateSql` method.
 - **Acceptance:** E1–E13 green; adding a stack cover in a real Space makes every frame a member and the Space timeline shows one cover with the correct badge count.
 
@@ -301,11 +310,11 @@ produces in production).
 - **Tests (write first):**
   - Unit — `shared-space.service.spec.ts`: `removeAssets` expands and feeds delete + thumbnail +
     orphan computation the expanded set.
-  - Medium — `shared-space.repository.spec.ts`: `getStackSiblingIdsInSpace` returns only
-    same-stack **direct members** of the given Space (E18).
-  - Medium — `shared-space-stacks.service.spec.ts`: remove cover → all gone (E14); remove
-    non-cover → all gone (E15); frame kept alive by a linked album stays visible & is not a
-    face-orphan (E16, E19); thumbnail reset when an expanded frame was the thumbnail (E17).
+  - Medium — `shared-space-stack-expansion.medium.spec.ts`: `getStackSiblingIdsInSpace` returns
+    only same-stack **direct members** of the given Space (E18). Composition E2E: remove cover →
+    all gone (E14); remove non-cover → all gone (E15); frame kept alive by a linked album stays
+    visible & is not a face-orphan (E16, E19); thumbnail reset when an expanded frame was the
+    thumbnail (E17).
 - **Verification gate:** same shape as S1 (tsc · unit · the two medium specs · `make sql`).
 - **Acceptance:** E14–E19 green; removing one frame of an in-Space stack clears the whole stack,
   except frames still reachable via a linked album.
@@ -351,7 +360,7 @@ produces in production).
 | `server/src/services/shared-space.service.ts` | expand in `addAssets` / `removeAssets` | S1, S2 |
 | `server/src/services/shared-space.service.spec.ts` | unit tests | S1, S2 |
 | `server/test/medium/specs/repositories/shared-space.repository.spec.ts` | query medium tests | S1, S2 |
-| `server/test/medium/specs/services/shared-space-stacks.service.spec.ts` (new) | end-to-end medium tests | S1, S2 |
+| `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` (new) | query + composition E2E medium tests | S1, S2 |
 | `mobile/lib/infrastructure/repositories/timeline.repository.dart` | collapse two aggregated-Space builders | S3 |
 | `mobile/test/infrastructure/repositories/timeline_repository_test.dart` | Drift collapse tests | S3 |
 | `web/src/routes/(user)/spaces/[spaceId]/.../spaces-page.spec.ts` | guard tests | S4 |
