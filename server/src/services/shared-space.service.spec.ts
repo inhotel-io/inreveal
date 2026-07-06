@@ -2716,7 +2716,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
       mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
-      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(space);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
       mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
@@ -2740,7 +2740,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
       mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
-      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(space);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
       mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);

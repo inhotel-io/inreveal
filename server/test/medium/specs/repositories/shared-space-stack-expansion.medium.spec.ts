@@ -274,19 +274,21 @@ describe('SharedSpaceRepository.getStackSiblingIdsInSpace', () => {
 
   it('returns [] for empty input', async () => {
     const { ctx, sut } = setup();
-    const { space } = await ctx.newSharedSpace({ createdById: (await ctx.newUser()).user.id });
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
     const result = await sut.getStackSiblingIdsInSpace(space.id, []);
     expect(result).toEqual([]);
   });
 });
 
+const removeWholeStack = async (sut: SharedSpaceRepository, spaceId: string, seedId: string) => {
+  const siblings = await sut.getStackSiblingIdsInSpace(spaceId, [seedId]);
+  const expanded = [...new Set([seedId, ...siblings])];
+  await sut.removeAssets(spaceId, expanded);
+  return expanded;
+};
+
 describe('stack-in-space removal composition (E14/E15/E16)', () => {
-  const removeWholeStack = async (sut: SharedSpaceRepository, spaceId: string, seedId: string) => {
-    const siblings = await sut.getStackSiblingIdsInSpace(spaceId, [seedId]);
-    const expanded = [...new Set([seedId, ...siblings])];
-    await sut.removeAssets(spaceId, expanded);
-    return expanded;
-  };
 
   it('removing the cover removes the whole stack (E14)', async () => {
     const { ctx, sut } = setup();
