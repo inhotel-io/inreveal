@@ -902,6 +902,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1021,6 +1022,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1162,6 +1164,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       )
@@ -1642,6 +1645,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1787,6 +1791,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
@@ -1902,6 +1907,7 @@ export class FaceIdentityRepository {
             OR ${spaceAlbumAssetExistsSql({
               assetIdColumn: sql`asset.id`,
               spaceScopeJoin: sql`INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"`,
+              requireShowInTimeline: true,
             })}
           )
       ),
