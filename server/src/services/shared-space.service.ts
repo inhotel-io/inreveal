@@ -571,8 +571,12 @@ export class SharedSpaceService extends BaseService {
   async addAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetAddDto): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     await this.requireAccess({ auth, permission: Permission.AssetRead, ids: dto.assetIds });
+
+    const siblingIds = await this.sharedSpaceRepository.getOwnedStackSiblingIds(auth.user.id, dto.assetIds);
+    const expandedAssetIds = [...new Set([...dto.assetIds, ...siblingIds])];
+
     const inserted = await this.sharedSpaceRepository.addAssets(
-      dto.assetIds.map((assetId) => ({ spaceId, assetId, addedById: auth.user.id })),
+      expandedAssetIds.map((assetId) => ({ spaceId, assetId, addedById: auth.user.id })),
     );
 
     await this.sharedSpaceRepository.update(spaceId, { lastActivityAt: new Date() });
@@ -587,7 +591,7 @@ export class SharedSpaceService extends BaseService {
     const space = await this.sharedSpaceRepository.getById(spaceId);
     if (space?.faceRecognitionEnabled) {
       await this.jobRepository.queueAll(
-        dto.assetIds.map((assetId) => ({
+        expandedAssetIds.map((assetId) => ({
           name: JobName.SharedSpaceFaceMatch as const,
           data: { spaceId, assetId },
         })),
