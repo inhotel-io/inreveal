@@ -619,18 +619,28 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
       ]),
       ...(timelineSpaceIds
         ? [
-            eb.exists(
-              eb
-                .selectFrom('shared_space_asset')
-                .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                .where('shared_space_asset.spaceId', '=', anyUuid(timelineSpaceIds)),
-            ),
-            eb.exists(
-              eb
-                .selectFrom('shared_space_library')
-                .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                .where('shared_space_library.spaceId', '=', anyUuid(timelineSpaceIds)),
-            ),
+            // Space-linked assets via direct asset membership: gate on Archive + Timeline
+            // (matches the album view's withDefaultVisibility; Hidden/Locked must not
+            // surface for viewers who are not the asset owner).
+            eb.and([
+              spaceVisibilityGate(eb),
+              eb.exists(
+                eb
+                  .selectFrom('shared_space_asset')
+                  .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                  .where('shared_space_asset.spaceId', '=', anyUuid(timelineSpaceIds)),
+              ),
+            ]),
+            // Space-linked assets via library membership: same Archive + Timeline gate.
+            eb.and([
+              spaceVisibilityGate(eb),
+              eb.exists(
+                eb
+                  .selectFrom('shared_space_library')
+                  .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                  .where('shared_space_library.spaceId', '=', anyUuid(timelineSpaceIds)),
+              ),
+            ]),
           ]
         : []),
     ]),

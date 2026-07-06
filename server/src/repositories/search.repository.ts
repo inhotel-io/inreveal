@@ -1222,19 +1222,34 @@ export class SearchRepository {
                   .where('album_asset.albumId', '=', asUuid(options!.albumId!)),
               ),
               eb.or([
+                // Caller's own assets follow the resolved visibility applied upstream; no gate.
                 eb('asset.ownerId', '=', anyUuid(userIds)),
-                eb.exists(
-                  eb
-                    .selectFrom('album_user')
-                    .whereRef('album_user.userId', '=', 'asset.ownerId')
-                    .where('album_user.albumId', '=', asUuid(options!.albumId!)),
-                ),
+                // Other album participants' assets: Archive + Timeline only (mirrors the
+                // album view's withDefaultVisibility — Hidden/Locked never surface for
+                // other members, matching the sibling spaceId/timelineSpaceIds branches).
+                eb.and([
+                  spaceVisibilityGate(eb),
+                  eb.exists(
+                    eb
+                      .selectFrom('album_user')
+                      .whereRef('album_user.userId', '=', 'asset.ownerId')
+                      .where('album_user.albumId', '=', asUuid(options!.albumId!)),
+                  ),
+                ]),
+                // Space-linked assets via timeline opt-in: also gate on Archive + Timeline.
                 ...(options?.timelineSpaceIds?.length
-                  ? spaceAssetPathBranches(eb, {
-                      correlateAssetId: 'asset.id',
-                      correlateLibraryId: 'asset.libraryId',
-                      scope: { spaceIds: options.timelineSpaceIds },
-                    })
+                  ? [
+                      eb.and([
+                        spaceVisibilityGate(eb),
+                        eb.or(
+                          spaceAssetPathBranches(eb, {
+                            correlateAssetId: 'asset.id',
+                            correlateLibraryId: 'asset.libraryId',
+                            scope: { spaceIds: options.timelineSpaceIds },
+                          }),
+                        ),
+                      ]),
+                    ]
                   : []),
               ]),
             ]),
