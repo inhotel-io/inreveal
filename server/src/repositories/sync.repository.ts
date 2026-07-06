@@ -1249,12 +1249,17 @@ export class LibraryAssetSync extends BaseSync {
   // Per-library backfill of asset rows for a specific library. Triggered by the
   // `syncLibraryAssetsV1` service loop when the client has not yet backfilled a
   // newly-accessible library.
-  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
-  getBackfill(options: SyncBackfillOptions, libraryId: string) {
+  //
+  // M3 visibility gate: the user always sees ALL visibilities of their own
+  // assets. For OTHER members' assets (reached via the space-link branch of
+  // accessibleLibraries), only Archive and Timeline are streamed.
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, libraryId: string, userId: string) {
     return this.backfillQuery('asset', options)
       .select(columns.syncAsset)
       .select('asset.updateId')
       .where('asset.libraryId', '=', libraryId)
+      .where((eb) => eb.or([eb('asset.ownerId', '=', userId), spaceVisibilityGate(eb)]))
       .stream();
   }
 
@@ -1264,6 +1269,8 @@ export class LibraryAssetSync extends BaseSync {
   // because there's no stable library<->asset join-row updateId to gate on.
   // Both initial syncs and subsequent metadata changes flow through this stream
   // as `LibraryAssetCreateV1` events; the client upserts idempotently.
+  //
+  // M3 visibility gate: see getBackfill above.
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
     return this.upsertQuery('asset', options)
@@ -1271,6 +1278,7 @@ export class LibraryAssetSync extends BaseSync {
       .select('asset.updateId')
       .where('asset.libraryId', 'is not', null)
       .where('asset.libraryId', 'in', (eb) => accessibleLibraries(eb, options.userId))
+      .where((eb) => eb.or([eb('asset.ownerId', '=', options.userId), spaceVisibilityGate(eb)]))
       .stream();
   }
 
@@ -1303,29 +1311,38 @@ export class LibraryAssetSync extends BaseSync {
 // the album-user boundary. No cleanupAuditTable — there is no dedicated
 // exif audit table (consistent with AlbumAssetExifSync).
 export class LibraryAssetExifSync extends BaseSync {
-  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
-  getBackfill(options: SyncBackfillOptions, libraryId: string) {
+  // M3 visibility gate: the user always sees ALL visibilities of their own
+  // assets. For OTHER members' assets (reached via the space-link branch of
+  // accessibleLibraries), only Archive and Timeline are streamed.
+  // backfillQuery('asset', ...) places `asset` as the base table, so the gate
+  // can reference asset.ownerId and asset.visibility directly.
+  @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
+  getBackfill(options: SyncBackfillOptions, libraryId: string, userId: string) {
     return this.backfillQuery('asset', options)
       .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
       .select(columns.syncAssetExif)
       .select('asset.updateId')
       .where('asset.libraryId', '=', libraryId)
+      .where((eb) => eb.or([eb('asset.ownerId', '=', userId), spaceVisibilityGate(eb)]))
       .stream();
   }
 
   // Single upsert stream — same rationale as LibraryAssetSync.getUpserts.
+  //
+  // M3 visibility gate: upsertQuery('asset_exif', ...) places asset_exif as
+  // the base table; we innerJoin asset so asset.ownerId and asset.visibility
+  // are reachable for the M3 gate. The libraryId scope is expressed as a
+  // direct WHERE on asset.libraryId (available after the join) rather than
+  // a subquery, matching the style used by SharedSpaceAssetExifSync.
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
     return this.upsertQuery('asset_exif', options)
+      .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
       .select(columns.syncAssetExif)
       .select('asset_exif.updateId')
-      .where('assetId', 'in', (eb) =>
-        eb
-          .selectFrom('asset')
-          .select('asset.id')
-          .where('asset.libraryId', 'is not', null)
-          .where('asset.libraryId', 'in', (eb2) => accessibleLibraries(eb2, options.userId)),
-      )
+      .where('asset.libraryId', 'is not', null)
+      .where('asset.libraryId', 'in', (eb) => accessibleLibraries(eb, options.userId))
+      .where((eb) => eb.or([eb('asset.ownerId', '=', options.userId), spaceVisibilityGate(eb)]))
       .stream();
   }
 }
