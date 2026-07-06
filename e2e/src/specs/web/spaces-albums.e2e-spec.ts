@@ -450,9 +450,10 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
     await expect(page.getByTestId('link-album-button')).toBeVisible();
     await page.getByTestId('link-album-button').click();
 
-    // SpaceLinkAlbumModal renders a FormModal; confirm it opened via the album-picker testid
-    // (always rendered once loading completes) or the modal heading text.
-    await expect(page.getByTestId('album-picker')).toBeVisible();
+    // SpaceLinkAlbumModal renders a FormModal (role="dialog"). The album-picker only renders
+    // once the async album load finishes AND there is a linkable album, so assert the dialog
+    // itself opened — that is what this test verifies.
+    await expect(page.getByRole('dialog')).toBeVisible();
   });
 
   // 7. Viewer gating: write controls absent; read controls present.
