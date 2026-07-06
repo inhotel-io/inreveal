@@ -16,7 +16,6 @@ class SharedSpaceLinkedAlbumDto {
     required this.addedById,
     required this.albumName,
     required this.albumThumbnailAssetId,
-    this.albumUsers = const [],
     required this.assetCount,
     this.contributorCounts = const Optional.present(const []),
     required this.createdAt,
@@ -42,9 +41,6 @@ class SharedSpaceLinkedAlbumDto {
 
   /// Thumbnail asset ID
   String? albumThumbnailAssetId;
-
-  /// First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically.
-  List<AlbumUserResponseDto> albumUsers;
 
   /// Number of assets
   ///
@@ -121,7 +117,6 @@ class SharedSpaceLinkedAlbumDto {
     other.addedById == addedById &&
     other.albumName == albumName &&
     other.albumThumbnailAssetId == albumThumbnailAssetId &&
-    _deepEquality.equals(other.albumUsers, albumUsers) &&
     other.assetCount == assetCount &&
     _deepEquality.equals(other.contributorCounts, contributorCounts) &&
     other.createdAt == createdAt &&
@@ -144,7 +139,6 @@ class SharedSpaceLinkedAlbumDto {
     (addedById == null ? 0 : addedById!.hashCode) +
     (albumName.hashCode) +
     (albumThumbnailAssetId == null ? 0 : albumThumbnailAssetId!.hashCode) +
-    (albumUsers.hashCode) +
     (assetCount.hashCode) +
     (contributorCounts.hashCode) +
     (createdAt.hashCode) +
@@ -162,7 +156,7 @@ class SharedSpaceLinkedAlbumDto {
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, albumUsers=$albumUsers, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, shared=$shared, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
+  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, shared=$shared, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -177,7 +171,6 @@ class SharedSpaceLinkedAlbumDto {
     } else {
     //  json[r'albumThumbnailAssetId'] = null;
     }
-      json[r'albumUsers'] = this.albumUsers;
       json[r'assetCount'] = this.assetCount;
     if (this.contributorCounts.isPresent) {
       final value = this.contributorCounts.value;
@@ -223,7 +216,6 @@ class SharedSpaceLinkedAlbumDto {
         addedById: mapValueOfType<String>(json, r'addedById'),
         albumName: mapValueOfType<String>(json, r'albumName')!,
         albumThumbnailAssetId: mapValueOfType<String>(json, r'albumThumbnailAssetId'),
-        albumUsers: AlbumUserResponseDto.listFromJson(json[r'albumUsers']),
         assetCount: mapValueOfType<int>(json, r'assetCount')!,
         contributorCounts: json.containsKey(r'contributorCounts') ? Optional.present(ContributorCountResponseDto.listFromJson(json[r'contributorCounts'])) : const Optional.absent(),
         createdAt: mapDateTime(json, r'createdAt', r'')!,
@@ -289,7 +281,6 @@ class SharedSpaceLinkedAlbumDto {
     'addedById',
     'albumName',
     'albumThumbnailAssetId',
-    'albumUsers',
     'assetCount',
     'createdAt',
     'description',
