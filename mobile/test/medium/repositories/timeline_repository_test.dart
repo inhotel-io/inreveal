@@ -226,6 +226,10 @@ void main() {
       final buckets = await sut.sharedSpace(space.id, GroupAssetsBy.day).bucketSource().first;
       expect(buckets, hasLength(1));
       expect((buckets.single as TimeBucket).assetCount, 1);
+
+      // the flat (none) count builder also collapses (sum of segment counts == 1)
+      final noneBuckets = await sut.sharedSpace(space.id, GroupAssetsBy.none).bucketSource().first;
+      expect(noneBuckets.fold<int>(0, (sum, b) => sum + b.assetCount), 1);
     });
 
     test('does NOT collapse the space-album detail timeline (E21)', () async {
@@ -243,6 +247,10 @@ void main() {
 
       final assets = await sut.spaceAlbum(space.id, album.id, GroupAssetsBy.none).assetSource(0, 100);
       expect(assets.map((a) => (a as RemoteAsset).id).toSet(), {primary.id, child1.id, child2.id});
+
+      // the album count builder likewise stays uncollapsed (all 3 counted)
+      final albumBuckets = await sut.spaceAlbum(space.id, album.id, GroupAssetsBy.none).bucketSource().first;
+      expect(albumBuckets.fold<int>(0, (sum, b) => sum + b.assetCount), 3);
     });
 
     test('legacy partial stack (only non-primary frames are members) yields zero (E22)', () async {
