@@ -1785,6 +1785,10 @@ where
   and "asset"."updateId" <= $2
   and "asset"."updateId" > $3
   and "asset"."libraryId" = $4
+  and (
+    "asset"."ownerId" = $5
+    or "asset"."visibility" in ($6, $7)
+  )
 order by
   "asset"."updateId" asc
 
@@ -1846,6 +1850,10 @@ where
         where
           "shared_space_member"."userId" = $5
       )
+  )
+  and (
+    "asset"."ownerId" = $6
+    or "asset"."visibility" in ($7, $8)
   )
 order by
   "asset"."updateId" asc
@@ -1928,6 +1936,10 @@ where
   and "asset"."updateId" <= $2
   and "asset"."updateId" > $3
   and "asset"."libraryId" = $4
+  and (
+    "asset"."ownerId" = $5
+    or "asset"."visibility" in ($6, $7)
+  )
 order by
   "asset"."updateId" asc
 
@@ -1961,46 +1973,44 @@ select
   "asset_exif"."updateId"
 from
   "asset_exif" as "asset_exif"
+  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
   "asset_exif"."updateId" < $1
   and "asset_exif"."updateId" > $2
-  and "assetId" in (
+  and "asset"."libraryId" is not null
+  and "asset"."libraryId" in (
     select
-      "asset"."id"
+      "library"."id"
     from
-      "asset"
+      "library"
     where
-      "asset"."libraryId" is not null
-      and "asset"."libraryId" in (
+      "library"."ownerId" = $3
+      and "library"."deletedAt" is null
+    union
+    select
+      "shared_space_library"."libraryId" as "id"
+    from
+      "shared_space_library"
+    where
+      "shared_space_library"."spaceId" in (
         select
-          "library"."id"
+          "shared_space"."id"
         from
-          "library"
+          "shared_space"
         where
-          "library"."ownerId" = $3
-          and "library"."deletedAt" is null
+          "shared_space"."createdById" = $4
         union
         select
-          "shared_space_library"."libraryId" as "id"
+          "shared_space_member"."spaceId" as "id"
         from
-          "shared_space_library"
+          "shared_space_member"
         where
-          "shared_space_library"."spaceId" in (
-            select
-              "shared_space"."id"
-            from
-              "shared_space"
-            where
-              "shared_space"."createdById" = $4
-            union
-            select
-              "shared_space_member"."spaceId" as "id"
-            from
-              "shared_space_member"
-            where
-              "shared_space_member"."userId" = $5
-          )
+          "shared_space_member"."userId" = $5
       )
+  )
+  and (
+    "asset"."ownerId" = $6
+    or "asset"."visibility" in ($7, $8)
   )
 order by
   "asset_exif"."updateId" asc

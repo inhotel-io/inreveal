@@ -2775,6 +2775,8 @@ export type SharedSpaceLinkedAlbumDto = {
     /** Link creation timestamp */
     linkedAt: string;
     order?: AssetOrder;
+    /** User ID of the album owner (non-PII UUID, for group-by-owner) */
+    ownerId: string;
     /** Is shared album */
     shared: boolean;
     /** Include this album in the space timeline */

@@ -228,12 +228,23 @@ select
   "album".*,
   "shared_space_album"."addedById",
   "shared_space_album"."showInTimeline",
-  "shared_space_album"."createdAt" as "linkedAt"
+  "shared_space_album"."createdAt" as "linkedAt",
+  (
+    select
+      "album_user"."userId"
+    from
+      "album_user"
+    where
+      "album_user"."albumId" = "album"."id"
+      and "album_user"."role" = $1
+    limit
+      $2
+  ) as "ownerId"
 from
   "shared_space_album"
   inner join "album" on "album"."id" = "shared_space_album"."albumId"
 where
-  "shared_space_album"."spaceId" = $1
+  "shared_space_album"."spaceId" = $3
   and "album"."deletedAt" is null
 order by
   "album"."createdAt" desc,

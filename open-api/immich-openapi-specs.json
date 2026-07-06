@@ -29922,6 +29922,10 @@
           "order": {
             "$ref": "#/components/schemas/AssetOrder"
           },
+          "ownerId": {
+            "description": "User ID of the album owner (non-PII UUID, for group-by-owner)",
+            "type": "string"
+          },
           "shared": {
             "description": "Is shared album",
             "type": "boolean"
@@ -29952,6 +29956,7 @@
           "id",
           "isActivityEnabled",
           "linkedAt",
+          "ownerId",
           "shared",
           "showInTimeline",
           "updatedAt"
