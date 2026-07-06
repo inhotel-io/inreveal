@@ -99,8 +99,20 @@ export class AlbumService extends BaseService {
     const hasSharedLink = album.sharedLinks && album.sharedLinks.length > 0;
     const isShared = hasSharedUsers || hasSharedLink;
 
+    const mapped = mapAlbum(album);
+
+    // Fix: if the caller is not an album participant (owner or album_user), redact emails.
+    // A space Viewer gets AlbumRead via checkSpaceLinkedAlbumReadAccess (no role filter)
+    // but should not see PII (email) of album participants.
+    const isParticipant = album.albumUsers ? album.albumUsers.some(({ user }) => user.id === auth.user.id) : false;
+    if (!isParticipant) {
+      for (const albumUser of mapped.albumUsers) {
+        albumUser.user.email = '';
+      }
+    }
+
     return {
-      ...mapAlbum(album),
+      ...mapped,
       startDate: asDateTimeString(albumMetadataForIds?.startDate ?? undefined),
       endDate: asDateTimeString(albumMetadataForIds?.endDate ?? undefined),
       assetCount: albumMetadataForIds?.assetCount ?? 0,
