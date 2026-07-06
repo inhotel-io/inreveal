@@ -14,8 +14,8 @@
  */
 
 import { AssetVisibility, LoginResponseDto, updateAssets } from '@immich/sdk';
-import { asBearerAuth, createUserDto } from 'src/fixtures';
-import { app, utils } from 'src/utils';
+import { createUserDto } from 'src/fixtures';
+import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
