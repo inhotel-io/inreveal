@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
+import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
@@ -20,7 +21,6 @@ import {
   SpacePeopleQueryDto,
   SpaceRepresentativeFaceUpdateDto,
 } from 'src/dtos/shared-space-person.dto';
-import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
 import {
   SharedSpaceActivityResponseDto,
   SharedSpaceAlbumLinkUpdateDto,
@@ -39,7 +39,6 @@ import {
   SharedSpaceResponseDto,
   SharedSpaceUpdateDto,
 } from 'src/dtos/shared-space.dto';
-import { AlbumAssetCount } from 'src/repositories/album.repository';
 import {
   AssetType,
   AssetVisibility,
@@ -54,6 +53,7 @@ import {
   SharedSpaceRole,
   UserAvatarColor,
 } from 'src/enum';
+import { AlbumAssetCount } from 'src/repositories/album.repository';
 import type { ArgOf } from 'src/repositories/event.repository';
 import type { SpaceFaceAssignment } from 'src/repositories/shared-space.repository';
 import {

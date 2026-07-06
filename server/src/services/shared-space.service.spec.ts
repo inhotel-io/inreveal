@@ -8043,9 +8043,19 @@ describe(SharedSpaceService.name, () => {
   describe('getLinkedAlbums', () => {
     it('returns AlbumResponseDto-shaped data + space fields, with album createdAt distinct from linkedAt', async () => {
       const row = makeRichRow();
-      const { auth, space } = arrange(mocks, [row], [
-        { albumId: row.id, assetCount: 7, startDate: new Date('2024-06-01'), endDate: new Date('2024-06-30'), lastModifiedAssetTimestamp: new Date('2024-06-30') },
-      ]);
+      const { auth, space } = arrange(
+        mocks,
+        [row],
+        [
+          {
+            albumId: row.id,
+            assetCount: 7,
+            startDate: new Date('2024-06-01'),
+            endDate: new Date('2024-06-30'),
+            lastModifiedAssetTimestamp: new Date('2024-06-30'),
+          },
+        ],
+      );
 
       const result = await sut.getLinkedAlbums(auth, space.id);
 
@@ -8066,7 +8076,17 @@ describe(SharedSpaceService.name, () => {
 
     it('bulk-fetches metadata once and never calls the per-album N+1 count', async () => {
       const rows = [makeRichRow(), makeRichRow()];
-      const { auth, space } = arrange(mocks, rows, rows.map((r) => ({ albumId: r.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null })));
+      const { auth, space } = arrange(
+        mocks,
+        rows,
+        rows.map((r) => ({
+          albumId: r.id,
+          assetCount: 1,
+          startDate: null,
+          endDate: null,
+          lastModifiedAssetTimestamp: null,
+        })),
+      );
 
       await sut.getLinkedAlbums(auth, space.id);
 
@@ -8098,7 +8118,11 @@ describe(SharedSpaceService.name, () => {
           { role: AlbumUserRole.Editor, user: factory.user({ name: 'Editor' }) },
         ],
       });
-      const { auth, space } = arrange(mocks, [row], [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const { auth, space } = arrange(
+        mocks,
+        [row],
+        [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }],
+      );
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].shared).toBe(true);
       expect(result[0].albumUsers).toHaveLength(2);
@@ -8106,7 +8130,11 @@ describe(SharedSpaceService.name, () => {
 
     it('preserves null addedById, null thumbnail, and showInTimeline=false', async () => {
       const row = makeRichRow({ addedById: null, albumThumbnailAssetId: null, showInTimeline: false });
-      const { auth, space } = arrange(mocks, [row], [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+      const { auth, space } = arrange(
+        mocks,
+        [row],
+        [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }],
+      );
       const result = await sut.getLinkedAlbums(auth, space.id);
       expect(result[0].addedById).toBeNull();
       expect(result[0].albumThumbnailAssetId).toBeNull();

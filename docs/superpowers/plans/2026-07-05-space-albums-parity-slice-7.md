@@ -9,15 +9,18 @@
 **Note on verification:** e2e requires the running e2e stack (`make e2e` / port 2285), which is not available in the unit dev loop. Write the specs faithfully against the real testids + existing patterns; they are verified on CI and fixed via `/babysit` if any timing/selector mismatch surfaces. Do NOT invent testids — read them from the fork components.
 
 ## Global Constraints
+
 - Spec §8 Slice 7. Fork-only e2e file. Follow the existing spec's setup helpers (`utils.createSpace`, `addSpaceMember`, `createAlbum`, `linkSpaceAlbum`, `setAuthCookies`) and its role fixtures.
 - Base: `4a84415f59`.
 
 ## Fork testids (read the components to confirm exact strings)
+
 - Controls: `space-albums-search`, `space-albums-sort-btn`/`-sort-menu`/`-sort-option-{AlbumSortBy}`, `space-albums-group-btn`/`-group-menu`/`-group-option-{SpaceAlbumGroupBy}`, `space-albums-view-toggle`, `create-album-button`, `link-album-button`.
 - List/cards: `space-album-card`, `space-album-card-link` (`/spaces/{id}/albums/{albumId}`), `space-album-group-{groupId}` (cover group header), `space-album-row-{albumId}` (list mode), `space-albums-no-results`.
 - Empty state: `empty-state-message`, `empty-link-album-button`.
 
 ## File Structure
+
 - Modify `e2e/src/specs/web/spaces-albums.e2e-spec.ts` (add a `describe` block of journeys). Seed several linked albums (varying names/asset counts) if the existing fixture only links one — add albums via `utils.createAlbum` + `utils.linkSpaceAlbum` in a `beforeAll`/`beforeEach` for the new block.
 
 ---
@@ -40,13 +43,16 @@
 - [ ] **Step 3: Local sanity** (if the e2e stack is up): `cd e2e && pnpm test:web -- spaces-albums`. If the stack is NOT up, do NOT block — commit and rely on CI + `/babysit`. State clearly in the report whether they were run or only authored.
 
 - [ ] **Step 4: Commit.**
+
 ```bash
 git add e2e/src/specs/web/spaces-albums.e2e-spec.ts
 git commit -m "test(spaces): e2e journeys for space albums (search/sort/group/view/create/link/viewer)"
 ```
 
 ## Slice 7 exit gate
+
 - The journeys are authored against real testids and follow the existing spec's setup. Verified on CI (babysit).
 
 ## Self-review (author)
+
 - Journeys cover search, sort, group+collapse, view toggle, create→space-route, link modal, viewer gating (spec §8 Slice 7) ✓; no invented testids (read from components) ✓.

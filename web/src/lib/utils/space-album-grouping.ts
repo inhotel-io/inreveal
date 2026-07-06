@@ -2,7 +2,11 @@ import type { AlbumResponseDto, SharedSpaceLinkedAlbumDto } from '@immich/sdk';
 import { groupBy } from 'lodash-es';
 import { get } from 'svelte/store';
 import { AlbumSortBy, SortOrder } from '$lib/stores/preferences.store';
-import { SpaceAlbumGroupBy, spaceAlbumViewSettings, type SpaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import {
+  SpaceAlbumGroupBy,
+  spaceAlbumViewSettings,
+  type SpaceAlbumViewSettings,
+} from '$lib/stores/space-album-view-settings.store';
 import { sortAlbums, stringToSortOrder } from '$lib/utils/album-utils';
 
 /**
@@ -201,7 +205,8 @@ export const buildSpaceAlbumGroups = (
 
       groups = sortedByLinker.map(([key, keyAlbums]) => ({
         id: key === UNASSIGNED_KEY ? ctx.unassigned : key,
-        name: key === UNASSIGNED_KEY ? ctx.unassigned : (ctx.members.find((m) => m.userId === key)?.name ?? ctx.unassigned),
+        name:
+          key === UNASSIGNED_KEY ? ctx.unassigned : (ctx.members.find((m) => m.userId === key)?.name ?? ctx.unassigned),
         albums: keyAlbums,
       }));
       break;

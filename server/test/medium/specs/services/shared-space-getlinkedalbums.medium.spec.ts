@@ -1,7 +1,7 @@
 import { Kysely } from 'kysely';
-import { AlbumRepository } from 'src/repositories/album.repository';
-import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AccessRepository } from 'src/repositories/access.repository';
+import { AlbumUserRepository } from 'src/repositories/album-user.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
