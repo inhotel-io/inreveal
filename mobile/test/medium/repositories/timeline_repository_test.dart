@@ -269,5 +269,25 @@ void main() {
       // (consistent with server/web timeline; documented limitation).
       expect(assets, isEmpty);
     });
+
+    test('shows a stack flat (not vanished) when its stack row is not synced locally', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      // A viewer sees another member's stacked frames with stack_id set, but no
+      // stack_entity row (stack_entity only syncs for own/partner stacks). The
+      // collapse must degrade to a flat view, never hide the frames.
+      final frame1 = await ctx.newRemoteAsset(ownerId: user.id, stackId: 'unsynced-stack', createdAt: createdAt);
+      final frame2 = await ctx.newRemoteAsset(ownerId: user.id, stackId: 'unsynced-stack', createdAt: createdAt);
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: frame1.id);
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: frame2.id);
+      // Deliberately NO insertStack(...) — the stack_entity row is absent.
+
+      final assets = await sut.sharedSpace(space.id, GroupAssetsBy.none).assetSource(0, 100);
+      expect(assets.map((a) => (a as RemoteAsset).id).toSet(), {frame1.id, frame2.id});
+
+      // count builder agrees: both frames counted, none dropped
+      final buckets = await sut.sharedSpace(space.id, GroupAssetsBy.none).bucketSource().first;
+      expect(buckets.fold<int>(0, (sum, b) => sum + b.assetCount), 2);
+    });
   });
 }

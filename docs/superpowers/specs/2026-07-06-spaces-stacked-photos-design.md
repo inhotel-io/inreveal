@@ -224,9 +224,18 @@ With every frame a direct member:
 - **Legacy partial stacks.** Stacks added to Spaces _before_ this change keep only their cover
   as a member until re-added. No backfill migration ships.
 - **Album-linked partial stacks** are not completed (see Non-goals).
+- **Mobile collapse is best-effort for non-owned stacks.** The mobile stack-collapse reads the
+  local `stack_entity` table, which only syncs for the viewer's own and partners' stacks — there
+  is no shared-space stack sync. So when a viewer opens a Space containing **another member's**
+  stack, the client can't know which frame is the cover and shows the stack's frames **flat**
+  (all of them) rather than collapsed. This is strictly better than pre-feature behavior (the
+  frames are all present via S1's membership fix) and never hides them; full mobile collapse for
+  non-owned stacks would require a new shared-space stack sync stream (out of scope). Owned
+  stacks collapse normally. The collapse predicate therefore keeps any asset whose `stack_entity`
+  row is absent locally.
 
-Both limitations follow directly from the locked decisions (add/remove-only sync depth; no
-backfill).
+These limitations follow from the locked decisions (add/remove-only sync depth; no backfill) and
+the mobile owner-scoped sync model.
 
 ## Edge-case coverage matrix
 

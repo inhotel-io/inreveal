@@ -469,6 +469,15 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
     //
     // An asset matching both branches is counted once because we COUNT
     // DISTINCT remote_asset.id.
+    //
+    // Stack collapse: we LEFT JOIN stack_entity and keep an asset when it has
+    // no stack, when it IS the stack's primary (cover), OR when the stack row
+    // is not present locally (stack_entity.id IS NULL). That last arm matters
+    // for shared spaces: stack_entity only syncs for the viewer's own and
+    // partners' stacks (there is no shared-space stack sync), yet a non-owned
+    // space asset still carries its stack_id. Without the `IS NULL` fallback
+    // such a stack would collapse against a missing primary and vanish
+    // entirely; instead we show its frames flat (as before collapse existed).
 
     if (groupBy == GroupAssetsBy.none) {
       final countExp = _db.remoteAssetEntity.id.count(distinct: true);
@@ -513,6 +522,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
                   _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
                   _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()) &
               (_db.remoteAssetEntity.stackId.isNull() |
+                  _db.stackEntity.id.isNull() |
                   _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
         );
       return countQuery
@@ -566,6 +576,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
                 _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
                 _db.sharedSpaceAlbumLinkEntity.albumId.isNotNull()) &
             (_db.remoteAssetEntity.stackId.isNull() |
+                _db.stackEntity.id.isNull() |
                 _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
       )
       ..groupBy([dateExp])
@@ -631,6 +642,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
                 _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
                 membership &
                 (_db.remoteAssetEntity.stackId.isNull() |
+                    _db.stackEntity.id.isNull() |
                     _db.remoteAssetEntity.id.equalsExp(_db.stackEntity.primaryAssetId)),
           )
           ..orderBy([OrderingTerm.desc(_db.remoteAssetEntity.createdAt)])
