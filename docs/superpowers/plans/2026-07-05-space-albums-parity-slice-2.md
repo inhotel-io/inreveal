@@ -33,10 +33,12 @@
 ## Task 1: space-scoped view-settings store
 
 **Files:**
+
 - Create: `web/src/lib/stores/space-album-view-settings.store.ts`
 - Test: `web/src/lib/stores/space-album-view-settings.store.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `persisted` from `svelte-persisted-store`; `AlbumViewMode`, `AlbumSortBy`, `SortOrder` from `$lib/stores/preferences.store`.
 - Produces: `spaceAlbumViewSettings` (a `persisted<SpaceAlbumViewSettings>`), `SpaceAlbumViewSettings` interface, `SpaceAlbumGroupBy` enum. Later slices consume `sortBy`/`sortOrder` (Slice 3) and `groupBy`/`groupOrder`/`collapsedGroups` + mutators (Slice 4).
 
@@ -108,6 +110,7 @@ export const spaceAlbumViewSettings = persisted<SpaceAlbumViewSettings>('space-a
 - [ ] **Step 4: Run — expect GREEN + tsc.** `cd web && pnpm test -- --run src/lib/stores/space-album-view-settings.store.spec.ts && pnpm check:typescript` → PASS / exit 0.
 
 - [ ] **Step 5: Commit.**
+
 ```bash
 git add web/src/lib/stores/space-album-view-settings.store.ts web/src/lib/stores/space-album-view-settings.store.spec.ts
 git commit -m "feat(spaces): space-scoped album view-settings store"
@@ -118,10 +121,12 @@ git commit -m "feat(spaces): space-scoped album view-settings store"
 ## Task 2: SpaceAlbumCard reuses AlbumCover
 
 **Files:**
+
 - Modify: `web/src/lib/components/spaces/space-album-card.svelte` (thumbnail block ~lines 20-22, 56-64)
 - Test: `web/src/lib/components/spaces/space-album-card.spec.ts` (update)
 
 **Interfaces:**
+
 - Consumes: `AlbumCover` from `$lib/components/album-page/AlbumCover.svelte`.
 - Produces: unchanged card props/behavior; thumbnail now rendered by `AlbumCover` (includes its `NoCover` fallback).
 
@@ -137,19 +142,23 @@ it('renders the album cover image when a thumbnail exists', () => {
   expect(screen.getByAltText('Trip')).toBeInTheDocument();
 });
 ```
+
 (Confirm the existing `baseAlbum`/inline album literal name; reuse it.)
 
 - [ ] **Step 2: Run — expect RED** (before the swap the raw `<img>` uses `alt={album.albumName}` too, so this specific assertion may already pass; if so, the RED is instead the visual regression — proceed and rely on Step 4 green + the isolation of the change). `cd web && pnpm test -- --run src/lib/components/spaces/space-album-card.spec.ts`.
 
 - [ ] **Step 3: Swap in AlbumCover.** Read the file; replace the thumbnail `{#if thumbnailUrl}...{:else}...{/if}` inner block (inside the `relative aspect-square ... {opacity-60}` wrapper `<div>`) with:
+
 ```svelte
 <AlbumCover album={album as unknown as AlbumResponseDto} class="size-full object-cover" />
 ```
+
 Add `import AlbumCover from '$lib/components/album-page/AlbumCover.svelte';` and `import type { AlbumResponseDto } from '@immich/sdk';`. Remove the now-unused `thumbnailUrl` derived, `getAssetMediaUrl` import, and `mdiImageAlbum` import (only if unused elsewhere in the file). KEEP the wrapper `<div>` with `{album.showInTimeline ? '' : 'opacity-60'}` and the `data-testid`s.
 
 - [ ] **Step 4: Run — expect GREEN + tsc + lint.** `cd web && pnpm test -- --run src/lib/components/spaces/space-album-card.spec.ts && pnpm check:typescript && npx eslint src/lib/components/spaces/space-album-card.svelte src/lib/components/spaces/space-album-card.spec.ts` → PASS / 0.
 
 - [ ] **Step 5: Commit.**
+
 ```bash
 git add web/src/lib/components/spaces/space-album-card.svelte web/src/lib/components/spaces/space-album-card.spec.ts
 git commit -m "refactor(spaces): SpaceAlbumCard reuses AlbumCover for the thumbnail"
@@ -160,11 +169,13 @@ git commit -m "refactor(spaces): SpaceAlbumCard reuses AlbumCover for the thumbn
 ## Task 3: SpaceAlbumsTable (fork list-mode rows)
 
 **Files:**
+
 - Create: `web/src/lib/components/spaces/space-albums-table.svelte`
 - Test: `web/src/lib/components/spaces/space-albums-table.spec.ts`
 - Modify: `web/src/lib/i18n/en.json` (list column headers if new keys needed — reuse existing `items_count`, album date strings where possible).
 
 **Interfaces:**
+
 - Consumes: `SharedSpaceLinkedAlbumDto[]`, `spaceId`, `canManage`, `onUnlink`, `onToggleTimeline` (same handler shapes as `SpaceAlbumCard`).
 - Produces: a table listing albums; each row links to `/spaces/{spaceId}/albums/{album.id}` and shows the space context menu.
 
@@ -187,11 +198,13 @@ it('shows the manage menu only when canManage', () => {
   expect(screen.getByTestId(`space-album-row-menu-${a1.id}`)).toBeInTheDocument();
 });
 ```
+
 (Use `renderWithTooltips` from `$tests/helpers` if the menu needs tooltip context.)
 
 - [ ] **Step 2: Run — expect RED.** `cd web && pnpm test -- --run src/lib/components/spaces/space-albums-table.spec.ts` → FAIL (missing component).
 
 - [ ] **Step 3: Implement `space-albums-table.svelte`.** Model on `AlbumsTableRow.svelte` but: (a) each row is an `<a href="/spaces/{spaceId}/albums/{album.id}" data-testid="space-album-row-{album.id}">` (not `goto(Route.viewAlbum)`); (b) columns: name (+ `$t('items_count')`), and dates via a null-guarded formatter (`album.updatedAt`, `album.createdAt`, then `album.endDate ?? '-'`, `album.startDate ?? '-'`); (c) a trailing cell with the space context menu (`data-testid="space-album-row-menu-{album.id}"`, timeline toggle + unlink) shown only when `canManage`, reusing the same `$t` keys and `onToggleTimeline`/`onUnlink` calls as `SpaceAlbumCard`. **Do NOT read `album.albumUsers[0]`** and do NOT add an owner or shared-by column (Slice 2 keeps it simple). Props:
+
 ```ts
 interface Props {
   spaceId: string;
@@ -201,11 +214,13 @@ interface Props {
   onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
 }
 ```
+
 Use a plain `<table class="w-full text-start">` / `<thead>` (static labels) / `<tbody>` with flex rows matching upstream row styling classes.
 
 - [ ] **Step 4: Run — expect GREEN + tsc + lint.** As in Task 2, for the table files.
 
 - [ ] **Step 5: Commit.**
+
 ```bash
 git add web/src/lib/components/spaces/space-albums-table.svelte web/src/lib/components/spaces/space-albums-table.spec.ts web/src/lib/i18n/en.json
 git commit -m "feat(spaces): SpaceAlbumsTable list-mode rows (fork, space routing)"
@@ -216,6 +231,7 @@ git commit -m "feat(spaces): SpaceAlbumsTable list-mode rows (fork, space routin
 ## Task 4: SpaceAlbumsControls (view toggle) + SpaceAlbumsList (switch) + wire the page
 
 **Files:**
+
 - Create: `web/src/lib/components/spaces/space-albums-controls.svelte`
 - Create: `web/src/lib/components/spaces/space-albums-list.svelte` + `.spec.ts`
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/albums/+page.svelte`
@@ -223,6 +239,7 @@ git commit -m "feat(spaces): SpaceAlbumsTable list-mode rows (fork, space routin
 - Modify: `web/src/lib/i18n/en.json` (view toggle labels, e.g. reuse existing `cover`/`list` keys if present; else add `spaces_albums_view_cover`/`spaces_albums_view_list`).
 
 **Interfaces:**
+
 - Consumes: `spaceAlbumViewSettings` (Task 1); `SpaceAlbumCard` (Task 2); `SpaceAlbumsTable` (Task 3); `AlbumViewMode` from `$lib/stores/preferences.store`.
 - Produces: `SpaceAlbumsControls` (renders the Cover/List toggle, writes `$spaceAlbumViewSettings.view`); `SpaceAlbumsList` (given `albums`, `spaceId`, `canManage`, handlers, renders cover grid of `SpaceAlbumCard` when `view === Cover`, else `SpaceAlbumsTable`).
 
@@ -235,7 +252,11 @@ import { AlbumViewMode, albumViewSettings } from '$lib/stores/preferences.store'
 import { spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
 
-beforeEach(() => { localStorage.clear(); spaceAlbumViewSettings.reset(); albumViewSettings.reset(); });
+beforeEach(() => {
+  localStorage.clear();
+  spaceAlbumViewSettings.reset();
+  albumViewSettings.reset();
+});
 
 it('renders cover cards by default and switches to the table on view=List', async () => {
   const albums = [makeAlbum({ id: 'a-1' }), makeAlbum({ id: 'a-2' })];
@@ -258,6 +279,7 @@ it('never writes the global albumViewSettings (isolation)', () => {
 - [ ] **Step 3: Implement `space-albums-controls.svelte`.** A toolbar row rendering a Cover/List toggle (use `@immich/ui` `Button`/`IconButton`, icons `mdiViewGridOutline`/`mdiFormatListBulletiSquare` or similar) that flips `$spaceAlbumViewSettings.view` between `AlbumViewMode.Cover` and `AlbumViewMode.List`, `data-testid="space-albums-view-toggle"`. (Search/sort/group/create/link are added in later slices — leave a clear layout container for them.)
 
 - [ ] **Step 4: Implement `space-albums-list.svelte`.**
+
 ```svelte
 <script lang="ts">
   import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
@@ -294,9 +316,10 @@ it('never writes the global albumViewSettings (isolation)', () => {
 - [ ] **Step 7: Update `space-albums-page.spec.ts`.** It currently asserts `getAllByTestId('space-album-card')` (still valid — cover mode default) and empty-state. Add an assertion that `space-albums-view-toggle` renders. Ensure `beforeEach` resets `spaceAlbumViewSettings`. Keep existing tests green.
 
 - [ ] **Step 8: Full web gate for the touched files — GREEN.**
-`cd web && pnpm test -- --run src/lib/components/spaces/space-albums-list.spec.ts "src/routes/(user)/spaces/[spaceId]/albums/space-albums-page.spec.ts" && pnpm check:typescript && npx eslint src/lib/components/spaces/space-albums-controls.svelte src/lib/components/spaces/space-albums-list.svelte "src/routes/(user)/spaces/[spaceId]/albums/+page.svelte"`
+      `cd web && pnpm test -- --run src/lib/components/spaces/space-albums-list.spec.ts "src/routes/(user)/spaces/[spaceId]/albums/space-albums-page.spec.ts" && pnpm check:typescript && npx eslint src/lib/components/spaces/space-albums-controls.svelte src/lib/components/spaces/space-albums-list.svelte "src/routes/(user)/spaces/[spaceId]/albums/+page.svelte"`
 
 - [ ] **Step 9: Commit.**
+
 ```bash
 git add web/src/lib/components/spaces/space-albums-controls.svelte web/src/lib/components/spaces/space-albums-list.svelte web/src/lib/components/spaces/space-albums-list.spec.ts "web/src/routes/(user)/spaces/[spaceId]/albums/" web/src/lib/i18n/en.json
 git commit -m "feat(spaces): render space albums via fork list + cover/list toggle"
@@ -305,10 +328,12 @@ git commit -m "feat(spaces): render space albums via fork list + cover/list togg
 ---
 
 ## Slice 2 exit gate
+
 - `cd web && pnpm test` (full web suite) green; `pnpm check:typescript` exit 0; `pnpm lint` (tolerating the ~580 pre-existing tailwind warnings — no NEW eslint errors on touched files).
 - Manual sanity (optional if dev stack up): the tab shows cards; the toggle switches to the table; global `/albums` view unaffected.
 
 ## Self-review (author)
+
 - Spec Slice 2 tests covered: store defaults/key/reset (T1) ✓, card AlbumCover + dim + menu (T2) ✓, table rows route to space + menu gating (T3) ✓, list cover↔table switch + isolation (T4) ✓, page renders controls+list + empty state (T4) ✓.
 - Crash guards: no `albumUsers[0]`, date `-` fallback ✓. AlbumCover cast ✓.
 - Type consistency: handler signatures `(album: SharedSpaceLinkedAlbumDto) => void` identical across card/table/list/page ✓.

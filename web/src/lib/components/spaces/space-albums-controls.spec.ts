@@ -1,11 +1,11 @@
-import { get } from 'svelte/store';
 import { render, screen, within, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { init, register, waitLocale } from 'svelte-i18n';
-import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
-import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { get } from 'svelte/store';
 import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
 import SpaceAlbumsControlsWrapper from '$lib/components/spaces/space-albums-controls.test-wrapper.svelte';
+import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
+import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 
 // The persisted store's reset() re-uses its initial object by reference, and in-place field
 // writes (groupBy/collapsedGroups) can leak across tests. Set a fresh object each time.

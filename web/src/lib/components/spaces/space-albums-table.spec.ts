@@ -1,10 +1,10 @@
+import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
-import { renderWithTooltips } from '$tests/helpers';
+import SpaceAlbumsTable from '$lib/components/spaces/space-albums-table.svelte';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
-import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
-import SpaceAlbumsTable from '$lib/components/spaces/space-albums-table.svelte';
+import { renderWithTooltips } from '$tests/helpers';
 
 function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
   return {

@@ -1,13 +1,13 @@
-import { get } from 'svelte/store';
+import type { SharedSpaceLinkedAlbumDto, SharedSpaceMemberResponseDto } from '@immich/sdk';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
+import { get } from 'svelte/store';
+import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
+import { authManager } from '$lib/managers/auth-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
-import { authManager } from '$lib/managers/auth-manager.svelte';
 import { userAdminFactory } from '@test-data/factories/user-factory';
-import type { SharedSpaceLinkedAlbumDto, SharedSpaceMemberResponseDto } from '@immich/sdk';
-import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
 vi.mock('$app/stores', () => ({

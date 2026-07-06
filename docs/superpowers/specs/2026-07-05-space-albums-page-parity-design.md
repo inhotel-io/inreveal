@@ -48,13 +48,13 @@ upstream equivalents are coupled (see below).
 
 ### Reused as-is (import only — no upstream edits)
 
-| File | Reused |
-| --- | --- |
-| `web/src/lib/components/album-page/AlbumCover.svelte` | Thumbnail (data-driven off `albumThumbnailAssetId`, has `NoCover` fallback) — used inside `SpaceAlbumCard` and fork table rows |
-| `web/src/lib/utils/album-utils.ts` | `sortAlbums`, `sortOptionsMetadata`, `findSortOptionMetadata`, `groupOptionsMetadata` (option metadata only), `getSelectedAlbumGroupOption`, `isAlbumGroupCollapsed(settings, id)` (reader — takes a settings arg), `stringToSortOrder`, types |
-| `web/src/lib/stores/preferences.store.ts` | Enums `SortOrder`, `AlbumViewMode`, `AlbumSortBy`; interface `AlbumViewSettings` |
-| `server/src/dtos/album.dto.ts` | `AlbumResponseSchema`, `mapAlbum` |
-| `server/src/repositories/album.repository.ts` | `getMetadataForIds` (bulk assetCount + date range) |
+| File                                                  | Reused                                                                                                                                                                                                                                         |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web/src/lib/components/album-page/AlbumCover.svelte` | Thumbnail (data-driven off `albumThumbnailAssetId`, has `NoCover` fallback) — used inside `SpaceAlbumCard` and fork table rows                                                                                                                 |
+| `web/src/lib/utils/album-utils.ts`                    | `sortAlbums`, `sortOptionsMetadata`, `findSortOptionMetadata`, `groupOptionsMetadata` (option metadata only), `getSelectedAlbumGroupOption`, `isAlbumGroupCollapsed(settings, id)` (reader — takes a settings arg), `stringToSortOrder`, types |
+| `web/src/lib/stores/preferences.store.ts`             | Enums `SortOrder`, `AlbumViewMode`, `AlbumSortBy`; interface `AlbumViewSettings`                                                                                                                                                               |
+| `server/src/dtos/album.dto.ts`                        | `AlbumResponseSchema`, `mapAlbum`                                                                                                                                                                                                              |
+| `server/src/repositories/album.repository.ts`         | `getMetadataForIds` (bulk assetCount + date range)                                                                                                                                                                                             |
 
 **NOT reusable — must be fork** (verified 2026-07-05):
 
@@ -71,22 +71,22 @@ upstream equivalents are coupled (see below).
 
 ### New fork-only files (isolated — never conflict on rebase)
 
-| File | Role |
-| --- | --- |
-| `web/src/lib/components/spaces/space-albums-controls.svelte` | Toolbar (search / sort / group / view toggle / collapse-expand / Create + Link) |
-| `web/src/lib/components/spaces/space-albums-list.svelte` | Orchestrator: search → sort (`sortAlbums`) → group (fork bucketing) → render (cover grid or list) |
-| `web/src/lib/components/spaces/space-albums-table.svelte` | List-mode: **fork rows** (route to the space album, show space actions, reuse `AlbumCover`) + **fork sort headers** (write the space store). Reuses `AlbumCover` only. |
-| `web/src/lib/stores/space-album-view-settings.store.ts` | Fork persisted store + `SpaceAlbumGroupBy` enum + **fork** collapse/expand mutators + group-by metadata (incl. "Linked by") |
+| File                                                         | Role                                                                                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web/src/lib/components/spaces/space-albums-controls.svelte` | Toolbar (search / sort / group / view toggle / collapse-expand / Create + Link)                                                                                        |
+| `web/src/lib/components/spaces/space-albums-list.svelte`     | Orchestrator: search → sort (`sortAlbums`) → group (fork bucketing) → render (cover grid or list)                                                                      |
+| `web/src/lib/components/spaces/space-albums-table.svelte`    | List-mode: **fork rows** (route to the space album, show space actions, reuse `AlbumCover`) + **fork sort headers** (write the space store). Reuses `AlbumCover` only. |
+| `web/src/lib/stores/space-album-view-settings.store.ts`      | Fork persisted store + `SpaceAlbumGroupBy` enum + **fork** collapse/expand mutators + group-by metadata (incl. "Linked by")                                            |
 
 ### Modified fork-only files
 
-| File | Change |
-| --- | --- |
-| `web/src/lib/components/spaces/space-album-card.svelte` | Consume enriched DTO (`id`, not `albumId`); render `AlbumCover`; keep show-in-timeline dim + unlink/timeline menu |
+| File                                                         | Change                                                                                                                                        |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `web/src/lib/components/spaces/space-album-card.svelte`      | Consume enriched DTO (`id`, not `albumId`); render `AlbumCover`; keep show-in-timeline dim + unlink/timeline menu                             |
 | `web/src/routes/(user)/spaces/[spaceId]/albums/+page.svelte` | Replace bespoke grid with `<SpaceAlbumsControls/>` + `<SpaceAlbumsList/>`; wire Create + Link; `linkedAlbumIds` maps `a.id` (was `a.albumId`) |
-| `server/src/dtos/shared-space.dto.ts` | Enrich `SharedSpaceLinkedAlbumSchema` |
-| `server/src/repositories/shared-space.repository.ts` | Rich `getLinkedAlbums`; drop per-album `getAlbumAssetCount` N+1; regenerate `queries/shared.space.repository.sql` |
-| `server/src/services/shared-space.service.ts` | Reuse `getMetadataForIds` + `mapAlbum`; remove N+1 loop |
+| `server/src/dtos/shared-space.dto.ts`                        | Enrich `SharedSpaceLinkedAlbumSchema`                                                                                                         |
+| `server/src/repositories/shared-space.repository.ts`         | Rich `getLinkedAlbums`; drop per-album `getAlbumAssetCount` N+1; regenerate `queries/shared.space.repository.sql`                             |
+| `server/src/services/shared-space.service.ts`                | Reuse `getMetadataForIds` + `mapAlbum`; remove N+1 loop                                                                                       |
 
 > `SpaceLinkAlbumModal.svelte` needs **no change** — it takes `linkedAlbumIds: string[]` and links by
 > `album.id` of full `AlbumResponseDto`s from `getAllAlbums`; it never reads a linked-album `albumId`.
@@ -99,7 +99,7 @@ upstream equivalents are coupled (see below).
 ### Honest cost
 
 The space feature needs **zero upstream `.svelte`/`.ts` edits** (one additive shared JSON). The list
-being un-reusable (C1 above) actually *reduces* upstream coupling — the fork owns its rendering. If
+being un-reusable (C1 above) actually _reduces_ upstream coupling — the fork owns its rendering. If
 upstream later adds a grouping mode or toolbar control, we mirror it into the space toolbar by hand —
 a rare ~10-line copy, **not a merge conflict every rebase.**
 
@@ -219,7 +219,7 @@ These are `nestjs-zod` schema DTOs — reconcile at the **schema** level, not cl
 export const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.extend({
   showInTimeline: z.boolean(),
   addedById: z.string().nullable(), // who linked it (labelled "Linked by" in the UI) — matches current type
-  linkedAt: z.string(),             // link-creation timestamp (was `createdAt`)
+  linkedAt: z.string(), // link-creation timestamp (was `createdAt`)
 });
 ```
 
@@ -255,7 +255,7 @@ Mirror `AlbumService.getAll` to kill the N+1:
 2. `rows = sharedSpaceRepository.getLinkedAlbums(spaceId)`; if empty, return `[]` early (skip step 3).
 3. `metadata = albumRepository.getMetadataForIds(rows.map(r => r.id))` — **one** bulk query.
 4. Map each row: `{ ...mapAlbum(row), startDate, endDate, assetCount, lastModifiedAssetTimestamp
-   (from metadata), showInTimeline, addedById, linkedAt }` — `mapAlbum` gives no `startDate`/`endDate`
+(from metadata), showInTimeline, addedById, linkedAt }` — `mapAlbum` gives no `startDate`/`endDate`
    /`assetCount` without hydrated `assets`, so these are overridden from `getMetadataForIds` (exactly
    as `AlbumService.getAll` does).
 
@@ -271,6 +271,7 @@ test/edge case and require red→green evidence from implementers. A test that p
 (when it should be red) is a red flag to investigate, not accept.
 
 Stacks & fixtures (verified on this branch):
+
 - **Server unit:** `newTestService(SharedSpaceService)` (`server/test/utils.ts`), auto-mocked repos
   (`mocks.sharedSpace`, `mocks.album`); fixtures via `server/test/small.factory.ts`
   (`factory.sharedSpace`, `factory.album`) and `server/test/factories/album.factory.ts` (`AlbumFactory`).
@@ -297,6 +298,7 @@ commit + push, each producing working, testable software.
 renamed fields so the app builds and all tests stay green (no UI features yet).
 
 **Tests first (update + add):**
+
 - **Update** `shared-space.service.spec.ts` `getLinkedAlbums` (`describe` ~`:8010`; current assertion
   `getAlbumAssetCount` toHaveBeenCalledWith ~`:8049`): drop that; assert `mocks.album.getMetadataForIds`
   called **once** with all ids; assert `getAlbumAssetCount` **never** called; assert enriched fields.
@@ -319,9 +321,10 @@ renamed fields so the app builds and all tests stay green (no UI features yet).
 **Implementation:** enrich `SharedSpaceLinkedAlbumSchema` (§6.1); rich `getLinkedAlbums` repo query with
 replicated album-user/shared-link selectors + `ORDER BY` (§6.2); service reuse of `getMetadataForIds` +
 `mapAlbum` (§6.3); **`make sql`** regen of `queries/shared.space.repository.sql`; SDK regen (`pnpm build`
-+ `pnpm sync:open-api` + `make open-api-typescript`); field renames (`albumId`→`id`,
-`createdAt`→`linkedAt`) in `space-album-card.svelte`, `spaces/[spaceId]/albums/+page.svelte`, and their
-existing specs (`space-albums-page.spec.ts`, `space-album-card.spec.ts`). `SpaceLinkAlbumModal` untouched.
+
+- `pnpm sync:open-api` + `make open-api-typescript`); field renames (`albumId`→`id`,
+  `createdAt`→`linkedAt`) in `space-album-card.svelte`, `spaces/[spaceId]/albums/+page.svelte`, and their
+  existing specs (`space-albums-page.spec.ts`, `space-album-card.spec.ts`). `SpaceLinkAlbumModal` untouched.
 
 **Exit criteria:** `cd server && pnpm test` (incl. new medium spec) + `pnpm check` + lint green;
 `cd web && pnpm test` + `pnpm check:typescript` + lint green (renames only); `cd e2e && pnpm test`
@@ -336,6 +339,7 @@ list-mode table — with a working **Cover/List toggle**, state in a **space-sco
 the global one**. Existing per-card actions (show-in-timeline, unlink) preserved.
 
 **Tests first:**
+
 - **Add** `space-album-view-settings.store.spec.ts`: default values; persistence key **≠**
   `album-view-settings`; view getter/setter.
 - **Add** `space-albums-list.spec.ts`: renders `SpaceAlbumCard`s in Cover mode; renders
@@ -363,6 +367,7 @@ in `+page.svelte` for controls + list; `en.json` view labels.
 **Goal:** sort dropdown drives album order.
 
 **Tests first:**
+
 - **Add/extend** `space-albums-controls.spec.ts`: sort dropdown lists the six options; selecting one
   writes `sortBy`/`sortOrder` to the space store (not the global one).
 - **Extend** `space-albums-list.spec.ts`: correct ordering for **each** option — Title (asc/desc), Item
@@ -380,6 +385,7 @@ in `+page.svelte` for controls + list; `en.json` view labels.
 **Goal:** group dropdown (None / Year / Linked by / Owner) with collapse/expand.
 
 **Tests first:**
+
 - **Extend** `space-albums-controls.spec.ts`: group dropdown lists **None/Year/Linked by/Owner**; `Year`
   disabled under Date-created/modified sort; collapse/expand buttons only shown when grouping ≠ None and
   write the space store.
@@ -404,6 +410,7 @@ collapse/expand mutators + group metadata in the store; collapse state in `space
 **Goal:** search box filters the list; distinct empty vs. no-results states.
 
 **Tests first:**
+
 - **Extend** `space-albums-controls.spec.ts`: search input binds `searchQuery`.
 - **Extend** `space-albums-list.spec.ts`: filters by name (case-insensitive substring) and `description`;
   **null `description` doesn't throw**; 0 matches → "No matching albums" (distinct from the 0-albums
@@ -422,6 +429,7 @@ collapse/expand mutators + group metadata in the store; collapse state in `space
 viewer read-only.
 
 **Tests first:**
+
 - **Extend** `space-albums-controls.spec.ts`: editor sees Create + Link; **viewer sees neither** but
   still sees search/sort/group/view; Create click invokes the handler, Link click opens the modal.
 - **Extend** `space-albums-page.spec.ts`: create+link happy path → creates via `createAlbum` (empty
@@ -442,6 +450,7 @@ viewer read-only.
 **Goal:** Playwright coverage of the whole tab + final full-gate sweep + i18n complete.
 
 **Tests first (Playwright journeys against a seeded space with several linked albums):**
+
 - Search narrows the grid; clearing restores it.
 - Changing sort reorders cards.
 - Group-by renders headers (Year, Linked by, Owner); collapse hides a group.
@@ -469,6 +478,7 @@ Cover/List toggle, `:199‑219`), leaving the All/Owned/Shared filter + search o
 Sort/Group/collapse/view in the middle. No behavior, prop, or option changes. `en.json` untouched.
 
 **Tests first:**
+
 - If the `AlbumsControls`/albums-page test asserts control **presence**, confirm it still passes; if it
   asserts DOM **order**, update it to the new order first (red), then reorder the markup (green).
 - **Add/extend** a test asserting the Create button renders **after** the view-toggle control in the DOM.
@@ -482,33 +492,33 @@ page's control order; upstream diff limited to the reorder.
 
 ## 9. Consolidated edge-case checklist (each must have a test)
 
-| # | Edge case | Slice |
-| --- | --- | --- |
-| 1 | 0 linked albums → empty CTA, controls hidden | 2 |
-| 2 | Albums exist but search → 0 results → "No matching albums" | 5 |
-| 3 | Album with 0 assets → `assetCount:0`, dates null | 1 |
-| 4 | Soft-deleted album excluded | 1 |
-| 5 | Album owned by another member → Owner grouping + `showOwner` | 1, 4 |
-| 6 | Shared album (`shared:true`, multiple `albumUsers`) | 1 |
-| 7 | Null `addedById` → "Unknown" bucket | 1, 4 |
-| 8 | `addedById` set but linker no longer a space member → "Unknown" | 4 |
-| 9 | Year group with date-less albums → "No date" bucket | 4 |
-| 10 | Year bucket uses `startDate` under Oldest-photo sort, else `endDate` | 4 |
-| 11 | `Year` group disabled under date-created/modified sort | 4 |
-| 12 | `MostRecentPhoto`=`endDate`, `OldestPhoto`=`startDate` sort | 3 |
-| 13 | Null-date albums sort last (deterministic) under date sorts | 3 |
-| 14 | Null `albumThumbnailAssetId` → `AlbumCover` `NoCover` fallback | 1, 2 |
-| 15 | Null `description` in search → no throw | 5 |
-| 16 | Create succeeds + link fails → toast, no navigation, reload | 6 |
-| 17 | Abandoned empty created album not auto-deleted (documented) | 6 |
-| 18 | Space view settings isolated from global (both directions) | 2 |
-| 19 | Deterministic server ordering (`ORDER BY`, no flaky medium/e2e) | 1 |
-| 20 | Member (viewer) can READ the enriched list; write ops (link/create) gated to editor+ | 1 (read+write server), 6 (web) |
-| 21 | Existing unlink + show-in-timeline card actions still work | 2 |
-| 22 | List-mode rows route to `/spaces/{id}/albums/{id}` (not `/albums/{id}`) | 2 |
-| 23 | Album `createdAt` distinct from link `linkedAt` | 1 |
-| 24 | N+1 removed (single `getMetadataForIds` call, `getAlbumAssetCount` never) | 1 |
-| 25 | `/albums` reorder: Create renders after the view toggle; existing tests pass | 8 |
+| #   | Edge case                                                                            | Slice                          |
+| --- | ------------------------------------------------------------------------------------ | ------------------------------ |
+| 1   | 0 linked albums → empty CTA, controls hidden                                         | 2                              |
+| 2   | Albums exist but search → 0 results → "No matching albums"                           | 5                              |
+| 3   | Album with 0 assets → `assetCount:0`, dates null                                     | 1                              |
+| 4   | Soft-deleted album excluded                                                          | 1                              |
+| 5   | Album owned by another member → Owner grouping + `showOwner`                         | 1, 4                           |
+| 6   | Shared album (`shared:true`, multiple `albumUsers`)                                  | 1                              |
+| 7   | Null `addedById` → "Unknown" bucket                                                  | 1, 4                           |
+| 8   | `addedById` set but linker no longer a space member → "Unknown"                      | 4                              |
+| 9   | Year group with date-less albums → "No date" bucket                                  | 4                              |
+| 10  | Year bucket uses `startDate` under Oldest-photo sort, else `endDate`                 | 4                              |
+| 11  | `Year` group disabled under date-created/modified sort                               | 4                              |
+| 12  | `MostRecentPhoto`=`endDate`, `OldestPhoto`=`startDate` sort                          | 3                              |
+| 13  | Null-date albums sort last (deterministic) under date sorts                          | 3                              |
+| 14  | Null `albumThumbnailAssetId` → `AlbumCover` `NoCover` fallback                       | 1, 2                           |
+| 15  | Null `description` in search → no throw                                              | 5                              |
+| 16  | Create succeeds + link fails → toast, no navigation, reload                          | 6                              |
+| 17  | Abandoned empty created album not auto-deleted (documented)                          | 6                              |
+| 18  | Space view settings isolated from global (both directions)                           | 2                              |
+| 19  | Deterministic server ordering (`ORDER BY`, no flaky medium/e2e)                      | 1                              |
+| 20  | Member (viewer) can READ the enriched list; write ops (link/create) gated to editor+ | 1 (read+write server), 6 (web) |
+| 21  | Existing unlink + show-in-timeline card actions still work                           | 2                              |
+| 22  | List-mode rows route to `/spaces/{id}/albums/{id}` (not `/albums/{id}`)              | 2                              |
+| 23  | Album `createdAt` distinct from link `linkedAt`                                      | 1                              |
+| 24  | N+1 removed (single `getMetadataForIds` call, `getAlbumAssetCount` never)            | 1                              |
+| 25  | `/albums` reorder: Create renders after the view toggle; existing tests pass         | 8                              |
 
 ## 10. Cross-cutting verification gate (final)
 
@@ -524,14 +534,14 @@ page's control order; upstream diff limited to the reorder.
 
 ## 11. Rebase safety summary
 
-| Layer | Files | Upstream? |
-| --- | --- | --- |
-| Server DTO / repo / service / query SQL | `shared-space.*`, `queries/shared.space.repository.sql` | **Fork-only** ✅ |
-| Web orchestration + store | `space-albums-*.svelte`, `space-album-view-settings.store.ts` | **Fork-only** ✅ |
-| Web page / card | `spaces/[spaceId]/albums/*`, `space-album-card.svelte` | **Fork-only** ✅ |
-| Reused leaves/helpers | `AlbumCover`, `album-utils.ts` (helpers), `mapAlbum`, `getMetadataForIds` | Upstream — **imported, not edited** ✅ |
-| Strings | `en.json` | Shared — additive only ⚠️ |
-| `/albums` toolbar reorder (Slice 8) | `AlbumsControls.svelte` | Upstream — **edited: deliberate, localized reorder** ⚠️ |
+| Layer                                   | Files                                                                     | Upstream?                                               |
+| --------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Server DTO / repo / service / query SQL | `shared-space.*`, `queries/shared.space.repository.sql`                   | **Fork-only** ✅                                        |
+| Web orchestration + store               | `space-albums-*.svelte`, `space-album-view-settings.store.ts`             | **Fork-only** ✅                                        |
+| Web page / card                         | `spaces/[spaceId]/albums/*`, `space-album-card.svelte`                    | **Fork-only** ✅                                        |
+| Reused leaves/helpers                   | `AlbumCover`, `album-utils.ts` (helpers), `mapAlbum`, `getMetadataForIds` | Upstream — **imported, not edited** ✅                  |
+| Strings                                 | `en.json`                                                                 | Shared — additive only ⚠️                               |
+| `/albums` toolbar reorder (Slice 8)     | `AlbumsControls.svelte`                                                   | Upstream — **edited: deliberate, localized reorder** ⚠️ |
 
 ## 12. Open decisions (resolved)
 
@@ -551,7 +561,7 @@ page's control order; upstream diff limited to the reorder.
   as the primary CTA cluster right); Create = filled primary, Link = secondary; standalone "N albums"
   count dropped (space page only). `/albums` is reordered to match (Slice 8 — a deliberate, localized
   upstream edit); the space page uses the same control **style** (with space-specific Linked-by grouping
-  + Link action, and no filter tabs).
+  - Link action, and no filter tabs).
 
 ## 13. Running via `/impl-loop`
 

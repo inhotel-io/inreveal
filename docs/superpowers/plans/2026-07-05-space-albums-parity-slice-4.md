@@ -20,6 +20,7 @@
 - Verify: `pnpm test -- --run <file>`, `pnpm check:typescript`, eslint 0 on touched files. No `Co-Authored-By`. Base: `1305ebd88d`.
 
 ## File Structure
+
 - Create `web/src/lib/utils/space-album-grouping.ts` + `.spec.ts`.
 - Modify `space-albums-list.svelte` (+ spec), `space-albums-table.svelte` (+ spec), `space-albums-controls.svelte` (+ spec), `+page.svelte` (thread `members`).
 - Modify `i18n/en.json` (add `group_linked_by`).
@@ -31,6 +32,7 @@
 **Files:** Create `web/src/lib/utils/space-album-grouping.ts` + `web/src/lib/utils/space-album-grouping.spec.ts`.
 
 **Interfaces:**
+
 - Produces: `SpaceAlbumGroup { id; name; albums: SharedSpaceLinkedAlbumDto[] }`; `spaceGroupOptionsMetadata`; `findSpaceGroupOptionMetadata`; `getSelectedSpaceAlbumGroupOption(settings)`; `isSpaceAlbumGroupCollapsed(settings, id)`; `toggleSpaceAlbumGroupCollapsing(id)`; `collapseAllSpaceAlbumGroups(ids)`; `expandAllSpaceAlbumGroups()`; `buildSpaceAlbumGroups(albums, settings, ctx)`.
 - Consumes: `SpaceAlbumGroupBy`, `spaceAlbumViewSettings`, `SpaceAlbumViewSettings` (store); `AlbumSortBy`, `SortOrder` (preferences.store); `sortAlbums`, `stringToSortOrder` (album-utils); `groupBy` from `lodash-es`.
 
@@ -41,29 +43,80 @@ import { get } from 'svelte/store';
 import { AlbumSortBy, SortOrder } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import {
-  buildSpaceAlbumGroups, getSelectedSpaceAlbumGroupOption, isSpaceAlbumGroupCollapsed,
-  toggleSpaceAlbumGroupCollapsing, collapseAllSpaceAlbumGroups, expandAllSpaceAlbumGroups,
+  buildSpaceAlbumGroups,
+  getSelectedSpaceAlbumGroupOption,
+  isSpaceAlbumGroupCollapsed,
+  toggleSpaceAlbumGroupCollapsing,
+  collapseAllSpaceAlbumGroups,
+  expandAllSpaceAlbumGroups,
 } from '$lib/utils/space-album-grouping';
 
-const CTX = { ungrouped: 'Albums', unknownYear: 'Unknown Year', unassigned: 'Unassigned', currentUserId: 'me', members: [] as any[] };
-const A = (o: any) => ({ id: 'x', albumName: 'A', assetCount: 0, albumThumbnailAssetId: null, showInTimeline: true, addedById: null, linkedAt: '', albumUsers: [], description: '', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z', shared: false, hasSharedLink: false, isActivityEnabled: false, ...o });
+const CTX = {
+  ungrouped: 'Albums',
+  unknownYear: 'Unknown Year',
+  unassigned: 'Unassigned',
+  currentUserId: 'me',
+  members: [] as any[],
+};
+const A = (o: any) => ({
+  id: 'x',
+  albumName: 'A',
+  assetCount: 0,
+  albumThumbnailAssetId: null,
+  showInTimeline: true,
+  addedById: null,
+  linkedAt: '',
+  albumUsers: [],
+  description: '',
+  createdAt: '2024-01-01T00:00:00Z',
+  updatedAt: '2024-01-01T00:00:00Z',
+  shared: false,
+  hasSharedLink: false,
+  isActivityEnabled: false,
+  ...o,
+});
 
-beforeEach(() => { localStorage.clear(); spaceAlbumViewSettings.reset(); });
+beforeEach(() => {
+  localStorage.clear();
+  spaceAlbumViewSettings.reset();
+});
 
 it('None → a single group named ungrouped', () => {
-  const g = buildSpaceAlbumGroups([A({ id: 'a' })], { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.None }, CTX);
-  expect(g).toHaveLength(1); expect(g[0].albums).toHaveLength(1);
+  const g = buildSpaceAlbumGroups(
+    [A({ id: 'a' })],
+    { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.None },
+    CTX,
+  );
+  expect(g).toHaveLength(1);
+  expect(g[0].albums).toHaveLength(1);
 });
 
 it('Year buckets by endDate, unknown-year last', () => {
-  const albums = [A({ id: 'none' }), A({ id: 'y2020', endDate: '2020-06-01T00:00:00Z' }), A({ id: 'y2024', endDate: '2024-06-01T00:00:00Z' })];
-  const g = buildSpaceAlbumGroups(albums, { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Year, groupOrder: SortOrder.Desc, sortBy: AlbumSortBy.MostRecentPhoto }, CTX);
+  const albums = [
+    A({ id: 'none' }),
+    A({ id: 'y2020', endDate: '2020-06-01T00:00:00Z' }),
+    A({ id: 'y2024', endDate: '2024-06-01T00:00:00Z' }),
+  ];
+  const g = buildSpaceAlbumGroups(
+    albums,
+    {
+      ...get(spaceAlbumViewSettings),
+      groupBy: SpaceAlbumGroupBy.Year,
+      groupOrder: SortOrder.Desc,
+      sortBy: AlbumSortBy.MostRecentPhoto,
+    },
+    CTX,
+  );
   expect(g.map((x) => x.name)).toEqual(['2024', '2020', 'Unknown Year']);
 });
 
 it('Year uses startDate under Oldest-photo sort', () => {
   const albums = [A({ id: 's', startDate: '2019-01-01T00:00:00Z', endDate: '2025-01-01T00:00:00Z' })];
-  const g = buildSpaceAlbumGroups(albums, { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Year, sortBy: AlbumSortBy.OldestPhoto }, CTX);
+  const g = buildSpaceAlbumGroups(
+    albums,
+    { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Year, sortBy: AlbumSortBy.OldestPhoto },
+    CTX,
+  );
   expect(g[0].name).toBe('2019');
 });
 
@@ -87,7 +140,13 @@ it('Owner groups by albumUsers[0]; empty albumUsers → unassigned (no crash)', 
   const names = g.map((x) => x.name);
   expect(names).toContain('Zoe');
   expect(names).toContain('Unassigned'); // empty albumUsers bucket
-  expect(() => buildSpaceAlbumGroups([A({ id: 'e', albumUsers: [] })], { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Owner }, ctx)).not.toThrow();
+  expect(() =>
+    buildSpaceAlbumGroups(
+      [A({ id: 'e', albumUsers: [] })],
+      { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Owner },
+      ctx,
+    ),
+  ).not.toThrow();
 });
 
 it('getSelectedSpaceAlbumGroupOption falls back to None when Year is disabled under date sort', () => {
@@ -125,6 +184,7 @@ it('collapse mutators write only the space store, keyed by groupBy', () => {
 - [ ] **Step 4: Run — expect GREEN + tsc.** All util spec cases pass; `pnpm check:typescript` exit 0.
 
 - [ ] **Step 5: Commit.**
+
 ```bash
 git add web/src/lib/utils/space-album-grouping.ts web/src/lib/utils/space-album-grouping.spec.ts
 git commit -m "feat(spaces): fork album grouping util (None/Year/LinkedBy/Owner) + collapse helpers"
@@ -137,6 +197,7 @@ git commit -m "feat(spaces): fork album grouping util (None/Year/LinkedBy/Owner)
 **Files:** Modify `space-albums-list.svelte` (+ spec); modify `+page.svelte` to pass `members`.
 
 **Interfaces:**
+
 - Consumes: `buildSpaceAlbumGroups`, `getSelectedSpaceAlbumGroupOption`, `isSpaceAlbumGroupCollapsed`, `toggleSpaceAlbumGroupCollapsing` (Task 1); `SpaceAlbumGroupBy`.
 - Produces: `SpaceAlbumsList` now takes `members: SharedSpaceMemberResponseDto[]`; renders grouped cover output (per-group header + grid) and passes groups to `SpaceAlbumsTable`.
 
@@ -151,6 +212,7 @@ git commit -m "feat(spaces): fork album grouping util (None/Year/LinkedBy/Owner)
 - [ ] **Step 5: Run — GREEN + tsc + lint.**
 
 - [ ] **Step 6: Commit.**
+
 ```bash
 git add web/src/lib/components/spaces/space-albums-list.svelte web/src/lib/components/spaces/space-albums-list.spec.ts "web/src/routes/(user)/spaces/[spaceId]/albums/+page.svelte" i18n/en.json
 git commit -m "feat(spaces): grouped cover rendering + collapse in space albums list"
@@ -169,6 +231,7 @@ git commit -m "feat(spaces): grouped cover rendering + collapse in space albums 
 - [ ] **Step 3: Implement.** Add optional `groups?: SpaceAlbumGroup[]` + `grouped: boolean` props (or accept `groups` and branch on length). Mirror `AlbumsTable`'s grouped `<tbody>` header + body pattern, using `isSpaceAlbumGroupCollapsed($spaceAlbumViewSettings, group.id)` + `toggleSpaceAlbumGroupCollapsing`, and the existing space row markup for `group.albums`. Ungrouped path unchanged (renders `albums` flat).
 
 - [ ] **Step 4: GREEN + tsc + lint. Step 5: Commit.**
+
 ```bash
 git commit -m "feat(spaces): grouped collapsible rows in space albums table"
 ```
@@ -186,6 +249,7 @@ git commit -m "feat(spaces): grouped collapsible rows in space albums table"
 - [ ] **Step 3: Implement.** Mirror the Slice-3 sort control's plain-button menu (`showGroupMenu`, container `data-testid="space-albums-group-container"`, btn `-group-btn`, menu `-group-menu`, options `-group-option-{id}`). Options from `spaceGroupOptionsMetadata`; disabled per `isDisabled()`; labels: `{None: $t('group_no'), Year: $t('group_year'), LinkedBy: $t('group_linked_by'), Owner: $t('group_owner')}`. `handleChangeGroupBy` mirrors AlbumsControls (same id → flip `groupOrder`, else set `groupBy` + `defaultOrder`). Add expand/collapse-all `IconButton`s gated on `getSelectedSpaceAlbumGroupOption($spaceAlbumViewSettings) !== None`, calling `expandAllSpaceAlbumGroups()` / `collapseAllSpaceAlbumGroups(groupIds)` — the controls need the current group ids; derive them or accept a `groupIds` prop from the list (simplest: compute in the page/list and pass down, OR compute in controls from the albums+settings). Add `group_linked_by` to `i18n/en.json` (value "Group by who linked").
 
 - [ ] **Step 4: GREEN + tsc + lint. Step 5: Commit.**
+
 ```bash
 git commit -m "feat(spaces): group dropdown + expand/collapse-all in space albums controls"
 ```
@@ -193,8 +257,10 @@ git commit -m "feat(spaces): group dropdown + expand/collapse-all in space album
 ---
 
 ## Slice 4 exit gate
+
 - `cd web && pnpm test` green; `pnpm check:typescript` exit 0; `pnpm lint` (no new eslint errors on touched files).
 
 ## Self-review (author)
+
 - Spec Slice 4 tests: None/Year/LinkedBy/Owner buckets ✓; Year start/end conditional (#10) ✓; unknown-year "No date" (#9) ✓; null addedById + linker-not-member → Unassigned (#7,#8) ✓; Owner empty-albumUsers guard (#5, no crash) ✓; Year disabled under date sort (#11) ✓; collapse/expand space-scoped ✓; group dropdown lists 4 + writes space store ✓.
 - Pure util (ctx labels) keeps grouping testable; components inject `$t`/members.

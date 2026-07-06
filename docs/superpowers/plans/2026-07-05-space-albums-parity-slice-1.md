@@ -34,11 +34,13 @@
 ## Task 1: Enrich the DTO + rewrite the service (unit-test driven)
 
 **Files:**
+
 - Modify: `server/src/dtos/shared-space.dto.ts:141-151` (schema) — `SharedSpaceLinkedAlbumSchema`.
 - Modify: `server/src/services/shared-space.service.ts:695-711` — `getLinkedAlbums`.
 - Test: `server/src/services/shared-space.service.spec.ts:8010-8059` (update) + new cases.
 
 **Interfaces:**
+
 - Consumes: `AlbumResponseSchema` (exported, `server/src/dtos/album.dto.ts:108`); `mapAlbum` (`album.dto.ts:169`, `(entity: MaybeDehydrated<MapAlbumDto>) => AlbumResponseDto`); `AlbumAssetCount` + `albumRepository.getMetadataForIds(ids: string[]): Promise<AlbumAssetCount[]>` (`album.repository.ts:23,162`); `asDateTimeString` (same import album.service.ts uses).
 - Produces: enriched `SharedSpaceLinkedAlbumDto` = `AlbumResponseDto` + `{ showInTimeline: boolean; addedById: string | null; linkedAt: string }`; the repo now must return `MapAlbumDto`-shaped rows + `{ addedById, showInTimeline, linkedAt }` (implemented in Task 2 — the unit test mocks these rows).
 
@@ -81,9 +83,18 @@ describe('getLinkedAlbums', () => {
 
   it('returns AlbumResponseDto-shaped data + space fields, with album createdAt distinct from linkedAt', async () => {
     const row = makeRichRow();
-    const { auth, space } = arrange([row], [
-      { albumId: row.id, assetCount: 7, startDate: new Date('2024-06-01'), endDate: new Date('2024-06-30'), lastModifiedAssetTimestamp: new Date('2024-06-30') },
-    ]);
+    const { auth, space } = arrange(
+      [row],
+      [
+        {
+          albumId: row.id,
+          assetCount: 7,
+          startDate: new Date('2024-06-01'),
+          endDate: new Date('2024-06-30'),
+          lastModifiedAssetTimestamp: new Date('2024-06-30'),
+        },
+      ],
+    );
 
     const result = await sut.getLinkedAlbums(auth, space.id);
 
@@ -104,7 +115,16 @@ describe('getLinkedAlbums', () => {
 
   it('bulk-fetches metadata once and never calls the per-album N+1 count', async () => {
     const rows = [makeRichRow(), makeRichRow()];
-    const { auth, space } = arrange(rows, rows.map((r) => ({ albumId: r.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null })));
+    const { auth, space } = arrange(
+      rows,
+      rows.map((r) => ({
+        albumId: r.id,
+        assetCount: 1,
+        startDate: null,
+        endDate: null,
+        lastModifiedAssetTimestamp: null,
+      })),
+    );
 
     await sut.getLinkedAlbums(auth, space.id);
 
@@ -136,7 +156,10 @@ describe('getLinkedAlbums', () => {
         { role: AlbumUserRole.Editor, user: factory.user({ name: 'Editor' }) },
       ],
     });
-    const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+    const { auth, space } = arrange(
+      [row],
+      [{ albumId: row.id, assetCount: 3, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }],
+    );
     const result = await sut.getLinkedAlbums(auth, space.id);
     expect(result[0].shared).toBe(true);
     expect(result[0].albumUsers).toHaveLength(2);
@@ -144,7 +167,10 @@ describe('getLinkedAlbums', () => {
 
   it('preserves null addedById, null thumbnail, and showInTimeline=false', async () => {
     const row = makeRichRow({ addedById: null, albumThumbnailAssetId: null, showInTimeline: false });
-    const { auth, space } = arrange([row], [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }]);
+    const { auth, space } = arrange(
+      [row],
+      [{ albumId: row.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }],
+    );
     const result = await sut.getLinkedAlbums(auth, space.id);
     expect(result[0].addedById).toBeNull();
     expect(result[0].albumThumbnailAssetId).toBeNull();
@@ -236,11 +262,13 @@ git commit -m "feat(spaces): enrich linked-albums service to AlbumResponseDto sh
 ## Task 2: Rich repo query (+ replicate selectors) + regenerate SQL & SDK (medium-test driven)
 
 **Files:**
+
 - Test: `server/src/services/shared-space.service.medium.spec.ts` (create).
 - Modify: `server/src/repositories/shared-space.repository.ts:427-444` (`getLinkedAlbums`); remove `getAlbumAssetCount` (`:480-490`) if now unused (grep first).
 - Regenerate: `server/src/queries/shared.space.repository.sql`, TS SDK.
 
 **Interfaces:**
+
 - Consumes: kysely helpers `jsonArrayFrom`/`jsonObjectFrom`, `columns` (`src/database`), `dummy` (`src/utils/database`) — the imports `album.repository.ts` uses for `withAlbumUsers`/`withSharedLink`.
 - Produces: `sharedSpaceRepository.getLinkedAlbums(spaceId)` returning rows = `MapAlbumDto` fields (`id, albumName, description, albumThumbnailAssetId, createdAt, updatedAt, isActivityEnabled, order, albumUsers, sharedLinks`) + `{ addedById: string | null, showInTimeline: boolean, linkedAt: Date }`.
 
@@ -322,6 +350,7 @@ git commit -m "feat(spaces): rich getLinkedAlbums query + bulk metadata, drop N+
 ## Task 3: Update the API e2e response-shape contract
 
 **Files:**
+
 - Modify: `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts:228-244` (shape) + keep `:247-254` (absorbed invariant).
 
 - [ ] **Step 1: Update the shape assertion + add an assets assertion.**
@@ -376,11 +405,13 @@ git commit -m "test(spaces): assert enriched linked-albums response shape (e2e)"
 ## Task 4: Migrate web consumers to the renamed fields (keep web green)
 
 **Files:**
+
 - Modify: `web/src/lib/components/spaces/space-album-card.svelte:54` (and any `album.albumId` reads).
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/albums/+page.svelte:36,128` (`a.albumId` → `a.id`).
 - Test: `web/src/routes/(user)/spaces/[spaceId]/albums/space-albums-page.spec.ts:66-77` (makeAlbum) and `web/src/lib/components/spaces/space-album-card.spec.ts:13-25` (inline album + href).
 
 **Interfaces:**
+
 - Consumes: regenerated SDK `SharedSpaceLinkedAlbumDto` (now `id`, not `albumId`; `linkedAt`, not link-`createdAt`).
 - Produces: web reads `album.id`; routes `/spaces/{spaceId}/albums/{album.id}`.
 
@@ -414,6 +445,7 @@ git commit -m "refactor(spaces): migrate space-albums web consumers to id/linked
 ## Slice 1 exit gate
 
 Run and confirm green (controller runs these itself, not just subagents):
+
 - `cd server && pnpm test && pnpm check && pnpm lint`
 - `cd server && pnpm test:medium -- --run src/services/shared-space.service.medium.spec.ts`
 - `cd web && pnpm test && pnpm check:typescript && pnpm lint`

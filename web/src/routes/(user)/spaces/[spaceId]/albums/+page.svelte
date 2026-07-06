@@ -129,7 +129,13 @@
       </div>
     </div>
   {:else}
-    <SpaceAlbumsControls {groupIds} bind:searchQuery canManage={isEditor} onCreate={handleCreateAlbum} onLink={openLinkAlbumModal} />
+    <SpaceAlbumsControls
+      {groupIds}
+      bind:searchQuery
+      canManage={isEditor}
+      onCreate={handleCreateAlbum}
+      onLink={openLinkAlbumModal}
+    />
     <div class="px-4 pt-4">
       <SpaceAlbumsList
         spaceId={space.id}

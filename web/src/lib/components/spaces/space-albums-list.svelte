@@ -95,7 +95,11 @@
         aria-expanded={!collapsed}
         data-testid="space-album-group-{group.id}"
       >
-        <Icon icon={mdiChevronRight} size="24" class="-mt-2.5 inline-block transition-all duration-250 {iconRotation}" />
+        <Icon
+          icon={mdiChevronRight}
+          size="24"
+          class="-mt-2.5 inline-block transition-all duration-250 {iconRotation}"
+        />
         <span class="text-3xl font-bold text-black dark:text-white">{group.name}</span>
         <span class="ms-1.5">({$t('albums_count', { values: { count: group.albums.length } })})</span>
       </button>
