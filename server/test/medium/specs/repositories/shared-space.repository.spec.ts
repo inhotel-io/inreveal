@@ -140,6 +140,68 @@ const seedAlbumPerson = async (
   return { user, space, album, asset, assetFace, person };
 };
 
+// Helper: create a user + space with a directly-added asset with a face
+const seedDirectFace = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: SharedSpaceRepository,
+  visibility: AssetVisibility,
+  softDelete = false,
+) => {
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+  const { asset } = await ctx.newAsset({ ownerId: user.id, visibility });
+  if (softDelete) {
+    await ctx.softDeleteAsset(asset.id);
+  }
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+  return { space, asset, assetFace };
+};
+
+// Helper: create a library-linked asset with a face
+const seedLibraryFace = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: SharedSpaceRepository,
+  visibility: AssetVisibility,
+) => {
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+  const { library } = await ctx.newLibrary({ ownerId: user.id });
+  const { asset } = await ctx.newAsset({ ownerId: user.id, libraryId: library.id, visibility });
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+  return { space, asset, assetFace };
+};
+
+// Helper: create an album-linked asset with a face
+const seedAlbumFace = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: SharedSpaceRepository,
+  opts: { visibility?: AssetVisibility; showInTimeline?: boolean; softDeleteAlbum?: boolean } = {},
+) => {
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+  const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'FaceAlbum' });
+  const { asset } = await ctx.newAsset({
+    ownerId: user.id,
+    visibility: opts.visibility ?? AssetVisibility.Timeline,
+  });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+  await ctx.newSharedSpaceAlbum({
+    spaceId: space.id,
+    albumId: album.id,
+    showInTimeline: opts.showInTimeline ?? true,
+  });
+  if (opts.softDeleteAlbum) {
+    await ctx.softDeleteAlbum(album.id);
+  }
+  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+  return { space, album, asset, assetFace };
+};
+
 describe(SharedSpaceRepository.name, () => {
   // ==========================================
   // Space CRUD
@@ -3686,6 +3748,174 @@ describe(SharedSpaceRepository.name, () => {
       expect(result1).not.toContain(user2.id);
       expect(result2).toContain(user2.id);
       expect(result2).not.toContain(user1.id);
+    });
+  });
+
+  // ==========================================
+  // isFaceInSpace — rep-face thumbnail guards
+  // ==========================================
+
+  describe('isFaceInSpace — visibility guards', () => {
+    // -- direct arm --
+
+    it('direct arm: returns true for a Timeline asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Timeline);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('direct arm: returns true for an Archive asset face (Archive is shareable)', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Archive);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('direct arm: returns false for a Hidden asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Hidden);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('direct arm: returns false for a Locked asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Locked);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('direct arm: returns false for a soft-deleted asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Timeline, /* softDelete */ true);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('direct arm: added-then-flipped — face no longer served after asset flips Hidden', async () => {
+      const { ctx, sut } = setup();
+      const { space, asset, assetFace } = await seedDirectFace(ctx, sut, AssetVisibility.Timeline);
+
+      // Confirm it's initially accessible
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+
+      // Flip asset to Hidden
+      await ctx.database
+        .updateTable('asset')
+        .set({ visibility: AssetVisibility.Hidden })
+        .where('id', '=', asset.id)
+        .execute();
+
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    // -- library arm --
+
+    it('library arm: returns true for a Timeline asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedLibraryFace(ctx, sut, AssetVisibility.Timeline);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('library arm: returns true for an Archive asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedLibraryFace(ctx, sut, AssetVisibility.Archive);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('library arm: returns false for a Hidden asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedLibraryFace(ctx, sut, AssetVisibility.Hidden);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('library arm: returns false for a Locked asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedLibraryFace(ctx, sut, AssetVisibility.Locked);
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    // -- album arm --
+
+    it('album arm: returns true for a Timeline asset face in a showInTimeline album', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Timeline,
+        showInTimeline: true,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('album arm: returns true for an Archive asset face in a showInTimeline album', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Archive,
+        showInTimeline: true,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(true);
+    });
+
+    it('album arm: returns false for a Hidden asset face in a showInTimeline album', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Hidden,
+        showInTimeline: true,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('album arm: returns false for a Locked asset face in a showInTimeline album', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Locked,
+        showInTimeline: true,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('album arm: returns false for a showInTimeline=false album asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Timeline,
+        showInTimeline: false,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('album arm: returns false for a soft-deleted album asset face', async () => {
+      const { ctx, sut } = setup();
+      const { space, assetFace } = await seedAlbumFace(ctx, sut, {
+        visibility: AssetVisibility.Timeline,
+        showInTimeline: true,
+        softDeleteAlbum: true,
+      });
+      await expect(sut.isFaceInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    // -- regression: manual rep-face path (getSpaceRepresentativeFaceForUpdate) still works --
+
+    it('regression: getSpaceRepresentativeFaceForUpdate still returns a face (manual path unaffected)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+      // assetFace isVisible defaults to true; getSpaceRepresentativeFaceForUpdate requires it
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+      const person = await sut.createPerson({
+        spaceId: space.id,
+        name: 'Manual Rep',
+        representativeFaceId: assetFace.id,
+        representativeFaceSource: 'manual',
+      });
+      // getSpaceRepresentativeFaceForUpdate joins shared_space_person_face — register the face
+      await sut.addPersonFaces([{ personId: person.id, assetFaceId: assetFace.id }], { skipRecount: true });
+
+      const face = await sut.getSpaceRepresentativeFaceForUpdate({
+        spaceId: space.id,
+        personId: person.id,
+        assetFaceId: assetFace.id,
+      });
+
+      expect(face).not.toBeNull();
+      expect(face?.id).toBe(assetFace.id);
     });
   });
 });

@@ -18,7 +18,11 @@ import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-perso
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, dummy, searchAssetBuilder } from 'src/utils/database';
-import { spaceAlbumAssetExists, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
+import {
+  spaceAlbumAssetExists,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
 const withSpaceAlbumUsers = (eb: ExpressionBuilder<DB, 'album' | 'shared_space_album'>) =>
   jsonArrayFrom(
@@ -2537,11 +2541,15 @@ export class SharedSpaceRepository {
       .selectFrom(
         this.db
           .selectFrom('shared_space_asset')
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
           .innerJoin('asset_face', 'asset_face.assetId', 'shared_space_asset.assetId')
           .select('asset_face.id')
           .where('shared_space_asset.spaceId', '=', spaceId)
           .where('asset_face.id', '=', faceId)
           .where('asset_face.deletedAt', 'is', null)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where((eb) => spaceVisibilityGate(eb))
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -2552,7 +2560,8 @@ export class SharedSpaceRepository {
               .where('asset_face.id', '=', faceId)
               .where('asset_face.deletedAt', 'is', null)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where((eb) => spaceVisibilityGate(eb)),
           )
           .union(
             this.db
@@ -2568,7 +2577,9 @@ export class SharedSpaceRepository {
               .where('asset_face.id', '=', faceId)
               .where('asset_face.deletedAt', 'is', null)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where((eb) => spaceVisibilityGate(eb))
+              .where('shared_space_album.showInTimeline', '=', true),
           )
           .as('combined'),
       )
