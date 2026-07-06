@@ -215,12 +215,16 @@ export const buildSpaceAlbumGroups = (
     case SpaceAlbumGroupBy.Owner: {
       const UNASSIGNED_KEY = '__unassigned__';
 
+      // ownerId is not currently exposed on SharedSpaceLinkedAlbumDto (albumUsers was stripped
+      // in Slice 7 to prevent PII leakage). Group by ownerId when it becomes available;
+      // fall back to UNASSIGNED_KEY so the grouping is safe and crash-free today.
       const groupedByOwner = groupBy(albums, (album) => {
-        return album.albumUsers[0]?.user.id ?? UNASSIGNED_KEY;
+        const ownerId = (album as unknown as { ownerId?: string }).ownerId;
+        return ownerId ?? UNASSIGNED_KEY;
       });
 
       const sortSign = order === SortOrder.Desc ? -1 : 1;
-      const sortedByOwner = Object.entries(groupedByOwner).sort(([ownerIdA, albumsA], [ownerIdB, albumsB]) => {
+      const sortedByOwner = Object.entries(groupedByOwner).sort(([ownerIdA], [ownerIdB]) => {
         // Unassigned always last
         if (ownerIdA === UNASSIGNED_KEY) {
           return 1;
@@ -233,8 +237,8 @@ export const buildSpaceAlbumGroups = (
         } else if (ownerIdB === ctx.currentUserId) {
           return sortSign;
         } else {
-          const ownerAName = albumsA[0]?.albumUsers[0]?.user.name ?? '';
-          const ownerBName = albumsB[0]?.albumUsers[0]?.user.name ?? '';
+          const ownerAName = ctx.members.find((m) => m.userId === ownerIdA)?.name ?? '';
+          const ownerBName = ctx.members.find((m) => m.userId === ownerIdB)?.name ?? '';
           return ownerAName.localeCompare(ownerBName) * sortSign;
         }
       });
@@ -243,10 +247,11 @@ export const buildSpaceAlbumGroups = (
         if (ownerId === UNASSIGNED_KEY) {
           return { id: ctx.unassigned, name: ctx.unassigned, albums: ownerAlbums };
         }
+        const memberName = ctx.members.find((m) => m.userId === ownerId)?.name;
         const ownerName =
           ownerId === ctx.currentUserId
-            ? (ctx.myAlbums ?? ownerAlbums[0]?.albumUsers[0]?.user.name ?? ctx.unassigned)
-            : (ownerAlbums[0]?.albumUsers[0]?.user.name ?? ctx.unassigned);
+            ? (ctx.myAlbums ?? memberName ?? ctx.unassigned)
+            : (memberName ?? ctx.unassigned);
         return { id: ownerId, name: ownerName, albums: ownerAlbums };
       });
       break;

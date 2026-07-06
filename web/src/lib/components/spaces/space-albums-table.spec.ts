@@ -15,7 +15,6 @@ function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSp
     showInTimeline: true,
     addedById: null,
     linkedAt: '2026-01-01T00:00:00.000Z',
-    albumUsers: [],
     description: '',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
