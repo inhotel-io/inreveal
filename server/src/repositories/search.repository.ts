@@ -19,7 +19,7 @@ import {
 } from 'src/utils/database';
 import { without } from 'src/utils/filter-suggestions';
 import { paginationHelper } from 'src/utils/pagination';
-import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
+import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 import z from 'zod';
 
 export interface SearchAssetIdOptions {
@@ -1116,24 +1116,35 @@ export class SearchRepository {
       .$if(!options?.spaceId && !options?.timelineSpaceIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(userIds)))
       .$if(!!options?.spaceId && !options?.timelineSpaceIds, (qb) =>
         qb.where((eb) =>
-          eb.or(
-            spaceAssetPathBranches(eb, {
-              correlateAssetId: 'asset.id',
-              correlateLibraryId: 'asset.libraryId',
-              scope: { spaceId: options!.spaceId! },
-            }),
-          ),
+          eb.and([
+            eb.or(
+              spaceAssetPathBranches(eb, {
+                correlateAssetId: 'asset.id',
+                correlateLibraryId: 'asset.libraryId',
+                scope: { spaceId: options!.spaceId! },
+                requireShowInTimeline: true,
+              }),
+            ),
+            // M3: caller's own assets bypass space-visibility gate; others must be Archive/Timeline.
+            eb.or([eb('asset.ownerId', '=', anyUuid(userIds)), spaceVisibilityGate(eb)]),
+          ]),
         ),
       )
       .$if(!!options?.timelineSpaceIds, (qb) =>
         qb.where((eb) =>
           eb.or([
             eb('asset.ownerId', '=', anyUuid(userIds)),
-            ...spaceAssetPathBranches(eb, {
-              correlateAssetId: 'asset.id',
-              correlateLibraryId: 'asset.libraryId',
-              scope: { spaceIds: options!.timelineSpaceIds! },
-            }),
+            eb.and([
+              eb('asset.visibility', '=', AssetVisibility.Timeline),
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { spaceIds: options!.timelineSpaceIds! },
+                  requireShowInTimeline: true,
+                }),
+              ),
+            ]),
           ]),
         ),
       )
@@ -1234,24 +1245,38 @@ export class SearchRepository {
         )
         .$if(!!options?.spaceId && !options?.timelineSpaceIds && !options?.albumId, (qb) =>
           qb.where((eb) =>
-            eb.or(
-              spaceAssetPathBranches(eb, {
-                correlateAssetId: 'asset.id',
-                correlateLibraryId: 'asset.libraryId',
-                scope: { spaceId: options!.spaceId! },
-              }),
-            ),
+            eb.and([
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { spaceId: options!.spaceId! },
+                  requireShowInTimeline: true,
+                }),
+              ),
+              // M3: the caller's own assets bypass the space-visibility gate (own-M3);
+              // every other member's asset must be Archive or Timeline.
+              eb.or([eb('asset.ownerId', '=', anyUuid(userIds)), spaceVisibilityGate(eb)]),
+            ]),
           ),
         )
         .$if(!!options?.timelineSpaceIds && !options?.albumId, (qb) =>
           qb.where((eb) =>
             eb.or([
+              // Caller's own assets follow the resolved visibility applied above.
               eb('asset.ownerId', '=', anyUuid(userIds)),
-              ...spaceAssetPathBranches(eb, {
-                correlateAssetId: 'asset.id',
-                correlateLibraryId: 'asset.libraryId',
-                scope: { spaceIds: options!.timelineSpaceIds! },
-              }),
+              // Other members' assets: Timeline only + showInTimeline=true album path.
+              eb.and([
+                eb('asset.visibility', '=', AssetVisibility.Timeline),
+                eb.or(
+                  spaceAssetPathBranches(eb, {
+                    correlateAssetId: 'asset.id',
+                    correlateLibraryId: 'asset.libraryId',
+                    scope: { spaceIds: options!.timelineSpaceIds! },
+                    requireShowInTimeline: true,
+                  }),
+                ),
+              ]),
             ]),
           ),
         )

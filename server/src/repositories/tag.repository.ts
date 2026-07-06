@@ -8,6 +8,7 @@ import { DB } from 'src/schema';
 import { TagAssetTable } from 'src/schema/tables/tag-asset.table';
 import { TagTable } from 'src/schema/tables/tag.table';
 import { asUuid } from 'src/utils/database';
+import { spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 @Injectable()
 export class TagRepository {
@@ -87,6 +88,7 @@ export class TagRepository {
   private ownedOrSpaceAccessible(eb: ExpressionBuilder<DB, 'tag'>, userId: string) {
     return eb.or([
       eb('tag.userId', '=', asUuid(userId)),
+      // Direct-asset arm: asset must be space-shareable (Archive or Timeline); Hidden/Locked never surface.
       eb.exists(
         eb
           .selectFrom('tag_asset')
@@ -95,8 +97,10 @@ export class TagRepository {
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
           .whereRef('tag_asset.tagId', '=', 'tag.id')
           .where('asset.deletedAt', 'is', null)
-          .where('shared_space_member.userId', '=', asUuid(userId)),
+          .where('shared_space_member.userId', '=', asUuid(userId))
+          .where(spaceVisibilityGate(eb as any)),
       ),
+      // Library arm: same visibility gate.
       eb.exists(
         eb
           .selectFrom('tag_asset')
@@ -105,8 +109,10 @@ export class TagRepository {
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
           .whereRef('tag_asset.tagId', '=', 'tag.id')
           .where('asset.deletedAt', 'is', null)
-          .where('shared_space_member.userId', '=', asUuid(userId)),
+          .where('shared_space_member.userId', '=', asUuid(userId))
+          .where(spaceVisibilityGate(eb as any)),
       ),
+      // Album arm: same visibility gate.
       eb.exists(
         eb
           .selectFrom('tag_asset')
@@ -119,7 +125,8 @@ export class TagRepository {
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
           .whereRef('tag_asset.tagId', '=', 'tag.id')
           .where('asset.deletedAt', 'is', null)
-          .where('shared_space_member.userId', '=', asUuid(userId)),
+          .where('shared_space_member.userId', '=', asUuid(userId))
+          .where(spaceVisibilityGate(eb as any)),
       ),
     ]);
   }
