@@ -397,6 +397,26 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getStackSiblingIdsInSpace(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset as seed')
+      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
+      .innerJoin('shared_space_asset', 'shared_space_asset.assetId', 'sibling.id')
+      .select('sibling.id as assetId')
+      .distinct()
+      .where('seed.id', 'in', assetIds)
+      .where('seed.stackId', 'is not', null)
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .execute();
+
+    return rows.map((row) => row.assetId);
+  }
+
   // ==========================================
   // Shared Space Library Link CRUD
   // ==========================================

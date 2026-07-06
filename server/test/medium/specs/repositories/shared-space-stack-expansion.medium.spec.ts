@@ -221,3 +221,61 @@ describe('stack-in-space composition (E10/E13)', () => {
     expect(await sut.getAssetCount(space.id)).toBe(2);
   });
 });
+
+describe('SharedSpaceRepository.getStackSiblingIdsInSpace', () => {
+  it('returns same-stack direct members of the space (E18)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child2 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id, child2.id]);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primary.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: child1.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: child2.id, addedById: user.id });
+
+    const result = await sut.getStackSiblingIdsInSpace(space.id, [primary.id]);
+
+    expect(new Set(result)).toEqual(new Set([primary.id, child1.id, child2.id]));
+  });
+
+  it('excludes same-stack assets that are NOT members of the space (E18)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+    // only the primary is a direct member; child1 is not
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primary.id, addedById: user.id });
+
+    const result = await sut.getStackSiblingIdsInSpace(space.id, [primary.id]);
+
+    expect(new Set(result)).toEqual(new Set([primary.id]));
+  });
+
+  it('does not cross space boundaries (E18)', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: user.id });
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: user.id });
+    const { asset: primary } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: child1 } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primary.id, child1.id]);
+    await ctx.newSharedSpaceAsset({ spaceId: spaceA.id, assetId: primary.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: spaceB.id, assetId: child1.id, addedById: user.id });
+
+    const result = await sut.getStackSiblingIdsInSpace(spaceA.id, [primary.id]);
+
+    // child1 is a member of space B, not A → excluded from space A's expansion
+    expect(new Set(result)).toEqual(new Set([primary.id]));
+  });
+
+  it('returns [] for empty input', async () => {
+    const { ctx, sut } = setup();
+    const { space } = await ctx.newSharedSpace({ createdById: (await ctx.newUser()).user.id });
+    const result = await sut.getStackSiblingIdsInSpace(space.id, []);
+    expect(result).toEqual([]);
+  });
+});
