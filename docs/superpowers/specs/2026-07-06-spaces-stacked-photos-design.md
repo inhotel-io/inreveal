@@ -251,7 +251,7 @@ coverage" for this feature.
 | E13 | Add cover, then **promote a different frame to primary** | Space timeline still shows the stack (new primary already a member) | S1 (medium) |
 | E14 | Remove the **cover** | All direct-member frames of the stack are removed | S2 |
 | E15 | Remove a **non-cover** frame | The whole stack's direct members are removed | S2 |
-| E16 | A removed frame is **also visible via a linked album** | Its direct row is deleted, but it **stays visible** via the album path; not counted as a face-orphan | S2 |
+| E16 | A removed frame is **also a member via a linked album** | Its direct row is deleted, but it **remains a space member** via the album path, so `getAssetIdsWithoutOtherSpacePath` does **not** flag it as a face-orphan (its faces are preserved). NB: whether it still renders in the aggregated timeline is subject to the album-partial-stack non-goal — E16 asserts the face-orphan correctness, not timeline visibility | S2 |
 | E17 | The Space **thumbnail** was an expanded (not directly-passed) frame | Thumbnail reset to `null` | S2 |
 | E18 | Passed siblings that are **not members** of the Space | Delete is a harmless no-op | S2 |
 | E19 | Face-orphan cleanup after remove | Runs over the **expanded** set; persons/faces removed only when no other Space path remains | S2 |
