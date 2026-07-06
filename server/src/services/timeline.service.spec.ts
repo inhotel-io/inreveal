@@ -98,6 +98,39 @@ describe(TimelineService.name, () => {
         await expect(sut.getTimeBuckets(authStub.admin, { spaceId: 'space-id' })).rejects.toThrow(BadRequestException);
       });
 
+      it('rejects Hidden/Locked visibility on a spaceId browse (Fix A defense-in-depth)', async () => {
+        mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set(['space-id']));
+
+        await expect(
+          sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+            spaceId: 'space-id',
+            visibility: AssetVisibility.Hidden,
+          }),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+            spaceId: 'space-id',
+            visibility: AssetVisibility.Locked,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
+      });
+
+      it('rejects Hidden/Locked visibility on a spacePersonId browse (Fix A defense-in-depth)', async () => {
+        mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set(['space-id']));
+
+        await expect(
+          sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+            spaceId: 'space-id',
+            spacePersonId: 'person-id',
+            visibility: AssetVisibility.Hidden,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
+      });
+
       it('should pass spaceId to asset repository', async () => {
         mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set(['space-id']));
         mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
