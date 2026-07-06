@@ -445,3 +445,148 @@ describe('checkSpaceAccessForSpace — visibility gate', () => {
     expect(after.has(asset.id)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// checkSpaceEditAccess — visibility gate (Slice 10)
+//
+// Security requirement: an editor role must NOT be able to edit another
+// member's Hidden or Locked asset via the space path. The edit gate must
+// mirror the read gate: only Timeline and Archive pass through.
+// ---------------------------------------------------------------------------
+
+describe('checkSpaceEditAccess — visibility gate (Slice 10)', () => {
+  // Path 1 — direct add (shared_space_asset)
+
+  it('grants Timeline and Archive to editor; blocks Hidden and Locked (direct path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: editor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: archive } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+    const { asset: hidden } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: locked } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+
+    for (const assetId of [timeline.id, archive.id, hidden.id, locked.id]) {
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId });
+    }
+
+    const result = await accessRepo.asset.checkSpaceEditAccess(
+      editor.id,
+      new Set([timeline.id, archive.id, hidden.id, locked.id]),
+    );
+
+    expect(result.has(timeline.id)).toBe(true);
+    expect(result.has(archive.id)).toBe(true);
+    expect(result.has(hidden.id)).toBe(false);
+    expect(result.has(locked.id)).toBe(false);
+  });
+
+  it('viewer role is NOT granted edit access regardless of visibility (direct path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timeline.id });
+
+    const result = await accessRepo.asset.checkSpaceEditAccess(viewer.id, new Set([timeline.id]));
+
+    expect(result.has(timeline.id)).toBe(false);
+  });
+
+  it('livePhotoVideoId: Locked parent → video part NOT granted via edit gate (direct path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: editor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+
+    const { asset: video } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: parent } = await ctx.newAsset({
+      ownerId: owner.id,
+      visibility: AssetVisibility.Locked,
+      livePhotoVideoId: video.id,
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: parent.id });
+
+    const result = await accessRepo.asset.checkSpaceEditAccess(editor.id, new Set([video.id]));
+    expect(result.has(video.id)).toBe(false);
+  });
+
+  // Path 2 — library (shared_space_library)
+
+  it('grants Timeline and Archive to editor; blocks Hidden and Locked (library path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: editor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    const { asset: timeline } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { asset: archive } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Archive,
+    });
+    const { asset: hidden } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Hidden,
+    });
+    const { asset: locked } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Locked,
+    });
+
+    const result = await accessRepo.asset.checkSpaceEditAccess(
+      editor.id,
+      new Set([timeline.id, archive.id, hidden.id, locked.id]),
+    );
+
+    expect(result.has(timeline.id)).toBe(true);
+    expect(result.has(archive.id)).toBe(true);
+    expect(result.has(hidden.id)).toBe(false);
+    expect(result.has(locked.id)).toBe(false);
+  });
+
+  it('added-then-locked: asset added while Timeline, flipped to Locked → edit access revoked (direct path)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: editor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+    const before = await accessRepo.asset.checkSpaceEditAccess(editor.id, new Set([asset.id]));
+    expect(before.has(asset.id)).toBe(true);
+
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Locked })
+      .where('id', '=', asset.id)
+      .execute();
+
+    const after = await accessRepo.asset.checkSpaceEditAccess(editor.id, new Set([asset.id]));
+    expect(after.has(asset.id)).toBe(false);
+  });
+});

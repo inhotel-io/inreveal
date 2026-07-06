@@ -30,7 +30,7 @@ import { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AudioStreamInfo, VectorExtension, VideoFormat, VideoPacketInfo, VideoStreamInfo } from 'src/types';
-import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
+import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 import { dateTruncUnitForTimeBucketSize } from 'src/utils/timeline-bucket';
 
 export const getKyselyConfig = (connection: DatabaseConnectionParams): KyselyConfig => {
@@ -664,13 +664,13 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
               requireShowInTimeline: true,
             }),
           ),
-          // Fork RBAC (M3): elevation only unlocks the CALLER'S OWN locked/archived folder. The
-          // caller's own (and partner) rows follow the resolved visibility applied above; every
-          // OTHER space member's row is constrained to Timeline, so a space-scoped search can never
-          // surface another member's Archived/Hidden/Locked asset.
+          // Fork RBAC (M3/Slice 10): elevation only unlocks the CALLER'S OWN locked/archived
+          // folder. The caller's own (and partner) rows follow the resolved visibility applied
+          // above; every OTHER space member's row is constrained to Archive+Timeline (matching the
+          // browse / timeline gate) — Hidden and Locked are never surfaced for other members.
           eb.or([
             ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
-            eb('asset.visibility', '=', AssetVisibility.Timeline),
+            spaceVisibilityGate(eb),
           ]),
         ]),
       ),
@@ -680,9 +680,10 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         eb.or([
           // Caller's own (and partner) rows follow the resolved visibility applied above.
           eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-          // Other space members' rows are always Timeline-only (elevation is per-owner, M3).
+          // Other space members' rows are Archive+Timeline (Slice 10 aligns search with browse;
+          // elevation is per-owner, Hidden/Locked never surface for other members).
           eb.and([
-            eb('asset.visibility', '=', AssetVisibility.Timeline),
+            spaceVisibilityGate(eb),
             eb.or(
               spaceAssetPathBranches(eb, {
                 correlateAssetId: 'asset.id',
