@@ -61,6 +61,7 @@ const makeMemberResult = (overrides: any = {}) => ({
 
 const makeRichRow = (over: Record<string, unknown> = {}) => {
   const albumId = newUuid();
+  const ownerUser = factory.user({ name: 'Owner One' });
   return {
     id: albumId,
     albumName: 'My Album',
@@ -70,7 +71,8 @@ const makeRichRow = (over: Record<string, unknown> = {}) => {
     updatedAt: new Date('2024-06-02T00:00:00.000Z'),
     isActivityEnabled: true,
     order: AssetOrder.Desc,
-    albumUsers: [{ role: AlbumUserRole.Owner, user: factory.user({ name: 'Owner One' }) }],
+    ownerId: ownerUser.id,
+    albumUsers: [{ role: AlbumUserRole.Owner, user: ownerUser }],
     sharedLinks: [],
     addedById: newUuid(),
     showInTimeline: true,
@@ -8141,6 +8143,24 @@ describe(SharedSpaceService.name, () => {
       expect(result[0].addedById).toBeNull();
       expect(result[0].albumThumbnailAssetId).toBeNull();
       expect(result[0].showInTimeline).toBe(false);
+    });
+
+    it('exposes ownerId (album owner UUID) and does NOT expose email or albumUsers', async () => {
+      const ownerUserId = newUuid();
+      const row = makeRichRow({ ownerId: ownerUserId });
+      const { auth, space } = arrange(
+        mocks,
+        [row],
+        [{ albumId: row.id, assetCount: 1, startDate: null, endDate: null, lastModifiedAssetTimestamp: null }],
+      );
+
+      const result = await sut.getLinkedAlbums(auth, space.id);
+
+      expect(result[0].ownerId).toBe(ownerUserId);
+      expect((result[0] as unknown as Record<string, unknown>)['albumUsers']).toBeUndefined();
+      // must not leak any user email
+      const json = JSON.stringify(result[0]);
+      expect(json).not.toContain('@');
     });
 
     it('rejects a non-member with ForbiddenException', async () => {

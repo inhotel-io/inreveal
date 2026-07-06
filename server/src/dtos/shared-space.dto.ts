@@ -141,6 +141,7 @@ const SharedSpaceAlbumParamSchema = z.object({
 
 const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.omit({ albumUsers: true })
   .extend({
+    ownerId: z.string().describe('User ID of the album owner (non-PII UUID, for group-by-owner)'),
     showInTimeline: z.boolean().describe('Include this album in the space timeline'),
     addedById: z.string().nullable().describe('User who linked the album into the space'),
     linkedAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),

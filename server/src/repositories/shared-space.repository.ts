@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
+import { AlbumUserRole, AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics } from 'src/repositories/person.repository';
 import type { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
@@ -495,6 +495,15 @@ export class SharedSpaceRepository {
         'shared_space_album.showInTimeline',
         'shared_space_album.createdAt as linkedAt',
       ])
+      .select((eb) =>
+        eb
+          .selectFrom('album_user')
+          .whereRef('album_user.albumId', '=', 'album.id')
+          .where('album_user.role', '=', AlbumUserRole.Owner)
+          .select('album_user.userId')
+          .limit(1)
+          .as('ownerId'),
+      )
       .where('shared_space_album.spaceId', '=', spaceId)
       .where('album.deletedAt', 'is', null)
       .orderBy('album.createdAt', 'desc')

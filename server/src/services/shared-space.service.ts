@@ -709,6 +709,7 @@ export class SharedSpaceService extends BaseService {
       const { albumUsers: _albumUsers, ...albumFields } = mapAlbum(row as unknown as MapAlbumDto);
       return {
         ...albumFields,
+        ownerId: (row as unknown as { ownerId: string }).ownerId,
         startDate: asDateTimeString(byId[row.id]?.startDate ?? undefined),
         endDate: asDateTimeString(byId[row.id]?.endDate ?? undefined),
         assetCount: byId[row.id]?.assetCount ?? 0,
