@@ -9,6 +9,9 @@ import { DB } from 'src/schema';
 import { ActivityTable } from 'src/schema/tables/activity.table';
 import { asUuid, dummy } from 'src/utils/database';
 
+/** Visibility values surfaced by withDefaultVisibility (Archive + Timeline). */
+const DEFAULT_VISIBILITY = [sql.lit(AssetVisibility.Archive), sql.lit(AssetVisibility.Timeline)] as const;
+
 export interface ActivitySearch {
   albumId?: string;
   assetId?: string | null;
@@ -41,7 +44,12 @@ export class ActivityRepository {
       .$if(!!assetId, (qb) => qb.where('activity.assetId', '=', assetId!))
       .$if(!!albumId, (qb) => qb.where('activity.albumId', '=', albumId!))
       .$if(isLiked !== undefined, (qb) => qb.where('activity.isLiked', '=', isLiked!))
-      .where('asset.deletedAt', 'is', null)
+      .where(({ or, and, eb }) =>
+        or([
+          and([eb('asset.deletedAt', 'is', null), eb('asset.visibility', 'in', DEFAULT_VISIBILITY)]),
+          eb('asset.id', 'is', null),
+        ]),
+      )
       .orderBy('activity.createdAt', 'asc')
       .execute();
   }
@@ -86,7 +94,7 @@ export class ActivityRepository {
       .where('activity.albumId', '=', albumId)
       .where(({ or, and, eb }) =>
         or([
-          and([eb('asset.deletedAt', 'is', null), eb('asset.visibility', '!=', sql.lit(AssetVisibility.Locked))]),
+          and([eb('asset.deletedAt', 'is', null), eb('asset.visibility', 'in', DEFAULT_VISIBILITY)]),
           eb('asset.id', 'is', null),
         ]),
       )
