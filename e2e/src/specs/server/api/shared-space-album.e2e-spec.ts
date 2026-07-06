@@ -207,35 +207,37 @@ describe('/shared-spaces/:id/albums (T18)', () => {
     it('space viewer can list linked albums (any member allowed)', async () => {
       const { status, body } = await listAlbums(viewer.accessToken);
       expect(status).toBe(200);
-      const albumIds = (body as Array<{ albumId: string }>).map((a) => a.albumId);
+      const albumIds = (body as Array<{ id: string }>).map((a) => a.id);
       expect(albumIds).toContain(ownerAlbum.id);
     });
 
     it('space editor can list linked albums', async () => {
       const { status, body } = await listAlbums(editor.accessToken);
       expect(status).toBe(200);
-      const albumIds = (body as Array<{ albumId: string }>).map((a) => a.albumId);
+      const albumIds = (body as Array<{ id: string }>).map((a) => a.id);
       expect(albumIds).toContain(ownerAlbum.id);
     });
 
     it('space owner can list linked albums', async () => {
       const { status, body } = await listAlbums(owner.accessToken);
       expect(status).toBe(200);
-      const albumIds = (body as Array<{ albumId: string }>).map((a) => a.albumId);
+      const albumIds = (body as Array<{ id: string }>).map((a) => a.id);
       expect(albumIds).toContain(ownerAlbum.id);
     });
 
-    it('response shape includes albumId, albumName, showInTimeline, assetCount, createdAt, addedById, albumThumbnailAssetId', async () => {
+    it('response shape includes id, albumName, showInTimeline, assetCount, createdAt, linkedAt, addedById, albumThumbnailAssetId', async () => {
       const { body } = await listAlbums(owner.accessToken);
-      const linked = (body as Array<Record<string, unknown>>).find((a) => a['albumId'] === ownerAlbum.id);
+      const linked = (body as Array<Record<string, unknown>>).find((a) => a['id'] === ownerAlbum.id);
       expect(linked).toBeDefined();
       expect(linked).toEqual(
         expect.objectContaining({
-          albumId: ownerAlbum.id,
+          id: ownerAlbum.id,
           albumName: 't18 owner album',
           showInTimeline: expect.any(Boolean),
           assetCount: expect.any(Number),
           createdAt: expect.any(String),
+          // linkedAt: the link-creation timestamp (distinct from the album createdAt)
+          linkedAt: expect.any(String),
           // addedById: the user who linked the album (editor linked it)
           addedById: expect.any(String),
           // albumThumbnailAssetId: set because ownerAlbum was created with an asset
@@ -493,7 +495,7 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       // Ensure unlinked regardless of test order before asserting the list.
       await unlinkAlbum(editor.accessToken, ownerAlbum.id);
       const { body } = await listAlbums(owner.accessToken);
-      const albumIds = (body as Array<{ albumId: string }>).map((a) => a.albumId);
+      const albumIds = (body as Array<{ id: string }>).map((a) => a.id);
       expect(albumIds).not.toContain(ownerAlbum.id);
     });
 
