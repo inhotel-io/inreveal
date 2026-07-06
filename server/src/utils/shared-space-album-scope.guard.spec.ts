@@ -1,78 +1,88 @@
-// Slice 4 — backstop guard (spec §2.5). The recurring space-album defect class is
-// "a 3-path access-scoping branch gains a shared_space_library arm but forgets the
-// shared_space_album arm" (the historical F1 bug). This test scans every scoping
-// file and asserts that each shared_space_library scoping reference has a nearby
-// linked-album marker — either raw `shared_space_album` OR a call to one of the
-// fork-owned album-scope helpers. It fires on any future clone (fork or upstream
-// rebase) that omits the album leg.
+// Static regression guards for the shared-space "linked album" access path.
 //
-// Benign non-scope references (CRUD, column lists, library-only sync helpers) are
-// filtered by pattern; genuine non-3-path sites are named in ALLOWLIST with a
-// reason. Two ALLOWLIST entries are GAPS this very guard discovered — see below.
+// Two INDEPENDENT scans over the same dynamically-derived file set:
 //
-// Slice 11 adds a SECOND, INDEPENDENT scan (at the bottom): every space asset
-// read must reference the visibility gate. The two scans share the same file list
-// but have separate allowlists so neither pollutes the other's invariant.
-import { readFileSync } from 'node:fs';
+//   Scan 1 (album-leg): the recurring space-album defect class is "a 3-path
+//     access-scoping branch gains a shared_space_library arm but forgets the
+//     shared_space_album arm" (the historical F1 bug). Every shared_space_library
+//     scoping reference must have a nearby linked-album marker.
+//
+//   Scan 2 (visibility-gate): every space asset read must exclude other members'
+//     Hidden/Locked assets. This is the class of leak that Fixes A (timeline),
+//     B (library-sync), C (activity), D (album search/facets) and I (redaction)
+//     closed. Every space-read function must reference a visibility gate.
+//
+// ── Why this rewrite (fixF / re-audit F3) ──────────────────────────────────
+// The previous Scan 2 was structurally too weak and NO-OP'd on the very files
+// that leaked:
+//   1. It used a HARDCODED file list, so a space read in an unlisted file was
+//      invisible.
+//   2. It keyed ONLY on `shared_space_*` table literals, but `asset.repository.ts`
+//      and `view-repository.ts` scope via the `spaceAssetPathBranches()` helper and
+//      contain ZERO such literals — so the guard scanned them as no-ops.
+//
+// This version fixes both:
+//   • The file set is DERIVED DYNAMICALLY — glob every repository + utils/database.ts
+//     and keep any file that contains a space-read marker (see SPACE_READ_MARKER).
+//   • A space read is detected by HELPER CALL *or* table literal, so helper-only
+//     files (asset/view) are now scanned.
+//   • The allowlist is keyed by `file::function` (not bare function name), so a
+//     collision like getMapMarkers (fixed in map.repository.ts, still album-gapped
+//     in shared-space.repository.ts) resolves to the correct site.
+//
+// ── What Scan 2 catches (self-test) ────────────────────────────────────────
+//   • A new/rebased space read that joins shared_space_asset/library/album (or
+//     routes through a space helper) and returns asset rows WITHOUT a nearby
+//     visibility gate → flagged as an orphan (the timeline/library/activity leak
+//     shape).
+//   • A helper-scoped read (spaceAssetPathBranches / spaceAlbumAssetExists*) whose
+//     caller drops the visibility gate → flagged, because the helpers themselves
+//     do NOT carry visibility (they only encode the access PATH, not the gate).
+//
+//   • It does NOT catch album-scoped reads that never touch a shared_space_* table
+//     or space helper (e.g. activity.repository, which filters by albumId with an
+//     inline DEFAULT_VISIBILITY gate). Those are outside this guard's detection
+//     model by construction; Fix C covers them with its own unit tests.
+//
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // Server root — vitest runs with cwd at server/ (matches face-identity-query-shape.spec.ts).
 const SERVER_ROOT = process.cwd();
 
-const SCOPING_FILES = [
-  'src/repositories/shared-space.repository.ts',
-  'src/repositories/sync.repository.ts',
-  'src/repositories/face-identity.repository.ts',
-  'src/repositories/search.repository.ts',
-  'src/repositories/asset.repository.ts',
-  'src/repositories/access.repository.ts',
-  'src/utils/database.ts',
-  'src/repositories/map.repository.ts',
-  'src/repositories/view-repository.ts',
-  'src/repositories/memory.repository.ts',
-  'src/repositories/tag.repository.ts',
-  'src/repositories/download.repository.ts',
-];
+const REPO_DIR = 'src/repositories';
+const EXTRA_FILES = ['src/utils/database.ts'];
 
-// A shared_space_library reference has "album coverage" if any of these appear
-// within +-WINDOW lines: the raw album table, or a fork album-scope helper call.
-const ALBUM_MARKER =
-  /shared_space_album|spaceAlbumAssetExists|spaceAssetPathBranches|spaceAlbumAssetExistsSql|accessibleSpaceAlbums/;
-const LIBRARY_REF = /\bshared_space_library\b/;
-const WINDOW = 45;
+// Fork-owned space-scope helpers. A call to any of these IS a space read (they
+// encode the direct/library/album access path). Detected as bare identifiers so a
+// call, spread, or import all count.
+const SPACE_HELPER =
+  /\b(spaceAssetPathBranches|spaceAlbumAssetExists|spaceAlbumAssetExistsSql|spaceDirectAssetExists|spaceLibraryAssetExists|accessibleSpaces|accessibleSpaceAlbums|accessibleLibraries)\b/;
 
-// Lines that reference shared_space_library but are NOT a 3-path access-scope arm.
-const BENIGN_LINE = [
-  /(insertInto|deleteFrom|updateTable|backfillQuery)\(\s*['"]shared_space_library/, // CRUD / sync backfill
-  /^'shared_space_library\.\w+',?$/, // column-list entry
-  /accessibleLibraries|library_user|library_asset|library_audit/, // library-only sync helpers
-];
+// The raw join tables. A reference to any of these is also a space read.
+const SPACE_TABLE = /\bshared_space_(asset|library|album)\b/;
 
-// Enclosing functions that legitimately reference shared_space_library WITHOUT an
-// album arm. Keyed by function name (robust to line drift). Every entry needs a reason.
-const ALLOWLIST: Record<string, string> = {
-  // Album-ABSENCE gate (keeps plain non-space album assets visible) — references
-  // asset/library absence by design, never an album access arm.
-  albumSharedSpaceScope: 'album-absence gate, not an album access arm',
-  // Pre-existing intentional RBAC gap: AssetUpdate/edit has no space-album arm
-  // (space editors can add/remove but not metadata-edit linked-album assets). Out
-  // of scope for this behavior-preserving consolidation; tracked separately.
-  checkSpaceEditAccess: 'known RBAC gap: AssetUpdate has no space-album arm (pre-existing)',
-  // NOTE: map.repository.ts:getMapMarkers was fixed by Slice 9. The space-specific
-  // getMapMarkers in shared-space.repository.ts (GET /shared-spaces/:id/map-markers)
-  // still lacks the album arm — pre-existing gap, tracked separately.
-  getMapMarkers: 'GUARD-DISCOVERED gap: union(direct,library) omits album arm (pre-existing, follow-up)',
-  // GUARD-DISCOVERED pre-existing missing-album gaps (not in the review's inventory,
-  // which only grepped shared_space_album). Both OR direct+library but omit the
-  // album arm, so an album-only asset is invisible to them. Flagged for follow-up;
-  // NOT fixed here (unplanned behavior change).
-  findSpaceForAssetAndUser: 'GUARD-DISCOVERED gap: union(direct,library) omits album arm (pre-existing, follow-up)',
-  getPersonalThumbnailForSpacePerson:
-    'GUARD-DISCOVERED gap: or(direct,library) omits album arm (pre-existing, follow-up)',
+// Either signal means the line participates in a space-scoped read.
+const SPACE_READ_MARKER = new RegExp(`${SPACE_HELPER.source}|${SPACE_TABLE.source}`);
+
+// Derive the file set: every repository + utils/database.ts that contains a
+// space-read marker. Glob, do not hardcode — a new leaky file is auto-included.
+const deriveScopingFiles = (): string[] => {
+  const repoFiles = readdirSync(join(SERVER_ROOT, REPO_DIR))
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.spec.ts'))
+    .map((f) => `${REPO_DIR}/${f}`);
+  return [...repoFiles, ...EXTRA_FILES].filter((file) =>
+    SPACE_READ_MARKER.test(readFileSync(join(SERVER_ROOT, file), 'utf8')),
+  );
 };
 
-const DECL = /^\s*(?:export\s+)?(?:async\s+)?(?:function\s+)?([A-Za-z0-9_]+)\s*[(<]/;
+const SCOPING_FILES = deriveScopingFiles();
+
+// ── shared helpers ─────────────────────────────────────────────────────────
+
+const DECL =
+  /^\s*(?:export\s+)?(?:public\s+|private\s+|protected\s+)?(?:async\s+)?(?:function\s+)?([A-Za-z0-9_]+)\s*[(<]/;
 const NON_DECL = new Set([
   'if',
   'for',
@@ -113,6 +123,7 @@ const NON_DECL = new Set([
   'THEN',
   'ELSE',
   'END',
+  'SET',
 ]);
 
 const enclosingFn = (lines: string[], i: number): string => {
@@ -123,6 +134,53 @@ const enclosingFn = (lines: string[], i: number): string => {
     }
   }
   return '<module>';
+};
+
+const shortName = (file: string) => file.split('/').pop()!;
+const key = (file: string, fn: string) => `${shortName(file)}::${fn}`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCAN 1 — album-leg coverage
+//
+// Every `shared_space_library` scoping arm must have album coverage within
+// ±WINDOW lines: the raw `shared_space_album` table, or a fork album-scope helper.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ALBUM_MARKER =
+  /shared_space_album|spaceAlbumAssetExists|spaceAssetPathBranches|spaceAlbumAssetExistsSql|accessibleSpaceAlbums/;
+const LIBRARY_REF = /\bshared_space_library\b/;
+const WINDOW = 45;
+
+// Lines that reference shared_space_library but are NOT a 3-path access-scope arm.
+const BENIGN_LINE = [
+  /(insertInto|deleteFrom|updateTable|backfillQuery|upsertQuery)\(\s*['"]shared_space_library/, // CRUD / sync backfill
+  /^'shared_space_library\.\w+',?$/, // column-list entry
+  /accessibleLibraries|library_user|library_asset|library_audit/, // library-only sync helpers
+];
+
+// Enclosing functions that legitimately reference shared_space_library WITHOUT an
+// album arm. Keyed by `<file>::<function>`. Every entry needs a real reason.
+const ALBUM_ALLOWLIST: Record<string, string> = {
+  // Album-ABSENCE gate (keeps plain non-space album assets visible) — references
+  // asset/library absence by design, never an album access arm.
+  'database.ts::albumSharedSpaceScope': 'album-absence gate, not an album access arm',
+  // Pre-existing intentional RBAC gap: AssetUpdate/edit has no space-album arm
+  // (space editors can add/remove but not metadata-edit linked-album assets).
+  'access.repository.ts::checkSpaceEditAccess': 'known RBAC gap: AssetUpdate has no space-album arm (pre-existing)',
+  // GET /shared-spaces/:id/map-markers unions direct+library only. Visibility-gated
+  // (visibleSpaceAssetVisibilities) so no leak — but album-linked markers are absent.
+  // Pre-existing album-completeness gap, tracked separately; NOT a visibility hole.
+  'shared-space.repository.ts::getMapMarkers':
+    'GUARD-DISCOVERED album gap: union(direct,library) omits album arm (pre-existing, follow-up)',
+  // Both OR direct+library but omit the album arm, so an album-only asset is
+  // invisible to them. Pre-existing; membership/thumbnail lookups (see Scan 2).
+  'shared-space.repository.ts::findSpaceForAssetAndUser':
+    'GUARD-DISCOVERED album gap: union(direct,library) omits album arm (pre-existing, follow-up)',
+  // Thumbnail-face lookup: or(direct,library) omits the album arm, so an album-only
+  // linked asset can't supply a fallback thumbnail. Visibility-gated (line 1486), so
+  // no visibility leak — a pre-existing album-completeness gap, tracked separately.
+  'shared-space.repository.ts::getPersonalThumbnailForSpacePerson':
+    'GUARD-DISCOVERED album gap: or(direct,library) omits album arm (pre-existing, follow-up)',
 };
 
 describe('space-album scope guard: every library scoping arm has album coverage', () => {
@@ -143,7 +201,7 @@ describe('space-album scope guard: every library scoping arm has album coverage'
         continue;
       }
       const fn = enclosingFn(lines, i);
-      if (ALLOWLIST[fn]) {
+      if (ALBUM_ALLOWLIST[key(file, fn)]) {
         continue;
       }
       const lo = Math.max(0, i - WINDOW);
@@ -158,131 +216,103 @@ describe('space-album scope guard: every library scoping arm has album coverage'
       orphans,
       `shared_space_library scoping arm(s) with no adjacent shared_space_album arm/helper.\n` +
         `Add the album leg (route it through spaceAlbumAssetExists / spaceAssetPathBranches /\n` +
-        `spaceAlbumAssetExistsSql) or, if genuinely album-free, add the enclosing function to\n` +
-        `ALLOWLIST with a reason.\n` +
+        `spaceAlbumAssetExistsSql) or, if genuinely album-free, add '<file>::<fn>' to\n` +
+        `ALBUM_ALLOWLIST with a reason.\n` +
         orphans.join('\n'),
     ).toEqual([]);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCAN 2 (Slice 11): VISIBILITY-GATE scan
+// SCAN 2 — visibility-gate coverage
 //
-// Every repository query that space-scopes an asset read (joins
-// shared_space_asset / shared_space_library / shared_space_album and
-// selects / returns asset rows) must reference the visibility gate — either:
-//   - spaceVisibilityGate (most surfaces)
-//   - spaceVisibleAssetVisibilities / visibleSpaceAssetVisibilities (shared-space repo)
-//   - peopleAssetVisibilities (people stats)
-//   - AssetVisibility.Timeline or AssetVisibility.Archive (tighter gates: map, memory, view)
+// Every space-scoped ASSET read (joins shared_space_asset/library/album, or routes
+// through a space helper, and returns asset rows) must reference the visibility
+// gate within ±VIS_WINDOW lines. The gate excludes other members' Hidden/Locked.
 //
-// The scan looks for any line containing `shared_space_asset`, `shared_space_library`,
-// or `shared_space_album` (excluding comments and benign CRUD) and verifies that
-// the enclosing function has at least one visibility-gate token within ±WINDOW lines.
-//
-// This scan uses its OWN separate allowlist — do NOT merge with ALLOWLIST above.
+// A space read is detected by SPACE_READ_MARKER (helper call OR table literal), so
+// helper-only files (asset.repository.ts, view-repository.ts) are covered — the
+// gap that let Fixes A/C slip past the old table-literal-only scan.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// A space scoping reference (asset read, not CRUD) is "visibility-gated" if any
-// of these tokens appear within ±VIS_WINDOW lines of it.
-//
-// The last two alternatives cover sync stream classes that select from a LINK
-// table (shared_space_library / shared_space_album) to stream metadata rows —
-// NOT asset rows. The presence of *_SYNC_COLUMNS (which contain only link-table
-// columns like libraryId, spaceId, showInTimeline) confirms the query is a
-// link-metadata stream and NOT an asset read. Asset visibility is enforced in
-// the corresponding asset-specific stream classes (SharedSpaceAssetSync etc.).
+// A space read is "visibility-gated" if any of these appear within ±VIS_WINDOW.
+//   - spaceVisibilityGate / spaceVisibleAssetVisibilities / visibleSpaceAssetVisibilities:
+//     the Kysely `visibility IN (archive,timeline)` gate.
+//   - peopleAssetVisibilities: the raw-SQL alias of the same set (face/person stats).
+//   - visibilityFilter: the local raw-SQL const `visibility IN (visibleSpaceAssetVisibilities)`
+//     interpolated into the space-stats CTEs (countPersons / peopleFaceStatistics).
+//   - AssetVisibility.Timeline / AssetVisibility.Archive: an inline visibility '='
+//     predicate (map / memory / view use the tighter Timeline-only gate).
+//   - *_SYNC_COLUMNS: the query streams a LINK table (libraryId/albumId/spaceId
+//     metadata) not asset rows; asset visibility lives in the asset-stream classes.
 const VIS_GATE_MARKER =
-  /spaceVisibilityGate|spaceVisibleAssetVisibilities|visibleSpaceAssetVisibilities|peopleAssetVisibilities|AssetVisibility\.Timeline|AssetVisibility\.Archive|SHARED_SPACE_LIBRARY_SYNC_COLUMNS|SHARED_SPACE_ALBUM_SYNC_COLUMNS|visibilityFilter/;
+  /spaceVisibilityGate|spaceVisibleAssetVisibilities|visibleSpaceAssetVisibilities|peopleAssetVisibilities|visibilityFilter|AssetVisibility\.(Timeline|Archive)|SHARED_SPACE_LIBRARY_SYNC_COLUMNS|SHARED_SPACE_ALBUM_SYNC_COLUMNS/;
 
-// Lines that reference shared_space_* but are NOT asset-read scoping arms
-// (mirrors the album-leg BENIGN_LINE filter, plus shared_space_album CRUD).
+// Lines that reference a space marker but are NOT an asset-read scoping arm.
 const VIS_BENIGN_LINE = [
-  /(insertInto|deleteFrom|updateTable|backfillQuery)\(\s*['"]shared_space/, // CRUD / sync backfill
+  /(insertInto|deleteFrom|updateTable|backfillQuery|upsertQuery|auditQuery)\(\s*['"]shared_space/, // CRUD / sync
   /^'shared_space[^']+\.\w+',?$/, // column-list entry
-  /accessibleLibraries|library_user|library_asset|library_audit/, // library-only sync helpers
-  /accessibleSpaceAlbums|accessibleSpaces/, // helper call references (not inline scoping)
-  /shared_space_member/, // membership-only references (not asset-read arms)
-  /shared_space_audit|shared_space_person|shared_space_library_audit/, // audit/person tables
-  // SharedSpaceLibrarySync / SharedSpaceAlbumLinkSync: these stream link-table rows
-  // (libraryId/albumId/spaceId metadata), NOT asset rows. The backfill/upsert queries
-  // select from the link table directly. Asset visibility is enforced in the separate
-  // SharedSpaceAssetSync / SharedSpaceAlbumAssetSync stream classes.
-  /SHARED_SPACE_LIBRARY_SYNC_COLUMNS|SHARED_SPACE_ALBUM_SYNC_COLUMNS/, // link-table column sets
+  /shared_space_(asset|library|album)_audit/, // audit tables (tombstones, not reads)
 ];
 
-// Scoping references that legitimately have no nearby visibility gate, keyed by
-// enclosing function name. Add here with a one-line reason ONLY.
+// Space reads that legitimately have no nearby visibility gate. Keyed by
+// `<file>::<function>`. Every entry states WHY (not "enforced downstream" waves).
 const VIS_ALLOWLIST: Record<string, string> = {
-  // Returns a boolean (is asset in space?), not a full asset row set.
-  // Gated upstream by checkSpaceAccess before any asset data is served.
-  isAssetInSpace: 'membership-presence check only; no asset data returned; gated upstream',
-  // Returns user/space metadata (who can edit?), not asset rows.
-  // Visibility-gated (Slice 10) but no album arm — on album-leg ALLOWLIST.
-  checkSpaceEditAccess: 'visibility-gated (Slice 10) via spaceVisibilityGate; on album-leg allowlist',
-  // Absence-gate (confirms asset is NOT already in space via another path).
-  // Reads album/library/direct rows to check absence, not to return asset data to client.
-  albumSharedSpaceScope: 'absence gate; checks non-membership, not asset data exposure',
-  // Returns space-person linked to a global person, not asset rows.
-  findSpacePersonByLinkedPersonId: 'returns space-person metadata, not asset rows',
-  // Union absence check for removeAssets — checks existing space membership.
-  getAssetIdsWithoutOtherSpacePath: 'membership check for removals; no asset data returned to client',
-  getAlbumAssetIdsWithoutOtherSpacePath: 'membership check for removals; no asset data returned to client',
-  // Returns the libraryId of a linked library, not asset rows.
-  getLinkedLibraries: 'returns library metadata, not asset rows',
-  // Returns space-level statistics (member counts, etc.), not asset rows.
-  getSpaceStats: 'space-level statistics; no asset rows returned',
-  // findSpaceForAssetAndUser: membership lookup returning space/role metadata.
-  // GUARD-DISCOVERED gap on album-leg allowlist; visibility gated upstream.
-  findSpaceForAssetAndUser: 'membership lookup; returns space/role, not asset data; visibility gated upstream',
-  // getPersonalThumbnailForSpacePerson: returns thumbnail face metadata (one face),
-  // not a user-visible asset set. GUARD-DISCOVERED gap on album-leg allowlist.
-  getPersonalThumbnailForSpacePerson: 'returns face thumbnail path, not a user-visible asset set; gated upstream',
-  // Sync backfill helpers: operate on shared_space_{member,audit} tables as part
-  // of the sync protocol, not as direct asset-read scoping. Asset visibility is
-  // enforced in the asset-specific sync streams (SharedSpaceAssetSync etc.).
-  backfillQuery: 'sync infrastructure; asset visibility enforced in stream classes',
-  upsertQuery: 'sync infrastructure; asset visibility enforced in stream classes',
-  auditQuery: 'sync audit query; no asset rows returned',
-  // Cleanup helpers that delete memory_asset rows based on visibility — the
-  // AssetVisibility.Timeline check IS the deletion criterion, not a read gate.
-  cleanup: 'memory cleanup; AssetVisibility.Timeline used as deletion criterion, not a read gate',
-  // Returns library IDs (not asset rows) accessible to the user via owned or space-linked libraries.
-  accessibleLibraries: 'returns library IDs only, not asset rows; visibility enforced in asset-stream queries',
-  // Streams shared_space_library LINK rows (libraryId, spaceId metadata), NOT asset rows.
-  // Asset visibility is enforced in SharedSpaceAssetExifSync and LibraryAssetSync.
-  SharedSpaceLibrarySync: 'streams library-link metadata rows, not asset rows; visibility in asset streams',
-  // Streams shared_space_album LINK rows (albumId, spaceId, showInTimeline), NOT asset rows.
-  // Asset visibility is enforced in SharedSpaceAlbumAssetSync and SharedSpaceAlbumAssetExifSync.
-  SharedSpaceAlbumLinkSync: 'streams album-link metadata rows, not asset rows; visibility in asset streams',
-  // Returns album IDs (not asset rows) that a user can edit/read via a space link.
-  // Actual asset visibility is enforced downstream when the album download happens.
-  checkSpaceLinkedAlbumAccess: 'returns album IDs only, not asset rows; asset visibility enforced downstream',
-  checkSpaceLinkedAlbumReadAccess: 'returns album IDs only, not asset rows; asset visibility enforced downstream',
-  // Returns addedById (user IDs) for who added a face to the space — not asset data.
-  getSpacePersonAssetAdderIds: 'returns addedById attribution (user IDs), not asset data',
-  // Returns addedById for who added a specific asset to the space (via direct/library/album).
-  // Selects only shared_space_{asset,library,album}.addedById — no asset content exposed.
-  getSpaceAssetAdder: 'returns addedById attribution only; no asset content returned to client',
-  // Returns (spaceId, albumId, showInTimeline, faceRecognitionEnabled) link metadata.
-  // Used for fan-out to find which spaces a linked album feeds — no asset rows returned.
-  getSpacesLinkedToAlbum: 'returns space-album link metadata (spaceId, albumId, flags), not asset rows',
-  // Returns album metadata rows (albumName, thumbnailAssetId, etc.) for albums linked to
-  // a space — used for management UI listing. Does NOT return individual asset content.
-  getLinkedAlbums: 'returns album metadata rows for management UI; no individual asset content',
-  // Returns a boolean (does this space-library link exist?), not asset rows.
-  hasLibraryLink: 'boolean membership check; returns true/false, not asset data',
-  // Reads shared_space_asset rows to INSERT them into shared_space_asset_audit —
-  // this is write infrastructure for the visibility-purge sync mechanism, not
-  // a client-facing asset read. Asset data is never returned to callers.
-  emitDirectAssetVisibilityPurge:
-    'sync purge infrastructure; inserts into audit table, no asset data returned to client',
-  // Returns library-link metadata rows (spaceId, libraryId, faceRecognitionEnabled)
-  // for fan-out to find which spaces a library feeds. No asset content exposed.
-  getSpacesLinkedToLibrary: 'returns library-link metadata (spaceId, libraryId, flags), not asset rows',
+  // — Membership / link-metadata lookups: return a spaceId, library id, album id, or
+  //   metadata row — never asset rows. No asset content is served, so no gate applies.
+  'shared-space.repository.ts::findSpaceForAssetAndUser':
+    'membership lookup; returns spaceId, not asset data (on album-leg allowlist too)',
+  'shared-space.repository.ts::getLinkedLibraries': 'returns library metadata rows, not asset rows',
+  'shared-space.repository.ts::hasLibraryLink': 'boolean link-existence check; no asset data',
+  'shared-space.repository.ts::getLinkedAlbums': 'returns album metadata rows for management UI; no asset content',
+  'shared-space.repository.ts::getSpacesLinkedToAlbum': 'returns space-album link metadata (ids/flags), not asset rows',
+  'shared-space.repository.ts::getSpacesLinkedToLibrary': 'returns library-link metadata (ids/flags), not asset rows',
+
+  // — Anti-join membership gates: read direct/library/album rows to check that an
+  //   asset is NOT already reachable via another space path (removal / face cleanup).
+  //   The read decides membership, it does not return asset content to a client.
+  'shared-space.repository.ts::getAssetIdsWithoutOtherSpacePath':
+    'anti-join membership check for removals; no asset data',
+  'shared-space.repository.ts::getAlbumAssetIdsWithoutOtherSpacePath':
+    'anti-join membership check for removals; no asset data',
+
+  // — addedById attribution: select shared_space_*.addedById (who added the asset),
+  //   never asset content. No visibility gate needed.
+  'shared-space.repository.ts::getSpacePersonAssetAdderIds': 'returns addedById (user ids), not asset data',
+  'shared-space.repository.ts::getSpaceAssetAdder': 'returns addedById attribution only; no asset content',
+
+  // — Sync purge write-infra: INSERT ... SELECT that reads shared_space_asset JOIN
+  //   ids (spaceId, assetId) into the audit tombstone table. No asset content read,
+  //   and it fires precisely BECAUSE the asset left the visible set (purge event).
+  'shared-space.repository.ts::emitDirectAssetVisibilityPurge':
+    'reads join ids into audit tombstone (purge write-infra); no asset content returned',
+
+  // — Album-ACCESS grant checks: select ONLY album.id (which albums the user may
+  //   read/edit via a space link), never asset rows. Individual asset visibility is
+  //   enforced at each DOWNSTREAM asset read — album withAssets (withDefaultVisibility),
+  //   activity (Fix C), and album search/facets (Fix D) — all of which are now gated.
+  'access.repository.ts::checkSpaceLinkedAlbumAccess':
+    'selects album.id only, never asset rows; asset visibility gated at each downstream read (Fixes C/D)',
+  'access.repository.ts::checkSpaceLinkedAlbumReadAccess':
+    'selects album.id only, never asset rows; asset visibility gated at each downstream read (Fixes C/D)',
+
+  // — Sync scope helper: accessibleLibraries builds a UNION of library ids (owned +
+  //   space-linked) used as a subquery scope. It returns library ids, never asset rows;
+  //   the asset streams that USE it (LibraryAssetSync/ExifSync) carry the visibility gate.
+  'sync.repository.ts::accessibleLibraries': 'returns library ids only (UNION of owned + space-linked), not asset rows',
+
+  // — SharedSpaceSync.getUpserts streams SHARED_SPACE_SYNC_COLUMNS (space name/settings
+  //   metadata) scoped by accessibleSpaces — space rows, NOT asset rows. The per-asset
+  //   space streams (SharedSpaceAssetSync etc.) carry the visibility gate separately.
+  'sync.repository.ts::getUpserts':
+    'sync stream of shared_space metadata columns (accessibleSpaces-scoped), not asset rows',
+  // LibrarySync.getCreatedAfter streams library_user access-GRANT rows (libraryId,
+  // createId) scoped by accessibleLibraries — a per-user grant ledger, not asset
+  // rows. The library asset streams (LibraryAssetSync/ExifSync) carry the gate.
+  'sync.repository.ts::getCreatedAfter':
+    'streams library_user access-grant metadata (accessibleLibraries-scoped), not asset rows',
 };
 
-const SPACE_ASSET_REF = /\bshared_space_asset\b|\bshared_space_library\b|\bshared_space_album\b/;
 const VIS_WINDOW = 50;
 
 describe('space-visibility gate guard: every space asset read has a visibility gate', () => {
@@ -294,21 +324,22 @@ describe('space-visibility gate guard: every space asset read has a visibility g
       const raw = lines[i];
       const trimmed = raw.trim();
 
-      // Skip comments
       if (trimmed.startsWith('//') || trimmed.startsWith('*')) {
         continue;
       }
-      // Skip non-space-scoping lines
-      if (!SPACE_ASSET_REF.test(raw)) {
+      if (!SPACE_READ_MARKER.test(raw)) {
         continue;
       }
-      // Skip benign CRUD / non-read-scoping lines
+      // The helper/scope module and its import lines are definitions, not reads.
+      if (/^import\b/.test(trimmed) || /from 'src\/utils\/shared-space-album-scope'/.test(trimmed)) {
+        continue;
+      }
       if (VIS_BENIGN_LINE.some((re) => re.test(trimmed))) {
         continue;
       }
 
       const fn = enclosingFn(lines, i);
-      if (VIS_ALLOWLIST[fn]) {
+      if (VIS_ALLOWLIST[key(file, fn)]) {
         continue;
       }
 
@@ -324,7 +355,7 @@ describe('space-visibility gate guard: every space asset read has a visibility g
       orphans,
       `space asset read arm(s) with no nearby visibility gate.\n` +
         `Add spaceVisibilityGate / visibleSpaceAssetVisibilities / AssetVisibility.Timeline\n` +
-        `to the query, or add the enclosing function to VIS_ALLOWLIST with a reason.\n` +
+        `to the query, or add '<file>::<fn>' to VIS_ALLOWLIST with a reason.\n` +
         orphans.join('\n'),
     ).toEqual([]);
   });
