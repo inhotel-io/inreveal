@@ -176,10 +176,11 @@ describe('shared-space visibility negatives (Slice 11)', () => {
     it('Locked direct-space asset absent from download manifest', async () => {
       const timelineAsset = await utils.createAsset(owner.accessToken);
       const lockedAsset = await utils.createAsset(owner.accessToken);
-      await setVisibility(lockedAsset.id, AssetVisibility.Locked);
 
       const spaceId = await freshSpace('download-locked-neg');
+      // add both while Timeline (the batch add rejects a pre-Locked asset), THEN lock
       await utils.addSpaceAssets(owner.accessToken, spaceId, [timelineAsset.id, lockedAsset.id]);
+      await setVisibility(lockedAsset.id, AssetVisibility.Locked);
 
       const assetIds = await downloadInfoIds({ spaceId });
 
