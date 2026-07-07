@@ -6,12 +6,15 @@
 // This slice closes only the Hidden gap, via a space-only audit table
 // (shared_space_album_asset_audit) unioned into SharedSpaceAlbumToAssetSync.
 import { Kysely } from 'kysely';
+import { DateTime } from 'luxon';
 import { SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
+import { v4 } from 'uuid';
 
 let defaultDatabase: Kysely<DB>;
 
@@ -337,5 +340,34 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
 
     // Next sync MUST be empty: no re-delivery from either arm, no skip.
     await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  });
+
+  it('R1 (album): cleanupAuditTable prunes old shared_space_album_asset_audit rows but retains recent ones', async () => {
+    const { ctx } = await setup();
+
+    const tableName = 'shared_space_album_asset_audit';
+    const oldDeletedAt = DateTime.now().minus({ days: 40 }).toISO();
+    const recentDeletedAt = DateTime.now().minus({ days: 10 }).toISO();
+
+    // Insert one old row (should be pruned) and one recent row (should be retained).
+    const oldRow = await ctx.database
+      .insertInto(tableName)
+      .values({ albumId: v4(), assetId: v4(), deletedAt: oldDeletedAt })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const recentRow = await ctx.database
+      .insertInto(tableName)
+      .values({ albumId: v4(), assetId: v4(), deletedAt: recentDeletedAt })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    await ctx.get(SyncRepository).sharedSpaceAlbumToAsset.cleanupAuditTable(31);
+
+    const remaining = await ctx.database.selectFrom(tableName).select('id').execute();
+    const remainingIds = remaining.map((r) => r.id);
+
+    expect(remainingIds).not.toContain(oldRow.id);
+    expect(remainingIds).toContain(recentRow.id);
   });
 });

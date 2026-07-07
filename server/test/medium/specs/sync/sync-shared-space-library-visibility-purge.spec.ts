@@ -5,12 +5,15 @@
 // there is no restore emit (asserted by L3). Space-only tombstones live in
 // shared_space_library_asset_audit, unioned (owner-gated) into LibraryAssetSync.
 import { Kysely } from 'kysely';
+import { DateTime } from 'luxon';
 import { AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
+import { v4 } from 'uuid';
 
 let defaultDatabase: Kysely<DB>;
 const setup = async (db?: Kysely<DB>) => {
@@ -160,5 +163,46 @@ describe('LibraryAssetSync — library visibility purge (space members, not owne
   it('X2: emitLibraryAssetVisibilityPurge is a no-op on an empty id list', async () => {
     const { ctx } = await setup();
     await expect(ctx.get(SharedSpaceRepository).emitLibraryAssetVisibilityPurge([])).resolves.not.toThrow();
+  });
+
+  it('R1 (library): cleanupAuditTable prunes old shared_space_library_asset_audit rows; retains recent; does not regress library_asset_audit', async () => {
+    const { ctx } = await setup();
+
+    const libraryAuditTable = 'shared_space_library_asset_audit';
+    const oldDeletedAt = DateTime.now().minus({ days: 40 }).toISO();
+    const recentDeletedAt = DateTime.now().minus({ days: 10 }).toISO();
+
+    // Insert an old and a recent row into the space library audit table.
+    const oldRow = await ctx.database
+      .insertInto(libraryAuditTable)
+      .values({ libraryId: v4(), assetId: v4(), deletedAt: oldDeletedAt })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const recentRow = await ctx.database
+      .insertInto(libraryAuditTable)
+      .values({ libraryId: v4(), assetId: v4(), deletedAt: recentDeletedAt })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    // Also insert a stale row into the shared library_asset_audit table to verify
+    // that the existing cleanup behaviour is not regressed.
+    const staleLibraryRow = await ctx.database
+      .insertInto('library_asset_audit')
+      .values({ libraryId: v4(), assetId: v4(), deletedAt: oldDeletedAt })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    await ctx.get(SyncRepository).libraryAsset.cleanupAuditTable(31);
+
+    const remainingSpaceLibrary = await ctx.database.selectFrom(libraryAuditTable).select('id').execute();
+    const remainingSpaceLibraryIds = remainingSpaceLibrary.map((r) => r.id);
+    expect(remainingSpaceLibraryIds).not.toContain(oldRow.id);
+    expect(remainingSpaceLibraryIds).toContain(recentRow.id);
+
+    // Stale library_asset_audit row must also have been pruned (regression guard).
+    const remainingLibraryAudit = await ctx.database.selectFrom('library_asset_audit').select('id').execute();
+    const remainingLibraryAuditIds = remainingLibraryAudit.map((r) => r.id);
+    expect(remainingLibraryAuditIds).not.toContain(staleLibraryRow.id);
   });
 });
