@@ -393,10 +393,11 @@ Every use case is specified below as Given/When/Then. Each scenario maps to at l
 - When I expand "France"
 - Then its cities are fetched once via `citySuggestionsProvider('France')`, showing a loading indicator, then the city list.
 
-**Scenario: Search triggers a city fetch**
+**Scenario: Search filters countries + already-loaded cities (no proactive city fetch)**
 
-- Given I type "par" (≥2 chars) in the picker search
-- Then, after a short debounce, cities are fetched for matching countries and matches (country names + loaded cities) are shown.
+- Given I type "par" in the picker search
+- Then the country list is filtered to countries whose name matches, plus any country with an already-loaded (expanded) city that matches; the matching loaded cities are shown.
+- And searching does NOT trigger city fetches for un-expanded countries — cities are fetched only when a country is expanded (honoring the "no network call unless the user acts" rule; this intentionally diverges from web's fetch-all-on-search).
 
 **Scenario: Selecting a city selects its country**
 
