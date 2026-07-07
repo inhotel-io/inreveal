@@ -76,6 +76,7 @@ import { SharedLinkAssetTable } from 'src/schema/tables/shared-link-asset.table'
 import { SharedLinkTable } from 'src/schema/tables/shared-link.table';
 import { SharedSpaceActivityTable } from 'src/schema/tables/shared-space-activity.table';
 import { SharedSpaceAlbumAssetAuditTable } from 'src/schema/tables/shared-space-album-asset-audit.table';
+import { SharedSpaceLibraryAssetAuditTable } from 'src/schema/tables/shared-space-library-asset-audit.table';
 import { SharedSpaceAlbumAuditTable } from 'src/schema/tables/shared-space-album-audit.table';
 import { SharedSpaceAlbumUserAuditTable } from 'src/schema/tables/shared-space-album-user-audit.table';
 import { SharedSpaceAlbumUserTable } from 'src/schema/tables/shared-space-album-user.table';
@@ -180,6 +181,7 @@ export class ImmichDatabase {
     SharedSpaceAlbumUserAuditTable,
     SharedSpaceLibraryTable,
     SharedSpaceLibraryAuditTable,
+    SharedSpaceLibraryAssetAuditTable,
     SharedSpaceActivityTable,
     SharedSpacePersonTable,
     SharedSpacePersonFaceTable,
@@ -324,6 +326,7 @@ export interface DB {
   shared_space_album_user_audit: SharedSpaceAlbumUserAuditTable;
   shared_space_library: SharedSpaceLibraryTable;
   shared_space_library_audit: SharedSpaceLibraryAuditTable;
+  shared_space_library_asset_audit: SharedSpaceLibraryAssetAuditTable;
   shared_space_activity: SharedSpaceActivityTable;
   shared_space_person: SharedSpacePersonTable;
   shared_space_person_face: SharedSpacePersonFaceTable;
