@@ -46,6 +46,9 @@ describe(AssetService.name, () => {
     // (Slice 4.B); default to no-op so unrelated update tests don't break.
     mocks.sharedSpace.emitDirectAssetVisibilityPurge.mockResolvedValue(void 0);
     mocks.sharedSpace.emitDirectAssetVisibilityRestore.mockResolvedValue(void 0);
+    // Slice 1: album-path purge/restore (album_asset row retained on Hidden).
+    mocks.sharedSpace.emitAlbumAssetVisibilityPurge.mockResolvedValue(void 0);
+    mocks.sharedSpace.emitAlbumAssetVisibilityRestore.mockResolvedValue(void 0);
   });
 
   describe('getStatistics', () => {
@@ -1064,6 +1067,46 @@ describe(AssetService.name, () => {
 
       expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
       expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
+    });
+
+    // Slice 1: album-path purge/restore dispatch assertions.
+    it('should purge album-linked space assets when visibility is Hidden', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Hidden });
+
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityRestore).not.toHaveBeenCalled();
+    });
+
+    it('should NOT purge album-linked assets when visibility is Locked (removeAssetsFromAll covers it)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Locked });
+
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityRestore).not.toHaveBeenCalled();
+    });
+
+    it.each([[AssetVisibility.Timeline], [AssetVisibility.Archive]])(
+      'should re-add album-linked space assets to member devices when visibility is %s',
+      async (visibility) => {
+        mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+        await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
+
+        expect(mocks.sharedSpace.emitAlbumAssetVisibilityRestore).toHaveBeenCalledWith(['asset-1']);
+        expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should not touch album-linked space assets when visibility is not provided', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], isFavorite: true });
+
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityRestore).not.toHaveBeenCalled();
     });
 
     it('should not call updateAllExif when no exif fields are provided', async () => {

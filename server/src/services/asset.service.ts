@@ -325,6 +325,16 @@ export class AssetService extends BaseService {
       await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(ids);
     }
 
+    // Slice 1: ALBUM-path purge/restore for already-synced member devices.
+    // Locked is already covered by removeAssetsFromAll above (deletes the
+    // album_asset join row, firing album_asset_audit) — no new tombstone needed.
+    // Hidden retains the album_asset row, so we emit an explicit tombstone.
+    if (visibility === AssetVisibility.Hidden) {
+      await this.sharedSpaceRepository.emitAlbumAssetVisibilityPurge(ids);
+    } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
+      await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(ids);
+    }
+
     await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
   }
 
