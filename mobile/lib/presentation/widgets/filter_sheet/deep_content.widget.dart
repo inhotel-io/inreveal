@@ -40,7 +40,13 @@ class DeepContent extends ConsumerWidget {
           ),
         );
       case FilterSectionId.tags:
-        return const TagsSectionDeep(key: Key('deep-section-tags'));
+        return Builder(
+          key: const Key('deep-section-tags-wrapper'),
+          builder: (context) => TagsSectionDeep(
+            key: const Key('deep-section-tags'),
+            onOpenPicker: () => context.pushRoute(const TagsPickerRoute()),
+          ),
+        );
       case FilterSectionId.when:
         return Builder(
           key: const Key('deep-section-when-wrapper'),

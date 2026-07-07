@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -8,19 +9,30 @@ import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provide
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:openapi/api.dart';
 
+/// Preview cap: the deep section shows at most this many chips by default,
+/// plus any selected suggestion beyond the cap (pinned so it stays visible).
+const int _kPreviewCap = 10;
+
 /// TagsSectionDeep — Deep-snap section for the Tags filter dimension.
 ///
-/// Layout: pill-wrap of tag chips (8pt spacing). Data comes from
+/// Layout: pill-wrap of tag chips (8pt spacing), capped to [_kPreviewCap]
+/// (selected suggestions beyond the cap are pinned). Data comes from
 /// `photosFilterSuggestionsProvider(filter).tags` (top-N bounded server-side
-/// per design §8). Wraps in [DeepSectionScaffold] for loading/error/empty.
+/// per design §8). A header trailing "Search N tags →" affordance delegates
+/// to [onOpenPicker] — tapping it opens the full picker. Wraps in
+/// [DeepSectionScaffold] for loading/error/empty.
 class TagsSectionDeep extends ConsumerWidget {
-  const TagsSectionDeep({super.key});
+  final VoidCallback? onOpenPicker;
+  const TagsSectionDeep({super.key, this.onOpenPicker});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(photosFilterDebouncedProvider);
     final async = ref.watch(photosFilterSuggestionsProvider(filter));
     final tagsAsync = async.whenData((s) => s.tags);
+    final selectedIds = ref.watch(photosFilterProvider.select((f) => f.tagIds?.toSet() ?? const <String>{}));
+
+    final count = tagsAsync.valueOrNull?.length ?? 0;
 
     return DeepSectionScaffold<FilterSuggestionsTagDto>(
       sectionId: FilterSectionId.tags,
@@ -28,9 +40,33 @@ class TagsSectionDeep extends ConsumerWidget {
       emptyCaptionKey: 'filter_sheet_deep_empty_tags',
       items: tagsAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
-      childBuilder: (tags) => Wrap(spacing: 8, runSpacing: 8, children: [for (final tag in tags) _TagChip(tag: tag)]),
+      trailingHeader: count > 0
+          ? TextButton(
+              key: const Key('tags-section-search-more'),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onOpenPicker?.call();
+              },
+              child: Text(_searchMoreTagsLabel(count)),
+            )
+          : null,
+      childBuilder: (tags) {
+        final firstTen = tags.take(_kPreviewCap).toList();
+        final overflowSelected = tags.skip(_kPreviewCap).where((t) => selectedIds.contains(t.id)).toList();
+        final display = [...firstTen, ...overflowSelected];
+
+        return Wrap(spacing: 8, runSpacing: 8, children: [for (final tag in display) _TagChip(tag: tag)]);
+      },
     );
   }
+}
+
+/// Plural helper — nested-leaf lookup avoids `.plural()`, which reads a
+/// late-initialized locale field and throws in widget tests without an
+/// `EasyLocalization` ancestor. Matches the pattern in `when_accordion_section.widget.dart`.
+String _searchMoreTagsLabel(int count) {
+  final variant = count == 1 ? 'one' : 'other';
+  return 'filter_sheet_deep_search_n_tags.$variant'.tr(namedArgs: {'count': '$count'});
 }
 
 class _TagChip extends ConsumerWidget {
