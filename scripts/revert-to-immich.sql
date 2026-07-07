@@ -115,6 +115,7 @@ DROP TABLE IF EXISTS "shared_space_person_alias" CASCADE;
 DROP TABLE IF EXISTS "shared_space_person_face" CASCADE;
 DROP TABLE IF EXISTS "shared_space_person" CASCADE;
 DROP TABLE IF EXISTS "shared_space_face_match_backfill_target" CASCADE;
+DROP TABLE IF EXISTS "shared_space_library_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
