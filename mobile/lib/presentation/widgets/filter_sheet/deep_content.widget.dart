@@ -9,8 +9,10 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/rating_star
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/tags_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/toggles_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/when_accordion_section.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/match_count_footer.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/search_bar.widget.dart';
+import 'package:immich_mobile/providers/photos_filter/hidden_sections.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
 
 /// The Deep snap body. Owns the scroll view, the sticky Done bar, and the
@@ -19,9 +21,41 @@ class DeepContent extends ConsumerWidget {
   final ScrollController scrollController;
   const DeepContent({super.key, required this.scrollController});
 
+  Widget _sectionFor(FilterSectionId id) {
+    switch (id) {
+      case FilterSectionId.people:
+        return Builder(
+          key: const Key('deep-section-people-wrapper'),
+          builder: (context) => PeopleSectionDeep(
+            key: const Key('deep-section-people'),
+            onOpenPicker: () => context.pushRoute(const PersonPickerRoute()),
+          ),
+        );
+      case FilterSectionId.places:
+        return const PlacesCascadeSection(key: Key('deep-section-places'));
+      case FilterSectionId.tags:
+        return const TagsSectionDeep(key: Key('deep-section-tags'));
+      case FilterSectionId.when:
+        return Builder(
+          key: const Key('deep-section-when-wrapper'),
+          builder: (context) => WhenAccordionSection(
+            key: const Key('deep-section-when'),
+            onOpenPicker: () => context.pushRoute(const WhenPickerRoute()),
+          ),
+        );
+      case FilterSectionId.rating:
+        return const RatingStarsSection(key: Key('deep-section-rating'));
+      case FilterSectionId.media:
+        return const MediaTypeSection(key: Key('deep-section-media'));
+      case FilterSectionId.toggles:
+        return const TogglesSection(key: Key('deep-section-toggles'));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final hidden = ref.watch(hiddenSectionsProvider);
     return Material(
       color: theme.colorScheme.surface,
       elevation: 3,
@@ -39,25 +73,8 @@ class DeepContent extends ConsumerWidget {
                 padding: EdgeInsets.fromLTRB(20, 4, 20, 4),
                 child: KeyedSubtree(key: Key('deep-search'), child: FilterSheetSearchBar()),
               ),
-              Builder(
-                key: const Key('deep-section-people-wrapper'),
-                builder: (context) => PeopleSectionDeep(
-                  key: const Key('deep-section-people'),
-                  onOpenPicker: () => context.pushRoute(const PersonPickerRoute()),
-                ),
-              ),
-              const PlacesCascadeSection(key: Key('deep-section-places')),
-              const TagsSectionDeep(key: Key('deep-section-tags')),
-              Builder(
-                key: const Key('deep-section-when-wrapper'),
-                builder: (context) => WhenAccordionSection(
-                  key: const Key('deep-section-when'),
-                  onOpenPicker: () => context.pushRoute(const WhenPickerRoute()),
-                ),
-              ),
-              const RatingStarsSection(key: Key('deep-section-rating')),
-              const MediaTypeSection(key: Key('deep-section-media')),
-              const TogglesSection(key: Key('deep-section-toggles')),
+              for (final id in FilterSectionId.values)
+                if (!hidden.contains(id)) _sectionFor(id),
             ],
           ),
           const Positioned(
