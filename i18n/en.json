@@ -1482,6 +1482,10 @@
     "one": "Search {count} place →",
     "other": "Search {count} places →"
   },
+  "filter_sheet_deep_search_n_tags": {
+    "one": "Search {count} tag →",
+    "other": "Search {count} tags →"
+  },
   "filter_sheet_deep_search_n_years": {
     "one": "{count} year →",
     "other": "{count} years →"
@@ -1531,11 +1535,14 @@
   "filter_sheet_picker_recent": "Recent",
   "filter_sheet_picker_search_people_hint": "Search people",
   "filter_sheet_picker_search_places_hint": "Search country or city…",
+  "filter_sheet_picker_search_tags_hint": "Search tags…",
   "filter_sheet_picker_search_when_hint": "Year or decade — e.g. 2024 or 20s",
   "filter_sheet_picker_selection_count": {
     "one": "{count} selected",
     "other": "{count} selected"
   },
+  "filter_sheet_picker_tags_matches": "Matches",
+  "filter_sheet_picker_tags_title": "Tags",
   "filter_sheet_picker_when_title": "Choose when",
   "filter_sheet_places": "Places",
   "filter_sheet_reset": "Reset",
