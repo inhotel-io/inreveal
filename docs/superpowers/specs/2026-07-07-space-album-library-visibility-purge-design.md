@@ -105,6 +105,8 @@ WHERE "assetId" IN (assetIds)
 
 The `@UpdatedAtTrigger('album_asset_updatedAt')` bumps `album_asset.updateId`, so `SharedSpaceAlbumToAssetSync.getUpserts` (membership) **and** `SharedSpaceAlbumAssetSync.getCreates` (asset metadata, now passing `spaceVisibilityGate`) both re-emit. Re-emitting to normal album members is idempotent (they already hold the row).
 
+> **`Locked` → restore asymmetry (by design).** Restore only re-adds after a **`Hidden`** flip, where the `album_asset` row was retained. After **`Locked`**, `removeAssetsFromAll` has already _deleted_ the `album_asset` rows, so `emitAlbumAssetVisibilityRestore` finds nothing to bump and the asset does **not** return to the album — matching Immich's Locked semantics (Locking removes from albums permanently). This is intentional, not a gap; asserted by A8.
+
 **`emitLibraryAssetVisibilityPurge(assetIds: string[])`** — `Hidden` **or** `Locked`.
 
 ```
@@ -200,7 +202,11 @@ Each unit has one purpose and a testable interface; the emit methods and the str
 
 ### 5.2 Union checkpoint correctness
 
-`getDeletes` unions the shared audit table with the new space audit table under **one** client checkpoint. Correct because both tables key on time-ordered uuid v7 ids (globally comparable): `WHERE id > ack AND id < nowId ORDER BY id` across the union neither skips nor re-delivers. Covered by an explicit test (§6, X4).
+`getDeletes` unions the shared audit table with the new space audit table and streams both under the **one** client checkpoint of the existing delete entity type, reusing the standard `auditQuery` bounds (`id > ack AND id < nowId ORDER BY id`).
+
+**Precise guarantee (do not overstate this).** `immich_uuid_v7` (`server/src/schema/functions.ts:9-22`) is a **millisecond timestamp + `gen_random_uuid()`** — ids are ordered _across_ milliseconds but **random within a millisecond**, so they are **not** strictly monotonic and two same-ms rows across the two tables order by their random suffix. The union therefore has **exactly the same** delivery guarantee — and the same well-known same-millisecond concurrent-commit tolerance — as **every existing single-table audit stream** (all of which already run on this id scheme). It introduces **no new** skip/re-delivery class: both arms share one `ack`/`nowId`, and `ORDER BY id` is applied to the unioned result, not per-arm.
+
+> **Implementation caveat:** the only `.union(` in `sync.repository.ts` today (`accessibleLibraries`, `:1169`) is a **scoping-set** union, **not** a two-audit-stream union — so this is a genuinely new query shape. The `auditQuery` helper builds one table's bounded query; the implementation must bound each arm with the same `ack`/`nowId` and order the union as a whole. Verified by X4.
 
 ### 5.3 Retention
 
@@ -248,6 +254,16 @@ Written Given/When/Then; each becomes one `it()`. Medium sync specs use the exis
   Given a user who is **not** a member of the space,
   When the owner sets the album asset `Hidden`,
   Then that user's sync yields no album delete for it.
+
+- **A8 — no album re-add after Locked (asymmetry).**
+  Given an asset that was `Locked` (its `album_asset` rows deleted by `removeAssetsFromAll`),
+  When the owner sets it back to `Timeline`,
+  Then the asset is **not** re-added to the album (no `album_asset` rows exist to re-emit) — matching Immich Locked semantics. (Contrast A2, which re-adds after `Hidden`.)
+
+- **A9 — `showInTimeline = false` linked album.**
+  Given an asset in a space-linked album whose link has `showInTimeline = false`, synced by a member,
+  When the owner sets it `Hidden` (then restores),
+  Then the member still receives the delete (and the re-add) — the album stays accessible; only its space-timeline projection differs.
 
 ### Library — `sync-shared-space-library-visibility-purge.spec.ts`
 
@@ -315,18 +331,63 @@ Also assert the existing direct emitters and `removeAssetsFromAll` calls are unc
 
 ---
 
-## 7. TDD implementation order (red → green per unit)
+## 7. Slices (impl-loop consumable)
 
-Each step: write the failing test first, then the minimum code to pass, then refactor.
+Three numbered slices, each producing working, testable software and independently shippable. Every slice is strict TDD: write the failing test(s) first (expected red noted), add the minimum code to go green, refactor. `impl-loop` plans, reviews, and executes one slice at a time; treat earlier slices as completed baseline.
 
-1. **A1 (album purge).** Write A1 → red (method + table + stream arm absent) → add `shared_space_album_asset_audit` table + migration, `emitAlbumAssetVisibilityPurge`, and the `getDeletes` union arm → green.
-2. **A2 (album restore).** Write A2 → red → add `emitAlbumAssetVisibilityRestore` → green.
-3. **L1 + L2 (library purge + owner exclusion).** Write both → red → add `shared_space_library_asset_audit` table + migration, `emitLibraryAssetVisibilityPurge`, and the owner-gated `getDeletes` union arm → green.
-4. **L3 (library restore automatic).** Write L3 → assert it passes with **no new code** (proves the `asset.updateId` auto-restore) → green.
-5. **Edge/scope:** A3, A4, A5, A6, A7, L4, L5, L6, L7 → fill any gaps surfaced (e.g. the `shared_space_album`/`shared_space_library` scoping subqueries, the owner gate).
-6. **Invariants:** X1 (cross-path), X2 (empty list), X3 (idempotent), X4 (union checkpoint), R1 (retention) → add cleanup wiring for R1.
-7. **Unit wiring last:** extend `asset.service.spec.ts` with the dispatch table (integration seam), then wire `asset.service.updateAll` → green.
-8. **Codegen + gate:** `pnpm build` → `make sql` (regen decorated-query SQL for the new `getDeletes`/emit queries; **requires a running DB** — never run `make sql` without one) → `make check-server` + `make lint-server` → run the two new specs + regression specs + full server unit suite.
+### Slice 1 — Album path (closes #753 follow-up #1)
+
+**Goal:** hiding an album-linked space asset purges it from already-synced members; restoring (from `Hidden`) re-adds it.
+
+**Tests first (red):** A1–A9 in a new `server/test/medium/specs/sync/sync-shared-space-album-visibility-purge.spec.ts`, plus the **album** rows of the `asset.service.spec.ts` dispatch table (→`Hidden` calls album purge; →`Locked` does **not**; →`Timeline`/`Archive` calls album restore).
+
+- _Expected red:_ `emitAlbumAssetVisibilityPurge` / `…Restore` undefined; no `SharedSpaceAlbumToAssetDeleteV1` emitted after a `Hidden` flip.
+
+**Implement (green):**
+
+- `server/src/schema/tables/shared-space-album-asset-audit.table.ts` + fork migration in `migrations-gallery/`.
+- `SharedSpaceRepository.emitAlbumAssetVisibilityPurge` / `emitAlbumAssetVisibilityRestore` (§3.2).
+- `SharedSpaceAlbumToAssetSync.getDeletes` union arm (§3.3) + its `cleanupAuditTable` wiring for the new table (§3.5).
+- `asset.service.updateAll` album block (§3.4) + its unit assertions.
+- `scripts/revert-to-immich/` `DROP TABLE`.
+
+**Edge cases in-slice:** A3 (Locked via `removeAssetsFromAll`, no new tombstone), A4 (no bleed to normal albums), A5 (multi-album fan-out), A6 (Viewer parity), A7 (non-member), A8 (no re-add after Locked), A9 (`showInTimeline = false`).
+
+**Verify:** `cd server && pnpm test -- --run test/medium/specs/sync/sync-shared-space-album-visibility-purge.spec.ts` + `pnpm test -- --run src/services/asset.service.spec.ts`; `make check-server`; `make sql` (DB up) clean.
+
+### Slice 2 — Library path (closes #753 follow-up #2)
+
+**Goal:** hiding/locking a library-linked space asset purges it from already-synced members (never from the library owner); restoring re-adds it automatically.
+
+**Tests first (red):** L1–L7 in a new `sync-shared-space-library-visibility-purge.spec.ts`, plus the **library** rows of the dispatch table (→`Hidden` **and** →`Locked` call library purge; owner-exclusion).
+
+- _Expected red:_ `emitLibraryAssetVisibilityPurge` undefined; member keeps the asset after a `Hidden` flip.
+
+**Implement (green):**
+
+- `server/src/schema/tables/shared-space-library-asset-audit.table.ts` + fork migration.
+- `SharedSpaceRepository.emitLibraryAssetVisibilityPurge` (§3.2). **No restore method** — L3 proves the automatic re-add via the `asset.updateId` bump.
+- `LibraryAssetSync.getDeletes` **owner-gated** union arm (§3.3) + its `cleanupAuditTable` wiring.
+- `asset.service.updateAll` library block (§3.4, `Hidden | Locked`) + its unit assertions.
+- `scripts/revert-to-immich/` `DROP TABLE`.
+
+**Edge cases in-slice:** L2 (owner never purged), L3 (automatic restore — assert **passes with no new code**), L4 (Locked purge), L5 (no bleed to non-space libraries), L6 (Viewer parity), L7 (non-member).
+
+**Verify:** `pnpm test -- --run test/medium/specs/sync/sync-shared-space-library-visibility-purge.spec.ts` + the asset.service unit; `make check-server`; `make sql` clean.
+
+### Slice 3 — Cross-path convergence, invariants & retention
+
+**Goal:** the three purge paths converge on one member; the union checkpoint is race-safe; the new audit tables are pruned.
+
+**Tests first (red):** X1 (multi-path), X2 (empty list no-op), X3 (idempotent double-purge), X4 (union checkpoint — ack advances past both sources, next sync empty, nothing skipped), R1 (retention prune) — in the two specs above (X4 in the album spec, R1 in both).
+
+- _Expected red:_ R1 fails until both `cleanupAuditTable` calls are wired; X4 fails if the union bounds the checkpoint per-arm instead of over the whole union (§5.2).
+
+**Implement (green):** finalise `cleanupAuditTable` wiring in the `sync.service.ts` prune loop; confirm the `getDeletes` union orders/bounds as one stream.
+
+**Verify:** both new specs + regression set (`sync-shared-space-visibility-purge.spec.ts`, `sync-shared-space-album.spec.ts`, `sync-shared-space-library.spec.ts`); `make sql`; `make check-server` + `make lint-server`; full server unit suite.
+
+> Slices 1 and 2 are each independently shippable (one follow-up each); Slice 3 hardens the seams. Run `make sql` **only** with a DB up — never without, it deletes the query files.
 
 ---
 
@@ -347,7 +408,7 @@ Each step: write the failing test first, then the minimum code to pass, then ref
 
 ## 10. Acceptance criteria
 
-- All BDD scenarios A1–A7, L1–L7, X1–X4, R1 and the `asset.service` dispatch-table unit tests pass.
+- All BDD scenarios A1–A9, L1–L7, X1–X4, R1 and the `asset.service` dispatch-table unit tests pass (Slice 1 → A1–A9 + album dispatch; Slice 2 → L1–L7 + library dispatch; Slice 3 → X1–X4, R1).
 - Direct-path and existing album/library sync specs remain green.
 - `make check-server`, `make lint-server`, and regenerated `make sql` output are clean.
 - Hiding an album- or library-linked space asset removes it from an already-synced member device; restoring re-adds it; the owner and normal (non-space) album members are unaffected.
