@@ -108,7 +108,11 @@ describe('LibraryAssetSync — library visibility purge (space members, not owne
 
     // Space with a library, but asset is in a DIFFERENT library not linked to any space
     const { space } = await owner.ctx.newSharedSpace({ createdById: owner.auth.user.id });
-    await owner.ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.auth.user.id, role: SharedSpaceRole.Owner });
+    await owner.ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: owner.auth.user.id,
+      role: SharedSpaceRole.Owner,
+    });
     await owner.ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.user.id, role: SharedSpaceRole.Editor });
 
     const { library: spaceLibrary } = await owner.ctx.newLibrary({ ownerId: owner.auth.user.id });

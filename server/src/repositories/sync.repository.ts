@@ -1312,10 +1312,7 @@ export class LibraryAssetSync extends BaseSync {
     const spaceLibraryAssetArm = this.db
       .selectFrom('shared_space_library_asset_audit')
       .innerJoin('asset', 'asset.id', 'shared_space_library_asset_audit.assetId')
-      .select([
-        'shared_space_library_asset_audit.id as id',
-        'shared_space_library_asset_audit.assetId as assetId',
-      ])
+      .select(['shared_space_library_asset_audit.id as id', 'shared_space_library_asset_audit.assetId as assetId'])
       .where('shared_space_library_asset_audit.id', '<', nowId)
       .$if(!!ack, (qb) => qb.where('shared_space_library_asset_audit.id', '>', ack!.updateId))
       .where('shared_space_library_asset_audit.libraryId', 'in', (eb) => accessibleLibraries(eb, userId))

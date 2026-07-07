@@ -76,7 +76,6 @@ import { SharedLinkAssetTable } from 'src/schema/tables/shared-link-asset.table'
 import { SharedLinkTable } from 'src/schema/tables/shared-link.table';
 import { SharedSpaceActivityTable } from 'src/schema/tables/shared-space-activity.table';
 import { SharedSpaceAlbumAssetAuditTable } from 'src/schema/tables/shared-space-album-asset-audit.table';
-import { SharedSpaceLibraryAssetAuditTable } from 'src/schema/tables/shared-space-library-asset-audit.table';
 import { SharedSpaceAlbumAuditTable } from 'src/schema/tables/shared-space-album-audit.table';
 import { SharedSpaceAlbumUserAuditTable } from 'src/schema/tables/shared-space-album-user-audit.table';
 import { SharedSpaceAlbumUserTable } from 'src/schema/tables/shared-space-album-user.table';
@@ -85,6 +84,7 @@ import { SharedSpaceAssetAuditTable } from 'src/schema/tables/shared-space-asset
 import { SharedSpaceAssetTable } from 'src/schema/tables/shared-space-asset.table';
 import { SharedSpaceAuditTable } from 'src/schema/tables/shared-space-audit.table';
 import { SharedSpaceFaceMatchBackfillTargetTable } from 'src/schema/tables/shared-space-face-match-backfill-target.table';
+import { SharedSpaceLibraryAssetAuditTable } from 'src/schema/tables/shared-space-library-asset-audit.table';
 import { SharedSpaceLibraryAuditTable } from 'src/schema/tables/shared-space-library-audit.table';
 import { SharedSpaceLibraryTable } from 'src/schema/tables/shared-space-library.table';
 import { SharedSpaceMemberAuditTable } from 'src/schema/tables/shared-space-member-audit.table';

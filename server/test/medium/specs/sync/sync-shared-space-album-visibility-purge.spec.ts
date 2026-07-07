@@ -253,9 +253,7 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([asset.id]);
 
     const afterRestore = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    const upserts = afterRestore.filter(
-      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1,
-    );
+    const upserts = afterRestore.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
     expect(upserts).toContainEqual(
       expect.objectContaining({ data: expect.objectContaining({ albumId: album.id, assetId: asset.id }) }),
     );

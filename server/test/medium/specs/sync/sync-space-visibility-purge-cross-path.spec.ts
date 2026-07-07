@@ -81,9 +81,7 @@ describe('Cross-path visibility purge convergence (X1)', () => {
     // Member's next sync must deliver deletes on ALL THREE streams.
     const next = await ctx.syncStream(member.auth, types);
 
-    const directDeletes = next.filter(
-      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
-    );
+    const directDeletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1);
     const albumDeletes = next.filter(
       (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1,
     );
@@ -94,14 +92,8 @@ describe('Cross-path visibility purge convergence (X1)', () => {
     expect(libraryDeletes.length, 'library-path delete missing').toBeGreaterThanOrEqual(1);
 
     // Check each stream contains the expected asset.
-    expect(
-      directDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id),
-    ).toBe(true);
-    expect(
-      albumDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id),
-    ).toBe(true);
-    expect(
-      libraryDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id),
-    ).toBe(true);
+    expect(directDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+    expect(albumDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+    expect(libraryDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
   });
 });
