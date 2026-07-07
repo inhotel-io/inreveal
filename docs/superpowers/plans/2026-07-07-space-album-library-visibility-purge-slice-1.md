@@ -37,11 +37,13 @@
 ### Task 1: Audit table + migration + registration
 
 **Files:**
+
 - Create: `server/src/schema/tables/shared-space-album-asset-audit.table.ts`
 - Create: `server/src/schema/migrations-gallery/1779400000000-SharedSpaceAlbumAssetAuditTable.ts`
 - Modify: schema registration (find where `SharedSpaceAssetAuditTable` is imported/listed and add the new class next to it)
 
 **Interfaces:**
+
 - Produces: DB table `shared_space_album_asset_audit(id uuidv7 PK, albumId uuid, assetId uuid, deletedAt timestamptz)`; Kysely type `DB['shared_space_album_asset_audit']`.
 
 - [ ] **Step 1: Create the table class** (mirror `shared-space-asset-audit.table.ts`)
@@ -107,11 +109,13 @@ export async function down(db: Kysely<any>): Promise<void> {
 ### Task 2: `emitAlbumAssetVisibilityPurge` + A1 (purge on Hidden)
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts`
 - Modify: `server/src/repositories/sync.repository.ts` (`SharedSpaceAlbumToAssetSync.getDeletes` union)
 - Test: `server/test/medium/specs/sync/sync-shared-space-album-visibility-purge.spec.ts`
 
 **Interfaces:**
+
 - Produces: `SharedSpaceRepository.emitAlbumAssetVisibilityPurge(assetIds: string[]): Promise<void>` — inserts one `shared_space_album_asset_audit` row per `(albumId, assetId)` where the album is space-linked.
 - Consumes: `accessibleSpaceAlbums(eb, userId)` (from `src/utils/shared-space-album-scope`); `SyncEntityType.SharedSpaceAlbumToAssetDeleteV1`; `SyncRequestType.SharedSpaceAlbumToAssetsV1`.
 
@@ -154,7 +158,11 @@ const seedSpaceWithAlbumAsset = async (
   const { space } = await ctx.newSharedSpace({ createdById: ownerId });
   await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ownerId, role: SharedSpaceRole.Owner });
   if (opts.memberId && opts.memberId !== ownerId) {
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: opts.memberId, role: opts.role ?? SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: opts.memberId,
+      role: opts.role ?? SharedSpaceRole.Editor,
+    });
   }
   const { album } = await ctx.newAlbum({ ownerId });
   const { asset } = await ctx.newAsset({ ownerId });
@@ -248,25 +256,25 @@ If Kysely's typing rejects the shared `arm` helper across two table literals, in
 - [ ] **Step 1: Write A2** — after A1's setup, sync + ack, purge + ack the delete, then restore and assert the membership upsert returns.
 
 ```typescript
-  it('A2: re-emits the album membership when the asset is restored to Timeline after a purge', async () => {
-    const { auth, ctx } = await setup();
-    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id);
+it('A2: re-emits the album membership when the asset is restored to Timeline after a purge', async () => {
+  const { auth, ctx } = await setup();
+  const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id);
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
+  const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  await ctx.syncAckAll(auth, initial);
 
-    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
-    const afterPurge = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, afterPurge);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
+  const afterPurge = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  await ctx.syncAckAll(auth, afterPurge);
+  await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
-    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([asset.id]);
+  await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([asset.id]);
 
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    const upserts = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
-    const emitted = upserts.map((e) => (e as { data: { albumId: string; assetId: string } }).data);
-    expect(emitted).toContainEqual(expect.objectContaining({ albumId: album.id, assetId: asset.id }));
-  });
+  const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  const upserts = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
+  const emitted = upserts.map((e) => (e as { data: { albumId: string; assetId: string } }).data);
+  expect(emitted).toContainEqual(expect.objectContaining({ albumId: album.id, assetId: asset.id }));
+});
 ```
 
 - [ ] **Step 2: Run A2 → red** (`-t A2`). Expected: FAIL — `emitAlbumAssetVisibilityRestore is not a function`.
@@ -341,7 +349,7 @@ await this.syncRepository.sharedSpaceAlbumToAsset.cleanupAuditTable(pruneThresho
 **Interfaces:** Consumes `sharedSpaceRepository.emitAlbumAssetVisibility{Purge,Restore}`.
 
 - [ ] **Step 1: Write the unit assertions** in `asset.service.spec.ts` (mock `sharedSpaceRepository`): on `updateAll` with `visibility: Hidden` → `emitAlbumAssetVisibilityPurge` called with the ids and `emitAlbumAssetVisibilityRestore` **not** called; with `Locked` → album purge **not** called (and `albumRepository.removeAssetsFromAll` **is** called, existing); with `Timeline` and with `Archive` → `emitAlbumAssetVisibilityRestore` called, purge not; with no visibility change → neither called. Mirror the existing direct-emitter assertions already in this spec.
-- [ ] **Step 2: Run → red** (methods not wired). 
+- [ ] **Step 2: Run → red** (methods not wired).
 - [ ] **Step 3: Add the album dispatch** in `updateAll`, immediately after the existing direct-path block:
 
 ```typescript

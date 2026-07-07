@@ -238,27 +238,27 @@ getDeletes(options: SyncQueryOptions) {
 - [ ] **Step 1: Write L3** — prove restore needs no emit. Change real visibility via `AssetRepository.updateAll` (bumps `asset.updateId`):
 
 ```typescript
-  it('L3: restores a library asset to the member automatically on un-hide (no restore emit)', async () => {
-    const owner = await setup();
-    const member = await owner.ctx.newSyncAuthUser();
-    const { asset } = await seedSpaceWithLibraryAsset(owner.ctx, owner.auth.user.id, member);
+it('L3: restores a library asset to the member automatically on un-hide (no restore emit)', async () => {
+  const owner = await setup();
+  const member = await owner.ctx.newSyncAuthUser();
+  const { asset } = await seedSpaceWithLibraryAsset(owner.ctx, owner.auth.user.id, member);
 
-    const initial = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
-    await owner.ctx.syncAckAll(member.auth, initial);
+  const initial = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
+  await owner.ctx.syncAckAll(member.auth, initial);
 
-    // Hide for real (bumps asset.updateId, gate now excludes) + emit the purge tombstone.
-    await owner.ctx.get(AssetRepository).updateAll([asset.id], { visibility: AssetVisibility.Hidden });
-    await owner.ctx.get(SharedSpaceRepository).emitLibraryAssetVisibilityPurge([asset.id]);
-    const afterHide = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
-    await owner.ctx.syncAckAll(member.auth, afterHide);
+  // Hide for real (bumps asset.updateId, gate now excludes) + emit the purge tombstone.
+  await owner.ctx.get(AssetRepository).updateAll([asset.id], { visibility: AssetVisibility.Hidden });
+  await owner.ctx.get(SharedSpaceRepository).emitLibraryAssetVisibilityPurge([asset.id]);
+  const afterHide = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
+  await owner.ctx.syncAckAll(member.auth, afterHide);
 
-    // Un-hide for real — NO restore emit is called. getUpserts must re-emit.
-    await owner.ctx.get(AssetRepository).updateAll([asset.id], { visibility: AssetVisibility.Timeline });
+  // Un-hide for real — NO restore emit is called. getUpserts must re-emit.
+  await owner.ctx.get(AssetRepository).updateAll([asset.id], { visibility: AssetVisibility.Timeline });
 
-    const restored = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
-    const creates = restored.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetCreateV1);
-    expect(creates.some((e) => (e as { data: { id: string } }).data.id === asset.id)).toBe(true);
-  });
+  const restored = await owner.ctx.syncStream(member.auth, [SyncRequestType.LibraryAssetsV1]);
+  const creates = restored.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetCreateV1);
+  expect(creates.some((e) => (e as { data: { id: string } }).data.id === asset.id)).toBe(true);
+});
 ```
 
 - [ ] **Step 2: Run L3 → should PASS with no new code** (proves the automatic re-add). If it fails, do NOT add a restore method without checking with the orchestrator — a failure means an assumption in §3.2/L3 is wrong.

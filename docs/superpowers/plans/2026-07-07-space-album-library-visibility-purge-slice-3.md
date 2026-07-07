@@ -50,11 +50,11 @@
 - [ ] **Step 1: Write X2 (album + library).** Assert `emitAlbumAssetVisibilityPurge([])`, `emitAlbumAssetVisibilityRestore([])`, and `emitLibraryAssetVisibilityPurge([])` each resolve without throwing and write no audit rows.
 
 ```typescript
-  it('X2: album emit methods are a no-op on an empty id list', async () => {
-    const { ctx } = await setup();
-    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([])).resolves.not.toThrow();
-    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([])).resolves.not.toThrow();
-  });
+it('X2: album emit methods are a no-op on an empty id list', async () => {
+  const { ctx } = await setup();
+  await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([])).resolves.not.toThrow();
+  await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([])).resolves.not.toThrow();
+});
 ```
 
 - [ ] **Step 2: Write X3 (idempotent double-purge).** In the album spec: seed A1's scenario, sync+ack; call `emitAlbumAssetVisibilityPurge([asset.id])` TWICE; sync; assert the member's device converges to "asset absent" — i.e. at least one `SharedSpaceAlbumToAssetDeleteV1` for the asset is delivered and the emitter did not throw. Ack; then `assertSyncIsComplete`. (Duplicate tombstones are tolerated, matching 4.B.)
