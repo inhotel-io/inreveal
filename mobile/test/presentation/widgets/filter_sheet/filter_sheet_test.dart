@@ -6,6 +6,7 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_sheet.wid
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/collapsed_sections.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_sheet.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/hidden_sections.provider.dart';
 
 import '../../../widget_tester_extensions.dart';
 
@@ -18,11 +19,21 @@ class _FakePrefs implements FilterSectionPrefs {
   Future<void> saveCollapsed(Set<FilterSectionId> ids) async {}
 }
 
+class _FakeVis implements FilterSectionVisibilityPrefs {
+  Set<FilterSectionId> stored;
+  _FakeVis(this.stored);
+  @override
+  Set<FilterSectionId> loadHidden() => stored;
+  @override
+  Future<void> saveHidden(Set<FilterSectionId> ids) async => stored = ids;
+}
+
 Future<void> _pump(WidgetTester tester, {FilterSheetSnap? snap}) async {
   await tester.pumpConsumerWidget(
     const FilterSheet(),
     overrides: [
       filterSectionPrefsProvider.overrideWithValue(_FakePrefs({})),
+      filterSectionVisibilityPrefsProvider.overrideWithValue(_FakeVis({})),
       if (snap != null) photosFilterSheetProvider.overrideWith((ref) => snap),
     ],
   );
