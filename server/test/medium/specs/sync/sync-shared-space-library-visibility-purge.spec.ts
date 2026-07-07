@@ -156,4 +156,9 @@ describe('LibraryAssetSync — library visibility purge (space members, not owne
     );
     expect(nonMemberDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(false);
   });
+
+  it('X2: emitLibraryAssetVisibilityPurge is a no-op on an empty id list', async () => {
+    const { ctx } = await setup();
+    await expect(ctx.get(SharedSpaceRepository).emitLibraryAssetVisibilityPurge([])).resolves.not.toThrow();
+  });
 });

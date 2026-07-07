@@ -257,4 +257,41 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
       expect.objectContaining({ data: expect.objectContaining({ albumId: album.id, assetId: asset.id }) }),
     );
   });
+
+  it('X2: album emit methods are a no-op on an empty id list', async () => {
+    const { ctx } = await setup();
+    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([])).resolves.not.toThrow();
+    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([])).resolves.not.toThrow();
+  });
+
+  it('X3: calling emitAlbumAssetVisibilityPurge twice is idempotent — member converges to absent', async () => {
+    const { auth, ctx } = await setup();
+    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id);
+
+    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(auth, initial);
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    // Double-purge — duplicate tombstones are written but should not cause errors.
+    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id])).resolves.not.toThrow();
+    await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id])).resolves.not.toThrow();
+
+    // The member must receive at least one delete for the asset (convergence to absent).
+    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
+    expect(deletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+
+    // Ack all deletes; next sync must be empty (device has converged).
+    await ctx.syncAckAll(auth, next);
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    // Verify the album association data is correct on at least one delete event.
+    expect(
+      deletes.some(
+        (e) =>
+          (e as { data: { albumId: string; assetId: string } }).data.albumId === album.id &&
+          (e as { data: { albumId: string; assetId: string } }).data.assetId === asset.id,
+      ),
+    ).toBe(true);
+  });
 });
