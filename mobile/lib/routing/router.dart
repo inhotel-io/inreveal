@@ -75,6 +75,7 @@ import 'package:immich_mobile/presentation/pages/local_timeline.page.dart';
 import 'package:immich_mobile/presentation/pages/profile/profile_picture_crop.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/person_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/places_picker.page.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/tags_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/when_picker.page.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/asset_viewer.page.dart';
 import 'package:immich_mobile/providers/api.provider.dart';
@@ -216,6 +217,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: PersonPickerRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: WhenPickerRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: PlacesPickerRoute.page, guards: [_authGuard, _duplicateGuard]),
+    AutoRoute(page: TagsPickerRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: DriftPersonRoute.page, guards: [_authGuard]),
     AutoRoute(page: DriftBackupOptionsRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: DriftAlbumOptionsRoute.page, guards: [_authGuard, _duplicateGuard]),

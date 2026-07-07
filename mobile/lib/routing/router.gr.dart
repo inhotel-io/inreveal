@@ -2087,6 +2087,22 @@ class TabShellRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [TagsPickerPage]
+class TagsPickerRoute extends PageRouteInfo<void> {
+  const TagsPickerRoute({List<PageRouteInfo>? children})
+    : super(TagsPickerRoute.name, initialChildren: children);
+
+  static const String name = 'TagsPickerRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const TagsPickerPage();
+    },
+  );
+}
+
+/// generated route for
 /// [WhatsNewPage]
 class WhatsNewRoute extends PageRouteInfo<void> {
   const WhatsNewRoute({List<PageRouteInfo>? children})
