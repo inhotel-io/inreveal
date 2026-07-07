@@ -286,6 +286,19 @@ const VIS_ALLOWLIST: Record<string, string> = {
   //   and it fires precisely BECAUSE the asset left the visible set (purge event).
   'shared-space.repository.ts::emitDirectAssetVisibilityPurge':
     'reads join ids into audit tombstone (purge write-infra); no asset content returned',
+  // — Album-path purge/restore write-infra (Slice 1): INSERT ... SELECT that reads
+  //   album_asset (join ids) scoped to shared_space_album (space-linked filter), and
+  //   UPDATE album_asset.updatedAt scoped to the same filter. No asset content served;
+  //   these are write operations that fire on visibility transitions.
+  'shared-space.repository.ts::emitAlbumAssetVisibilityPurge':
+    'reads album_asset join ids into audit tombstone (purge write-infra); no asset content returned',
+  'shared-space.repository.ts::emitAlbumAssetVisibilityRestore':
+    'UPDATE album_asset.updatedAt scoped to space-linked albums (restore write-infra); no asset content returned',
+  // — Library-path purge write-infra (Slice 2): INSERT ... SELECT that reads asset
+  //   (libraryId, id) scoped to shared_space_library (space-linked filter). No asset
+  //   content served; fires on visibility transitions to write tombstones.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityPurge':
+    'reads asset library ids into audit tombstone (purge write-infra); no asset content returned',
 
   // — Album-ACCESS grant checks: select ONLY album.id (which albums the user may
   //   read/edit via a space link), never asset rows. Individual asset visibility is
