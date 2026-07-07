@@ -47,6 +47,9 @@ class DeepContent extends ConsumerWidget {
             onOpenPicker: () => context.pushRoute(const TagsPickerRoute()),
           ),
         );
+      case FilterSectionId.camera:
+        // TEMPORARY placeholder — replaced by the real CameraCascadeSection in Task 6.
+        return const SizedBox.shrink();
       case FilterSectionId.when:
         return Builder(
           key: const Key('deep-section-when-wrapper'),

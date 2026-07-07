@@ -36,7 +36,7 @@ void main() {
       expect(decodeCollapsedSections(encodeCollapsedSections(set)), set);
     });
     test('decode ignores unknown ids and malformed json', () {
-      expect(decodeCollapsedSections('["tags","camera","junk"]'), {FilterSectionId.tags});
+      expect(decodeCollapsedSections('["tags","unknown-id","junk"]'), {FilterSectionId.tags});
       expect(decodeCollapsedSections('not json'), <FilterSectionId>{});
       expect(decodeCollapsedSections('{"a":1}'), <FilterSectionId>{});
       expect(decodeCollapsedSections('[]'), <FilterSectionId>{});

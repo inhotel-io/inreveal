@@ -3,9 +3,9 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_i
 
 void main() {
   group('FilterSectionId', () {
-    test('render order is people, places, tags, when, rating, media, toggles', () {
+    test('render order is people, places, tags, camera, when, rating, media, toggles', () {
       expect(FilterSectionId.values.map((e) => e.name).toList(), [
-        'people', 'places', 'tags', 'when', 'rating', 'media', 'toggles',
+        'people', 'places', 'tags', 'camera', 'when', 'rating', 'media', 'toggles',
       ]);
     });
 
@@ -26,7 +26,7 @@ void main() {
       for (final s in FilterSectionId.values) {
         expect(FilterSectionId.fromStorageId(s.storageId), s);
       }
-      expect(FilterSectionId.fromStorageId('camera'), isNull); // added in Slice 6
+      expect(FilterSectionId.fromStorageId('camera'), FilterSectionId.camera); // added in Slice 6
       expect(FilterSectionId.fromStorageId('nonsense'), isNull);
     });
   });

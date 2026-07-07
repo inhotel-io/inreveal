@@ -4,6 +4,7 @@ enum FilterSectionId {
   people('people', 'filter_sheet_deep_people_section'),
   places('places', 'filter_sheet_deep_places_section'),
   tags('tags', 'filter_sheet_deep_tags_section'),
+  camera('camera', 'filter_sheet_deep_camera_section'),
   when('when', 'filter_sheet_deep_when_section'),
   rating('rating', 'filter_sheet_deep_rating_section'),
   media('media', 'filter_sheet_deep_media_section'),
