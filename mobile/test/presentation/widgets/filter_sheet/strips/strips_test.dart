@@ -14,9 +14,11 @@ import 'package:immich_mobile/generated/codegen_loader.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/camera_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/person_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/places_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/tags_picker.page.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/camera_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/people_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/places_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/tags_strip.widget.dart';
@@ -55,11 +57,28 @@ class _TagsStripTestRouter extends RootStackRouter {
   List<AutoRoute> get routes => [AutoRoute(page: _tagsHomePage, initial: true), AutoRoute(page: TagsPickerRoute.page)];
 }
 
+final _cameraHomePage = PageInfo('CameraStripHarness', builder: (data) => const Material(child: CameraStrip()));
+
+class _CameraStripTestRouter extends RootStackRouter {
+  @override
+  List<AutoRoute> get routes => [
+    AutoRoute(page: _cameraHomePage, initial: true),
+    AutoRoute(page: CameraPickerRoute.page),
+  ];
+}
+
 FilterSuggestionsResponseDto _suggestions({
   List<FilterSuggestionsPersonDto> people = const [],
   List<FilterSuggestionsTagDto> tags = const [],
   List<String> countries = const [],
-}) => FilterSuggestionsResponseDto(hasUnnamedPeople: false, people: people, tags: tags, countries: countries);
+  List<String> cameraMakes = const [],
+}) => FilterSuggestionsResponseDto(
+  hasUnnamedPeople: false,
+  people: people,
+  tags: tags,
+  countries: countries,
+  cameraMakes: cameraMakes,
+);
 
 List<Override> _overrideSuggestions(FilterSuggestionsResponseDto data) => [
   photosFilterSuggestionsProvider.overrideWith((ref, filter) async => data),
@@ -386,6 +405,113 @@ void main() {
 
       expect(find.byType(TagsPickerPage), findsOneWidget);
       expect(find.byType(TagsStrip), findsNothing);
+    });
+  });
+
+  group('CameraStrip', () {
+    testWidgets('empty data → hidden', (tester) async {
+      await tester.pumpConsumerWidget(const CameraStrip(), overrides: _overrideSuggestions(_suggestions()));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('camera-tile')), findsNothing);
+    });
+
+    testWidgets('tap on make sets camera filter', (tester) async {
+      final s = _suggestions(cameraMakes: ['Canon', 'Sony']);
+      await tester.pumpConsumerWidget(const CameraStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(CameraStrip)));
+      await tester.tap(find.text('Canon'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(photosFilterProvider).camera.make, 'Canon');
+    });
+
+    testWidgets('tap on already-selected make clears camera', (tester) async {
+      final s = _suggestions(cameraMakes: ['Canon']);
+      await tester.pumpConsumerWidget(const CameraStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(CameraStrip)));
+      container.read(photosFilterProvider.notifier).setCamera(SearchCameraFilter(make: 'Canon'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Canon'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(photosFilterProvider).camera.make, isNull);
+    });
+
+    testWidgets('caps to 10 tiles + a trailing "+N" tile when there are more than 10 makes', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(cameraMakes: [for (var i = 0; i < 15; i++) 'M$i']);
+      await tester.pumpConsumerWidget(const CameraStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('M$i'), findsOneWidget);
+      }
+      for (var i = 10; i < 15; i++) {
+        expect(find.text('M$i'), findsNothing);
+      }
+      expect(find.byKey(const Key('camera-strip-more')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('camera-strip-more')), matching: find.textContaining('5')),
+        findsOneWidget,
+        reason: '15 - 10 = 5 more',
+      );
+    });
+
+    testWidgets('no "+N" tile when there are 10 or fewer makes', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(cameraMakes: [for (var i = 0; i < 10; i++) 'M$i']);
+      await tester.pumpConsumerWidget(const CameraStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('M$i'), findsOneWidget);
+      }
+      expect(find.byKey(const Key('camera-strip-more')), findsNothing);
+    });
+
+    testWidgets('tapping the "+N" tile navigates to the camera picker', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(cameraMakes: [for (var i = 0; i < 15; i++) 'M$i']);
+      final router = _CameraStripTestRouter();
+      await tester.pumpWidget(
+        EasyLocalization(
+          supportedLocales: locales.values.toList(),
+          path: translationsPath,
+          startLocale: locales.values.first,
+          fallbackLocale: locales.values.first,
+          saveLocale: false,
+          useFallbackTranslations: true,
+          assetLoader: const CodegenLoader(),
+          child: ProviderScope(
+            overrides: _overrideSuggestions(s),
+            child: Builder(
+              builder: (context) => MaterialApp.router(
+                debugShowCheckedModeBanner: false,
+                routerConfig: router.config(),
+                localizationsDelegates: context.localizationDelegates,
+                supportedLocales: context.supportedLocales,
+                locale: context.locale,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('camera-strip-more')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('camera-strip-more')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CameraPickerPage), findsOneWidget);
+      expect(find.byType(CameraStrip), findsNothing);
     });
   });
 
