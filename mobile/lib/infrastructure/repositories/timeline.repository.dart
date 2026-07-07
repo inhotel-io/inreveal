@@ -562,11 +562,7 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
               _db.sharedSpaceAlbumLinkEntity.showInTimeline.equals(true),
           useColumns: false,
         ),
-        leftOuterJoin(
-          _db.stackEntity,
-          _db.stackEntity.id.equalsExp(_db.remoteAssetEntity.stackId),
-          useColumns: false,
-        ),
+        leftOuterJoin(_db.stackEntity, _db.stackEntity.id.equalsExp(_db.remoteAssetEntity.stackId), useColumns: false),
       ])
       ..where(
         _db.remoteAssetEntity.deletedAt.isNull() &

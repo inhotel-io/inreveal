@@ -157,8 +157,7 @@ void main() {
     // honours the showInTimeline filter). It is pinned here as an explicit
     // regression guard so that future query refactors can't silently break this
     // data contract.
-    test('toggle-flip regression: updating showInTimeline flips asset in/out of space timeline',
-        () async {
+    test('toggle-flip regression: updating showInTimeline flips asset in/out of space timeline', () async {
       final user = await ctx.newUser();
       final space = await ctx.newSharedSpace(createdById: user.id);
       final album = await ctx.newSharedSpaceAlbum();
@@ -174,11 +173,7 @@ void main() {
       // Simulate the sync-nudge delivering the toggled PATCH result:
       // update the link row to showInTimeline = false.
       await (ctx.db.update(ctx.db.sharedSpaceAlbumLinkEntity)
-            ..where(
-              (t) =>
-                  t.spaceId.equals(space.id) &
-                  t.albumId.equals(album.id),
-            ))
+            ..where((t) => t.spaceId.equals(space.id) & t.albumId.equals(album.id)))
           .write(const SharedSpaceAlbumLinkEntityCompanion(showInTimeline: Value(false)));
 
       // After toggle: asset must be excluded from the space timeline.
@@ -187,11 +182,7 @@ void main() {
 
       // Re-enable: asset returns.
       await (ctx.db.update(ctx.db.sharedSpaceAlbumLinkEntity)
-            ..where(
-              (t) =>
-                  t.spaceId.equals(space.id) &
-                  t.albumId.equals(album.id),
-            ))
+            ..where((t) => t.spaceId.equals(space.id) & t.albumId.equals(album.id)))
           .write(const SharedSpaceAlbumLinkEntityCompanion(showInTimeline: Value(true)));
 
       final restored = await sut.sharedSpace(space.id, .none).assetSource(0, 100);
