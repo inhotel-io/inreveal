@@ -1525,11 +1525,27 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
-    const userId = options.userId;
-    return this.auditQuery('album_asset_audit', options)
+    const { userId, nowId, ack } = options;
+    // Union the shared album_asset_audit (normal album deletes) with the
+    // space-only shared_space_album_asset_audit (visibility Hidden purge).
+    // Both arms are checkpoint-gated by the same nowId/ack bounds and scoped
+    // to albums accessible to this user via the space. A single ORDER BY id
+    // is applied over the whole union — per-arm ordering is invalid SQL.
+    const albumAssetArm = this.db
+      .selectFrom('album_asset_audit')
       .select(['id', 'assetId', 'albumId'])
-      .where((eb) => eb('albumId', 'in', (eb2) => accessibleSpaceAlbums(eb2, userId)))
-      .stream();
+      .where('id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
+      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+
+    const spaceAlbumAssetArm = this.db
+      .selectFrom('shared_space_album_asset_audit')
+      .select(['id', 'assetId', 'albumId'])
+      .where('id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
+      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+
+    return albumAssetArm.union(spaceAlbumAssetArm).orderBy('id', 'asc').stream();
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
