@@ -40,8 +40,7 @@ class PeopleStrip extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           itemCount: shown.length + (overflow > 0 ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (ctx, i) =>
-              i < shown.length ? _PersonTile(person: shown[i]) : _MorePersonTile(count: overflow),
+          itemBuilder: (ctx, i) => i < shown.length ? _PersonTile(person: shown[i]) : _MorePersonTile(count: overflow),
         );
       },
     );

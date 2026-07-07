@@ -160,10 +160,8 @@ class _CityList extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-          child: LinearProgressIndicator(),
-        ),
+        loading: () =>
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4), child: LinearProgressIndicator()),
         error: (_, _) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: TextButton.icon(

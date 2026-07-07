@@ -38,8 +38,7 @@ class PlacesStrip extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           itemCount: shown.length + (overflow > 0 ? 1 : 0),
           separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (ctx, i) =>
-              i < shown.length ? _PlaceTile(country: shown[i]) : _MorePlaceTile(count: overflow),
+          itemBuilder: (ctx, i) => i < shown.length ? _PlaceTile(country: shown[i]) : _MorePlaceTile(count: overflow),
         );
       },
     );

@@ -9,12 +9,7 @@ class PlacesPickerSearchHeader extends StatelessWidget {
   final String value;
   final TextEditingController controller;
 
-  const PlacesPickerSearchHeader({
-    super.key,
-    required this.onChanged,
-    required this.value,
-    required this.controller,
-  });
+  const PlacesPickerSearchHeader({super.key, required this.onChanged, required this.value, required this.controller});
 
   @override
   Widget build(BuildContext context) {

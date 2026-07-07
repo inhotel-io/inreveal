@@ -9,12 +9,7 @@ class CameraPickerSearchHeader extends StatelessWidget {
   final String value;
   final TextEditingController controller;
 
-  const CameraPickerSearchHeader({
-    super.key,
-    required this.onChanged,
-    required this.value,
-    required this.controller,
-  });
+  const CameraPickerSearchHeader({super.key, required this.onChanged, required this.value, required this.controller});
 
   @override
   Widget build(BuildContext context) {

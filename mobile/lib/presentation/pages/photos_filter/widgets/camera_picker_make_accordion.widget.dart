@@ -157,15 +157,12 @@ class _ModelList extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final model in filtered)
-                _ModelRow(make: make, model: model, selected: selectedModel == model),
+              for (final model in filtered) _ModelRow(make: make, model: model, selected: selectedModel == model),
             ],
           );
         },
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-          child: LinearProgressIndicator(),
-        ),
+        loading: () =>
+            const Padding(padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4), child: LinearProgressIndicator()),
         error: (_, _) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: TextButton.icon(

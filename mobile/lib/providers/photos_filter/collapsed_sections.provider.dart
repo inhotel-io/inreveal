@@ -41,8 +41,9 @@ class StoreFilterSectionPrefs implements FilterSectionPrefs {
 
 final filterSectionPrefsProvider = Provider<FilterSectionPrefs>((_) => const StoreFilterSectionPrefs());
 
-final collapsedSectionsProvider =
-    NotifierProvider<CollapsedSectionsNotifier, Set<FilterSectionId>>(CollapsedSectionsNotifier.new);
+final collapsedSectionsProvider = NotifierProvider<CollapsedSectionsNotifier, Set<FilterSectionId>>(
+  CollapsedSectionsNotifier.new,
+);
 
 class CollapsedSectionsNotifier extends Notifier<Set<FilterSectionId>> {
   @override
