@@ -413,6 +413,95 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  /**
+   * Slice 1 ALBUM-path purge: when the owner flips an album-linked asset to
+   * Hidden, the album_asset join row is retained (unlike Locked), so no
+   * album_asset_audit trigger fires. Emit one shared_space_album_asset_audit
+   * tombstone per (albumId, assetId) where the album is space-linked, so
+   * SharedSpaceAlbumToAssetSync.getDeletes delivers the delete to members.
+   * Only space-linked albums are targeted — normal album members are unaffected.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitAlbumAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_album_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('album_asset')
+          .select(['album_asset.albumId', 'album_asset.assetId'])
+          .where('album_asset.assetId', 'in', assetIds)
+          .where('album_asset.albumId', 'in', (eb) =>
+            eb.selectFrom('shared_space_album').select('shared_space_album.albumId'),
+          ),
+      )
+      .execute();
+  }
+
+  /**
+   * Slice 1 ALBUM-path restore: when the owner flips a Hidden album-linked
+   * asset back to Timeline/Archive, the album_asset row was retained. Touch
+   * the rows so the updated_at BEFORE-UPDATE trigger bumps album_asset.updateId
+   * and SharedSpaceAlbumToAssetSync.getUpserts re-emits the membership to devices
+   * that purged it. Only space-linked albums are targeted. Re-emitting to normal
+   * album members is idempotent.
+   *
+   * Note: after Locked, album_asset rows were deleted by removeAssetsFromAll, so
+   * this method finds nothing to bump and the asset does not return to the album —
+   * matching Immich Locked semantics (see A8).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitAlbumAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('album_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .where('albumId', 'in', (eb) => eb.selectFrom('shared_space_album').select('shared_space_album.albumId'))
+      .execute();
+  }
+
+  /**
+   * Slice 2 LIBRARY-path purge: when the owner flips a library-linked space asset
+   * to Hidden or Locked, write a tombstone per (libraryId, assetId) in
+   * shared_space_library_asset_audit for each asset that belongs to a space-linked
+   * library. LibraryAssetSync.getDeletes unions this table (owner-gated) so member
+   * devices drop the asset. The owner is never purged — the union arm filters
+   * asset.ownerId != userId. Restore is automatic (the visibility UPDATE bumps
+   * asset.updateId; LibraryAssetSync.getUpserts re-emits the now-visible asset).
+   * Only space-linked libraries are targeted — the library owner's own sync stream
+   * and any non-space library member are unaffected.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitLibraryAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_library_asset_audit')
+      .columns(['libraryId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('asset')
+          .select(['asset.libraryId as libraryId', 'asset.id as assetId'])
+          .where('asset.id', 'in', assetIds)
+          .where('asset.libraryId', 'is not', null)
+          .where('asset.libraryId', 'in', (eb) =>
+            eb.selectFrom('shared_space_library').select('shared_space_library.libraryId'),
+          ),
+      )
+      .$narrowType<{ libraryId: string }>()
+      .execute();
+  }
+
   // ==========================================
   // Shared Space Library Link CRUD
   // ==========================================

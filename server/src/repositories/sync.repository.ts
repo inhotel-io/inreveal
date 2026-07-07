@@ -1294,14 +1294,36 @@ export class LibraryAssetSync extends BaseSync {
   // drops all assets locally without needing per-asset events.
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
-    return this.auditQuery('library_asset_audit', options)
+    const { userId, nowId, ack } = options;
+
+    // Existing arm: per-asset deletes from library_asset_audit (triggered when an
+    // asset row is physically deleted from the DB — not a visibility flip).
+    const libraryAssetArm = this.db
+      .selectFrom('library_asset_audit')
       .select(['library_asset_audit.id as id', 'library_asset_audit.assetId as assetId'])
-      .where('library_asset_audit.libraryId', 'in', (eb) => accessibleLibraries(eb, options.userId))
-      .stream();
+      .where('library_asset_audit.id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('library_asset_audit.id', '>', ack!.updateId))
+      .where('library_asset_audit.libraryId', 'in', (eb) => accessibleLibraries(eb, userId));
+
+    // Space visibility purge arm: tombstones written by emitLibraryAssetVisibilityPurge
+    // when the owner flips a library-linked space asset to Hidden/Locked.
+    // Owner-gated: the library owner never receives a visibility purge for their
+    // own asset — only non-owner space members are purged.
+    const spaceLibraryAssetArm = this.db
+      .selectFrom('shared_space_library_asset_audit')
+      .innerJoin('asset', 'asset.id', 'shared_space_library_asset_audit.assetId')
+      .select(['shared_space_library_asset_audit.id as id', 'shared_space_library_asset_audit.assetId as assetId'])
+      .where('shared_space_library_asset_audit.id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('shared_space_library_asset_audit.id', '>', ack!.updateId))
+      .where('shared_space_library_asset_audit.libraryId', 'in', (eb) => accessibleLibraries(eb, userId))
+      .where('asset.ownerId', '!=', userId);
+
+    return libraryAssetArm.union(spaceLibraryAssetArm).orderBy('id', 'asc').stream();
   }
 
-  cleanupAuditTable(daysAgo: number) {
-    return this.auditCleanup('library_asset_audit', daysAgo);
+  async cleanupAuditTable(daysAgo: number) {
+    await this.auditCleanup('library_asset_audit', daysAgo);
+    await this.auditCleanup('shared_space_library_asset_audit', daysAgo);
   }
 }
 
@@ -1525,11 +1547,27 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
-    const userId = options.userId;
-    return this.auditQuery('album_asset_audit', options)
+    const { userId, nowId, ack } = options;
+    // Union the shared album_asset_audit (normal album deletes) with the
+    // space-only shared_space_album_asset_audit (visibility Hidden purge).
+    // Both arms are checkpoint-gated by the same nowId/ack bounds and scoped
+    // to albums accessible to this user via the space. A single ORDER BY id
+    // is applied over the whole union — per-arm ordering is invalid SQL.
+    const albumAssetArm = this.db
+      .selectFrom('album_asset_audit')
       .select(['id', 'assetId', 'albumId'])
-      .where((eb) => eb('albumId', 'in', (eb2) => accessibleSpaceAlbums(eb2, userId)))
-      .stream();
+      .where('id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
+      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+
+    const spaceAlbumAssetArm = this.db
+      .selectFrom('shared_space_album_asset_audit')
+      .select(['id', 'assetId', 'albumId'])
+      .where('id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
+      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+
+    return albumAssetArm.union(spaceAlbumAssetArm).orderBy('id', 'asc').stream();
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
@@ -1541,6 +1579,12 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
+  }
+
+  // Prune the space-only shared_space_album_asset_audit table. The shared
+  // album_asset_audit is pruned by albumToAsset.cleanupAuditTable (AlbumToAssetSync).
+  cleanupAuditTable(daysAgo: number) {
+    return this.auditCleanup('shared_space_album_asset_audit', daysAgo);
   }
 }
 

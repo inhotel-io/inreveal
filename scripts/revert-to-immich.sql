@@ -115,6 +115,8 @@ DROP TABLE IF EXISTS "shared_space_person_alias" CASCADE;
 DROP TABLE IF EXISTS "shared_space_person_face" CASCADE;
 DROP TABLE IF EXISTS "shared_space_person" CASCADE;
 DROP TABLE IF EXISTS "shared_space_face_match_backfill_target" CASCADE;
+DROP TABLE IF EXISTS "shared_space_library_asset_audit" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
@@ -352,6 +354,8 @@ DELETE FROM "kysely_migrations"
    '1779100000000-AddSharedSpaceAlbumCreateSideTriggers',
    '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
+   '1779309791424-SharedSpaceAlbumAssetAuditTable',
+   '1781181889688-SharedSpaceLibraryAssetAuditTable',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
