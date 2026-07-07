@@ -7,6 +7,8 @@
 **Tracking issue:** [#473 — Filter panel in iOS app not collapsible and not searchable](https://github.com/open-noodle/gallery/issues/473)
 **Parity target:** the web filter panel (`web/src/lib/components/filter-panel/`) and its redesign spec `docs/superpowers/specs/2026-06-17-filter-panel-redesign-design.md`.
 
+> **Visual source of truth.** The interactive mockup is the **canonical UI reference** for this work. Every section, picker, and interaction must reproduce its layout and anatomy. The "UI anatomy" section below transcribes each screen so this spec is self-contained, and every slice deep-links the exact mockup screen it builds. **Any deviation from the mockup requires explicit sign-off and a spec update** — the implementation plan must not invent alternative layouts. When prose and mockup disagree, the mockup wins. The plan produced from this spec must carry these mockup references into each slice's acceptance criteria.
+
 ## Problem
 
 The mobile filter sheet renders **every** person, place and tag in a single flat, unbounded, non-collapsible, non-searchable list. From the issue reporter:
@@ -98,6 +100,61 @@ A shared scaffold: nav bar (back + title + Done), a search field, optional conte
 
 - The dead upstream `widgets/search/search_filter/` (people/location/camera/media/star pickers) and its providers (`providers/search/people.provider.dart`, `search_filter.provider.dart`, `search_page_state.provider.dart`) are unreferenced. Delete to reduce confusion.
 
+## UI anatomy — the mockup is the source of truth
+
+Each surface below transcribes the corresponding screen in `2026-07-07-mobile-filter-parity-mockup.html`. Implementation must reproduce this layout; the anchors deep-link the exact screen. (Visual styling — spacing/colour/typography — follows the app's own design system, not the mockup's demo fonts; the mockup governs **layout, elements, and interaction**, mirroring how the web redesign spec treats its prototype.)
+
+### Deep sheet — [`#mockup-deep`](2026-07-07-mobile-filter-parity-mockup.html#mockup-deep)
+
+- Header row: grabber; title "Filter"; a **⚙ manage icon** and **"Reset"** on the right.
+- Accordion sections in this order: **People, Places, Tags, Camera, When, Rating, Media type, Toggles**.
+- Section header: title (left), optional count (right), chevron that rotates (−90° when collapsed). Collapsed → header only. Empty → "(0)" and disabled.
+- People (expanded): capped **6-avatar** grid (circular; selected shows a ✓ badge) then an amber **"Search N people →"** row (magnifier + label + → arrow).
+- Places / Tags / Camera (expanded): capped **chip cloud** (first 10; selected chip filled) then a **"Search N →"** row.
+- Rating: five tappable stars. Media type: segmented **All / Photos / Videos**. Toggles: switch rows.
+- Sticky footer: "N results" (left) + amber **"Done"** button (right).
+
+### Browse snap — [`#mockup-browse`](2026-07-07-mobile-filter-parity-mockup.html#mockup-browse)
+
+- Header: grabber; title "Filter"; "Reset".
+- A global text search bar ("Search your library…").
+- Horizontal **strips**: People (circular avatars, capped, trailing **"+N / all"** tile), Places (rounded gradient tiles, capped, trailing "+N"), etc. The trailing tile opens that dimension's picker.
+- **Active-filter chips render on the timeline above the sheet** (existing `PhotosFilterSubheader`), never inside the sheet.
+
+### People picker — [`#mockup-people-picker`](2026-07-07-mobile-filter-parity-mockup.html#mockup-people-picker)
+
+- Nav bar: back "‹", title "People", "Done".
+- Search field (magnifier + placeholder / live query).
+- **"Selected · N"** strip of avatars (and a Recent strip when applicable).
+- **A–Z alpha scrubber** pinned to the right edge.
+- Bucketed list (A, B, …): each row = avatar + name + **"N photos"** subtitle (from `numberOfAssets`; hidden offline) + a **checkbox** (✓ when selected; multi-select).
+
+### Places picker — [`#mockup-places-picker`](2026-07-07-mobile-filter-parity-mockup.html#mockup-places-picker)
+
+- Nav bar: back, "Places", "Done".
+- Search field ("Search country or city…").
+- Bucket label: "COUNTRIES · from filter suggestions (already loaded)".
+- Country row: swatch + name + **expand chevron** (▾ collapsed / ▴ expanded). Expanding a country reveals **indented city rows with radios** (single-select). A subtle "cities fetched on expand" hint conveys the lazy load; no counts shown.
+
+### Tags picker — [`#mockup-tags-picker`](2026-07-07-mobile-filter-parity-mockup.html#mockup-tags-picker)
+
+- Nav bar: back, "Tags", "Done".
+- Search field (live query).
+- **"Selected · N"** chip cloud (selected tag shows its full path + ✕).
+- "MATCHES" bucket; each row = tag name + **full-path subtitle** + checkbox (multi-select).
+
+### Camera picker — [`#mockup-camera-picker`](2026-07-07-mobile-filter-parity-mockup.html#mockup-camera-picker)
+
+- Nav bar: back, "Camera", "Done".
+- Search field ("Search make or model…").
+- Bucket label: "MAKE · from filter suggestions (already loaded)".
+- Make row: name + **expand chevron**. Expanding a make reveals **indented model rows with radios** (single-select make + single model). "models fetched on expand" hint; no counts shown.
+
+### Manage sections — [`#mockup-manage-sections`](2026-07-07-mobile-filter-parity-mockup.html#mockup-manage-sections)
+
+- Nav bar: title "Manage sections", "Done".
+- One row per section: leading icon + name + status subtitle ("Shown" / "Hidden" / "Shown · has N active") + a **toggle switch**.
+
 ## Slicing
 
 Seven independently shippable, independently testable slices. **Slice 1 alone resolves the headline "collapsible" ask;** the picker slices (3–6) are largely parallelizable once the shell exists.
@@ -122,6 +179,16 @@ Slice 1 (Collapse)  ──►  Slice 2 (Hide/Manage Sections)
 | 5   | **Tags picker + cap**           | New Tags picker (`getAllTags`, search, multi-select, windowed); cap Tags preview/strip + "Search N →".                        | 1          | `tags_section`, `tags_strip`, new `tags_picker.page` + route, `tag.provider`                                                              |
 | 6   | **Camera dimension**            | New Camera section + browse strip + picker (makes upfront, lazy models, single make+model); new provider.                     | 1          | new `camera_section`, `camera_strip`, `camera_picker.page` + route, new `cameraModelSuggestionsProvider`, `deep_content`/`browse_content` |
 | 7   | **Retire dead upstream UI**     | Delete unreferenced `widgets/search/search_filter/` + its providers.                                                          | 3–6        | deletions only                                                                                                                            |
+
+**Each slice reproduces a specific mockup screen** — that screen's layout (see "UI anatomy") is the slice's visual acceptance bar:
+
+- **Slice 1** → accordion headers/chevrons + capped previews in the [Deep snap](2026-07-07-mobile-filter-parity-mockup.html#mockup-deep).
+- **Slice 2** → the [Manage sections](2026-07-07-mobile-filter-parity-mockup.html#mockup-manage-sections) screen + the ⚙ entry in the [Deep snap](2026-07-07-mobile-filter-parity-mockup.html#mockup-deep).
+- **Slice 3** → the [People picker](2026-07-07-mobile-filter-parity-mockup.html#mockup-people-picker) + the People section in the [Deep](2026-07-07-mobile-filter-parity-mockup.html#mockup-deep) / [Browse](2026-07-07-mobile-filter-parity-mockup.html#mockup-browse) snaps.
+- **Slice 4** → the [Places picker](2026-07-07-mobile-filter-parity-mockup.html#mockup-places-picker).
+- **Slice 5** → the [Tags picker](2026-07-07-mobile-filter-parity-mockup.html#mockup-tags-picker).
+- **Slice 6** → the [Camera picker](2026-07-07-mobile-filter-parity-mockup.html#mockup-camera-picker) + the new Camera section in the [Deep snap](2026-07-07-mobile-filter-parity-mockup.html#mockup-deep).
+- **Slice 7** → no UI (deletions only).
 
 ## Development approach
 
