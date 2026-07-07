@@ -10,15 +10,23 @@ import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.d
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 
+/// Preview cap: the deep section's country Wrap shows at most this many
+/// chips by default, plus the selected country if it falls beyond the cap
+/// (pinned so it stays visible).
+const int _kPreviewCap = 10;
+
 /// PlacesCascadeSection — Deep-snap section for the Places filter dimension.
 ///
 /// When no country is selected, renders a Wrap of country FilterChips sourced
-/// from photosFilterSuggestionsProvider. Tapping a country sets
-/// filter.location.country and swaps in a _CityCascade which shows:
+/// from photosFilterSuggestionsProvider (capped to [_kPreviewCap]) plus a
+/// "Search N places →" header affordance delegating to [onOpenPicker]. Tapping
+/// a country sets filter.location.country and swaps in a _CityCascade which
+/// shows:
 ///   - the selected country as an InputChip (× clears it)
 ///   - a Wrap of city FilterChips from citySuggestionsProvider(country)
 class PlacesCascadeSection extends ConsumerWidget {
-  const PlacesCascadeSection({super.key});
+  final VoidCallback? onOpenPicker;
+  const PlacesCascadeSection({super.key, this.onOpenPicker});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,6 +34,7 @@ class PlacesCascadeSection extends ConsumerWidget {
     final async = ref.watch(photosFilterSuggestionsProvider(filter));
     final countriesAsync = async.whenData((s) => s.countries);
     final selectedCountry = ref.watch(photosFilterProvider.select((f) => f.location.country));
+    final count = countriesAsync.valueOrNull?.length ?? 0;
 
     return DeepSectionScaffold<String>(
       sectionId: FilterSectionId.places,
@@ -33,9 +42,19 @@ class PlacesCascadeSection extends ConsumerWidget {
       emptyCaptionKey: 'filter_sheet_deep_empty_places',
       items: countriesAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
+      trailingHeader: count > 0
+          ? TextButton(
+              key: const Key('places-section-search-more'),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                onOpenPicker?.call();
+              },
+              child: Text(_searchMorePlacesLabel(count)),
+            )
+          : null,
       childBuilder: (countries) {
         if (selectedCountry == null) {
-          return _CountryWrap(countries: countries);
+          return _CountryWrap(countries: countries, selectedCountry: selectedCountry);
         }
         return _CityCascade(country: selectedCountry);
       },
@@ -43,21 +62,36 @@ class PlacesCascadeSection extends ConsumerWidget {
   }
 }
 
+/// Plural helper — nested-leaf lookup avoids `.plural()`, which reads a
+/// late-initialized locale field and throws in widget tests without an
+/// `EasyLocalization` ancestor. Matches the pattern in `people_section.widget.dart`.
+String _searchMorePlacesLabel(int count) {
+  final variant = count == 1 ? 'one' : 'other';
+  return 'filter_sheet_deep_search_n_places.$variant'.tr(namedArgs: {'count': '$count'});
+}
+
 class _CountryWrap extends ConsumerWidget {
   final List<String> countries;
-  const _CountryWrap({required this.countries});
+  final String? selectedCountry;
+  const _CountryWrap({required this.countries, required this.selectedCountry});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final firstCap = countries.take(_kPreviewCap).toList();
+    final display = [
+      ...firstCap,
+      if (selectedCountry != null && !firstCap.contains(selectedCountry) && countries.contains(selectedCountry))
+        selectedCountry!,
+    ];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final country in countries)
+        for (final country in display)
           FilterChip(
             key: Key('places-country-$country'),
             label: Text(country),
-            selected: false,
+            selected: country == selectedCountry,
             onSelected: (_) {
               HapticFeedback.selectionClick();
               ref.read(photosFilterProvider.notifier).setLocation(SearchLocationFilter(country: country));

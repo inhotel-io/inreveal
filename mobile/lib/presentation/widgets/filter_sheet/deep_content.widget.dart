@@ -32,7 +32,13 @@ class DeepContent extends ConsumerWidget {
           ),
         );
       case FilterSectionId.places:
-        return const PlacesCascadeSection(key: Key('deep-section-places'));
+        return Builder(
+          key: const Key('deep-section-places-wrapper'),
+          builder: (context) => PlacesCascadeSection(
+            key: const Key('deep-section-places'),
+            onOpenPicker: () => context.pushRoute(const PlacesPickerRoute()),
+          ),
+        );
       case FilterSectionId.tags:
         return const TagsSectionDeep(key: Key('deep-section-tags'));
       case FilterSectionId.when:

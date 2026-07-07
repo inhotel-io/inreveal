@@ -151,5 +151,107 @@ void main() {
       // The selected-country chip should render — we assert existence + delete icon visible.
       expect(find.byKey(const Key('places-country-selected')), findsOneWidget);
     });
+
+    // Slice 4: cap the country wrap to 10 + a "Search N places →" header trailing button.
+    testWidgets('caps country wrap to 10 + renders "Search N places →" in the header', (tester) async {
+      final countries = [for (var i = 0; i < 15; i++) 'C$i'];
+      await tester.pumpConsumerWidget(
+        const Material(child: PlacesCascadeSection(onOpenPicker: null)),
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: countries))),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.byKey(Key('places-country-C$i')), findsOneWidget);
+      }
+      for (var i = 10; i < 15; i++) {
+        expect(find.byKey(Key('places-country-C$i')), findsNothing);
+      }
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collapsible-header-places')),
+          matching: find.byKey(const Key('places-section-search-more')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collapsible-body-places')),
+          matching: find.byKey(const Key('places-section-search-more')),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('onOpenPicker callback fires when "Search N places →" tapped', (tester) async {
+      var opened = false;
+      final countries = [for (var i = 0; i < 15; i++) 'C$i'];
+      await tester.pumpConsumerWidget(
+        Material(child: PlacesCascadeSection(onOpenPicker: () => opened = true)),
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: countries))),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('places-section-search-more')));
+      expect(opened, isTrue);
+    });
+
+    testWidgets('pins a selected country beyond the first 10', (tester) async {
+      final countries = [for (var i = 0; i < 15; i++) 'C$i'];
+      await tester.pumpConsumerWidget(
+        const Material(child: PlacesCascadeSection(onOpenPicker: null)),
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: countries))),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(PlacesCascadeSection)));
+      // C11 is the 12th country (index 11) — beyond the 10-item cap.
+      container.read(photosFilterProvider.notifier).setLocation(SearchLocationFilter(country: 'C11'));
+      await tester.pumpAndSettle();
+
+      // Selecting a country swaps the wrap for the city cascade, so the
+      // pinned-selection chip itself now shows as the selected-country chip.
+      expect(find.byKey(const Key('places-country-selected')), findsOneWidget);
+      expect(find.text('C11'), findsOneWidget);
+    });
+
+    testWidgets('≤10 countries renders all, no over-cap', (tester) async {
+      final countries = [for (var i = 0; i < 6; i++) 'C$i'];
+      await tester.pumpConsumerWidget(
+        const Material(child: PlacesCascadeSection(onOpenPicker: null)),
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: countries))),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 6; i++) {
+        expect(find.byKey(Key('places-country-C$i')), findsOneWidget);
+      }
+    });
+
+    testWidgets('empty countries → no "Search N places →" affordance', (tester) async {
+      await tester.pumpConsumerWidget(
+        const Material(child: PlacesCascadeSection(onOpenPicker: null)),
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: []))),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('places-section-search-more')), findsNothing);
+    });
   });
 }
