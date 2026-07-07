@@ -66,6 +66,7 @@ void main() {
         const Key('deep-section-people'),
         const Key('deep-section-places'),
         const Key('deep-section-tags'),
+        const Key('deep-section-camera'),
         const Key('deep-section-when'),
         const Key('deep-section-rating'),
         const Key('deep-section-media'),

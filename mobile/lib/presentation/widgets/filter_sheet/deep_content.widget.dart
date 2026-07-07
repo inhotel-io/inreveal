@@ -1,6 +1,7 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/camera_cascade_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_header.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/people_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/media_type_section.widget.dart';
@@ -48,8 +49,13 @@ class DeepContent extends ConsumerWidget {
           ),
         );
       case FilterSectionId.camera:
-        // TEMPORARY placeholder — replaced by the real CameraCascadeSection in Task 6.
-        return const SizedBox.shrink();
+        return Builder(
+          key: const Key('deep-section-camera-wrapper'),
+          builder: (context) => CameraCascadeSection(
+            key: const Key('deep-section-camera'),
+            onOpenPicker: () => context.pushRoute(const CameraPickerRoute()),
+          ),
+        );
       case FilterSectionId.when:
         return Builder(
           key: const Key('deep-section-when-wrapper'),
