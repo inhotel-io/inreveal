@@ -16,7 +16,6 @@ class SharedSpaceLinkedAlbumDto {
     required this.addedById,
     required this.albumName,
     required this.albumThumbnailAssetId,
-    this.albumUsers = const [],
     required this.assetCount,
     this.contributorCounts = const Optional.present(const []),
     required this.createdAt,
@@ -28,6 +27,7 @@ class SharedSpaceLinkedAlbumDto {
     this.lastModifiedAssetTimestamp = const Optional.absent(),
     required this.linkedAt,
     this.order = const Optional.absent(),
+    required this.ownerId,
     required this.shared,
     required this.showInTimeline,
     this.startDate = const Optional.absent(),
@@ -42,9 +42,6 @@ class SharedSpaceLinkedAlbumDto {
 
   /// Thumbnail asset ID
   String? albumThumbnailAssetId;
-
-  /// First entry is always the album owner. Second entry is the auth user, if it differs from the owner. The rest are ordered alphabetically.
-  List<AlbumUserResponseDto> albumUsers;
 
   /// Number of assets
   ///
@@ -98,6 +95,9 @@ class SharedSpaceLinkedAlbumDto {
   ///
   Optional<AssetOrder?> order;
 
+  /// User ID of the album owner (non-PII UUID, for group-by-owner)
+  String ownerId;
+
   /// Is shared album
   bool shared;
 
@@ -121,7 +121,6 @@ class SharedSpaceLinkedAlbumDto {
     other.addedById == addedById &&
     other.albumName == albumName &&
     other.albumThumbnailAssetId == albumThumbnailAssetId &&
-    _deepEquality.equals(other.albumUsers, albumUsers) &&
     other.assetCount == assetCount &&
     _deepEquality.equals(other.contributorCounts, contributorCounts) &&
     other.createdAt == createdAt &&
@@ -133,6 +132,7 @@ class SharedSpaceLinkedAlbumDto {
     other.lastModifiedAssetTimestamp == lastModifiedAssetTimestamp &&
     other.linkedAt == linkedAt &&
     other.order == order &&
+    other.ownerId == ownerId &&
     other.shared == shared &&
     other.showInTimeline == showInTimeline &&
     other.startDate == startDate &&
@@ -144,7 +144,6 @@ class SharedSpaceLinkedAlbumDto {
     (addedById == null ? 0 : addedById!.hashCode) +
     (albumName.hashCode) +
     (albumThumbnailAssetId == null ? 0 : albumThumbnailAssetId!.hashCode) +
-    (albumUsers.hashCode) +
     (assetCount.hashCode) +
     (contributorCounts.hashCode) +
     (createdAt.hashCode) +
@@ -156,13 +155,14 @@ class SharedSpaceLinkedAlbumDto {
     (lastModifiedAssetTimestamp == null ? 0 : lastModifiedAssetTimestamp!.hashCode) +
     (linkedAt.hashCode) +
     (order == null ? 0 : order!.hashCode) +
+    (ownerId.hashCode) +
     (shared.hashCode) +
     (showInTimeline.hashCode) +
     (startDate == null ? 0 : startDate!.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, albumUsers=$albumUsers, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, shared=$shared, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
+  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, ownerId=$ownerId, shared=$shared, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -177,7 +177,6 @@ class SharedSpaceLinkedAlbumDto {
     } else {
     //  json[r'albumThumbnailAssetId'] = null;
     }
-      json[r'albumUsers'] = this.albumUsers;
       json[r'assetCount'] = this.assetCount;
     if (this.contributorCounts.isPresent) {
       final value = this.contributorCounts.value;
@@ -201,6 +200,7 @@ class SharedSpaceLinkedAlbumDto {
       final value = this.order.value;
       json[r'order'] = value;
     }
+      json[r'ownerId'] = this.ownerId;
       json[r'shared'] = this.shared;
       json[r'showInTimeline'] = this.showInTimeline;
     if (this.startDate.isPresent) {
@@ -223,7 +223,6 @@ class SharedSpaceLinkedAlbumDto {
         addedById: mapValueOfType<String>(json, r'addedById'),
         albumName: mapValueOfType<String>(json, r'albumName')!,
         albumThumbnailAssetId: mapValueOfType<String>(json, r'albumThumbnailAssetId'),
-        albumUsers: AlbumUserResponseDto.listFromJson(json[r'albumUsers']),
         assetCount: mapValueOfType<int>(json, r'assetCount')!,
         contributorCounts: json.containsKey(r'contributorCounts') ? Optional.present(ContributorCountResponseDto.listFromJson(json[r'contributorCounts'])) : const Optional.absent(),
         createdAt: mapDateTime(json, r'createdAt', r'')!,
@@ -235,6 +234,7 @@ class SharedSpaceLinkedAlbumDto {
         lastModifiedAssetTimestamp: json.containsKey(r'lastModifiedAssetTimestamp') ? Optional.present(mapDateTime(json, r'lastModifiedAssetTimestamp', r'')) : const Optional.absent(),
         linkedAt: mapDateTime(json, r'linkedAt', r'')!,
         order: json.containsKey(r'order') ? Optional.present(AssetOrder.fromJson(json[r'order'])) : const Optional.absent(),
+        ownerId: mapValueOfType<String>(json, r'ownerId')!,
         shared: mapValueOfType<bool>(json, r'shared')!,
         showInTimeline: mapValueOfType<bool>(json, r'showInTimeline')!,
         startDate: json.containsKey(r'startDate') ? Optional.present(mapDateTime(json, r'startDate', r'')) : const Optional.absent(),
@@ -289,7 +289,6 @@ class SharedSpaceLinkedAlbumDto {
     'addedById',
     'albumName',
     'albumThumbnailAssetId',
-    'albumUsers',
     'assetCount',
     'createdAt',
     'description',
@@ -297,6 +296,7 @@ class SharedSpaceLinkedAlbumDto {
     'id',
     'isActivityEnabled',
     'linkedAt',
+    'ownerId',
     'shared',
     'showInTimeline',
     'updatedAt',

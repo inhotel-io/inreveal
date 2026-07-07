@@ -1,6 +1,6 @@
 import { Kysely } from 'kysely';
 import { StorageCore } from 'src/cores/storage.core';
-import { AssetVisibility, JobName, JobStatus, TimeBucketSize } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, JobName, JobStatus, TimeBucketSize } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -136,6 +136,56 @@ describe('SharedSpaceService — getLinkedAlbums', () => {
 
     const nonMemberAuth = authFromUser(nonMember);
     await expect(sut.getLinkedAlbums(nonMemberAuth, space.id)).rejects.toThrow();
+  });
+
+  it('does NOT expose albumUsers or email in the linked-album payload (PII guard)', async () => {
+    // Slice 7 — getLinkedAlbums must strip albumUsers (and the email addresses they carry)
+    // from every linked album DTO returned to any space member (Viewer+).
+    // We add a second user as an album_user so that albumUsers would be non-empty if leaked.
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: collaborator } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'PII Test Album' });
+
+    // Add collaborator as an album user so albumUsers would be populated if leaked
+    await ctx.database
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: collaborator.id, role: AlbumUserRole.Editor })
+      .execute();
+
+    const { asset: a1 } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: a1.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const viewerAuth = authFromUser(viewer);
+    const links = await sut.getLinkedAlbums(viewerAuth, space.id);
+
+    expect(links).toHaveLength(1);
+    const link = links[0];
+
+    // Core fields the web uses must still be present
+    expect(link.id).toBe(album.id);
+    expect(link.albumName).toBe('PII Test Album');
+    expect(typeof link.assetCount).toBe('number');
+    expect(typeof link.showInTimeline).toBe('boolean');
+    expect(link.addedById).toBe(owner.id);
+    expect(typeof link.linkedAt).toBe('string');
+
+    // Deep-scan: no albumUsers property and no email string anywhere in the serialized payload
+    expect((link as unknown as Record<string, unknown>)['albumUsers']).toBeUndefined();
+
+    const serialized = JSON.stringify(link);
+    // email fields like "email":"..." must not appear anywhere in the payload
+    expect(serialized).not.toMatch(/"email"\s*:/);
+    // collaborator's actual email must not appear
+    expect(serialized).not.toContain(collaborator.email);
+    // owner's email must not appear
+    expect(serialized).not.toContain(owner.email);
   });
 });
 
@@ -683,13 +733,12 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
     expect(accessedIds).toContain(motion.id);
   });
 
-  it('Test 6: locked (Visibility.Locked) asset in linked album — checkSpaceAccess does NOT filter by visibility', async () => {
-    // checkSpaceAccess does NOT filter asset.visibility for ANY space path (album/library/direct) —
-    // this is pre-existing behavior inherited from libraries/direct adds, NOT introduced by space albums;
-    // locked-asset exclusion across all space paths would be a separate cross-cutting change (out of scope)
-    //
-    // PARITY: album-linked Locked assets and direct-added Locked assets must behave identically —
-    // both are returned by checkSpaceAccess with no visibility filtering applied on either path.
+  it('Test 6: locked (Visibility.Locked) asset in linked album — checkSpaceAccess EXCLUDES hidden/locked (Slice 3 fix)', async () => {
+    // Slice 3 security fix: checkSpaceAccess now applies the spaceVisibilityGate
+    // (asset.visibility IN (Archive, Timeline)) to ALL three access paths — direct,
+    // library, and album. Hidden/Locked assets must NEVER be exposed via the space gate.
+    // The owner's own Locked assets are still readable via checkOwnerAccess (with
+    // hasElevatedPermission=true), which runs before checkSpaceAccess in access.ts.
     const { ctx } = setup();
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
@@ -714,9 +763,9 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
       new Set([albumLockedAsset.id, directLockedAsset.id]),
     );
 
-    // Pinned: both locked assets are returned — visibility is NOT filtered on either the album-branch or the direct-add path
-    expect(accessedIds).toContain(albumLockedAsset.id);
-    expect(accessedIds).toContain(directLockedAsset.id);
+    // Fixed: Locked assets are excluded from checkSpaceAccess on both album-branch and direct-add path
+    expect(accessedIds.has(albumLockedAsset.id)).toBe(false);
+    expect(accessedIds.has(directLockedAsset.id)).toBe(false);
   });
 
   it('Test 7: empty album link is a no-op (zero assets, timeline unchanged)', async () => {

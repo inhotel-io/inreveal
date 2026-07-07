@@ -1,8 +1,8 @@
-import { AssetMediaResponseDto, LoginResponseDto, SharedSpaceRole } from '@immich/sdk';
+import { AssetMediaResponseDto, AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
 import { authHeaders, forEachActor, type Actor } from 'src/actors';
 import { createUserDto } from 'src/fixtures';
 import { errorDto } from 'src/responses';
-import { app, utils } from 'src/utils';
+import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -1344,6 +1344,115 @@ describe('/shared-spaces', () => {
         .get(`/assets/${user1Asset1.id}/original`)
         .set('Authorization', `Bearer ${user2.accessToken}`);
 
+      expect(status).toBe(200);
+    });
+  });
+
+  // ─── Slice 3: visibility gate — Hidden/Locked assets are never exposed via space ───────────────
+
+  describe('checkSpaceAccess visibility gate (Slice 3) — Hidden/Locked assets blocked', () => {
+    /**
+     * user1 owns the space and assets. user2 is a plain viewer member.
+     * For each test a fresh space + asset pair is created to avoid state leakage.
+     *
+     * Endpoints tested per the brief:
+     *   GET /assets/:id            (AssetRead)
+     *   GET /assets/:id/original   (AssetDownload)
+     *   GET /assets/:id/thumbnail  (AssetView)
+     */
+
+    it('member CANNOT read a Locked direct-space asset (GET /assets/:id → 400)', async () => {
+      // Add while Timeline (the add-assets endpoint rejects Locked and filters Hidden), THEN flip —
+      // the real "added-then-locked" scenario the checkSpaceAccess gate must catch.
+      const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Read Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
+        { headers: asBearerAuth(user1.accessToken) },
+      );
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('member CANNOT download a Locked direct-space asset (GET /assets/:id/original → 400)', async () => {
+      const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Download Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
+        { headers: asBearerAuth(user1.accessToken) },
+      );
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}/original`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('member CANNOT view thumbnail of a Locked direct-space asset (GET /assets/:id/thumbnail → 400)', async () => {
+      const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Locked Thumb Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Locked } },
+        { headers: asBearerAuth(user1.accessToken) },
+      );
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}/thumbnail`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('member CANNOT read a Hidden direct-space asset (GET /assets/:id → 400)', async () => {
+      const asset = await utils.createAsset(user1.accessToken);
+      const space = await utils.createSpace(user1.accessToken, { name: 'Hidden Read Block' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(user1.accessToken) },
+      );
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+      expect(status).toBe(400);
+    });
+
+    it('member CAN read a Timeline direct-space asset (GET /assets/:id → 200)', async () => {
+      const asset = await utils.createAsset(user1.accessToken);
+      // Default visibility is Timeline; no update needed
+      const space = await utils.createSpace(user1.accessToken, { name: 'Timeline Read Allow' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+      expect(status).toBe(200);
+    });
+
+    it('member CAN read an Archive direct-space asset (GET /assets/:id → 200)', async () => {
+      const asset = await utils.createAsset(user1.accessToken);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Archive } },
+        { headers: asBearerAuth(user1.accessToken) },
+      );
+      const space = await utils.createSpace(user1.accessToken, { name: 'Archive Read Allow' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId });
+      await utils.addSpaceAssets(user1.accessToken, space.id, [asset.id]);
+
+      const { status } = await request(app)
+        .get(`/assets/${asset.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
       expect(status).toBe(200);
     });
   });

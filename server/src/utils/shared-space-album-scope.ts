@@ -17,8 +17,34 @@
 //
 // See docs / data/sa-abstraction-spec-t8/report.md for the full design + slices.
 import { Expression, ExpressionBuilder, RawBuilder, ReferenceExpression, sql, SqlBool } from 'kysely';
+import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
 import { anyUuid, asUuid } from 'src/utils/database';
+
+/**
+ * The canonical set of asset visibilities that are shareable through a space.
+ * Hidden and Locked assets are never shareable; Archive and Timeline are.
+ * This is the single source of truth — previously declared as three local
+ * constants under two names across shared-space, face-identity, and person
+ * repositories.
+ */
+export const spaceVisibleAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+
+/**
+ * Returns an `eb.in` predicate restricting `column` to the two space-shareable
+ * visibility values (`archive`, `timeline`).
+ *
+ * Default column presumes an `asset`-rooted/joined query; not usable on an
+ * `asset`-less builder.
+ *
+ * Usage: `.where((eb) => spaceVisibilityGate(eb))`
+ */
+export function spaceVisibilityGate(
+  eb: ExpressionBuilder<DB, keyof DB>,
+  column: ReferenceExpression<DB, keyof DB> = 'asset.visibility',
+): Expression<SqlBool> {
+  return eb(column, 'in', spaceVisibleAssetVisibilities);
+}
 
 /**
  * How a space-scoped branch is bound to the space(s) it applies to. Mirrors the
@@ -246,6 +272,8 @@ export interface SpaceAlbumAssetSqlOptions {
   spaceScopeJoin: RawBuilder<unknown>;
   /** A1 invariant: require `album.deletedAt IS NULL`. Default true. */
   requireAlbumNotDeleted?: boolean;
+  /** Timeline surfaces only: require `shared_space_album.showInTimeline = true`. Default false. */
+  requireShowInTimeline?: boolean;
 }
 
 /**
@@ -257,6 +285,7 @@ export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): Ra
     (options.requireAlbumNotDeleted ?? true)
       ? sql`INNER JOIN album ON album.id = shared_space_album."albumId" AND album."deletedAt" IS NULL`
       : sql``;
+  const timelineGate = options.requireShowInTimeline ? sql`AND "shared_space_album"."showInTimeline" = true` : sql``;
   return sql<SqlBool>`EXISTS (
               SELECT 1
               FROM shared_space_album
@@ -264,5 +293,6 @@ export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): Ra
               ${albumJoin}
               INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
               WHERE album_asset."assetId" = ${options.assetIdColumn}
+              ${timelineGate}
             )`;
 }

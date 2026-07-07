@@ -153,6 +153,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -356,6 +357,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -558,6 +560,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -730,6 +733,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -933,6 +937,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   )
@@ -1050,6 +1055,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -1260,6 +1266,7 @@ WITH
             INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
           WHERE
             album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),

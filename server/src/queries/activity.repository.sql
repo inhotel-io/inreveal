@@ -25,7 +25,13 @@ from
   left join "asset" on "asset"."id" = "activity"."assetId"
 where
   "activity"."albumId" = $1
-  and "asset"."deletedAt" is null
+  and (
+    (
+      "asset"."deletedAt" is null
+      and "asset"."visibility" in ('archive', 'timeline')
+    )
+    or "asset"."id" is null
+  )
 order by
   "activity"."createdAt" asc
 
@@ -81,7 +87,7 @@ where
   and (
     (
       "asset"."deletedAt" is null
-      and "asset"."visibility" != 'locked'
+      and "asset"."visibility" in ('archive', 'timeline')
     )
     or "asset"."id" is null
   )

@@ -58,7 +58,7 @@ import {
   withTags,
 } from 'src/utils/database';
 import { globToSqlPattern } from 'src/utils/misc';
-import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
+import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 export type AssetStats = Record<AssetType, number>;
 
@@ -309,18 +309,39 @@ export function withTimeBucketAssetFilters<O>(
     )
     .$if(!!options.spaceId, (qb) =>
       qb.where((eb) =>
-        eb.or(
-          spaceAssetPathBranches(eb, {
-            correlateAssetId: 'asset.id',
-            correlateLibraryId: 'asset.libraryId',
-            scope: { spaceId: options.spaceId! },
-            requireShowInTimeline: true,
-          }),
-        ),
+        // Fork RBAC (Fix A): the space-membership predicate is intersected with an
+        // INDEPENDENT visibility gate — `own OR (Archive|Timeline)` — so an explicit
+        // `visibility=HIDDEN`/`LOCKED` cannot surface OTHER members' Hidden/Locked in-space
+        // assets. Mirrors searchAssetBuilder. `userIds` may be undefined (pure spaceId browse):
+        // then the `own` term is absent and the gate is purely other-members-Archive/Timeline.
+        eb.and([
+          eb.or(
+            spaceAssetPathBranches(eb, {
+              correlateAssetId: 'asset.id',
+              correlateLibraryId: 'asset.libraryId',
+              scope: { spaceId: options.spaceId! },
+              requireShowInTimeline: true,
+            }),
+          ),
+          eb.or([
+            ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+            spaceVisibilityGate(eb),
+          ]),
+        ]),
       ),
     )
     .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-    .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+    .$if(!!options.spacePersonIds?.length, (qb) =>
+      hasSpacePeople(qb, options.spacePersonIds!).where((eb) =>
+        // The space-person face narrowing must ALSO carry the independent visibility gate:
+        // a space person's face on ANOTHER member's Hidden/Locked asset must not surface it
+        // via an explicit `visibility=HIDDEN`. Caller's own rows follow the resolved visibility.
+        eb.or([
+          ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+          spaceVisibilityGate(eb),
+        ]),
+      ),
+    )
     .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
     .$if(!!options.withStacked, (qb) =>
       qb
@@ -335,13 +356,22 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
       qb.where((eb) =>
         eb.or([
+          // Caller's own (and partner) rows follow the resolved top-level visibility.
           eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-          ...spaceAssetPathBranches(eb, {
-            correlateAssetId: 'asset.id',
-            correlateLibraryId: 'asset.libraryId',
-            scope: { spaceIds: options.timelineSpaceIds! },
-            requireShowInTimeline: true,
-          }),
+          // Fork RBAC (Fix A): other members' rows are constrained to Archive+Timeline via the
+          // INDEPENDENT gate, so an explicit `visibility=HIDDEN`/`LOCKED` can't surface their
+          // Hidden/Locked in-space assets. Mirrors searchAssetBuilder's timelineSpaceIds arm.
+          eb.and([
+            spaceVisibilityGate(eb),
+            eb.or(
+              spaceAssetPathBranches(eb, {
+                correlateAssetId: 'asset.id',
+                correlateLibraryId: 'asset.libraryId',
+                scope: { spaceIds: options.timelineSpaceIds! },
+                requireShowInTimeline: true,
+              }),
+            ),
+          ]),
         ]),
       ),
     )
@@ -1351,18 +1381,36 @@ export class AssetRepository {
           )
           .$if(!!options.spaceId, (qb) =>
             qb.where((eb) =>
-              eb.or(
-                spaceAssetPathBranches(eb, {
-                  correlateAssetId: 'asset.id',
-                  correlateLibraryId: 'asset.libraryId',
-                  scope: { spaceId: options.spaceId! },
-                  requireShowInTimeline: true,
-                }),
-              ),
+              // Fork RBAC (Fix A) — inline copy of the withTimeBucketAssetFilters gate. Keep in
+              // sync with that helper: intersect the space-membership predicate with an
+              // INDEPENDENT `own OR (Archive|Timeline)` gate so explicit `visibility=HIDDEN`/
+              // `LOCKED` can't leak OTHER members' Hidden/Locked in-space assets.
+              eb.and([
+                eb.or(
+                  spaceAssetPathBranches(eb, {
+                    correlateAssetId: 'asset.id',
+                    correlateLibraryId: 'asset.libraryId',
+                    scope: { spaceId: options.spaceId! },
+                    requireShowInTimeline: true,
+                  }),
+                ),
+                eb.or([
+                  ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+                  spaceVisibilityGate(eb),
+                ]),
+              ]),
             ),
           )
           .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-          .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+          .$if(!!options.spacePersonIds?.length, (qb) =>
+            hasSpacePeople(qb, options.spacePersonIds!).where((eb) =>
+              // Space-person face narrowing carries the independent visibility gate too (inline copy).
+              eb.or([
+                ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+                spaceVisibilityGate(eb),
+              ]),
+            ),
+          )
           .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
           .$if(!!options.city, (qb) => qb.where('asset_exif.city', '=', options.city!))
           .$if(!!options.country, (qb) => qb.where('asset_exif.country', '=', options.country!))
@@ -1374,14 +1422,22 @@ export class AssetRepository {
           )
           .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
             qb.where((eb) =>
+              // Fork RBAC (Fix A) — inline copy of the withTimeBucketAssetFilters timelineSpaceIds
+              // arm. Caller's own rows follow the resolved visibility; other members' rows carry
+              // the independent Archive+Timeline gate so Hidden/Locked never leak.
               eb.or([
                 eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-                ...spaceAssetPathBranches(eb, {
-                  correlateAssetId: 'asset.id',
-                  correlateLibraryId: 'asset.libraryId',
-                  scope: { spaceIds: options.timelineSpaceIds! },
-                  requireShowInTimeline: true,
-                }),
+                eb.and([
+                  spaceVisibilityGate(eb),
+                  eb.or(
+                    spaceAssetPathBranches(eb, {
+                      correlateAssetId: 'asset.id',
+                      correlateLibraryId: 'asset.libraryId',
+                      scope: { spaceIds: options.timelineSpaceIds! },
+                      requireShowInTimeline: true,
+                    }),
+                  ),
+                ]),
               ]),
             ),
           )
