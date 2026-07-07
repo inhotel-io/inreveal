@@ -16,6 +16,7 @@ import 'package:immich_mobile/infrastructure/repositories/store.repository.dart'
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/person_picker.page.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/places_picker.page.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/tags_picker.page.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/people_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/places_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/tags_strip.widget.dart';
@@ -45,6 +46,13 @@ class _PlacesStripTestRouter extends RootStackRouter {
     AutoRoute(page: _placesHomePage, initial: true),
     AutoRoute(page: PlacesPickerRoute.page),
   ];
+}
+
+final _tagsHomePage = PageInfo('TagsStripHarness', builder: (data) => const Material(child: TagsStrip()));
+
+class _TagsStripTestRouter extends RootStackRouter {
+  @override
+  List<AutoRoute> get routes => [AutoRoute(page: _tagsHomePage, initial: true), AutoRoute(page: TagsPickerRoute.page)];
 }
 
 FilterSuggestionsResponseDto _suggestions({
@@ -305,6 +313,79 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(photosFilterProvider).tagIds, ['t1']);
+    });
+
+    // Slice 5: cap the strip to 10 tiles + a trailing "+N" tile that opens the full picker.
+    testWidgets('caps to 10 chips + a trailing "+N" tile when there are more than 10 tags', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(2400, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(tags: [for (var i = 0; i < 15; i++) FilterSuggestionsTagDto(id: 't$i', value: 'Tag$i')]);
+      await tester.pumpConsumerWidget(const TagsStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('Tag$i'), findsOneWidget);
+      }
+      for (var i = 10; i < 15; i++) {
+        expect(find.text('Tag$i'), findsNothing);
+      }
+      expect(find.byKey(const Key('tags-strip-more')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('tags-strip-more')), matching: find.textContaining('5')),
+        findsOneWidget,
+        reason: '15 - 10 = 5 more',
+      );
+    });
+
+    testWidgets('no "+N" tile when there are 10 or fewer tags', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(2400, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(tags: [for (var i = 0; i < 10; i++) FilterSuggestionsTagDto(id: 't$i', value: 'Tag$i')]);
+      await tester.pumpConsumerWidget(const TagsStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('Tag$i'), findsOneWidget);
+      }
+      expect(find.byKey(const Key('tags-strip-more')), findsNothing);
+    });
+
+    testWidgets('tapping the "+N" tile navigates to the tags picker', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(2400, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(tags: [for (var i = 0; i < 15; i++) FilterSuggestionsTagDto(id: 't$i', value: 'Tag$i')]);
+      final router = _TagsStripTestRouter();
+      await tester.pumpWidget(
+        EasyLocalization(
+          supportedLocales: locales.values.toList(),
+          path: translationsPath,
+          startLocale: locales.values.first,
+          fallbackLocale: locales.values.first,
+          saveLocale: false,
+          useFallbackTranslations: true,
+          assetLoader: const CodegenLoader(),
+          child: ProviderScope(
+            overrides: _overrideSuggestions(s),
+            child: Builder(
+              builder: (context) => MaterialApp.router(
+                debugShowCheckedModeBanner: false,
+                routerConfig: router.config(),
+                localizationsDelegates: context.localizationDelegates,
+                supportedLocales: context.supportedLocales,
+                locale: context.locale,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('tags-strip-more')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('tags-strip-more')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagsPickerPage), findsOneWidget);
+      expect(find.byType(TagsStrip), findsNothing);
     });
   });
 
