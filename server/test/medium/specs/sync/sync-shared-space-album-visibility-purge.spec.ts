@@ -294,4 +294,48 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
       ),
     ).toBe(true);
   });
+
+  // X4: the unioned getDeletes (album_asset_audit + shared_space_album_asset_audit)
+  // runs under ONE client checkpoint. Deletes from both sources in one window must
+  // all deliver, and a single ack must advance past both (next sync empty).
+  it('X4: union checkpoint correctness — ack advances past both audit sources; next sync empty', async () => {
+    const { auth, ctx } = await setup();
+
+    // Seed a space with TWO linked albums, same asset in both.
+    const { space } = await ctx.newSharedSpace({ createdById: auth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Owner });
+    const { album: albumA } = await ctx.newAlbum({ ownerId: auth.user.id });
+    const { album: albumB } = await ctx.newAlbum({ ownerId: auth.user.id });
+    const { asset } = await ctx.newAsset({ ownerId: auth.user.id });
+    await ctx.newAlbumAsset({ albumId: albumA.id, assetId: asset.id });
+    await ctx.newAlbumAsset({ albumId: albumB.id, assetId: asset.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: albumA.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: albumB.id });
+
+    // Member syncs and acks to simulate an already-synced device.
+    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(auth, initial);
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    // Produce one tombstone from EACH union arm in the same window:
+    // Arm 1 (album_asset_audit): remove asset from album A — fires the album_asset_audit trigger.
+    await ctx.get(AlbumRepository).removeAssetIds(albumA.id, [asset.id]);
+    // Arm 2 (shared_space_album_asset_audit): emit visibility purge for album B (still has the row).
+    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
+
+    // Sync — must deliver deletes from BOTH sources (≥2 deletes covering albumA and albumB).
+    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
+    expect(deletes.length, 'expected deletes from both audit sources').toBeGreaterThanOrEqual(2);
+
+    const pairs = deletes.map((d) => (d as { data: { albumId: string; assetId: string } }).data);
+    expect(pairs).toContainEqual(expect.objectContaining({ albumId: albumA.id, assetId: asset.id }));
+    expect(pairs).toContainEqual(expect.objectContaining({ albumId: albumB.id, assetId: asset.id }));
+
+    // Ack all deletes — the single checkpoint must advance past both audit tables.
+    await ctx.syncAckAll(auth, next);
+
+    // Next sync MUST be empty: no re-delivery from either arm, no skip.
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  });
 });
