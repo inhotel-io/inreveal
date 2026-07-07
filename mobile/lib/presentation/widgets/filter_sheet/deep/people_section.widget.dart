@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
@@ -30,6 +31,7 @@ class PeopleSectionDeep extends ConsumerWidget {
     final showTrailing = count > 0;
 
     return DeepSectionScaffold<FilterSuggestionsPersonDto>(
+      sectionId: FilterSectionId.people,
       titleKey: 'filter_sheet_deep_people_section',
       emptyCaptionKey: 'filter_sheet_deep_empty_people',
       items: peopleAsync,

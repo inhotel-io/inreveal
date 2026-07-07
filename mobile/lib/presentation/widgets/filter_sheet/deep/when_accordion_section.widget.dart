@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/temporal_utils.dart';
@@ -54,6 +55,7 @@ class _WhenAccordionSectionState extends ConsumerState<WhenAccordionSection> {
     final count = yearsAsync.valueOrNull?.length ?? 0;
 
     return DeepSectionScaffold<YearCount>(
+      sectionId: FilterSectionId.when,
       titleKey: 'filter_sheet_deep_when_section',
       emptyCaptionKey: 'filter_sheet_deep_empty_when',
       items: yearsAsync,

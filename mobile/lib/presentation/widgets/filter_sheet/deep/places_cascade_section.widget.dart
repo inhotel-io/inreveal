@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/city_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
@@ -27,6 +28,7 @@ class PlacesCascadeSection extends ConsumerWidget {
     final selectedCountry = ref.watch(photosFilterProvider.select((f) => f.location.country));
 
     return DeepSectionScaffold<String>(
+      sectionId: FilterSectionId.places,
       titleKey: 'filter_sheet_deep_places_section',
       emptyCaptionKey: 'filter_sheet_deep_empty_places',
       items: countriesAsync,

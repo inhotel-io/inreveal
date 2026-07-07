@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
@@ -22,6 +23,7 @@ class TagsSectionDeep extends ConsumerWidget {
     final tagsAsync = async.whenData((s) => s.tags);
 
     return DeepSectionScaffold<FilterSuggestionsTagDto>(
+      sectionId: FilterSectionId.tags,
       titleKey: 'filter_sheet_deep_tags_section',
       emptyCaptionKey: 'filter_sheet_deep_empty_tags',
       items: tagsAsync,
