@@ -204,6 +204,22 @@ class AssetViewerRouteArgs {
 }
 
 /// generated route for
+/// [CameraPickerPage]
+class CameraPickerRoute extends PageRouteInfo<void> {
+  const CameraPickerRoute({List<PageRouteInfo>? children})
+    : super(CameraPickerRoute.name, initialChildren: children);
+
+  static const String name = 'CameraPickerRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const CameraPickerPage();
+    },
+  );
+}
+
+/// generated route for
 /// [ChangePasswordPage]
 class ChangePasswordRoute extends PageRouteInfo<void> {
   const ChangePasswordRoute({List<PageRouteInfo>? children})
