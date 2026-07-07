@@ -294,6 +294,11 @@ const VIS_ALLOWLIST: Record<string, string> = {
     'reads album_asset join ids into audit tombstone (purge write-infra); no asset content returned',
   'shared-space.repository.ts::emitAlbumAssetVisibilityRestore':
     'UPDATE album_asset.updatedAt scoped to space-linked albums (restore write-infra); no asset content returned',
+  // — Library-path purge write-infra (Slice 2): INSERT ... SELECT that reads asset
+  //   (libraryId, id) scoped to shared_space_library (space-linked filter). No asset
+  //   content served; fires on visibility transitions to write tombstones.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityPurge':
+    'reads asset library ids into audit tombstone (purge write-infra); no asset content returned',
 
   // — Album-ACCESS grant checks: select ONLY album.id (which albums the user may
   //   read/edit via a space link), never asset rows. Individual asset visibility is

@@ -468,6 +468,40 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  /**
+   * Slice 2 LIBRARY-path purge: when the owner flips a library-linked space asset
+   * to Hidden or Locked, write a tombstone per (libraryId, assetId) in
+   * shared_space_library_asset_audit for each asset that belongs to a space-linked
+   * library. LibraryAssetSync.getDeletes unions this table (owner-gated) so member
+   * devices drop the asset. The owner is never purged — the union arm filters
+   * asset.ownerId != userId. Restore is automatic (the visibility UPDATE bumps
+   * asset.updateId; LibraryAssetSync.getUpserts re-emits the now-visible asset).
+   * Only space-linked libraries are targeted — the library owner's own sync stream
+   * and any non-space library member are unaffected.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitLibraryAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_library_asset_audit')
+      .columns(['libraryId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('asset')
+          .select(['asset.libraryId as libraryId', 'asset.id as assetId'])
+          .where('asset.id', 'in', assetIds)
+          .where('asset.libraryId', 'is not', null)
+          .where('asset.libraryId', 'in', (eb) =>
+            eb.selectFrom('shared_space_library').select('shared_space_library.libraryId'),
+          ),
+      )
+      .$narrowType<{ libraryId: string }>()
+      .execute();
+  }
+
   // ==========================================
   // Shared Space Library Link CRUD
   // ==========================================
