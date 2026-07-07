@@ -15,6 +15,7 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/person_picker.page.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/places_picker.page.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/people_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/places_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/tags_strip.widget.dart';
@@ -34,6 +35,16 @@ final _homePage = PageInfo('PeopleStripHarness', builder: (data) => const Materi
 class _PeopleStripTestRouter extends RootStackRouter {
   @override
   List<AutoRoute> get routes => [AutoRoute(page: _homePage, initial: true), AutoRoute(page: PersonPickerRoute.page)];
+}
+
+final _placesHomePage = PageInfo('PlacesStripHarness', builder: (data) => const Material(child: PlacesStrip()));
+
+class _PlacesStripTestRouter extends RootStackRouter {
+  @override
+  List<AutoRoute> get routes => [
+    AutoRoute(page: _placesHomePage, initial: true),
+    AutoRoute(page: PlacesPickerRoute.page),
+  ];
 }
 
 FilterSuggestionsResponseDto _suggestions({
@@ -199,6 +210,79 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(photosFilterProvider).location.country, isNull);
+    });
+
+    // Slice 4: cap the strip to 10 tiles + a trailing "+N" tile that opens the full picker.
+    testWidgets('caps to 10 tiles + a trailing "+N" tile when there are more than 10 countries', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(countries: [for (var i = 0; i < 15; i++) 'C$i']);
+      await tester.pumpConsumerWidget(const PlacesStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('C$i'), findsOneWidget);
+      }
+      for (var i = 10; i < 15; i++) {
+        expect(find.text('C$i'), findsNothing);
+      }
+      expect(find.byKey(const Key('places-strip-more')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('places-strip-more')), matching: find.textContaining('5')),
+        findsOneWidget,
+        reason: '15 - 10 = 5 more',
+      );
+    });
+
+    testWidgets('no "+N" tile when there are 10 or fewer countries', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(countries: [for (var i = 0; i < 10; i++) 'C$i']);
+      await tester.pumpConsumerWidget(const PlacesStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 10; i++) {
+        expect(find.text('C$i'), findsOneWidget);
+      }
+      expect(find.byKey(const Key('places-strip-more')), findsNothing);
+    });
+
+    testWidgets('tapping the "+N" tile navigates to the places picker', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final s = _suggestions(countries: [for (var i = 0; i < 15; i++) 'C$i']);
+      final router = _PlacesStripTestRouter();
+      await tester.pumpWidget(
+        EasyLocalization(
+          supportedLocales: locales.values.toList(),
+          path: translationsPath,
+          startLocale: locales.values.first,
+          fallbackLocale: locales.values.first,
+          saveLocale: false,
+          useFallbackTranslations: true,
+          assetLoader: const CodegenLoader(),
+          child: ProviderScope(
+            overrides: _overrideSuggestions(s),
+            child: Builder(
+              builder: (context) => MaterialApp.router(
+                debugShowCheckedModeBanner: false,
+                routerConfig: router.config(),
+                localizationsDelegates: context.localizationDelegates,
+                supportedLocales: context.supportedLocales,
+                locale: context.locale,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('places-strip-more')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('places-strip-more')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PlacesPickerPage), findsOneWidget);
+      expect(find.byType(PlacesStrip), findsNothing);
     });
   });
 
