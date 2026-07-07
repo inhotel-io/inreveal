@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- `src/` alias imports only. Migration timestamp **`1779500000000`** (album used `1779400000000`). Prettier 120-col; ESLint zero-warnings. Medium tests need Docker. **Do NOT run `make sql`** (orchestrator handles it). Reuse existing entity types (`LibraryAssetDeleteV1`, `LibraryAssetCreateV1`) — no new sync types, no mobile change.
+- `src/` alias imports only. Migration timestamp **`1781181889688`** (album used `1779309791424`). Prettier 120-col; ESLint zero-warnings. Medium tests need Docker. **Do NOT run `make sql`** (orchestrator handles it). Reuse existing entity types (`LibraryAssetDeleteV1`, `LibraryAssetCreateV1`) — no new sync types, no mobile change.
 
 ## File map
 
 - **Create:** `server/src/schema/tables/shared-space-library-asset-audit.table.ts`
-- **Create:** `server/src/schema/migrations-gallery/1779500000000-SharedSpaceLibraryAssetAuditTable.ts`
+- **Create:** `server/src/schema/migrations-gallery/1781181889688-SharedSpaceLibraryAssetAuditTable.ts`
 - **Modify:** `server/src/schema/index.ts` — register the new table (next to the album audit table added in Slice 1).
 - **Modify:** `server/src/repositories/shared-space.repository.ts` — add `emitLibraryAssetVisibilityPurge`.
 - **Modify:** `server/src/repositories/sync.repository.ts` — augment `LibraryAssetSync.getDeletes` (owner-gated union) + extend `LibraryAssetSync.cleanupAuditTable` to prune both tables.
@@ -54,7 +54,7 @@ export class SharedSpaceLibraryAssetAuditTable {
 ```
 
 - [ ] **Step 2: Register** the class in `server/src/schema/index.ts` next to `SharedSpaceAlbumAssetAuditTable`.
-- [ ] **Step 3: Migration** `1779500000000-SharedSpaceLibraryAssetAuditTable.ts`:
+- [ ] **Step 3: Migration** `1781181889688-SharedSpaceLibraryAssetAuditTable.ts`:
 
 ```typescript
 import { Kysely, sql } from 'kysely';

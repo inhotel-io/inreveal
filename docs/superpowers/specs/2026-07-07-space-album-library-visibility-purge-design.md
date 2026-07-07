@@ -77,7 +77,7 @@ Two append-only audit tables, **explicit-emit only (no triggers)** — visibilit
 | `assetId` | uuid | indexed |
 | `deletedAt` | timestamptz | `clock_timestamp()`, indexed |
 
-Table classes live in `server/src/schema/tables/`. Round-timestamp fork migrations (e.g. `1779400000000-…`, `1779500000000-…`) that don't collide with existing `migrations-gallery/` timestamps. Add both tables to the `scripts/revert-to-immich/` cleanup SQL (one `DROP TABLE` per new table).
+Table classes live in `server/src/schema/tables/`. Fork migrations with spread-apart random timestamps (`1779309791424-…`, `1781181889688-…`) that don't collide with existing `migrations-gallery/` timestamps or in-flight migrations on other branches. Add both tables to the `scripts/revert-to-immich/` cleanup SQL (one `DROP TABLE` per new table).
 
 ### 3.2 New `SharedSpaceRepository` methods (`server/src/repositories/shared-space.repository.ts`)
 

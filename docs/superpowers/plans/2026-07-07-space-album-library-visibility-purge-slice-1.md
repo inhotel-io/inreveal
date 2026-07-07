@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Server imports use the `src/` path alias — **no relative imports**.
-- Fork migrations go in `server/src/schema/migrations-gallery/` with round timestamps; the newest existing is `1779300000000`, so use **`1779400000000`** for this slice's table. (Slice 2 uses `1779500000000`.)
+- Fork migrations go in `server/src/schema/migrations-gallery/` with round timestamps; the newest existing is `1779300000000`, so use **`1779309791424`** for this slice's table. (Slice 2 uses `1781181889688`.)
 - Prettier: 120-col, single quotes, trailing commas, semicolons. ESLint zero-warnings.
 - Medium tests require Docker (testcontainers). Run from `server/`.
 - `make sql` regenerates decorated-query docs and **requires a running DB** — never run it without one (it deletes query files).
@@ -22,7 +22,7 @@
 ## File map
 
 - **Create:** `server/src/schema/tables/shared-space-album-asset-audit.table.ts` — the audit table class.
-- **Create:** `server/src/schema/migrations-gallery/1779400000000-SharedSpaceAlbumAssetAuditTable.ts` — the migration.
+- **Create:** `server/src/schema/migrations-gallery/1779309791424-SharedSpaceAlbumAssetAuditTable.ts` — the migration.
 - **Modify:** `server/src/schema/index.ts` (or wherever table classes are registered) — register the new table so the `DB` type includes it.
 - **Modify:** `server/src/repositories/shared-space.repository.ts` — add `emitAlbumAssetVisibilityPurge` + `emitAlbumAssetVisibilityRestore`.
 - **Modify:** `server/src/repositories/sync.repository.ts` — augment `SharedSpaceAlbumToAssetSync.getDeletes` (union) + add `cleanupAuditTable`.
@@ -39,7 +39,7 @@
 **Files:**
 
 - Create: `server/src/schema/tables/shared-space-album-asset-audit.table.ts`
-- Create: `server/src/schema/migrations-gallery/1779400000000-SharedSpaceAlbumAssetAuditTable.ts`
+- Create: `server/src/schema/migrations-gallery/1779309791424-SharedSpaceAlbumAssetAuditTable.ts`
 - Modify: schema registration (find where `SharedSpaceAssetAuditTable` is imported/listed and add the new class next to it)
 
 **Interfaces:**
