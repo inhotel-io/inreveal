@@ -1558,6 +1558,12 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
       .stream();
   }
+
+  // Prune the space-only shared_space_album_asset_audit table. The shared
+  // album_asset_audit is pruned by albumToAsset.cleanupAuditTable (AlbumToAssetSync).
+  cleanupAuditTable(daysAgo: number) {
+    return this.auditCleanup('shared_space_album_asset_audit', daysAgo);
+  }
 }
 
 // Streams album_asset rows (full asset metadata) for albums accessible via
