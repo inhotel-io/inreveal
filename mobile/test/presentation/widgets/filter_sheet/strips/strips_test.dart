@@ -1,24 +1,40 @@
+import 'package:auto_route/auto_route.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/constants/locales.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
+import 'package:immich_mobile/generated/codegen_loader.g.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/person_picker.page.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/people_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/places_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/tags_strip.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/strips/when_strip.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
+import 'package:immich_mobile/routing/router.dart';
 import 'package:openapi/api.dart';
 
 import '../../../../widget_tester_extensions.dart';
+
+/// Minimal, self-contained AutoRoute router — just enough to prove `PeopleStrip`'s
+/// "+N" tile really navigates to [PersonPickerRoute] without pulling in the app's
+/// full, auth-guarded `AppRouter` (which needs a live ApiService/AuthService/etc.).
+final _homePage = PageInfo('PeopleStripHarness', builder: (data) => const Material(child: PeopleStrip()));
+
+class _PeopleStripTestRouter extends RootStackRouter {
+  @override
+  List<AutoRoute> get routes => [AutoRoute(page: _homePage, initial: true), AutoRoute(page: PersonPickerRoute.page)];
+}
 
 FilterSuggestionsResponseDto _suggestions({
   List<FilterSuggestionsPersonDto> people = const [],
@@ -75,6 +91,79 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(photosFilterProvider).people.map((p) => p.id), ['p1']);
+    });
+
+    // Slice 3: cap the strip to 6 tiles + a trailing "+N" tile that opens the full picker.
+    testWidgets('caps to 6 tiles + a trailing "+N" tile when there are more than 6 people', (tester) async {
+      final s = _suggestions(
+        people: [for (var i = 0; i < 10; i++) FilterSuggestionsPersonDto(id: 'p$i', name: 'P$i')],
+      );
+      await tester.pumpConsumerWidget(const PeopleStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 6; i++) {
+        expect(find.text('P$i'), findsOneWidget);
+      }
+      for (var i = 6; i < 10; i++) {
+        expect(find.text('P$i'), findsNothing);
+      }
+      expect(find.byKey(const Key('people-strip-more')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('people-strip-more')), matching: find.textContaining('4')),
+        findsOneWidget,
+        reason: '10 - 6 = 4 more',
+      );
+    });
+
+    testWidgets('no "+N" tile when there are 6 or fewer people', (tester) async {
+      final s = _suggestions(
+        people: [for (var i = 0; i < 6; i++) FilterSuggestionsPersonDto(id: 'p$i', name: 'P$i')],
+      );
+      await tester.pumpConsumerWidget(const PeopleStrip(), overrides: _overrideSuggestions(s));
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 6; i++) {
+        expect(find.text('P$i'), findsOneWidget);
+      }
+      expect(find.byKey(const Key('people-strip-more')), findsNothing);
+    });
+
+    testWidgets('tapping the "+N" tile navigates to the person picker', (tester) async {
+      final s = _suggestions(
+        people: [for (var i = 0; i < 10; i++) FilterSuggestionsPersonDto(id: 'p$i', name: 'P$i')],
+      );
+      final router = _PeopleStripTestRouter();
+      await tester.pumpWidget(
+        EasyLocalization(
+          supportedLocales: locales.values.toList(),
+          path: translationsPath,
+          startLocale: locales.values.first,
+          fallbackLocale: locales.values.first,
+          saveLocale: false,
+          useFallbackTranslations: true,
+          assetLoader: const CodegenLoader(),
+          child: ProviderScope(
+            overrides: _overrideSuggestions(s),
+            child: Builder(
+              builder: (context) => MaterialApp.router(
+                debugShowCheckedModeBanner: false,
+                routerConfig: router.config(),
+                localizationsDelegates: context.localizationDelegates,
+                supportedLocales: context.supportedLocales,
+                locale: context.locale,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('people-strip-more')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('people-strip-more')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PersonPickerPage), findsOneWidget);
+      expect(find.byType(PeopleStrip), findsNothing);
     });
   });
 
