@@ -118,14 +118,15 @@ void main() {
       expect(provider.url, 'http://localhost:0/shared-spaces/space-1/people/profile-1/thumbnail');
     });
 
-    testWidgets('empty list → empty state string and no "Search N" affordance', (tester) async {
+    testWidgets('empty list → section auto-collapses with "(0)", no "Search N" affordance', (tester) async {
       await tester.pumpConsumerWidget(
         const Material(child: PeopleSectionDeep(onOpenPicker: null)),
         overrides: [photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(people: [])))],
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('deep-section-empty')), findsOneWidget);
+      expect(find.textContaining('(0)'), findsOneWidget);
+      expect(find.byKey(const Key('deep-section-empty')), findsNothing);
       expect(find.byKey(const Key('people-section-search-more')), findsNothing);
     });
 

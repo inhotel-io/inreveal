@@ -3,11 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/tags_section.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
+import 'package:immich_mobile/providers/photos_filter/collapsed_sections.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:openapi/api.dart';
 
 import '../../../../widget_tester_extensions.dart';
+
+class _FakePrefs implements FilterSectionPrefs {
+  final Set<FilterSectionId> collapsed;
+  _FakePrefs(this.collapsed);
+  @override
+  Set<FilterSectionId> loadCollapsed() => collapsed;
+  @override
+  Future<void> saveCollapsed(Set<FilterSectionId> ids) async {}
+}
+
+Override _noCollapsed() => filterSectionPrefsProvider.overrideWithValue(_FakePrefs({}));
 
 FilterSuggestionsResponseDto _sugg({List<FilterSuggestionsTagDto>? tags}) =>
     FilterSuggestionsResponseDto(hasUnnamedPeople: false, tags: tags ?? const []);
@@ -18,6 +31,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(
               _sugg(
@@ -42,6 +56,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(
               _sugg(
@@ -70,6 +85,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(
               _sugg(
@@ -89,20 +105,25 @@ void main() {
       expect(chip.selected, isTrue);
     });
 
-    testWidgets('empty tags → empty caption rendered by DeepSectionScaffold', (tester) async {
+    testWidgets('empty tags → section auto-collapses, "(0)" shown, empty caption hidden', (tester) async {
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
-        overrides: [photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(tags: [])))],
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(tags: []))),
+        ],
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('deep-section-empty')), findsOneWidget);
+      expect(find.textContaining('(0)'), findsOneWidget);
+      expect(find.byKey(const Key('deep-section-empty')), findsNothing);
     });
 
     testWidgets('section title renders via filter_sheet_deep_tags_section key', (tester) async {
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(
               _sugg(
@@ -123,6 +144,7 @@ void main() {
       await tester.pumpConsumerWidgetDark(
         const Material(child: TagsSectionDeep()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(
               _sugg(

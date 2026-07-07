@@ -3,12 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/places_cascade_section.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/city_suggestions.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/collapsed_sections.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:openapi/api.dart';
 
 import '../../../../widget_tester_extensions.dart';
+
+class _FakePrefs implements FilterSectionPrefs {
+  final Set<FilterSectionId> collapsed;
+  _FakePrefs(this.collapsed);
+  @override
+  Set<FilterSectionId> loadCollapsed() => collapsed;
+  @override
+  Future<void> saveCollapsed(Set<FilterSectionId> ids) async {}
+}
+
+Override _noCollapsed() => filterSectionPrefsProvider.overrideWithValue(_FakePrefs({}));
 
 FilterSuggestionsResponseDto _sugg({List<String>? countries}) =>
     FilterSuggestionsResponseDto(hasUnnamedPeople: false, countries: countries ?? const []);
@@ -19,6 +32,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(_sugg(countries: ['France', 'Germany'])),
           ),
@@ -34,6 +48,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(_sugg(countries: ['France', 'Germany'])),
           ),
@@ -58,6 +73,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: ['France']))),
           citySuggestionsProvider.overrideWith((ref, country) => Future.value(['Paris'])),
         ],
@@ -80,6 +96,7 @@ void main() {
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith(
             (ref, filter) => Future.value(_sugg(countries: ['France', 'Germany'])),
           ),
@@ -102,20 +119,25 @@ void main() {
       expect(find.byKey(const Key('places-country-Germany')), findsOneWidget);
     });
 
-    testWidgets('empty countries → renders empty caption via DeepSectionScaffold', (tester) async {
+    testWidgets('empty countries → section auto-collapses, "(0)" shown, empty caption hidden', (tester) async {
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection()),
-        overrides: [photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: [])))],
+        overrides: [
+          _noCollapsed(),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: []))),
+        ],
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('deep-section-empty')), findsOneWidget);
+      expect(find.textContaining('(0)'), findsOneWidget);
+      expect(find.byKey(const Key('deep-section-empty')), findsNothing);
     });
 
     testWidgets('selected country chip renders primary color in dark theme', (tester) async {
       await tester.pumpConsumerWidgetDark(
         const Material(child: PlacesCascadeSection()),
         overrides: [
+          _noCollapsed(),
           photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(countries: ['France']))),
           citySuggestionsProvider.overrideWith((ref, country) => Future.value(const <String>[])),
         ],
