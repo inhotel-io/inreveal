@@ -18,12 +18,13 @@ const int _kPreviewCap = 10;
 /// PlacesCascadeSection — Deep-snap section for the Places filter dimension.
 ///
 /// When no country is selected, renders a Wrap of country FilterChips sourced
-/// from photosFilterSuggestionsProvider (capped to [_kPreviewCap]) plus a
-/// "Search N places →" header affordance delegating to [onOpenPicker]. Tapping
-/// a country sets filter.location.country and swaps in a _CityCascade which
+/// from photosFilterSuggestionsProvider (capped to [_kPreviewCap]). Tapping a
+/// country sets filter.location.country and swaps in a _CityCascade which
 /// shows:
 ///   - the selected country as an InputChip (× clears it)
 ///   - a Wrap of city FilterChips from citySuggestionsProvider(country)
+/// A body "Search N places →" row below the wrap/cascade delegates to
+/// [onOpenPicker] — tapping it opens the full picker.
 class PlacesCascadeSection extends ConsumerWidget {
   final VoidCallback? onOpenPicker;
   const PlacesCascadeSection({super.key, this.onOpenPicker});
@@ -42,22 +43,54 @@ class PlacesCascadeSection extends ConsumerWidget {
       emptyCaptionKey: 'filter_sheet_deep_empty_places',
       items: countriesAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
-      trailingHeader: count > 0
-          ? TextButton(
-              key: const Key('places-section-search-more'),
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onOpenPicker?.call();
-              },
-              child: Text(_searchMorePlacesLabel(count)),
-            )
-          : null,
       childBuilder: (countries) {
-        if (selectedCountry == null) {
-          return _CountryWrap(countries: countries);
-        }
-        return _CityCascade(country: selectedCountry);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selectedCountry == null) _CountryWrap(countries: countries) else _CityCascade(country: selectedCountry),
+            if (count > 0) _SearchMoreRow(count: count, onOpenPicker: onOpenPicker),
+          ],
+        );
       },
+    );
+  }
+}
+
+class _SearchMoreRow extends StatelessWidget {
+  final int count;
+  final VoidCallback? onOpenPicker;
+  const _SearchMoreRow({required this.count, this.onOpenPicker});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        key: const Key('places-section-search-more'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onOpenPicker?.call();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              // The translated label already ends in "→" (see filter_sheet_deep_search_n_places).
+              Expanded(
+                child: Text(
+                  _searchMorePlacesLabel(count),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

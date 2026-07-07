@@ -153,4 +153,29 @@ void main() {
       expect(find.byKey(const Key('places-picker-clear-search')), findsNothing);
     });
   });
+
+  group('PlacesPickerPage error state', () {
+    testWidgets('renders a tappable retry; tapping invalidates the suggestions provider and refetches', (tester) async {
+      var calls = 0;
+      await tester.pumpConsumerWidget(
+        const PlacesPickerPage(),
+        overrides: [
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) async {
+            calls++;
+            if (calls == 1) throw Exception('network down');
+            return _sugg(['France']);
+          }),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('places-picker-retry')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('places-picker-retry')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('places-picker-retry')), findsNothing);
+      expect(find.byKey(const Key('places-picker-country-France')), findsOneWidget);
+    });
+  });
 }

@@ -97,10 +97,7 @@ void main() {
 
   group('CameraPickerPage integration', () {
     testWidgets('renders a row per make from suggestions (no proactive model fetch)', (tester) async {
-      await tester.pumpConsumerWidget(
-        const CameraPickerPage(),
-        overrides: _overrideMakes(['Canon', 'Sony', 'Nikon']),
-      );
+      await tester.pumpConsumerWidget(const CameraPickerPage(), overrides: _overrideMakes(['Canon', 'Sony', 'Nikon']));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('camera-picker-make-Canon')), findsOneWidget);
@@ -109,10 +106,7 @@ void main() {
     });
 
     testWidgets('typing "can" filters the make list to Canon only', (tester) async {
-      await tester.pumpConsumerWidget(
-        const CameraPickerPage(),
-        overrides: _overrideMakes(['Canon', 'Sony', 'Nikon']),
-      );
+      await tester.pumpConsumerWidget(const CameraPickerPage(), overrides: _overrideMakes(['Canon', 'Sony', 'Nikon']));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byKey(const Key('camera-picker-search-field')), 'can');
@@ -123,37 +117,59 @@ void main() {
       expect(find.byKey(const Key('camera-picker-make-Nikon')), findsNothing);
     });
 
-    testWidgets(
-      'query matching only an already-loaded model of the expanded make keeps the accordion visible',
-      (tester) async {
-        await tester.pumpConsumerWidget(
-          const CameraPickerPage(),
-          overrides: [
-            ..._overrideMakes(['Canon']),
-            cameraModelSuggestionsProvider.overrideWith(
-              (ref, make) async => make == 'Canon' ? ['EOS R5', 'EOS R6'] : [],
-            ),
-          ],
-        );
-        await tester.pumpAndSettle();
+    testWidgets('query matching only an already-loaded model of the expanded make keeps the accordion visible', (
+      tester,
+    ) async {
+      await tester.pumpConsumerWidget(
+        const CameraPickerPage(),
+        overrides: [
+          ..._overrideMakes(['Canon']),
+          cameraModelSuggestionsProvider.overrideWith((ref, make) async => make == 'Canon' ? ['EOS R5', 'EOS R6'] : []),
+        ],
+      );
+      await tester.pumpAndSettle();
 
-        // Expand Canon so its models load and get cached.
-        await tester.tap(find.byKey(const Key('camera-picker-make-Canon')));
-        await tester.pumpAndSettle();
-        expect(find.byKey(const Key('camera-picker-model-EOS R5')), findsOneWidget);
-        expect(find.byKey(const Key('camera-picker-model-EOS R6')), findsOneWidget);
+      // Expand Canon so its models load and get cached.
+      await tester.tap(find.byKey(const Key('camera-picker-make-Canon')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('camera-picker-model-EOS R5')), findsOneWidget);
+      expect(find.byKey(const Key('camera-picker-model-EOS R6')), findsOneWidget);
 
-        // "r5" matches no make name, but matches the already-loaded model
-        // EOS R5 under the still-expanded Canon — the page must keep showing
-        // the accordion (Canon + EOS R5), not fall back to No results.
-        await tester.enterText(find.byKey(const Key('camera-picker-search-field')), 'r5');
-        await tester.pumpAndSettle();
+      // "r5" matches no make name, but matches the already-loaded model
+      // EOS R5 under the still-expanded Canon — the page must keep showing
+      // the accordion (Canon + EOS R5), not fall back to No results.
+      await tester.enterText(find.byKey(const Key('camera-picker-search-field')), 'r5');
+      await tester.pumpAndSettle();
 
-        expect(find.byKey(const Key('camera-picker-make-Canon')), findsOneWidget);
-        expect(find.byKey(const Key('camera-picker-model-EOS R5')), findsOneWidget);
-        expect(find.byKey(const Key('camera-picker-model-EOS R6')), findsNothing);
-        expect(find.byKey(const Key('camera-picker-clear-search')), findsNothing);
-      },
-    );
+      expect(find.byKey(const Key('camera-picker-make-Canon')), findsOneWidget);
+      expect(find.byKey(const Key('camera-picker-model-EOS R5')), findsOneWidget);
+      expect(find.byKey(const Key('camera-picker-model-EOS R6')), findsNothing);
+      expect(find.byKey(const Key('camera-picker-clear-search')), findsNothing);
+    });
+  });
+
+  group('CameraPickerPage error state', () {
+    testWidgets('renders a tappable retry; tapping invalidates the suggestions provider and refetches', (tester) async {
+      var calls = 0;
+      await tester.pumpConsumerWidget(
+        const CameraPickerPage(),
+        overrides: [
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) async {
+            calls++;
+            if (calls == 1) throw Exception('network down');
+            return _sugg(['Canon']);
+          }),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('camera-picker-retry')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('camera-picker-retry')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('camera-picker-retry')), findsNothing);
+      expect(find.byKey(const Key('camera-picker-make-Canon')), findsOneWidget);
+    });
   });
 }

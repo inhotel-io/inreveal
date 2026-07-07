@@ -121,6 +121,31 @@ void main() {
       expect(find.byKey(const Key('deep-section-empty')), findsNothing);
     });
 
+    // Final review: the "N years →" row lives in the section BODY, not the header
+    // (matches the People/Places/Tags/Camera body-row pattern).
+    testWidgets('renders "N years →" in the body (not the header)', (tester) async {
+      await tester.pumpConsumerWidget(
+        const Material(child: WhenAccordionSection(onOpenPicker: null)),
+        overrides: [_noCollapsed(), timeBucketsProvider.overrideWith((ref, filter) => Future.value(_seed()))],
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collapsible-body-when')),
+          matching: find.byKey(const Key('when-section-search-more')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collapsible-header-when')),
+          matching: find.byKey(const Key('when-section-search-more')),
+        ),
+        findsNothing,
+      );
+    });
+
     testWidgets('onOpenPicker fires on "N years →" tap', (tester) async {
       var opened = false;
       await tester.pumpConsumerWidget(

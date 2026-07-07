@@ -6,6 +6,7 @@ import 'package:immich_mobile/domain/models/tag.model.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/selected_tags_strip.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/tags_picker_list.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/tags_picker_search_header.widget.dart';
+import 'package:immich_mobile/providers/infrastructure/tag.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/tags_picker.provider.dart';
 
 @RoutePage()
@@ -77,8 +78,19 @@ class _TagsPickerPageState extends ConsumerState<TagsPickerPage> {
 
   List<Widget> _bodySlivers(AsyncValue<List<Tag>> async, String query) {
     return async.when(
-      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator(value: 0)))],
-      error: (e, st) => [SliverFillRemaining(child: Center(child: Text('filter_sheet_load_error_retry'.tr())))],
+      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator()))],
+      error: (e, st) => [
+        SliverFillRemaining(
+          child: Center(
+            child: TextButton.icon(
+              key: const Key('tags-picker-retry'),
+              onPressed: () => ref.invalidate(tagProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text('filter_sheet_load_error_retry'.tr()),
+            ),
+          ),
+        ),
+      ],
       data: (filtered) {
         if (filtered.isEmpty && query.trim().isNotEmpty) {
           return [

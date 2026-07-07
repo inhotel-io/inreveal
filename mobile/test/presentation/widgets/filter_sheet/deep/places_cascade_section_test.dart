@@ -152,8 +152,8 @@ void main() {
       expect(find.byKey(const Key('places-country-selected')), findsOneWidget);
     });
 
-    // Slice 4: cap the country wrap to 10 + a "Search N places →" header trailing button.
-    testWidgets('caps country wrap to 10 + renders "Search N places →" in the header', (tester) async {
+    // Slice 4 / final review: cap the country wrap to 10 + a body "Search N places →" row.
+    testWidgets('caps country wrap to 10 + renders "Search N places →" in the body (not the header)', (tester) async {
       final countries = [for (var i = 0; i < 15; i++) 'C$i'];
       await tester.pumpConsumerWidget(
         const Material(child: PlacesCascadeSection(onOpenPicker: null)),
@@ -173,14 +173,14 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byKey(const Key('collapsible-header-places')),
+          of: find.byKey(const Key('collapsible-body-places')),
           matching: find.byKey(const Key('places-section-search-more')),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byKey(const Key('collapsible-body-places')),
+          of: find.byKey(const Key('collapsible-header-places')),
           matching: find.byKey(const Key('places-section-search-more')),
         ),
         findsNothing,

@@ -140,8 +140,8 @@ void main() {
       expect(find.text('filter_sheet_deep_tags_section'.tr().toUpperCase()), findsOneWidget);
     });
 
-    // Slice 5: cap the preview Wrap to 10 chips + a "Search N tags →" header trailing.
-    testWidgets('caps preview to 10 chips + renders "Search N tags →" in the header trailing', (tester) async {
+    // Slice 5 / final review: cap the preview Wrap to 10 chips + a body "Search N tags →" row.
+    testWidgets('caps preview to 10 chips + renders "Search N tags →" in the body (not the header)', (tester) async {
       final tags = [for (var i = 0; i < 15; i++) FilterSuggestionsTagDto(id: 't$i', value: 'Tag$i')];
       await tester.pumpConsumerWidget(
         const Material(child: TagsSectionDeep()),
@@ -161,10 +161,17 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byKey(const Key('collapsible-header-tags')),
+          of: find.byKey(const Key('collapsible-body-tags')),
           matching: find.byKey(const Key('tags-section-search-more')),
         ),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collapsible-header-tags')),
+          matching: find.byKey(const Key('tags-section-search-more')),
+        ),
+        findsNothing,
       );
     });
 

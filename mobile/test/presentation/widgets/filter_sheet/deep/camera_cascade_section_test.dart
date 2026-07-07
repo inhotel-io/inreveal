@@ -74,9 +74,7 @@ void main() {
         const Material(child: CameraCascadeSection()),
         overrides: [
           _noCollapsed(),
-          photosFilterSuggestionsProvider.overrideWith(
-            (ref, filter) => Future.value(_sugg(cameraMakes: ['Canon'])),
-          ),
+          photosFilterSuggestionsProvider.overrideWith((ref, filter) => Future.value(_sugg(cameraMakes: ['Canon']))),
           cameraModelSuggestionsProvider.overrideWith((ref, make) => Future.value(['EOS R5'])),
         ],
       );
@@ -135,7 +133,7 @@ void main() {
       expect(find.byKey(const Key('deep-section-empty')), findsNothing);
     });
 
-    testWidgets('caps make wrap to 10 + renders "Search N cameras →" in the header', (tester) async {
+    testWidgets('caps make wrap to 10 + renders "Search N cameras →" in the body (not the header)', (tester) async {
       final makes = [for (var i = 0; i < 15; i++) 'M$i'];
       await tester.pumpConsumerWidget(
         const Material(child: CameraCascadeSection(onOpenPicker: null)),
@@ -155,14 +153,14 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byKey(const Key('collapsible-header-camera')),
+          of: find.byKey(const Key('collapsible-body-camera')),
           matching: find.byKey(const Key('camera-section-search-more')),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byKey(const Key('collapsible-body-camera')),
+          of: find.byKey(const Key('collapsible-header-camera')),
           matching: find.byKey(const Key('camera-section-search-more')),
         ),
         findsNothing,

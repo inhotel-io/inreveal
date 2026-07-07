@@ -18,8 +18,8 @@ const int _kPreviewCap = 10;
 /// Layout: pill-wrap of tag chips (8pt spacing), capped to [_kPreviewCap]
 /// (selected suggestions beyond the cap are pinned). Data comes from
 /// `photosFilterSuggestionsProvider(filter).tags` (top-N bounded server-side
-/// per design §8). A header trailing "Search N tags →" affordance delegates
-/// to [onOpenPicker] — tapping it opens the full picker. Wraps in
+/// per design §8). A body "Search N tags →" row below the wrap delegates to
+/// [onOpenPicker] — tapping it opens the full picker. Wraps in
 /// [DeepSectionScaffold] for loading/error/empty.
 class TagsSectionDeep extends ConsumerWidget {
   final VoidCallback? onOpenPicker;
@@ -40,23 +40,58 @@ class TagsSectionDeep extends ConsumerWidget {
       emptyCaptionKey: 'filter_sheet_deep_empty_tags',
       items: tagsAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
-      trailingHeader: count > 0
-          ? TextButton(
-              key: const Key('tags-section-search-more'),
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onOpenPicker?.call();
-              },
-              child: Text(_searchMoreTagsLabel(count)),
-            )
-          : null,
       childBuilder: (tags) {
         final firstTen = tags.take(_kPreviewCap).toList();
         final overflowSelected = tags.skip(_kPreviewCap).where((t) => selectedIds.contains(t.id)).toList();
         final display = [...firstTen, ...overflowSelected];
 
-        return Wrap(spacing: 8, runSpacing: 8, children: [for (final tag in display) _TagChip(tag: tag)]);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(spacing: 8, runSpacing: 8, children: [for (final tag in display) _TagChip(tag: tag)]),
+            if (count > 0) _SearchMoreRow(count: count, onOpenPicker: onOpenPicker),
+          ],
+        );
       },
+    );
+  }
+}
+
+class _SearchMoreRow extends StatelessWidget {
+  final int count;
+  final VoidCallback? onOpenPicker;
+  const _SearchMoreRow({required this.count, this.onOpenPicker});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        key: const Key('tags-section-search-more'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onOpenPicker?.call();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              // The translated label already ends in "→" (see filter_sheet_deep_search_n_tags).
+              Expanded(
+                child: Text(
+                  _searchMoreTagsLabel(count),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

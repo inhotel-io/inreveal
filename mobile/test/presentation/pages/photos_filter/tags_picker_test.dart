@@ -18,6 +18,24 @@ class _FakeTagNotifier extends TagNotifier {
   Future<Set<Tag>> build() async => tags;
 }
 
+/// Throws on the first `build()`, succeeds on every subsequent one — lets a
+/// test prove that tapping "retry" performs a genuine refetch (not just a
+/// cosmetic re-render of already-cached data). `ref.invalidate(tagProvider)`
+/// re-runs `build()` on this same notifier instance, so a plain mutable
+/// field is enough to track the attempt count.
+class _FlakyTagNotifier extends TagNotifier {
+  final Set<Tag> tags;
+  int calls = 0;
+  _FlakyTagNotifier(this.tags);
+
+  @override
+  Future<Set<Tag>> build() async {
+    calls++;
+    if (calls == 1) throw Exception('network down');
+    return tags;
+  }
+}
+
 Tag _t(String id, String value) => Tag(id: id, value: value);
 
 List<Override> _overrides(Set<Tag> tags) => [tagProvider.overrideWith(() => _FakeTagNotifier(tags))];
@@ -76,18 +94,12 @@ void main() {
 
       expect(find.byKey(const Key('tag-row-t1')), findsOneWidget);
       expect(find.byKey(const Key('tag-row-t2')), findsOneWidget);
-      expect(
-        find.descendant(of: find.byKey(const Key('tag-row-t1')), matching: find.text('Rome')),
-        findsOneWidget,
-      );
+      expect(find.descendant(of: find.byKey(const Key('tag-row-t1')), matching: find.text('Rome')), findsOneWidget);
       expect(
         find.descendant(of: find.byKey(const Key('tag-row-t1')), matching: find.textContaining('Travel / Italy')),
         findsOneWidget,
       );
-      expect(
-        find.descendant(of: find.byKey(const Key('tag-row-t2')), matching: find.text('Food')),
-        findsOneWidget,
-      );
+      expect(find.descendant(of: find.byKey(const Key('tag-row-t2')), matching: find.text('Food')), findsOneWidget);
       expect(find.byKey(const Key('tag-row-subtitle-t2')), findsNothing);
     });
 
@@ -170,6 +182,26 @@ void main() {
 
       expect(container.read(tagsPickerQueryProvider), '');
       expect(find.byKey(const Key('tags-picker-clear-search')), findsNothing);
+    });
+  });
+
+  group('TagsPickerPage error state', () {
+    testWidgets('renders a tappable retry; tapping invalidates tagProvider and refetches', (tester) async {
+      await tester.pumpConsumerWidget(
+        const TagsPickerPage(),
+        overrides: [
+          tagProvider.overrideWith(() => _FlakyTagNotifier({_t('t1', 'Food')})),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('tags-picker-retry')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('tags-picker-retry')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('tags-picker-retry')), findsNothing);
+      expect(find.byKey(const Key('tag-row-t1')), findsOneWidget);
     });
   });
 }

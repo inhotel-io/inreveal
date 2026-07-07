@@ -32,7 +32,7 @@ class DeepHeader extends ConsumerWidget {
             children: [
               IconButton(
                 key: const Key('deep-header-manage'),
-                icon: const Icon(Icons.tune_rounded),
+                icon: const Icon(Icons.settings_rounded),
                 tooltip: 'filter_sheet_deep_manage_sections'.tr(),
                 onPressed: () {
                   HapticFeedback.selectionClick();

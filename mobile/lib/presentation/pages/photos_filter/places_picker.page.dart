@@ -5,6 +5,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/places_picker_country_accordion.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/places_picker_search_header.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/city_suggestions.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/places_picker.provider.dart';
 
 @RoutePage()
@@ -77,8 +79,19 @@ class _PlacesPickerPageState extends ConsumerState<PlacesPickerPage> {
 
   List<Widget> _bodySlivers(AsyncValue<List<String>> async, String query) {
     return async.when(
-      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator(value: 0)))],
-      error: (e, st) => [SliverFillRemaining(child: Center(child: Text('filter_sheet_load_error_retry'.tr())))],
+      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator()))],
+      error: (e, st) => [
+        SliverFillRemaining(
+          child: Center(
+            child: TextButton.icon(
+              key: const Key('places-picker-retry'),
+              onPressed: () => ref.invalidate(photosFilterSuggestionsProvider(ref.read(photosFilterDebouncedProvider))),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text('filter_sheet_load_error_retry'.tr()),
+            ),
+          ),
+        ),
+      ],
       data: (countries) {
         final trimmedQuery = query.trim();
         final hasVisibleContent = countries.isNotEmpty || _expandedCountryHasCityMatch(trimmedQuery);

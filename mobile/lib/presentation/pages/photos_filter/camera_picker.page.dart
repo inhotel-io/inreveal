@@ -6,6 +6,8 @@ import 'package:immich_mobile/presentation/pages/photos_filter/widgets/camera_pi
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/camera_picker_search_header.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/camera_model_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/camera_picker.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 
 @RoutePage()
 class CameraPickerPage extends ConsumerStatefulWidget {
@@ -77,8 +79,19 @@ class _CameraPickerPageState extends ConsumerState<CameraPickerPage> {
 
   List<Widget> _bodySlivers(AsyncValue<List<String>> async, String query) {
     return async.when(
-      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator(value: 0)))],
-      error: (e, st) => [SliverFillRemaining(child: Center(child: Text('filter_sheet_load_error_retry'.tr())))],
+      loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator()))],
+      error: (e, st) => [
+        SliverFillRemaining(
+          child: Center(
+            child: TextButton.icon(
+              key: const Key('camera-picker-retry'),
+              onPressed: () => ref.invalidate(photosFilterSuggestionsProvider(ref.read(photosFilterDebouncedProvider))),
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text('filter_sheet_load_error_retry'.tr()),
+            ),
+          ),
+        ),
+      ],
       data: (makes) {
         final trimmedQuery = query.trim();
         final hasVisibleContent = makes.isNotEmpty || _expandedMakeHasModelMatch(trimmedQuery);

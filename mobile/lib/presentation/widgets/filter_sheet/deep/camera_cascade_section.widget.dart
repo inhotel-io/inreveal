@@ -18,12 +18,12 @@ const int _kPreviewCap = 10;
 /// CameraCascadeSection — Deep-snap section for the Camera filter dimension.
 ///
 /// When no make is selected, renders a Wrap of make FilterChips sourced from
-/// photosFilterSuggestionsProvider (capped to [_kPreviewCap]) plus a
-/// "Search N cameras →" header affordance delegating to [onOpenPicker].
-/// Tapping a make sets filter.camera.make and swaps in a _ModelCascade which
-/// shows:
+/// photosFilterSuggestionsProvider (capped to [_kPreviewCap]). Tapping a make
+/// sets filter.camera.make and swaps in a _ModelCascade which shows:
 ///   - the selected make as an InputChip (× clears it)
 ///   - a Wrap of model FilterChips from cameraModelSuggestionsProvider(make)
+/// A body "Search N cameras →" row below the wrap/cascade delegates to
+/// [onOpenPicker] — tapping it opens the full picker.
 class CameraCascadeSection extends ConsumerWidget {
   final VoidCallback? onOpenPicker;
   const CameraCascadeSection({super.key, this.onOpenPicker});
@@ -42,22 +42,54 @@ class CameraCascadeSection extends ConsumerWidget {
       emptyCaptionKey: 'filter_sheet_deep_empty_camera',
       items: makesAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
-      trailingHeader: count > 0
-          ? TextButton(
-              key: const Key('camera-section-search-more'),
-              onPressed: () {
-                HapticFeedback.selectionClick();
-                onOpenPicker?.call();
-              },
-              child: Text(_searchMoreCamerasLabel(count)),
-            )
-          : null,
       childBuilder: (makes) {
-        if (selectedMake == null) {
-          return _MakeWrap(makes: makes);
-        }
-        return _ModelCascade(make: selectedMake);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selectedMake == null) _MakeWrap(makes: makes) else _ModelCascade(make: selectedMake),
+            if (count > 0) _SearchMoreRow(count: count, onOpenPicker: onOpenPicker),
+          ],
+        );
       },
+    );
+  }
+}
+
+class _SearchMoreRow extends StatelessWidget {
+  final int count;
+  final VoidCallback? onOpenPicker;
+  const _SearchMoreRow({required this.count, this.onOpenPicker});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        key: const Key('camera-section-search-more'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onOpenPicker?.call();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              // The translated label already ends in "→" (see filter_sheet_deep_search_n_cameras).
+              Expanded(
+                child: Text(
+                  _searchMoreCamerasLabel(count),
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -138,9 +170,7 @@ class _ModelCascade extends ConsumerWidget {
                       HapticFeedback.selectionClick();
                       ref
                           .read(photosFilterProvider.notifier)
-                          .setCamera(
-                            SearchCameraFilter(make: make, model: selectedModel == model ? null : model),
-                          );
+                          .setCamera(SearchCameraFilter(make: make, model: selectedModel == model ? null : model));
                     },
                   ),
               ],
