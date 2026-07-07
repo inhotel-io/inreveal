@@ -99,16 +99,16 @@ class _GalleryBottomNavState extends ConsumerState<GalleryBottomNav> {
           ignoring: hiding,
           child: Padding(
             padding: EdgeInsets.only(left: 14, right: 14, bottom: bottomInset),
+            // Google-Photos-style: the pill hugs its tabs (content-sized) at the
+            // left; the search blob sits at the right, with the gap between them.
             child: Row(
               children: [
-                Expanded(
-                  child: GalleryNavPill(
-                    activeTab: GalleryTabEnum.values[widget.tabsRouter.activeIndex],
-                    disabledTabs: isReadonly ? const {GalleryTabEnum.albums, GalleryTabEnum.library} : const {},
-                    onTabTap: _onTabTap,
-                  ),
+                GalleryNavPill(
+                  activeTab: GalleryTabEnum.values[widget.tabsRouter.activeIndex],
+                  disabledTabs: isReadonly ? const {GalleryTabEnum.albums, GalleryTabEnum.library} : const {},
+                  onTabTap: _onTabTap,
                 ),
-                const SizedBox(width: 10),
+                const Spacer(),
                 GallerySearchBlob(enabled: !isReadonly, onTap: () => openGallerySearch(widget.tabsRouter, ref.read)),
               ],
             ),

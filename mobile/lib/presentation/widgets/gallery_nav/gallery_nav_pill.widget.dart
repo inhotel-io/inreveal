@@ -147,7 +147,9 @@ class _GalleryNavPillState extends State<GalleryNavPill> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _edgeInset),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // Google-Photos-style: cluster the tabs (content width) instead of
+                  // spreading them edge-to-edge; the pill sizes to this Row.
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final tab in GalleryTabEnum.values)
                       KeyedSubtree(
