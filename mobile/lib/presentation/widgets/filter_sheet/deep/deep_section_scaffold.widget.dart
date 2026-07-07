@@ -48,22 +48,16 @@ class _DeepSectionScaffoldState<T> extends State<DeepSectionScaffold<T>> {
     final data = items.valueOrNull;
     if (data != null) _lastData = data;
 
-    final theme = Theme.of(context);
-
     final cache = _lastData;
     final isEmpty = cache != null && cache.isEmpty;
 
     Widget body;
     if (cache != null) {
+      // Body is hidden by CollapsibleSection when empty; isEmpty drives the "(0)" + disabled header.
+      // widget.emptyCaptionKey is kept on the constructor for callers, but its caption is
+      // unreachable while isEmpty is true, so we skip building it here.
       body = cache.isEmpty
-          ? Padding(
-              key: const Key('deep-section-empty'),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                widget.emptyCaptionKey.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-              ),
-            )
+          ? const SizedBox.shrink()
           : Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: widget.childBuilder(cache));
     } else if (items is AsyncError) {
       body = _DeepRetry(onRetry: widget.onRetry);

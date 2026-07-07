@@ -72,7 +72,12 @@ class CollapsibleSection extends ConsumerWidget {
     // entirely when animations are disabled instead of animating at 0ms.
     final body = disableAnimations
         ? bodyContent
-        : AnimatedSize(duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic, child: bodyContent);
+        : AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: bodyContent,
+          );
 
     return Column(
       key: Key('collapsible-section-${sectionId.storageId}'),
