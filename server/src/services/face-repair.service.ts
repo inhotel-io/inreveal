@@ -462,6 +462,13 @@ export class FaceRepairService extends BaseService {
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to scan while facial recognition is active');
     }
+    // A running identity/shared-space backfill fans out a storm of SharedSpaceFaceMatchFromBackfill
+    // (+ dedup/reconciliation) jobs that hammer the shared DB pool. The scan already holds up to
+    // SCAN_SEARCH_CONCURRENCY connections per page, so starting one on top of that backfill starves
+    // the scan's own heartbeat/progress writes and wedges it. Refuse until the backfill drains.
+    if (await this.jobRepository.isActive(QueueName.PeopleBackfill)) {
+      throw new ConflictException('Refusing to scan while an identity backfill is active');
+    }
     await this.faceRepairScanRepository.failStaleScans(STALE_SCAN_TIMEOUT_MS);
     const { machineLearning } = await this.getConfig({ withCache: true });
     const recognition = machineLearning.facialRecognition;
