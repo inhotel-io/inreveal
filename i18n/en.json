@@ -1460,7 +1460,10 @@
   "filter_search_people": "Search people...",
   "filter_sheet_archived": "Archived",
   "filter_sheet_browse_see_all": "More filters",
+  "filter_sheet_camera": "Camera",
   "filter_sheet_clear_filters": "Clear filters",
+  "filter_sheet_deep_camera_section": "Camera",
+  "filter_sheet_deep_empty_camera": "Cameras will appear when photos have them",
   "filter_sheet_deep_empty_people": "Filters appear as you upload photos",
   "filter_sheet_deep_empty_places": "Locations will appear when photos have them",
   "filter_sheet_deep_empty_tags": "No tags yet — tap a photo to add one",
@@ -1474,6 +1477,10 @@
   "filter_sheet_deep_places_section": "Places",
   "filter_sheet_deep_rating_any": "Any rating",
   "filter_sheet_deep_rating_section": "Rating",
+  "filter_sheet_deep_search_n_cameras": {
+    "one": "Search {count} camera →",
+    "other": "Search {count} cameras →"
+  },
   "filter_sheet_deep_search_n_people": {
     "one": "Search {count} person →",
     "other": "Search {count} people →"
@@ -1523,6 +1530,7 @@
   "filter_sheet_offline": "Offline",
   "filter_sheet_people": "People",
   "filter_sheet_picker_all_time": "All time",
+  "filter_sheet_picker_camera_title": "Camera",
   "filter_sheet_picker_clear_search": "Clear search",
   "filter_sheet_picker_done": "Done",
   "filter_sheet_picker_no_results": "No results for '{query}'",
@@ -1533,6 +1541,7 @@
   "filter_sheet_picker_people_title": "Choose people",
   "filter_sheet_picker_places_title": "Places",
   "filter_sheet_picker_recent": "Recent",
+  "filter_sheet_picker_search_camera_hint": "Search make or model…",
   "filter_sheet_picker_search_people_hint": "Search people",
   "filter_sheet_picker_search_places_hint": "Search country or city…",
   "filter_sheet_picker_search_tags_hint": "Search tags…",
