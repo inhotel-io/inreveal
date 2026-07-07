@@ -335,6 +335,13 @@ export class AssetService extends BaseService {
       await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(ids);
     }
 
+    // Slice 2: LIBRARY-path purge. No removal analogue for libraries, so purge on
+    // both Hidden and Locked. Restore is automatic (the visibility UPDATE above bumps
+    // asset.updateId; LibraryAssetSync.getUpserts re-emits when the gate flips).
+    if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
+      await this.sharedSpaceRepository.emitLibraryAssetVisibilityPurge(ids);
+    }
+
     await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
   }
 
