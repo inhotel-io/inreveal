@@ -37,7 +37,10 @@ void main() {
       expect(find.byKey(const Key('deep-header-reset')), findsNothing);
     });
 
-    testWidgets('Close button sets sheet snap to browse', (tester) async {
+    testWidgets('Close button closes the sheet (hidden)', (tester) async {
+      // The X is a "close" affordance (icon: close_rounded, tooltip: close) — it must
+      // dismiss the sheet, consistent with Done / system-back / drag-to-dismiss. The
+      // progressive step-back (deep → browse) is the scrim-tap / drag gesture, not the X.
       await tester.pumpConsumerWidget(const Material(child: DeepHeader()));
       final container = ProviderScope.containerOf(tester.element(find.byType(DeepHeader)));
       container.read(photosFilterSheetProvider.notifier).state = FilterSheetSnap.deep;
@@ -46,7 +49,7 @@ void main() {
       await tester.tap(find.byKey(const Key('deep-header-close')));
       await tester.pumpAndSettle();
 
-      expect(container.read(photosFilterSheetProvider), FilterSheetSnap.browse);
+      expect(container.read(photosFilterSheetProvider), FilterSheetSnap.hidden);
     });
 
     testWidgets('Reset calls reset() on notifier and filter becomes empty', (tester) async {

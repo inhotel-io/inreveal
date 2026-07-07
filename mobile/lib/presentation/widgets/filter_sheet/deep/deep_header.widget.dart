@@ -22,7 +22,9 @@ class DeepHeader extends ConsumerWidget {
             key: const Key('deep-header-close'),
             icon: const Icon(Icons.close_rounded),
             tooltip: 'close'.tr(),
-            onPressed: () => ref.read(photosFilterSheetProvider.notifier).state = FilterSheetSnap.browse,
+            // Close = dismiss the sheet entirely (hidden), matching Done / system-back /
+            // drag-to-dismiss. Progressive collapse (deep → browse) is the scrim-tap / drag.
+            onPressed: () => ref.read(photosFilterSheetProvider.notifier).state = FilterSheetSnap.hidden,
           ),
           Expanded(
             child: Text('filter_sheet_title'.tr(), style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
