@@ -1417,4 +1417,41 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       expect(assetIds).toContain(asset.id);
     });
   });
+
+  describe('createPersonForIdentity — idempotent under the (spaceId, identityId) race', () => {
+    it('no-ops (returns undefined) instead of throwing when the identity already has a space person', async () => {
+      const { ctx, sut, faceIdentityRepository } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: person } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+      const faceId = await createFaceWithEmbedding(ctx, { assetId: asset.id, personId: person.id });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+
+      const first = await sut.createPersonForIdentity({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: faceId,
+        type: 'person',
+      });
+      expect(first).toBeDefined();
+
+      // The concurrent-writer scenario: a second insert for the same (spaceId, identityId) must NOT
+      // throw shared_space_person_spaceId_identityId_key — it no-ops so the caller can re-read.
+      const second = await sut.createPersonForIdentity({
+        spaceId: space.id,
+        identityId: identity.id,
+        name: '',
+        representativeFaceId: faceId,
+        type: 'person',
+      });
+      expect(second).toBeUndefined();
+
+      const persons = await sut.getPersonsBySpaceId(space.id, { withHidden: true, petsEnabled: true });
+      expect(persons).toHaveLength(1);
+      expect(persons[0].id).toBe(first!.id);
+    });
+  });
 });

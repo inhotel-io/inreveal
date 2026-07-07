@@ -2763,13 +2763,27 @@ export class SharedSpaceService extends BaseService {
       personalPersonId: input.personId,
     });
 
-    return this.sharedSpaceRepository.createPerson({
+    // Idempotent create. A concurrent shared-space job — dedup / reconciliation / another per-asset
+    // face match on the same space, all fanned out by the identity backfill — can create this
+    // identity's space-person between the check above and this insert. createPersonForIdentity
+    // no-ops on the (spaceId, identityId) unique index instead of throwing; the throw previously
+    // failed the whole job and drove a BullMQ retry storm. On a no-op, fold into the winner's row.
+    const created = await this.sharedSpaceRepository.createPersonForIdentity({
       spaceId: input.spaceId,
       identityId: input.identityId,
       name: '',
       representativeFaceId,
       type: input.type,
     });
+    if (created) {
+      return created;
+    }
+
+    const raced = await this.sharedSpaceRepository.getSpacePersonByIdentity(input.spaceId, input.identityId);
+    if (raced && (!raced.type || raced.type === input.type)) {
+      return raced;
+    }
+    return undefined;
   }
 
   private isExactSelectedSpaceAssignment(

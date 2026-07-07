@@ -3960,7 +3960,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
       mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(void 0 as any);
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([]);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId }),
       );
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
@@ -3969,7 +3969,7 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
       expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId,
         name: '',
@@ -3978,6 +3978,43 @@ describe(SharedSpaceService.name, () => {
       });
       expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
         [{ personId: spacePersonId, assetFaceId: faceId }],
+        { skipRecount: true },
+      );
+    });
+
+    it('recovers when a concurrent job wins the space-person insert race (no unique-constraint failure)', async () => {
+      const spaceId = newUuid();
+      const assetId = newUuid();
+      const faceId = newUuid();
+      const personalPersonId = newUuid();
+      const identityId = newUuid();
+      const racedSpacePersonId = newUuid();
+      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+      const embedding = '[1,2,3]';
+
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);
+      mocks.sharedSpace.getAssetFacesForMatching.mockResolvedValue([
+        { id: faceId, assetId, personId: personalPersonId, identityId, type: 'person', embedding },
+      ]);
+      mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
+      // Pre-insert check misses, then a concurrent writer wins the (spaceId, identityId) insert so
+      // ours no-ops (undefined), then we re-read the winner's row.
+      mocks.sharedSpace.getSpacePersonByIdentity
+        .mockResolvedValueOnce(void 0 as any)
+        .mockResolvedValueOnce(factory.sharedSpacePerson({ id: racedSpacePersonId, spaceId, identityId }));
+      mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([]);
+      mocks.sharedSpace.createPersonForIdentity.mockResolvedValue(void 0);
+      mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
+      mocks.sharedSpace.getPetFacesForAsset.mockResolvedValue([]);
+
+      const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.createPersonForIdentity).toHaveBeenCalled();
+      // Folded the face into the winner's space person instead of throwing the unique constraint.
+      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
+        [{ personId: racedSpacePersonId, assetFaceId: faceId }],
         { skipRecount: true },
       );
     });
@@ -4004,7 +4041,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([
         { personId: nearbySpacePersonId, name: '', distance: 0.1, identityId: nearbyIdentityId, type: 'person' },
       ]);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({ id: createdSpacePersonId, spaceId, identityId: sourceIdentityId }),
       );
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
@@ -4013,7 +4050,7 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
       expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId: sourceIdentityId,
         name: '',
@@ -4054,7 +4091,7 @@ describe(SharedSpaceService.name, () => {
         }),
       );
       mocks.sharedSpace.isFaceInSpace.mockResolvedValue(true);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({
           id: spacePersonId,
           spaceId,
@@ -4070,7 +4107,7 @@ describe(SharedSpaceService.name, () => {
       expect(result).toBe(JobStatus.Success);
       expect(mocks.person.getById).toHaveBeenCalledWith(personalPersonId);
       expect(mocks.sharedSpace.isFaceInSpace).toHaveBeenCalledWith(spaceId, personalRepresentativeFaceId);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId,
         name: '',

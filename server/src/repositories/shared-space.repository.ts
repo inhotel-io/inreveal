@@ -2225,6 +2225,23 @@ export class SharedSpaceRepository {
     return this.db.insertInto('shared_space_person').values(values).returningAll().executeTakeFirstOrThrow();
   }
 
+  // Idempotent create against the partial `shared_space_person_spaceId_identityId_key` unique index.
+  // Concurrent shared-space jobs — the backfill on PeopleBackfill plus the dedup / reconciliation /
+  // face-match jobs it enqueues on FacialRecognition, all touching the same space — can insert this
+  // identity's space-person between a caller's existence check and its insert. Without ON CONFLICT the
+  // loser threw `shared_space_person_spaceId_identityId_key`, which failed the whole job and drove a
+  // BullMQ retry storm (Hagen's 16k-person space). DO NOTHING makes the loser a benign no-op (returns
+  // undefined); the caller then re-reads the winner's row. Only ever called with a non-null identityId,
+  // matching the index predicate.
+  createPersonForIdentity(values: Insertable<SharedSpacePersonTable>) {
+    return this.db
+      .insertInto('shared_space_person')
+      .values(values)
+      .onConflict((oc) => oc.columns(['spaceId', 'identityId']).where('identityId', 'is not', null).doNothing())
+      .returningAll()
+      .executeTakeFirst();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
   getSpacePersonByIdentity(spaceId: string, identityId: string) {
     return this.db

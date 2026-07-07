@@ -150,6 +150,16 @@ describe(FaceRepairService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
+    it('throws 409 ConflictException when an identity backfill is active (nothing enqueued)', async () => {
+      // Facial recognition idle, but a PeopleBackfill storm would starve the scan's DB pool.
+      mocks.job.isActive.mockImplementation((queue) => Promise.resolve(queue === QueueName.PeopleBackfill));
+
+      await expect(sut.triggerScan('user-1')).rejects.toThrow(ConflictException);
+
+      expect(mocks.faceRepairScan.createScan).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
     it('rethrows real DB failures instead of masking them as 409 scan-in-progress', async () => {
       mocks.job.isActive.mockResolvedValue(false);
       mocks.faceRepairScan.createScan.mockRejectedValue(new Error('connection refused'));
