@@ -1863,7 +1863,7 @@ select
   "library_asset_audit"."id" as "id",
   "library_asset_audit"."assetId" as "assetId"
 from
-  "library_asset_audit" as "library_asset_audit"
+  "library_asset_audit"
 where
   "library_asset_audit"."id" < $1
   and "library_asset_audit"."id" > $2
@@ -1897,8 +1897,49 @@ where
           "shared_space_member"."userId" = $5
       )
   )
+union
+select
+  "shared_space_library_asset_audit"."id" as "id",
+  "shared_space_library_asset_audit"."assetId" as "assetId"
+from
+  "shared_space_library_asset_audit"
+  inner join "asset" on "asset"."id" = "shared_space_library_asset_audit"."assetId"
+where
+  "shared_space_library_asset_audit"."id" < $6
+  and "shared_space_library_asset_audit"."id" > $7
+  and "shared_space_library_asset_audit"."libraryId" in (
+    select
+      "library"."id"
+    from
+      "library"
+    where
+      "library"."ownerId" = $8
+      and "library"."deletedAt" is null
+    union
+    select
+      "shared_space_library"."libraryId" as "id"
+    from
+      "shared_space_library"
+    where
+      "shared_space_library"."spaceId" in (
+        select
+          "shared_space"."id"
+        from
+          "shared_space"
+        where
+          "shared_space"."createdById" = $9
+        union
+        select
+          "shared_space_member"."spaceId" as "id"
+        from
+          "shared_space_member"
+        where
+          "shared_space_member"."userId" = $10
+      )
+  )
+  and "asset"."ownerId" != $11
 order by
-  "library_asset_audit"."id" asc
+  "id" asc
 
 -- SyncRepository.libraryAssetExif.getBackfill
 select
@@ -2285,10 +2326,10 @@ select
   "assetId",
   "albumId"
 from
-  "album_asset_audit" as "album_asset_audit"
+  "album_asset_audit"
 where
-  "album_asset_audit"."id" < $1
-  and "album_asset_audit"."id" > $2
+  "id" < $1
+  and "id" > $2
   and "albumId" in (
     select
       "shared_space_album"."albumId" as "id"
@@ -2313,8 +2354,42 @@ where
           "shared_space_member"."userId" = $4
       )
   )
+union
+select
+  "id",
+  "assetId",
+  "albumId"
+from
+  "shared_space_album_asset_audit"
+where
+  "id" < $5
+  and "id" > $6
+  and "albumId" in (
+    select
+      "shared_space_album"."albumId" as "id"
+    from
+      "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+    where
+      "album"."deletedAt" is null
+      and "shared_space_album"."spaceId" in (
+        select
+          "shared_space"."id"
+        from
+          "shared_space"
+        where
+          "shared_space"."createdById" = $7
+        union
+        select
+          "shared_space_member"."spaceId" as "id"
+        from
+          "shared_space_member"
+        where
+          "shared_space_member"."userId" = $8
+      )
+  )
 order by
-  "album_asset_audit"."id" asc
+  "id" asc
 
 -- SyncRepository.sharedSpaceAlbumToAsset.getUpserts
 select

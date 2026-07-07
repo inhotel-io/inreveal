@@ -184,6 +184,54 @@ set
 where
   "assetId" in ($1)
 
+-- SharedSpaceRepository.emitAlbumAssetVisibilityPurge
+insert into
+  "shared_space_album_asset_audit" ("albumId", "assetId")
+select
+  "album_asset"."albumId",
+  "album_asset"."assetId"
+from
+  "album_asset"
+where
+  "album_asset"."assetId" in ($1)
+  and "album_asset"."albumId" in (
+    select
+      "shared_space_album"."albumId"
+    from
+      "shared_space_album"
+  )
+
+-- SharedSpaceRepository.emitAlbumAssetVisibilityRestore
+update "album_asset"
+set
+  "updatedAt" = clock_timestamp()
+where
+  "assetId" in ($1)
+  and "albumId" in (
+    select
+      "shared_space_album"."albumId"
+    from
+      "shared_space_album"
+  )
+
+-- SharedSpaceRepository.emitLibraryAssetVisibilityPurge
+insert into
+  "shared_space_library_asset_audit" ("libraryId", "assetId")
+select
+  "asset"."libraryId" as "libraryId",
+  "asset"."id" as "assetId"
+from
+  "asset"
+where
+  "asset"."id" in ($1)
+  and "asset"."libraryId" is not null
+  and "asset"."libraryId" in (
+    select
+      "shared_space_library"."libraryId"
+    from
+      "shared_space_library"
+  )
+
 -- SharedSpaceRepository.removeLibrary
 delete from "shared_space_library"
 where
