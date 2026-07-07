@@ -20,6 +20,7 @@ Spec: `docs/superpowers/specs/2026-07-06-spaces-stacked-photos-design.md` (Slice
 ### Task 1: Web guard test (E24/E25)
 
 **Files:**
+
 - Create: `web/src/lib/utils/space-filter-options.spec.ts`
 
 - [ ] **Step 1: Write the test**
@@ -64,6 +65,7 @@ git commit -m "test(spaces): guard space timeline collapses stacks, album detail
 ### Task 2: User documentation
 
 **Files:**
+
 - Modify: `docs/docs/features/shared-spaces.md` — insert a new `## Stacked Photos` section between `## Removing Photos from a Space` (ends line 150) and `## Timeline Integration` (line 152).
 
 - [ ] **Step 1: Insert the section** (verbatim, after the Removing section's last line and its blank line, before `## Timeline Integration`):

@@ -32,9 +32,9 @@ Two facts in the code are **independent of each other**, and their mismatch is t
 Promoting a new primary only writes `stack.primaryAssetId` (`stack.service.ts` →
 `stack.repository.ts`); it touches **no** `shared_space_asset` rows. So:
 
-| Step | Old primary | New primary |
-|------|-------------|-------------|
-| Stack added to Space | ✅ member, ✅ is global primary → **shows** | ❌ not a member |
+| Step                      | Old primary                                                           | New primary                                                              |
+| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Stack added to Space      | ✅ member, ✅ is global primary → **shows**                           | ❌ not a member                                                          |
 | User promotes new primary | ✅ still member, but now ❌ non-primary → **dropped by stack filter** | ✅ now global primary, but ❌ not a member → **dropped by Space filter** |
 
 → neither shows. This reproduces the discussion word-for-word.
@@ -82,14 +82,14 @@ albums work; only line numbers moved.
 
 ## Design decisions (locked)
 
-| Decision | Choice |
-|---|---|
-| Target behavior | Whole stack lives in the Space (the discussion's "Better" ask; subsumes "Minimum") |
-| Where expansion happens | **Server-side only** — single source of truth for web, mobile, and CLI |
-| Sync depth | Expand on **add and remove only** (MVP) |
-| Platforms | Server + web + mobile |
-| Legacy data | **No backfill migration** |
-| Remove semantics | Removing any frame of a stack removes the **whole stack** from the Space |
+| Decision                | Choice                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| Target behavior         | Whole stack lives in the Space (the discussion's "Better" ask; subsumes "Minimum") |
+| Where expansion happens | **Server-side only** — single source of truth for web, mobile, and CLI             |
+| Sync depth              | Expand on **add and remove only** (MVP)                                            |
+| Platforms               | Server + web + mobile                                                              |
+| Legacy data             | **No backfill migration**                                                          |
+| Remove semantics        | Removing any frame of a stack removes the **whole stack** from the Space           |
 
 ## Development approach — TDD (mandatory)
 
@@ -192,12 +192,12 @@ Add the same collapse the main timeline uses (`mobile/lib/infrastructure/entitie
 `stack_id IS NULL OR remote_asset.id = primary_asset_id`) — `LEFT JOIN stack_entity ON stack_id = id`
 plus that predicate — to **both** the aggregated-Space asset query and its count query:
 
-| Mobile method | Collapse? |
-|---|---|
+| Mobile method                                                       | Collapse?              |
+| ------------------------------------------------------------------- | ---------------------- |
 | `_watchSharedSpaceBucket` (`:452`) — aggregated Space bucket counts | **Yes — add collapse** |
-| `_getSharedSpaceBucketAssets` (`:570`) — aggregated Space assets | **Yes — add collapse** |
-| `_watchSpaceAlbumBucket` (`:638`) — space-album detail counts | No — leave as-is |
-| `_getSpaceAlbumBucketAssets` (`:698`) — space-album detail assets | No — leave as-is |
+| `_getSharedSpaceBucketAssets` (`:570`) — aggregated Space assets    | **Yes — add collapse** |
+| `_watchSpaceAlbumBucket` (`:638`) — space-album detail counts       | No — leave as-is       |
+| `_getSpaceAlbumBucketAssets` (`:698`) — space-album detail assets   | No — leave as-is       |
 
 This keeps parity with web (aggregated Space collapses via `withStacked: true`; album-detail
 does not) and with normal album behavior. Tap-to-expand (`asset_stack.provider.dart`) already
@@ -209,12 +209,12 @@ device.
 
 With every frame a direct member:
 
-| Step | Behavior |
-|------|----------|
-| Add stack to Space | All frames inserted; timeline collapses to global primary (a member) → **cover shows**, badge count accurate |
-| Promote a new primary | New primary already a member → **shows instantly**; old primary collapsed under it |
-| Tap the cover | All frames shown — all are members |
-| Remove the stack | All frames removed (unless still visible via a linked album) |
+| Step                  | Behavior                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Add stack to Space    | All frames inserted; timeline collapses to global primary (a member) → **cover shows**, badge count accurate |
+| Promote a new primary | New primary already a member → **shows instantly**; old primary collapsed under it                           |
+| Tap the cover         | All frames shown — all are members                                                                           |
+| Remove the stack      | All frames removed (unless still visible via a linked album)                                                 |
 
 ## Accepted limitations (MVP — documented, not silently dropped)
 
@@ -244,7 +244,7 @@ the mobile owner-scoped sync model.
   the viewer enables space-timeline integration, and applies the same
   `stack_id IS NULL OR rae.id = se.primary_asset_id` collapse **without** the `se.id IS NULL`
   fallback this change added to the aggregated-Space builders. So a non-owned Space stack can
-  still vanish from the *main* timeline for a viewer who integrated the Space. This is
+  still vanish from the _main_ timeline for a viewer who integrated the Space. This is
   **pre-existing** (that file is untouched here; on the base branch only the cover was a member
   and it was already filtered the same way) and out of scope for #751, but the same one-line
   `se.id IS NULL` guard (plus a regression test of the same shape) should be applied there as a
@@ -255,34 +255,34 @@ the mobile owner-scoped sync model.
 Every row below has a dedicated test in the slice noted. This is the definition of "full
 coverage" for this feature.
 
-| # | Case | Expected behavior | Slice |
-|---|------|-------------------|-------|
-| E1 | Add a stack **cover** owned by the adder | All timeline-visible siblings of the stack become direct members | S1 |
-| E2 | Add a **non-primary** frame owned by the adder | All siblings **incl. the primary** become members | S1 |
-| E3 | Add an asset **with no stack** | Only that asset is added (expansion is a no-op) | S1 |
-| E4 | Add an asset **not owned** by the adder (shared to them) | No expansion — only that asset is added (owner-scoped guard) | S1 |
-| E5 | A sibling is **Hidden or Locked** | Excluded from expansion — never pulled into a shared Space | S1 |
-| E5b | A sibling is **Archived** | **Included** — archived is space-eligible (`visibleSpaceAssetVisibilities`); it is a member but stays hidden from the Timeline-scoped Space view | S1 |
-| E6 | A sibling is **soft-deleted** (`deletedAt` set / trashed) | Excluded from expansion | S1 |
-| E7 | The **seed itself** is non-timeline-visible but explicitly selected | Retained (only auto-pulled siblings are filtered) | S1 |
-| E8 | **Two seeds from the same stack** in one request | Expansion dedupes → each frame inserted once | S1 |
-| E9 | **Mixed batch** (some stacked, some standalone) | Correct union: standalone kept as-is, stacks expanded | S1 |
-| E10 | **Re-add** a stack already partly in the Space | `onConflict doNothing`; idempotent; `inserted.length` counts only new rows | S1 |
-| E11 | Empty `assetIds` | No-op; no sibling query issued | S1 |
-| E12 | `faceRecognitionEnabled` on the Space | `SharedSpaceFaceMatch` queued for **every** expanded frame; disabled → none | S1 |
-| E13 | Add cover, then **promote a different frame to primary** | Space timeline still shows the stack (new primary already a member) | S1 (medium) |
-| E14 | Remove the **cover** | All direct-member frames of the stack are removed | S2 |
-| E15 | Remove a **non-cover** frame | The whole stack's direct members are removed | S2 |
-| E16 | A removed frame is **also a member via a linked album** | Its direct row is deleted, but it **remains a space member** via the album path, so `getAssetIdsWithoutOtherSpacePath` does **not** flag it as a face-orphan (its faces are preserved). NB: whether it still renders in the aggregated timeline is subject to the album-partial-stack non-goal — E16 asserts the face-orphan correctness, not timeline visibility | S2 |
-| E17 | The Space **thumbnail** was an expanded (not directly-passed) frame | Thumbnail reset to `null` | S2 |
-| E18 | Passed siblings that are **not members** of the Space | Delete is a harmless no-op | S2 |
-| E19 | Face-orphan cleanup after remove | Runs over the **expanded** set; persons/faces removed only when no other Space path remains | S2 |
-| E20 | Mobile: Space with a 3-frame stack (all members) | **One** collapsed cover tile; bucket count == 1 | S3 |
-| E21 | Mobile: **space-album detail** view | Unchanged — shows all 3 frames (parity with albums) | S3 |
-| E22 | Mobile: **legacy partial stack** (only non-primary frames are members, primary absent) | Collapse yields **0** tiles — consistent with server/web timeline; documented limitation | S3 |
-| E23 | Mobile: bucket-count query and asset query agree after collapse | Same collapsed cardinality | S3 |
-| E24 | Web: Space view after all frames are members | Renders the collapsed cover with the **correct** count | S4 |
-| E25 | Web: space-album detail view | Still uncollapsed (asserts `withStacked` is **not** sent — guards the non-goal) | S4 |
+| #   | Case                                                                                   | Expected behavior                                                                                                                                                                                                                                                                                                                                                 | Slice       |
+| --- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| E1  | Add a stack **cover** owned by the adder                                               | All timeline-visible siblings of the stack become direct members                                                                                                                                                                                                                                                                                                  | S1          |
+| E2  | Add a **non-primary** frame owned by the adder                                         | All siblings **incl. the primary** become members                                                                                                                                                                                                                                                                                                                 | S1          |
+| E3  | Add an asset **with no stack**                                                         | Only that asset is added (expansion is a no-op)                                                                                                                                                                                                                                                                                                                   | S1          |
+| E4  | Add an asset **not owned** by the adder (shared to them)                               | No expansion — only that asset is added (owner-scoped guard)                                                                                                                                                                                                                                                                                                      | S1          |
+| E5  | A sibling is **Hidden or Locked**                                                      | Excluded from expansion — never pulled into a shared Space                                                                                                                                                                                                                                                                                                        | S1          |
+| E5b | A sibling is **Archived**                                                              | **Included** — archived is space-eligible (`visibleSpaceAssetVisibilities`); it is a member but stays hidden from the Timeline-scoped Space view                                                                                                                                                                                                                  | S1          |
+| E6  | A sibling is **soft-deleted** (`deletedAt` set / trashed)                              | Excluded from expansion                                                                                                                                                                                                                                                                                                                                           | S1          |
+| E7  | The **seed itself** is non-timeline-visible but explicitly selected                    | Retained (only auto-pulled siblings are filtered)                                                                                                                                                                                                                                                                                                                 | S1          |
+| E8  | **Two seeds from the same stack** in one request                                       | Expansion dedupes → each frame inserted once                                                                                                                                                                                                                                                                                                                      | S1          |
+| E9  | **Mixed batch** (some stacked, some standalone)                                        | Correct union: standalone kept as-is, stacks expanded                                                                                                                                                                                                                                                                                                             | S1          |
+| E10 | **Re-add** a stack already partly in the Space                                         | `onConflict doNothing`; idempotent; `inserted.length` counts only new rows                                                                                                                                                                                                                                                                                        | S1          |
+| E11 | Empty `assetIds`                                                                       | No-op; no sibling query issued                                                                                                                                                                                                                                                                                                                                    | S1          |
+| E12 | `faceRecognitionEnabled` on the Space                                                  | `SharedSpaceFaceMatch` queued for **every** expanded frame; disabled → none                                                                                                                                                                                                                                                                                       | S1          |
+| E13 | Add cover, then **promote a different frame to primary**                               | Space timeline still shows the stack (new primary already a member)                                                                                                                                                                                                                                                                                               | S1 (medium) |
+| E14 | Remove the **cover**                                                                   | All direct-member frames of the stack are removed                                                                                                                                                                                                                                                                                                                 | S2          |
+| E15 | Remove a **non-cover** frame                                                           | The whole stack's direct members are removed                                                                                                                                                                                                                                                                                                                      | S2          |
+| E16 | A removed frame is **also a member via a linked album**                                | Its direct row is deleted, but it **remains a space member** via the album path, so `getAssetIdsWithoutOtherSpacePath` does **not** flag it as a face-orphan (its faces are preserved). NB: whether it still renders in the aggregated timeline is subject to the album-partial-stack non-goal — E16 asserts the face-orphan correctness, not timeline visibility | S2          |
+| E17 | The Space **thumbnail** was an expanded (not directly-passed) frame                    | Thumbnail reset to `null`                                                                                                                                                                                                                                                                                                                                         | S2          |
+| E18 | Passed siblings that are **not members** of the Space                                  | Delete is a harmless no-op                                                                                                                                                                                                                                                                                                                                        | S2          |
+| E19 | Face-orphan cleanup after remove                                                       | Runs over the **expanded** set; persons/faces removed only when no other Space path remains                                                                                                                                                                                                                                                                       | S2          |
+| E20 | Mobile: Space with a 3-frame stack (all members)                                       | **One** collapsed cover tile; bucket count == 1                                                                                                                                                                                                                                                                                                                   | S3          |
+| E21 | Mobile: **space-album detail** view                                                    | Unchanged — shows all 3 frames (parity with albums)                                                                                                                                                                                                                                                                                                               | S3          |
+| E22 | Mobile: **legacy partial stack** (only non-primary frames are members, primary absent) | Collapse yields **0** tiles — consistent with server/web timeline; documented limitation                                                                                                                                                                                                                                                                          | S3          |
+| E23 | Mobile: bucket-count query and asset query agree after collapse                        | Same collapsed cardinality                                                                                                                                                                                                                                                                                                                                        | S3          |
+| E24 | Web: Space view after all frames are members                                           | Renders the collapsed cover with the **correct** count                                                                                                                                                                                                                                                                                                            | S4          |
+| E25 | Web: space-album detail view                                                           | Still uncollapsed (asserts `withStacked` is **not** sent — guards the non-goal)                                                                                                                                                                                                                                                                                   | S4          |
 
 **Known consistent edge (not a bug, not fixed):** a stack whose **primary is non-timeline**
 (e.g. archived) vanishes from the Space timeline entirely (non-primaries collapsed out, primary
@@ -376,14 +376,14 @@ produces in production).
 
 ## Files touched (summary)
 
-| File | Change | Slice |
-|------|--------|-------|
-| `server/src/repositories/shared-space.repository.ts` | two `@GenerateSql` stack-closure queries | S1, S2 |
-| `server/src/services/shared-space.service.ts` | expand in `addAssets` / `removeAssets` | S1, S2 |
-| `server/src/services/shared-space.service.spec.ts` | unit tests | S1, S2 |
-| `server/test/medium/specs/repositories/shared-space.repository.spec.ts` | query medium tests | S1, S2 |
-| `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` (new) | query + composition E2E medium tests | S1, S2 |
-| `mobile/lib/infrastructure/repositories/timeline.repository.dart` | collapse two aggregated-Space builders | S3 |
-| `mobile/test/infrastructure/repositories/timeline_repository_test.dart` | Drift collapse tests | S3 |
-| `web/src/routes/(user)/spaces/[spaceId]/.../spaces-page.spec.ts` | guard tests | S4 |
-| `docs/docs/…` (Spaces user doc) | re-add-workaround note | S4 |
+| File                                                                                      | Change                                   | Slice  |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------- | ------ |
+| `server/src/repositories/shared-space.repository.ts`                                      | two `@GenerateSql` stack-closure queries | S1, S2 |
+| `server/src/services/shared-space.service.ts`                                             | expand in `addAssets` / `removeAssets`   | S1, S2 |
+| `server/src/services/shared-space.service.spec.ts`                                        | unit tests                               | S1, S2 |
+| `server/test/medium/specs/repositories/shared-space.repository.spec.ts`                   | query medium tests                       | S1, S2 |
+| `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` (new) | query + composition E2E medium tests     | S1, S2 |
+| `mobile/lib/infrastructure/repositories/timeline.repository.dart`                         | collapse two aggregated-Space builders   | S3     |
+| `mobile/test/infrastructure/repositories/timeline_repository_test.dart`                   | Drift collapse tests                     | S3     |
+| `web/src/routes/(user)/spaces/[spaceId]/.../spaces-page.spec.ts`                          | guard tests                              | S4     |
+| `docs/docs/…` (Spaces user doc)                                                           | re-add-workaround note                   | S4     |

@@ -24,11 +24,13 @@ Spec: `docs/superpowers/specs/2026-07-06-spaces-stacked-photos-design.md` (Slice
 ### Task 1: Repository query `getOwnedStackSiblingIds`
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` (add method near `addAssets`, ~line 333)
 - Create: `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts`
 - Regenerate: `server/src/queries/shared.space.repository.sql`
 
 **Interfaces:**
+
 - Produces: `getOwnedStackSiblingIds(userId: string, assetIds: string[]): Promise<string[]>` — asset ids of all non-deleted, space-eligible-visibility, `ownerId = userId` assets sharing a non-null `stackId` with any of `assetIds`. Returns `[]` for empty input.
 
 - [ ] **Step 1: Write the failing medium tests**
@@ -245,10 +247,12 @@ git commit -m "feat(spaces): add getOwnedStackSiblingIds repo query for stack ex
 ### Task 2: `addAssets` expands to the stack closure
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts:571-596` (`addAssets`)
 - Modify: `server/src/services/shared-space.service.spec.ts` (add default mock in `beforeEach`; add expansion tests to the `describe('addAssets', …)` block near line 2139)
 
 **Interfaces:**
+
 - Consumes: `SharedSpaceRepository.getOwnedStackSiblingIds(userId, assetIds) → Promise<string[]>` (Task 1).
 
 - [ ] **Step 1: Add the default mock so existing tests keep passing**
@@ -256,7 +260,7 @@ git commit -m "feat(spaces): add getOwnedStackSiblingIds repo query for stack ex
 In `server/src/services/shared-space.service.spec.ts`, inside `beforeEach` (after `({ sut, mocks } = newTestService(SharedSpaceService));`, near line 243), add:
 
 ```ts
-    mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([]);
+mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([]);
 ```
 
 - [ ] **Step 2: Write the failing unit tests**
@@ -264,102 +268,102 @@ In `server/src/services/shared-space.service.spec.ts`, inside `beforeEach` (afte
 Add these tests inside `describe('addAssets', …)` in `server/src/services/shared-space.service.spec.ts`:
 
 ```ts
-    it('should expand a stack to its siblings and insert the whole stack (E1/E2)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const cover = newUuid();
-      const sibling1 = newUuid();
-      const sibling2 = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+it('should expand a stack to its siblings and insert the whole stack (E1/E2)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const cover = newUuid();
+  const sibling1 = newUuid();
+  const sibling2 = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([cover]));
-      mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([cover, sibling1, sibling2]);
-      mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([cover]));
+  mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([cover, sibling1, sibling2]);
+  mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.addAssets(auth, spaceId, { assetIds: [cover] });
+  await sut.addAssets(auth, spaceId, { assetIds: [cover] });
 
-      expect(mocks.sharedSpace.getOwnedStackSiblingIds).toHaveBeenCalledWith(auth.user.id, [cover]);
-      expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([
-        { spaceId, assetId: cover, addedById: auth.user.id },
-        { spaceId, assetId: sibling1, addedById: auth.user.id },
-        { spaceId, assetId: sibling2, addedById: auth.user.id },
-      ]);
-    });
+  expect(mocks.sharedSpace.getOwnedStackSiblingIds).toHaveBeenCalledWith(auth.user.id, [cover]);
+  expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([
+    { spaceId, assetId: cover, addedById: auth.user.id },
+    { spaceId, assetId: sibling1, addedById: auth.user.id },
+    { spaceId, assetId: sibling2, addedById: auth.user.id },
+  ]);
+});
 
-    it('should dedupe seeds and returned siblings (E8)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const a = newUuid();
-      const b = newUuid();
-      const c = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+it('should dedupe seeds and returned siblings (E8)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const a = newUuid();
+  const b = newUuid();
+  const c = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([a, b]));
-      mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([b, c]);
-      mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([a, b]));
+  mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([b, c]);
+  mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.addAssets(auth, spaceId, { assetIds: [a, b] });
+  await sut.addAssets(auth, spaceId, { assetIds: [a, b] });
 
-      expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([
-        { spaceId, assetId: a, addedById: auth.user.id },
-        { spaceId, assetId: b, addedById: auth.user.id },
-        { spaceId, assetId: c, addedById: auth.user.id },
-      ]);
-    });
+  expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([
+    { spaceId, assetId: a, addedById: auth.user.id },
+    { spaceId, assetId: b, addedById: auth.user.id },
+    { spaceId, assetId: c, addedById: auth.user.id },
+  ]);
+});
 
-    it('should retain an explicitly-added seed that is not a returned sibling (E7)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const seed = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+it('should retain an explicitly-added seed that is not a returned sibling (E7)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const seed = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([seed]));
-      mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([]);
-      mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([seed]));
+  mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([]);
+  mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.addAssets(auth, spaceId, { assetIds: [seed] });
+  await sut.addAssets(auth, spaceId, { assetIds: [seed] });
 
-      expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([{ spaceId, assetId: seed, addedById: auth.user.id }]);
-    });
+  expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([{ spaceId, assetId: seed, addedById: auth.user.id }]);
+});
 
-    it('should queue SharedSpaceFaceMatch jobs for the expanded set (E12)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const cover = newUuid();
-      const sibling1 = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
+it('should queue SharedSpaceFaceMatch jobs for the expanded set (E12)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const cover = newUuid();
+  const sibling1 = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([cover]));
-      mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([cover, sibling1]);
-      mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([cover]));
+  mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([cover, sibling1]);
+  mocks.sharedSpace.addAssets.mockResolvedValue([] as any);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.addAssets(auth, spaceId, { assetIds: [cover] });
+  await sut.addAssets(auth, spaceId, { assetIds: [cover] });
 
-      expect(mocks.job.queueAll).toHaveBeenCalledWith([
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId, assetId: cover } },
-        { name: JobName.SharedSpaceFaceMatch, data: { spaceId, assetId: sibling1 } },
-      ]);
-    });
+  expect(mocks.job.queueAll).toHaveBeenCalledWith([
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId, assetId: cover } },
+    { name: JobName.SharedSpaceFaceMatch, data: { spaceId, assetId: sibling1 } },
+  ]);
+});
 ```
 
 - [ ] **Step 3: Run to verify failure**
@@ -424,9 +428,11 @@ git commit -m "feat(spaces): expand add-to-space to the whole stack (#751)"
 ### Task 3: Composition E2E medium tests (timeline collapse, promote-primary, idempotency)
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` (add a second `describe`)
 
 **Interfaces:**
+
 - Consumes: `SharedSpaceRepository.getOwnedStackSiblingIds` + `addAssets`; `AssetRepository.getTimeBuckets`; `StackRepository.update`; `ctx.newStack`, `ctx.newSharedSpace`, `ctx.newSharedSpaceMember`.
 
 - [ ] **Step 1: Write the failing composition tests**
@@ -443,7 +449,13 @@ Then the describe block:
 
 ```ts
 describe('stack-in-space composition (E10/E13)', () => {
-  const addWholeStack = async (ctx: any, sut: SharedSpaceRepository, spaceId: string, userId: string, seedId: string) => {
+  const addWholeStack = async (
+    ctx: any,
+    sut: SharedSpaceRepository,
+    spaceId: string,
+    userId: string,
+    seedId: string,
+  ) => {
     const siblings = await sut.getOwnedStackSiblingIds(userId, [seedId]);
     const expanded = [...new Set([seedId, ...siblings])];
     return sut.addAssets(expanded.map((assetId) => ({ spaceId, assetId, addedById: userId })));
@@ -531,6 +543,7 @@ git commit -m "test(spaces): composition E2E for stack-in-space add + collapse (
 `node ./dist/bin/sync-sql.js` reads the `@GenerateSql` decorators from the built `dist/` and writes `server/src/queries/*.sql`. It needs a reachable Postgres.
 
 Procedure:
+
 1. `cd server && pnpm build` (produces `dist/bin/sync-sql.js`).
 2. Ensure a Postgres is reachable with the immich dev env (`DB_HOSTNAME`, `DB_USERNAME`, `DB_PASSWORD`, `DB_DATABASE_NAME`, `DB_PORT`). If the dev stack DB is not up, start just Postgres, or export the same connection the medium tests would use.
 3. `mise sql` (or `node ./dist/bin/sync-sql.js`).

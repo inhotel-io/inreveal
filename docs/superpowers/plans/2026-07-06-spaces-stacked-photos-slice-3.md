@@ -23,6 +23,7 @@ Spec: `docs/superpowers/specs/2026-07-06-spaces-stacked-photos-design.md` (Slice
 ### Task 1: Add stack-collapse to the aggregated-Space builders (test-first)
 
 **Files:**
+
 - Modify: `mobile/lib/infrastructure/repositories/timeline.repository.dart` (three query builders inside `_watchSharedSpaceBucket` and `_getSharedSpaceBucketAssets`).
 - Modify: `mobile/test/medium/repositories/timeline_repository_test.dart` (add a `group` of tests).
 

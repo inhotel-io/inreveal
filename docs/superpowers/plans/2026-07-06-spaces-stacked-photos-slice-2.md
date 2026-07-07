@@ -24,10 +24,12 @@ Spec: `docs/superpowers/specs/2026-07-06-spaces-stacked-photos-design.md` (Slice
 ### Task 1: Repository query `getStackSiblingIdsInSpace`
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` — add after `removeAssets` (the method around line 392).
 - Modify: `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` — add a `describe` block.
 
 **Interfaces:**
+
 - Produces: `getStackSiblingIdsInSpace(spaceId: string, assetIds: string[]): Promise<string[]>` — asset ids of assets that (a) share a non-null `stackId` with any of `assetIds` AND (b) are direct members of `spaceId`. Returns `[]` for empty input.
 
 - [ ] **Step 1: Write the failing medium tests** — append this `describe` to `shared-space-stack-expansion.medium.spec.ts` (the file already imports `setup`, `ctx` helpers, `SharedSpaceRepository`):
@@ -141,68 +143,67 @@ git commit -m "feat(spaces): add getStackSiblingIdsInSpace repo query for remove
 ### Task 2: `removeAssets` expands to the stack closure
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts` — the `removeAssets` method.
 - Modify: `server/src/services/shared-space.service.spec.ts` — add default mock in `beforeEach`; add tests to the `describe('removeAssets', …)` block.
 
 **Interfaces:**
+
 - Consumes: `SharedSpaceRepository.getStackSiblingIdsInSpace(spaceId, assetIds) → Promise<string[]>` (Task 1).
 
 - [ ] **Step 1: Add the default mock** — in `beforeEach` (next to the existing `mocks.sharedSpace.getOwnedStackSiblingIds.mockResolvedValue([])` added in S1):
 
 ```ts
-    mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([]);
+mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([]);
 ```
 
 - [ ] **Step 2: Write the failing unit tests** — add to `describe('removeAssets', …)` in `shared-space.service.spec.ts`. (Mirror the setup style already used in that block: mock `getMember` with an Editor member, `getById` with a space, `getLastAssetAddedAt`, `getAssetIdsWithoutOtherSpacePath` → `[]` unless asserting orphans.)
 
 ```ts
-    it('should expand removal to same-stack space members (E14/E15)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const cover = newUuid();
-      const sibling1 = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId });
+it('should expand removal to same-stack space members (E14/E15)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const cover = newUuid();
+  const sibling1 = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
-      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
-      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
+  mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
 
-      await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
+  await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
 
-      expect(mocks.sharedSpace.getStackSiblingIdsInSpace).toHaveBeenCalledWith(spaceId, [cover]);
-      expect(mocks.sharedSpace.removeAssets).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
-      expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
-    });
+  expect(mocks.sharedSpace.getStackSiblingIdsInSpace).toHaveBeenCalledWith(spaceId, [cover]);
+  expect(mocks.sharedSpace.removeAssets).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
+  expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(spaceId, [cover, sibling1]);
+});
 
-    it('should reset the thumbnail when it is an expanded (sibling) frame (E17)', async () => {
-      const auth = factory.auth();
-      const spaceId = newUuid();
-      const cover = newUuid();
-      const sibling1 = newUuid();
-      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
-      const space = factory.sharedSpace({ id: spaceId, thumbnailAssetId: sibling1 });
+it('should reset the thumbnail when it is an expanded (sibling) frame (E17)', async () => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const cover = newUuid();
+  const sibling1 = newUuid();
+  const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+  const space = factory.sharedSpace({ id: spaceId, thumbnailAssetId: sibling1 });
 
-      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
-      mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
-      mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
-      mocks.sharedSpace.update.mockResolvedValue(space);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
-      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+  mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+  mocks.sharedSpace.getById.mockResolvedValue(space);
+  mocks.sharedSpace.getStackSiblingIdsInSpace.mockResolvedValue([cover, sibling1]);
+  mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(undefined);
+  mocks.sharedSpace.update.mockResolvedValue(space);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
 
-      // thumbnail (sibling1) is NOT in the caller's dto.assetIds — only reachable via expansion
-      await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
+  // thumbnail (sibling1) is NOT in the caller's dto.assetIds — only reachable via expansion
+  await sut.removeAssets(auth, spaceId, { assetIds: [cover] });
 
-      expect(mocks.sharedSpace.update).toHaveBeenCalledWith(
-        spaceId,
-        expect.objectContaining({ thumbnailAssetId: null }),
-      );
-    });
+  expect(mocks.sharedSpace.update).toHaveBeenCalledWith(spaceId, expect.objectContaining({ thumbnailAssetId: null }));
+});
 ```
 
 - [ ] **Step 3: Run to verify failure**
@@ -275,9 +276,11 @@ git commit -m "feat(spaces): expand remove-from-space to the whole stack (#751)"
 ### Task 3: Composition E2E medium tests (remove whole stack, album survival)
 
 **Files:**
+
 - Modify: `server/test/medium/specs/repositories/shared-space-stack-expansion.medium.spec.ts` — add a `describe`.
 
 **Interfaces:**
+
 - Consumes: `getStackSiblingIdsInSpace`, `removeAssets`, `getAssetCount`, `getAssetIdsWithoutOtherSpacePath`; `ctx.newAlbum`, `ctx.newSharedSpaceAlbum`, `ctx.newSharedSpaceAsset`.
 
 - [ ] **Step 1: Write the tests** — append:
