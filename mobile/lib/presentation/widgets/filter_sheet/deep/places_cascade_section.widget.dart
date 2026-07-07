@@ -11,8 +11,8 @@ import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provide
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 
 /// Preview cap: the deep section's country Wrap shows at most this many
-/// chips by default, plus the selected country if it falls beyond the cap
-/// (pinned so it stays visible).
+/// chips. The Wrap only renders while no country is selected — selecting one
+/// swaps in [_CityCascade], whose InputChip shows the selection instead.
 const int _kPreviewCap = 10;
 
 /// PlacesCascadeSection — Deep-snap section for the Places filter dimension.
@@ -54,7 +54,7 @@ class PlacesCascadeSection extends ConsumerWidget {
           : null,
       childBuilder: (countries) {
         if (selectedCountry == null) {
-          return _CountryWrap(countries: countries, selectedCountry: selectedCountry);
+          return _CountryWrap(countries: countries);
         }
         return _CityCascade(country: selectedCountry);
       },
@@ -72,17 +72,11 @@ String _searchMorePlacesLabel(int count) {
 
 class _CountryWrap extends ConsumerWidget {
   final List<String> countries;
-  final String? selectedCountry;
-  const _CountryWrap({required this.countries, required this.selectedCountry});
+  const _CountryWrap({required this.countries});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final firstCap = countries.take(_kPreviewCap).toList();
-    final display = [
-      ...firstCap,
-      if (selectedCountry != null && !firstCap.contains(selectedCountry) && countries.contains(selectedCountry))
-        selectedCountry!,
-    ];
+    final display = countries.take(_kPreviewCap).toList();
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -91,7 +85,7 @@ class _CountryWrap extends ConsumerWidget {
           FilterChip(
             key: Key('places-country-$country'),
             label: Text(country),
-            selected: country == selectedCountry,
+            selected: false,
             onSelected: (_) {
               HapticFeedback.selectionClick();
               ref.read(photosFilterProvider.notifier).setLocation(SearchLocationFilter(country: country));

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/places_picker_country_accordion.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/places_picker_search_header.widget.dart';
+import 'package:immich_mobile/providers/photos_filter/city_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/places_picker.provider.dart';
 
 @RoutePage()
@@ -79,18 +80,20 @@ class _PlacesPickerPageState extends ConsumerState<PlacesPickerPage> {
       loading: () => const [SliverFillRemaining(child: Center(child: CircularProgressIndicator(value: 0)))],
       error: (e, st) => [SliverFillRemaining(child: Center(child: Text('filter_sheet_load_error_retry'.tr())))],
       data: (countries) {
-        if (countries.isEmpty && query.trim().isNotEmpty) {
+        final trimmedQuery = query.trim();
+        final hasVisibleContent = countries.isNotEmpty || _expandedCountryHasCityMatch(trimmedQuery);
+        if (!hasVisibleContent && trimmedQuery.isNotEmpty) {
           return [
             SliverFillRemaining(
               hasScrollBody: false,
               child: _PlacesNoResultsPanel(
-                query: query.trim(),
+                query: trimmedQuery,
                 onClear: () => ref.read(placesPickerQueryProvider.notifier).state = '',
               ),
             ),
           ];
         }
-        if (countries.isEmpty) {
+        if (!hasVisibleContent) {
           return const [SliverToBoxAdapter(child: SizedBox.shrink())];
         }
         return [
@@ -103,6 +106,23 @@ class _PlacesPickerPageState extends ConsumerState<PlacesPickerPage> {
         ];
       },
     );
+  }
+
+  /// True when the currently-expanded country has an already-loaded city
+  /// matching [trimmedQuery] — without triggering a fetch (only cached
+  /// cities of the expanded country count; no proactive fetch here).
+  ///
+  /// Lets the page keep the accordion visible even when [trimmedQuery]
+  /// matches no country name, so the accordion's own already-loaded-city
+  /// filtering (see PlacesPickerCountryAccordion) stays reachable instead of
+  /// being short-circuited by a page-level "no results" decision that only
+  /// looked at country names.
+  bool _expandedCountryHasCityMatch(String trimmedQuery) {
+    final expanded = _expandedCountry;
+    if (expanded == null || trimmedQuery.isEmpty) return false;
+    final query = trimmedQuery.toLowerCase();
+    final cachedCities = ref.watch(citySuggestionsProvider(expanded)).valueOrNull;
+    return cachedCities?.any((c) => c.toLowerCase().contains(query)) ?? false;
   }
 }
 

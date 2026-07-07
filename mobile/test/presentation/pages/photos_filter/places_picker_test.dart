@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/places_picker.page.dart';
+import 'package:immich_mobile/providers/photos_filter/city_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/places_picker.provider.dart';
 import 'package:openapi/api.dart';
@@ -66,10 +67,7 @@ void main() {
 
   group('PlacesPickerPage search', () {
     testWidgets('typing updates placesPickerQueryProvider', (tester) async {
-      await tester.pumpConsumerWidget(
-        const PlacesPickerPage(),
-        overrides: _overrideCountries(['France', 'Spain']),
-      );
+      await tester.pumpConsumerWidget(const PlacesPickerPage(), overrides: _overrideCountries(['France', 'Spain']));
       await tester.pumpAndSettle();
 
       final container = ProviderScope.containerOf(tester.element(find.byType(PlacesPickerPage)));
@@ -123,6 +121,36 @@ void main() {
       expect(find.byKey(const Key('places-picker-country-France')), findsOneWidget);
       expect(find.byKey(const Key('places-picker-country-Spain')), findsNothing);
       expect(find.byKey(const Key('places-picker-country-Finland')), findsNothing);
+    });
+
+    testWidgets('query matching only an already-loaded city of the expanded country keeps the accordion visible', (
+      tester,
+    ) async {
+      await tester.pumpConsumerWidget(
+        const PlacesPickerPage(),
+        overrides: [
+          ..._overrideCountries(['France']),
+          citySuggestionsProvider.overrideWith((ref, country) async => country == 'France' ? ['Paris', 'Lyon'] : []),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      // Expand France so its cities load and get cached.
+      await tester.tap(find.byKey(const Key('places-picker-country-France')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('places-picker-city-Paris')), findsOneWidget);
+      expect(find.byKey(const Key('places-picker-city-Lyon')), findsOneWidget);
+
+      // "par" matches no country name, but matches the already-loaded city
+      // Paris under the still-expanded France — the page must keep showing
+      // the accordion (France + Paris), not fall back to No results.
+      await tester.enterText(find.byKey(const Key('places-picker-search-field')), 'par');
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('places-picker-country-France')), findsOneWidget);
+      expect(find.byKey(const Key('places-picker-city-Paris')), findsOneWidget);
+      expect(find.byKey(const Key('places-picker-city-Lyon')), findsNothing);
+      expect(find.byKey(const Key('places-picker-clear-search')), findsNothing);
     });
   });
 }
