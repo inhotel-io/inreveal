@@ -3,10 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_header.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_sheet.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/hidden_sections.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 
 import '../../../../widget_tester_extensions.dart';
+
+class _FakeVis implements FilterSectionVisibilityPrefs {
+  Set<FilterSectionId> stored;
+  _FakeVis(this.stored);
+  @override
+  Set<FilterSectionId> loadHidden() => stored;
+  @override
+  Future<void> saveHidden(Set<FilterSectionId> ids) async => stored = ids;
+}
 
 void main() {
   group('DeepHeader', () {
@@ -76,6 +87,18 @@ void main() {
     testWidgets('renders correctly in dark theme', (tester) async {
       await tester.pumpConsumerWidgetDark(const Material(child: DeepHeader()));
       expect(find.byKey(const Key('deep-header-close')), findsOneWidget);
+    });
+
+    testWidgets('shows a manage-sections button that opens the sheet', (tester) async {
+      await tester.pumpConsumerWidget(
+        const Material(child: DeepHeader()),
+        overrides: [filterSectionVisibilityPrefsProvider.overrideWithValue(_FakeVis({}))],
+      );
+      expect(find.byKey(const Key('deep-header-manage')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('deep-header-manage')));
+      await tester.pumpAndSettle();
+      // The manage sheet is now open — its section toggles are present.
+      expect(find.byKey(const Key('manage-section-people')), findsOneWidget);
     });
   });
 }

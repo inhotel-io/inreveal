@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/manage_sections_sheet.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_sheet.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 
@@ -26,19 +27,29 @@ class DeepHeader extends ConsumerWidget {
           Expanded(
             child: Text('filter_sheet_title'.tr(), style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
           ),
-          // Mirror-width placeholder keeps the title centered when Reset hides.
-          // IconButton has a default 48×48 hit area; the placeholder matches.
-          if (!isEmpty)
-            TextButton(
-              key: const Key('deep-header-reset'),
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                ref.read(photosFilterProvider.notifier).reset();
-              },
-              child: Text('filter_sheet_reset'.tr()),
-            )
-          else
-            const SizedBox(width: 48, height: 48),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                key: const Key('deep-header-manage'),
+                icon: const Icon(Icons.tune_rounded),
+                tooltip: 'filter_sheet_deep_manage_sections'.tr(),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  showManageSectionsSheet(context);
+                },
+              ),
+              if (!isEmpty)
+                TextButton(
+                  key: const Key('deep-header-reset'),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    ref.read(photosFilterProvider.notifier).reset();
+                  },
+                  child: Text('filter_sheet_reset'.tr()),
+                ),
+            ],
+          ),
         ],
       ),
     );
