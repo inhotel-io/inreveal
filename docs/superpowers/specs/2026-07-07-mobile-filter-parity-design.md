@@ -243,7 +243,9 @@ Every use case is specified below as Given/When/Then. Each scenario maps to at l
 
 - Given the "Tags" section was empty and disabled
 - When the filter context changes so tags are available
-- Then the "Tags" header is enabled and can be expanded (respecting the user's last explicit expand/collapse choice, else default-collapsed).
+- Then the "Tags" header is enabled and can be expanded (respecting the user's last explicit expand/collapse choice, else the default — expanded).
+
+**Note on defaults:** sections default to **expanded** (preserving today's "everything visible" UX and adding collapse on top). Persistence stores the set of **collapsed** section ids (a section is collapsed iff its id is in the stored set); empty sections always render collapsed + disabled regardless of the stored set, and are not written to it.
 
 **Scenario: Reduced-motion disables the slide**
 
