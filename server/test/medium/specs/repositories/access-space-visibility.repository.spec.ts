@@ -32,6 +32,20 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+const seedPersonOnSpaceAsset = async (visibility: AssetVisibility) => {
+  const { ctx, accessRepo } = setup();
+  const { user: owner } = await ctx.newUser();
+  const { user: viewer } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+  const { person } = await ctx.newPerson({ ownerId: owner.id });
+  const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility });
+  await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+  return { accessRepo, viewer, person };
+};
+
 // ---------------------------------------------------------------------------
 // Path 1 — direct add (shared_space_asset)
 // ---------------------------------------------------------------------------
@@ -588,5 +602,43 @@ describe('checkSpaceEditAccess — visibility gate (Slice 10)', () => {
 
     const after = await accessRepo.asset.checkSpaceEditAccess(editor.id, new Set([asset.id]));
     expect(after.has(asset.id)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkSharedSpaceAccess (PersonRead) — visibility widening (rbac-7)
+//
+// Security requirement: PersonRead via shared-space membership must be granted
+// for a person whose only space face is on an Archived asset (the space people
+// grid already surfaces them via getPersonsBySpaceId), not just Timeline. Never
+// Hidden or Locked.
+// ---------------------------------------------------------------------------
+
+describe('checkSharedSpaceAccess (PersonRead) — visibility widening (rbac-7)', () => {
+  it('GRANTS PersonRead for a person whose only space face is on an Archived asset (was denied)', async () => {
+    const { accessRepo, viewer, person } = await seedPersonOnSpaceAsset(AssetVisibility.Archive);
+    const result = await accessRepo.person.checkSharedSpaceAccess(viewer.id, new Set([person.id]));
+    expect(result.has(person.id)).toBe(true);
+  });
+
+  it('grants PersonRead on a Timeline asset (positive control, regression)', async () => {
+    const { accessRepo, viewer, person } = await seedPersonOnSpaceAsset(AssetVisibility.Timeline);
+    const result = await accessRepo.person.checkSharedSpaceAccess(viewer.id, new Set([person.id]));
+    expect(result.has(person.id)).toBe(true);
+  });
+
+  it('never grants PersonRead when the person only appears on Hidden or Locked space assets', async () => {
+    const hiddenCase = await seedPersonOnSpaceAsset(AssetVisibility.Hidden);
+    const lockedCase = await seedPersonOnSpaceAsset(AssetVisibility.Locked);
+    const hiddenResult = await hiddenCase.accessRepo.person.checkSharedSpaceAccess(
+      hiddenCase.viewer.id,
+      new Set([hiddenCase.person.id]),
+    );
+    const lockedResult = await lockedCase.accessRepo.person.checkSharedSpaceAccess(
+      lockedCase.viewer.id,
+      new Set([lockedCase.person.id]),
+    );
+    expect(hiddenResult.has(hiddenCase.person.id)).toBe(false);
+    expect(lockedResult.has(lockedCase.person.id)).toBe(false);
   });
 });

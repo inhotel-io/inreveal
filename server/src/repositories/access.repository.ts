@@ -5,7 +5,11 @@ import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
-import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
+import {
+  spaceAssetPathBranches,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
 class ActivityAccess {
   constructor(private db: Kysely<DB>) {}
@@ -706,7 +710,10 @@ class PersonAccess {
               join
                 .onRef('asset.id', '=', 'asset_face.assetId')
                 .on('asset.deletedAt', 'is', null)
-                .on('asset.visibility', '=', AssetVisibility.Timeline),
+                // rbac-7 (deny-only widening): widen from Timeline-only to the shareable set
+                // (Timeline + Archive) so a person appearing only on Archived space assets — shown in the
+                // space people grid via getPersonsBySpaceId — is also granted PersonRead. Never Hidden/Locked.
+                .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
             )
             .whereRef('asset_face.personId', '=', 'person.id')
             .where('asset_face.deletedAt', 'is', null)

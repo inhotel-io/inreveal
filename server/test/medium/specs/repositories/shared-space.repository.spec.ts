@@ -1915,6 +1915,41 @@ describe(SharedSpaceRepository.name, () => {
         detectedFaceCount: 0,
       });
     });
+
+    // rbac-7 regression: getPersonsBySpaceId already gates on the shareable visibility set
+    // (Archive + Timeline) — this pins that Hidden/Locked-only faces stay excluded from the space
+    // people grid, so PersonRead (widened in access.repository.ts) never grants more than the grid shows.
+    it('excludes a person whose only face is on a Hidden or Locked space asset (rbac-7 regression)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: hiddenAsset.id });
+      const { assetFace: hiddenFace } = await ctx.newAssetFace({ assetId: hiddenAsset.id });
+      const hiddenPerson = await sut.createPerson({
+        spaceId: space.id,
+        name: 'Hidden Asset Person',
+        representativeFaceId: hiddenFace.id,
+      });
+      await sut.addPersonFaces([{ personId: hiddenPerson.id, assetFaceId: hiddenFace.id }], { skipRecount: true });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedAsset.id });
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id });
+      const lockedPerson = await sut.createPerson({
+        spaceId: space.id,
+        name: 'Locked Asset Person',
+        representativeFaceId: lockedFace.id,
+      });
+      await sut.addPersonFaces([{ personId: lockedPerson.id, assetFaceId: lockedFace.id }], { skipRecount: true });
+
+      const result = await sut.getPersonsBySpaceId(space.id, {});
+      const ids = result.map((p) => p.id);
+
+      expect(ids).not.toContain(hiddenPerson.id);
+      expect(ids).not.toContain(lockedPerson.id);
+    });
   });
 
   describe('countPersonsBySpaceId', () => {
