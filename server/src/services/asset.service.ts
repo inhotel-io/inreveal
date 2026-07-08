@@ -309,40 +309,36 @@ export class AssetService extends BaseService {
       await this.assetRepository.updateAll(ids, assetDto);
     }
 
+    if (visibility !== undefined) {
+      await this.applyVisibilityTransitionSideEffects(ids, visibility);
+    }
+
+    await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
+  }
+
+  private async applyVisibilityTransitionSideEffects(ids: string[], visibility: AssetVisibility): Promise<void> {
     if (visibility === AssetVisibility.Locked) {
       await this.albumRepository.removeAssetsFromAll(ids);
     }
 
-    // Slice 4.B: a visibility flip deletes no shared_space_asset join row, so the
-    // delete-audit trigger never fires and already-synced member devices keep the
-    // bytes. Explicitly purge (Hidden/Locked) or re-add (Timeline/Archive) the
-    // DIRECT space-asset path so member devices converge. Album-linked and
-    // library paths are separate follow-ups; album+Locked is already covered by
-    // removeAssetsFromAll above.
+    // Slice 4.B DIRECT-path purge/restore (see updateAll history).
     if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
       await this.sharedSpaceRepository.emitDirectAssetVisibilityPurge(ids);
     } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
       await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(ids);
     }
 
-    // Slice 1: ALBUM-path purge/restore for already-synced member devices.
-    // Locked is already covered by removeAssetsFromAll above (deletes the
-    // album_asset join row, firing album_asset_audit) — no new tombstone needed.
-    // Hidden retains the album_asset row, so we emit an explicit tombstone.
+    // Slice 1 ALBUM-path purge/restore. Locked is covered by removeAssetsFromAll above.
     if (visibility === AssetVisibility.Hidden) {
       await this.sharedSpaceRepository.emitAlbumAssetVisibilityPurge(ids);
     } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
       await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(ids);
     }
 
-    // Slice 2: LIBRARY-path purge. No removal analogue for libraries, so purge on
-    // both Hidden and Locked. Restore is automatic (the visibility UPDATE above bumps
-    // asset.updateId; LibraryAssetSync.getUpserts re-emits when the gate flips).
+    // Slice 2 LIBRARY-path purge. Restore is automatic (the visibility UPDATE bumps asset.updateId).
     if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
       await this.sharedSpaceRepository.emitLibraryAssetVisibilityPurge(ids);
     }
-
-    await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
   }
 
   async copy(
