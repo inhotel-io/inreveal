@@ -458,7 +458,7 @@ needed (in Task 4 the handlers pass a **synthetic** prior to keep the same helpe
       extraction-hide path (`metadata.service.ts:890-896`) does not emit `AssetHide`.
 
 - [ ] **Implement the emit** in `metadata.service.ts`. Inside the `if (motionAsset.visibility ===
-    AssetVisibility.Timeline)` block (`890-896`), after the `assetRepository.update(...)` / log line:
+AssetVisibility.Timeline)` block (`890-896`), after the `assetRepository.update(...)` / log line:
 
   ```ts
   await this.eventRepository.emit('AssetHide', { assetId: motionAsset.id, userId: motionAsset.ownerId });
@@ -617,7 +617,7 @@ The handlers build a synthetic one-entry map. **No `@GenerateSql` method is adde
 
 - [ ] **Seed priors in the existing `updateAll`/`update` emit tests** (behavioural change → expected churn).
       For each existing **purge** assertion (Hidden/Locked; `asset.service.spec.ts:1041-1051, 1075-1082,
-    1115-1124`) add a shareable prior before the call:
+1115-1124`) add a shareable prior before the call:
       `mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);`
       For each existing **restore** assertion (Timeline/Archive; `1053-1063, 1093-1103`) add a non-shareable
       prior:
