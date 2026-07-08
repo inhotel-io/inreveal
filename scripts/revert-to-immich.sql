@@ -93,6 +93,7 @@ END $$;
 -- -----------------------------------------------------------------------------
 DROP TRIGGER IF EXISTS "library_after_insert" ON "library";
 DROP TRIGGER IF EXISTS "asset_library_delete_audit" ON "asset";
+DROP TRIGGER IF EXISTS "album_soft_delete_shared_space_album" ON "album";
 
 -- -----------------------------------------------------------------------------
 -- 2. Drop Gallery-only tables (CASCADE).
@@ -172,6 +173,7 @@ DROP FUNCTION IF EXISTS shared_space_album_delete_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_member_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit() CASCADE;
+DROP FUNCTION IF EXISTS album_soft_delete_shared_space_album() CASCADE;
 
 -- -----------------------------------------------------------------------------
 -- 4. Drop Gallery-added columns from Immich-native tables.
@@ -227,6 +229,7 @@ DELETE FROM "migration_overrides"
    'function_shared_space_member_delete_album_audit',
    'function_shared_space_delete_album_audit',
    'function_shared_space_album_user_delete_after_audit',
+   'function_album_soft_delete_shared_space_album',
    'index_asset_face_personId_idx',
    'index_face_identity_representativeFaceId_idx',
    'index_person_identityId_idx',
@@ -253,6 +256,7 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_member_delete_album_audit',
    'trigger_shared_space_delete_album_audit',
    'trigger_shared_space_album_user_delete_after_audit',
+   'trigger_album_soft_delete_shared_space_album',
    'trigger_shared_space_album_updatedAt',
    'trigger_shared_space_library_updatedAt',
    'trigger_shared_space_member_after_insert',
