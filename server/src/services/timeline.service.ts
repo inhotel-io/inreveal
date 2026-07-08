@@ -130,11 +130,13 @@ export class TimelineService extends BaseService {
     // regardless, but rejecting here short-circuits the leak vector before it reaches the DB. The
     // per-user timeline paths (userId / withSharedSpaces) are intentionally untouched so a caller
     // can still view their OWN hidden assets.
-    const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId;
+    const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId || !!dto.albumId;
     const requestsPrivateVisibility =
       dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
     if (spaceBrowse && requestsPrivateVisibility) {
-      throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space');
+      throw new BadRequestException(
+        'Hidden and locked assets are not available when browsing a shared space or album',
+      );
     }
 
     if (dto.albumId) {

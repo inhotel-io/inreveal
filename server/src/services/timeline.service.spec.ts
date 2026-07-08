@@ -891,6 +891,75 @@ describe(TimelineService.name, () => {
     });
   });
 
+  describe('album browse visibility (Slice 1 / security-3)', () => {
+    // The rejection is flat — even the album owner (here: an elevated admin, mocked to hold
+    // album access) is refused Hidden/Locked via the album path, matching the album grid.
+    it('rejects Hidden visibility on an albumId browse for getTimeBuckets', async () => {
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+      await expect(
+        sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+          albumId: 'album-id',
+          visibility: AssetVisibility.Hidden,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
+    });
+
+    it('rejects Locked visibility on an albumId browse for getTimeBuckets', async () => {
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+      await expect(
+        sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+          albumId: 'album-id',
+          visibility: AssetVisibility.Locked,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
+    });
+
+    it('rejects Hidden visibility on an albumId browse for getTimeBucket', async () => {
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.asset.getTimeBucket.mockResolvedValue({ assets: `[{ id: ['asset-id'] }]` });
+
+      await expect(
+        sut.getTimeBucket(authStub.adminWithElevatedPermission, {
+          timeBucket: '2024-01-01',
+          albumId: 'album-id',
+          visibility: AssetVisibility.Hidden,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mocks.asset.getTimeBucket).not.toHaveBeenCalled();
+    });
+
+    it('allows Archive visibility on an albumId browse (Archive is shareable)', async () => {
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+      await expect(
+        sut.getTimeBuckets(authStub.admin, { albumId: 'album-id', visibility: AssetVisibility.Archive }),
+      ).resolves.toEqual([{ timeBucket: '2024-01-01', count: 1 }]);
+
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
+    });
+
+    it('allows default (undefined) visibility on an albumId browse', async () => {
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+      await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' })).resolves.toEqual([
+        { timeBucket: '2024-01-01', count: 1 },
+      ]);
+
+      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
+    });
+  });
+
   describe('getTimeBucketCovers', () => {
     it('runs access checks and forwards resolved options + buckets to the repository', async () => {
       mocks.asset.getTimeBucketCovers.mockResolvedValue([]);
