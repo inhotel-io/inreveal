@@ -556,6 +556,7 @@ export class SharedSpaceService extends BaseService {
         throw new BadRequestException('Owner cannot leave the space');
       }
       await this.sharedSpaceRepository.removeMember(spaceId, userId);
+      await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
       await this.sharedSpaceRepository.logActivity({
         spaceId,
         userId,
@@ -574,6 +575,7 @@ export class SharedSpaceService extends BaseService {
       throw new ForbiddenException('Cannot remove the space creator');
     }
     await this.sharedSpaceRepository.removeMember(spaceId, userId);
+    await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
     await this.sharedSpaceRepository.logActivity({
       spaceId,
       userId: auth.user.id,
@@ -1381,6 +1383,32 @@ export class SharedSpaceService extends BaseService {
       name: JobName.SharedSpacePersonMetadataBackfill,
       data: identityId ? { identityId } : {},
     });
+  }
+
+  /**
+   * albums-6: unlink the departing user's OWNED albums from the space and clean up
+   * any now-orphaned space person faces (mirrors unlinkAlbum's cleanup). Returns the
+   * unlinked album ids so the caller can also enqueue grant reconciliation (Task 3).
+   */
+  private async cleanupDepartingMemberAlbums(
+    spaceId: string,
+    userId: string,
+    faceRecognitionEnabled: boolean,
+  ): Promise<string[]> {
+    const unlinkedAlbumIds = (await this.sharedSpaceRepository.removeOwnedAlbumLinksAddedBy(spaceId, userId)) ?? [];
+    if (faceRecognitionEnabled && unlinkedAlbumIds.length > 0) {
+      for (const albumId of unlinkedAlbumIds) {
+        const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(
+          spaceId,
+          albumId,
+        );
+        if (orphanedAssetIds.length > 0) {
+          await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
+        }
+      }
+      await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+    }
+    return unlinkedAlbumIds;
   }
 
   private async queueSpaceIdentityReconciliation(input: {

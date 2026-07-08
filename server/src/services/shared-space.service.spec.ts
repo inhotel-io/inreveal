@@ -2053,6 +2053,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, spaceId, targetUserId);
@@ -2068,6 +2069,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(viewerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, spaceId, auth.user.id);
@@ -2106,6 +2108,7 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, 'space-1', 'user-1');
@@ -2125,6 +2128,7 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, 'space-1', 'other-user');
@@ -2144,6 +2148,7 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, 'space-1', 'user-1');
@@ -2165,6 +2170,7 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, 'space-1', 'other-user');
@@ -2198,11 +2204,46 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: 'owner-1' }));
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
       await sut.removeMember(auth, 'space-1', 'other-user');
 
       expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user');
+    });
+
+    it("unlinks the departing member's OWNED albums on removal (albums-6)", async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-a']);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+    });
+
+    it("unlinks the leaver's OWNED albums on self-leave (albums-6)", async () => {
+      const auth = factory.auth({ user: { id: 'member-2' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'member-2', role: SharedSpaceRole.Editor }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
     });
   });
 

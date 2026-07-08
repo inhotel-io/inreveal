@@ -573,6 +573,32 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // albums-6: on member removal/leave, unlink the shared_space_album rows the
+  // departing user ADDED and OWNS (album_user role='owner', album not soft-deleted).
+  // Remaining members lose access to the ex-member's album (its future assets too).
+  // Rows the member added for albums they do NOT own are left untouched. Deleting the
+  // rows fires shared_space_album_delete_audit (link tombstone + gated grant revocation
+  // for remaining members). Returns the album ids actually unlinked.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async removeOwnedAlbumLinksAddedBy(spaceId: string, userId: string): Promise<string[]> {
+    const deleted = await this.db
+      .deleteFrom('shared_space_album')
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('shared_space_album.addedById', '=', userId)
+      .where('shared_space_album.albumId', 'in', (eb) =>
+        eb
+          .selectFrom('album_user')
+          .innerJoin('album', 'album.id', 'album_user.albumId')
+          .select('album_user.albumId')
+          .where('album_user.userId', '=', userId)
+          .where('album_user.role', '=', AlbumUserRole.Owner)
+          .where('album.deletedAt', 'is', null),
+      )
+      .returning('shared_space_album.albumId')
+      .execute();
+    return deleted.map((row) => row.albumId);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   getLinkedAlbums(spaceId: string) {
     return this.db
