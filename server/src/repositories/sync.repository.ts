@@ -1337,7 +1337,21 @@ export class LibraryAssetSync extends BaseSync {
       .where('shared_space_library_asset_audit.id', '<', nowId)
       .$if(!!ack, (qb) => qb.where('shared_space_library_asset_audit.id', '>', ack!.updateId))
       .where('shared_space_library_asset_audit.libraryId', 'in', (eb) => accessibleLibraries(eb, userId))
-      .where('asset.ownerId', '!=', userId);
+      .where('asset.ownerId', '!=', userId)
+      // security-7: a member who is ALSO the owner's partner keeps partner-entitled access to the asset
+      // (a partner may see Hidden). Do not purge it from their device — exclude assets whose owner shares
+      // with this user via the partner table (sharedById = owner, sharedWithId = this user).
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('partner')
+              .select(eb.lit(1).as('exists'))
+              .whereRef('partner.sharedById', '=', 'asset.ownerId')
+              .where('partner.sharedWithId', '=', userId),
+          ),
+        ),
+      );
 
     return libraryAssetArm.union(spaceLibraryAssetArm).orderBy('id', 'asc').stream();
   }
