@@ -2183,6 +2183,53 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.addAssets).not.toHaveBeenCalled();
     });
 
+    it('rejects re-adding an asset the caller can only READ via a space-linked album (rbac-2)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const albumOnlyAssetId = newUuid();
+      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+      // Caller neither owns nor partners the asset — they only reach it through a space-linked album.
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkPartnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkAlbumAccess.mockResolvedValue(new Set([albumOnlyAssetId]));
+      mocks.access.asset.checkSpaceAccess.mockResolvedValue(new Set([albumOnlyAssetId]));
+
+      await expect(sut.addAssets(auth, spaceId, { assetIds: [albumOnlyAssetId] })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+
+      expect(mocks.sharedSpace.addAssets).not.toHaveBeenCalled();
+      // AssetShare must NOT consult the album/space READ arms — those are the escalation surface.
+      expect(mocks.access.asset.checkAlbumAccess).not.toHaveBeenCalled();
+      expect(mocks.access.asset.checkSpaceAccess).not.toHaveBeenCalled();
+    });
+
+    it('allows an editor to add a partner-shared asset (AssetShare includes partner) (rbac-2)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const partnerAssetId = newUuid();
+      const editorMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+      const space = factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: false });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkPartnerAccess.mockResolvedValue(new Set([partnerAssetId]));
+      mocks.sharedSpace.addAssets.mockResolvedValue([
+        { spaceId, assetId: partnerAssetId, addedById: auth.user.id },
+      ] as any);
+      mocks.sharedSpace.getById.mockResolvedValue(space);
+      mocks.sharedSpace.update.mockResolvedValue(space);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addAssets(auth, spaceId, { assetIds: [partnerAssetId] });
+
+      expect(mocks.sharedSpace.addAssets).toHaveBeenCalledWith([
+        { spaceId, assetId: partnerAssetId, addedById: auth.user.id },
+      ]);
+    });
+
     it('should NOT auto-set thumbnailAssetId when space has no thumbnail', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();

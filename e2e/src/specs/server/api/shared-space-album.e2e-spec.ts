@@ -1,4 +1,11 @@
-import { AlbumResponseDto, AlbumUserRole, AssetMediaResponseDto, LoginResponseDto, SharedSpaceRole } from '@immich/sdk';
+import {
+  AlbumResponseDto,
+  AlbumUserRole,
+  AssetMediaResponseDto,
+  AssetVisibility,
+  LoginResponseDto,
+  SharedSpaceRole,
+} from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
 import { app, utils } from 'src/utils';
 import request from 'supertest';
@@ -522,5 +529,140 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       const { status } = await unlinkAlbum(owner.accessToken, ownerAlbum.id);
       expect(status).toBe(204);
     });
+  });
+});
+
+const addSpaceAssets = (token: string, spaceId: string, assetIds: string[]) =>
+  request(app).post(`/shared-spaces/${spaceId}/assets`).set('Authorization', `Bearer ${token}`).send({ assetIds });
+
+const bulkUpdateAssets = (token: string, body: Record<string, unknown>) =>
+  request(app).put('/assets').set('Authorization', `Bearer ${token}`).send(body);
+
+const singleUpdateAsset = (token: string, id: string, body: Record<string, unknown>) =>
+  request(app).put(`/assets/${id}`).set('Authorization', `Bearer ${token}`).send(body);
+
+// rbac-2 (CI-deferred — Docker down): a space Viewer must not re-share album assets they can only READ.
+describe('rbac-2: addAssets requires AssetShare (read→re-share escalation)', () => {
+  let admin: LoginResponseDto;
+  let victim: LoginResponseDto; // owns album X (asset A) and space S1
+  let attacker: LoginResponseDto; // Viewer of S1, Owner of S2
+
+  let assetA: AssetMediaResponseDto;
+  let attackerSpaceId: string;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+    [victim, attacker] = await Promise.all([
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac2-victim')),
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac2-attacker')),
+    ]);
+
+    // Victim owns asset A (Timeline → shareable via the space-album read arm) inside album X.
+    assetA = await utils.createAsset(victim.accessToken);
+    const albumX = await utils.createAlbum(victim.accessToken, {
+      albumName: 'rbac2 album X',
+      assetIds: [assetA.id],
+    });
+
+    // Victim's space S1 links album X; attacker joins S1 as Viewer → AssetRead on A via checkSpaceAccess's album arm.
+    const s1 = await utils.createSpace(victim.accessToken, { name: 'rbac2 S1' });
+    await utils.addSpaceMember(victim.accessToken, s1.id, { userId: attacker.userId, role: SharedSpaceRole.Viewer });
+    await utils.linkSpaceAlbum(victim.accessToken, s1.id, albumX.id);
+
+    // Attacker owns space S2 (they are its Owner ≥ Editor, so requireRole(Editor) passes and the asset gate is reached).
+    const s2 = await utils.createSpace(attacker.accessToken, { name: 'rbac2 S2' });
+    attackerSpaceId = s2.id;
+  });
+
+  it('attacker cannot re-add a victim asset they only READ via the linked album → 400', async () => {
+    const { status } = await addSpaceAssets(attacker.accessToken, attackerSpaceId, [assetA.id]);
+    expect(status).toBe(400); // requireAccess(AssetShare) denial → BadRequestException (was 204 pre-fix)
+  });
+
+  it('victim can still add their own asset to their own space → 204', async () => {
+    const s = await utils.createSpace(victim.accessToken, { name: 'rbac2 victim space' });
+    const { status } = await addSpaceAssets(victim.accessToken, s.id, [assetA.id]);
+    expect(status).toBe(204);
+  });
+});
+
+// rbac-3 (CI-deferred — Docker down): a space Editor must not flip another member's asset visibility.
+describe('rbac-3: visibility writes are restricted to owned assets', () => {
+  let admin: LoginResponseDto;
+  let owner: LoginResponseDto; // space owner
+  let editor: LoginResponseDto; // space editor (attacker)
+  let victim: LoginResponseDto; // contributes an asset to the space
+
+  let spaceId: string;
+  let victimAsset: AssetMediaResponseDto;
+  let victimAlbum: AlbumResponseDto;
+  let editorAsset: AssetMediaResponseDto;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+    [owner, editor, victim] = await Promise.all([
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac3-owner')),
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac3-editor')),
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac3-victim')),
+    ]);
+
+    const space = await utils.createSpace(owner.accessToken, { name: 'rbac3 space' });
+    spaceId = space.id;
+    await utils.addSpaceMember(owner.accessToken, spaceId, { userId: editor.userId, role: SharedSpaceRole.Editor });
+    await utils.addSpaceMember(owner.accessToken, spaceId, { userId: victim.userId, role: SharedSpaceRole.Editor });
+
+    // Victim owns an asset in a personal album AND direct in the space → editor gains checkSpaceEditAccess over it.
+    victimAsset = await utils.createAsset(victim.accessToken);
+    victimAlbum = await utils.createAlbum(victim.accessToken, {
+      albumName: 'rbac3 victim album',
+      assetIds: [victimAsset.id],
+    });
+    await utils.addSpaceAssets(victim.accessToken, spaceId, [victimAsset.id]);
+
+    // Editor owns their own asset in the space (positive control).
+    editorAsset = await utils.createAsset(editor.accessToken);
+    await utils.addSpaceAssets(editor.accessToken, spaceId, [editorAsset.id]);
+  });
+
+  it('editor cannot bulk-lock the victim asset → 403; asset stays Timeline and stays in the victim album', async () => {
+    const { status } = await bulkUpdateAssets(editor.accessToken, {
+      ids: [victimAsset.id],
+      visibility: AssetVisibility.Locked,
+    });
+    expect(status).toBe(403);
+
+    // Cascade did NOT fire: visibility unchanged and still an album member.
+    const { status: getStatus, body } = await request(app)
+      .get(`/assets/${victimAsset.id}`)
+      .set('Authorization', `Bearer ${victim.accessToken}`);
+    expect(getStatus).toBe(200);
+    expect(body.visibility).toBe(AssetVisibility.Timeline);
+
+    const { body: album } = await request(app)
+      .get(`/albums/${victimAlbum.id}`)
+      .set('Authorization', `Bearer ${victim.accessToken}`);
+    expect((album.assets as Array<{ id: string }>).map((a) => a.id)).toContain(victimAsset.id);
+  });
+
+  it('editor cannot single-PUT the victim asset to Hidden → 403', async () => {
+    const { status } = await singleUpdateAsset(editor.accessToken, victimAsset.id, {
+      visibility: AssetVisibility.Hidden,
+    });
+    expect(status).toBe(403);
+  });
+
+  it('editor CAN change visibility on their OWN asset → 204', async () => {
+    const { status } = await bulkUpdateAssets(editor.accessToken, {
+      ids: [editorAsset.id],
+      visibility: AssetVisibility.Archive,
+    });
+    expect(status).toBe(204);
+  });
+
+  it('editor CAN still set a non-visibility field on the victim asset (existing policy) → 204', async () => {
+    const { status } = await bulkUpdateAssets(editor.accessToken, { ids: [victimAsset.id], isFavorite: true });
+    expect(status).toBe(204);
   });
 });

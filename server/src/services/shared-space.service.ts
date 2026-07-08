@@ -570,7 +570,12 @@ export class SharedSpaceService extends BaseService {
 
   async addAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetAddDto): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-    await this.requireAccess({ auth, permission: Permission.AssetRead, ids: dto.assetIds });
+    // rbac-2: AssetRead's space arm (checkSpaceAccess) includes an un-role-gated shared_space_album branch,
+    // so a space Viewer of a space linking album X could read X's assets and re-add them as DIRECT assets
+    // into a space they own — gaining AssetUpdate over the owner's assets via checkSpaceEditAccess. AssetShare
+    // (owner ∪ partner only, no album/space arm) is the same permission album-add already requires and closes
+    // the read→re-share→write escalation.
+    await this.requireAccess({ auth, permission: Permission.AssetShare, ids: dto.assetIds });
     const inserted = await this.sharedSpaceRepository.addAssets(
       dto.assetIds.map((assetId) => ({ spaceId, assetId, addedById: auth.user.id })),
     );
