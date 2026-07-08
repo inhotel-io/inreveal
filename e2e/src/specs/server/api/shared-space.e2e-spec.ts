@@ -514,6 +514,19 @@ describe('/shared-spaces', () => {
 
       expect(status).toBe(403);
     });
+
+    // security-9: a non-UUID path param must 400 (route-param DTO validation), not fall through to
+    // Postgres and surface as a raw 500.
+    it('returns 400 (not 500) for a non-UUID member userId path param', async () => {
+      const space = await utils.createSpace(user1.accessToken, { name: 'Non-UUID Member Param' });
+
+      const { status } = await request(app)
+        .patch(`/shared-spaces/${space.id}/members/not-a-uuid`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ role: SharedSpaceRole.Editor });
+
+      expect(status).toBe(400);
+    });
   });
 
   describe('GET /shared-spaces/:id/members', () => {
