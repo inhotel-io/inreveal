@@ -456,4 +456,59 @@ describe('/sync — shared-space streams', () => {
     // e2e equivalent would need to wait on the async AssetDelete job actually removing the row, which is
     // not deterministic enough for this suite (no-flake-allowance).
   });
+
+  // Slice 4 seam (correctness-1): HTTP hide → emit → real DB → HTTP /sync must converge. A restore-then-hide
+  // in one window must NOT resurrect the now-Hidden asset on the member's device via a stale updateId.
+  describe('slice 4: restore-then-hide converges on the member /sync (no resurrection)', () => {
+    it('member converges to absent after a restore then hide of a direct-space asset', async () => {
+      const space = await utils.createSpace(admin.accessToken, { name: 'Slice4 Converge' });
+      await utils.addSpaceMember(admin.accessToken, space.id, {
+        userId: member.userId,
+        role: SharedSpaceRole.Editor,
+      });
+      const asset = await utils.createAsset(admin.accessToken);
+      await utils.addSpaceAssets(admin.accessToken, space.id, [asset.id]);
+
+      const types = [SyncRequestType.SharedSpaceToAssetsV1];
+      const initial = await syncStream(member.accessToken, types, true);
+      await ackAll(member.accessToken, initial);
+
+      // Three boundary crossings, no member sync between them, so all land in ONE window:
+      //   hide (tombstone) → restore (join-row updateId bump) → hide (tombstone).
+      // Slice 3 only emits on a shareable-boundary cross, so Timeline→Timeline would NOT bump; the
+      // restore MUST come from Hidden→Timeline to produce the stale updateId that drives resurrection.
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(admin.accessToken) },
+      );
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Timeline } },
+        { headers: asBearerAuth(admin.accessToken) },
+      );
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(admin.accessToken) },
+      );
+
+      const next = await syncStream(member.accessToken, types);
+      const links = next
+        .filter((l) => l.type === 'SharedSpaceToAssetV1')
+        .map((l) => l.data as { spaceId: string; assetId: string });
+      const deletes = next
+        .filter((l) => l.type === 'SharedSpaceToAssetDeleteV1')
+        .map((l) => l.data as { spaceId: string; assetId: string });
+
+      // Delete drops the link; the flat gate blocks the stale-updateId re-add → member converges to absent.
+      expect(deletes).toContainEqual({ spaceId: space.id, assetId: asset.id });
+      expect(links).not.toContainEqual({ spaceId: space.id, assetId: asset.id });
+
+      // Acking must leave the next window empty (no re-delivery).
+      await ackAll(member.accessToken, next);
+      const after = await syncStream(member.accessToken, types);
+      const residual = after.filter(
+        (l) => l.type === 'SharedSpaceToAssetV1' && (l.data as { assetId: string }).assetId === asset.id,
+      );
+      expect(residual).toHaveLength(0);
+    });
+  });
 });

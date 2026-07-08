@@ -18,7 +18,7 @@
 // end-to-end verification are documented follow-ups (out of scope here).
 
 import { Kysely } from 'kysely';
-import { SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
@@ -186,5 +186,118 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
       spaceId: space.id,
       assetId: asset.id,
     });
+  });
+
+  // correctness-1: restore bumps the join-row updateId; a later hide writes a tombstone. In one sync
+  // window the handler streams deletes BEFORE upserts, so without the gate the pending updateId-bumped
+  // link row RE-ADDS the now-Hidden asset after the delete drops it (resurrection). The flat gate on
+  // getUpserts blocks the re-add → the member converges to ABSENT.
+  it('correctness-1: restore-then-hide within one window does NOT resurrect the asset for a member', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id, memberAuth.user.id);
+
+    // Member already synced the asset while Timeline.
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    // Restore (updateId bump) then hide (tombstone), both after the ack, in one window.
+    await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityRestore([asset.id]);
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+    await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
+
+    const next = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const upserts = next
+      .filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetV1)
+      .map((e) => (e as { data: { spaceId: string; assetId: string } }).data);
+    const deletes = next
+      .filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1)
+      .map((e) => (e as { data: { spaceId: string; assetId: string } }).data);
+
+    // The tombstone drops the link; the flat gate blocks the stale-updateId re-add → converge to absent.
+    expect(deletes).toContainEqual(expect.objectContaining({ spaceId: space.id, assetId: asset.id }));
+    expect(upserts).not.toContainEqual(expect.objectContaining({ spaceId: space.id, assetId: asset.id }));
+
+    // Ack all; the next window must be empty (no re-delivery from the stale updateId).
+    await ctx.syncAckAll(memberAuth, next);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+  });
+
+  // correctness-1 edge: a member backfilling a space AFTER an asset was purged/hidden must not receive
+  // the tombstoned link row via the backfill path.
+  it('correctness-1: backfill after a purge does NOT re-deliver the Hidden asset link row', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id);
+
+    // Hide + purge before any member has synced.
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+    await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
+
+    // A fresh member joins and backfills the space.
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: memberAuth.user.id, role: SharedSpaceRole.Editor });
+
+    const next = await ctx.syncStream(memberAuth, [
+      SyncRequestType.SharedSpacesV1,
+      SyncRequestType.SharedSpaceToAssetsV1,
+    ]);
+    const joinEvents = next.filter(
+      (r: { type: string }) =>
+        r.type === SyncEntityType.SharedSpaceToAssetV1 || r.type === SyncEntityType.SharedSpaceToAssetBackfillV1,
+    );
+    expect(joinEvents.map((e) => (e as { data: { assetId: string } }).data.assetId)).not.toContain(asset.id);
+  });
+
+  // Owner-stream consistency with slice 3: the owner-gated tombstone means an already-synced owner keeps
+  // their own Hidden asset (no delete). The FLAT upsert gate (slice 4) means a FRESH owner backfill omits
+  // that same Hidden link row — identical to the SharedSpaceAssetsV1 content stream, which also omits it.
+  // Pins the flat decision; the deferred "owner sees own hidden" feature would flip BOTH streams together.
+  it('owner consistency: owner keeps an already-synced Hidden asset (no delete) but a fresh backfill omits it (flat gate)', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id);
+
+    const initial = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(ownerAuth, initial);
+    await ctx.assertSyncIsComplete(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+    await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
+
+    // slice 3: owner gets NO delete for their own hidden asset (over-purge guard).
+    const afterHide = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const ownerDeletes = afterHide.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(ownerDeletes).toHaveLength(0);
+
+    // slice 4 flat gate: a FRESH (reset) backfill omits the owner's own Hidden link row...
+    const reset = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1], true);
+    const resetLinks = reset.filter(
+      (r: { type: string }) =>
+        r.type === SyncEntityType.SharedSpaceToAssetV1 || r.type === SyncEntityType.SharedSpaceToAssetBackfillV1,
+    );
+    expect(resetLinks.map((e) => (e as { data: { assetId: string } }).data.assetId)).not.toContain(asset.id);
+
+    // ...matching the content stream, which also omits it for the owner (both flat).
+    const content = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceAssetsV1], true);
+    const contentAssetEvents = content.filter(
+      (r: { type: string }) =>
+        r.type === SyncEntityType.SharedSpaceAssetCreateV1 ||
+        r.type === SyncEntityType.SharedSpaceAssetBackfillV1,
+    );
+    expect(contentAssetEvents.map((e) => (e as { data: { id: string } }).data.id)).not.toContain(asset.id);
   });
 });
