@@ -485,6 +485,10 @@ export class JobRepository {
       case JobName.SharedSpaceBulkAddAssets: {
         return { jobId: `bulk-add-${item.data.spaceId}-${item.data.userId}` };
       }
+      case JobName.SharedSpaceAlbumGrantReconcile: {
+        const data = item.data as { albumIds: string[] };
+        return { jobId: `space-album-grant-reconcile-${[...data.albumIds].sort().join(',')}`, removeOnComplete: true };
+      }
       case JobName.SharedSpaceFaceMatch: {
         const prefix =
           item.data.source === 'identity-backfill'

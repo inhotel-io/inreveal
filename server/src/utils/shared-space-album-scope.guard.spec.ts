@@ -273,6 +273,12 @@ const VIS_ALLOWLIST: Record<string, string> = {
   'shared-space.repository.ts::hasLibraryLink': 'boolean link-existence check; no asset data',
   'shared-space.repository.ts::getLinkedAlbums': 'returns album metadata rows for management UI; no asset content',
   'shared-space.repository.ts::getSpacesLinkedToAlbum': 'returns space-album link metadata (ids/flags), not asset rows',
+  // albums-6: departing-member album-link cleanup + correctness-4 reconcile targeting —
+  // both operate on shared_space_album LINK rows (delete-by-ownership / id list), never
+  // asset content.
+  'shared-space.repository.ts::removeOwnedAlbumLinksAddedBy':
+    'deletes shared_space_album link rows the departing member added and owns; RETURNING albumId only, no asset content',
+  'shared-space.repository.ts::getLinkedAlbumIds': 'returns album ids linked to a space (link metadata), not asset rows',
   'shared-space.repository.ts::getSpacesLinkedToLibrary': 'returns library-link metadata (ids/flags), not asset rows',
   // rbac-6: album owner's management view of every space this album is linked into —
   // returns spaceId/spaceName/linkedById/showInTimeline only, never asset rows.

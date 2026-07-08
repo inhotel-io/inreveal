@@ -626,6 +626,48 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // correctness-4 support: album ids currently linked to a space (captured before a
+  // member removal / space deletion so the reconcile job can target them post-commit).
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getLinkedAlbumIds(spaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_album')
+      .select('albumId')
+      .where('spaceId', '=', spaceId)
+      .execute();
+    return rows.map((row) => row.albumId);
+  }
+
+  // correctness-4: sweep the grants of the given albums and tombstone any with no live
+  // access path. Runs POST-COMMIT (its own statement/txn), so the READ COMMITTED snapshot
+  // race in the delete-side triggers is resolved — it sees committed state. Inserting into
+  // shared_space_album_user_audit fires shared_space_album_user_delete_after_audit (deletes
+  // the grant) + SharedSpaceAlbumSync.getDeletes (device tombstone). The nil sentinel
+  // excludes no real space → "does the user have ANY live path?"; a grant with a live path
+  // is skipped (no over-revocation), an already-revoked grant has no row to sweep. Returns
+  // the number of grants tombstoned.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async reconcileAlbumGrants(albumIds: string[]): Promise<number> {
+    if (albumIds.length === 0) {
+      return 0;
+    }
+    const inserted = await this.db
+      .insertInto('shared_space_album_user_audit')
+      .columns(['albumId', 'userId'])
+      .expression((eb) =>
+        eb
+          .selectFrom('shared_space_album_user')
+          .select(['shared_space_album_user.albumId', 'shared_space_album_user.userId'])
+          .where('shared_space_album_user.albumId', 'in', albumIds)
+          .where(
+            sql<boolean>`NOT user_has_album_path("shared_space_album_user"."albumId", "shared_space_album_user"."userId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+          ),
+      )
+      .returning('albumId')
+      .execute();
+    return inserted.length;
+  }
+
   // Album sync fan-out: used by the AlbumAssetsAdd/Remove handlers to find every space
   // a linked album feeds, with its face-recognition flag. Mirrors getSpacesLinkedToLibrary.
   @GenerateSql({ params: [DummyValue.UUID] })

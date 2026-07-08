@@ -996,6 +996,9 @@ export enum JobName {
   // Shared Space Bulk Operations
   SharedSpaceBulkAddAssets = 'SharedSpaceBulkAddAssets',
 
+  // Shared Space Album Grant Reconciliation
+  SharedSpaceAlbumGrantReconcile = 'SharedSpaceAlbumGrantReconcile',
+
   // Classification
   AssetClassifyQueueAll = 'AssetClassifyQueueAll',
   AssetClassify = 'AssetClassify',

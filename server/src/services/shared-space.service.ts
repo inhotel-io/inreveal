@@ -361,7 +361,11 @@ export class SharedSpaceService extends BaseService {
 
   async remove(auth: AuthDto, id: string): Promise<void> {
     await this.requireRole(auth, id, SharedSpaceRole.Owner);
+    // Capture the space's linked albums BEFORE the cascade delete removes the link rows,
+    // so the post-commit reconcile can target them.
+    const affectedAlbumIds = (await this.sharedSpaceRepository.getLinkedAlbumIds(id)) ?? [];
     await this.sharedSpaceRepository.remove(id);
+    await this.queueAlbumGrantReconcile(affectedAlbumIds);
     await this.queueSpacePersonMetadataBackfill();
   }
 
@@ -549,6 +553,7 @@ export class SharedSpaceService extends BaseService {
   async removeMember(auth: AuthDto, spaceId: string, userId: string): Promise<void> {
     const isSelf = auth.user.id === userId;
     const space = await this.sharedSpaceRepository.getById(spaceId);
+    const affectedAlbumIds = (await this.sharedSpaceRepository.getLinkedAlbumIds(spaceId)) ?? [];
 
     if (isSelf) {
       const member = await this.requireMembership(auth, spaceId);
@@ -564,6 +569,7 @@ export class SharedSpaceService extends BaseService {
         data: {},
       });
       await this.queueSpacePersonMetadataBackfill();
+      await this.queueAlbumGrantReconcile(affectedAlbumIds);
       return;
     }
 
@@ -583,6 +589,7 @@ export class SharedSpaceService extends BaseService {
       data: { removedUserId: userId },
     });
     await this.queueSpacePersonMetadataBackfill();
+    await this.queueAlbumGrantReconcile(affectedAlbumIds);
   }
 
   async addAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetAddDto): Promise<void> {
@@ -714,6 +721,9 @@ export class SharedSpaceService extends BaseService {
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       await this.queueSpacePersonMetadataBackfill();
     }
+    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
+    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
+    await this.queueAlbumGrantReconcile([albumId]);
   }
 
   async updateAlbumLink(
@@ -1382,6 +1392,26 @@ export class SharedSpaceService extends BaseService {
     await this.jobRepository.queue({
       name: JobName.SharedSpacePersonMetadataBackfill,
       data: identityId ? { identityId } : {},
+    });
+  }
+
+  @OnJob({ name: JobName.SharedSpaceAlbumGrantReconcile, queue: QueueName.BackgroundTask })
+  async handleSharedSpaceAlbumGrantReconcile(job: JobOf<JobName.SharedSpaceAlbumGrantReconcile>): Promise<JobStatus> {
+    await this.sharedSpaceRepository.reconcileAlbumGrants(job.albumIds ?? []);
+    return JobStatus.Success;
+  }
+
+  // correctness-4: enqueue a post-commit reconciliation for the given albums. Idempotent
+  // and deadlock-free — it runs after the triggering transaction commits, resolving the
+  // TOCTOU race in the delete-side grant-revocation triggers. No-op for an empty set.
+  private async queueAlbumGrantReconcile(albumIds: string[]): Promise<void> {
+    const unique = [...new Set(albumIds)];
+    if (unique.length === 0) {
+      return;
+    }
+    await this.jobRepository.queue({
+      name: JobName.SharedSpaceAlbumGrantReconcile,
+      data: { albumIds: unique },
     });
   }
 

@@ -1417,6 +1417,7 @@ describe(SharedSpaceService.name, () => {
       const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
 
       mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.remove.mockResolvedValue(void 0);
 
       await sut.remove(auth, spaceId);
@@ -1430,6 +1431,7 @@ describe(SharedSpaceService.name, () => {
       const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
 
       mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.remove.mockResolvedValue(void 0);
 
       await sut.remove(auth, spaceId);
@@ -1438,6 +1440,23 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonMetadataBackfill,
         data: {},
+      });
+    });
+
+    it('enqueues album grant reconcile for the deleted space albums (correctness-4)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue(['album-a']);
+      mocks.sharedSpace.remove.mockResolvedValue(void 0);
+
+      await sut.remove(auth, spaceId);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: ['album-a'] },
       });
     });
 
@@ -2052,6 +2071,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2068,6 +2088,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(viewerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2084,6 +2105,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
 
       await expect(sut.removeMember(auth, spaceId, auth.user.id)).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
@@ -2096,6 +2118,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(viewerMember);
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
 
       await expect(sut.removeMember(auth, spaceId, newUuid())).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
@@ -2107,6 +2130,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'user-1', role: SharedSpaceRole.Editor }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2127,6 +2151,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2147,6 +2172,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'user-1', role: SharedSpaceRole.Editor }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2169,6 +2195,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2192,6 +2219,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
 
       await expect(sut.removeMember(auth, 'space-1', creatorId)).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
@@ -2203,6 +2231,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: 'owner-1' }));
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2220,6 +2249,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getById.mockResolvedValue(
         factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
       );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-a']);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2237,6 +2267,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getById.mockResolvedValue(
         factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
       );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2244,6 +2275,47 @@ describe(SharedSpaceService.name, () => {
       await sut.removeMember(auth, 'space-1', 'member-2');
 
       expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+    });
+
+    it('enqueues album grant reconcile for the space albums on member removal (correctness-4)', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue(['album-a', 'album-b']);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: ['album-a', 'album-b'] },
+      });
+    });
+
+    it('does NOT enqueue reconcile when the space has no linked albums', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
+      );
     });
   });
 
@@ -8218,6 +8290,26 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
       // Editor path short-circuits before the owner check.
       expect(mocks.access.album.checkOwnerAccess).not.toHaveBeenCalled();
+    });
+
+    it('enqueues album grant reconcile after unlink (correctness-4)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
+      );
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: [albumId] },
+      });
     });
   });
 
