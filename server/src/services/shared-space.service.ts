@@ -781,6 +781,24 @@ export class SharedSpaceService extends BaseService {
     await this.sharedSpaceRepository.updateMemberLastViewed(spaceId, auth.user.id);
   }
 
+  // C3: the space activity feed is readable by any member (SharedSpaceRead + membership). Most
+  // activity `data` blobs are space-scoped ids/names members can already see, but a *propagated*
+  // PersonMerge (written by identity-merge-propagation when a user merges people in another space
+  // or their personal library) carries cross-space + personal-library UUIDs. Redact PersonMerge
+  // down to the member-safe fields the in-space direct merge already uses.
+  private redactActivityData(type: SharedSpaceActivityType, data: Record<string, unknown>): Record<string, unknown> {
+    if (type !== SharedSpaceActivityType.PersonMerge) {
+      return data;
+    }
+    const safe: Record<string, unknown> = {};
+    for (const key of ['personName', 'count', 'activityRole'] as const) {
+      if (data[key] !== undefined) {
+        safe[key] = data[key];
+      }
+    }
+    return safe;
+  }
+
   async getActivities(
     auth: AuthDto,
     spaceId: string,
@@ -793,7 +811,7 @@ export class SharedSpaceService extends BaseService {
     return activities.map((a) => ({
       id: a.id,
       type: a.type,
-      data: a.data as Record<string, unknown>,
+      data: this.redactActivityData(a.type as SharedSpaceActivityType, a.data as Record<string, unknown>),
       createdAt: (a.createdAt as unknown as Date).toISOString(),
       userId: a.userId,
       userName: a.name,

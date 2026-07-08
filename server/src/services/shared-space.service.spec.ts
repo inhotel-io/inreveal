@@ -2993,6 +2993,68 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('getActivities redaction', () => {
+    it('strips cross-space and personal identity ids from PersonMerge activity data', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ spaceId, userId: auth.user.id }));
+      mocks.sharedSpace.getActivities.mockResolvedValue([
+        {
+          id: newUuid(),
+          type: SharedSpaceActivityType.PersonMerge,
+          data: {
+            personName: 'Alex',
+            count: 2,
+            activityRole: 'origin',
+            affectedSpaceIds: [newUuid(), newUuid()],
+            originatingSpaceId: newUuid(),
+            targetProfileId: newUuid(),
+            sourceProfileIds: [newUuid()],
+            targetIdentityId: newUuid(),
+            sourceIdentityIds: [newUuid()],
+          },
+          createdAt: new Date(),
+          userId: auth.user.id,
+          name: 'Owner',
+          email: 'owner@example.com',
+          profileImagePath: '',
+          avatarColor: null,
+        },
+      ] as any);
+
+      const [activity] = await sut.getActivities(auth, spaceId, {});
+
+      expect(activity.data).toEqual({ personName: 'Alex', count: 2, activityRole: 'origin' });
+      expect(activity.data).not.toHaveProperty('affectedSpaceIds');
+      expect(activity.data).not.toHaveProperty('sourceProfileIds');
+      expect(activity.data).not.toHaveProperty('targetIdentityId');
+    });
+
+    it('passes non-PersonMerge activity data through unchanged', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ spaceId, userId: auth.user.id }));
+      mocks.sharedSpace.getActivities.mockResolvedValue([
+        {
+          id: newUuid(),
+          type: SharedSpaceActivityType.AlbumLink,
+          data: { albumId: newUuid(), albumName: 'Trip' },
+          createdAt: new Date(),
+          userId: auth.user.id,
+          name: 'Owner',
+          email: 'owner@example.com',
+          profileImagePath: '',
+          avatarColor: null,
+        },
+      ] as any);
+
+      const [activity] = await sut.getActivities(auth, spaceId, {});
+
+      expect(activity.data).toHaveProperty('albumId');
+      expect(activity.data).toHaveProperty('albumName');
+    });
+  });
+
   describe('handleSharedSpaceIdentityReconciliation', () => {
     it('should merge one strict local member match into an accessible space identity', async () => {
       const space = factory.sharedSpace({ id: 'space-1', faceRecognitionEnabled: true });
