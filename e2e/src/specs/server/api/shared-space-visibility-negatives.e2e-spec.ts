@@ -489,6 +489,10 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       const spaceId = await freshSpaceWithViewer('map-marker-hidden-neg');
       await linkAlbum(spaceId, album.id);
 
+      // Map markers only surface assets whose EXIF (GPS lat/lon) has been extracted — drain the
+      // metadataExtraction queue (admin token has queue-read access) before querying.
+      await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+
       const memberIds = await mapMarkerIds(album.id, member.accessToken);
       expect(memberIds).toContain(gps.id);
       expect(memberIds).not.toContain(hidden.id);
