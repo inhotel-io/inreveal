@@ -80,6 +80,21 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             await _db.remoteAssetCloudIdEntity.deleteAll();
             await _db.assetEditEntity.deleteAll();
             await _db.assetOcrEntity.deleteAll();
+
+            // --- gallery-fork: clear fork space + library tables (mobile-4) ---
+            // SyncResetV1 must wipe every fork-only remote table too, or a stale
+            // shared_space_album_asset + link row joined to a re-synced remote_asset
+            // wrongly re-places assets in space timelines after a reset. Runs under
+            // PRAGMA foreign_keys = OFF (see reset() preamble), so ordering is free;
+            // children-before-parents kept for readability.
+            await _db.sharedSpaceAlbumAssetEntity.deleteAll();
+            await _db.sharedSpaceAlbumLinkEntity.deleteAll();
+            await _db.sharedSpaceAlbumEntity.deleteAll();
+            await _db.sharedSpaceAssetEntity.deleteAll();
+            await _db.sharedSpaceLibraryEntity.deleteAll();
+            await _db.sharedSpaceMemberEntity.deleteAll();
+            await _db.sharedSpaceEntity.deleteAll();
+            await _db.libraryEntity.deleteAll();
           });
         } finally {
           // re-enable FK even if the transaction throws, otherwise the connection

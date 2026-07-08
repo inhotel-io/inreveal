@@ -279,6 +279,113 @@ void main() {
       expect(after.name, equals('Camera'));
       expect(after.backupSelection, equals(BackupSelection.none));
     });
+
+    test('reset() clears all 8 fork space + library tables (mobile-4)', () async {
+      // Seed a fully-populated fork-space graph via the real sync handlers so
+      // FK-parent ordering (space → album/library → link/membership) is honoured.
+      await sut.updateUsersV1([_createUser()]);
+      await sut.updateSharedSpacesV1([
+        SyncSharedSpaceV1(
+          id: 'space-1',
+          name: 'Space',
+          description: null,
+          color: null,
+          createdById: 'user-1',
+          thumbnailAssetId: null,
+          thumbnailCropY: null,
+          faceRecognitionEnabled: true,
+          petsEnabled: false,
+          lastActivityAt: null,
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceMembersV1([
+        SyncSharedSpaceMemberV1(
+          spaceId: 'space-1',
+          userId: 'user-1',
+          role: 'editor',
+          joinedAt: DateTime(2026, 4, 6),
+          showInTimeline: true,
+        ),
+      ]);
+      await sut.updateAssetsV1([_createAsset(id: 'asset-1', checksum: 'c1', fileName: 'a.jpg')]);
+      await sut.updateSharedSpaceToAssetsV1([
+        SyncSharedSpaceToAssetV1(spaceId: 'space-1', assetId: 'asset-1'),
+      ]);
+      await sut.updateLibrariesV1([
+        SyncLibraryV1(
+          id: 'library-1',
+          name: 'Lib',
+          ownerId: 'user-1',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceLibrariesV1([
+        SyncSharedSpaceLibraryV1(
+          spaceId: 'space-1',
+          libraryId: 'library-1',
+          addedById: 'user-1',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceAlbumsV1([
+        SyncAlbumV2(
+          id: 'album-1',
+          name: 'Album',
+          description: '',
+          isActivityEnabled: true,
+          order: AssetOrder.asc,
+          thumbnailAssetId: null,
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceAlbumLinksV1([
+        SyncSharedSpaceAlbumLinkV1(
+          spaceId: 'space-1',
+          albumId: 'album-1',
+          showInTimeline: true,
+          addedById: 'user-1',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceAlbumToAssetsV1([
+        SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'asset-1'),
+      ]);
+
+      // Sanity: every table is non-empty before reset.
+      expect(await db.sharedSpaceEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceMemberEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceAssetEntity.select().get(), isNotEmpty);
+      expect(await db.libraryEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceLibraryEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceAlbumEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceAlbumLinkEntity.select().get(), isNotEmpty);
+      expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isNotEmpty);
+
+      // reset() must not throw under foreign_keys = OFF and must empty all 8.
+      await sut.reset();
+
+      expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceAlbumLinkEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceAlbumEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceAssetEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceLibraryEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceMemberEntity.select().get(), isEmpty);
+      expect(await db.sharedSpaceEntity.select().get(), isEmpty);
+      expect(await db.libraryEntity.select().get(), isEmpty);
+    });
+
+    test('reset() on an empty DB does not throw under foreign_keys = OFF (mobile-4)', () async {
+      // No seed at all — the added deleteAll() calls must be safe no-ops.
+      await sut.reset();
+      expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isEmpty);
+      expect(await db.libraryEntity.select().get(), isEmpty);
+    });
   });
 
   group('SyncStreamRepository - Live photos', () {
