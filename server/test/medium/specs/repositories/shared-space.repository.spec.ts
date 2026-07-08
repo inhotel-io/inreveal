@@ -815,6 +815,54 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  // albums-7: getLastAssetAddedAt / getLastContributor must also reflect album (and library)
+  // driven space activity, not just direct shared_space_asset adds — otherwise a space whose
+  // only activity is via a linked, on-timeline album never updates its "last activity" card.
+  describe('space activity from album links (albums-7)', () => {
+    it('getLastAssetAddedAt reflects the most recent album asset createdAt for an on-timeline album', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'RecencyAlbum' });
+      const createdAt = new Date('2025-06-01T00:00:00.000Z');
+      const { asset } = await ctx.newAsset({ ownerId: user.id, createdAt });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: true });
+
+      const lastAddedAt = await sut.getLastAssetAddedAt(space.id);
+
+      expect(lastAddedAt?.toISOString()).toBe(createdAt.toISOString());
+    });
+
+    it('ignores album asset activity when the album link is off-timeline', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'OffTimelineRecency' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, createdAt: new Date('2025-06-01T00:00:00.000Z') });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+
+      const lastAddedAt = await sut.getLastAssetAddedAt(space.id);
+
+      expect(lastAddedAt).toBeUndefined();
+    });
+
+    it('getLastContributor attributes an album asset to the asset owner', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'ContributorAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, createdAt: new Date('2025-06-01T00:00:00.000Z') });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: true });
+
+      const contributor = await sut.getLastContributor(space.id, new Date('2025-01-01T00:00:00.000Z'));
+
+      expect(contributor?.id).toBe(user.id);
+    });
+  });
+
   describe('getAssetCount', () => {
     it('should count non-deleted assets', async () => {
       const { ctx, sut } = setup();
@@ -1022,6 +1070,20 @@ describe(SharedSpaceRepository.name, () => {
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe(withThumb.id);
     });
+
+    it('excludes album assets whose link is off-timeline (showInTimeline = false)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'OffTimelineRecent' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, thumbhash: Buffer.from('thumb1') });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+
+      const result = await sut.getRecentAssets(space.id, 4);
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('getNewAssetCount', () => {
@@ -1074,6 +1136,20 @@ describe(SharedSpaceRepository.name, () => {
       const count = await sut.getNewAssetCount(space.id, new Date('2023-01-01T00:00:00.000Z'));
 
       expect(count).toBe(1);
+    });
+
+    it('excludes album assets whose link is off-timeline (showInTimeline = false)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'OffTimelineNewCount' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, createdAt: new Date('2026-01-01T00:00:00.000Z') });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+
+      const count = await sut.getNewAssetCount(space.id, new Date('2023-01-01T00:00:00.000Z'));
+
+      expect(count).toBe(0);
     });
   });
 
@@ -3645,6 +3721,20 @@ describe(SharedSpaceRepository.name, () => {
       await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
 
       await expect(sut.getAssetCount(space.id)).resolves.toBe(1);
+    });
+
+    // albums-7: card metrics must match the timeline — an album linked with showInTimeline=false
+    // must NOT inflate the space-card asset count (the space timeline never surfaces it).
+    it('excludes album assets whose link is off-timeline (showInTimeline = false)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'OffTimelineCount' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(0);
     });
   });
 

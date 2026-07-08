@@ -272,6 +272,7 @@ export class SharedSpaceRepository {
               .innerJoin('asset', 'asset.id', 'album_asset.assetId')
               .select('asset.id')
               .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
               .where('asset.deletedAt', 'is', null)
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
@@ -769,6 +770,7 @@ export class SharedSpaceRepository {
               .innerJoin('asset', 'asset.id', 'album_asset.assetId')
               .select(['asset.id', 'asset.thumbhash', 'asset.fileCreatedAt'])
               .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
               .where('asset.deletedAt', 'is', null)
               .where('asset.isOffline', '=', false)
               .where('asset.type', '=', AssetType.Image)
@@ -786,13 +788,43 @@ export class SharedSpaceRepository {
   @GenerateSql({ params: [DummyValue.UUID] })
   async getLastAssetAddedAt(spaceId: string): Promise<Date | undefined> {
     const result = await this.db
-      .selectFrom('shared_space_asset')
-      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .where('spaceId', '=', spaceId)
-      .where('asset.deletedAt', 'is', null)
-      .where('asset.isOffline', '=', false)
-      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-      .select((eb) => eb.fn.max('addedAt').as('lastAddedAt'))
+      .selectFrom(
+        this.db
+          .selectFrom('shared_space_asset')
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+          .select('shared_space_asset.addedAt as ts')
+          .where('shared_space_asset.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+          .union(
+            this.db
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .select('asset.createdAt as ts')
+              .where('shared_space_library.spaceId', '=', spaceId)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select('asset.createdAt as ts')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .as('combined'),
+      )
+      .select((eb) => eb.fn.max('combined.ts').as('lastAddedAt'))
       .executeTakeFirst();
     return result?.lastAddedAt ?? undefined;
   }
@@ -831,6 +863,7 @@ export class SharedSpaceRepository {
               .innerJoin('asset', 'asset.id', 'album_asset.assetId')
               .select('asset.id')
               .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
               .where('asset.createdAt', '>', since)
               .where('asset.deletedAt', 'is', null)
               .where('asset.isOffline', '=', false)
@@ -845,18 +878,47 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.DATE] })
   async getLastContributor(spaceId: string, since: Date): Promise<{ id: string; name: string } | undefined> {
-    return this.db
+    const contributions = this.db
       .selectFrom('shared_space_asset')
       .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .innerJoin('user', (join) =>
-        join.onRef('user.id', '=', 'shared_space_asset.addedById').on('user.deletedAt', 'is', null),
-      )
+      .select(['shared_space_asset.addedById as userId', 'shared_space_asset.addedAt as ts'])
       .where('shared_space_asset.spaceId', '=', spaceId)
       .where('shared_space_asset.addedAt', '>', since)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
       .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-      .orderBy('shared_space_asset.addedAt', 'desc')
+      .union(
+        this.db
+          .selectFrom('shared_space_library')
+          .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+          .select(['asset.ownerId as userId', 'asset.createdAt as ts'])
+          .where('shared_space_library.spaceId', '=', spaceId)
+          .where('asset.createdAt', '>', since)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+      )
+      .union(
+        this.db
+          .selectFrom('shared_space_album')
+          .innerJoin('album', (j) =>
+            j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+          )
+          .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+          .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+          .select(['asset.ownerId as userId', 'asset.createdAt as ts'])
+          .where('shared_space_album.spaceId', '=', spaceId)
+          .where('shared_space_album.showInTimeline', '=', true)
+          .where('asset.createdAt', '>', since)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+      );
+
+    return this.db
+      .selectFrom(contributions.as('contrib'))
+      .innerJoin('user', (join) => join.onRef('user.id', '=', 'contrib.userId').on('user.deletedAt', 'is', null))
+      .orderBy('contrib.ts', 'desc')
       .select(['user.id', 'user.name'])
       .limit(1)
       .executeTakeFirst();
