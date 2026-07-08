@@ -167,6 +167,10 @@ describe(SyncRequestType.AlbumToAssetsV1, () => {
 
     const { album: sharedAlbum } = await ctx.newAlbum({ ownerId: user2.id });
     await ctx.newAlbumAsset({ albumId: sharedAlbum.id, assetId: sharedAsset1.id });
+    // Separate the two album_asset inserts by a tick so their UUIDv7 updateIds are strictly
+    // ordered (asset1 < asset2). The backfill sorts by updateId ASC, and the assertion below
+    // pins that order — without this the two rows can land in the same millisecond and invert.
+    await wait(2);
     await ctx.newAlbumAsset({ albumId: sharedAlbum.id, assetId: sharedAsset2.id });
 
     await wait(2);
