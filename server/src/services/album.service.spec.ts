@@ -900,32 +900,27 @@ describe(AlbumService.name, () => {
       );
     });
 
-    it('redacts album-user emails when access is via space grant only (not a participant)', async () => {
-      // spaceViewer is NOT in album.albumUsers — access granted only via checkSpaceLinkedAlbumReadAccess
+    it('strips albumUsers to the owner (email redacted) when access is via space grant only (security-8)', async () => {
+      // spaceViewer is NOT in album.albumUsers — access granted only via checkSpaceLinkedAlbumReadAccess.
       const spaceViewer = UserFactory.create();
-      const album = AlbumFactory.from().albumUser().build();
+      const album = AlbumFactory.from().albumUser().build(); // owner + 1 extra participant
+      const otherParticipant = album.albumUsers.find(({ role }) => role !== AlbumUserRole.Owner)!;
       mocks.album.getById.mockResolvedValue(getForAlbum(album));
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
       mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([album.id]));
       mocks.album.getMetadataForIds.mockResolvedValue([
-        {
-          albumId: album.id,
-          assetCount: 0,
-          startDate: null,
-          endDate: null,
-          lastModifiedAssetTimestamp: null,
-        },
+        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
       ]);
 
       const result = await sut.get(AuthFactory.create(spaceViewer), album.id);
 
-      // albumUsers array must still be present (DTO requires it, web needs it)
-      expect(result.albumUsers.length).toBeGreaterThan(0);
-      // but no email should be exposed
-      for (const albumUser of result.albumUsers) {
-        expect(albumUser.user.email).toBe('');
-      }
+      // Only the owner survives (DTO requires albumUsers.min(1)); other participants are gone.
+      expect(result.albumUsers).toHaveLength(1);
+      expect(result.albumUsers[0].role).toBe(AlbumUserRole.Owner);
+      expect(result.albumUsers.map((u) => u.user.id)).not.toContain(otherParticipant.user.id);
+      // Owner display name kept; email still redacted.
+      expect(result.albumUsers[0].user.email).toBe('');
     });
 
     it('does NOT redact emails when the caller is an album participant (album_user)', async () => {

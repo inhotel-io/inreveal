@@ -18,6 +18,7 @@ import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { AlbumUserRole, Permission } from 'src/enum';
 import { AlbumAssetCount, AlbumInfoOptions } from 'src/repositories/album.repository';
 import { BaseService } from 'src/services/base.service';
+import { hasDirectAlbumReadAccess } from 'src/utils/access';
 import { addAssets, removeAssets } from 'src/utils/asset.util';
 import { asDateTimeString } from 'src/utils/date';
 import { getPreferences } from 'src/utils/preferences';
@@ -101,11 +102,15 @@ export class AlbumService extends BaseService {
 
     const mapped = mapAlbum(album);
 
-    // Fix: if the caller is not an album participant (owner or album_user), redact emails.
-    // A space Viewer gets AlbumRead via checkSpaceLinkedAlbumReadAccess (no role filter)
-    // but should not see PII (email) of album participants.
-    const isParticipant = album.albumUsers ? album.albumUsers.some(({ user }) => user.id === auth.user.id) : false;
-    if (!isParticipant) {
+    // security-8: a caller who reaches the album ONLY through shared-space membership (not the album owner
+    // or a shared album_user) must not see other participants' PII (id / name / role / profile image /
+    // email). Strip albumUsers down to the album owner (display name only, email redacted), matching
+    // getLinkedAlbums; genuine participants and shared-link callers keep the full list.
+    const hasDirectAccess =
+      !!auth.sharedLink || (await hasDirectAlbumReadAccess(this.accessRepository, auth.user.id, id));
+    if (!hasDirectAccess) {
+      const ownerAlbumUser = mapped.albumUsers.find(({ role }) => role === AlbumUserRole.Owner);
+      mapped.albumUsers = ownerAlbumUser ? [ownerAlbumUser] : mapped.albumUsers.slice(0, 1);
       for (const albumUser of mapped.albumUsers) {
         albumUser.user.email = '';
       }
@@ -117,6 +122,8 @@ export class AlbumService extends BaseService {
       endDate: asDateTimeString(albumMetadataForIds?.endDate ?? undefined),
       assetCount: albumMetadataForIds?.assetCount ?? 0,
       lastModifiedAssetTimestamp: asDateTimeString(albumMetadataForIds?.lastModifiedAssetTimestamp ?? undefined),
+      // Note: contributorCounts still exposes contributor userIds for space-only readers — outside
+      // security-8's stated albumUsers-shape scope; flagged for a follow-up, not changed here.
       contributorCounts: isShared ? await this.albumRepository.getContributorCounts(album.id) : undefined,
     };
   }

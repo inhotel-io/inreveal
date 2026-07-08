@@ -13,7 +13,7 @@
  * 400 responses on Hidden/Locked are confirmed to be gate failures, not setup bugs.
  */
 
-import { AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
+import { AlbumUserRole, AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { createUserDto } from 'src/fixtures';
@@ -427,6 +427,39 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
       const ownerIds = await mapMarkerIds(album.id, owner.accessToken);
       expect(ownerIds).not.toContain(hidden.id); // flat gate: no owner exception
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // GET /albums/:id (space-linked) — participants stripped for space-only readers (security-8)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('GET /albums/:id (space-linked) — participants stripped for space-only readers (security-8)', () => {
+    it('space Viewer sees albumUsers reduced to the owner; a participant sees the full list', async () => {
+      const participant = await utils.userSetup(admin.accessToken, createUserDto.create('sec8-participant'));
+      const asset = await utils.createAsset(owner.accessToken);
+      const album = await utils.createAlbum(owner.accessToken, { albumName: 'Sec8 Album', assetIds: [asset.id] });
+      await request(app)
+        .put(`/albums/${album.id}/users`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({ albumUsers: [{ userId: participant.userId, role: AlbumUserRole.Viewer }] });
+
+      const spaceId = await freshSpaceWithViewer('sec8-space');
+      await linkAlbum(spaceId, album.id);
+
+      const asMember = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+      expect(asMember.status).toBe(200);
+      expect(asMember.body.albumUsers).toHaveLength(1);
+      expect(asMember.body.albumUsers.map((u: { user: { id: string } }) => u.user.id)).not.toContain(
+        participant.userId,
+      );
+
+      const asParticipant = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${participant.accessToken}`);
+      expect(asParticipant.body.albumUsers.length).toBeGreaterThan(1); // participant path wins
     });
   });
 });
