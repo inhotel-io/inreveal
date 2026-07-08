@@ -360,6 +360,8 @@ DELETE FROM "kysely_migrations"
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
    '1779309791424-SharedSpaceAlbumAssetAuditTable',
    '1781181889688-SharedSpaceLibraryAssetAuditTable',
+   '1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger',
+   '1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -419,10 +421,15 @@ BEGIN
      AND tablename IN (
        'library_user', 'library_audit', 'library_asset_audit',
        'shared_space_library_audit', 'shared_space_library',
+       'shared_space_library_asset_audit',
        'shared_space_activity', 'shared_space_person_alias',
        'shared_space_person_face', 'shared_space_person',
+       'shared_space_face_match_backfill_target',
        'shared_space_asset_audit', 'shared_space_member_audit',
        'shared_space_audit', 'shared_space_asset', 'shared_space_member',
+       'shared_space_album', 'shared_space_album_audit',
+       'shared_space_album_user', 'shared_space_album_user_audit',
+       'shared_space_album_asset_audit',
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
