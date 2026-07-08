@@ -97,11 +97,27 @@ class SyncApiRepository {
           SyncRequestType.libraryAssetExifsV1,
           SyncRequestType.sharedSpaceLibrariesV1,
           // --- gallery-fork: shared-space album sync types (Phase 2B) ---
-          SyncRequestType.sharedSpaceAlbumsV1,
-          SyncRequestType.sharedSpaceAlbumLinksV1,
-          SyncRequestType.sharedSpaceAlbumToAssetsV1,
-          SyncRequestType.sharedSpaceAlbumAssetsV1,
-          SyncRequestType.sharedSpaceAlbumAssetExifsV1,
+          //
+          // mobile-1: gate these 5 request types behind the fork-server version that
+          // first ships the space-albums feature. An older fork server's
+          // SyncRequestTypeSchema (z.enum) REJECTS unknown enum values with a 400 for
+          // the WHOLE /sync/stream request → a total sync outage on an app that is
+          // ahead of the server (mobile + server release independently). The boundary
+          // is a FORK version: deployed fork servers report FORK_VERSION (stamped into
+          // server/package.json by branding/scripts/apply-branding.sh patch_versions),
+          // NOT the upstream Immich version — so do NOT copy the 3.0.0 OCR gate. v5.0.0
+          // is the last release WITHOUT space-albums; the feature (and its enum values)
+          // ship in the next release, so gate on strictly-after-5.0.0, which also admits
+          // the feature's release-candidates. See slice-5 plan §0.1 for the full evidence
+          // and the release-time reconciliation note. The server drop-unknown filter
+          // (slice-5 Commit 2) is the complementary defense for future skew.
+          if (serverVersion > const SemVer(major: 5, minor: 0, patch: 0)) ...[
+            SyncRequestType.sharedSpaceAlbumsV1,
+            SyncRequestType.sharedSpaceAlbumLinksV1,
+            SyncRequestType.sharedSpaceAlbumToAssetsV1,
+            SyncRequestType.sharedSpaceAlbumAssetsV1,
+            SyncRequestType.sharedSpaceAlbumAssetExifsV1,
+          ],
         ],
       ).toJson(),
     );
