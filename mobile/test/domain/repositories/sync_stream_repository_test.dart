@@ -327,9 +327,7 @@ void main() {
         ),
       ]);
       await sut.updateAssetsV1([_createAsset(id: 'asset-1', checksum: 'c1', fileName: 'a.jpg')]);
-      await sut.updateSharedSpaceToAssetsV1([
-        SyncSharedSpaceToAssetV1(spaceId: 'space-1', assetId: 'asset-1'),
-      ]);
+      await sut.updateSharedSpaceToAssetsV1([SyncSharedSpaceToAssetV1(spaceId: 'space-1', assetId: 'asset-1')]);
       await sut.updateLibrariesV1([
         SyncLibraryV1(
           id: 'library-1',
@@ -370,9 +368,7 @@ void main() {
           updatedAt: DateTime(2026, 4, 6),
         ),
       ]);
-      await sut.updateSharedSpaceAlbumToAssetsV1([
-        SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'asset-1'),
-      ]);
+      await sut.updateSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'asset-1')]);
 
       // Sanity: every table is non-empty before reset.
       expect(await db.sharedSpaceEntity.select().get(), isNotEmpty);
@@ -477,11 +473,7 @@ void main() {
         fileName: 'IMG_8002.HEIC',
         livePhotoVideoId: motion.id,
       );
-      final normal = _createAssetV2(
-        id: 'normal-v2-1',
-        checksum: 'normal-v2-checksum',
-        fileName: 'IMG_9000.JPG',
-      );
+      final normal = _createAssetV2(id: 'normal-v2-1', checksum: 'normal-v2-checksum', fileName: 'IMG_9000.JPG');
 
       await sut.updateAssetsV2([motion, still, normal]);
 
@@ -1149,9 +1141,7 @@ void main() {
         ]);
         // The asset is a member of a space-linked album (no FK on assetId, so this
         // join row can reference the library asset directly).
-        await sut.updateSharedSpaceAlbumToAssetsV1([
-          SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'album-add'),
-        ]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'album-add')]);
 
         await sut.deleteLibrariesV1([SyncLibraryDeleteV1(libraryId: 'library-1')], currentUserId: 'user-1');
 
@@ -1489,14 +1479,18 @@ void main() {
     });
 
     test('keeps a partner-owned asset', () async {
-      await db.into(db.partnerEntity).insert(
-        PartnerEntityCompanion.insert(
-          sharedById: 'user-partner',
-          sharedWithId: 'user-1',
-          inTimeline: const drift.Value(true),
-        ),
-      );
-      await sut.updateAssetsV1([_createAsset(id: 'partner', checksum: 'c1', fileName: 'p.jpg', ownerId: 'user-partner')]);
+      await db
+          .into(db.partnerEntity)
+          .insert(
+            PartnerEntityCompanion.insert(
+              sharedById: 'user-partner',
+              sharedWithId: 'user-1',
+              inTimeline: const drift.Value(true),
+            ),
+          );
+      await sut.updateAssetsV1([
+        _createAsset(id: 'partner', checksum: 'c1', fileName: 'p.jpg', ownerId: 'user-partner'),
+      ]);
 
       await sut.pruneAssets();
 
@@ -1688,10 +1682,7 @@ void main() {
     );
   }
 
-  SyncAlbumToAssetV1 makeAlbumToAsset({
-    String albumId = 'album-1',
-    String assetId = 'asset-1',
-  }) {
+  SyncAlbumToAssetV1 makeAlbumToAsset({String albumId = 'album-1', String assetId = 'asset-1'}) {
     return SyncAlbumToAssetV1(albumId: albumId, assetId: assetId);
   }
 
@@ -1817,9 +1808,7 @@ void main() {
           makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
         ]);
 
-        await sut.deleteSharedSpaceAlbumToAssetsV1([
-          SyncAlbumToAssetDeleteV1(albumId: 'album-1', assetId: 'asset-1'),
-        ]);
+        await sut.deleteSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetDeleteV1(albumId: 'album-1', assetId: 'asset-1')]);
 
         final remaining = await db.sharedSpaceAlbumAssetEntity.select().get();
         expect(remaining, hasLength(1));
@@ -1837,20 +1826,15 @@ void main() {
           makeAlbumToAsset(albumId: 'album-1', assetId: 'asset-2'),
         ]);
         // Asset blob written via the shared remote_asset store.
-        await sut.updateAssetsV1([
-          _createAsset(id: 'asset-1', checksum: 'c1', fileName: 'a.jpg'),
-        ]);
+        await sut.updateAssetsV1([_createAsset(id: 'asset-1', checksum: 'c1', fileName: 'a.jpg')]);
 
         await sut.deleteSharedSpaceAlbumsV1([SyncAlbumDeleteV1(albumId: 'album-1')]);
 
-        expect(await db.sharedSpaceAlbumEntity.select().get(), isEmpty,
-            reason: 'metadata row must be deleted');
-        expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isEmpty,
-            reason: 'membership rows must be swept');
+        expect(await db.sharedSpaceAlbumEntity.select().get(), isEmpty, reason: 'metadata row must be deleted');
+        expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isEmpty, reason: 'membership rows must be swept');
         // remote_asset blob must survive — it may be reachable by another path.
         final assetRows = await db.remoteAssetEntity.select().get();
-        expect(assetRows, hasLength(1),
-            reason: 'remote_asset blob must not be swept');
+        expect(assetRows, hasLength(1), reason: 'remote_asset blob must not be swept');
         expect(assetRows.first.id, 'asset-1');
       });
     });

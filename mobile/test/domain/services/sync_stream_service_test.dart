@@ -36,7 +36,6 @@ class _AbortCallbackWrapper {
 
 class _MockAbortCallbackWrapper extends Mock implements _AbortCallbackWrapper {}
 
-
 void main() {
   late SyncStreamService sut;
   late SyncStreamRepository mockSyncStreamRepo;
@@ -178,12 +177,8 @@ void main() {
     when(() => mockSyncStreamRepo.deleteSharedSpaceAlbumLinksV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.updateSharedSpaceAlbumToAssetsV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.deleteSharedSpaceAlbumToAssetsV1(any())).thenAnswer(successHandler);
-    when(
-      () => mockSyncStreamRepo.updateSharedSpaceAlbumAssetsV1(any()),
-    ).thenAnswer(successHandler);
-    when(
-      () => mockSyncStreamRepo.updateSharedSpaceAlbumAssetExifsV1(any()),
-    ).thenAnswer(successHandler);
+    when(() => mockSyncStreamRepo.updateSharedSpaceAlbumAssetsV1(any())).thenAnswer(successHandler);
+    when(() => mockSyncStreamRepo.updateSharedSpaceAlbumAssetExifsV1(any())).thenAnswer(successHandler);
     when(() => mockSyncMigrationRepo.v20260128CopyExifWidthHeightToAsset()).thenAnswer(successHandler);
 
     sut = SyncStreamService(
