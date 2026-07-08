@@ -27,10 +27,12 @@
 **Fix (reuse existing machinery, no new job type).** On failure, enqueue the fork's existing durable, per-space reconcile job `SharedSpaceFaceMatchAll` for each affected face-enabled space. That job pages the whole space through `processSpaceFaceMatch` (idempotent re-projection of missing faces) and its completion follow-up runs `SharedSpacePersonDedup` (recount + `deleteOrphanedPersons`) + identity reconciliation — a convergent pass. The handler bodies are already idempotent (`queueAll` of `SharedSpaceFaceMatch` upserts projections; `recountPersons` sets absolute counts; `deleteOrphanedPersons` / `removePersonFacesByAssetIds` are delete-by-key), so re-driving does not double-count. Determine the affected space set **before** the risky projection work so it is available in the catch block.
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts:2881-2985` (the four `@OnEvent` handlers) + add one private helper.
 - Test: `server/src/services/shared-space.service.spec.ts` (extend the existing `onAlbumAssetsAdd` / `onAlbumAssetsRemove` / `onAssetDelete` / `onAlbumDelete` describe blocks near lines 10505-10642).
 
 **Interfaces:**
+
 - Consumes: `JobName.SharedSpaceFaceMatchAll` (data `{ spaceId }`, already wired in `enum.ts:987`, `types.ts:305/596`, `job.repository.ts:508`); `this.jobRepository.queueAll`; `this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId): Promise<{ spaceId: string; faceRecognitionEnabled: boolean }[]>`.
 - Produces: `private async enqueueSpaceFaceProjectionReconcile(spaceIds: string[]): Promise<void>` — dedupes, no-ops on empty, enqueues one `SharedSpaceFaceMatchAll` per space, and swallows+logs its own enqueue failure (never throws).
 
@@ -270,15 +272,18 @@ git commit -m "fix(spaces): reconcile space face-people projection after a faile
 **Problem.** `getAssetCount` / `getNewAssetCount` / `getRecentAssets` include the album arm with **no** `showInTimeline` gate, so an off-timeline linked album inflates the card counts vs. the actual space timeline (the timeline only surfaces album assets when `shared_space_album.showInTimeline = true`). `getLastAssetAddedAt` / `getLastContributor` query only `shared_space_asset`, so album/library-driven recency never updates the card.
 
 **Fix.**
+
 1. Add `.where('shared_space_album.showInTimeline', '=', true)` to the album arm of `getAssetCount` (repo ~277), `getRecentAssets` (~775), `getNewAssetCount` (~837).
 2. Union library (`asset.createdAt`) and album (`asset.createdAt`, `showInTimeline`-gated) arms into `getLastAssetAddedAt` (~787-798) via a `ts` timestamp, then `max(ts)`.
 3. Union library + album arms into `getLastContributor` (~847-863). **Contributor attribution decision:** direct assets attribute to `shared_space_asset.addedById` (the space contributor); library/album assets have no per-asset space-contributor, so attribute to `asset.ownerId` (the asset owner) — the closest defensible proxy. Album arm `showInTimeline`-gated.
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` — `getAssetCount` (244-284), `getRecentAssets` (736-784), `getNewAssetCount` (800-844), `getLastAssetAddedAt` (786-798), `getLastContributor` (846-863).
 - Test (MEDIUM, CI-deferred): `server/test/medium/specs/repositories/shared-space.repository.spec.ts` — extend `getAssetCount` (818), `getRecentAssets` (976), `getNewAssetCount` (1027), and the `space activity from direct asset links` block (746) describes. The spec already has a `linkAlbum`-style helper at line 182 taking `{ showInTimeline }`.
 
 **Interfaces:**
+
 - Consumes: `visibleSpaceAssetVisibilities`, `AssetType.Image` (already imported in this file). No new imports.
 - Produces: unchanged method signatures — `getLastAssetAddedAt(spaceId): Promise<Date | undefined>`, `getLastContributor(spaceId, since): Promise<{ id: string; name: string } | undefined>`.
 
@@ -456,12 +461,14 @@ git commit -m "fix(spaces): match space-card metrics to the timeline (showInTime
 ## Task 3 — correctness-7: repair the `revert-to-immich.sql` guard **and** the migration DELETE list
 
 **Problem (two gaps, both in `scripts/revert-to-immich.sql`).**
+
 1. **Step-9 guard (cited).** The `fork_tables_left` sanity-check IN-list (lines 419-430) omits **7** fork tables that step 2 drops: `shared_space_face_match_backfill_target`, `shared_space_library_asset_audit`, `shared_space_album_asset_audit`, `shared_space_album_user`, `shared_space_album_user_audit`, `shared_space_album_audit`, `shared_space_album`. The guard therefore never verifies these dropped.
 2. **Step-8 `kysely_migrations` DELETE list (newly found, more severe).** It omits the two slice-8/9 fork migrations `1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger` and `1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId` (verified: every other `migrations-gallery/*.ts` file is present). Because the step-9 `fork_rows_left` guard matches `name LIKE '%SharedSpace%'`, those two undeleted rows make the **whole revert script abort** ("Gallery row(s) still present … aborting") on any DB that ran them.
 
 **Fix.** Add the 7 tables to the step-9 IN-list and the 2 migration names to the step-8 DELETE list. Add a Vitest test that parses the script and enforces both invariants going forward.
 
 **Files:**
+
 - Modify: `scripts/revert-to-immich.sql` (step 8 list ~322-379; step 9 guard IN-list ~419-430).
 - Test (UNIT, runs locally — pure file parse, no DB): create `server/test/revert-to-immich.spec.ts`.
 
@@ -556,6 +563,7 @@ git commit -m "fix(spaces): repair revert-to-immich guard list and album-slice m
 ## Task 4 — gaps-7: composite audit indexes for the member-join sync fan-out
 
 **Problem.** Joining a space inserts a grant per (member × album) and the `getDeletes` scans on the album audit tables lack a composite index matching their access pattern:
+
 - `SharedSpaceAlbumToAssetSync.getDeletes` (`sync.repository.ts:1612-1626`) scans `shared_space_album_asset_audit` by `albumId IN (…) AND id > ack AND id < nowId`. Current indexes are single-column (`albumId`, `assetId`, `deletedAt`) — a composite `(albumId, id)` serves the filter-by-album + id-range-scan directly.
 - `SharedSpaceAlbumSync.getDeletes` (`sync.repository.ts:1486-1490`) scans `shared_space_album_user_audit` by `userId = ? AND id range`. A composite `(userId, id)` serves the equality + range without a sort.
 
@@ -564,6 +572,7 @@ Both indexes are cheap; add them regardless. **Measurement note (record in commi
 **Index registration pattern (confirmed):** the fork declares composite indexes with the class-level `@Index({ name, columns })` decorator from `@immich/sql-tools` (e.g. `asset-face.table.ts:29`) **and** a matching `migrations-gallery/` migration. A plain multi-column index is representable by the decorator, so — unlike the expression index in `1778600000000-SortSpacePeopleByNameIndex.ts` — **no `migration_overrides` row is needed**. `functions.ts` is not involved. No `revert-to-immich.sql` table/column entry is needed (the indexes live on fork tables already dropped `CASCADE`), but the new migration **name must be added to the revert step-8 DELETE list**.
 
 **Files:**
+
 - Modify: `server/src/schema/tables/shared-space-album-asset-audit.table.ts` (add `@Index` + import).
 - Modify: `server/src/schema/tables/shared-space-album-user-audit.table.ts` (add `@Index` + import).
 - Create: `server/src/schema/migrations-gallery/1782300000000-AddSharedSpaceAlbumAuditSyncIndexes.ts`.
@@ -645,10 +654,12 @@ git commit -m "perf(spaces): add composite audit indexes for the member-join syn
 **Fix (read-time redaction, minimal blast radius).** Redact in `getActivities`' map, not at the write site — keeps other consumers/tests of the stored blob untouched and localises the change to the space feed. Whitelist the member-safe keys for `PersonMerge` only.
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts` — `getActivities` map (793-803) + a private helper. `SharedSpaceActivityType` is already imported (used across the file).
 - Test: `server/src/services/shared-space.service.spec.ts` — new `describe('getActivities redaction', ...)`.
 
 **Interfaces:**
+
 - Produces: `private redactActivityData(type: SharedSpaceActivityType, data: Record<string, unknown>): Record<string, unknown>` — for `PersonMerge` returns only `{ personName?, count?, activityRole? }` (present-only); otherwise returns `data` unchanged.
 
 - [ ] **Step 1: Write the failing test** in `shared-space.service.spec.ts`:
@@ -777,6 +788,7 @@ git commit -m "fix(spaces): redact cross-space identifiers from the space activi
 **Resolution: proven SAFE → committed pinning tests (no code change).** The album arm is not a divergence surface. Trash: every count/preview album arm carries `asset.deletedAt IS NULL` symmetrically with the direct/library arms, and the member grid (`asset.repository.ts` `getTimeBucket` / `withTimeBucketAssetFilters`) filters trash at the single `asset` root before the album `EXISTS` (`asset.repository.ts:253,1352`). Stack: the grid collapses stacks at the `asset` root (`withTimeBucketAssetFilters:352-357`, `getTimeBucket:1458-1468`) for every arm, matching the normal (non-space) album grid which uses the same `getTimeBucket` `albumId` path. The album-only extra predicates are the intended `album.deletedAt IS NULL` invariant + `showInTimeline` gate. Deliverable: lock this in so a future album-arm rewrite can't silently start over/under-surfacing.
 
 **Files:**
+
 - Test (MEDIUM, CI-deferred): `server/test/medium/specs/repositories/shared-space.repository.spec.ts` (album-arm count parity) + `server/test/medium/specs/repositories/asset.repository.spec.ts` (grid trash/stack parity). Use the album+asset seed helpers already in the shared-space medium spec.
 
 - [ ] **Step 1: Write the pinning tests (trash).** In the shared-space repository medium spec:
@@ -839,6 +851,7 @@ git commit -m "test(spaces): pin album-arm trash + stack parity on space read su
 **Resolution: proven SAFE → committed pinning test (no code change).** The partner arm and the space arm are two independent grants unioned at the access-orchestration layer (`utils/access.ts:116-124` `AssetRead`, dup'd for `AssetView`/`AssetDownload`) — `setUnion(owner, album, partner, space)`. Partner access (`access.repository.ts:260-265`) grants **Timeline + Hidden** (upstream behaviour — partners DO see the owner's Hidden; they never see Archive or Locked). The space gate (`shared-space-album-scope.ts:42-47`) grants **Timeline + Archive**, stripping Hidden/Locked. Resolved union for a user P who is both O's partner and a member of a space O linked X into: Timeline→visible (both); Archive→visible via **space**; Hidden→visible via **partner** (space-independent, pre-existing); **Locked→blocked by both arms**. `Locked` is the only truly-private tier and it never leaks through the union — the load-bearing safety property. This is fully consistent with slice-4 **security-7**, which had to suppress the space-driven library purge for partners so a partner+member doesn't lose a still-entitled Hidden asset (`sync.repository.ts:1341-1354`).
 
 **Files:**
+
 - Test (MEDIUM, CI-deferred): `server/test/medium/specs/repositories/access.repository.spec.ts` (real visibility predicates). If the access medium spec lacks a partner+space fixture, add one mirroring the existing partner + shared-space seed helpers.
 
 - [ ] **Step 1: Write the invariant test.** Seed: owner O, user P as O's partner AND a member of space S; O links a library/album containing asset X into S.
@@ -899,11 +912,13 @@ git commit -m "test(spaces): pin partner × space-linked visibility (Locked bloc
 **Fix.** Add four zod param DTOs (mirroring `SharedSpaceAlbumParamSchema`) and convert every raw-string-param handler to a validated `@Param() { … }: …ParamDto`. Single-`{id}` routes reuse the existing `UUIDParamDto`.
 
 **Files:**
+
 - Modify: `server/src/dtos/shared-space.dto.ts` — add 4 schemas + 4 DTO classes (near the existing `SharedSpaceAlbumParamSchema` at 137 and the DTO exports at 200).
 - Modify: `server/src/controllers/shared-space.controller.ts` — convert the raw-string routes; add the new DTOs to the existing `src/dtos/shared-space.dto` import group.
 - Test (UNIT, local): `server/src/dtos/shared-space.dto.spec.ts` (new) — the zod schemas reject non-UUIDs; **e2e (CI-deferred)**: extend `e2e/src/api/specs/shared-space*.e2e-spec.ts` with a 400 assertion.
 
 **Interfaces:**
+
 - Produces (in `shared-space.dto.ts`): `SharedSpaceMemberParamDto` (`{ id, userId }`), `SharedSpacePersonParamDto` (`{ id, personId }`), `SharedSpacePersonFaceParamDto` (`{ id, personId, faceId }`), `SharedSpaceLibraryParamDto` (`{ id, libraryId }`) — all `z.uuidv4()` fields.
 
 - [ ] **Step 1: Write the failing schema unit test** — `server/src/dtos/shared-space.dto.spec.ts`:
@@ -930,9 +945,9 @@ describe('shared-space param DTOs', () => {
   });
 
   it('SharedSpacePersonFaceParamDto rejects a non-UUID faceId', () => {
-    expect(
-      SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: 'nope' }).success,
-    ).toBe(false);
+    expect(SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: 'nope' }).success).toBe(
+      false,
+    );
   });
 
   it('SharedSpaceLibraryParamDto rejects a non-UUID libraryId', () => {
@@ -985,7 +1000,6 @@ export class SharedSpaceLibraryParamDto extends createZodDto(SharedSpaceLibraryP
 - [ ] **Step 4: Import the new DTOs in the controller.** In `shared-space.controller.ts`, add `SharedSpaceLibraryParamDto`, `SharedSpaceMemberParamDto`, `SharedSpacePersonFaceParamDto`, `SharedSpacePersonParamDto` to the `from 'src/dtos/shared-space.dto'` import block (36-54, alphabetical).
 
 - [ ] **Step 5: Convert every raw-string-param handler.** Apply these signature edits (body calls stay the same — they pass `id`, `userId`, `personId`, `faceId`, `libraryId`):
-
   - `updateMemberTimeline` (165-169), `updateMemberPreferences` (180-185), `deduplicateSpacePeople` (363): change `@Param('id') id: string` → `@Param() { id }: UUIDParamDto`.
   - `updateMember` (207-213), `updateMemberMetadataContribution` (223-229), `removeMember` (240): change the `@Param('id') id: string, @Param('userId') userId: string` pair → `@Param() { id, userId }: SharedSpaceMemberParamDto`.
   - `getSpacePersonStatistics` (374-378), `getSpacePersonFaces` (389-395), `updateSpacePersonRepresentativeFace` (424-429), `getSpacePerson` (440-444), `getSpacePersonThumbnail` (456-462), `updateSpacePerson` (473-479), `deleteSpacePerson` (490-495), `mergeSpacePeople` (506-512), `setSpacePersonAlias` (523-528), `deleteSpacePersonAlias` (540-545), `getSpacePersonAssets` (555-560): change the `@Param('id') id: string, @Param('personId') personId: string` pair → `@Param() { id, personId }: SharedSpacePersonParamDto`.
@@ -1004,7 +1018,7 @@ export class SharedSpaceLibraryParamDto extends createZodDto(SharedSpaceLibraryP
   }
 ```
 
-  Example (`getSpacePersonFaceThumbnail`):
+Example (`getSpacePersonFaceThumbnail`):
 
 ```ts
   async getSpacePersonFaceThumbnail(

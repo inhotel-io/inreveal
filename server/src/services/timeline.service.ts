@@ -134,9 +134,7 @@ export class TimelineService extends BaseService {
     const requestsPrivateVisibility =
       dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
     if (spaceBrowse && requestsPrivateVisibility) {
-      throw new BadRequestException(
-        'Hidden and locked assets are not available when browsing a shared space or album',
-      );
+      throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space or album');
     }
 
     if (dto.albumId) {

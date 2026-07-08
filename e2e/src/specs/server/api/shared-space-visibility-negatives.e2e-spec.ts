@@ -129,9 +129,7 @@ describe('shared-space visibility negatives (Slice 11)', () => {
   };
 
   const linkAlbum = (spaceId: string, albumId: string) =>
-    request(app)
-      .put(`/shared-spaces/${spaceId}/albums/${albumId}`)
-      .set('Authorization', `Bearer ${owner.accessToken}`);
+    request(app).put(`/shared-spaces/${spaceId}/albums/${albumId}`).set('Authorization', `Bearer ${owner.accessToken}`);
 
   /** Upload a GPS-tagged fixture (thompson-springs.jpg — see reference_test_asset_exif_content) as owner. */
   const uploadGpsAsset = async () => {

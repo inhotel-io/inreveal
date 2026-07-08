@@ -34,13 +34,9 @@ describe(SyncController.name, () => {
       // Unknown enum VALUES are now dropped by the SyncStreamDto preprocess filter
       // (mobile-1 skew safety) rather than 400-ing the whole request. A structurally
       // invalid `types` (not an array) still fails validation cleanly.
-      const { status, body } = await request(ctx.getHttpServer())
-        .post('/sync/stream')
-        .send({ types: 'invalid' });
+      const { status, body } = await request(ctx.getHttpServer()).post('/sync/stream').send({ types: 'invalid' });
       expect(status).toBe(400);
-      expect(body).toEqual(
-        errorDto.validationError([{ path: ['types'], message: expect.stringContaining('array') }]),
-      );
+      expect(body).toEqual(errorDto.validationError([{ path: ['types'], message: expect.stringContaining('array') }]));
       expect(ctx.authenticate).toHaveBeenCalled();
     });
   });

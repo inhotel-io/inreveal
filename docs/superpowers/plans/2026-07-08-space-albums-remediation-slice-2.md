@@ -24,7 +24,7 @@ two non-SQL leaks (album-level activity + participant PII):
   `this.requireAccess`, `this.checkAccess`). Access composition lives in `src/utils/access.ts`
   (`checkOtherAccess` → `AlbumRead` case at lines 181-194 = owner ∪ shared-viewer ∪ **space-linked**).
 - **The "space-only reader" determination (shared by C1 + security-8).** A caller reaches an album through
-  a *direct* grant (album owner or a shared `album_user`) or *only* through shared-space membership
+  a _direct_ grant (album owner or a shared `album_user`) or _only_ through shared-space membership
   (`checkSpaceLinkedAlbumReadAccess`, no role filter). We introduce **one** shared helper
   `hasDirectAlbumReadAccess(access, userId, albumId)` in `src/utils/access.ts` that mirrors the `granted`
   set computed in the `AlbumRead` case **before** the space-linked arm is unioned in
@@ -203,11 +203,17 @@ gate must live in the repo SQL. Flat gate (no owner exception) — consistent wi
 - [ ] **Implement the minimal fix** in `server/src/repositories/map.repository.ts`.
 
   Extend the import at line 17:
+
   ```ts
-  import { spaceAlbumAssetExists, spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
+  import {
+    spaceAlbumAssetExists,
+    spaceAssetPathBranches,
+    spaceVisibilityGate,
+  } from 'src/utils/shared-space-album-scope';
   ```
 
   Change `getAlbumMapMarkers` (lines 75-81) to:
+
   ```ts
   @GenerateSql({ params: [DummyValue.UUID] })
   getAlbumMapMarkers(albumId: string) {
@@ -351,10 +357,13 @@ filter). e2e authored, CI-deferred.
   ```
 
 - [ ] **Implement the C1 fix** in `server/src/services/activity.service.ts`. Add the import:
+
   ```ts
   import { hasDirectAlbumReadAccess } from 'src/utils/access';
   ```
+
   Replace `getAll` (lines 20-30) with:
+
   ```ts
   async getAll(auth: AuthDto, dto: ActivitySearchDto): Promise<ActivityResponseDto[]> {
     await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
@@ -401,8 +410,14 @@ filter). e2e authored, CI-deferred.
         { headers: asBearerAuth(spaceOwner.accessToken) },
       );
       // album-level comment (no assetId) + asset-level comment (assetId set)
-      await createActivity({ albumId: album.id, type: ReactionType.Comment, comment: 'album-level secret' }, spaceOwner.accessToken);
-      await createActivity({ albumId: album.id, assetId: asset.id, type: ReactionType.Comment, comment: 'on the photo' }, spaceOwner.accessToken);
+      await createActivity(
+        { albumId: album.id, type: ReactionType.Comment, comment: 'album-level secret' },
+        spaceOwner.accessToken,
+      );
+      await createActivity(
+        { albumId: album.id, assetId: asset.id, type: ReactionType.Comment, comment: 'on the photo' },
+        spaceOwner.accessToken,
+      );
 
       const space = await utils.createSpace(spaceOwner.accessToken, { name: 'C1 Space' });
       await utils.addSpaceMember(spaceOwner.accessToken, space.id, { userId: nonOwner.userId }); // Viewer
@@ -411,14 +426,16 @@ filter). e2e authored, CI-deferred.
         .set('Authorization', `Bearer ${spaceOwner.accessToken}`);
 
       const asMember = await request(app)
-        .get('/activities').query({ albumId: album.id })
+        .get('/activities')
+        .query({ albumId: album.id })
         .set('Authorization', `Bearer ${nonOwner.accessToken}`);
       expect(asMember.status).toBe(200);
       expect(asMember.body.map((a: { assetId: string | null }) => a.assetId)).toEqual([asset.id]);
       expect(asMember.body.some((a: { comment?: string }) => a.comment === 'album-level secret')).toBe(false);
 
       const asOwner = await request(app)
-        .get('/activities').query({ albumId: album.id })
+        .get('/activities')
+        .query({ albumId: album.id })
         .set('Authorization', `Bearer ${spaceOwner.accessToken}`);
       expect(asOwner.body).toHaveLength(2); // owner sees both
     });
@@ -499,10 +516,13 @@ requires `.min(1)`, so the owner entry is kept (cannot omit the array entirely).
 
 - [ ] **Implement the fix** in `server/src/services/album.service.ts`. Add the import (alongside the
       existing `src/utils/asset.util` import):
+
   ```ts
   import { hasDirectAlbumReadAccess } from 'src/utils/access';
   ```
+
   Replace the `mapped`/redaction block in `get` (lines 102-112) with:
+
   ```ts
   const mapped = mapAlbum(album);
 
@@ -545,17 +565,25 @@ requires `.min(1)`, so the owner entry is kept (cannot omit the array entirely).
       await request(app)
         .put(`/albums/${album.id}/users`)
         .set('Authorization', `Bearer ${owner.accessToken}`)
-        .send({ albumUsers: [{ userId: participant.userId, role: SharedSpaceRole.Viewer /* AlbumUserRole.Viewer */ }] });
+        .send({
+          albumUsers: [{ userId: participant.userId, role: SharedSpaceRole.Viewer /* AlbumUserRole.Viewer */ }],
+        });
 
       const spaceId = await freshSpaceWithViewer('sec8-space');
       await linkAlbum(spaceId, album.id);
 
-      const asMember = await request(app).get(`/albums/${album.id}`).set('Authorization', `Bearer ${member.accessToken}`);
+      const asMember = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
       expect(asMember.status).toBe(200);
       expect(asMember.body.albumUsers).toHaveLength(1);
-      expect(asMember.body.albumUsers.map((u: { user: { id: string } }) => u.user.id)).not.toContain(participant.userId);
+      expect(asMember.body.albumUsers.map((u: { user: { id: string } }) => u.user.id)).not.toContain(
+        participant.userId,
+      );
 
-      const asParticipant = await request(app).get(`/albums/${album.id}`).set('Authorization', `Bearer ${participant.accessToken}`);
+      const asParticipant = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${participant.accessToken}`);
       expect(asParticipant.body.albumUsers.length).toBeGreaterThan(1); // participant path wins
     });
   });
@@ -581,7 +609,7 @@ requires `.min(1)`, so the owner entry is kept (cannot omit the array entirely).
 `PersonAccess.checkSharedSpaceAccess`, lines 697-727) inner-joins `asset` with
 `.on('asset.visibility', '=', AssetVisibility.Timeline)` — **stricter** than the grid. A person appearing
 only on **Archived** space assets shows in the space people grid (`getPersonsBySpaceId` already uses
-`visibleSpaceAssetVisibilities` = Archive+Timeline) but is *denied* `PersonRead` (rep-face picker /
+`visibleSpaceAssetVisibilities` = Archive+Timeline) but is _denied_ `PersonRead` (rep-face picker /
 thumbnail 403). Widen the equality to the shareable set `spaceVisibleAssetVisibilities`
 (Timeline+Archive). This **grants more** and never admits Hidden/Locked — frame as a deny-fix, not a leak.
 
@@ -635,8 +663,22 @@ thumbnail 403). Widen the equality to the shareable set `spaceVisibleAssetVisibi
     it('never grants PersonRead when the person only appears on Hidden or Locked space assets', async () => {
       const hiddenCase = await seedPersonOnSpaceAsset(AssetVisibility.Hidden);
       const lockedCase = await seedPersonOnSpaceAsset(AssetVisibility.Locked);
-      expect((await hiddenCase.accessRepo.person.checkSharedSpaceAccess(hiddenCase.viewer.id, new Set([hiddenCase.person.id]))).has(hiddenCase.person.id)).toBe(false);
-      expect((await lockedCase.accessRepo.person.checkSharedSpaceAccess(lockedCase.viewer.id, new Set([lockedCase.person.id]))).has(lockedCase.person.id)).toBe(false);
+      expect(
+        (
+          await hiddenCase.accessRepo.person.checkSharedSpaceAccess(
+            hiddenCase.viewer.id,
+            new Set([hiddenCase.person.id]),
+          )
+        ).has(hiddenCase.person.id),
+      ).toBe(false);
+      expect(
+        (
+          await lockedCase.accessRepo.person.checkSharedSpaceAccess(
+            lockedCase.viewer.id,
+            new Set([lockedCase.person.id]),
+          )
+        ).has(lockedCase.person.id),
+      ).toBe(false);
     });
   });
   ```
@@ -651,11 +693,18 @@ thumbnail 403). Widen the equality to the shareable set `spaceVisibleAssetVisibi
       Expected **RED**: the "GRANTS … Archived" test fails on current code (`.on('asset.visibility', '=', Timeline)` excludes Archive). Hidden/Locked + Timeline tests pass on both.
 
 - [ ] **Implement the widening** in `server/src/repositories/access.repository.ts`. Extend the import at line 8:
+
   ```ts
-  import { spaceAssetPathBranches, spaceVisibilityGate, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
+  import {
+    spaceAssetPathBranches,
+    spaceVisibilityGate,
+    spaceVisibleAssetVisibilities,
+  } from 'src/utils/shared-space-album-scope';
   ```
+
   Change the join condition in `checkSharedSpaceAccess` (lines 705-710) from
   `.on('asset.visibility', '=', AssetVisibility.Timeline)` to:
+
   ```ts
             .innerJoin('asset', (join) =>
               join
@@ -667,6 +716,7 @@ thumbnail 403). Widen the equality to the shareable set `spaceVisibleAssetVisibi
                 .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
             )
   ```
+
   > `AssetVisibility` stays imported (still used elsewhere in the file). `spaceVisibilityGate` is a
   > `where`-predicate helper and is **not** usable inside a join `.on(...)`, hence the direct
   > `'in', spaceVisibleAssetVisibilities` form.
@@ -684,7 +734,7 @@ thumbnail 403). Widen the equality to the shareable set `spaceVisibleAssetVisibi
 
 **Closes rbac-8 (documented no-change).** `downloadAlbumId` (`download.repository.ts`, lines 28-34) already
 applies a flat `spaceVisibilityGate`, so an album-archive export omits the owner's own Hidden rows. Adding
-an `own OR` exception would let the owner *download* Hidden while the grid *hides* it — an inconsistency.
+an `own OR` exception would let the owner _download_ Hidden while the grid _hides_ it — an inconsistency.
 The current flat gate **matches the album grid** (`withDefaultVisibility`) and map-markers. **Fix = a
 one-line clarifying comment + a pinning regression test.** No behavior change.
 
@@ -704,6 +754,7 @@ run — an explicit exception to §0.1's "red first" rule, documented). e2e (own
 
 - [ ] **Add the clarifying comment** in `server/src/repositories/download.repository.ts`, `downloadAlbumId`
       (lines 28-34):
+
   ```ts
   downloadAlbumId(albumId: string) {
     return builder(this.db)
@@ -784,18 +835,18 @@ CI-deferred layers.
 
 ## Coverage map (every Slice 2 edge case → named test)
 
-| Spec edge case | Test |
-|---|---|
-| Map-markers Hidden/Locked absent for Viewer **and** owner (flat gate) | Task 1 medium "excludes Hidden and Locked…", "omits the album OWNER's own Hidden…"; e2e "Hidden album asset has no map marker for a Viewer member OR the owner" |
-| Archive album asset still present in map-markers | Task 1 medium `expect(ids).toContain(archive.id)` |
-| Asset-level comments on a **visible** asset still returned (don't over-deny C1) | Task 2 unit "drops album-level … keeps asset-level" (`toEqual([assetId])`); e2e `toEqual([asset.id])` |
-| Album participant who is **also** a space member still sees activity (participant wins) | Task 2 unit "keeps album-level … shared album participant who is also a space member" |
-| Owner sees album-level activity | Task 2 unit "keeps album-level … for the album owner"; e2e owner `toHaveLength(2)` |
-| Non-participant space member: albumUsers reduced to owner display name | Task 3 unit "strips albumUsers to the owner…"; e2e member `toHaveLength(1)` |
-| Album participant who is also a space member: full participant list (participant wins) | Task 3 e2e "a participant sees the full list" |
-| `getLinkedAlbums` output unchanged (regression only) | Untouched — no code change to `shared-space.service.getLinkedAlbums`; its existing specs stay green (verified by Task 6 unit run) |
-| PersonRead **granted** for a person on Archived-only space assets (rbac-7 widening) | Task 4 medium "GRANTS PersonRead … Archived asset" |
-| Hidden/Locked never grant PersonRead (regression) | Task 4 medium "never grants … Hidden or Locked" |
-| `getPersonsBySpaceId` stays gated (no Hidden/Locked) | Task 4 regression in `shared-space.repository.spec.ts` |
-| Owner album download **omits** own Hidden (rbac-8 no-change, matches grid) | Task 5 e2e "owner's own Hidden album asset is omitted"; existing member-path block covers the member side |
-| **Locked** can't be in an album; motion parts still download (unchanged) | Existing member-path Locked download test (Slice 1); no motion filter touched |
+| Spec edge case                                                                          | Test                                                                                                                                                            |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Map-markers Hidden/Locked absent for Viewer **and** owner (flat gate)                   | Task 1 medium "excludes Hidden and Locked…", "omits the album OWNER's own Hidden…"; e2e "Hidden album asset has no map marker for a Viewer member OR the owner" |
+| Archive album asset still present in map-markers                                        | Task 1 medium `expect(ids).toContain(archive.id)`                                                                                                               |
+| Asset-level comments on a **visible** asset still returned (don't over-deny C1)         | Task 2 unit "drops album-level … keeps asset-level" (`toEqual([assetId])`); e2e `toEqual([asset.id])`                                                           |
+| Album participant who is **also** a space member still sees activity (participant wins) | Task 2 unit "keeps album-level … shared album participant who is also a space member"                                                                           |
+| Owner sees album-level activity                                                         | Task 2 unit "keeps album-level … for the album owner"; e2e owner `toHaveLength(2)`                                                                              |
+| Non-participant space member: albumUsers reduced to owner display name                  | Task 3 unit "strips albumUsers to the owner…"; e2e member `toHaveLength(1)`                                                                                     |
+| Album participant who is also a space member: full participant list (participant wins)  | Task 3 e2e "a participant sees the full list"                                                                                                                   |
+| `getLinkedAlbums` output unchanged (regression only)                                    | Untouched — no code change to `shared-space.service.getLinkedAlbums`; its existing specs stay green (verified by Task 6 unit run)                               |
+| PersonRead **granted** for a person on Archived-only space assets (rbac-7 widening)     | Task 4 medium "GRANTS PersonRead … Archived asset"                                                                                                              |
+| Hidden/Locked never grant PersonRead (regression)                                       | Task 4 medium "never grants … Hidden or Locked"                                                                                                                 |
+| `getPersonsBySpaceId` stays gated (no Hidden/Locked)                                    | Task 4 regression in `shared-space.repository.spec.ts`                                                                                                          |
+| Owner album download **omits** own Hidden (rbac-8 no-change, matches grid)              | Task 5 e2e "owner's own Hidden album asset is omitted"; existing member-path block covers the member side                                                       |
+| **Locked** can't be in an album; motion parts still download (unchanged)                | Existing member-path Locked download test (Slice 1); no motion filter touched                                                                                   |

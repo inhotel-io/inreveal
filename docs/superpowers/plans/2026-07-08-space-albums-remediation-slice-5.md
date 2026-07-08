@@ -23,9 +23,9 @@ Read this whole section before touching code. It resolves the version-boundary q
 
 1. **What the server reports = the `version` field of `server/package.json`.** `serverVersion` (`server/src/constants.ts:57-59`) is `new SemVer(JSON.parse(readFileSync('server/package.json')).version)`. `VersionService.getVersion()` (`version.service.ts:71-73`) returns it, and `GET /server/version` serves it. Mobile reads it via `_api.serverInfoApi.getServerVersion()` (`sync_stream.service.dart:60`).
 2. **In source, that version is `3.0.1`** (the upstream Immich base after the v3 rebase). But **at Docker build time, `branding/scripts/apply-branding.sh` `patch_versions()` (lines 782-806) rewrites `server/package.json`'s `.version` to `FORK_VERSION`** (the fork release, e.g. `5.0.0`). `patch_versions` is in the branding `main()` flow (line 829); CI passes `FORK_VERSION` from the release input, falling back to the latest fork `vX.Y.Z` git tag (`.github/actions/apply-branding/action.yml:37`, script lines 48-53). This version-stamping was **added 2026-07-03** (commit `d7a1e3f177` "add version stamping to apply-branding script").
-3. **Therefore a *deployed* fork server reports the FORK release version (5.x), NOT the upstream Immich version (3.0.1).** Corroborated operationally: the whole deployed fleet reports `v5.0.0-rc.0` / `v5.0.0`. This **refutes** the spec/review assumption that "the fork server reports the upstream Immich version" — that was true *before* 2026-07-03; the version-stamping commit changed the regime. It is why a naive `>= SemVer(3,0,0)` copied from the OCR gate would be **wrong** in the *opposite* direction the spec expected: a fork server reports `5.x`, which is `>= 3.0.0` for the wrong reason (5 > 3 numerically), and the gate would fire against every already-released fork server that has **no** `SharedSpaceAlbum*` enum values → the exact 400 outage.
+3. **Therefore a _deployed_ fork server reports the FORK release version (5.x), NOT the upstream Immich version (3.0.1).** Corroborated operationally: the whole deployed fleet reports `v5.0.0-rc.0` / `v5.0.0`. This **refutes** the spec/review assumption that "the fork server reports the upstream Immich version" — that was true _before_ 2026-07-03; the version-stamping commit changed the regime. It is why a naive `>= SemVer(3,0,0)` copied from the OCR gate would be **wrong** in the _opposite_ direction the spec expected: a fork server reports `5.x`, which is `>= 3.0.0` for the wrong reason (5 > 3 numerically), and the gate would fire against every already-released fork server that has **no** `SharedSpaceAlbum*` enum values → the exact 400 outage.
 4. **When did the enum values ship?** `SharedSpaceAlbum*` was added to `server/src/enum.ts` `SyncRequestType` on branch `space-albums-onto-main` (dispatch wiring commit `d6ea4eb6c5`, 2026-07-03). **This feature is not yet merged/released** — `v5.0.0` (already tagged) does **not** contain space-albums. The enum values (and the server emitters) ship in the **first fork release after v5.0.0**.
-5. **The `> 2.7.5` precedent** (`sync_stream.service.dart:142`) is a fork-version gate written under the *old* (pre-stamping) regime; under the new regime a fork `5.x` server trivially satisfies `> 2.7.5`. It confirms the *shape* (a fork-specific version gate) but its numeric value is not a usable analog for the album boundary.
+5. **The `> 2.7.5` precedent** (`sync_stream.service.dart:142`) is a fork-version gate written under the _old_ (pre-stamping) regime; under the new regime a fork `5.x` server trivially satisfies `> 2.7.5`. It confirms the _shape_ (a fork-specific version gate) but its numeric value is not a usable analog for the album boundary.
 
 **The boundary cannot be pinned to an exact release number from code alone** (the space-albums release is a future decision; the only known facts are: it is a fork version, strictly newer than the last release `v5.0.0`, and it ships mobile + server together). Per the spec's instruction for this case, the design uses the **server-side filter (Commit 2) as the primary robustness mechanism** and the **client gate as the best-available signal**:
 
@@ -33,8 +33,8 @@ Read this whole section before touching code. It resolves the version-boundary q
 
 - **It excludes every currently-released fork server (≤ v5.0.0).** Those are exactly the servers that have **neither** the enum values **nor** the server filter — the real, existing outage surface. `>` (strictly greater) means `5.0.0` itself is excluded (correct: v5.0.0 lacks the enum).
 - **It includes the feature release and its release-candidates.** The feature ships as some vNext > 5.0.0 (e.g. `5.0.1` or `5.1.0`) and is validated on RC builds (e.g. `5.1.0-rc.0`). With `>`, `SemVer(5,1,0,prerelease:0) > SemVer(5,0,0)` is `true` (minor 1 > 0), and `SemVer(5,0,1) > SemVer(5,0,0)` is `true` (patch 1 > 0) — so RC validation and the GA release both activate the types. (A `>= SemVer(5,1,0)` form would **exclude** `5.1.0-rc.0`, breaking RC validation, and would silently disable the feature if it shipped as a `5.0.x` patch — a worse failure mode.)
-- **Failure mode is bounded and gracefully mitigated.** The only residual risk is a *non-feature* `5.0.x` hotfix cut from the v5.0.0 line **before** the feature merges: it would report `> 5.0.0`, the client would send the album types, and — because that hotfix predates the server filter — it would 400. This is (a) controllable by release ordering (do not cut a `5.0.x` hotfix between now and the feature release, or cut the feature as the next release), and (b) flagged below as a release-time reconciliation.
-- **`serverVersion` is never null here.** `SyncStreamService.sync()` (`sync_stream.service.dart:60-64`) aborts the entire sync (returns `false`) when `getServerVersion()` is null, *before* `streamChanges` is called. So inside `sync_api.repository.dart` `serverVersion` is always a valid `SemVer`, and the spec's "missing/unparseable → treat as old / fail-safe" is satisfied two ways: (i) null aborts sync entirely upstream, and (ii) any parseable-but-old version (≤ 5.0.0) is excluded by `>`.
+- **Failure mode is bounded and gracefully mitigated.** The only residual risk is a _non-feature_ `5.0.x` hotfix cut from the v5.0.0 line **before** the feature merges: it would report `> 5.0.0`, the client would send the album types, and — because that hotfix predates the server filter — it would 400. This is (a) controllable by release ordering (do not cut a `5.0.x` hotfix between now and the feature release, or cut the feature as the next release), and (b) flagged below as a release-time reconciliation.
+- **`serverVersion` is never null here.** `SyncStreamService.sync()` (`sync_stream.service.dart:60-64`) aborts the entire sync (returns `false`) when `getServerVersion()` is null, _before_ `streamChanges` is called. So inside `sync_api.repository.dart` `serverVersion` is always a valid `SemVer`, and the spec's "missing/unparseable → treat as old / fail-safe" is satisfied two ways: (i) null aborts sync entirely upstream, and (ii) any parseable-but-old version (≤ 5.0.0) is excluded by `>`.
 
 **RELEASE-TIME RECONCILIATION (call out in the PR):** before the space-albums feature is released, confirm the actual release tag and, if a non-feature `5.0.x` was (or will be) released first, tighten the gate to `>= SemVer(<exact feature version>)`. The `> 5.0.0` value is the correct, safe lower bound **given no `5.0.x` exists today** (`git tag -l 'v5.*'` shows only `v5.0.0-rc.0`, `v5.0.0`).
 
@@ -73,7 +73,7 @@ const SyncStreamSchema = z
   .meta({ id: 'SyncStreamDto' });
 ```
 
-- **Unknown enum *values* inside a valid array → dropped** (no 400). Known values validate normally.
+- **Unknown enum _values_ inside a valid array → dropped** (no 400). Known values validate normally.
 - **Structural malformation is NOT masked:** a non-array `types` (e.g. a bare string) or a missing `types` passes straight through `preprocess` unchanged and still fails `z.array(...)` → 400. This preserves strict parsing for genuinely malformed requests.
 - **No SDK regen.** `z.preprocess((v)=>…, z.array(X))` is exactly the pattern already used by `time-bucket.dto.ts:49-58` (`personIds`/`spacePersonIds`/`tagIds`), which renders in `open-api/immich-openapi-specs.json` as `{"type":"array","items":{…}}` — the OpenAPI generator uses the inner (output) schema, so `SyncStreamDto.types` stays `array of SyncRequestType`, byte-identical to today. Verified by inspecting the generated spec (the timeline/search/map endpoints' preprocess-array params all render as typed arrays, never `unknown`).
 
@@ -105,20 +105,25 @@ The `DELETE /sync/ack` "should require sync response type enums" test (`sync.con
 ## File Structure
 
 **Modify (mobile production):**
+
 - `mobile/lib/infrastructure/repositories/sync_api.repository.dart:99-104` — wrap the 5 `SharedSpaceAlbum*` types in a `serverVersion > SemVer(5,0,0)` collection-`if` spread.
 - `mobile/lib/infrastructure/repositories/sync_stream.repository.dart:795-817` — add two `AND id NOT IN (…)` clauses to the `deleteLibrariesV1` sweep + update the preceding comment.
 
 **Modify (server production):**
+
 - `server/src/dtos/sync.dto.ts` — add `SyncRequestType` to the `src/enum` import; wrap `SyncStreamSchema.types` in a `z.preprocess` drop-unknown filter.
 
 **Create (server test):**
+
 - `server/src/dtos/sync.dto.spec.ts` — Zod-level unit tests for the drop-unknown filter.
 
 **Modify (server test):**
+
 - `server/src/controllers/sync.controller.spec.ts:33-44` — repurpose the enum-400 test to a structural-400 test.
 - `e2e/src/specs/server/api/sync.e2e-spec.ts:79-90` — repurpose the enum-400 test to a drop-unknown-200 test (CI-deferred run).
 
 **Extend (mobile test):**
+
 - `mobile/test/infrastructure/repositories/sync_api_repository_test.dart` — add a `mobile-1: SharedSpaceAlbum request-type version gate` group (capture + decode the request body).
 - `mobile/test/domain/repositories/sync_stream_repository_test.dart` — add mobile-2 tests inside the existing `deleteLibrariesV1 orphan sweep` group.
 
@@ -129,10 +134,12 @@ The `DELETE /sync/ack` "should require sync response type enums" test (`sync.con
 ### Task 1: Client version gate + tests (`sync_api.repository.dart`)
 
 **Files:**
+
 - Test: `mobile/test/infrastructure/repositories/sync_api_repository_test.dart`
 - Modify: `mobile/lib/infrastructure/repositories/sync_api.repository.dart:99-104`
 
 **Interfaces:**
+
 - Consumes: `SyncApiRepository.streamChanges(onData, {required SemVer serverVersion, …, http.Client? httpClient})` (already exists); `SemVer` from `package:immich_mobile/utils/semver.dart` with `operator >`; the test's existing `streamChanges(onDataCallback, serverVersion)` helper and `mockHttpClient` capture.
 - Produces: request body `types` list that includes the 5 `SharedSpaceAlbum*` values **iff** `serverVersion > SemVer(5,0,0)`.
 
@@ -285,12 +292,14 @@ the next release, and > 5.0.0 also admits its release-candidates for validation.
 ### Task 2: `z.preprocess` filter + DTO unit tests + update the two existing 400 tests + e2e
 
 **Files:**
+
 - Modify: `server/src/dtos/sync.dto.ts` (import + `SyncStreamSchema.types`)
 - Create: `server/src/dtos/sync.dto.spec.ts`
 - Modify: `server/src/controllers/sync.controller.spec.ts:33-44`
 - Modify: `e2e/src/specs/server/api/sync.e2e-spec.ts:79-90`
 
 **Interfaces:**
+
 - Consumes: `SyncRequestType`, `SyncRequestTypeSchema` from `src/enum`; `SyncStreamDto.schema` (static, exposed by `createZodDto`).
 - Produces: `SyncStreamDto.types` that silently drops unknown enum values but still rejects a non-array/missing `types`.
 
@@ -423,36 +432,32 @@ Expected: **all 7 PASS.**
 In `server/src/controllers/sync.controller.spec.ts`, replace the existing test at lines 33-44:
 
 ```ts
-    it('should require sync request type enums', async () => {
-      const { status, body } = await request(ctx.getHttpServer())
-        .post('/sync/stream')
-        .send({ types: ['invalid'] });
-      expect(status).toBe(400);
-      expect(body).toEqual(
-        errorDto.validationError([
-          { path: ['types', 0], message: expect.stringContaining('Invalid option: expected one of') },
-        ]),
-      );
-      expect(ctx.authenticate).toHaveBeenCalled();
-    });
+it('should require sync request type enums', async () => {
+  const { status, body } = await request(ctx.getHttpServer())
+    .post('/sync/stream')
+    .send({ types: ['invalid'] });
+  expect(status).toBe(400);
+  expect(body).toEqual(
+    errorDto.validationError([
+      { path: ['types', 0], message: expect.stringContaining('Invalid option: expected one of') },
+    ]),
+  );
+  expect(ctx.authenticate).toHaveBeenCalled();
+});
 ```
 
 with (unknown enum values are now dropped, so the enforced boundary is structural — a non-array `types`):
 
 ```ts
-    it('should reject a non-array types field (structural validation still fires)', async () => {
-      // Unknown enum VALUES are now dropped by the SyncStreamDto preprocess filter
-      // (mobile-1 skew safety) rather than 400-ing the whole request. A structurally
-      // invalid `types` (not an array) still fails validation cleanly.
-      const { status, body } = await request(ctx.getHttpServer())
-        .post('/sync/stream')
-        .send({ types: 'invalid' });
-      expect(status).toBe(400);
-      expect(body).toEqual(
-        errorDto.validationError([{ path: ['types'], message: expect.stringContaining('array') }]),
-      );
-      expect(ctx.authenticate).toHaveBeenCalled();
-    });
+it('should reject a non-array types field (structural validation still fires)', async () => {
+  // Unknown enum VALUES are now dropped by the SyncStreamDto preprocess filter
+  // (mobile-1 skew safety) rather than 400-ing the whole request. A structurally
+  // invalid `types` (not an array) still fails validation cleanly.
+  const { status, body } = await request(ctx.getHttpServer()).post('/sync/stream').send({ types: 'invalid' });
+  expect(status).toBe(400);
+  expect(body).toEqual(errorDto.validationError([{ path: ['types'], message: expect.stringContaining('array') }]));
+  expect(ctx.authenticate).toHaveBeenCalled();
+});
 ```
 
 - [ ] **Step 6: Run the controller spec (GREEN)**
@@ -467,61 +472,61 @@ Expected: **all PASS** (the repurposed structural-400 test passes; the untouched
 In `e2e/src/specs/server/api/sync.e2e-spec.ts`, replace the existing test at lines 79-90 with two tests exercising the drop-unknown behavior over real HTTP. Reuse the buffered jsonl parser shape already used by the "returns content-type …" test above it:
 
 ```ts
-    it('drops an unknown SyncRequestType and still streams the known types (no 400)', async () => {
-      const { status, headers, body } = await request(app)
-        .post('/sync/stream')
-        .set(asBearerAuth(userA.accessToken))
-        .send({ types: ['UsersV1', 'NotARealType'], reset: true })
-        .buffer(true)
-        .parse((res, callback) => {
-          let data = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            callback(null, data);
-          });
-        });
-      // The unknown value is filtered out; UsersV1 still streams → 200 jsonl, not 400.
-      expect(status).toBe(200);
-      expect(headers['content-type']).toContain('application/jsonlines+json');
-      const text = body as unknown as string;
-      expect(text.length).toBeGreaterThan(0);
-      const types = text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line).type as string);
-      expect(types).toContain('UserV1'); // the UsersV1 request emits UserV1 entities
+it('drops an unknown SyncRequestType and still streams the known types (no 400)', async () => {
+  const { status, headers, body } = await request(app)
+    .post('/sync/stream')
+    .set(asBearerAuth(userA.accessToken))
+    .send({ types: ['UsersV1', 'NotARealType'], reset: true })
+    .buffer(true)
+    .parse((res, callback) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        callback(null, data);
+      });
     });
+  // The unknown value is filtered out; UsersV1 still streams → 200 jsonl, not 400.
+  expect(status).toBe(200);
+  expect(headers['content-type']).toContain('application/jsonlines+json');
+  const text = body as unknown as string;
+  expect(text.length).toBeGreaterThan(0);
+  const types = text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line).type as string);
+  expect(types).toContain('UserV1'); // the UsersV1 request emits UserV1 entities
+});
 
-    it('an all-unknown types array does not 400 (stream completes cleanly)', async () => {
-      const { status, body } = await request(app)
-        .post('/sync/stream')
-        .set(asBearerAuth(userA.accessToken))
-        .send({ types: ['NotARealType'], reset: true })
-        .buffer(true)
-        .parse((res, callback) => {
-          let data = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            callback(null, data);
-          });
-        });
-      // No known types remain after filtering → the stream still opens (200) and
-      // completes with a SyncCompleteV1 marker; it must NOT 400.
-      expect(status).toBe(200);
-      const text = body as unknown as string;
-      const types = text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line).type as string);
-      expect(types).toContain('SyncCompleteV1');
-      expect(types).not.toContain('UserV1');
+it('an all-unknown types array does not 400 (stream completes cleanly)', async () => {
+  const { status, body } = await request(app)
+    .post('/sync/stream')
+    .set(asBearerAuth(userA.accessToken))
+    .send({ types: ['NotARealType'], reset: true })
+    .buffer(true)
+    .parse((res, callback) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        callback(null, data);
+      });
     });
+  // No known types remain after filtering → the stream still opens (200) and
+  // completes with a SyncCompleteV1 marker; it must NOT 400.
+  expect(status).toBe(200);
+  const text = body as unknown as string;
+  const types = text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line).type as string);
+  expect(types).toContain('SyncCompleteV1');
+  expect(types).not.toContain('UserV1');
+});
 ```
 
 - [ ] **Step 8: Verify the e2e spec compiles (local RED substitute; Docker down)**
@@ -559,10 +564,12 @@ handle. Structural errors (non-array types) still 400. No OpenAPI/SDK change
 ### Task 3: Sweep keep-set + tests (`sync_stream.repository.dart`)
 
 **Files:**
+
 - Test: `mobile/test/domain/repositories/sync_stream_repository_test.dart` (existing `deleteLibrariesV1 orphan sweep` group)
 - Modify: `mobile/lib/infrastructure/repositories/sync_stream.repository.dart:795-817`
 
 **Interfaces:**
+
 - Consumes (test helpers already defined in the enclosing group): `makeLibrary`, `makeLibraryAsset({id, checksum, ownerId, libraryId})`, `insertPartner`, `_createUser`, `sut.updateLibraryAssetsV1`, `sut.updateSharedSpaceAlbumToAssetsV1`, `sut.updateAlbumsV2`, `sut.updateAlbumToAssetsV1`, `sut.deleteLibrariesV1(data, {required currentUserId})`; `db.remoteAssetEntity`, `db.sharedSpaceAlbumAssetEntity`, `db.remoteAlbumAssetEntity`; openapi `SyncLibraryDeleteV1`, `SyncAlbumToAssetV1`, `SyncAlbumV2`, `AssetOrder`, `AssetVisibility`, `AssetTypeEnum`, `SyncAssetV1`.
 - Produces: a sweep that also preserves `remote_asset` rows reachable via `shared_space_album_asset_entity` or `remote_album_asset_entity`.
 
@@ -777,22 +784,23 @@ timeline. Add both tables to the sweep keep-set. No new bound parameters."
 - [ ] **No generated-code drift.** `git diff --stat` shows only: `mobile/lib/infrastructure/repositories/sync_api.repository.dart`, `mobile/lib/infrastructure/repositories/sync_stream.repository.dart`, the two mobile test files, `server/src/dtos/sync.dto.ts`, `server/src/dtos/sync.dto.spec.ts`, `server/src/controllers/sync.controller.spec.ts`, `e2e/src/specs/server/api/sync.e2e-spec.ts`. In particular **`open-api/`, `mobile/openapi/`, `server/src/queries/`, and `server/src/schema/migrations-gallery/` must be unchanged** (no SDK regen, no SQL regen, no migration).
 
 **CI-deferred (Docker down — CI runs these):**
+
 - `cd e2e && pnpm test` (or the API e2e job) — `sync.e2e-spec.ts` drop-unknown tests (real HTTP seam).
 
 **Edge-case coverage map (every Slice 5 edge case → a named test):**
 
-| Slice 5 edge case | Test |
-|---|---|
-| `serverVersion` exactly at the feature boundary → included | `sync_api_repository_test.dart` "feature release v5.1.0 … INCLUDES all 5" + "v5.0.1 (first possible post-release) … INCLUDES" (off-by-one guard against the excluded `v5.0.0`) |
-| `serverVersion` just below the boundary (`v5.0.0`) → excluded | `sync_api_repository_test.dart` "v5.0.0 (last pre-feature release): EXCLUDES all 5" |
+| Slice 5 edge case                                                       | Test                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serverVersion` exactly at the feature boundary → included              | `sync_api_repository_test.dart` "feature release v5.1.0 … INCLUDES all 5" + "v5.0.1 (first possible post-release) … INCLUDES" (off-by-one guard against the excluded `v5.0.0`)                                       |
+| `serverVersion` just below the boundary (`v5.0.0`) → excluded           | `sync_api_repository_test.dart` "v5.0.0 (last pre-feature release): EXCLUDES all 5"                                                                                                                                  |
 | Missing/unparseable `serverVersion` → treat as old (exclude; fail-safe) | Null handled upstream (`sync_stream.service.dart:60-64` aborts sync before streaming; §0.1); any old parseable version → `sync_api_repository_test.dart` "old upstream-numbered fork server (3.0.1): EXCLUDES all 5" |
-| Feature RC validation (`5.1.0-rc.0`) still activates the types | `sync_api_repository_test.dart` "feature release-candidate v5.1.0-rc.0 … INCLUDES" |
-| Asset in a library + `remote_album_asset` (classic album) → retained | `sync_stream_repository_test.dart` "preserves an asset also present in remote_album_asset …" |
-| Asset in a library + `shared_space_album_asset` → retained | `sync_stream_repository_test.dart` "preserves an asset also present in shared_space_album_asset …" |
-| Asset in the removed library only, also Hidden → still deleted | `sync_stream_repository_test.dart` "deletes a Hidden foreign asset reachable only via the removed library …" |
-| Sweep with empty album set → no regression | `sync_stream_repository_test.dart` "empty album/space-album sets: orphan sweep still deletes …" |
-| Server: unknown type posted → known types still stream, no 400 | `sync.dto.spec.ts` "drops an unknown request type but keeps the known ones" + `sync.e2e-spec.ts` "drops an unknown SyncRequestType and still streams …" + "an all-unknown types array does not 400" |
-| Server: structural malformation still 400s | `sync.dto.spec.ts` "still REJECTS a non-array/missing types" + `sync.controller.spec.ts` "should reject a non-array types field" |
+| Feature RC validation (`5.1.0-rc.0`) still activates the types          | `sync_api_repository_test.dart` "feature release-candidate v5.1.0-rc.0 … INCLUDES"                                                                                                                                   |
+| Asset in a library + `remote_album_asset` (classic album) → retained    | `sync_stream_repository_test.dart` "preserves an asset also present in remote_album_asset …"                                                                                                                         |
+| Asset in a library + `shared_space_album_asset` → retained              | `sync_stream_repository_test.dart` "preserves an asset also present in shared_space_album_asset …"                                                                                                                   |
+| Asset in the removed library only, also Hidden → still deleted          | `sync_stream_repository_test.dart` "deletes a Hidden foreign asset reachable only via the removed library …"                                                                                                         |
+| Sweep with empty album set → no regression                              | `sync_stream_repository_test.dart` "empty album/space-album sets: orphan sweep still deletes …"                                                                                                                      |
+| Server: unknown type posted → known types still stream, no 400          | `sync.dto.spec.ts` "drops an unknown request type but keeps the known ones" + `sync.e2e-spec.ts` "drops an unknown SyncRequestType and still streams …" + "an all-unknown types array does not 400"                  |
+| Server: structural malformation still 400s                              | `sync.dto.spec.ts` "still REJECTS a non-array/missing types" + `sync.controller.spec.ts` "should reject a non-array types field"                                                                                     |
 
 ---
 

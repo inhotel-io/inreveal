@@ -50,9 +50,7 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
     const response = await ctx.syncStream(auth, ALBUM_TYPES);
     // grant-revocation → album drops (metadata + assets)
     expect(
-      response.some(
-        (r) => r.type === SyncEntityType.SharedSpaceAlbumDeleteV1 && (r as any).data.albumId === album.id,
-      ),
+      response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumDeleteV1 && (r as any).data.albumId === album.id),
     ).toBe(true);
     // link tombstone → shelf link row drops
     expect(
@@ -83,9 +81,9 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
 
     const response = await ctx.syncStream(auth, ALBUM_TYPES);
     // metadata re-delivered (SharedSpaceAlbumV1) and link re-delivered (SharedSpaceAlbumLinkV1)
-    expect(
-      response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumV1 && (r as any).data.id === album.id),
-    ).toBe(true);
+    expect(response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumV1 && (r as any).data.id === album.id)).toBe(
+      true,
+    );
     expect(
       response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumLinkV1 && (r as any).data.albumId === album.id),
     ).toBe(true);
@@ -128,7 +126,11 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
       .where('albumId', '=', album.id)
       .execute();
     const firstSpaceId = spaceAlbumLinks.find((r) => r.spaceId !== s2.id)!.spaceId;
-    await db.deleteFrom('shared_space_album').where('spaceId', '=', firstSpaceId).where('albumId', '=', album.id).execute();
+    await db
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', firstSpaceId)
+      .where('albumId', '=', album.id)
+      .execute();
     const { asset: added } = await ctx.newAsset({ ownerId: owner.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: added.id });
 

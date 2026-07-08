@@ -67,12 +67,12 @@ describe('shared-space param DTOs (security-9)', () => {
   });
 
   it('SharedSpacePersonFaceParamDto rejects a non-UUID faceId', () => {
-    expect(
-      SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: 'nope' }).success,
-    ).toBe(false);
-    expect(
-      SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: uuid }).success,
-    ).toBe(true);
+    expect(SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: 'nope' }).success).toBe(
+      false,
+    );
+    expect(SharedSpacePersonFaceParamDto.schema.safeParse({ id: uuid, personId: uuid, faceId: uuid }).success).toBe(
+      true,
+    );
   });
 
   it('SharedSpaceLibraryParamDto rejects a non-UUID libraryId', () => {

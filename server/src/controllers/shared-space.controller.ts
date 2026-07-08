@@ -525,10 +525,7 @@ export class SharedSpaceController {
     description: 'Remove a user-specific alias for a person in a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  deleteSpacePersonAlias(
-    @Auth() auth: AuthDto,
-    @Param() { id, personId }: SharedSpacePersonParamDto,
-  ): Promise<void> {
+  deleteSpacePersonAlias(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<void> {
     return this.service.deleteSpacePersonAlias(auth, id, personId);
   }
 
@@ -539,10 +536,7 @@ export class SharedSpaceController {
     description: 'Retrieve asset IDs for all assets containing a specific person in a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  getSpacePersonAssets(
-    @Auth() auth: AuthDto,
-    @Param() { id, personId }: SharedSpacePersonParamDto,
-  ): Promise<string[]> {
+  getSpacePersonAssets(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<string[]> {
     return this.service.getSpacePersonAssets(auth, id, personId);
   }
 

@@ -56,11 +56,11 @@ So **(a) alone** makes the removed-creator state unreachable. Dropping the `crea
 
 **Decision — the three options weighed for a no-DB-validation slice:**
 
-- **(A) `pg_advisory_xact_lock` per `(albumId, userId)`** taken in a deterministic `ORDER BY hashtextextended(...)` pre-loop inside the delete-side triggers **and** the create-side grant-insert triggers **and** Slice 8's restore trigger. **REJECTED.** Correctness depends on a *global* consistent lock order across **five** PL/pgSQL functions; a single missed or mis-ordered site deadlocks. It cannot be validated locally (no DB), and even a green CI concurrency test doesn't cover every production interleaving. A prod deadlock is strictly worse than the rare, read-safe race. "Be conservative — a correct-but-deferred correctness-4 beats a blind advisory-lock that deadlocks prod."
+- **(A) `pg_advisory_xact_lock` per `(albumId, userId)`** taken in a deterministic `ORDER BY hashtextextended(...)` pre-loop inside the delete-side triggers **and** the create-side grant-insert triggers **and** Slice 8's restore trigger. **REJECTED.** Correctness depends on a _global_ consistent lock order across **five** PL/pgSQL functions; a single missed or mis-ordered site deadlocks. It cannot be validated locally (no DB), and even a green CI concurrency test doesn't cover every production interleaving. A prod deadlock is strictly worse than the rare, read-safe race. "Be conservative — a correct-but-deferred correctness-4 beats a blind advisory-lock that deadlocks prod."
 - **(B) Targeted post-commit reconciliation job.** **CHOSEN.** A BullMQ job (`SharedSpaceAlbumGrantReconcile { albumIds }`) enqueued from the service revocation paths (`unlinkAlbum`, `removeMember`, `remove`) **after** the mutation commits. The job re-evaluates `user_has_album_path(albumId, userId, <nil sentinel>)` for every grant of those albums and inserts the stranded ones into `shared_space_album_user_audit` — the existing consumer deletes the grant and `SharedSpaceAlbumSync.getDeletes` delivers the device tombstone. Because it runs **post-commit**, it reads committed state → the snapshot race is gone. **No hot-path lock → cannot deadlock. Idempotent** (a live-path grant is skipped; an already-revoked grant has no row). **CI-validatable** (deterministic medium tests below). Reuses the existing audit→consumer→sync machinery → **no schema change**. Convergence window = job latency (seconds), acceptable for a rare MEDIUM race with a safe read path.
 - **(C) Document + defer.** Weaker than (B): leaves the finding open. (B) is low-risk enough (no lock, no migration, CI-validated, benign failure modes) to actually close it. (C) is the fallback only if review rejects the new job infra.
 
-**Why the nil sentinel is correct and cannot over-revoke.** The delete triggers pass the *modified* space as `exclude_space_id` to ask "is there any **other** path?". The reconcile asks "is there **any** live path at all?" → exclude nothing real → `'00000000-0000-0000-0000-000000000000'::uuid` (never a real `immich_uuid_v7()` space id). For a legit grant holder who is a member of the single space linking the (live) album, branch 2's `ssa2."spaceId" <> exclude_space_id` is `realSpaceId <> nil` = TRUE → path found → grant **kept**. `user_has_album_path` is the exact function every delete trigger already trusts in production; reusing it with the nil sentinel adds no new predicate risk. A medium test below pins "legit grant survives the sweep".
+**Why the nil sentinel is correct and cannot over-revoke.** The delete triggers pass the _modified_ space as `exclude_space_id` to ask "is there any **other** path?". The reconcile asks "is there **any** live path at all?" → exclude nothing real → `'00000000-0000-0000-0000-000000000000'::uuid` (never a real `immich_uuid_v7()` space id). For a legit grant holder who is a member of the single space linking the (live) album, branch 2's `ssa2."spaceId" <> exclude_space_id` is `realSpaceId <> nil` = TRUE → path found → grant **kept**. `user_has_album_path` is the exact function every delete trigger already trusts in production; reusing it with the nil sentinel adds no new predicate risk. A medium test below pins "legit grant survives the sweep".
 
 ### B.5 Deferred: rbac-4 part (b) — dropping the `createdById` arm (do NOT implement here)
 
@@ -74,7 +74,7 @@ The spec proposes also removing the `createdById` UNION arm from `accessibleSpac
    - `server/test/medium/specs/sync/library-audit-triggers.spec.ts:264,274`
    - `server/test/medium/specs/sync/library-user-triggers.spec.ts:427`
 3. **Scope-vs-gate asymmetry.** The trigger-side creator branches (`user_has_album_path` branch 3, `user_has_library_path`'s creator branch, and the `OLD."createdById"` arms in the delete-side audit functions) would remain while the sync scope drops it — a subtle inconsistency to reason about with no DB to check.
-4. Those tests' own comments call the arm a **deliberate defensive path**; with guard (a) reinforcing the invariant, keeping the arm is the *more* defensive posture.
+4. Those tests' own comments call the arm a **deliberate defensive path**; with guard (a) reinforcing the invariant, keeping the arm is the _more_ defensive posture.
 
 **Deferral recipe (for a future DB-backed slice):** delete the `.union(...)` arm in `accessibleSpaces` (`shared-space-album-scope.ts:91-96`), leaving only the `shared_space_member` select; invert the five specs above to assert the `createdById`-only space/library is **excluded** and add member-row variants that are included; regenerate `sync.repository.sql` on a scratch DB; verify the trigger-side creator branches (they may then also want dropping for symmetry). Not in this slice.
 
@@ -88,6 +88,7 @@ The spec proposes also removing the `createdById` UNION arm from `accessibleSpac
 ## File Structure
 
 **Modified (production):**
+
 - `server/src/services/shared-space.service.ts` — `updateMember` creator guard (Task 1); `removeMember` creator guard + album-6 unlink + reconcile enqueue (Tasks 1, 2, 3); `unlinkAlbum` + `remove` reconcile enqueue + `queueAlbumGrantReconcile`/`handleSharedSpaceAlbumGrantReconcile` (Task 3).
 - `server/src/repositories/shared-space.repository.ts` — `removeOwnedAlbumLinksAddedBy` (Task 2); `getLinkedAlbumIds` + `reconcileAlbumGrants` (Task 3).
 - `server/src/enum.ts` — `JobName.SharedSpaceAlbumGrantReconcile` (Task 3).
@@ -95,9 +96,11 @@ The spec proposes also removing the `createdById` UNION arm from `accessibleSpac
 - `server/src/repositories/job.repository.ts` — dedup `jobId` case for the new job (Task 3).
 
 **Modified (tests):**
+
 - `server/src/services/shared-space.service.spec.ts` — new `removeMember`/`updateMember` guard cases + album-6 + reconcile-enqueue cases (Tasks 1, 2, 3).
 
 **Created (tests):**
+
 - `server/test/medium/specs/sync/shared-space-member-album-lifecycle.spec.ts` — albums-6 ownership-scoped delete (Task 2).
 - `server/test/medium/specs/repositories/shared-space-album-grant-reconcile.spec.ts` — correctness-4 reconcile sweep + deterministic race (Task 3).
 
@@ -110,10 +113,12 @@ The spec proposes also removing the `createdById` UNION arm from `accessibleSpac
 ## Task 1: rbac-4 — forbid removing/demoting the space creator
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts` (`updateMember` ~438-473; `removeMember` ~541-569)
 - Test: `server/src/services/shared-space.service.spec.ts` (`updateMember` describe ~1730; `removeMember` describe ~2012)
 
 **Interfaces:**
+
 - Consumes: `this.sharedSpaceRepository.getById(spaceId)` → returns `{ id, createdById, faceRecognitionEnabled, … } | undefined` (existing method, `shared-space.repository.ts:115`).
 - Produces: `removeMember` now fetches `space` once at the top (reused by Tasks 2 & 3) and throws `ForbiddenException('Cannot remove the space creator')` when a non-self target is the creator. `updateMember` throws `ForbiddenException('Cannot demote the space creator')` when the target is the creator and the new role is not `Owner`.
 
@@ -122,74 +127,58 @@ The spec proposes also removing the `createdById` UNION arm from `accessibleSpac
 Add to `server/src/services/shared-space.service.spec.ts`. Inside the existing `describe('removeMember', …)` block (~2012), add:
 
 ```ts
-    it('rejects removing the space creator (rbac-4)', async () => {
-      const auth = factory.auth({ user: { id: 'co-owner' } });
-      const creatorId = 'creator-1';
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: creatorId }),
-      );
+it('rejects removing the space creator (rbac-4)', async () => {
+  const auth = factory.auth({ user: { id: 'co-owner' } });
+  const creatorId = 'creator-1';
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
 
-      await expect(sut.removeMember(auth, 'space-1', creatorId)).rejects.toBeInstanceOf(ForbiddenException);
-      expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
-    });
+  await expect(sut.removeMember(auth, 'space-1', creatorId)).rejects.toBeInstanceOf(ForbiddenException);
+  expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
+});
 
-    it('still allows removing a non-creator member', async () => {
-      const auth = factory.auth({ user: { id: 'owner-1' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1' }),
-      );
-      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it('still allows removing a non-creator member', async () => {
+  const auth = factory.auth({ user: { id: 'owner-1' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: 'owner-1' }));
+  mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.removeMember(auth, 'space-1', 'other-user');
+  await sut.removeMember(auth, 'space-1', 'other-user');
 
-      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user');
-    });
+  expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user');
+});
 ```
 
 Inside `describe('updateMember', …)` (~1730), add:
 
 ```ts
-    it('rejects demoting the space creator (rbac-4)', async () => {
-      const auth = factory.auth({ user: { id: 'co-owner' } });
-      const creatorId = 'creator-1';
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: creatorId }),
-      );
+it('rejects demoting the space creator (rbac-4)', async () => {
+  const auth = factory.auth({ user: { id: 'co-owner' } });
+  const creatorId = 'creator-1';
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
 
-      await expect(
-        sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Viewer }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(mocks.sharedSpace.updateMember).not.toHaveBeenCalled();
-    });
+  await expect(sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Viewer })).rejects.toBeInstanceOf(
+    ForbiddenException,
+  );
+  expect(mocks.sharedSpace.updateMember).not.toHaveBeenCalled();
+});
 
-    it('allows a no-op role set on the creator (stays Owner)', async () => {
-      const auth = factory.auth({ user: { id: 'co-owner' } });
-      const creatorId = 'creator-1';
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: creatorId }),
-      );
-      mocks.sharedSpace.updateMember.mockResolvedValue(void 0 as never);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it('allows a no-op role set on the creator (stays Owner)', async () => {
+  const auth = factory.auth({ user: { id: 'co-owner' } });
+  const creatorId = 'creator-1';
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
+  mocks.sharedSpace.updateMember.mockResolvedValue(void 0 as never);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Owner });
+  await sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Owner });
 
-      expect(mocks.sharedSpace.updateMember).toHaveBeenCalledWith('space-1', creatorId, {
-        role: SharedSpaceRole.Owner,
-      });
-    });
+  expect(mocks.sharedSpace.updateMember).toHaveBeenCalledWith('space-1', creatorId, {
+    role: SharedSpaceRole.Owner,
+  });
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -202,13 +191,13 @@ Expected: FAIL — no creator guard exists, so `removeMember`/`updateMember` pro
 Edit `server/src/services/shared-space.service.ts`, `updateMember` (~438-473). After the `existingMember` null-check (currently ~451-453), before `const oldRole = existingMember.role;`, insert:
 
 ```ts
-    // rbac-4: a promoted co-Owner must not be able to demote the space creator.
-    // The creator is always an Owner member (create() inserts them); keeping the
-    // role at Owner is a harmless no-op, anything lower is a demotion → reject.
-    const space = await this.sharedSpaceRepository.getById(spaceId);
-    if (space && userId === space.createdById && dto.role !== SharedSpaceRole.Owner) {
-      throw new ForbiddenException('Cannot demote the space creator');
-    }
+// rbac-4: a promoted co-Owner must not be able to demote the space creator.
+// The creator is always an Owner member (create() inserts them); keeping the
+// role at Owner is a harmless no-op, anything lower is a demotion → reject.
+const space = await this.sharedSpaceRepository.getById(spaceId);
+if (space && userId === space.createdById && dto.role !== SharedSpaceRole.Owner) {
+  throw new ForbiddenException('Cannot demote the space creator');
+}
 ```
 
 - [ ] **Step 4: Add the `removeMember` creator guard (and fetch `space` once at the top)**
@@ -276,12 +265,14 @@ git commit -m "fix(spaces): forbid removing or demoting the space creator"
 ## Task 2: albums-6 — auto-unlink a departing member's own albums
 
 **Files:**
+
 - Create: `server/src/repositories/shared-space.repository.ts` method `removeOwnedAlbumLinksAddedBy` (add near the album-link CRUD, ~558-601)
 - Modify: `server/src/services/shared-space.service.ts` (`removeMember` — both branches, after `removeMember`)
 - Modify: `server/src/services/shared-space.service.spec.ts` (`removeMember` describe)
 - Create: `server/test/medium/specs/sync/shared-space-member-album-lifecycle.spec.ts`
 
 **Interfaces:**
+
 - Produces: `SharedSpaceRepository.removeOwnedAlbumLinksAddedBy(spaceId: string, userId: string): Promise<string[]>` — deletes `shared_space_album` rows for `spaceId` where `addedById = userId` **and** `userId` owns the album (`album_user.role='owner'`, `album.deletedAt IS NULL`); returns the deleted album ids. Deleting the rows fires the existing `shared_space_album_delete_audit` trigger.
 - Consumed by: `removeMember` (both branches) in Task 2; the returned album ids feed the optional face-orphan cleanup and (Task 3) the reconcile enqueue set.
 
@@ -290,39 +281,35 @@ git commit -m "fix(spaces): forbid removing or demoting the space creator"
 Add to `server/src/services/shared-space.service.spec.ts` inside `describe('removeMember', …)`:
 
 ```ts
-    it('unlinks the departing member\'s OWNED albums on removal (albums-6)', async () => {
-      const auth = factory.auth({ user: { id: 'owner-1' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
-      );
-      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
-      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-a']);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it("unlinks the departing member's OWNED albums on removal (albums-6)", async () => {
+  const auth = factory.auth({ user: { id: 'owner-1' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(
+    factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+  );
+  mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+  mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-a']);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.removeMember(auth, 'space-1', 'member-2');
+  await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
-    });
+  expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+});
 
-    it('unlinks the leaver\'s OWNED albums on self-leave (albums-6)', async () => {
-      const auth = factory.auth({ user: { id: 'member-2' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'member-2', role: SharedSpaceRole.Editor }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
-      );
-      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
-      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it("unlinks the leaver's OWNED albums on self-leave (albums-6)", async () => {
+  const auth = factory.auth({ user: { id: 'member-2' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'member-2', role: SharedSpaceRole.Editor }));
+  mocks.sharedSpace.getById.mockResolvedValue(
+    factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+  );
+  mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+  mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.removeMember(auth, 'space-1', 'member-2');
+  await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
-    });
+  expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+});
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -397,57 +384,57 @@ Edit `server/src/services/shared-space.service.ts`, `removeMember`. Add the unli
 Then in `removeMember`, in the **self-leave** branch, replace:
 
 ```ts
-      await this.sharedSpaceRepository.removeMember(spaceId, userId);
-      await this.sharedSpaceRepository.logActivity({
-        spaceId,
-        userId,
-        type: SharedSpaceActivityType.MemberLeave,
-        data: {},
-      });
-      await this.queueSpacePersonMetadataBackfill();
-      return;
+await this.sharedSpaceRepository.removeMember(spaceId, userId);
+await this.sharedSpaceRepository.logActivity({
+  spaceId,
+  userId,
+  type: SharedSpaceActivityType.MemberLeave,
+  data: {},
+});
+await this.queueSpacePersonMetadataBackfill();
+return;
 ```
 
 with:
 
 ```ts
-      await this.sharedSpaceRepository.removeMember(spaceId, userId);
-      await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
-      await this.sharedSpaceRepository.logActivity({
-        spaceId,
-        userId,
-        type: SharedSpaceActivityType.MemberLeave,
-        data: {},
-      });
-      await this.queueSpacePersonMetadataBackfill();
-      return;
+await this.sharedSpaceRepository.removeMember(spaceId, userId);
+await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
+await this.sharedSpaceRepository.logActivity({
+  spaceId,
+  userId,
+  type: SharedSpaceActivityType.MemberLeave,
+  data: {},
+});
+await this.queueSpacePersonMetadataBackfill();
+return;
 ```
 
 And in the **owner-removes-other** branch, replace:
 
 ```ts
-    await this.sharedSpaceRepository.removeMember(spaceId, userId);
-    await this.sharedSpaceRepository.logActivity({
-      spaceId,
-      userId: auth.user.id,
-      type: SharedSpaceActivityType.MemberRemove,
-      data: { removedUserId: userId },
-    });
-    await this.queueSpacePersonMetadataBackfill();
+await this.sharedSpaceRepository.removeMember(spaceId, userId);
+await this.sharedSpaceRepository.logActivity({
+  spaceId,
+  userId: auth.user.id,
+  type: SharedSpaceActivityType.MemberRemove,
+  data: { removedUserId: userId },
+});
+await this.queueSpacePersonMetadataBackfill();
 ```
 
 with:
 
 ```ts
-    await this.sharedSpaceRepository.removeMember(spaceId, userId);
-    await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
-    await this.sharedSpaceRepository.logActivity({
-      spaceId,
-      userId: auth.user.id,
-      type: SharedSpaceActivityType.MemberRemove,
-      data: { removedUserId: userId },
-    });
-    await this.queueSpacePersonMetadataBackfill();
+await this.sharedSpaceRepository.removeMember(spaceId, userId);
+await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
+await this.sharedSpaceRepository.logActivity({
+  spaceId,
+  userId: auth.user.id,
+  type: SharedSpaceActivityType.MemberRemove,
+  data: { removedUserId: userId },
+});
+await this.queueSpacePersonMetadataBackfill();
 ```
 
 (Pre-existing `removeMember` unit tests are unaffected: `removeOwnedAlbumLinksAddedBy` auto-mocks to `undefined` → `?? []` → the face-cleanup branch is skipped, no extra `job.queue` call, `removeMember` still called with the same args.)
@@ -575,6 +562,7 @@ git commit -m "fix(spaces): unlink a departing member's own albums on removal"
 ## Task 3: correctness-4 — targeted post-commit grant reconciliation
 
 **Files:**
+
 - Modify: `server/src/enum.ts` (`JobName`, ~992)
 - Modify: `server/src/types.ts` (`ISharedSpaceAlbumGrantReconcileJob` ~343; `JobItem` union ~597)
 - Modify: `server/src/repositories/job.repository.ts` (dedup `jobId` case, ~528)
@@ -584,6 +572,7 @@ git commit -m "fix(spaces): unlink a departing member's own albums on removal"
 - Create: `server/test/medium/specs/repositories/shared-space-album-grant-reconcile.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `JobName.SharedSpaceAlbumGrantReconcile = 'SharedSpaceAlbumGrantReconcile'`.
   - `interface ISharedSpaceAlbumGrantReconcileJob extends IBaseJob { albumIds: string[] }`.
@@ -832,9 +821,9 @@ Edit `server/src/services/shared-space.service.ts`. Add the handler and helper n
 **(a) `unlinkAlbum`** (`~673-700`). At the end of the method (after the orphaned-face cleanup block), add:
 
 ```ts
-    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
-    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
-    await this.queueAlbumGrantReconcile([albumId]);
+// correctness-4: reconcile grants for the just-unlinked album (its grant revocation
+// in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
+await this.queueAlbumGrantReconcile([albumId]);
 ```
 
 **(b) `remove`** (space delete, `~362-366`). Replace the method with:
@@ -854,19 +843,19 @@ Edit `server/src/services/shared-space.service.ts`. Add the handler and helper n
 **(c) `removeMember`** (both branches). Capture the space's linked albums at the top (they persist through member removal, and the set includes any owned albums Task 2 later unlinks), and enqueue at the end of each branch. In `removeMember`, right after `const space = await this.sharedSpaceRepository.getById(spaceId);`, add:
 
 ```ts
-    const affectedAlbumIds = (await this.sharedSpaceRepository.getLinkedAlbumIds(spaceId)) ?? [];
+const affectedAlbumIds = (await this.sharedSpaceRepository.getLinkedAlbumIds(spaceId)) ?? [];
 ```
 
 Then, in the **self-leave** branch, after `await this.queueSpacePersonMetadataBackfill();` and **before** `return;`, add:
 
 ```ts
-      await this.queueAlbumGrantReconcile(affectedAlbumIds);
+await this.queueAlbumGrantReconcile(affectedAlbumIds);
 ```
 
 And in the **owner-removes-other** branch, after the final `await this.queueSpacePersonMetadataBackfill();`, add:
 
 ```ts
-    await this.queueAlbumGrantReconcile(affectedAlbumIds);
+await this.queueAlbumGrantReconcile(affectedAlbumIds);
 ```
 
 - [ ] **Step 8: Write & run the failing→passing unit tests (enqueue wiring)**
@@ -874,66 +863,60 @@ And in the **owner-removes-other** branch, after the final `await this.queueSpac
 Add to `server/src/services/shared-space.service.spec.ts`. In `describe('unlinkAlbum', …)` (find it; if absent, add a `describe` block) assert the enqueue; and in `describe('removeMember', …)` assert enqueue happens iff the space has linked albums. Example cases:
 
 ```ts
-    it('enqueues album grant reconcile after unlink (correctness-4)', async () => {
-      const auth = factory.auth({ user: { id: 'owner-1' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
-      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as never);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
-      mocks.album.getById.mockResolvedValue(undefined);
+it('enqueues album grant reconcile after unlink (correctness-4)', async () => {
+  const auth = factory.auth({ user: { id: 'owner-1' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+  mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as never);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.album.getById.mockResolvedValue(undefined);
 
-      await sut.unlinkAlbum(auth, 'space-1', 'album-a');
+  await sut.unlinkAlbum(auth, 'space-1', 'album-a');
 
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpaceAlbumGrantReconcile,
-        data: { albumIds: ['album-a'] },
-      });
-    });
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.SharedSpaceAlbumGrantReconcile,
+    data: { albumIds: ['album-a'] },
+  });
+});
 ```
 
 ```ts
-    it('enqueues album grant reconcile for the space albums on member removal (correctness-4)', async () => {
-      const auth = factory.auth({ user: { id: 'owner-1' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
-      );
-      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue(['album-a', 'album-b']);
-      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
-      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it('enqueues album grant reconcile for the space albums on member removal (correctness-4)', async () => {
+  const auth = factory.auth({ user: { id: 'owner-1' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(
+    factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+  );
+  mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue(['album-a', 'album-b']);
+  mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+  mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.removeMember(auth, 'space-1', 'member-2');
+  await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpaceAlbumGrantReconcile,
-        data: { albumIds: ['album-a', 'album-b'] },
-      });
-    });
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.SharedSpaceAlbumGrantReconcile,
+    data: { albumIds: ['album-a', 'album-b'] },
+  });
+});
 
-    it('does NOT enqueue reconcile when the space has no linked albums', async () => {
-      const auth = factory.auth({ user: { id: 'owner-1' } });
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
-      );
-      mocks.sharedSpace.getById.mockResolvedValue(
-        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
-      );
-      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
-      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
-      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+it('does NOT enqueue reconcile when the space has no linked albums', async () => {
+  const auth = factory.auth({ user: { id: 'owner-1' } });
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }));
+  mocks.sharedSpace.getById.mockResolvedValue(
+    factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+  );
+  mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+  mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+  mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.removeMember(auth, 'space-1', 'member-2');
+  await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.job.queue).not.toHaveBeenCalledWith(
-        expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
-      );
-    });
+  expect(mocks.job.queue).not.toHaveBeenCalledWith(
+    expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
+  );
+});
 ```
 
 > **Pre-existing test note:** the older `removeMember` cases that assert `mocks.job.queue` was called exactly once (`shared-space.service.spec.ts:2110,2130`) still pass because those cases don't mock `getLinkedAlbumIds` → it returns `undefined` → `?? []` → no reconcile enqueue → still exactly one queue call (the metadata backfill). Do **not** change those assertions.
@@ -969,6 +952,7 @@ git commit -m "fix(spaces): reconcile stranded album grants after concurrent rev
 ## Self-Review
 
 **1. Spec coverage (Slice 9 in the design doc):**
+
 - rbac-4/albums-5 part (a) — creator remove/demote guards → **Task 1** (unit red→green).
 - rbac-4/albums-5 part (b) — drop `createdById` arm → **deferred with recipe** (§B.5); the task explicitly permits "(a) alone may suffice — assess", and the investigation justifies deferral.
 - albums-6 — ex-member's owned albums unlinked on removal/leave → **Task 2** (service delete via ownership-scoped repo method; unit + medium).

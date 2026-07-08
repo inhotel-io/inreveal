@@ -463,16 +463,12 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
 
     for (const auth of [memberA, memberB]) {
       const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-      const deletes = next.filter(
-        (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1,
-      );
+      const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
       // Each member gets exactly one delete (their own space's album link) and no re-add.
       expect(deletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
       await ctx.syncAckAll(auth, next);
       const afterAck = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-      const upserts = afterAck.filter(
-        (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1,
-      );
+      const upserts = afterAck.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
       expect(upserts.map((e) => (e as { data: { assetId: string } }).data.assetId)).not.toContain(asset.id);
     }
   });

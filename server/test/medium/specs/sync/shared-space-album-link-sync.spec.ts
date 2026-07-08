@@ -180,7 +180,9 @@ describe('SharedSpaceAlbumLinkSync — soft-deleted album exclusion (Slice 8)', 
 
     const stream = sut.getUpserts({ nowId: NOW_ID, userId: owner.id });
     const result: any[] = [];
-    for await (const row of stream) {result.push(row);}
+    for await (const row of stream) {
+      result.push(row);
+    }
     const albumIds = result.map((r: any) => r.albumId);
     expect(albumIds).toContain(live.id);
     expect(albumIds).not.toContain(trashed.id);
@@ -199,7 +201,9 @@ describe('SharedSpaceAlbumLinkSync — soft-deleted album exclusion (Slice 8)', 
 
     const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, space.id);
     const result: any[] = [];
-    for await (const row of stream) {result.push(row);}
+    for await (const row of stream) {
+      result.push(row);
+    }
     const albumIds = result.map((r: any) => r.albumId);
     expect(albumIds).toContain(live.id);
     expect(albumIds).not.toContain(trashed.id);
@@ -217,7 +221,9 @@ describe('SharedSpaceAlbumLinkSync — soft-deleted album exclusion (Slice 8)', 
 
     const stream = sut.getUpserts({ nowId: NOW_ID, userId: owner.id });
     const result: any[] = [];
-    for await (const row of stream) {result.push(row);}
+    for await (const row of stream) {
+      result.push(row);
+    }
     expect(result.map((r: any) => r.albumId)).toContain(album.id);
   });
 });

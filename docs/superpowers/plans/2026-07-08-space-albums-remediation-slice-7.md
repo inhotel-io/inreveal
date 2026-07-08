@@ -28,6 +28,7 @@
 ## Key investigation findings (decisions locked in)
 
 **Owner-visible link shape — DECISION: a new optional field `sharedSpaceLinks` on `AlbumResponseDto`, NOT a new endpoint.**
+
 - Rationale: it mirrors the two existing conditionally-populated optional fields on the same DTO — `contributorCounts` (populated only in `get()` when shared) and the shared-space DTO's admin-only `linkedLibraries` — so it is an established, low-churn pattern. The web album detail page already fetches `getAlbumInfo` (`GET /albums/:id`), so no extra round-trip or new route/controller surface is needed. Owner-gating is enforced in the service (populated only when the caller owns the album; `undefined` otherwise), exactly like `contributorCounts`.
 - Cost: it is a DTO change → **SDK regen required** (Task 3). A new endpoint would have the same regen cost with more surface, so the field wins on churn.
 
@@ -44,6 +45,7 @@
 ## File Structure
 
 **Server (Commit 1):**
+
 - Modify `server/src/dtos/album.dto.ts` — add `AlbumSharedSpaceLinkResponseSchema` + optional `sharedSpaceLinks` field on `AlbumResponseSchema`.
 - Modify `server/src/repositories/shared-space.repository.ts` — add `getAlbumSpaceLinks(albumId)` (no `@GenerateSql`).
 - Modify `server/src/services/album.service.ts` — populate `sharedSpaceLinks` in `get()` for the album owner only.
@@ -54,6 +56,7 @@
 - Regenerated: `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `mobile/openapi/**` (Dart), `packages/sdk/build/**`.
 
 **Web (Commit 2):**
+
 - Create `web/src/lib/components/album-page/AlbumSharedSpaceLinks.svelte`.
 - Create `web/src/lib/components/album-page/__tests__/AlbumSharedSpaceLinks.spec.ts`.
 - Modify `web/src/lib/components/album-page/AlbumViewer.svelte` — mount the component.
@@ -61,6 +64,7 @@
 - Modify `.../[[assetId=id]]/space-album-detail-page.spec.ts` — control-bar regression test.
 
 **Playwright (Commit 3):**
+
 - Modify `e2e/src/specs/web/spaces-albums.e2e-spec.ts` (and/or `spaces-albums-journey.e2e-spec.ts`) — Viewer-vs-Editor affordance matrix.
 
 ---
@@ -70,9 +74,11 @@
 ### Task 1: `getAlbumSpaceLinks` repository query
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` (add method next to `getLinkedAlbums` / `getSpacesLinkedToAlbum`, ~`:576-614`)
 
 **Interfaces:**
+
 - Produces: `SharedSpaceRepository.getAlbumSpaceLinks(albumId: string): Promise<{ spaceId: string; spaceName: string; linkedById: string | null; showInTimeline: boolean }[]>` — every shared space the album is currently linked into, ordered by space name.
 
 - [ ] **Step 1: Add the method (no `@GenerateSql`)**
@@ -110,11 +116,13 @@ Expected: PASS (no `tsc` errors). This is verified end-to-end once Task 2's cons
 ### Task 2: `sharedSpaceLinks` DTO field + owner-gated population in `album.service.get`
 
 **Files:**
+
 - Modify: `server/src/dtos/album.dto.ts:108-141` (add sub-schema + field) and export near `:152`
 - Modify: `server/src/services/album.service.ts:93-129` (`get`)
 - Test: `server/src/services/album.service.spec.ts` (new `describe('get — sharedSpaceLinks (rbac-6)')`)
 
 **Interfaces:**
+
 - Consumes: `SharedSpaceRepository.getAlbumSpaceLinks` (Task 1); `accessRepository.album.checkOwnerAccess(userId, ids: Set<string>): Promise<Set<string>>`.
 - Produces: `AlbumResponseDto.sharedSpaceLinks?: AlbumSharedSpaceLinkResponseDto[]` where `AlbumSharedSpaceLinkResponseDto = { spaceId: string; spaceName: string; linkedById: string | null; showInTimeline: boolean }`. Populated **only** when the caller owns the album; `undefined` for every other caller.
 
@@ -123,62 +131,62 @@ Expected: PASS (no `tsc` errors). This is verified end-to-end once Task 2's cons
 Add to `server/src/services/album.service.spec.ts` (mirror the `AuthFactory` / `AlbumFactory` / `getForAlbum` / `mocks.access.album.*` patterns already in the file, e.g. `:126-186`):
 
 ```ts
-  describe('get — sharedSpaceLinks (rbac-6)', () => {
-    it('returns sharedSpaceLinks to the album owner', async () => {
-      const auth = AuthFactory.create();
-      const album = AlbumFactory.from().owner(auth.user).build();
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
-      mocks.album.getById.mockResolvedValue(getForAlbum(album));
-      mocks.album.getMetadataForIds.mockResolvedValue([
-        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
-      ]);
-      mocks.sharedSpace.getAlbumSpaceLinks.mockResolvedValue([
-        { spaceId: 'space-1', spaceName: 'Trip', linkedById: 'editor-1', showInTimeline: true },
-        { spaceId: 'space-2', spaceName: 'Zoo', linkedById: 'editor-2', showInTimeline: false },
-      ]);
+describe('get — sharedSpaceLinks (rbac-6)', () => {
+  it('returns sharedSpaceLinks to the album owner', async () => {
+    const auth = AuthFactory.create();
+    const album = AlbumFactory.from().owner(auth.user).build();
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
+    mocks.album.getById.mockResolvedValue(getForAlbum(album));
+    mocks.album.getMetadataForIds.mockResolvedValue([
+      { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
+    ]);
+    mocks.sharedSpace.getAlbumSpaceLinks.mockResolvedValue([
+      { spaceId: 'space-1', spaceName: 'Trip', linkedById: 'editor-1', showInTimeline: true },
+      { spaceId: 'space-2', spaceName: 'Zoo', linkedById: 'editor-2', showInTimeline: false },
+    ]);
 
-      const result = await sut.get(auth, album.id);
+    const result = await sut.get(auth, album.id);
 
-      expect(result.sharedSpaceLinks).toEqual([
-        { spaceId: 'space-1', spaceName: 'Trip', linkedById: 'editor-1', showInTimeline: true },
-        { spaceId: 'space-2', spaceName: 'Zoo', linkedById: 'editor-2', showInTimeline: false },
-      ]);
-      expect(mocks.sharedSpace.getAlbumSpaceLinks).toHaveBeenCalledWith(album.id);
-    });
-
-    it('omits sharedSpaceLinks for a non-owner space-linked reader', async () => {
-      const auth = AuthFactory.create();
-      const album = AlbumFactory.from().albumUser().build(); // owned by someone else
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set()); // not the owner
-      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set()); // not a shared album_user
-      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([album.id])); // reaches via space
-      mocks.album.getById.mockResolvedValue(getForAlbum(album));
-      mocks.album.getMetadataForIds.mockResolvedValue([
-        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
-      ]);
-
-      const result = await sut.get(auth, album.id);
-
-      expect(result.sharedSpaceLinks).toBeUndefined();
-      expect(mocks.sharedSpace.getAlbumSpaceLinks).not.toHaveBeenCalled();
-    });
-
-    it('omits sharedSpaceLinks for a non-owner album EDITOR (owner-only policy)', async () => {
-      const auth = AuthFactory.create();
-      const album = AlbumFactory.from().albumUser().build();
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set()); // not the owner
-      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([album.id])); // album editor/viewer
-      mocks.album.getById.mockResolvedValue(getForAlbum(album));
-      mocks.album.getMetadataForIds.mockResolvedValue([
-        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
-      ]);
-
-      const result = await sut.get(auth, album.id);
-
-      expect(result.sharedSpaceLinks).toBeUndefined();
-      expect(mocks.sharedSpace.getAlbumSpaceLinks).not.toHaveBeenCalled();
-    });
+    expect(result.sharedSpaceLinks).toEqual([
+      { spaceId: 'space-1', spaceName: 'Trip', linkedById: 'editor-1', showInTimeline: true },
+      { spaceId: 'space-2', spaceName: 'Zoo', linkedById: 'editor-2', showInTimeline: false },
+    ]);
+    expect(mocks.sharedSpace.getAlbumSpaceLinks).toHaveBeenCalledWith(album.id);
   });
+
+  it('omits sharedSpaceLinks for a non-owner space-linked reader', async () => {
+    const auth = AuthFactory.create();
+    const album = AlbumFactory.from().albumUser().build(); // owned by someone else
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set()); // not the owner
+    mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set()); // not a shared album_user
+    mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([album.id])); // reaches via space
+    mocks.album.getById.mockResolvedValue(getForAlbum(album));
+    mocks.album.getMetadataForIds.mockResolvedValue([
+      { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
+    ]);
+
+    const result = await sut.get(auth, album.id);
+
+    expect(result.sharedSpaceLinks).toBeUndefined();
+    expect(mocks.sharedSpace.getAlbumSpaceLinks).not.toHaveBeenCalled();
+  });
+
+  it('omits sharedSpaceLinks for a non-owner album EDITOR (owner-only policy)', async () => {
+    const auth = AuthFactory.create();
+    const album = AlbumFactory.from().albumUser().build();
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set()); // not the owner
+    mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([album.id])); // album editor/viewer
+    mocks.album.getById.mockResolvedValue(getForAlbum(album));
+    mocks.album.getMetadataForIds.mockResolvedValue([
+      { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
+    ]);
+
+    const result = await sut.get(auth, album.id);
+
+    expect(result.sharedSpaceLinks).toBeUndefined();
+    expect(mocks.sharedSpace.getAlbumSpaceLinks).not.toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -219,18 +227,18 @@ export class AlbumSharedSpaceLinkResponseDto extends createZodDto(AlbumSharedSpa
 In `server/src/services/album.service.ts`, inside `get()` (between the security-8 `hasDirectAccess` block ending at `:117` and the `return {` at `:119`), add:
 
 ```ts
-    // rbac-6: the album OWNER (and only the owner) sees the list of shared spaces this album is
-    // linked into, so they can review + revoke links (a space editor can link an owner's album).
-    // Non-owner callers — including album editors/viewers and space-only readers — get no list.
-    const isAlbumOwner = (await this.accessRepository.album.checkOwnerAccess(auth.user.id, new Set([id]))).has(id);
-    const sharedSpaceLinks = isAlbumOwner
-      ? (await this.sharedSpaceRepository.getAlbumSpaceLinks(id)).map((link) => ({
-          spaceId: link.spaceId,
-          spaceName: link.spaceName,
-          linkedById: link.linkedById,
-          showInTimeline: link.showInTimeline,
-        }))
-      : undefined;
+// rbac-6: the album OWNER (and only the owner) sees the list of shared spaces this album is
+// linked into, so they can review + revoke links (a space editor can link an owner's album).
+// Non-owner callers — including album editors/viewers and space-only readers — get no list.
+const isAlbumOwner = (await this.accessRepository.album.checkOwnerAccess(auth.user.id, new Set([id]))).has(id);
+const sharedSpaceLinks = isAlbumOwner
+  ? (await this.sharedSpaceRepository.getAlbumSpaceLinks(id)).map((link) => ({
+      spaceId: link.spaceId,
+      spaceName: link.spaceName,
+      linkedById: link.linkedById,
+      showInTimeline: link.showInTimeline,
+    }))
+  : undefined;
 ```
 
 Add `sharedSpaceLinks,` to the returned object (in the `return { ...mapped, ... }` block, after `contributorCounts`):
@@ -250,10 +258,12 @@ Expected: PASS (all three).
 ### Task 3: `unlinkAlbum` album-owner arm
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts:673-690` (`unlinkAlbum`)
 - Test: `server/src/services/shared-space.service.spec.ts` (new `describe('unlinkAlbum — owner arm (rbac-6)')`)
 
 **Interfaces:**
+
 - Consumes: `BaseService.checkAccess({ auth, permission, ids })` (`base.service.ts:336`); `Permission.AlbumDelete` → `access.album.checkOwnerAccess`; `getSharedSpaceRoleScore` + `ROLE_HIERARCHY` (already in `shared-space.service.ts:71-77`).
 - Produces: `unlinkAlbum` now succeeds for (space Editor+) **OR** (album owner, even a non-member); rejects everyone else with `ForbiddenException`.
 
@@ -262,64 +272,64 @@ Expected: PASS (all three).
 Add to `server/src/services/shared-space.service.spec.ts` (mirror `makeMemberResult` / `factory.auth` / `mocks.sharedSpace.*` / `mocks.access.album.*` patterns, e.g. `:7789-7912`, `:10427-10447`):
 
 ```ts
-  describe('unlinkAlbum — owner arm (rbac-6)', () => {
-    it('allows the album owner to unlink even without space membership', async () => {
-      const auth = factory.auth({ user: { isAdmin: false } });
-      const spaceId = newUuid();
-      const albumId = newUuid();
-      mocks.sharedSpace.getMember.mockResolvedValue(void 0); // not a space member
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId])); // owns the album
-      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
-      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
-      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+describe('unlinkAlbum — owner arm (rbac-6)', () => {
+  it('allows the album owner to unlink even without space membership', async () => {
+    const auth = factory.auth({ user: { isAdmin: false } });
+    const spaceId = newUuid();
+    const albumId = newUuid();
+    mocks.sharedSpace.getMember.mockResolvedValue(void 0); // not a space member
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId])); // owns the album
+    mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+    mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+    mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+    mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-      await sut.unlinkAlbum(auth, spaceId, albumId);
+    await sut.unlinkAlbum(auth, spaceId, albumId);
 
-      expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
-    });
-
-    it('rejects unlink from a non-owner non-member', async () => {
-      const auth = factory.auth({ user: { isAdmin: false } });
-      mocks.sharedSpace.getMember.mockResolvedValue(void 0);
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(sut.unlinkAlbum(auth, newUuid(), newUuid())).rejects.toThrow(ForbiddenException);
-      expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
-    });
-
-    it('rejects unlink from a space Viewer who does not own the album', async () => {
-      const auth = factory.auth({ user: { isAdmin: false } });
-      const spaceId = newUuid();
-      const albumId = newUuid();
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
-      );
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(sut.unlinkAlbum(auth, spaceId, albumId)).rejects.toThrow(ForbiddenException);
-      expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
-    });
-
-    it('still allows a space Editor who is NOT the album owner to unlink (space-editor path not weakened)', async () => {
-      const auth = factory.auth({ user: { isAdmin: false } });
-      const spaceId = newUuid();
-      const albumId = newUuid();
-      mocks.sharedSpace.getMember.mockResolvedValue(
-        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
-      );
-      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
-      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
-      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
-      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
-
-      await sut.unlinkAlbum(auth, spaceId, albumId);
-
-      expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
-      // Editor path short-circuits before the owner check.
-      expect(mocks.access.album.checkOwnerAccess).not.toHaveBeenCalled();
-    });
+    expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
   });
+
+  it('rejects unlink from a non-owner non-member', async () => {
+    const auth = factory.auth({ user: { isAdmin: false } });
+    mocks.sharedSpace.getMember.mockResolvedValue(void 0);
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+    await expect(sut.unlinkAlbum(auth, newUuid(), newUuid())).rejects.toThrow(ForbiddenException);
+    expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
+  });
+
+  it('rejects unlink from a space Viewer who does not own the album', async () => {
+    const auth = factory.auth({ user: { isAdmin: false } });
+    const spaceId = newUuid();
+    const albumId = newUuid();
+    mocks.sharedSpace.getMember.mockResolvedValue(
+      makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
+    );
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+    await expect(sut.unlinkAlbum(auth, spaceId, albumId)).rejects.toThrow(ForbiddenException);
+    expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
+  });
+
+  it('still allows a space Editor who is NOT the album owner to unlink (space-editor path not weakened)', async () => {
+    const auth = factory.auth({ user: { isAdmin: false } });
+    const spaceId = newUuid();
+    const albumId = newUuid();
+    mocks.sharedSpace.getMember.mockResolvedValue(
+      makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
+    );
+    mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+    mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+    mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+    mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+    await sut.unlinkAlbum(auth, spaceId, albumId);
+
+    expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
+    // Editor path short-circuits before the owner check.
+    expect(mocks.access.album.checkOwnerAccess).not.toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -332,23 +342,23 @@ Expected: FAIL — the "album owner without membership" test throws `ForbiddenEx
 In `server/src/services/shared-space.service.ts`, replace the first line of `unlinkAlbum` (`:674`):
 
 ```ts
-    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
 ```
 
 with:
 
 ```ts
-    // rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
-    // revoke a link to their own album, even without space membership (otherwise an owner cannot
-    // discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
-    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
-    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
-    if (!isSpaceEditor) {
-      const ownedAlbums = await this.checkAccess({ auth, permission: Permission.AlbumDelete, ids: [albumId] });
-      if (!ownedAlbums.has(albumId)) {
-        throw new ForbiddenException('Insufficient role');
-      }
-    }
+// rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
+// revoke a link to their own album, even without space membership (otherwise an owner cannot
+// discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
+const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
+const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
+if (!isSpaceEditor) {
+  const ownedAlbums = await this.checkAccess({ auth, permission: Permission.AlbumDelete, ids: [albumId] });
+  if (!ownedAlbums.has(albumId)) {
+    throw new ForbiddenException('Insufficient role');
+  }
+}
 ```
 
 (`ForbiddenException` and `Permission` are already imported at `:1` and `:50`.)
@@ -365,9 +375,11 @@ Expected: PASS.
 ### Task 4: Authored server API e2e for rbac-6 (CI-deferred)
 
 **Files:**
+
 - Modify: `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts` (add a `describe('rbac-6 — album-link ownership controls')` block near the existing rbac-2 / rbac-3 blocks at the bottom)
 
 **Interfaces:**
+
 - Consumes: `utils.adminSetup`, `utils.userSetup`, `utils.createSpace`, `utils.addSpaceMember`, `utils.createAsset`, `utils.createAlbum({ albumName, albumUsers, assetIds })`, `utils.linkSpaceAlbum(token, spaceId, albumId)`; SDK `getAlbumInfo`; raw `request(app)` for `DELETE /shared-spaces/:spaceId/albums/:albumId`.
 
 - [ ] **Step 1: Write the e2e block**
@@ -429,9 +441,7 @@ describe('rbac-6 — album-link ownership controls', () => {
       .expect(204);
 
     const info = await getAlbumInfo({ id: album.id }, { headers: asBearerAuth(albumOwner.accessToken) });
-    expect(info.sharedSpaceLinks).toEqual([
-      expect.objectContaining({ spaceId: spaceB.id, spaceName: 'Space B' }),
-    ]);
+    expect(info.sharedSpaceLinks).toEqual([expect.objectContaining({ spaceId: spaceB.id, spaceName: 'Space B' })]);
     // The album itself is untouched.
     expect(info.id).toBe(album.id);
     expect(info.assetCount).toBe(1);
@@ -456,9 +466,11 @@ Expected: PASS (types resolve). **Mark the block "authored, CI-deferred"** — i
 ### Task 5: SDK regen (required before web tasks)
 
 **Files:**
+
 - Regenerated (do not hand-edit): `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `mobile/openapi/**`, `packages/sdk/build/**`.
 
 **Interfaces:**
+
 - Produces: SDK type `AlbumResponseDto.sharedSpaceLinks?: AlbumSharedSpaceLinkResponseDto[]` and type `AlbumSharedSpaceLinkResponseDto` importable from `@immich/sdk` (consumed by Task 6/7).
 
 - [ ] **Step 1: Build the server so the spec generator sees the new DTO**
@@ -499,7 +511,7 @@ git add server/src/dtos/album.dto.ts \
 git commit -m "feat(spaces): album owner can view + revoke space-album links (rbac-6)"
 ```
 
-> **RISK (call out in the PR):** the `sharedSpaceLinks` field forces an SDK/Dart regen that cannot be executed in the Docker-down environment for its *runtime* verification (only compile-time). The regenerated `mobile/openapi/**` Dart is additive/optional and mobile is out of slice-7 scope, but it must be committed so the checked-in client matches the spec. If Java was unavailable, the Dart step must be completed in a Java-capable/CI environment before merge, or CI's OpenAPI check will flag drift.
+> **RISK (call out in the PR):** the `sharedSpaceLinks` field forces an SDK/Dart regen that cannot be executed in the Docker-down environment for its _runtime_ verification (only compile-time). The regenerated `mobile/openapi/**` Dart is additive/optional and mobile is out of slice-7 scope, but it must be committed so the checked-in client matches the spec. If Java was unavailable, the Dart step must be completed in a Java-capable/CI environment before merge, or CI's OpenAPI check will flag drift.
 
 ---
 
@@ -510,10 +522,12 @@ git commit -m "feat(spaces): album owner can view + revoke space-album links (rb
 ### Task 6: `AlbumSharedSpaceLinks` component + unit test
 
 **Files:**
+
 - Create: `web/src/lib/components/album-page/AlbumSharedSpaceLinks.svelte`
 - Test: `web/src/lib/components/album-page/__tests__/AlbumSharedSpaceLinks.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `AlbumResponseDto` (with `sharedSpaceLinks`) from `@immich/sdk`; `unlinkAlbum({ id, albumId })` from `@immich/sdk`.
 - Produces: `AlbumSharedSpaceLinks` component — props `{ album: AlbumResponseDto }`; renders one row per `album.sharedSpaceLinks` entry (space name + timeline indicator + unlink button); on unlink calls `unlinkAlbum({ id: link.spaceId, albumId: album.id })` and removes the row from local state. Renders nothing when `sharedSpaceLinks` is empty/undefined.
 
@@ -534,7 +548,7 @@ vi.mock('@immich/sdk', async (importOriginal) => ({
 }));
 
 const albumWith = (sharedSpaceLinks: unknown) =>
-  ({ id: 'album-1', albumName: 'Owner Album', sharedSpaceLinks } as never);
+  ({ id: 'album-1', albumName: 'Owner Album', sharedSpaceLinks }) as never;
 
 describe('AlbumSharedSpaceLinks', () => {
   it('renders one row per space link with the space name', () => {
@@ -636,9 +650,11 @@ Expected: PASS (all three).
 ### Task 7: Mount `AlbumSharedSpaceLinks` in the album detail page
 
 **Files:**
+
 - Modify: `web/src/lib/components/album-page/AlbumViewer.svelte` (the personal album-detail component that receives the `AlbumResponseDto`)
 
 **Interfaces:**
+
 - Consumes: `AlbumSharedSpaceLinks` (Task 6); the `album` object already in `AlbumViewer` scope.
 
 - [ ] **Step 1: Import + mount the component**
@@ -646,7 +662,7 @@ Expected: PASS (all three).
 In `web/src/lib/components/album-page/AlbumViewer.svelte`, add the import alongside the other `album-page` imports:
 
 ```ts
-  import AlbumSharedSpaceLinks from '$lib/components/album-page/AlbumSharedSpaceLinks.svelte';
+import AlbumSharedSpaceLinks from '$lib/components/album-page/AlbumSharedSpaceLinks.svelte';
 ```
 
 Mount it in the album header / summary / options region where album metadata is rendered (near `AlbumSummary` or the album options block — re-confirm the exact block by reading the file). The component self-hides when there are no links, so no extra guard is needed:
@@ -665,10 +681,12 @@ Expected: PASS (svelte-check + tsc; `album.sharedSpaceLinks` resolves because th
 ### Task 8: Pin the space-linked-album control bar (rbac-5 / albums-8) + regression test
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/spaces/[spaceId]/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte:214-222` (control-bar comment + `data-testid` for Playwright)
 - Test: `.../[[assetId=id]]/space-album-detail-page.spec.ts` (control-bar regression)
 
 **Interfaces:**
+
 - Produces: a stable `data-testid="album-remove-from-album"` marker on the space-album RemoveFromAlbum control (consumed by Task 9 Playwright); a pinned control-bar shape (Download + `canManage`-gated RemoveFromAlbum, no metadata-edit affordances).
 
 - [ ] **Step 1: Write the failing regression test**
@@ -676,23 +694,23 @@ Expected: PASS (svelte-check + tsc; `album.sharedSpaceLinks` resolves because th
 Add to the existing `space-album-detail-page.spec.ts` (mirror its existing render harness / `mock-asset-select-control-bar.test-wrapper.svelte` usage — re-confirm the wrapper the file uses to drive the control bar):
 
 ```ts
-  describe('rbac-5/albums-8: album-path control bar exposes no editor metadata affordances', () => {
-    it('shows Download + RemoveFromAlbum for a manager and NO metadata-edit affordances', () => {
-      // render with canManage = true (space editor or album editor) and a selection active
-      // (reuse the file's existing render helper / props for the browse-mode control bar).
-      // Assert the only actions are Download + RemoveFromAlbum:
-      expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
-      expect(screen.queryByTestId('change-date-action')).toBeNull();
-      expect(screen.queryByTestId('change-location-action')).toBeNull();
-      expect(screen.queryByTestId('archive-action')).toBeNull();
-      expect(screen.queryByTestId('tag-action')).toBeNull();
-    });
-
-    it('hides RemoveFromAlbum for a non-manager (viewer)', () => {
-      // render with canManage = false
-      expect(screen.queryByTestId('album-remove-from-album')).toBeNull();
-    });
+describe('rbac-5/albums-8: album-path control bar exposes no editor metadata affordances', () => {
+  it('shows Download + RemoveFromAlbum for a manager and NO metadata-edit affordances', () => {
+    // render with canManage = true (space editor or album editor) and a selection active
+    // (reuse the file's existing render helper / props for the browse-mode control bar).
+    // Assert the only actions are Download + RemoveFromAlbum:
+    expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
+    expect(screen.queryByTestId('change-date-action')).toBeNull();
+    expect(screen.queryByTestId('change-location-action')).toBeNull();
+    expect(screen.queryByTestId('archive-action')).toBeNull();
+    expect(screen.queryByTestId('tag-action')).toBeNull();
   });
+
+  it('hides RemoveFromAlbum for a non-manager (viewer)', () => {
+    // render with canManage = false
+    expect(screen.queryByTestId('album-remove-from-album')).toBeNull();
+  });
+});
 ```
 
 > The exact `queryByTestId` targets depend on this repo's action testids; if the metadata-edit actions have no testids, assert the control bar's rendered button set by role/text instead (`screen.queryByRole('button', { name: /archive|change date|change location|tag/i })` → `null`). The load-bearing assertions are: RemoveFromAlbum present iff `canManage`, and no metadata-edit control present in any case.
@@ -755,9 +773,11 @@ git commit -m "feat(web): surface album space-links to owner; pin space-album ed
 ### Task 9: Viewer-vs-Editor affordance matrix (authored, CI-deferred)
 
 **Files:**
+
 - Modify: `e2e/src/specs/web/spaces-albums.e2e-spec.ts` (extend the existing viewer-gating tests) and/or `e2e/src/specs/web/spaces-albums-journey.e2e-spec.ts`
 
 **Interfaces:**
+
 - Consumes: existing fixture (`owner`/`editor`/`viewer` via `utils.createSpace`/`utils.addSpaceMember`/`utils.createAlbum({ albumUsers })`/`utils.linkSpaceAlbum`); `utils.setAuthCookies`; existing selectors `link-album-button`, `space-album-card-menu`, `add-photos-button`; new selector `album-remove-from-album` (Task 8).
 
 - [ ] **Step 1: Extend the spec with the affordance matrix**

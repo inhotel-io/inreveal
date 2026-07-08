@@ -13,7 +13,7 @@
 - **No relative imports in `server/`** — use the `src/` path alias (enforced by ESLint).
 - **Prettier**: 120-char width, single quotes, trailing commas, semicolons.
 - **TDD is mandatory** (spec §0.1): every fix is red-first with a captured command + expected failure, then green, then a final full-suite validation for the touched package. A test that passes on first run is a red flag.
-- **Flat gate, no owner exception** (spec §0.4): the album *content* read surfaces use `spaceVisibilityGate(eb)` / `withDefaultVisibility` with **no** `own OR` — the album grid already hides the owner's own Hidden/Locked, so an owner exception here would be an inconsistency. Only the non-album `userIds` search path keeps its existing `own OR gate` and stays untouched.
+- **Flat gate, no owner exception** (spec §0.4): the album _content_ read surfaces use `spaceVisibilityGate(eb)` / `withDefaultVisibility` with **no** `own OR` — the album grid already hides the owner's own Hidden/Locked, so an owner exception here would be an inconsistency. Only the non-album `userIds` search path keeps its existing `own OR gate` and stays untouched.
 - **No Claude co-author trailers** on commits (spec §0.3). One commit per fix-group; boundaries defined per task below.
 - **No SDK/DTO changes** in this slice — no endpoint or DTO signature changes, so no `make build-sdk` / `make open-api` needed. (`visibility` is already `AssetVisibilitySchema.optional()` on the search DTO and an existing field on `TimeBucketDto`.)
 - **No `make sql` in this slice** — no `@GenerateSqlQueries`-decorated repository method signature changes (the edits are inside `searchAssetBuilder` / the `getTimeBucket*` query bodies, whose generated SQL fixtures are not asserted by these tasks). Do **not** run `make sql` without a running scratch DB (deletes query files).
@@ -57,10 +57,12 @@ make check-server && make lint-server
 ### Task 1: `timeBucketChecks` rejects `albumId` + Hidden/Locked (security-3 primary)
 
 **Files:**
+
 - Modify: `server/src/services/timeline.service.ts:133-138` (the `spaceBrowse` private-visibility rejection)
 - Test: `server/src/services/timeline.service.spec.ts` (add a new `describe` block)
 
 **Interfaces:**
+
 - Consumes: `TimelineService.getTimeBuckets(auth, dto)` / `getTimeBucket(auth, dto)` — both call the private `timeBucketChecks` first (`timeline.service.ts:20,36`).
 - Produces: no signature change. Behavior: `albumId` + `visibility` ∈ {Hidden, Locked} → `BadRequestException` for everyone (flat, no owner exception), thrown before the repo call and before the `AlbumRead` access check.
 
@@ -69,106 +71,104 @@ make check-server && make lint-server
 Add this `describe` block inside the top-level `describe(TimelineService.name, …)` in `server/src/services/timeline.service.spec.ts` (e.g. right after the existing `describe('edge cases', …)` block, before the final closing `});`). It reuses the file's existing imports (`BadRequestException`, `AssetVisibility`, `TimeBucketSize`, `authStub`).
 
 ```ts
-  describe('album browse visibility (Slice 1 / security-3)', () => {
-    // The rejection is flat — even the album owner (here: an elevated admin, mocked to hold
-    // album access) is refused Hidden/Locked via the album path, matching the album grid.
-    it('rejects Hidden visibility on an albumId browse for getTimeBuckets', async () => {
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
-      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+describe('album browse visibility (Slice 1 / security-3)', () => {
+  // The rejection is flat — even the album owner (here: an elevated admin, mocked to hold
+  // album access) is refused Hidden/Locked via the album path, matching the album grid.
+  it('rejects Hidden visibility on an albumId browse for getTimeBuckets', async () => {
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+    mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
-      await expect(
-        sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
-          albumId: 'album-id',
-          visibility: AssetVisibility.Hidden,
-        }),
-      ).rejects.toThrow(BadRequestException);
+    await expect(
+      sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+        albumId: 'album-id',
+        visibility: AssetVisibility.Hidden,
+      }),
+    ).rejects.toThrow(BadRequestException);
 
-      expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
-    });
-
-    it('rejects Locked visibility on an albumId browse for getTimeBuckets', async () => {
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
-      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
-
-      await expect(
-        sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
-          albumId: 'album-id',
-          visibility: AssetVisibility.Locked,
-        }),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
-    });
-
-    it('rejects Hidden visibility on an albumId browse for getTimeBucket', async () => {
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
-      mocks.asset.getTimeBucket.mockResolvedValue({ assets: `[{ id: ['asset-id'] }]` });
-
-      await expect(
-        sut.getTimeBucket(authStub.adminWithElevatedPermission, {
-          timeBucket: '2024-01-01',
-          albumId: 'album-id',
-          visibility: AssetVisibility.Hidden,
-        }),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(mocks.asset.getTimeBucket).not.toHaveBeenCalled();
-    });
-
-    it('allows Archive visibility on an albumId browse (Archive is shareable)', async () => {
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
-      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
-
-      await expect(
-        sut.getTimeBuckets(authStub.admin, { albumId: 'album-id', visibility: AssetVisibility.Archive }),
-      ).resolves.toEqual([{ timeBucket: '2024-01-01', count: 1 }]);
-
-      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
-    });
-
-    it('allows default (undefined) visibility on an albumId browse', async () => {
-      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
-      mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
-
-      await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' })).resolves.toEqual([
-        { timeBucket: '2024-01-01', count: 1 },
-      ]);
-
-      expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
-    });
+    expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
   });
+
+  it('rejects Locked visibility on an albumId browse for getTimeBuckets', async () => {
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+    mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+    await expect(
+      sut.getTimeBuckets(authStub.adminWithElevatedPermission, {
+        albumId: 'album-id',
+        visibility: AssetVisibility.Locked,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(mocks.asset.getTimeBuckets).not.toHaveBeenCalled();
+  });
+
+  it('rejects Hidden visibility on an albumId browse for getTimeBucket', async () => {
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+    mocks.asset.getTimeBucket.mockResolvedValue({ assets: `[{ id: ['asset-id'] }]` });
+
+    await expect(
+      sut.getTimeBucket(authStub.adminWithElevatedPermission, {
+        timeBucket: '2024-01-01',
+        albumId: 'album-id',
+        visibility: AssetVisibility.Hidden,
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(mocks.asset.getTimeBucket).not.toHaveBeenCalled();
+  });
+
+  it('allows Archive visibility on an albumId browse (Archive is shareable)', async () => {
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+    mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+    await expect(
+      sut.getTimeBuckets(authStub.admin, { albumId: 'album-id', visibility: AssetVisibility.Archive }),
+    ).resolves.toEqual([{ timeBucket: '2024-01-01', count: 1 }]);
+
+    expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
+  });
+
+  it('allows default (undefined) visibility on an albumId browse', async () => {
+    mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+    mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
+
+    await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' })).resolves.toEqual([
+      { timeBucket: '2024-01-01', count: 1 },
+    ]);
+
+    expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-id' }));
+  });
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail (RED)**
 
 Run: `cd server && pnpm test -- --run src/services/timeline.service.spec.ts`
 
-Expected: the three `rejects…` tests FAIL. Pre-fix, `albumId` is not part of `spaceBrowse`, so no rejection is thrown; `checkOwnerAccess` is mocked to grant access, so the call proceeds into `super.getTimeBuckets`/`getTimeBucket` (mocked to resolve). The `rejects.toThrow(BadRequestException)` assertions fail (the promise resolves) and the `not.toHaveBeenCalled()` assertions fail (the repo mock *was* called). The two "allows …" tests pass on first run (they are the positive-control guard, not the RED driver).
+Expected: the three `rejects…` tests FAIL. Pre-fix, `albumId` is not part of `spaceBrowse`, so no rejection is thrown; `checkOwnerAccess` is mocked to grant access, so the call proceeds into `super.getTimeBuckets`/`getTimeBucket` (mocked to resolve). The `rejects.toThrow(BadRequestException)` assertions fail (the promise resolves) and the `not.toHaveBeenCalled()` assertions fail (the repo mock _was_ called). The two "allows …" tests pass on first run (they are the positive-control guard, not the RED driver).
 
 - [ ] **Step 3: Apply the minimal fix**
 
 In `server/src/services/timeline.service.ts`, add `dto.albumId` to the `spaceBrowse` condition and broaden the message. Change:
 
 ```ts
-    const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId;
-    const requestsPrivateVisibility =
-      dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
-    if (spaceBrowse && requestsPrivateVisibility) {
-      throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space');
-    }
+const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId;
+const requestsPrivateVisibility =
+  dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
+if (spaceBrowse && requestsPrivateVisibility) {
+  throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space');
+}
 ```
 
 to:
 
 ```ts
-    const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId || !!dto.albumId;
-    const requestsPrivateVisibility =
-      dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
-    if (spaceBrowse && requestsPrivateVisibility) {
-      throw new BadRequestException(
-        'Hidden and locked assets are not available when browsing a shared space or album',
-      );
-    }
+const spaceBrowse = !!dto.spaceId || !!dto.spacePersonId || !!dto.albumId;
+const requestsPrivateVisibility =
+  dto.visibility === AssetVisibility.Hidden || dto.visibility === AssetVisibility.Locked;
+if (spaceBrowse && requestsPrivateVisibility) {
+  throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space or album');
+}
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass (GREEN)**
@@ -189,11 +189,13 @@ git commit -m "fix(spaces): reject Hidden/Locked album-scoped timeline buckets (
 ### Task 2: Gate the plain-album search branch in `albumSharedSpaceScope` (security-1)
 
 **Files:**
+
 - Modify: `server/src/utils/database.ts:612-619` (the first OR-branch `eb.and([...])` inside `albumSharedSpaceScope`)
 - Test (unit SQL-shape): `server/src/repositories/search.repository.spec.ts` (add one `it` in the existing album-branch `describe`, near line 597)
 - Test (medium behavior): `server/test/medium/specs/services/search.service.spec.ts` (add a new `describe` after the existing `describe('albumIds option', …)`, ~line 485)
 
 **Interfaces:**
+
 - Consumes: `spaceVisibilityGate(eb)` from `src/utils/shared-space-album-scope` — already imported and used in `database.ts` (the two `timelineSpaceIds` branches at `:626,:636`). Predicate: `asset.visibility IN (Archive, Timeline)`.
 - Produces: `albumSharedSpaceScope`'s first OR-branch now ANDs the flat visibility gate, so a Hidden/Locked asset reachable only via a linked (or plain) album is excluded from `searchAssetBuilder` when `albumIds` is set and `userIds` is unset (the album-scoped `searchMetadata` path — `search.service.ts:142-146`; `database.ts:709`).
 
@@ -202,17 +204,17 @@ git commit -m "fix(spaces): reject Hidden/Locked album-scoped timeline buckets (
 In `server/src/repositories/search.repository.spec.ts`, inside the `describe` that already contains `'searchAssetBuilder album-scoped branch gates space assets on Archive+Timeline visibility'` (the block ending ~line 610), add:
 
 ```ts
-    it('searchAssetBuilder plain-album branch (no timelineSpaceIds) gates on Archive+Timeline visibility (security-1)', () => {
-      // albumSharedSpaceScope's FIRST OR-branch (plain non-shared-space album assets) had NO
-      // visibility gate, so a Hidden asset reachable only via a linked album leaked. With ONLY
-      // albumIds set (no timelineSpaceIds, no userIds) that branch is the sole album predicate —
-      // it must now carry the flat visibility gate.
-      const sql = buildAssetSearchSql({
-        albumIds: ['11111111-1111-1111-1111-111111111111'],
-      });
+it('searchAssetBuilder plain-album branch (no timelineSpaceIds) gates on Archive+Timeline visibility (security-1)', () => {
+  // albumSharedSpaceScope's FIRST OR-branch (plain non-shared-space album assets) had NO
+  // visibility gate, so a Hidden asset reachable only via a linked album leaked. With ONLY
+  // albumIds set (no timelineSpaceIds, no userIds) that branch is the sole album predicate —
+  // it must now carry the flat visibility gate.
+  const sql = buildAssetSearchSql({
+    albumIds: ['11111111-1111-1111-1111-111111111111'],
+  });
 
-      expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
-    });
+  expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
+});
 ```
 
 - [ ] **Step 1b: Write the failing medium behavior tests**
@@ -220,146 +222,146 @@ In `server/src/repositories/search.repository.spec.ts`, inside the `describe` th
 In `server/test/medium/specs/services/search.service.spec.ts`, add this `describe` immediately after the existing `describe('albumIds option', …)` block (it reuses the file's `setup`, `factory`, `AssetVisibility`, and `ctx.*` helpers):
 
 ```ts
-  describe('albumIds option — visibility gate (Slice 1 / security-1)', () => {
-    // Owner's album carrying one asset per visibility, linked into a space with a Viewer member.
-    const seedAlbumWithVisibilities = async (ctx: SearchCtx) => {
-      const { user: owner } = await ctx.newUser();
-      const { user: member } = await ctx.newUser();
-      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisAlbum' });
+describe('albumIds option — visibility gate (Slice 1 / security-1)', () => {
+  // Owner's album carrying one asset per visibility, linked into a space with a Viewer member.
+  const seedAlbumWithVisibilities = async (ctx: SearchCtx) => {
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisAlbum' });
 
-      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
-      const { asset: archiveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
-      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
-      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
-      for (const asset of [timelineAsset, archiveAsset, hiddenAsset, lockedAsset]) {
-        await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
-      }
-
-      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
-      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
-
-      return { owner, member, album, space, timelineAsset, archiveAsset, hiddenAsset, lockedAsset };
-    };
-
-    const itemIds = (response: Awaited<ReturnType<SearchService['searchMetadata']>>) =>
-      response.assets.items.map((item) => item.id);
-
-    it('hides a Hidden album asset from a Viewer member (default visibility); Timeline+Archive present, Locked absent', async () => {
-      const { sut, ctx } = setup();
-      const s = await seedAlbumWithVisibilities(ctx);
-      const auth = factory.auth({ user: { id: s.member.id } });
-
-      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id] });
-      const ids = itemIds(response);
-
-      expect(ids).toContain(s.timelineAsset.id);
-      expect(ids).toContain(s.archiveAsset.id); // Archive is shareable — not stripped
-      expect(ids).not.toContain(s.hiddenAsset.id); // security-1: Hidden gated on the album path
-      expect(ids).not.toContain(s.lockedAsset.id); // Locked never present
-    });
-
-    it('hides a Hidden album asset even when the member explicitly requests visibility=hidden', async () => {
-      const { sut, ctx } = setup();
-      const s = await seedAlbumWithVisibilities(ctx);
-      const auth = factory.auth({ user: { id: s.member.id } });
-
-      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], visibility: AssetVisibility.Hidden });
-
-      expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
-    });
-
-    it("hides the OWNER's own Hidden album asset via the album path (flat gate, matches the grid)", async () => {
-      const { sut, ctx } = setup();
-      const s = await seedAlbumWithVisibilities(ctx);
-      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
-
-      const response = await sut.searchMetadata(ownerAuth, {
-        albumIds: [s.album.id],
-        visibility: AssetVisibility.Hidden,
-      });
-
-      expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
-    });
-
-    it('OWNER still finds their Hidden asset via the non-album userIds search path (untouched)', async () => {
-      const { sut, ctx } = setup();
-      const s = await seedAlbumWithVisibilities(ctx);
-      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
-
-      // No albumIds -> userIds = [owner], scoped to ownerId + explicit Hidden. This path keeps its
-      // own `own OR gate` and is untouched by the fix.
-      const response = await sut.searchMetadata(ownerAuth, { visibility: AssetVisibility.Hidden });
-
-      expect(itemIds(response)).toContain(s.hiddenAsset.id);
-    });
-
-    it('gates a Hidden asset reachable via an album linked into TWO spaces (member of one)', async () => {
-      const { sut, ctx } = setup();
-      const { user: owner } = await ctx.newUser();
-      const { user: member } = await ctx.newUser();
-      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TwoSpaceAlbum' });
-
-      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
-      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
-      await ctx.newAlbumAsset({ albumId: album.id, assetId: timelineAsset.id });
-      await ctx.newAlbumAsset({ albumId: album.id, assetId: hiddenAsset.id });
-
-      const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id });
-      const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id });
-      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: 'owner' });
-      await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: 'owner' });
-      // member belongs ONLY to spaceA
-      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: member.id, role: 'viewer' });
-      await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
-      await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
-
-      const auth = factory.auth({ user: { id: member.id } });
-      const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
-      const ids = itemIds(response);
-
-      expect(ids).toContain(timelineAsset.id);
-      expect(ids).not.toContain(hiddenAsset.id);
-    });
-
-    it('a member of NEITHER space has no album.read access (403-empty)', async () => {
-      const { sut, ctx } = setup();
-      const { user: owner } = await ctx.newUser();
-      const { user: stranger } = await ctx.newUser();
-      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'NoAccessAlbum' });
-      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: archiveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+    const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+    for (const asset of [timelineAsset, archiveAsset, hiddenAsset, lockedAsset]) {
       await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    }
 
-      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
-      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
-      const strangerAuth = factory.auth({ user: { id: stranger.id } });
+    return { owner, member, album, space, timelineAsset, archiveAsset, hiddenAsset, lockedAsset };
+  };
 
-      await expect(sut.searchMetadata(strangerAuth, { albumIds: [album.id] })).rejects.toThrow(
-        'Not found or no album.read access',
-      );
-    });
+  const itemIds = (response: Awaited<ReturnType<SearchService['searchMetadata']>>) =>
+    response.assets.items.map((item) => item.id);
 
-    it('gate still applies when albumIds is combined with a personIds filter', async () => {
-      const { sut, ctx } = setup();
-      const s = await seedAlbumWithVisibilities(ctx);
+  it('hides a Hidden album asset from a Viewer member (default visibility); Timeline+Archive present, Locked absent', async () => {
+    const { sut, ctx } = setup();
+    const s = await seedAlbumWithVisibilities(ctx);
+    const auth = factory.auth({ user: { id: s.member.id } });
 
-      // A person whose face sits on BOTH the Timeline and the Hidden album asset. Combining the
-      // album scope with the person scope must not open a bypass — the Hidden asset stays gated.
-      const { person } = await ctx.newPerson({ ownerId: s.owner.id, name: 'ComboPerson' });
-      await ctx.newAssetFace({ assetId: s.timelineAsset.id, personId: person.id });
-      await ctx.newAssetFace({ assetId: s.hiddenAsset.id, personId: person.id });
+    const response = await sut.searchMetadata(auth, { albumIds: [s.album.id] });
+    const ids = itemIds(response);
 
-      const auth = factory.auth({ user: { id: s.member.id } });
-      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], personIds: [person.id] });
-      const ids = itemIds(response);
-
-      expect(ids).toContain(s.timelineAsset.id);
-      expect(ids).not.toContain(s.hiddenAsset.id);
-    });
+    expect(ids).toContain(s.timelineAsset.id);
+    expect(ids).toContain(s.archiveAsset.id); // Archive is shareable — not stripped
+    expect(ids).not.toContain(s.hiddenAsset.id); // security-1: Hidden gated on the album path
+    expect(ids).not.toContain(s.lockedAsset.id); // Locked never present
   });
+
+  it('hides a Hidden album asset even when the member explicitly requests visibility=hidden', async () => {
+    const { sut, ctx } = setup();
+    const s = await seedAlbumWithVisibilities(ctx);
+    const auth = factory.auth({ user: { id: s.member.id } });
+
+    const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], visibility: AssetVisibility.Hidden });
+
+    expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
+  });
+
+  it("hides the OWNER's own Hidden album asset via the album path (flat gate, matches the grid)", async () => {
+    const { sut, ctx } = setup();
+    const s = await seedAlbumWithVisibilities(ctx);
+    const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+    const response = await sut.searchMetadata(ownerAuth, {
+      albumIds: [s.album.id],
+      visibility: AssetVisibility.Hidden,
+    });
+
+    expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
+  });
+
+  it('OWNER still finds their Hidden asset via the non-album userIds search path (untouched)', async () => {
+    const { sut, ctx } = setup();
+    const s = await seedAlbumWithVisibilities(ctx);
+    const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+    // No albumIds -> userIds = [owner], scoped to ownerId + explicit Hidden. This path keeps its
+    // own `own OR gate` and is untouched by the fix.
+    const response = await sut.searchMetadata(ownerAuth, { visibility: AssetVisibility.Hidden });
+
+    expect(itemIds(response)).toContain(s.hiddenAsset.id);
+  });
+
+  it('gates a Hidden asset reachable via an album linked into TWO spaces (member of one)', async () => {
+    const { sut, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TwoSpaceAlbum' });
+
+    const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: timelineAsset.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hiddenAsset.id });
+
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id });
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: 'owner' });
+    // member belongs ONLY to spaceA
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: member.id, role: 'viewer' });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
+
+    const auth = factory.auth({ user: { id: member.id } });
+    const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
+    const ids = itemIds(response);
+
+    expect(ids).toContain(timelineAsset.id);
+    expect(ids).not.toContain(hiddenAsset.id);
+  });
+
+  it('a member of NEITHER space has no album.read access (403-empty)', async () => {
+    const { sut, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: stranger } = await ctx.newUser();
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'NoAccessAlbum' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    const strangerAuth = factory.auth({ user: { id: stranger.id } });
+
+    await expect(sut.searchMetadata(strangerAuth, { albumIds: [album.id] })).rejects.toThrow(
+      'Not found or no album.read access',
+    );
+  });
+
+  it('gate still applies when albumIds is combined with a personIds filter', async () => {
+    const { sut, ctx } = setup();
+    const s = await seedAlbumWithVisibilities(ctx);
+
+    // A person whose face sits on BOTH the Timeline and the Hidden album asset. Combining the
+    // album scope with the person scope must not open a bypass — the Hidden asset stays gated.
+    const { person } = await ctx.newPerson({ ownerId: s.owner.id, name: 'ComboPerson' });
+    await ctx.newAssetFace({ assetId: s.timelineAsset.id, personId: person.id });
+    await ctx.newAssetFace({ assetId: s.hiddenAsset.id, personId: person.id });
+
+    const auth = factory.auth({ user: { id: s.member.id } });
+    const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], personIds: [person.id] });
+    const ids = itemIds(response);
+
+    expect(ids).toContain(s.timelineAsset.id);
+    expect(ids).not.toContain(s.hiddenAsset.id);
+  });
+});
 ```
 
 Note: this uses `SearchService` in a type annotation — add it to the existing import from `src/services/search.service` (already imported at line 14, so no new import needed).
@@ -367,12 +369,14 @@ Note: this uses `SearchService` in a type annotation — add it to the existing 
 - [ ] **Step 2: Run both test layers to verify they fail (RED)**
 
 Run:
+
 ```bash
 cd server && pnpm test -- --run src/repositories/search.repository.spec.ts
 cd server && pnpm test:medium -- --run test/medium/specs/services/search.service.spec.ts
 ```
 
 Expected:
+
 - Unit: the new `plain-album branch … gates on Archive+Timeline` test FAILS — with only `albumIds` set (no `timelineSpaceIds`, no `visibility`, no `userIds`), the compiled SQL has no `"asset"."visibility" in (…)` clause at all (the plain-album branch is `NOT EXISTS shared_space_asset AND NOT EXISTS shared_space_library` with no gate), so the regex does not match.
 - Medium: the `hides a Hidden album asset …`, `… explicitly requests visibility=hidden`, `hides the OWNER's own …`, `two spaces …`, and `combined with a personIds filter` tests FAIL — pre-fix the ungated plain-album branch returns the Hidden asset. The `OWNER still finds … via the non-album path` and `member of NEITHER space` tests pass on first run (they pin untouched behavior).
 
@@ -412,6 +416,7 @@ to:
 - [ ] **Step 4: Run both test layers to verify they pass (GREEN)**
 
 Run:
+
 ```bash
 cd server && pnpm test -- --run src/repositories/search.repository.spec.ts
 cd server && pnpm test:medium -- --run test/medium/specs/services/search.service.spec.ts
@@ -431,10 +436,12 @@ git commit -m "fix(spaces): gate plain-album search branch on shareable visibili
 ### Task 3: Gate the asset-repo `albumId` arm (security-3 defense-in-depth)
 
 **Files:**
+
 - Modify: `server/src/repositories/asset.repository.ts:295-299` (the `.$if(!!options.albumId, …)` arm)
 - Test (medium behavior): `server/test/medium/specs/repositories/timeline-bucket-explicit-visibility.medium.spec.ts` (add a new `describe`)
 
 **Interfaces:**
+
 - Consumes: `spaceVisibilityGate` from `src/utils/shared-space-album-scope` — already imported and used in `asset.repository.ts` (the `spaceId` arm at `:328`).
 - Produces: the `albumId` timeline arm ANDs the flat visibility gate, so an explicit `visibility=Hidden`/`Locked` on `getTimeBuckets`/`getTimeBucket`/`getTimeBucketCovers` can never surface Hidden/Locked album assets even if the service-level guard (Task 1) is bypassed. The top-level `withDefaultVisibility` (`:293`) only fires when `options.visibility === undefined`, which is why an explicit visibility needs this arm gated. The gate is idempotent for the album grid's default view (`withDefaultVisibility` is the same `IN (Archive, Timeline)` predicate).
 
@@ -448,10 +455,7 @@ In `server/test/medium/specs/repositories/timeline-bucket-explicit-visibility.me
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('timeline bucket explicit-visibility — albumId arm', () => {
-  const seedAlbum = async (
-    ctx: ReturnType<typeof setup>['ctx'],
-    spaceRepo: ReturnType<typeof setup>['spaceRepo'],
-  ) => {
+  const seedAlbum = async (ctx: ReturnType<typeof setup>['ctx'], spaceRepo: ReturnType<typeof setup>['spaceRepo']) => {
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
@@ -595,9 +599,11 @@ git commit -m "fix(spaces): gate asset-repo albumId timeline arm on shareable vi
 ### Task 4: e2e negatives over both HTTP surfaces
 
 **Files:**
+
 - Test: `e2e/src/specs/server/api/shared-space-visibility-negatives.e2e-spec.ts` (add two new `describe` blocks + one import)
 
 **Interfaces:**
+
 - Consumes existing helpers in the file/utils (all confirmed present): `utils.createAsset`, `utils.createAlbum`, `utils.createSpace` (via the file's `freshSpace`), `utils.addSpaceMember`, the file's `setVisibility(assetId, visibility)` helper, and the `PUT /shared-spaces/:spaceId/albums/:albumId` link call. A space member gets `AlbumRead`/`AlbumDownload` on a linked album via `checkSpaceLinkedAlbumReadAccess` (already exercised by the file's existing `POST /download/info (albumId …)` block).
 - Produces: HTTP-level proof that both fixes hold end-to-end.
 
@@ -612,152 +618,148 @@ import { AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from
 Then add these two `describe` blocks inside the top-level `describe('shared-space visibility negatives (Slice 11)', …)` (e.g. after the existing album-download block, before the final closing `});`). They reuse the file's `owner`, `member`, `setVisibility`, and the raw `request(app)` pattern.
 
 ```ts
-  // ─────────────────────────────────────────────────────────────────────────────
-  // POST /search/metadata (albumId via space AlbumRead grant) — Hidden/Locked absent
-  // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /search/metadata (albumId via space AlbumRead grant) — Hidden/Locked absent
+// ─────────────────────────────────────────────────────────────────────────────
 
-  describe('POST /search/metadata (albumIds via space AlbumRead grant) — Hidden/Locked absent (security-1)', () => {
-    // Fresh space with owner=Owner, member=Viewer; returns the space id.
-    const freshSpaceWithViewer = async (name: string) => {
-      const space = await utils.createSpace(owner.accessToken, { name });
-      await utils.addSpaceMember(owner.accessToken, space.id, {
-        userId: member.userId,
-        role: SharedSpaceRole.Viewer,
-      });
-      return space.id;
-    };
-
-    const linkAlbum = (spaceId: string, albumId: string) =>
-      request(app)
-        .put(`/shared-spaces/${spaceId}/albums/${albumId}`)
-        .set('Authorization', `Bearer ${owner.accessToken}`);
-
-    const searchAlbumIds = async (body: Record<string, unknown>): Promise<string[]> => {
-      const { status, body: resBody } = await request(app)
-        .post('/search/metadata')
-        .set('Authorization', `Bearer ${member.accessToken}`)
-        .send(body);
-      expect(status).toBe(200);
-      return (resBody.assets.items as Array<{ id: string }>).map((item) => item.id);
-    };
-
-    it('Hidden album-linked asset absent for a Viewer (default visibility); Timeline+Archive present', async () => {
-      const timelineAsset = await utils.createAsset(owner.accessToken);
-      const archiveAsset = await utils.createAsset(owner.accessToken);
-      await setVisibility(archiveAsset.id, AssetVisibility.Archive);
-      const hiddenAsset = await utils.createAsset(owner.accessToken);
-
-      const album = await utils.createAlbum(owner.accessToken, {
-        albumName: 'SearchAlbumHiddenNeg',
-        assetIds: [timelineAsset.id, archiveAsset.id, hiddenAsset.id],
-      });
-      // hide AFTER album-add (a pre-Hidden asset would be rejected / auto-removed from the album)
-      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
-
-      const spaceId = await freshSpaceWithViewer('search-album-hidden-neg');
-      await linkAlbum(spaceId, album.id);
-
-      const ids = await searchAlbumIds({ albumIds: [album.id] });
-
-      expect(ids).toContain(timelineAsset.id);
-      expect(ids).toContain(archiveAsset.id);
-      expect(ids).not.toContain(hiddenAsset.id);
+describe('POST /search/metadata (albumIds via space AlbumRead grant) — Hidden/Locked absent (security-1)', () => {
+  // Fresh space with owner=Owner, member=Viewer; returns the space id.
+  const freshSpaceWithViewer = async (name: string) => {
+    const space = await utils.createSpace(owner.accessToken, { name });
+    await utils.addSpaceMember(owner.accessToken, space.id, {
+      userId: member.userId,
+      role: SharedSpaceRole.Viewer,
     });
+    return space.id;
+  };
 
-    it('Hidden album-linked asset absent even with an explicit visibility=hidden request', async () => {
-      const timelineAsset = await utils.createAsset(owner.accessToken);
-      const hiddenAsset = await utils.createAsset(owner.accessToken);
+  const linkAlbum = (spaceId: string, albumId: string) =>
+    request(app).put(`/shared-spaces/${spaceId}/albums/${albumId}`).set('Authorization', `Bearer ${owner.accessToken}`);
 
-      const album = await utils.createAlbum(owner.accessToken, {
-        albumName: 'SearchAlbumHiddenExplicit',
-        assetIds: [timelineAsset.id, hiddenAsset.id],
-      });
-      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+  const searchAlbumIds = async (body: Record<string, unknown>): Promise<string[]> => {
+    const { status, body: resBody } = await request(app)
+      .post('/search/metadata')
+      .set('Authorization', `Bearer ${member.accessToken}`)
+      .send(body);
+    expect(status).toBe(200);
+    return (resBody.assets.items as Array<{ id: string }>).map((item) => item.id);
+  };
 
-      const spaceId = await freshSpaceWithViewer('search-album-hidden-explicit');
-      await linkAlbum(spaceId, album.id);
+  it('Hidden album-linked asset absent for a Viewer (default visibility); Timeline+Archive present', async () => {
+    const timelineAsset = await utils.createAsset(owner.accessToken);
+    const archiveAsset = await utils.createAsset(owner.accessToken);
+    await setVisibility(archiveAsset.id, AssetVisibility.Archive);
+    const hiddenAsset = await utils.createAsset(owner.accessToken);
 
-      const ids = await searchAlbumIds({ albumIds: [album.id], visibility: AssetVisibility.Hidden });
-
-      expect(ids).not.toContain(hiddenAsset.id);
+    const album = await utils.createAlbum(owner.accessToken, {
+      albumName: 'SearchAlbumHiddenNeg',
+      assetIds: [timelineAsset.id, archiveAsset.id, hiddenAsset.id],
     });
+    // hide AFTER album-add (a pre-Hidden asset would be rejected / auto-removed from the album)
+    await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+
+    const spaceId = await freshSpaceWithViewer('search-album-hidden-neg');
+    await linkAlbum(spaceId, album.id);
+
+    const ids = await searchAlbumIds({ albumIds: [album.id] });
+
+    expect(ids).toContain(timelineAsset.id);
+    expect(ids).toContain(archiveAsset.id);
+    expect(ids).not.toContain(hiddenAsset.id);
   });
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // GET /timeline/bucket (albumId) — Hidden/Locked → 400; Timeline/Archive → 200
-  // ─────────────────────────────────────────────────────────────────────────────
+  it('Hidden album-linked asset absent even with an explicit visibility=hidden request', async () => {
+    const timelineAsset = await utils.createAsset(owner.accessToken);
+    const hiddenAsset = await utils.createAsset(owner.accessToken);
 
-  describe('GET /timeline/bucket (albumId via space AlbumRead grant) — Hidden/Locked rejected (security-3)', () => {
-    const freshSpaceWithViewer = async (name: string) => {
-      const space = await utils.createSpace(owner.accessToken, { name });
-      await utils.addSpaceMember(owner.accessToken, space.id, {
-        userId: member.userId,
-        role: SharedSpaceRole.Viewer,
-      });
-      return space.id;
-    };
-
-    const linkAlbum = (spaceId: string, albumId: string) =>
-      request(app)
-        .put(`/shared-spaces/${spaceId}/albums/${albumId}`)
-        .set('Authorization', `Bearer ${owner.accessToken}`);
-
-    // Resolve a real bucket for the album's assets so the positive controls query a populated bucket.
-    const firstAlbumBucket = async (albumId: string): Promise<string> => {
-      const { status, body } = await request(app)
-        .get(`/timeline/buckets?bucketSize=month&albumId=${albumId}`)
-        .set('Authorization', `Bearer ${member.accessToken}`);
-      expect(status).toBe(200);
-      return (body as Array<{ timeBucket: string }>)[0].timeBucket;
-    };
-
-    const setupLinkedAlbum = async (name: string) => {
-      const timelineAsset = await utils.createAsset(owner.accessToken);
-      const hiddenAsset = await utils.createAsset(owner.accessToken);
-      const album = await utils.createAlbum(owner.accessToken, {
-        albumName: name,
-        assetIds: [timelineAsset.id, hiddenAsset.id],
-      });
-      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
-      const spaceId = await freshSpaceWithViewer(name);
-      await linkAlbum(spaceId, album.id);
-      return { album, timelineAsset, hiddenAsset };
-    };
-
-    it('albumId + visibility=hidden → 400 for a Viewer member', async () => {
-      const { album } = await setupLinkedAlbum('bucket-album-hidden-neg');
-
-      const { status } = await request(app)
-        .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=hidden`)
-        .set('Authorization', `Bearer ${member.accessToken}`);
-
-      expect(status).toBe(400);
+    const album = await utils.createAlbum(owner.accessToken, {
+      albumName: 'SearchAlbumHiddenExplicit',
+      assetIds: [timelineAsset.id, hiddenAsset.id],
     });
+    await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
 
-    it('albumId + visibility=locked → 400 for a Viewer member', async () => {
-      const { album } = await setupLinkedAlbum('bucket-album-locked-neg');
+    const spaceId = await freshSpaceWithViewer('search-album-hidden-explicit');
+    await linkAlbum(spaceId, album.id);
 
-      const { status } = await request(app)
-        .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=locked`)
-        .set('Authorization', `Bearer ${member.accessToken}`);
+    const ids = await searchAlbumIds({ albumIds: [album.id], visibility: AssetVisibility.Hidden });
 
-      expect(status).toBe(400);
-    });
-
-    it('albumId (default visibility) → 200 with the Timeline asset present, Hidden absent', async () => {
-      const { album, timelineAsset, hiddenAsset } = await setupLinkedAlbum('bucket-album-default-pos');
-      const timeBucket = await firstAlbumBucket(album.id);
-
-      const { status, body } = await request(app)
-        .get(`/timeline/bucket?bucketSize=month&timeBucket=${timeBucket}&albumId=${album.id}`)
-        .set('Authorization', `Bearer ${member.accessToken}`);
-
-      expect(status).toBe(200);
-      const returnedIds = (body.id ?? []) as string[];
-      expect(returnedIds).toContain(timelineAsset.id);
-      expect(returnedIds).not.toContain(hiddenAsset.id);
-    });
+    expect(ids).not.toContain(hiddenAsset.id);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /timeline/bucket (albumId) — Hidden/Locked → 400; Timeline/Archive → 200
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('GET /timeline/bucket (albumId via space AlbumRead grant) — Hidden/Locked rejected (security-3)', () => {
+  const freshSpaceWithViewer = async (name: string) => {
+    const space = await utils.createSpace(owner.accessToken, { name });
+    await utils.addSpaceMember(owner.accessToken, space.id, {
+      userId: member.userId,
+      role: SharedSpaceRole.Viewer,
+    });
+    return space.id;
+  };
+
+  const linkAlbum = (spaceId: string, albumId: string) =>
+    request(app).put(`/shared-spaces/${spaceId}/albums/${albumId}`).set('Authorization', `Bearer ${owner.accessToken}`);
+
+  // Resolve a real bucket for the album's assets so the positive controls query a populated bucket.
+  const firstAlbumBucket = async (albumId: string): Promise<string> => {
+    const { status, body } = await request(app)
+      .get(`/timeline/buckets?bucketSize=month&albumId=${albumId}`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+    expect(status).toBe(200);
+    return (body as Array<{ timeBucket: string }>)[0].timeBucket;
+  };
+
+  const setupLinkedAlbum = async (name: string) => {
+    const timelineAsset = await utils.createAsset(owner.accessToken);
+    const hiddenAsset = await utils.createAsset(owner.accessToken);
+    const album = await utils.createAlbum(owner.accessToken, {
+      albumName: name,
+      assetIds: [timelineAsset.id, hiddenAsset.id],
+    });
+    await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+    const spaceId = await freshSpaceWithViewer(name);
+    await linkAlbum(spaceId, album.id);
+    return { album, timelineAsset, hiddenAsset };
+  };
+
+  it('albumId + visibility=hidden → 400 for a Viewer member', async () => {
+    const { album } = await setupLinkedAlbum('bucket-album-hidden-neg');
+
+    const { status } = await request(app)
+      .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=hidden`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+
+    expect(status).toBe(400);
+  });
+
+  it('albumId + visibility=locked → 400 for a Viewer member', async () => {
+    const { album } = await setupLinkedAlbum('bucket-album-locked-neg');
+
+    const { status } = await request(app)
+      .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=locked`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+
+    expect(status).toBe(400);
+  });
+
+  it('albumId (default visibility) → 200 with the Timeline asset present, Hidden absent', async () => {
+    const { album, timelineAsset, hiddenAsset } = await setupLinkedAlbum('bucket-album-default-pos');
+    const timeBucket = await firstAlbumBucket(album.id);
+
+    const { status, body } = await request(app)
+      .get(`/timeline/bucket?bucketSize=month&timeBucket=${timeBucket}&albumId=${album.id}`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+
+    expect(status).toBe(200);
+    const returnedIds = (body.id ?? []) as string[];
+    expect(returnedIds).toContain(timelineAsset.id);
+    expect(returnedIds).not.toContain(hiddenAsset.id);
+  });
+});
 ```
 
 - [ ] **Step 2: Run the e2e file to verify GREEN**
@@ -787,12 +789,14 @@ Expected: PASS (no regressions in `timeline.service.spec.ts`, `search.repository
 - [ ] **Step 2: Run the relevant medium suites**
 
 Run:
+
 ```bash
 cd server && pnpm test:medium -- --run test/medium/specs/services/search.service.spec.ts
 cd server && pnpm test:medium -- --run test/medium/specs/repositories/timeline-bucket-explicit-visibility.medium.spec.ts
 cd server && pnpm test:medium -- --run test/medium/specs/repositories/asset.repository.spec.ts
 cd server && pnpm test:medium -- --run test/medium/specs/utils/shared-space-album-scope-sql.medium.spec.ts
 ```
+
 Expected: PASS. (Include `shared-space-album-scope-sql.medium.spec.ts` and the guard spec below because they pin `albumSharedSpaceScope`-adjacent behavior.)
 
 - [ ] **Step 3: Run the guard spec (no unintended library-arm coverage change)**

@@ -257,9 +257,7 @@ describe('LibraryAssetSync — library visibility purge (space members, not owne
 
     // Partner-and-member: NO delete (partner entitlement preserved).
     const partnerNext = await owner.ctx.syncStream(partnerMember.auth, [SyncRequestType.LibraryAssetsV1]);
-    const partnerDeletes = partnerNext.filter(
-      (r: { type: string }) => r.type === SyncEntityType.LibraryAssetDeleteV1,
-    );
+    const partnerDeletes = partnerNext.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetDeleteV1);
     expect(partnerDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(false);
 
     // Plain member (no partner): still purged.

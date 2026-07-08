@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **Toolchain:** Flutter 3.44.1 via mise. Run tests with `cd mobile && mise exec -- flutter test <file>`. Run the analyzer with `cd mobile && mise exec -- dart analyze --fatal-infos lib test`. CI runs `dart analyze --fatal-infos` over **both** `lib` **and** `test` — a lint in a test file fails CI, so keep test files clean too.
-- **One-time env setup (only if `flutter test` fails to *compile*):** run `cd mobile && mise exec -- flutter pub get` and, if generated localization keys are missing, `cd mobile && mise exec -- mise run codegen:translation` once. This is an environment fixup, **not** a code change, and is **not** committed.
+- **One-time env setup (only if `flutter test` fails to _compile_):** run `cd mobile && mise exec -- flutter pub get` and, if generated localization keys are missing, `cd mobile && mise exec -- mise run codegen:translation` once. This is an environment fixup, **not** a code change, and is **not** committed.
 - **No `build_runner`:** All four fixes are query-only (new joins / new `deleteAll()` over existing tables / predicate swaps). No `@DataClassName`/column/table schema change → **do not** run `dart run build_runner build`. Confirm by never editing any file under `lib/infrastructure/entities/*.entity.dart` or any `*.drift.dart`.
 - **No ESLint / no `pnpm run lint`:** This slice is Dart-only. The Dart compile+lint gate **is** `dart analyze --fatal-infos lib test`. Do not add any per-slice `pnpm`/ESLint step.
 - **Commits:** exactly one commit per fix (four total). Use the exact messages given in each task's final step. **No** `Co-Authored-By` / "Generated with" trailers on any commit.
@@ -41,21 +41,22 @@
 ## Task 1: `mobile-4` — `reset()` clears the fork space tables
 
 **Files:**
+
 - Modify: `mobile/lib/infrastructure/repositories/sync_stream.repository.dart:52-94` (`reset()`, add 8 `deleteAll()` calls inside the transaction, after line 82 `await _db.assetOcrEntity.deleteAll();`)
 - Test: `mobile/test/domain/repositories/sync_stream_repository_test.dart` (extend the existing `group('SyncStreamRepository - reset()', ...)` at ~line 232)
 
 **Context.** `reset()` runs under `PRAGMA foreign_keys = OFF` inside `_db.exclusively(...)` + `transaction(...)`. It currently deletes 17 remote tables but **none** of the 8 fork space tables. A stale `shared_space_album_asset` + link row joined to a re-synced `remote_asset` after a reset wrongly re-places assets in space timelines. The 8 Drift accessors → SQLite table names (all confirmed already used elsewhere in this same file, so all accessors exist):
 
-| Drift accessor (`_db.…`) | SQLite table |
-|---|---|
+| Drift accessor (`_db.…`)      | SQLite table                      |
+| ----------------------------- | --------------------------------- |
 | `sharedSpaceAlbumAssetEntity` | `shared_space_album_asset_entity` |
-| `sharedSpaceAlbumLinkEntity` | `shared_space_album_link_entity` |
-| `sharedSpaceAlbumEntity` | `shared_space_album_entity` |
-| `sharedSpaceAssetEntity` | `shared_space_asset_entity` |
-| `sharedSpaceLibraryEntity` | `shared_space_library_entity` |
-| `sharedSpaceMemberEntity` | `shared_space_member_entity` |
-| `sharedSpaceEntity` | `shared_space_entity` |
-| `libraryEntity` | `library_entity` |
+| `sharedSpaceAlbumLinkEntity`  | `shared_space_album_link_entity`  |
+| `sharedSpaceAlbumEntity`      | `shared_space_album_entity`       |
+| `sharedSpaceAssetEntity`      | `shared_space_asset_entity`       |
+| `sharedSpaceLibraryEntity`    | `shared_space_library_entity`     |
+| `sharedSpaceMemberEntity`     | `shared_space_member_entity`      |
+| `sharedSpaceEntity`           | `shared_space_entity`             |
+| `libraryEntity`               | `library_entity`                  |
 
 - [ ] **Step 1: Write the failing test**
 
@@ -216,23 +217,25 @@ git commit -m "fix(spaces): clear fork space tables on mobile SyncResetV1"
 ## Task 2: `mobile-6` — space queries return Archived assets (6 predicate sites)
 
 **Files:**
+
 - Modify: `mobile/lib/infrastructure/repositories/timeline.repository.dart` — 6 sites, lines **505, 551, 611, 657, 682, 719**
 - Test: `mobile/test/medium/repositories/timeline_repository_test.dart` (add a new `group('mobile-6: archived visibility', …)`)
 
 **Context — the exact 6 sites** (each currently reads `_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline)`):
 
-| # | Function | Branch | Line |
-|---|---|---|---|
-| 1 | `_watchSharedSpaceBucket` | `groupBy == GroupAssetsBy.none` (count query) | 505 |
-| 2 | `_watchSharedSpaceBucket` | `groupBy != none` (grouped query) | 551 |
-| 3 | `_getSharedSpaceBucketAssets` | (asset page) | 611 |
-| 4 | `_watchSpaceAlbumBucket` | `groupBy == GroupAssetsBy.none` (count query) | 657 |
-| 5 | `_watchSpaceAlbumBucket` | `groupBy != none` (grouped query) | 682 |
-| 6 | `_getSpaceAlbumBucketAssets` | (asset page) | 719 |
+| #   | Function                      | Branch                                        | Line |
+| --- | ----------------------------- | --------------------------------------------- | ---- |
+| 1   | `_watchSharedSpaceBucket`     | `groupBy == GroupAssetsBy.none` (count query) | 505  |
+| 2   | `_watchSharedSpaceBucket`     | `groupBy != none` (grouped query)             | 551  |
+| 3   | `_getSharedSpaceBucketAssets` | (asset page)                                  | 611  |
+| 4   | `_watchSpaceAlbumBucket`      | `groupBy == GroupAssetsBy.none` (count query) | 657  |
+| 5   | `_watchSpaceAlbumBucket`      | `groupBy != none` (grouped query)             | 682  |
+| 6   | `_getSpaceAlbumBucketAssets`  | (asset page)                                  | 719  |
 
 The server streams **Timeline + Archive** to non-owners and mobile stores archived rows; requiring `== timeline` drops archived-but-shared assets that web shows. All 6 must change to `IN (timeline, archive)` using the confirmed OR idiom. Missing **any one** leaves that surface dropping archived assets — the test below exercises all 6 (both `assetSource` and `bucketSource` at `.none` and `.day`).
 
 **Interfaces (already exist, used by the test):**
+
 - `DriftTimelineRepository.sharedSpace(String spaceId, GroupAssetsBy groupBy)` → `TimelineQuery` with `.bucketSource()` (`Stream<List<Bucket>>`) and `.assetSource(int offset, int count)` (`Future<List<BaseAsset>>`).
 - `DriftTimelineRepository.spaceAlbum(String spaceId, String albumId, GroupAssetsBy groupBy)` → same shape.
 - `Bucket.assetCount` (int) — sum across buckets = number of visible assets.
@@ -346,12 +349,14 @@ git commit -m "fix(spaces): show archived assets in mobile space and space-album
 ## Task 3: `mobile-5` — shelf count via `remote_asset` join
 
 **Files:**
+
 - Modify: `mobile/lib/infrastructure/repositories/space_album.repository.dart:11-42` (`watchLinkedAlbums`) + add one import
 - Test: `mobile/test/medium/repositories/space_album_repository_test.dart` (extend `group('watchLinkedAlbums', …)`) + add one import
 
 **Context.** `watchLinkedAlbums` currently counts **membership rows** directly (`assetMembership.assetId.count()`), so the shelf badge counts assets that are Hidden / deleted / not-yet-synced at link time — overstating vs. the detail view (`_getSpaceAlbumBucketAssets`, which after `mobile-6` shows `deletedAt IS NULL AND visibility IN (timeline, archive)`). Fix: count via a **LEFT JOIN to `remote_asset`** with the detail predicate in the **JOIN ON-clause** (not the WHERE) so an album with zero visible assets still surfaces with `assetCount == 0`. `remote_asset.id.count()` ignores the NULLs a LEFT JOIN produces, giving the correct visible count.
 
 **Interfaces:**
+
 - Produces: `watchLinkedAlbums(String spaceId) → Stream<List<SpaceAlbum>>` where `SpaceAlbum.assetCount` = count of the album's assets that are `deletedAt IS NULL AND visibility IN (timeline, archive)`. Signature and `SpaceAlbum` shape are unchanged.
 
 - [ ] **Step 1: Write the failing test**
@@ -490,6 +495,7 @@ git commit -m "fix(spaces): count shelf albums via visible remote_asset join"
 ## Task 4: `mobile-3` / `gaps-1` — space-aware `pruneAssets` on `syncCompleteV1`
 
 **Files:**
+
 - Modify: `mobile/lib/infrastructure/repositories/sync_stream.repository.dart:1336-1368` (`pruneAssets`, extend the keep-set)
 - Modify: `mobile/lib/domain/services/sync_stream.service.dart:289-291` (enable the `pruneAssets()` call on `syncCompleteV1`)
 - Test: `mobile/test/domain/repositories/sync_stream_repository_test.dart` (new `group('SyncStreamRepository - pruneAssets', …)`)
@@ -500,12 +506,14 @@ git commit -m "fix(spaces): count shelf albums via visible remote_asset join"
 Keep-set = owned ∪ partner ∪ `remote_album_asset` (classic album) ∪ `shared_space_asset` (direct) ∪ `shared_space_album_asset` (granted album) ∪ library-reachable (`shared_space_library` via `library_id`). Deletion is expressed as the negation of that keep-set.
 
 **Two correctness pins the plan bakes in:**
+
 1. **NULL `library_id` trap.** `library_id.isNotInQuery(...)` is `NULL` (not `TRUE`) when `library_id` is NULL, and `X & NULL == NULL` → the row would **not** be deleted — so a common orphan (an asset with no library) would never be pruned. The library term must be `(library_id IS NULL OR library_id NOT IN sharedSpaceLibrary)` so a NULL-library orphan still deletes: `asset.libraryId.isNull() | asset.libraryId.isNotInQuery(...)`.
 2. **`remote_exif` cascades automatically.** `remote_exif_entity.assetId` has `onDelete: KeyAction.cascade` and `pruneAssets` runs inside `_db.transaction()` **without** disabling foreign keys (the DB opens with `PRAGMA foreign_keys = ON`), so deleting a `remote_asset` row deletes its `remote_exif` row. The test asserts this rather than adding a redundant explicit delete.
 
 **Thumbnail byte-cache eviction — DEFERRED (documented).** The privacy-critical part (row-level GC of `remote_asset` + cascaded `remote_exif` — the filename/checksum/thumbhash/GPS/city/camera metadata) is done here. In-memory thumbnail **bytes** live in the UI-layer `CustomImageCache` (a `PaintingBinding.instance.imageCache` singleton keyed by **`ImageProvider` instances**, not asset ids) and, for full images, a URL-keyed disk cache — neither is reachable from a `DriftDatabaseRepository`, and neither can be driven from a `flutter test` unit test against an in-memory DB (no binding, no providers, no network). Wiring eviction would require threading pruned ids out to a UI/service layer that resolves them into provider cache keys / disk URLs — out of scope for this repo-level fix and flagged "unverified" by the review. This task adds an explicit code comment marking the deferral so a follow-up (evict `imageCache` + disk cache for pruned ids at the service layer) is discoverable. **No byte-eviction test is written** (correct per the spec's "explicitly deferred with a follow-up note" allowance).
 
 **Interfaces:**
+
 - Consumes (service test): `SyncStreamRepository.pruneAssets() → Future<void>` (mockable via `MockSyncStreamRepository`).
 - Produces: `syncCompleteV1` dispatch now calls `pruneAssets()`.
 
@@ -743,9 +751,10 @@ SyncSharedSpaceV1 _pruneSpace({String id = 'space-1'}) => SyncSharedSpaceV1(
 
 Run: `cd mobile && mise exec -- flutter test test/domain/repositories/sync_stream_repository_test.dart --plain-name 'pruneAssets'`
 Expected: FAIL — the keep-path tests fail because the current `pruneAssets` keep-set is only owned ∪ partner ∪ `remote_album_asset`:
+
 - `keeps an asset reachable via shared_space_asset …`, `… shared_space_album_asset …`, `… space-linked library …`, and `multi-path …` all fail: their asset is **deleted** (empty result) though it should be kept.
 - `prunes an orphan with a NULL library_id …` passes on the current code (current predicate has no library term) — it becomes the regression guard for Step 3.
-(`skips pruning …`, `deletes an unreachable foreign orphan …`, `keeps an owned asset …`, `keeps a partner-owned asset …`, `keeps … remote_album_asset …` pass on current code.)
+  (`skips pruning …`, `deletes an unreachable foreign orphan …`, `keeps an owned asset …`, `keeps a partner-owned asset …`, `keeps … remote_album_asset …` pass on current code.)
 
 - [ ] **Step 3: Extend the `pruneAssets` keep-set**
 
@@ -868,6 +877,7 @@ Expected: `No issues found!`
 - [ ] **Full targeted test run for every touched file:**
 
 Run:
+
 ```bash
 cd mobile && mise exec -- flutter test \
   test/domain/repositories/sync_stream_repository_test.dart \
@@ -875,6 +885,7 @@ cd mobile && mise exec -- flutter test \
   test/medium/repositories/timeline_repository_test.dart \
   test/medium/repositories/space_album_repository_test.dart
 ```
+
 Expected: All tests pass (0 failures).
 
 - [ ] **Confirm no codegen drift:** `git status` shows only the 4 source files + 4 test files changed — **no** `*.drift.dart` / `*.g.dart` / entity files touched (proves no `build_runner` was needed).

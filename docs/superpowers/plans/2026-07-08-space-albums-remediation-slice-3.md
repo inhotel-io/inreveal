@@ -47,8 +47,8 @@ The fix, in **green-between-commits** order:
   locals. It moves verbatim into a private helper.
 - **The six emits are no-ops for non-shared assets** (verified): `emitDirectAssetVisibilityPurge` selects from
   `shared_space_asset` (empty for non-shared), `emitAlbumAssetVisibilityPurge` from `album_asset ⋈
-  shared_space_album` (empty), `emitLibraryAssetVisibilityPurge` from `asset WHERE libraryId IN
-  shared_space_library` (empty). `removeAssetsFromAll(ids)` removes the asset from **all** albums it is in —
+shared_space_album` (empty), `emitLibraryAssetVisibilityPurge` from `asset WHERE libraryId IN
+shared_space_library` (empty). `removeAssetsFromAll(ids)` removes the asset from **all** albums it is in —
   this is existing Immich Locked semantics and already runs in `updateAll`; routing `update()` through the
   helper simply extends it to the single-asset path (the **intended** security-4 fix).
 - **Motion-photo fix = event handler, not direct call (justified).** `AssetHide`/`AssetShow`
@@ -80,7 +80,7 @@ The fix, in **green-between-commits** order:
   join-row deletion **including the FK cascade when the asset is physically deleted** (asset row gone). An
   `innerJoin('asset')` there would **drop physical-delete tombstones** (no asset row to join) → members never
   learn the asset was deleted. So the direct arm uses a **LEFT JOIN** + `(asset.ownerId IS NULL OR
-  asset.ownerId != userId)`: physical-delete tombstones (null owner) reach everyone; visibility-purge
+asset.ownerId != userId)`: physical-delete tombstones (null owner) reach everyone; visibility-purge
   tombstones (asset still exists) exclude the owner. See the documented consequence in Task 5.
 
 ## Tech Stack
@@ -176,9 +176,9 @@ Contains, in the current order: `removeAssetsFromAll` on Locked → direct purge
       after `if (Object.keys(assetDto).length > 0) { await this.assetRepository.updateAll(...) }` (`308-310`):
 
   ```ts
-    if (visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects(ids, visibility);
-    }
+  if (visibility !== undefined) {
+    await this.applyVisibilityTransitionSideEffects(ids, visibility);
+  }
   ```
 
   > Byte-identical: when `visibility` is `undefined` the old block fired no branch and `removeAssetsFromAll`
@@ -293,13 +293,13 @@ assets: the emits are no-ops (Architecture) and `removeAssetsFromAll` matches ex
       guard (line 252) and before `return mapAsset(asset, { auth })` (line 254), insert:
 
   ```ts
-    // security-4: the single-asset PUT previously wrote `visibility` straight through, skipping every
-    // #757 transition side-effect the bulk path runs — member devices kept hidden/locked bytes forever and
-    // Locked assets stayed in the owner's albums. Route it through the same helper so a single PUT is
-    // byte-for-byte equivalent to a one-id bulk update. No-op for non-space assets (the emits match nothing).
-    if (dto.visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects([id], dto.visibility);
-    }
+  // security-4: the single-asset PUT previously wrote `visibility` straight through, skipping every
+  // #757 transition side-effect the bulk path runs — member devices kept hidden/locked bytes forever and
+  // Locked assets stayed in the owner's albums. Route it through the same helper so a single PUT is
+  // byte-for-byte equivalent to a one-id bulk update. No-op for non-space assets (the emits match nothing).
+  if (dto.visibility !== undefined) {
+    await this.applyVisibilityTransitionSideEffects([id], dto.visibility);
+  }
   ```
 
 - [ ] **Add the correctness-6 rationale** as a doc comment on `applyVisibilityTransitionSideEffects` (from
@@ -448,20 +448,20 @@ needed (in Task 4 the handlers pass a **synthetic** prior to keep the same helpe
       (~line 1326):
 
   ```ts
-      expect(mocks.event.emit).toHaveBeenCalledWith('AssetHide', {
-        assetId: motionAsset.id,
-        userId: motionAsset.ownerId,
-      });
+  expect(mocks.event.emit).toHaveBeenCalledWith('AssetHide', {
+    assetId: motionAsset.id,
+    userId: motionAsset.ownerId,
+  });
   ```
 
 - [ ] **Run**: `cd server && pnpm test --run src/services/metadata.service.spec.ts`. Expected **RED** — the
       extraction-hide path (`metadata.service.ts:890-896`) does not emit `AssetHide`.
 
 - [ ] **Implement the emit** in `metadata.service.ts`. Inside the `if (motionAsset.visibility ===
-      AssetVisibility.Timeline)` block (`890-896`), after the `assetRepository.update(...)` / log line:
+    AssetVisibility.Timeline)` block (`890-896`), after the `assetRepository.update(...)` / log line:
 
   ```ts
-        await this.eventRepository.emit('AssetHide', { assetId: motionAsset.id, userId: motionAsset.ownerId });
+  await this.eventRepository.emit('AssetHide', { assetId: motionAsset.id, userId: motionAsset.ownerId });
   ```
 
   > Do **not** touch the created-Hidden path (`849-861`) — a motion asset created Hidden was never visible to
@@ -570,31 +570,38 @@ The handlers build a synthetic one-entry map. **No `@GenerateSql` method is adde
       (`asset.service.ts:308`), capture priors only when a visibility change is requested; then pass them:
 
   ```ts
-    const priorVisibilities =
-      visibility !== undefined
-        ? new Map((await this.assetRepository.getByIds(ids)).map((a) => [a.id, a.visibility]))
-        : new Map<string, AssetVisibility>();
+  const priorVisibilities =
+    visibility !== undefined
+      ? new Map((await this.assetRepository.getByIds(ids)).map((a) => [a.id, a.visibility]))
+      : new Map<string, AssetVisibility>();
   ```
+
   and change the guarded call (added in Task 1) to:
+
   ```ts
-    if (visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects(ids, visibility, priorVisibilities);
-    }
+  if (visibility !== undefined) {
+    await this.applyVisibilityTransitionSideEffects(ids, visibility, priorVisibilities);
+  }
   ```
 
 - [ ] **Update `update()`** to fetch the single prior before the write. Before
       `const asset = await this.assetRepository.update({ id, ...rest });` (line 240), add:
+
   ```ts
-    const priorVisibility = dto.visibility !== undefined ? (await this.assetRepository.getById(id))?.visibility : undefined;
+  const priorVisibility =
+    dto.visibility !== undefined ? (await this.assetRepository.getById(id))?.visibility : undefined;
   ```
+
   and change the Task 2 call to:
+
   ```ts
-    if (dto.visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects([id], dto.visibility, new Map([[id, priorVisibility]]));
-    }
+  if (dto.visibility !== undefined) {
+    await this.applyVisibilityTransitionSideEffects([id], dto.visibility, new Map([[id, priorVisibility]]));
+  }
   ```
 
 - [ ] **Update both event handlers** to pass a synthetic prior (the event is the crossing):
+
   ```ts
   @OnEvent({ name: 'AssetHide' })
   async onAssetHide({ assetId }: ArgOf<'AssetHide'>): Promise<void> {
@@ -610,7 +617,7 @@ The handlers build a synthetic one-entry map. **No `@GenerateSql` method is adde
 
 - [ ] **Seed priors in the existing `updateAll`/`update` emit tests** (behavioural change → expected churn).
       For each existing **purge** assertion (Hidden/Locked; `asset.service.spec.ts:1041-1051, 1075-1082,
-      1115-1124`) add a shareable prior before the call:
+    1115-1124`) add a shareable prior before the call:
       `mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);`
       For each existing **restore** assertion (Timeline/Archive; `1053-1063, 1093-1103`) add a non-shareable
       prior:
@@ -645,7 +652,11 @@ The handlers build a synthetic one-entry map. **No `@GenerateSql` method is adde
       { id: 'asset-1', visibility: AssetVisibility.Timeline } as any,
       { id: 'asset-2', visibility: AssetVisibility.Hidden } as any,
     ]);
-    await sut.updateAll(authStub.admin, { ids: ['asset-1', 'asset-2'], isFavorite: true, visibility: AssetVisibility.Hidden });
+    await sut.updateAll(authStub.admin, {
+      ids: ['asset-1', 'asset-2'],
+      isFavorite: true,
+      visibility: AssetVisibility.Hidden,
+    });
     expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
     expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
   });
@@ -741,22 +752,23 @@ Architecture; this is a documented divergence from the spec's phrasing, which al
       purge-only (no delete trigger) so `innerJoin('asset')` is safe; qualify the ambiguous `id` select:
 
   ```ts
-    const spaceAlbumAssetArm = this.db
-      .selectFrom('shared_space_album_asset_audit')
-      // gaps-5: owner-gate the album visibility-purge arm to match the library arm — the album owner must
-      // never receive a delete for their OWN hidden asset (over-purge). This table is purge-only (no delete
-      // trigger), so the asset row always exists → a plain INNER JOIN is correct.
-      .innerJoin('asset', 'asset.id', 'shared_space_album_asset_audit.assetId')
-      .select([
-        'shared_space_album_asset_audit.id as id',
-        'shared_space_album_asset_audit.assetId as assetId',
-        'shared_space_album_asset_audit.albumId as albumId',
-      ])
-      .where('shared_space_album_asset_audit.id', '<', nowId)
-      .$if(!!ack, (qb) => qb.where('shared_space_album_asset_audit.id', '>', ack!.updateId))
-      .where('shared_space_album_asset_audit.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      .where('asset.ownerId', '!=', userId);
+  const spaceAlbumAssetArm = this.db
+    .selectFrom('shared_space_album_asset_audit')
+    // gaps-5: owner-gate the album visibility-purge arm to match the library arm — the album owner must
+    // never receive a delete for their OWN hidden asset (over-purge). This table is purge-only (no delete
+    // trigger), so the asset row always exists → a plain INNER JOIN is correct.
+    .innerJoin('asset', 'asset.id', 'shared_space_album_asset_audit.assetId')
+    .select([
+      'shared_space_album_asset_audit.id as id',
+      'shared_space_album_asset_audit.assetId as assetId',
+      'shared_space_album_asset_audit.albumId as albumId',
+    ])
+    .where('shared_space_album_asset_audit.id', '<', nowId)
+    .$if(!!ack, (qb) => qb.where('shared_space_album_asset_audit.id', '>', ack!.updateId))
+    .where('shared_space_album_asset_audit.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+    .where('asset.ownerId', '!=', userId);
   ```
+
   > `albumAssetArm` (the `album_asset_audit` physical-removal arm, `1556-1561`) is **left unchanged** — a
   > physical album removal is a real delete everyone (owner included) should receive.
 
@@ -783,8 +795,9 @@ Architecture; this is a documented divergence from the spec's phrasing, which al
         .stream();
     }
   ```
+
   > **Accepted consequence (documented):** with the asset still present, the owner is also excluded from a
-  > direct *unlink*-of-own-asset delete on this arm (the dual-purpose table cannot distinguish unlink from
+  > direct _unlink_-of-own-asset delete on this arm (the dual-purpose table cannot distinguish unlink from
   > visibility-purge without a discriminator column, which is a migration → out of Slice-3 scope). This is
   > minor and aligns with the deferred "owner sees own" direction: the owner initiated the unlink (client
   > already updated) and a full backfill reconciles; **members still receive** the delete, and **physical**
@@ -831,17 +844,17 @@ layers.
 
 ## Coverage map (every Slice 3 edge case → named test)
 
-| Spec edge case | Test |
-|---|---|
-| `PUT` with `visibility` **unchanged** → no emit, no album removal | Task 2 unit "does not run any visibility transition when a single PUT omits visibility"; Task 4 unit "does NOT re-purge an already-Hidden asset" (re-affirm) |
-| Timeline↔Archive (both shareable) → **no** purge | Task 4 unit "does NOT purge or restore on a Timeline→Archive move"; Task 4 medium (b) |
-| Restore (Hidden→Timeline) via single endpoint → emits **restore** | Task 2 unit "restores direct/album space paths when a single PUT sets visibility Timeline" |
-| Bulk `updateAll` mixed visibility + favorite → only boundary-crossers emit | Task 4 unit "emits only for boundary-crossers in a mixed bulk favorite+visibility flip"; Task 4 medium (c) |
-| Locked transition removes from albums exactly once; re-lock → no-op | Task 2 unit "removes from all albums AND purges … Locked"; Task 4 unit "removes from albums exactly once and skips a re-lock" |
+| Spec edge case                                                                  | Test                                                                                                                                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PUT` with `visibility` **unchanged** → no emit, no album removal               | Task 2 unit "does not run any visibility transition when a single PUT omits visibility"; Task 4 unit "does NOT re-purge an already-Hidden asset" (re-affirm) |
+| Timeline↔Archive (both shareable) → **no** purge                                | Task 4 unit "does NOT purge or restore on a Timeline→Archive move"; Task 4 medium (b)                                                                        |
+| Restore (Hidden→Timeline) via single endpoint → emits **restore**               | Task 2 unit "restores direct/album space paths when a single PUT sets visibility Timeline"                                                                   |
+| Bulk `updateAll` mixed visibility + favorite → only boundary-crossers emit      | Task 4 unit "emits only for boundary-crossers in a mixed bulk favorite+visibility flip"; Task 4 medium (c)                                                   |
+| Locked transition removes from albums exactly once; re-lock → no-op             | Task 2 unit "removes from all albums AND purges … Locked"; Task 4 unit "removes from albums exactly once and skips a re-lock"                                |
 | Motion video in a space-linked library flipped Hidden → purge tombstone emitted | Task 3 unit "purges … when a motion asset is hidden" + metadata "emits AssetHide"; (linkLivePhotos/onBeforeLink/onAfterUnlink fixed for free by the handler) |
-| Owner gets **no** delete for their **own** album/direct asset (gaps-5) | Task 5 medium album "A6 owner does NOT receive…" + direct "owner does NOT receive…" |
-| Physical asset delete still reaches the owner (direct LEFT-JOIN regression) | Task 5 medium "a PHYSICAL asset delete still reaches the owner" |
-| Single endpoint emits the **same** tombstone as bulk (security-4) | Task 2 e2e "single PUT {visibility:hidden} … same purge as bulk" |
-| Locked single PUT removes from ALL owner albums + tombstones | Task 2 e2e "single PUT {visibility:locked} removes A from ALL the owner albums AND tombstones it" |
-| Crash between UPDATE and emits → recoverable (idempotent, not atomic) | correctness-6 helper doc comment (Task 2) + Task 4 idempotency test (re-run emits harmlessly) |
-| classification (Archive↔Timeline) / trash.restoreAll unchanged | No code touched — documented in Architecture (neither crosses the shareable boundary) |
+| Owner gets **no** delete for their **own** album/direct asset (gaps-5)          | Task 5 medium album "A6 owner does NOT receive…" + direct "owner does NOT receive…"                                                                          |
+| Physical asset delete still reaches the owner (direct LEFT-JOIN regression)     | Task 5 medium "a PHYSICAL asset delete still reaches the owner"                                                                                              |
+| Single endpoint emits the **same** tombstone as bulk (security-4)               | Task 2 e2e "single PUT {visibility:hidden} … same purge as bulk"                                                                                             |
+| Locked single PUT removes from ALL owner albums + tombstones                    | Task 2 e2e "single PUT {visibility:locked} removes A from ALL the owner albums AND tombstones it"                                                            |
+| Crash between UPDATE and emits → recoverable (idempotent, not atomic)           | correctness-6 helper doc comment (Task 2) + Task 4 idempotency test (re-run emits harmlessly)                                                                |
+| classification (Archive↔Timeline) / trash.restoreAll unchanged                  | No code touched — documented in Architecture (neither crosses the shareable boundary)                                                                        |

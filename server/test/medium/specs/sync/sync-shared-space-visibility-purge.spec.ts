@@ -295,8 +295,7 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
     const content = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceAssetsV1], true);
     const contentAssetEvents = content.filter(
       (r: { type: string }) =>
-        r.type === SyncEntityType.SharedSpaceAssetCreateV1 ||
-        r.type === SyncEntityType.SharedSpaceAssetBackfillV1,
+        r.type === SyncEntityType.SharedSpaceAssetCreateV1 || r.type === SyncEntityType.SharedSpaceAssetBackfillV1,
     );
     expect(contentAssetEvents.map((e) => (e as { data: { id: string } }).data.id)).not.toContain(asset.id);
   });

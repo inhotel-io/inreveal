@@ -1108,18 +1108,20 @@ export class SharedSpaceAssetExifSync extends BaseSync {
 export class SharedSpaceToAssetSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, spaceId: string) {
-    return this.backfillQuery('shared_space_asset', options)
-      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .select([
-        'shared_space_asset.assetId as assetId',
-        'shared_space_asset.spaceId as spaceId',
-        'shared_space_asset.updateId',
-      ])
-      .where('shared_space_asset.spaceId', '=', spaceId)
-      // correctness-1/security-6: flat visibility gate — never stream a link row for a
-      // Hidden/Locked asset (matches the SharedSpaceAssetSync content sibling; converges on restore).
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+    return (
+      this.backfillQuery('shared_space_asset', options)
+        .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+        .select([
+          'shared_space_asset.assetId as assetId',
+          'shared_space_asset.spaceId as spaceId',
+          'shared_space_asset.updateId',
+        ])
+        .where('shared_space_asset.spaceId', '=', spaceId)
+        // correctness-1/security-6: flat visibility gate — never stream a link row for a
+        // Hidden/Locked asset (matches the SharedSpaceAssetSync content sibling; converges on restore).
+        .where((eb) => spaceVisibilityGate(eb))
+        .stream()
+    );
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
@@ -1149,18 +1151,20 @@ export class SharedSpaceToAssetSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
-    return this.upsertQuery('shared_space_asset', options)
-      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .select([
-        'shared_space_asset.assetId as assetId',
-        'shared_space_asset.spaceId as spaceId',
-        'shared_space_asset.updateId',
-      ])
-      .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
-      // correctness-1/security-6: flat visibility gate — a restore's updateId bump must not re-add a
-      // now-Hidden asset after the delete tombstone (resurrection); also blocks the metadata leak.
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+    return (
+      this.upsertQuery('shared_space_asset', options)
+        .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+        .select([
+          'shared_space_asset.assetId as assetId',
+          'shared_space_asset.spaceId as spaceId',
+          'shared_space_asset.updateId',
+        ])
+        .where('shared_space_asset.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+        // correctness-1/security-6: flat visibility gate — a restore's updateId bump must not re-add a
+        // now-Hidden asset after the delete tombstone (resurrection); also blocks the metadata leak.
+        .where((eb) => spaceVisibilityGate(eb))
+        .stream()
+    );
   }
 }
 
@@ -1537,15 +1541,17 @@ const SHARED_SPACE_ALBUM_SYNC_COLUMNS = [
 export class SharedSpaceAlbumLinkSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, spaceId: string) {
-    return this.backfillQuery('shared_space_album', options)
-      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
-      .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
-      .where('shared_space_album.spaceId', '=', spaceId)
-      // Slice 8 (correctness-3): never stream a soft-deleted album's link row; the
-      // trigger tombstones it via shared_space_album_audit, and this stops getUpserts/
-      // getBackfill re-adding it before restore.
-      .where('album.deletedAt', 'is', null)
-      .stream();
+    return (
+      this.backfillQuery('shared_space_album', options)
+        .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+        .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
+        .where('shared_space_album.spaceId', '=', spaceId)
+        // Slice 8 (correctness-3): never stream a soft-deleted album's link row; the
+        // trigger tombstones it via shared_space_album_audit, and this stops getUpserts/
+        // getBackfill re-adding it before restore.
+        .where('album.deletedAt', 'is', null)
+        .stream()
+    );
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
@@ -1562,15 +1568,17 @@ export class SharedSpaceAlbumLinkSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
-    return this.upsertQuery('shared_space_album', options)
-      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
-      .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
-      .where('shared_space_album.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
-      // Slice 8 (correctness-3): exclude soft-deleted albums so a stale updateId bump
-      // cannot re-add a tombstoned link row (convergence). Restore bumps updateId and
-      // clears deletedAt → the row re-delivers.
-      .where('album.deletedAt', 'is', null)
-      .stream();
+    return (
+      this.upsertQuery('shared_space_album', options)
+        .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+        .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
+        .where('shared_space_album.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+        // Slice 8 (correctness-3): exclude soft-deleted albums so a stale updateId bump
+        // cannot re-add a tombstoned link row (convergence). Restore bumps updateId and
+        // clears deletedAt → the row re-delivers.
+        .where('album.deletedAt', 'is', null)
+        .stream()
+    );
   }
 }
 
@@ -1584,14 +1592,16 @@ export class SharedSpaceAlbumLinkSync extends BaseSync {
 class SharedSpaceAlbumToAssetSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, albumId: string) {
-    return this.backfillQuery('album_asset', options)
-      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
-      .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
-      .where('album_asset.albumId', '=', albumId)
-      // correctness-1/security-6: flat visibility gate — never backfill a Hidden/Locked album asset's
-      // link row (matches the SharedSpaceAlbumAssetSync content sibling; converges on restore).
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+    return (
+      this.backfillQuery('album_asset', options)
+        .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+        .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
+        .where('album_asset.albumId', '=', albumId)
+        // correctness-1/security-6: flat visibility gate — never backfill a Hidden/Locked album asset's
+        // link row (matches the SharedSpaceAlbumAssetSync content sibling; converges on restore).
+        .where((eb) => spaceVisibilityGate(eb))
+        .stream()
+    );
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
@@ -1631,16 +1641,18 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
     const userId = options.userId;
-    return this.upsertQuery('album_asset', options)
-      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
-      .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
-      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
-      .where('shared_space_album_user.userId', '=', userId)
-      .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      // correctness-1/security-6: flat visibility gate — a restore's updateId bump must not re-add a
-      // now-Hidden album asset after the delete tombstone (resurrection); also blocks the metadata leak.
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+    return (
+      this.upsertQuery('album_asset', options)
+        .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+        .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId', 'album_asset.updateId'])
+        .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+        .where('shared_space_album_user.userId', '=', userId)
+        .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+        // correctness-1/security-6: flat visibility gate — a restore's updateId bump must not re-add a
+        // now-Hidden album asset after the delete tombstone (resurrection); also blocks the metadata leak.
+        .where((eb) => spaceVisibilityGate(eb))
+        .stream()
+    );
   }
 
   // Prune the space-only shared_space_album_asset_audit table. The shared

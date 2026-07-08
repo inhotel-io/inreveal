@@ -67,6 +67,7 @@ The spec text writes the trigger as `AFTER UPDATE OF "deletedAt" ON album`. **Th
 ## File Structure
 
 **Modified (production):**
+
 - `server/src/schema/functions.ts` — add `album_soft_delete_shared_space_album` (Task 1); change `shared_space_album_after_insert_user`'s `ON CONFLICT` (Task 3).
 - `server/src/schema/tables/album.table.ts` — add the `@AfterUpdateTrigger` decorator + import (Task 1).
 - `server/src/repositories/sync.repository.ts` — `SharedSpaceAlbumLinkSync.getUpserts` + `getBackfill` gate (Task 2).
@@ -74,14 +75,17 @@ The spec text writes the trigger as `AFTER UPDATE OF "deletedAt" ON album`. **Th
 - `scripts/revert-to-immich.sql` — DROP + `migration_overrides` DELETE entries (Tasks 1 & 3).
 
 **Created (migrations):**
+
 - `server/src/schema/migrations-gallery/1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger.ts` (Task 1).
 - `server/src/schema/migrations-gallery/1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId.ts` (Task 3).
 
 **Created (tests):**
+
 - `server/test/medium/specs/sync/shared-space-album-soft-delete-triggers.spec.ts` (Task 1 — trigger-level DB-state).
 - `server/test/medium/specs/sync/sync-shared-space-album-trash-lifecycle.spec.ts` (Task 4 — end-to-end via `SyncService.syncStream`).
 
 **Modified (tests):**
+
 - `server/test/medium/specs/sync/shared-space-album-link-sync.spec.ts` (Task 2).
 - `server/test/medium/specs/sync/shared-space-album-create-triggers.spec.ts` (Task 3).
 
@@ -92,6 +96,7 @@ The spec text writes the trigger as `AFTER UPDATE OF "deletedAt" ON album`. **Th
 ## Task 1: Album soft-delete/restore trigger
 
 **Files:**
+
 - Modify: `server/src/schema/functions.ts` (append after `shared_space_member_after_insert_album`, ~line 707)
 - Modify: `server/src/schema/tables/album.table.ts`
 - Create: `server/src/schema/migrations-gallery/1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger.ts`
@@ -99,6 +104,7 @@ The spec text writes the trigger as `AFTER UPDATE OF "deletedAt" ON album`. **Th
 - Test: `server/test/medium/specs/sync/shared-space-album-soft-delete-triggers.spec.ts`
 
 **Interfaces:**
+
 - Produces: PG trigger `album_soft_delete_shared_space_album` (function of same name) on the `album` table. On soft-delete it inserts into `shared_space_album_user_audit` (revokes grants via the existing consumer) and `shared_space_album_audit` (link tombstone). On restore it upserts `shared_space_album_user` grants (`ON CONFLICT ("userId","albumId") DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now()`) and bumps `shared_space_album."updateId"`. Task 4 relies on the produced `SharedSpaceAlbumDeleteV1` / `SharedSpaceAlbumLinkDeleteV1` / re-delivery behavior.
 
 - [ ] **Step 1: Write the failing tests**
@@ -575,11 +581,13 @@ git commit -m "feat(spaces): album soft-delete/restore drives shared-space album
 ## Task 2: `SharedSpaceAlbumLinkSync` deletedAt filter
 
 **Files:**
+
 - Modify: `server/src/repositories/sync.repository.ts` (`SharedSpaceAlbumLinkSync.getUpserts` ~1559-1564, `getBackfill` ~1539-1544)
 - Modify: `server/src/queries/sync.repository.sql` (regenerated — CI-deferred)
 - Test: `server/test/medium/specs/sync/shared-space-album-link-sync.spec.ts` (extend)
 
 **Interfaces:**
+
 - Consumes: nothing new (independent of Task 1's trigger at the DB level, but co-required for convergence — the trigger writes the link tombstone, this filter stops the tombstoned row re-appearing via `getUpserts`/`getBackfill`).
 - Produces: `SharedSpaceAlbumLinkSync.getUpserts`/`getBackfill` now `innerJoin('album', 'album.id', 'shared_space_album.albumId').where('album.deletedAt', 'is', null)`.
 
@@ -719,11 +727,13 @@ git commit -m "fix(spaces): exclude soft-deleted albums from shared-space album 
 ## Task 3: albums-9 — re-link grant gets a fresh createId
 
 **Files:**
+
 - Modify: `server/src/schema/functions.ts` (`shared_space_album_after_insert_user`, ~664-681)
 - Create: `server/src/schema/migrations-gallery/1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId.ts`
 - Test: `server/test/medium/specs/sync/shared-space-album-create-triggers.spec.ts` (extend)
 
 **Interfaces:**
+
 - Produces: `shared_space_album_after_insert_user`'s grant insert changes from `ON CONFLICT DO NOTHING` to `ON CONFLICT ("userId", "albumId") DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now()`. Only the **re-link** create-side trigger (fired by `shared_space_album` INSERT) is changed; the member-join trigger `shared_space_member_after_insert_album` keeps `DO NOTHING` (a joining member with a pre-existing grant already has the assets — no re-backfill needed).
 
 **Safety (albums-9 cannot resurrect a revoked grant):** `DO UPDATE` fires **only on conflict**, i.e. only when the `(userId, albumId)` grant row **already exists** — which means the user still had an access path (a legitimately-revoked grant was deleted by the delete-side consumer, so re-link does a plain INSERT for a now-valid space membership). `DO UPDATE` therefore never re-inserts a deleted grant; it only refreshes the `createId` of a surviving one. Verified.
@@ -900,9 +910,11 @@ git commit -m "fix(spaces): refresh shared-space album grant createId on re-link
 ## Task 4: End-to-end trash-lifecycle sync (ties Tasks 1–3 together)
 
 **Files:**
+
 - Create: `server/test/medium/specs/sync/sync-shared-space-album-trash-lifecycle.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the Task 1 trigger, the Task 2 link filter, and the Task 3 createId change — all three, driven through the real `SyncService.syncStream`.
 
 - [ ] **Step 1: Write the end-to-end test**
@@ -962,9 +974,7 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
     const response = await ctx.syncStream(auth, ALBUM_TYPES);
     // grant-revocation → album drops (metadata + assets)
     expect(
-      response.some(
-        (r) => r.type === SyncEntityType.SharedSpaceAlbumDeleteV1 && (r as any).data.albumId === album.id,
-      ),
+      response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumDeleteV1 && (r as any).data.albumId === album.id),
     ).toBe(true);
     // link tombstone → shelf link row drops
     expect(
@@ -995,9 +1005,9 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
 
     const response = await ctx.syncStream(auth, ALBUM_TYPES);
     // metadata re-delivered (SharedSpaceAlbumV1) and link re-delivered (SharedSpaceAlbumLinkV1)
-    expect(
-      response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumV1 && (r as any).data.id === album.id),
-    ).toBe(true);
+    expect(response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumV1 && (r as any).data.id === album.id)).toBe(
+      true,
+    );
     expect(
       response.some((r) => r.type === SyncEntityType.SharedSpaceAlbumLinkV1 && (r as any).data.albumId === album.id),
     ).toBe(true);
@@ -1037,7 +1047,11 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
     const firstSpaceId = (
       await db.selectFrom('shared_space_album').select('spaceId').where('albumId', '=', album.id).execute()
     ).find((r) => r.spaceId !== s2.id)!.spaceId;
-    await db.deleteFrom('shared_space_album').where('spaceId', '=', firstSpaceId).where('albumId', '=', album.id).execute();
+    await db
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', firstSpaceId)
+      .where('albumId', '=', album.id)
+      .execute();
     const { asset: added } = await ctx.newAsset({ ownerId: owner.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: added.id });
 
@@ -1075,18 +1089,18 @@ git commit -m "test(spaces): end-to-end shared-space album trash lifecycle sync"
 
 ## Edge cases — every one is a named test above
 
-| Edge case (spec §Slice 8) | Where covered |
-|---|---|
-| Album in **two** spaces, one unlinked during another's trash window → grant survives via the other path, restore doesn't double-create | Task 1 "album in two spaces during a trash window" |
-| Restore of an album whose owner is still trashed vs restored — define behavior | **Documented (B.1):** album restore ⟺ user restore; there is no independent album-restore path. No separate test needed — soft-delete and restore both go through `softDeleteAll`/`restoreAll`. |
-| Hard delete after soft delete still emits the final delete (don't **double-tombstone**) | Task 1 "does NOT double-tombstone when softDeleteAll re-stamps"; and the transition guard means the eventual hard-delete's `shared_space_album_delete_audit` produces at most an **idempotent** duplicate (client drop of an already-dropped album/link is a no-op) — documented below |
-| `deletedAt` filter on `SharedSpaceAlbumLinkSync` does **not** hide **live** albums | Task 2 "getUpserts excludes a soft-deleted album link row but keeps live ones" (asserts `live.id` present) + "re-includes after restore" |
-| Fresh `createId` on re-link doesn't resurrect a legitimately-revoked grant (only when a path actually exists) | Task 3 "a fresh legitimate grant (no prior path) is a plain insert, not a resurrection" + the safety argument in Task 3 |
-| Grant created **during** a trash window then restore → delivered past a stale checkpoint (albums-3) | Task 1 "re-delivers a grant created DURING the trash window" + Task 4 (implicitly, via createId bump) |
-| Restore re-creates grants (albums-2) with fresh createId | Task 1 "re-creates every member grant with a FRESH createId on restore" + Task 4 "restore re-delivers" |
-| Transition guard ignores non-deletedAt updates | Task 1 "does NOT act on a non-deletedAt update" |
+| Edge case (spec §Slice 8)                                                                                                              | Where covered                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Album in **two** spaces, one unlinked during another's trash window → grant survives via the other path, restore doesn't double-create | Task 1 "album in two spaces during a trash window"                                                                                                                                                                                                                                     |
+| Restore of an album whose owner is still trashed vs restored — define behavior                                                         | **Documented (B.1):** album restore ⟺ user restore; there is no independent album-restore path. No separate test needed — soft-delete and restore both go through `softDeleteAll`/`restoreAll`.                                                                                        |
+| Hard delete after soft delete still emits the final delete (don't **double-tombstone**)                                                | Task 1 "does NOT double-tombstone when softDeleteAll re-stamps"; and the transition guard means the eventual hard-delete's `shared_space_album_delete_audit` produces at most an **idempotent** duplicate (client drop of an already-dropped album/link is a no-op) — documented below |
+| `deletedAt` filter on `SharedSpaceAlbumLinkSync` does **not** hide **live** albums                                                     | Task 2 "getUpserts excludes a soft-deleted album link row but keeps live ones" (asserts `live.id` present) + "re-includes after restore"                                                                                                                                               |
+| Fresh `createId` on re-link doesn't resurrect a legitimately-revoked grant (only when a path actually exists)                          | Task 3 "a fresh legitimate grant (no prior path) is a plain insert, not a resurrection" + the safety argument in Task 3                                                                                                                                                                |
+| Grant created **during** a trash window then restore → delivered past a stale checkpoint (albums-3)                                    | Task 1 "re-delivers a grant created DURING the trash window" + Task 4 (implicitly, via createId bump)                                                                                                                                                                                  |
+| Restore re-creates grants (albums-2) with fresh createId                                                                               | Task 1 "re-creates every member grant with a FRESH createId on restore" + Task 4 "restore re-delivers"                                                                                                                                                                                 |
+| Transition guard ignores non-deletedAt updates                                                                                         | Task 1 "does NOT act on a non-deletedAt update"                                                                                                                                                                                                                                        |
 
-**Idempotent double-tombstone note (documented, accepted):** on the *force*-delete path (`softDeleteAll` then a later hard-delete), the album's hard-delete cascades to `shared_space_album` and fires the existing `shared_space_album_delete_audit`, producing a second link-audit (and a grant-audit whose consumer no-ops because the grant was already deleted by the soft-delete branch). Both duplicates are **idempotent** on the client (dropping an already-dropped album/link is a no-op). Preventing them would require the hard-delete path to detect a prior soft-delete audit — unnecessary complexity for no correctness gain. This is the resolution of the spec's "don't double-tombstone" edge case.
+**Idempotent double-tombstone note (documented, accepted):** on the _force_-delete path (`softDeleteAll` then a later hard-delete), the album's hard-delete cascades to `shared_space_album` and fires the existing `shared_space_album_delete_audit`, producing a second link-audit (and a grant-audit whose consumer no-ops because the grant was already deleted by the soft-delete branch). Both duplicates are **idempotent** on the client (dropping an already-dropped album/link is a no-op). Preventing them would require the hard-delete path to detect a prior soft-delete audit — unnecessary complexity for no correctness gain. This is the resolution of the spec's "don't double-tombstone" edge case.
 
 ---
 
