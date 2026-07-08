@@ -1367,13 +1367,41 @@ class SyncStreamRepository extends DriftDatabaseRepository {
 
         final validUsers = {currentUserId, ...partnerIds.nonNulls};
 
-        // Asset is not owned by the current user or any of their partners and is not part of any (shared) album
-        // Likely a stale asset that was previously shared but has been removed
+        // Delete assets no longer reachable by ANY path. Keep-set:
+        //   owned ∪ partner ∪ remote_album_asset (classic album)
+        //   ∪ shared_space_asset (direct) ∪ shared_space_album_asset (granted album)
+        //   ∪ library-reachable (library_id ∈ shared_space_library).
+        // mobile-3/gaps-1: without the space/album/library arms a member's Drift DB
+        // keeps remote_asset (filename, checksum, thumbhash) + remote_exif (GPS, city,
+        // camera) forever after a purge/unlink, defeating the purge's privacy goal.
+        //
+        // remote_exif rows are removed automatically: remote_exif_entity.assetId has
+        // ON DELETE CASCADE and this transaction runs with foreign_keys = ON.
+        //
+        // DEFERRED (follow-up): evicting cached thumbnail BYTES (in-memory
+        // CustomImageCache — a PaintingBinding.imageCache singleton keyed by
+        // ImageProvider instances, not asset ids — and the URL-keyed disk cache) is a
+        // UI/service-layer concern not reachable from this Drift repository. Row-level
+        // GC (remote_asset + cascaded remote_exif) is done here; byte eviction is a
+        // future service-layer step (resolve pruned ids → provider keys / disk URLs).
         await _db.remoteAssetEntity.deleteWhere((asset) {
           return asset.ownerId.isNotIn(validUsers) &
               asset.id.isNotInQuery(
                 _db.remoteAlbumAssetEntity.selectOnly()..addColumns([_db.remoteAlbumAssetEntity.assetId]),
-              );
+              ) &
+              asset.id.isNotInQuery(
+                _db.sharedSpaceAssetEntity.selectOnly()..addColumns([_db.sharedSpaceAssetEntity.assetId]),
+              ) &
+              asset.id.isNotInQuery(
+                _db.sharedSpaceAlbumAssetEntity.selectOnly()..addColumns([_db.sharedSpaceAlbumAssetEntity.assetId]),
+              ) &
+              // Library-reachable exclusion. NULL-safe: `library_id NOT IN (...)` is NULL
+              // (not TRUE) when library_id is NULL, so a null-library orphan would never
+              // be deleted — guard with `IS NULL OR ...` so it still prunes.
+              (asset.libraryId.isNull() |
+                  asset.libraryId.isNotInQuery(
+                    _db.sharedSpaceLibraryEntity.selectOnly()..addColumns([_db.sharedSpaceLibraryEntity.libraryId]),
+                  ));
         });
       });
     } catch (error, stack) {

@@ -285,10 +285,11 @@ class SyncStreamService {
       // to acknowledge that the client has processed all the backfill events
       case SyncEntityType.syncAckV1:
         return;
-      // SyncCompleteV1 is used to signal the completion of the sync process. Cleanup stale assets and signal completion
+      // SyncCompleteV1 signals the end of the sync process. mobile-3/gaps-1: run the
+      // space-aware GC to drop remote_asset/remote_exif rows no longer reachable by
+      // any path (owner/partner/classic-album/direct/space-album/space-library).
       case SyncEntityType.syncCompleteV1:
-        return;
-      // return _syncStreamRepository.pruneAssets();
+        return _syncStreamRepository.pruneAssets();
       // Request to reset the client state. Clear everything related to remote entities
       case SyncEntityType.syncResetV1:
         return _syncStreamRepository.reset();

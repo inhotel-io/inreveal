@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
 import 'package:immich_mobile/domain/models/album/local_album.model.dart';
 import 'package:immich_mobile/domain/models/memory.model.dart';
+import 'package:immich_mobile/domain/models/user.model.dart';
+import 'package:immich_mobile/infrastructure/entities/auth_user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/partner.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_album.entity.drift.dart';
@@ -57,6 +59,21 @@ SyncAssetV1 _createAsset({
     isEdited: false,
   );
 }
+
+SyncSharedSpaceV1 _pruneSpace({String id = 'space-1'}) => SyncSharedSpaceV1(
+  id: id,
+  name: 'Space',
+  description: null,
+  color: null,
+  createdById: 'user-1',
+  thumbnailAssetId: null,
+  thumbnailCropY: null,
+  faceRecognitionEnabled: true,
+  petsEnabled: false,
+  lastActivityAt: null,
+  createdAt: DateTime(2026, 4, 6),
+  updatedAt: DateTime(2026, 4, 6),
+);
 
 SyncAssetV2 _createAssetV2({
   required String id,
@@ -1400,6 +1417,204 @@ void main() {
       final rows = await db.remoteAssetEntity.select().get();
       expect(rows, hasLength(1));
       expect(rows.first.libraryId, 'libB');
+    });
+  });
+
+  group('SyncStreamRepository - pruneAssets', () {
+    // pruneAssets reads the current user id from authUserEntity (not userEntity).
+    Future<void> seedAuthUser(String id) => db.authUserEntity.insertOne(
+      AuthUserEntityCompanion.insert(id: id, name: 'me', email: '$id@test.com', avatarColor: AvatarColor.primary),
+    );
+
+    // A foreign-owned asset optionally tied to a library, for the keep-path cases.
+    SyncAssetV1 foreignAsset({required String id, required String checksum, String? libraryId}) => SyncAssetV1(
+      id: id,
+      checksum: checksum,
+      originalFileName: '$id.jpg',
+      type: AssetTypeEnum.IMAGE,
+      ownerId: 'user-foreign',
+      isFavorite: false,
+      fileCreatedAt: DateTime(2024, 1, 1),
+      fileModifiedAt: DateTime(2024, 1, 1),
+      localDateTime: DateTime(2024, 1, 1),
+      createdAt: DateTime(2024, 1, 1),
+      visibility: AssetVisibility.timeline,
+      width: 100,
+      height: 100,
+      deletedAt: null,
+      duration: null,
+      libraryId: libraryId,
+      livePhotoVideoId: null,
+      stackId: null,
+      thumbhash: null,
+      isEdited: false,
+    );
+
+    setUp(() async {
+      await sut.updateUsersV1([
+        _createUser(id: 'user-1'),
+        _createUser(id: 'user-partner'),
+        _createUser(id: 'user-foreign'),
+      ]);
+      await seedAuthUser('user-1');
+    });
+
+    test('skips pruning when there is no authenticated user', () async {
+      // Fresh DB with no authUser row (override the group setUp by clearing it).
+      await db.authUserEntity.deleteAll();
+      await sut.updateAssetsV1([foreignAsset(id: 'orphan', checksum: 'c1')]);
+
+      await sut.pruneAssets();
+
+      expect(await db.remoteAssetEntity.select().get(), hasLength(1), reason: 'no auth user → no pruning');
+    });
+
+    test('deletes an unreachable foreign orphan and cascades its remote_exif', () async {
+      await sut.updateAssetsV1([foreignAsset(id: 'orphan', checksum: 'c1')]);
+      await sut.updateAssetsExifV1([_createExif(assetId: 'orphan', width: 100, height: 100, orientation: '1')]);
+      expect(await db.remoteExifEntity.select().get(), hasLength(1));
+
+      await sut.pruneAssets();
+
+      expect(await db.remoteAssetEntity.select().get(), isEmpty);
+      expect(await db.remoteExifEntity.select().get(), isEmpty, reason: 'FK ON DELETE CASCADE removes exif');
+    });
+
+    test('keeps an owned asset even with no album/space path', () async {
+      await sut.updateAssetsV1([_createAsset(id: 'mine', checksum: 'c1', fileName: 'mine.jpg', ownerId: 'user-1')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['mine']);
+    });
+
+    test('keeps a partner-owned asset', () async {
+      await db.into(db.partnerEntity).insert(
+        PartnerEntityCompanion.insert(
+          sharedById: 'user-partner',
+          sharedWithId: 'user-1',
+          inTimeline: const drift.Value(true),
+        ),
+      );
+      await sut.updateAssetsV1([_createAsset(id: 'partner', checksum: 'c1', fileName: 'p.jpg', ownerId: 'user-partner')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['partner']);
+    });
+
+    test('keeps an asset reachable via remote_album_asset (classic album)', () async {
+      await sut.updateAssetsV1([foreignAsset(id: 'classic', checksum: 'c1')]);
+      await sut.updateAlbumsV2([
+        SyncAlbumV2(
+          id: 'classic-album',
+          name: 'Classic',
+          description: '',
+          isActivityEnabled: true,
+          order: AssetOrder.asc,
+          thumbnailAssetId: null,
+          createdAt: DateTime(2026, 6, 1),
+          updatedAt: DateTime(2026, 6, 1),
+        ),
+      ]);
+      await sut.updateAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'classic-album', assetId: 'classic')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['classic']);
+    });
+
+    test('keeps an asset reachable via shared_space_asset (direct add)', () async {
+      await sut.updateAssetsV1([foreignAsset(id: 'direct', checksum: 'c1')]);
+      await sut.updateSharedSpacesV1([_pruneSpace()]);
+      await sut.updateSharedSpaceToAssetsV1([SyncSharedSpaceToAssetV1(spaceId: 'space-1', assetId: 'direct')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['direct']);
+    });
+
+    test('keeps an asset reachable via shared_space_album_asset (granted album)', () async {
+      await sut.updateAssetsV1([foreignAsset(id: 'album-add', checksum: 'c1')]);
+      await sut.updateSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'album-add')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['album-add']);
+    });
+
+    test('keeps an asset reachable via a space-linked library (shared_space_library)', () async {
+      await sut.updateSharedSpacesV1([_pruneSpace()]);
+      await sut.updateLibrariesV1([
+        SyncLibraryV1(
+          id: 'library-1',
+          name: 'Lib',
+          ownerId: 'user-foreign',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceLibrariesV1([
+        SyncSharedSpaceLibraryV1(
+          spaceId: 'space-1',
+          libraryId: 'library-1',
+          addedById: 'user-1',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateAssetsV1([foreignAsset(id: 'lib-asset', checksum: 'c1', libraryId: 'library-1')]);
+
+      await sut.pruneAssets();
+
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['lib-asset']);
+    });
+
+    test('multi-path: pruned only when ALL paths are gone', () async {
+      // Reachable via BOTH a direct add and a space album.
+      await sut.updateAssetsV1([foreignAsset(id: 'multi', checksum: 'c1')]);
+      await sut.updateSharedSpacesV1([_pruneSpace()]);
+      await sut.updateSharedSpaceToAssetsV1([SyncSharedSpaceToAssetV1(spaceId: 'space-1', assetId: 'multi')]);
+      await sut.updateSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'multi')]);
+
+      // Drop ONE path — still reachable via the other → kept.
+      await sut.deleteSharedSpaceToAssetsV1([SyncSharedSpaceToAssetDeleteV1(spaceId: 'space-1', assetId: 'multi')]);
+      await sut.pruneAssets();
+      expect((await db.remoteAssetEntity.select().get()).map((a) => a.id), ['multi']);
+
+      // Drop the last path → now unreachable → pruned.
+      await sut.deleteSharedSpaceAlbumToAssetsV1([SyncAlbumToAssetDeleteV1(albumId: 'album-1', assetId: 'multi')]);
+      await sut.pruneAssets();
+      expect(await db.remoteAssetEntity.select().get(), isEmpty);
+    });
+
+    test('prunes an orphan with a NULL library_id (NULL-in-subquery trap regression)', () async {
+      // A space-linked library exists but this orphan is not in it (null library_id).
+      await sut.updateSharedSpacesV1([_pruneSpace()]);
+      await sut.updateLibrariesV1([
+        SyncLibraryV1(
+          id: 'library-1',
+          name: 'Lib',
+          ownerId: 'user-foreign',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      await sut.updateSharedSpaceLibrariesV1([
+        SyncSharedSpaceLibraryV1(
+          spaceId: 'space-1',
+          libraryId: 'library-1',
+          addedById: 'user-1',
+          createdAt: DateTime(2026, 4, 6),
+          updatedAt: DateTime(2026, 4, 6),
+        ),
+      ]);
+      // Orphan has libraryId: null → must still be pruned (not shielded by NULL NOT IN).
+      await sut.updateAssetsV1([foreignAsset(id: 'null-lib-orphan', checksum: 'c1')]);
+
+      await sut.pruneAssets();
+
+      expect(await db.remoteAssetEntity.select().get(), isEmpty);
     });
   });
 

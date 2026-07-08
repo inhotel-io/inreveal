@@ -266,6 +266,16 @@ void main() {
       verifyNever(() => mockSyncApiRepo.ack(any()));
     });
 
+    test("syncCompleteV1 triggers pruneAssets (mobile-3)", () async {
+      when(() => mockSyncStreamRepo.pruneAssets()).thenAnswer((_) async {});
+
+      await simulateEvents([
+        const SyncEvent(type: SyncEntityType.syncCompleteV1, data: 'complete', ack: 'ack-complete'),
+      ]);
+
+      verify(() => mockSyncStreamRepo.pruneAssets()).called(1);
+    });
+
     test("aborts and stops processing if cancelled during iteration", () async {
       final cancellation = Completer<void>();
 
