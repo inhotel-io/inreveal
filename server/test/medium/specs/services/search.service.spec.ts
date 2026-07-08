@@ -141,6 +141,31 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+// Owner's album carrying one asset per visibility, linked into a space with a Viewer member.
+const seedAlbumWithVisibilities = async (ctx: SearchCtx) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisAlbum' });
+
+  const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+  const { asset: archiveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+  const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+  const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+  for (const asset of [timelineAsset, archiveAsset, hiddenAsset, lockedAsset]) {
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+  }
+
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+  await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+  return { owner, member, album, space, timelineAsset, archiveAsset, hiddenAsset, lockedAsset };
+};
+
+const itemIds = (response: Awaited<ReturnType<SearchService['searchMetadata']>>) =>
+  response.assets.items.map((item) => item.id);
+
 describe(SearchService.name, () => {
   it('should work', () => {
     const { sut } = setup();
@@ -485,31 +510,6 @@ describe(SearchService.name, () => {
   });
 
   describe('albumIds option — visibility gate (Slice 1 / security-1)', () => {
-    // Owner's album carrying one asset per visibility, linked into a space with a Viewer member.
-    const seedAlbumWithVisibilities = async (ctx: SearchCtx) => {
-      const { user: owner } = await ctx.newUser();
-      const { user: member } = await ctx.newUser();
-      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisAlbum' });
-
-      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
-      const { asset: archiveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
-      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
-      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
-      for (const asset of [timelineAsset, archiveAsset, hiddenAsset, lockedAsset]) {
-        await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
-      }
-
-      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
-      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
-      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
-
-      return { owner, member, album, space, timelineAsset, archiveAsset, hiddenAsset, lockedAsset };
-    };
-
-    const itemIds = (response: Awaited<ReturnType<SearchService['searchMetadata']>>) =>
-      response.assets.items.map((item) => item.id);
-
     it('hides a Hidden album asset from a Viewer member (default visibility); Timeline+Archive present, Locked absent', async () => {
       const { sut, ctx } = setup();
       const s = await seedAlbumWithVisibilities(ctx);
