@@ -329,6 +329,7 @@ DELETE FROM "kysely_migrations"
    '1781000000000-AddFaceRepairDecline',
    '1782000000000-AddFaceRepairScanFlaggedFace',
    '1783000000000-AddFaceRepairScanInFlightIndex',
+   '1784000000000-FixFaceRepairScanInFlightIndexOverride',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
