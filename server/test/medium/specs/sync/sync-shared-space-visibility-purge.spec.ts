@@ -36,57 +36,85 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
-// Seed a space owned by `auth`, with `auth` as Owner, plus a directly-added
-// asset. Returns the space + asset. The caller acks the current sync state to
-// simulate an already-synced device before flipping visibility.
-const seedSpaceWithDirectAsset = async (ctx: SyncTestContext, ownerId: string) => {
+// Seed a space owned by `ownerId`, with `ownerId` as Owner, plus a directly-added
+// asset. `memberId` (if given) is added as a non-owner Editor so it can sync the
+// asset separately from the owner — needed since gaps-5 excludes the owner from
+// the visibility-purge tombstone. Returns the space + asset. The caller acks the
+// current sync state to simulate an already-synced device before flipping visibility.
+const seedSpaceWithDirectAsset = async (ctx: SyncTestContext, ownerId: string, memberId?: string) => {
   const { space } = await ctx.newSharedSpace({ createdById: ownerId });
   await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ownerId, role: SharedSpaceRole.Owner });
+  if (memberId && memberId !== ownerId) {
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: memberId, role: SharedSpaceRole.Editor });
+  }
   const { asset } = await ctx.newAsset({ ownerId });
   await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
   return { space, asset };
 };
 
 describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', () => {
-  it('emits a delete event for a directly-added asset flipped to Hidden after it was acked', async () => {
-    const { auth, ctx } = await setup();
-    const { space, asset } = await seedSpaceWithDirectAsset(ctx, auth.user.id);
+  it('emits a delete event for a directly-added asset flipped to Hidden after it was acked, excluding the owner (gaps-5)', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id, memberAuth.user.id);
 
-    // Simulate an already-synced device.
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    // Simulate an already-synced device for both the owner and the member.
+    const ownerInitial = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(ownerAuth, ownerInitial);
+    const memberInitial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, memberInitial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
 
-    // Owner flips the asset to Hidden — DIRECT-path purge must emit a tombstone.
+    // Owner flips the asset to Hidden — DIRECT-path purge must emit a tombstone to the MEMBER, not the owner.
     await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
 
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
-    const deleteEvents = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1);
-    expect(deleteEvents).toHaveLength(1);
-    expect((deleteEvents[0] as { data: { spaceId: string; assetId: string } }).data).toMatchObject({
+    const memberNext = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const memberDeletes = memberNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(memberDeletes).toHaveLength(1);
+    expect((memberDeletes[0] as { data: { spaceId: string; assetId: string } }).data).toMatchObject({
       spaceId: space.id,
       assetId: asset.id,
     });
+
+    // gaps-5: the owner must NOT receive a delete for their own hidden asset.
+    const ownerNext = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const ownerDeletes = ownerNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(ownerDeletes).toHaveLength(0);
   });
 
-  it('emits a delete event for a directly-added asset flipped to Locked after it was acked', async () => {
-    const { auth, ctx } = await setup();
-    const { space, asset } = await seedSpaceWithDirectAsset(ctx, auth.user.id);
+  it('emits a delete event for a directly-added asset flipped to Locked after it was acked, excluding the owner (gaps-5)', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id, memberAuth.user.id);
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const ownerInitial = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(ownerAuth, ownerInitial);
+    const memberInitial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, memberInitial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
 
     // Locked purge uses the same direct-path tombstone mechanism.
     await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
 
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceToAssetsV1]);
-    const deleteEvents = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1);
-    expect(deleteEvents).toHaveLength(1);
-    expect((deleteEvents[0] as { data: { spaceId: string; assetId: string } }).data).toMatchObject({
+    const memberNext = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const memberDeletes = memberNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(memberDeletes).toHaveLength(1);
+    expect((memberDeletes[0] as { data: { spaceId: string; assetId: string } }).data).toMatchObject({
       spaceId: space.id,
       assetId: asset.id,
     });
+
+    const ownerNext = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const ownerDeletes = ownerNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(ownerDeletes).toHaveLength(0);
   });
 
   it('re-emits an upsert for a directly-added asset restored to Timeline after being purged', async () => {
@@ -133,5 +161,30 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
     const { ctx } = await setup();
     await expect(ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([])).resolves.not.toThrow();
     await expect(ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityRestore([])).resolves.not.toThrow();
+  });
+
+  // gaps-5 regression guard: shared_space_asset_audit is DUAL-PURPOSE — the visibility-purge arm added
+  // above excludes the owner, but a PHYSICAL asset delete (asset row gone, FK cascade fires
+  // shared_space_asset_delete_audit) must still reach the owner, since the owner's own device also needs
+  // to drop the asset. The LEFT JOIN + null-owner disjunct in getDeletes exists precisely for this case.
+  it('a PHYSICAL asset delete still reaches the owner via getDeletes (LEFT JOIN null-owner regression)', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id);
+
+    const initial = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(ownerAuth, initial);
+    await ctx.assertSyncIsComplete(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    // Hard-delete the asset row — cascades to shared_space_asset, firing shared_space_asset_delete_audit
+    // (the OLD row values are captured; the asset row itself is now gone).
+    await ctx.database.deleteFrom('asset').where('id', '=', asset.id).execute();
+
+    const next = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const deleteEvents = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1);
+    expect(deleteEvents).toHaveLength(1);
+    expect((deleteEvents[0] as { data: { spaceId: string; assetId: string } }).data).toMatchObject({
+      spaceId: space.id,
+      assetId: asset.id,
+    });
   });
 });

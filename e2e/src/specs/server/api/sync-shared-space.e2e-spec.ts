@@ -1,4 +1,4 @@
-import { SharedSpaceRole, SyncRequestType, type LoginResponseDto } from '@immich/sdk';
+import { AssetVisibility, SharedSpaceRole, SyncRequestType, updateAssets, type LoginResponseDto } from '@immich/sdk';
 import { authHeaders, type Actor } from 'src/actors';
 import { createUserDto } from 'src/fixtures';
 import { app, asBearerAuth, utils } from 'src/utils';
@@ -403,5 +403,57 @@ describe('/sync — shared-space streams', () => {
       const nonComplete = second.filter((l) => l.type !== 'SyncCompleteV1');
       expect(nonComplete).toHaveLength(0);
     });
+  });
+
+  // gaps-5: the space owner must not receive a delete for their OWN asset when a visibility flip purges
+  // it from already-synced member devices (over-purge) — but a genuine physical delete must still reach
+  // everyone, owner included (shared_space_asset_audit is dual-purpose; see sync.repository.ts getDeletes).
+  describe('gaps-5: owner-gate seam on the direct visibility-purge delete stream', () => {
+    it("owner's own asset hidden via PUT does not tombstone on the owner's /sync, but does on the member's", async () => {
+      const space = await utils.createSpace(admin.accessToken, { name: 'Gaps5 OwnerGate' });
+      await utils.addSpaceMember(admin.accessToken, space.id, {
+        userId: member.userId,
+        role: SharedSpaceRole.Editor,
+      });
+      const asset = await utils.createAsset(admin.accessToken);
+      await utils.addSpaceAssets(admin.accessToken, space.id, [asset.id]);
+
+      const types = [SyncRequestType.SharedSpaceToAssetsV1];
+      const ownerInitial = await syncStream(admin.accessToken, types, true);
+      await ackAll(admin.accessToken, ownerInitial);
+      const memberInitial = await syncStream(member.accessToken, types, true);
+      await ackAll(member.accessToken, memberInitial);
+
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [asset.id], visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(admin.accessToken) },
+      );
+
+      const ownerNext = await syncStream(admin.accessToken, types);
+      const ownerDeletes = ownerNext.filter((l) => {
+        if (l.type !== 'SharedSpaceToAssetDeleteV1') {
+          return false;
+        }
+        const data = l.data as { spaceId: string; assetId: string };
+        return data.spaceId === space.id && data.assetId === asset.id;
+      });
+      expect(ownerDeletes).toHaveLength(0);
+
+      const memberNext = await syncStream(member.accessToken, types);
+      const memberDeletes = memberNext.filter((l) => {
+        if (l.type !== 'SharedSpaceToAssetDeleteV1') {
+          return false;
+        }
+        const data = l.data as { spaceId: string; assetId: string };
+        return data.spaceId === space.id && data.assetId === asset.id;
+      });
+      expect(memberDeletes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    // The physical-delete LEFT JOIN null-owner regression (a hard asset delete must still reach the
+    // owner) is covered deterministically at the medium layer — see
+    // sync-shared-space-visibility-purge.spec.ts "a PHYSICAL asset delete still reaches the owner". An
+    // e2e equivalent would need to wait on the async AssetDelete job actually removing the row, which is
+    // not deterministic enough for this suite (no-flake-allowance).
   });
 });

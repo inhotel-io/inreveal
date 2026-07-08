@@ -1120,10 +1120,23 @@ export class SharedSpaceToAssetSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
-    return this.auditQuery('shared_space_asset_audit', options)
-      .select(['id', 'assetId', 'spaceId'])
-      .where('spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
-      .stream();
+    return (
+      this.auditQuery('shared_space_asset_audit', options)
+        // gaps-5: owner-gate the visibility-purge tombstones (owner must not lose their OWN hidden asset).
+        // shared_space_asset_audit is DUAL-PURPOSE — it also receives physical/link-delete tombstones from
+        // the shared_space_asset_delete_audit trigger, whose asset row may be GONE (FK cascade on asset
+        // delete). A LEFT JOIN keeps those (asset.ownerId IS NULL → delivered to everyone incl. the owner);
+        // visibility-purge tombstones (asset still exists) exclude the owner via ownerId != userId.
+        .leftJoin('asset', 'asset.id', 'shared_space_asset_audit.assetId')
+        .select([
+          'shared_space_asset_audit.id as id',
+          'shared_space_asset_audit.assetId as assetId',
+          'shared_space_asset_audit.spaceId as spaceId',
+        ])
+        .where('shared_space_asset_audit.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+        .where((eb) => eb.or([eb('asset.ownerId', 'is', null), eb('asset.ownerId', '!=', options.userId)]))
+        .stream()
+    );
   }
 
   cleanupAuditTable(daysAgo: number) {
@@ -1562,10 +1575,19 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
 
     const spaceAlbumAssetArm = this.db
       .selectFrom('shared_space_album_asset_audit')
-      .select(['id', 'assetId', 'albumId'])
-      .where('id', '<', nowId)
-      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
-      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+      // gaps-5: owner-gate the album visibility-purge arm to match the library arm — the album owner must
+      // never receive a delete for their OWN hidden asset (over-purge). This table is purge-only (no delete
+      // trigger), so the asset row always exists → a plain INNER JOIN is correct.
+      .innerJoin('asset', 'asset.id', 'shared_space_album_asset_audit.assetId')
+      .select([
+        'shared_space_album_asset_audit.id as id',
+        'shared_space_album_asset_audit.assetId as assetId',
+        'shared_space_album_asset_audit.albumId as albumId',
+      ])
+      .where('shared_space_album_asset_audit.id', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('shared_space_album_asset_audit.id', '>', ack!.updateId))
+      .where('shared_space_album_asset_audit.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where('asset.ownerId', '!=', userId);
 
     return albumAssetArm.union(spaceAlbumAssetArm).orderBy('id', 'asc').stream();
   }
