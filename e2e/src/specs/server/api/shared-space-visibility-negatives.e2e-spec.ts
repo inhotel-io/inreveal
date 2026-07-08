@@ -316,6 +316,25 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       expect(assetIds).toContain(timelineAsset.id);
       expect(assetIds).not.toContain(lockedAsset.id);
     });
+
+    it("owner's own Hidden album asset is omitted from the album download manifest (rbac-8, flat gate)", async () => {
+      const timelineAsset = await utils.createAsset(owner.accessToken);
+      const hiddenAsset = await utils.createAsset(owner.accessToken);
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'Rbac8 OwnerDownload',
+        assetIds: [timelineAsset.id, hiddenAsset.id],
+      });
+      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+
+      const { status, body } = await request(app)
+        .post('/download/info')
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({ albumId: album.id });
+      expect(status).toBe(201);
+      const ids = (body.archives as Array<{ assetIds: string[] }>).flatMap((a) => a.assetIds);
+      expect(ids).toContain(timelineAsset.id);
+      expect(ids).not.toContain(hiddenAsset.id); // matches the grid — owner's Hidden omitted
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────────────────

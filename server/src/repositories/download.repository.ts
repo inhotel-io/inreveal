@@ -29,6 +29,9 @@ export class DownloadRepository {
     return builder(this.db)
       .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
       .where('album_asset.albumId', '=', albumId)
+      // rbac-8 (no functional change): flat visibility gate — NO owner exception — so an album-archive
+      // export omits Hidden/Locked rows for everyone, matching the album grid (withDefaultVisibility) and
+      // map-markers. An `own OR` here would let the owner download Hidden while the grid hides it.
       .where((eb) => spaceVisibilityGate(eb))
       .stream();
   }
