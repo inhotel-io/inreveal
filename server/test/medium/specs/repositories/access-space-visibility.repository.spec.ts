@@ -642,3 +642,73 @@ describe('checkSharedSpaceAccess (PersonRead) — visibility widening (rbac-7)',
     expect(lockedResult.has(lockedCase.person.id)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// C6 investigation resolved SAFE/CONSISTENT: the partner arm (checkPartnerAccess — grants
+// Timeline + Hidden, upstream behaviour) and the space arm (checkSpaceAccess — grants Timeline +
+// Archive, per the space visibility gate) are two independent grants unioned at the
+// access-orchestration layer (utils/access.ts AssetRead: setUnion(owner, album, partner, space)).
+// For a user P who is both O's partner AND a member of a space O linked an asset into:
+//   Timeline -> visible via both; Archive -> visible via the SPACE arm only; Hidden -> visible via
+//   the PARTNER arm only (space-independent, pre-existing); Locked -> blocked by BOTH arms — the
+//   only truly-private tier, and it never leaks through the union. Consistent with slice-4
+//   security-7 (partner-entitled Hidden assets are protected from the space-driven library purge).
+// Pin this so a future change to either arm can't silently let Locked leak through the union.
+// ---------------------------------------------------------------------------
+
+describe('C6 partner × space-linked visibility invariant', () => {
+  const seedPartnerAndSpaceAsset = async (visibility: AssetVisibility) => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: partner } = await ctx.newUser();
+    await ctx.newPartner({ sharedById: owner.id, sharedWithId: partner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: partner.id, role: 'viewer' });
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+    return { accessRepo, partner, asset };
+  };
+
+  it('Locked X is blocked by BOTH arms (the private tier never leaks through the union)', async () => {
+    const { accessRepo, partner, asset } = await seedPartnerAndSpaceAsset(AssetVisibility.Locked);
+
+    const partnerResult = await accessRepo.asset.checkPartnerAccess(partner.id, new Set([asset.id]));
+    const spaceResult = await accessRepo.asset.checkSpaceAccess(partner.id, new Set([asset.id]));
+
+    expect(partnerResult.has(asset.id)).toBe(false);
+    expect(spaceResult.has(asset.id)).toBe(false);
+  });
+
+  it('Hidden X is granted via the PARTNER arm (attributable to partner-sharing, not the space)', async () => {
+    const { accessRepo, partner, asset } = await seedPartnerAndSpaceAsset(AssetVisibility.Hidden);
+
+    const partnerResult = await accessRepo.asset.checkPartnerAccess(partner.id, new Set([asset.id]));
+    const spaceResult = await accessRepo.asset.checkSpaceAccess(partner.id, new Set([asset.id]));
+
+    expect(partnerResult.has(asset.id)).toBe(true);
+    expect(spaceResult.has(asset.id)).toBe(false); // space strips Hidden
+  });
+
+  it('Archive X is granted via the SPACE arm (partner default cannot see Archive)', async () => {
+    const { accessRepo, partner, asset } = await seedPartnerAndSpaceAsset(AssetVisibility.Archive);
+
+    const partnerResult = await accessRepo.asset.checkPartnerAccess(partner.id, new Set([asset.id]));
+    const spaceResult = await accessRepo.asset.checkSpaceAccess(partner.id, new Set([asset.id]));
+
+    expect(spaceResult.has(asset.id)).toBe(true);
+    expect(partnerResult.has(asset.id)).toBe(false);
+  });
+
+  it('Timeline X is granted via BOTH arms (positive control, regression)', async () => {
+    const { accessRepo, partner, asset } = await seedPartnerAndSpaceAsset(AssetVisibility.Timeline);
+
+    const partnerResult = await accessRepo.asset.checkPartnerAccess(partner.id, new Set([asset.id]));
+    const spaceResult = await accessRepo.asset.checkSpaceAccess(partner.id, new Set([asset.id]));
+
+    expect(partnerResult.has(asset.id)).toBe(true);
+    expect(spaceResult.has(asset.id)).toBe(true);
+  });
+});
