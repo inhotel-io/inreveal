@@ -13,7 +13,7 @@
  * 400 responses on Hidden/Locked are confirmed to be gate failures, not setup bugs.
  */
 
-import { AssetVisibility, LoginResponseDto, updateAssets } from '@immich/sdk';
+import { AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
 import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
@@ -57,6 +57,53 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       .send(body);
     expect(status).toBe(201);
     return (resBody.archives as Array<{ assetIds: string[] }>).flatMap((a) => a.assetIds);
+  };
+
+  /** Fresh space with owner=Owner, member=Viewer; returns the space id. */
+  const freshSpaceWithViewer = async (name: string) => {
+    const space = await utils.createSpace(owner.accessToken, { name });
+    await utils.addSpaceMember(owner.accessToken, space.id, {
+      userId: member.userId,
+      role: SharedSpaceRole.Viewer,
+    });
+    return space.id;
+  };
+
+  const linkAlbum = (spaceId: string, albumId: string) =>
+    request(app)
+      .put(`/shared-spaces/${spaceId}/albums/${albumId}`)
+      .set('Authorization', `Bearer ${owner.accessToken}`);
+
+  const searchAlbumIds = async (body: Record<string, unknown>): Promise<string[]> => {
+    const { status, body: resBody } = await request(app)
+      .post('/search/metadata')
+      .set('Authorization', `Bearer ${member.accessToken}`)
+      .send(body);
+    expect(status).toBe(200);
+    return (resBody.assets.items as Array<{ id: string }>).map((item) => item.id);
+  };
+
+  // Resolve a real bucket for the album's assets so the positive controls query a populated bucket.
+  const firstAlbumBucket = async (albumId: string): Promise<string> => {
+    const { status, body } = await request(app)
+      .get(`/timeline/buckets?bucketSize=month&albumId=${albumId}`)
+      .set('Authorization', `Bearer ${member.accessToken}`);
+    expect(status).toBe(200);
+    return (body as Array<{ timeBucket: string }>)[0].timeBucket;
+  };
+
+  /** Owner-created album with a Timeline + a Hidden asset, linked into a fresh space with a Viewer. */
+  const setupLinkedAlbum = async (name: string) => {
+    const timelineAsset = await utils.createAsset(owner.accessToken);
+    const hiddenAsset = await utils.createAsset(owner.accessToken);
+    const album = await utils.createAlbum(owner.accessToken, {
+      albumName: name,
+      assetIds: [timelineAsset.id, hiddenAsset.id],
+    });
+    await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+    const spaceId = await freshSpaceWithViewer(name);
+    await linkAlbum(spaceId, album.id);
+    return { album, timelineAsset, hiddenAsset };
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -250,6 +297,93 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
       expect(assetIds).toContain(timelineAsset.id);
       expect(assetIds).not.toContain(lockedAsset.id);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // POST /search/metadata (albumId via space AlbumRead grant) — Hidden/Locked absent
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('POST /search/metadata (albumIds via space AlbumRead grant) — Hidden/Locked absent (security-1)', () => {
+    it('Hidden album-linked asset absent for a Viewer (default visibility); Timeline+Archive present', async () => {
+      const timelineAsset = await utils.createAsset(owner.accessToken);
+      const archiveAsset = await utils.createAsset(owner.accessToken);
+      await setVisibility(archiveAsset.id, AssetVisibility.Archive);
+      const hiddenAsset = await utils.createAsset(owner.accessToken);
+
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'SearchAlbumHiddenNeg',
+        assetIds: [timelineAsset.id, archiveAsset.id, hiddenAsset.id],
+      });
+      // hide AFTER album-add (a pre-Hidden asset would be rejected / auto-removed from the album)
+      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+
+      const spaceId = await freshSpaceWithViewer('search-album-hidden-neg');
+      await linkAlbum(spaceId, album.id);
+
+      const ids = await searchAlbumIds({ albumIds: [album.id] });
+
+      expect(ids).toContain(timelineAsset.id);
+      expect(ids).toContain(archiveAsset.id);
+      expect(ids).not.toContain(hiddenAsset.id);
+    });
+
+    it('Hidden album-linked asset absent even with an explicit visibility=hidden request', async () => {
+      const timelineAsset = await utils.createAsset(owner.accessToken);
+      const hiddenAsset = await utils.createAsset(owner.accessToken);
+
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'SearchAlbumHiddenExplicit',
+        assetIds: [timelineAsset.id, hiddenAsset.id],
+      });
+      await setVisibility(hiddenAsset.id, AssetVisibility.Hidden);
+
+      const spaceId = await freshSpaceWithViewer('search-album-hidden-explicit');
+      await linkAlbum(spaceId, album.id);
+
+      const ids = await searchAlbumIds({ albumIds: [album.id], visibility: AssetVisibility.Hidden });
+
+      expect(ids).not.toContain(hiddenAsset.id);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // GET /timeline/bucket (albumId) — Hidden/Locked → 400; Timeline/Archive → 200
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('GET /timeline/bucket (albumId via space AlbumRead grant) — Hidden/Locked rejected (security-3)', () => {
+    it('albumId + visibility=hidden → 400 for a Viewer member', async () => {
+      const { album } = await setupLinkedAlbum('bucket-album-hidden-neg');
+
+      const { status } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=hidden`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(400);
+    });
+
+    it('albumId + visibility=locked → 400 for a Viewer member', async () => {
+      const { album } = await setupLinkedAlbum('bucket-album-locked-neg');
+
+      const { status } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=locked`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(400);
+    });
+
+    it('albumId (default visibility) → 200 with the Timeline asset present, Hidden absent', async () => {
+      const { album, timelineAsset, hiddenAsset } = await setupLinkedAlbum('bucket-album-default-pos');
+      const timeBucket = await firstAlbumBucket(album.id);
+
+      const { status, body } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=${timeBucket}&albumId=${album.id}`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(200);
+      const returnedIds = (body.id ?? []) as string[];
+      expect(returnedIds).toContain(timelineAsset.id);
+      expect(returnedIds).not.toContain(hiddenAsset.id);
     });
   });
 });
