@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/infrastructure/repositories/remote_album.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/space_album.repository.dart';
 
@@ -58,6 +59,42 @@ void main() {
       final reef = albums.firstWhere((a) => a.id == a2.id);
       expect(hawaii.assetCount, 2);
       expect(reef.assetCount, 0);
+    });
+
+    test('assetCount counts only visible assets — excludes hidden, deleted, and unsynced (mobile-5)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Mixed');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      final visibleTimeline = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.timeline);
+      final visibleArchive = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.archive);
+      final hidden = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.hidden);
+      final deleted = await ctx.newRemoteAsset(ownerId: user.id, deletedAt: DateTime(2026, 1, 1));
+
+      // 4 membership rows with a remote_asset + 1 membership row whose asset was
+      // never synced (no remote_asset row at all) → only 2 are visible.
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: visibleTimeline.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: visibleArchive.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: hidden.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: deleted.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: 'never-synced-asset');
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.single.assetCount, 2, reason: 'timeline + archive only; hidden/deleted/unsynced excluded');
+    });
+
+    test('assetCount is 0 for an album with no visible assets but the album still lists (mobile-5)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'AllHidden');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+      final hidden = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.hidden);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: hidden.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.map((a) => a.id), contains(album.id), reason: 'album must still appear on the shelf');
+      expect(albums.single.assetCount, 0);
     });
   });
 

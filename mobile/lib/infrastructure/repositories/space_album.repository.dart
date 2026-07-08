@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 
@@ -12,14 +13,28 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
     final link = _db.sharedSpaceAlbumLinkEntity;
     final meta = _db.sharedSpaceAlbumEntity;
     final assetMembership = _db.sharedSpaceAlbumAssetEntity;
+    final asset = _db.remoteAssetEntity;
 
-    // COUNT of membership rows per album (correlated via groupBy + LEFT JOIN).
-    final assetCountExp = assetMembership.assetId.count();
+    // mobile-5: count only assets the detail view would show. LEFT JOIN
+    // membership → remote_asset and apply the space-album detail predicate
+    // (deletedAt IS NULL AND visibility IN (timeline, archive) — matching
+    // _getSpaceAlbumBucketAssets after mobile-6) in the JOIN ON-clause, NOT the
+    // WHERE, so an album with zero visible assets still surfaces with count 0.
+    // remote_asset.id.count() ignores the NULLs a LEFT JOIN produces.
+    final assetCountExp = asset.id.count();
 
     final query =
         _db.select(link).join([
             innerJoin(meta, meta.id.equalsExp(link.albumId)),
             leftOuterJoin(assetMembership, assetMembership.albumId.equalsExp(link.albumId), useColumns: false),
+            leftOuterJoin(
+              asset,
+              asset.id.equalsExp(assetMembership.assetId) &
+                  asset.deletedAt.isNull() &
+                  (asset.visibility.equalsValue(AssetVisibility.timeline) |
+                      asset.visibility.equalsValue(AssetVisibility.archive)),
+              useColumns: false,
+            ),
           ])
           ..where(link.spaceId.equals(spaceId))
           ..addColumns([assetCountExp])
