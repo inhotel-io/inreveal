@@ -14,10 +14,20 @@
  */
 
 import { AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
+import { readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { createUserDto } from 'src/fixtures';
-import { app, asBearerAuth, utils } from 'src/utils';
+import { app, asBearerAuth, testAssetDir, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+
+const mapMarkerIds = async (albumId: string, token: string): Promise<string[]> => {
+  const { status, body } = await request(app)
+    .get(`/albums/${albumId}/map-markers`)
+    .set('Authorization', `Bearer ${token}`);
+  expect(status).toBe(200);
+  return (body as Array<{ id: string }>).map((m) => m.id);
+};
 
 describe('shared-space visibility negatives (Slice 11)', () => {
   let admin: LoginResponseDto;
@@ -73,6 +83,14 @@ describe('shared-space visibility negatives (Slice 11)', () => {
     request(app)
       .put(`/shared-spaces/${spaceId}/albums/${albumId}`)
       .set('Authorization', `Bearer ${owner.accessToken}`);
+
+  /** Upload a GPS-tagged fixture (thompson-springs.jpg — see reference_test_asset_exif_content) as owner. */
+  const uploadGpsAsset = async () => {
+    const filepath = join(testAssetDir, 'metadata/gps-position/thompson-springs.jpg');
+    return utils.createAsset(owner.accessToken, {
+      assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+    });
+  };
 
   const searchAlbumIds = async (body: Record<string, unknown>): Promise<string[]> => {
     const { status, body: resBody } = await request(app)
@@ -384,6 +402,31 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       const returnedIds = (body.id ?? []) as string[];
       expect(returnedIds).toContain(timelineAsset.id);
       expect(returnedIds).not.toContain(hiddenAsset.id);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // GET /albums/:id/map-markers (space-linked) — Hidden/Locked coordinates absent (security-2)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('GET /albums/:id/map-markers (space-linked) — Hidden/Locked coordinates absent (security-2)', () => {
+    it('Hidden album asset has no map marker for a Viewer member OR the owner (flat gate)', async () => {
+      const gps = await uploadGpsAsset();
+      const hidden = await uploadGpsAsset();
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'MapMarkerHiddenNeg',
+        assetIds: [gps.id, hidden.id],
+      });
+      await setVisibility(hidden.id, AssetVisibility.Hidden);
+      const spaceId = await freshSpaceWithViewer('map-marker-hidden-neg');
+      await linkAlbum(spaceId, album.id);
+
+      const memberIds = await mapMarkerIds(album.id, member.accessToken);
+      expect(memberIds).toContain(gps.id);
+      expect(memberIds).not.toContain(hidden.id);
+
+      const ownerIds = await mapMarkerIds(album.id, owner.accessToken);
+      expect(ownerIds).not.toContain(hidden.id); // flat gate: no owner exception
     });
   });
 });
