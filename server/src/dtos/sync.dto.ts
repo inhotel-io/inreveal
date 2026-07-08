@@ -10,6 +10,7 @@ import {
   MemoryTypeSchema,
   SyncEntityType,
   SyncEntityTypeSchema,
+  SyncRequestType,
   SyncRequestTypeSchema,
   UserAvatarColorSchema,
   UserMetadataKeySchema,
@@ -714,9 +715,25 @@ export type SyncItem = {
   [SyncEntityType.SharedSpaceAlbumAssetExifBackfillV1]: SyncAssetExifV1;
 };
 
+// mobile-1 (defense-in-depth): drop request types this server does not recognise instead of
+// rejecting the whole /sync/stream with a 400. A newer client sends fork-only enum values (e.g.
+// the SharedSpaceAlbum* types) that an older server's z.enum would reject, taking down the entire
+// sync stream (total outage). Filtering unknown values BEFORE the enum-array validation lets known
+// types keep streaming; SyncService.stream already ignores any type not in SYNC_TYPES_ORDER
+// (sync.service.ts). A non-array or missing `types` still fails validation — structural errors are
+// NOT masked. The z.preprocess(fn, z.array(X)) shape renders in OpenAPI as an array of X (same as
+// today), so no SDK regen is needed (see time-bucket.dto.ts personIds/tagIds for the same pattern).
+const KNOWN_SYNC_REQUEST_TYPES = new Set<string>(Object.values(SyncRequestType));
+
 const SyncStreamSchema = z
   .object({
-    types: z.array(SyncRequestTypeSchema).describe('Sync request types'),
+    types: z
+      .preprocess(
+        (value) =>
+          Array.isArray(value) ? value.filter((type) => KNOWN_SYNC_REQUEST_TYPES.has(type as string)) : value,
+        z.array(SyncRequestTypeSchema),
+      )
+      .describe('Sync request types'),
     reset: z.boolean().optional().describe('Reset sync state'),
   })
   .meta({ id: 'SyncStreamDto' });
