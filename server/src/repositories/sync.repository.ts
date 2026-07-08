@@ -1126,23 +1126,16 @@ export class SharedSpaceToAssetSync extends BaseSync {
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getDeletes(options: SyncQueryOptions) {
-    return (
-      this.auditQuery('shared_space_asset_audit', options)
-        // gaps-5: owner-gate the visibility-purge tombstones (owner must not lose their OWN hidden asset).
-        // shared_space_asset_audit is DUAL-PURPOSE — it also receives physical/link-delete tombstones from
-        // the shared_space_asset_delete_audit trigger, whose asset row may be GONE (FK cascade on asset
-        // delete). A LEFT JOIN keeps those (asset.ownerId IS NULL → delivered to everyone incl. the owner);
-        // visibility-purge tombstones (asset still exists) exclude the owner via ownerId != userId.
-        .leftJoin('asset', 'asset.id', 'shared_space_asset_audit.assetId')
-        .select([
-          'shared_space_asset_audit.id as id',
-          'shared_space_asset_audit.assetId as assetId',
-          'shared_space_asset_audit.spaceId as spaceId',
-        ])
-        .where('shared_space_asset_audit.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
-        .where((eb) => eb.or([eb('asset.ownerId', 'is', null), eb('asset.ownerId', '!=', options.userId)]))
-        .stream()
-    );
+    // gaps-5 deliberately NOT owner-gated on this DIRECT arm. shared_space_asset_audit is dual-purpose:
+    // it receives both visibility-purge tombstones (gaps-5 wanted the owner excluded — LOW/benign, restore
+    // round-trips) AND genuine removal tombstones from shared_space_asset_delete_audit (the owner MUST get
+    // these to converge their own other devices). The two are indistinguishable without a discriminator
+    // column (a migration, out of scope), so owner removal-convergence wins and the owner is not gated here.
+    // The owner IS gated on the ALBUM (getDeletes below) and LIBRARY arms, whose audit tables are purge-only.
+    return this.auditQuery('shared_space_asset_audit', options)
+      .select(['id', 'assetId', 'spaceId'])
+      .where('spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      .stream();
   }
 
   cleanupAuditTable(daysAgo: number) {

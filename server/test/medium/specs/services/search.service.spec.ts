@@ -4,6 +4,7 @@ import { AlbumUserRole, AssetVisibility } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -26,6 +27,10 @@ const setup = (db?: Kysely<DB>) => {
       AccessRepository,
       AssetRepository,
       DatabaseRepository,
+      // Slice 1: the albumIds+personIds edge-case test exercises searchMetadata's person path, which calls
+      // faceIdentityRepository.resolveScopedPersonTokens — wire it real so the resolver runs (returns no
+      // scoped tokens for a plain personId) instead of throwing on an undefined repo.
+      FaceIdentityRepository,
       SearchRepository,
       SharedSpaceRepository,
       PartnerRepository,
@@ -610,13 +615,15 @@ describe(SearchService.name, () => {
       const { sut, ctx } = setup();
       const s = await seedAlbumWithVisibilities(ctx);
 
-      // A person whose face sits on BOTH the Timeline and the Hidden album asset. Combining the
-      // album scope with the person scope must not open a bypass — the Hidden asset stays gated.
+      // A person whose face sits on BOTH the Timeline and the Hidden album asset. The OWNER searches
+      // (they hold PersonRead on their own person — a member could not filter by it). Combining the album
+      // scope with the person scope must not open a bypass: the flat album gate still hides the Hidden
+      // asset from the owner too (matches the album grid), while the Timeline asset comes through.
       const { person } = await ctx.newPerson({ ownerId: s.owner.id, name: 'ComboPerson' });
       await ctx.newAssetFace({ assetId: s.timelineAsset.id, personId: person.id });
       await ctx.newAssetFace({ assetId: s.hiddenAsset.id, personId: person.id });
 
-      const auth = factory.auth({ user: { id: s.member.id } });
+      const auth = factory.auth({ user: { id: s.owner.id } });
       const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], personIds: [person.id] });
       const ids = itemIds(response);
 

@@ -38,8 +38,9 @@ beforeAll(async () => {
 
 // Seed a space owned by `ownerId`, with `ownerId` as Owner, plus a directly-added
 // asset. `memberId` (if given) is added as a non-owner Editor so it can sync the
-// asset separately from the owner — needed since gaps-5 excludes the owner from
-// the visibility-purge tombstone. Returns the space + asset. The caller acks the
+// asset separately from the owner. NOTE: the DIRECT arm is intentionally NOT owner-gated
+// (its audit table is dual-purpose — see SharedSpaceToAssetSync.getDeletes), so the owner
+// also receives the direct purge tombstone. Returns the space + asset. The caller acks the
 // current sync state to simulate an already-synced device before flipping visibility.
 const seedSpaceWithDirectAsset = async (ctx: SyncTestContext, ownerId: string, memberId?: string) => {
   const { space } = await ctx.newSharedSpace({ createdById: ownerId });
@@ -53,7 +54,7 @@ const seedSpaceWithDirectAsset = async (ctx: SyncTestContext, ownerId: string, m
 };
 
 describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', () => {
-  it('emits a delete event for a directly-added asset flipped to Hidden after it was acked, excluding the owner (gaps-5)', async () => {
+  it('emits a direct-path delete tombstone to both the member and the owner when flipped to Hidden', async () => {
     const { auth: ownerAuth, ctx } = await setup();
     const { auth: memberAuth } = await ctx.newSyncAuthUser();
     const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id, memberAuth.user.id);
@@ -65,7 +66,7 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
     await ctx.syncAckAll(memberAuth, memberInitial);
     await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
 
-    // Owner flips the asset to Hidden — DIRECT-path purge must emit a tombstone to the MEMBER, not the owner.
+    // Owner flips the asset to Hidden — DIRECT-path purge emits a tombstone.
     await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
 
     const memberNext = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
@@ -78,15 +79,16 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
       assetId: asset.id,
     });
 
-    // gaps-5: the owner must NOT receive a delete for their own hidden asset.
+    // The DIRECT arm is dual-purpose and NOT owner-gated, so the owner receives the tombstone too
+    // (gaps-5's owner-exclusion applies only to the purge-only album/library arms). Benign: restore round-trips.
     const ownerNext = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
     const ownerDeletes = ownerNext.filter(
       (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
     );
-    expect(ownerDeletes).toHaveLength(0);
+    expect(ownerDeletes).toHaveLength(1);
   });
 
-  it('emits a delete event for a directly-added asset flipped to Locked after it was acked, excluding the owner (gaps-5)', async () => {
+  it('emits a direct-path delete tombstone to both the member and the owner when flipped to Locked', async () => {
     const { auth: ownerAuth, ctx } = await setup();
     const { auth: memberAuth } = await ctx.newSyncAuthUser();
     const { space, asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id, memberAuth.user.id);
@@ -114,7 +116,7 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
     const ownerDeletes = ownerNext.filter(
       (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
     );
-    expect(ownerDeletes).toHaveLength(0);
+    expect(ownerDeletes).toHaveLength(1);
   });
 
   it('re-emits an upsert for a directly-added asset restored to Timeline after being purged', async () => {
@@ -261,7 +263,7 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
   // their own Hidden asset (no delete). The FLAT upsert gate (slice 4) means a FRESH owner backfill omits
   // that same Hidden link row — identical to the SharedSpaceAssetsV1 content stream, which also omits it.
   // Pins the flat decision; the deferred "owner sees own hidden" feature would flip BOTH streams together.
-  it('owner consistency: owner keeps an already-synced Hidden asset (no delete) but a fresh backfill omits it (flat gate)', async () => {
+  it('owner consistency: owner drops an already-synced Hidden asset (direct delete) and a fresh backfill omits it (flat gate)', async () => {
     const { auth: ownerAuth, ctx } = await setup();
     const { asset } = await seedSpaceWithDirectAsset(ctx, ownerAuth.user.id);
 
@@ -276,12 +278,14 @@ describe('SharedSpaceToAssetSync — visibility purge/restore (direct path)', ()
       .execute();
     await ctx.get(SharedSpaceRepository).emitDirectAssetVisibilityPurge([asset.id]);
 
-    // slice 3: owner gets NO delete for their own hidden asset (over-purge guard).
+    // The DIRECT arm is not owner-gated (dual-purpose table), so the owner DOES receive the delete —
+    // which is the consistent outcome: it converges the already-synced device to the same state the flat
+    // backfill gate produces (asset omitted). gaps-5's owner-exclusion applies only to the album/library arms.
     const afterHide = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1]);
     const ownerDeletes = afterHide.filter(
       (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
     );
-    expect(ownerDeletes).toHaveLength(0);
+    expect(ownerDeletes).toHaveLength(1);
 
     // slice 4 flat gate: a FRESH (reset) backfill omits the owner's own Hidden link row...
     const reset = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceToAssetsV1], true);

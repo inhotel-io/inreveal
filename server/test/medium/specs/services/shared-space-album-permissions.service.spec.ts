@@ -20,7 +20,7 @@ import { getKyselyDB } from 'test/utils';
 let defaultDatabase: Kysely<DB>;
 
 const setup = (db?: Kysely<DB>) => {
-  return newMediumService(SharedSpaceService, {
+  const result = newMediumService(SharedSpaceService, {
     database: db || defaultDatabase,
     real: [
       AccessRepository,
@@ -32,6 +32,11 @@ const setup = (db?: Kysely<DB>) => {
     ],
     mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
   });
+  // Slice 9: unlinkAlbum/removeMember/remove now enqueue the post-commit grant-reconcile job
+  // (queueAlbumGrantReconcile → jobRepository.queue). JobRepository is auto-mocked (unimplemented calls
+  // throw), so give queue a no-op resolution for the permission-matrix tests that exercise those paths.
+  result.ctx.getMock(JobRepository).queue.mockResolvedValue(void 0);
+  return result;
 };
 
 beforeAll(async () => {

@@ -102,8 +102,14 @@ describe('shared-space album trash lifecycle (Slice 8, end-to-end)', () => {
     await restore(db, album.id);
 
     const response = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    // The re-created grant is a FRESH grant, so its assets re-deliver via the BACKFILL path
+    // (SharedSpaceAlbumToAssetBackfillV1), not the upsert type — accept either.
     const assetIds = response
-      .filter((r) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1)
+      .filter(
+        (r) =>
+          r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 ||
+          r.type === SyncEntityType.SharedSpaceAlbumToAssetBackfillV1,
+      )
       .map((r) => (r as any).data.assetId);
     expect(assetIds).toContain(asset.id);
   });
