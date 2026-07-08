@@ -12,9 +12,11 @@
     onRemove: ((assetIds: string[]) => void) | undefined;
     assetIds?: string[];
     menuItem?: boolean;
+    /** Playwright hook for the album-path control bar (rbac-5/albums-8, C4). */
+    'data-testid'?: string;
   }
 
-  let { album = $bindable(), onRemove, assetIds, menuItem = false }: Props = $props();
+  let { album = $bindable(), onRemove, assetIds, menuItem = false, 'data-testid': testId }: Props = $props();
 
   const removeFromAlbum = async () => {
     const ids = assetIds ?? assetMultiSelectManager.assets.map(({ id }) => id) ?? [];
@@ -57,5 +59,6 @@
     aria-label={$t('remove_from_album')}
     icon={mdiDeleteOutline}
     onclick={removeFromAlbum}
+    data-testid={testId}
   />
 {/if}

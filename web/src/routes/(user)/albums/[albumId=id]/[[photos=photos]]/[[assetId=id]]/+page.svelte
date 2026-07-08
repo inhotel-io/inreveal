@@ -2,6 +2,7 @@
   import { goto, invalidate, onNavigate } from '$app/navigation';
   import { scrollMemoryClearer } from '$lib/actions/scroll-memory';
   import AlbumMap from '$lib/components/album-page/AlbumMap.svelte';
+  import AlbumSharedSpaceLinks from '$lib/components/album-page/AlbumSharedSpaceLinks.svelte';
   import AlbumSummary from '$lib/components/album-page/AlbumSummary.svelte';
   import ActivityStatus from '$lib/components/asset-viewer/ActivityStatus.svelte';
   import ActivityViewer from '$lib/components/asset-viewer/ActivityViewer.svelte';
@@ -605,6 +606,10 @@
                     {#if album.assetCount > 0}
                       <AlbumSummary {album} />
                     {/if}
+
+                    <!-- rbac-6: owner-only — the server populates album.sharedSpaceLinks only for
+                         the album owner, so this self-hides for every other caller. -->
+                    <AlbumSharedSpaceLinks {album} />
 
                     <!-- ALBUM SHARING -->
                     {#if album.albumUsers.length > 1 || (album.hasSharedLink && isOwned)}
