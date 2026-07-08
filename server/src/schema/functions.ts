@@ -671,7 +671,8 @@ export const shared_space_album_after_insert_user = registerFunction({
       SELECT DISTINCT ssm."userId", ir."albumId"
       FROM inserted_rows ir
       INNER JOIN shared_space_member ssm ON ssm."spaceId" = ir."spaceId"
-      ON CONFLICT DO NOTHING;
+      ON CONFLICT ("userId", "albumId")
+      DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now();
 
       UPDATE album
       SET "updatedAt" = clock_timestamp(), "updateId" = immich_uuid_v7(clock_timestamp())
