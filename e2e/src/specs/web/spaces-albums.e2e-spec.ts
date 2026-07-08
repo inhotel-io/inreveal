@@ -12,6 +12,7 @@ import {
 } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { createUserDto } from 'src/fixtures';
+import { thumbnailUtils } from 'src/ui/specs/timeline/utils';
 import { asBearerAuth, utils } from 'src/utils';
 
 // Web E2E coverage for the in-space albums UI.
@@ -258,6 +259,54 @@ test.describe('Spaces — Albums UI (editor flows + viewer-denied gating)', () =
     await page.getByTestId('space-tab-albums').click();
     await page.waitForURL(`/spaces/${space.id}/albums`);
     await expect(page.getByTestId('space-album-card-link').filter({ hasText: 'Linked Album' })).toBeVisible();
+  });
+
+  // ─── C4: role-gating of link/unlink/edit affordances ───────────────────────
+  //
+  // Consolidates the link/unlink/add-photos/remove-from-album affordance matrix across the
+  // space-albums list AND the space-album detail control bar: a Viewer must see NONE of them;
+  // an Editor must see all of them. Reuses this describe's owner/editor/viewer + space + album
+  // fixture (album is linked to `space` and contains `asset`/`asset2`).
+  test.describe('C4: role-gating of link/unlink/edit affordances', () => {
+    test('viewer sees no link / unlink / add-photos affordances', async ({ context, page }) => {
+      await utils.setAuthCookies(context, viewer.accessToken);
+      await page.goto(`/spaces/${space.id}/albums`);
+
+      await expect(page.getByTestId('link-album-button')).not.toBeVisible();
+      await expect(page.getByTestId('create-album-button')).not.toBeVisible();
+      // The card's ⋯ menu (unlink / show-in-timeline) is canManage-gated.
+      await expect(page.getByTestId('space-album-card-menu')).not.toBeVisible();
+    });
+
+    test('editor sees link + unlink affordances', async ({ context, page }) => {
+      await utils.setAuthCookies(context, editor.accessToken);
+      await page.goto(`/spaces/${space.id}/albums`);
+
+      await expect(page.getByTestId('link-album-button')).toBeVisible();
+      await expect(page.getByTestId('space-album-card-menu').first()).toBeVisible();
+    });
+
+    test('viewer sees no remove-from-album affordance in the space album detail', async ({ context, page }) => {
+      await utils.setAuthCookies(context, viewer.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      // Enter selection on the first asset, then assert the remove control is absent.
+      await thumbnailUtils.withAssetId(page, asset.id).hover();
+      await thumbnailUtils.selectButton(page, asset.id).click();
+
+      await expect(page.getByTestId('add-photos-button')).not.toBeVisible();
+      await expect(page.getByTestId('album-remove-from-album')).not.toBeVisible();
+    });
+
+    test('editor sees the remove-from-album affordance in the space album detail', async ({ context, page }) => {
+      await utils.setAuthCookies(context, editor.accessToken);
+      await page.goto(`/spaces/${space.id}/albums/${album.id}`);
+
+      await thumbnailUtils.withAssetId(page, asset.id).hover();
+      await thumbnailUtils.selectButton(page, asset.id).click();
+
+      await expect(page.getByTestId('album-remove-from-album')).toBeVisible();
+    });
   });
 });
 
