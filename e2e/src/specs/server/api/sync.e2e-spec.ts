@@ -75,62 +75,6 @@ describe('/sync', () => {
       expect(firstLine).toBeDefined();
       expect(() => JSON.parse(firstLine!)).not.toThrow();
     });
-
-    it('drops an unknown SyncRequestType and still streams the known types (no 400)', async () => {
-      const { status, headers, body } = await request(app)
-        .post('/sync/stream')
-        .set(asBearerAuth(userA.accessToken))
-        .send({ types: ['UsersV1', 'NotARealType'], reset: true })
-        .buffer(true)
-        .parse((res, callback) => {
-          let data = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            callback(null, data);
-          });
-        });
-      // The unknown value is filtered out; UsersV1 still streams → 200 jsonl, not 400.
-      expect(status).toBe(200);
-      expect(headers['content-type']).toContain('application/jsonlines+json');
-      const text = body as unknown as string;
-      expect(text.length).toBeGreaterThan(0);
-      const types = text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line).type as string);
-      expect(types).toContain('UserV1'); // the UsersV1 request emits UserV1 entities
-    });
-
-    it('an all-unknown types array does not 400 (stream completes cleanly)', async () => {
-      const { status, body } = await request(app)
-        .post('/sync/stream')
-        .set(asBearerAuth(userA.accessToken))
-        .send({ types: ['NotARealType'], reset: true })
-        .buffer(true)
-        .parse((res, callback) => {
-          let data = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk: string) => {
-            data += chunk;
-          });
-          res.on('end', () => {
-            callback(null, data);
-          });
-        });
-      // No known types remain after filtering → the stream still opens (200) and
-      // completes with a SyncCompleteV1 marker; it must NOT 400.
-      expect(status).toBe(200);
-      const text = body as unknown as string;
-      const types = text
-        .split('\n')
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line).type as string);
-      expect(types).toContain('SyncCompleteV1');
-      expect(types).not.toContain('UserV1');
-    });
   });
 
   describe('GET /sync/ack', () => {

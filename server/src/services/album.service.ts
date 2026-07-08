@@ -131,12 +131,16 @@ export class AlbumService extends BaseService {
     let sharedSpaceLinks: AlbumResponseDto['sharedSpaceLinks'];
     if (isAlbumOwner) {
       const links = await this.sharedSpaceRepository.getAlbumSpaceLinks(id);
-      sharedSpaceLinks = links.map((link) => ({
-        spaceId: link.spaceId,
-        spaceName: link.spaceName,
-        linkedById: link.linkedById,
-        showInTimeline: link.showInTimeline,
-      }));
+      // Omit the field entirely when the album has no space links, so a plain album's response shape is
+      // unchanged (the field only appears for the owner when there is at least one link to surface).
+      if (links.length > 0) {
+        sharedSpaceLinks = links.map((link) => ({
+          spaceId: link.spaceId,
+          spaceName: link.spaceName,
+          linkedById: link.linkedById,
+          showInTimeline: link.showInTimeline,
+        }));
+      }
     }
 
     return {
