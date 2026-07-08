@@ -1114,6 +1114,7 @@ describe(AssetService.name, () => {
       'should purge direct space assets from member devices when visibility is %s',
       async (visibility) => {
         mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+        mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);
 
         await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
 
@@ -1126,6 +1127,7 @@ describe(AssetService.name, () => {
       'should re-add direct space assets to member devices when visibility is %s',
       async (visibility) => {
         mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+        mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Hidden } as any]);
 
         await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
 
@@ -1146,6 +1148,7 @@ describe(AssetService.name, () => {
     // Slice 1: album-path purge/restore dispatch assertions.
     it('should purge album-linked space assets when visibility is Hidden', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);
 
       await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Hidden });
 
@@ -1155,6 +1158,7 @@ describe(AssetService.name, () => {
 
     it('should NOT purge album-linked assets when visibility is Locked (removeAssetsFromAll covers it)', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);
 
       await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Locked });
 
@@ -1166,6 +1170,7 @@ describe(AssetService.name, () => {
       'should re-add album-linked space assets to member devices when visibility is %s',
       async (visibility) => {
         mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+        mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Hidden } as any]);
 
         await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
 
@@ -1188,6 +1193,7 @@ describe(AssetService.name, () => {
       'should purge library-linked space assets when visibility is %s',
       async (visibility) => {
         mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+        mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);
 
         await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
 
@@ -1245,6 +1251,47 @@ describe(AssetService.name, () => {
       });
 
       expect(mocks.asset.updateDateTimeOriginal).toHaveBeenCalledWith(['asset-1'], undefined, 'America/New_York');
+    });
+
+    it('does NOT re-purge an already-Hidden asset (correctness-8 idempotency)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Hidden } as any]);
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Hidden });
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).not.toHaveBeenCalled();
+    });
+
+    it('does NOT purge or restore on a Timeline→Archive move (both shareable, correctness-8)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Timeline } as any]);
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Archive });
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
+    });
+
+    it('emits only for boundary-crossers in a mixed bulk favorite+visibility flip (correctness-8)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1', 'asset-2']));
+      // asset-1 crosses Timeline→Hidden; asset-2 was already Hidden (no-op).
+      mocks.asset.getByIds.mockResolvedValue([
+        { id: 'asset-1', visibility: AssetVisibility.Timeline } as any,
+        { id: 'asset-2', visibility: AssetVisibility.Hidden } as any,
+      ]);
+      await sut.updateAll(authStub.admin, {
+        ids: ['asset-1', 'asset-2'],
+        isFavorite: true,
+        visibility: AssetVisibility.Hidden,
+      });
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+    });
+
+    it('removes from albums exactly once and skips a re-lock (correctness-8)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Locked } as any]);
+      await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Locked });
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled(); // already Locked → no-op
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
     });
   });
 

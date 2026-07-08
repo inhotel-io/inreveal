@@ -238,6 +238,14 @@ export class AssetService extends BaseService {
 
     await this.updateExif({ id, description, dateTimeOriginal, latitude, longitude, rating });
 
+    // correctness-8: capture the PRIOR visibility before the write so the transition helper can tell a
+    // genuine boundary crossing from a no-op re-affirm (e.g. Hidden -> Hidden).
+    let priorVisibility: AssetVisibility | undefined;
+    if (dto.visibility !== undefined) {
+      const priorAsset = await this.assetRepository.getById(id);
+      priorVisibility = priorAsset?.visibility;
+    }
+
     const asset = await this.assetRepository.update({ id, ...rest });
 
     if (previousMotion && asset) {
@@ -257,7 +265,7 @@ export class AssetService extends BaseService {
     // Locked assets stayed in the owner's albums. Route it through the same helper so a single PUT is
     // byte-for-byte equivalent to a one-id bulk update. No-op for non-space assets (the emits match nothing).
     if (dto.visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects([id], dto.visibility);
+      await this.applyVisibilityTransitionSideEffects([id], dto.visibility, new Map([[id, priorVisibility]]));
     }
 
     return mapAsset(asset, { auth });
@@ -270,12 +278,21 @@ export class AssetService extends BaseService {
   // Timeline↔Hidden crossing, so we run the same transition side-effects for the single asset.
   @OnEvent({ name: 'AssetHide' })
   async onAssetHide({ assetId }: ArgOf<'AssetHide'>): Promise<void> {
-    await this.applyVisibilityTransitionSideEffects([assetId], AssetVisibility.Hidden);
+    // AssetHide fires only on Timeline→Hidden → seed a shareable prior so it registers as a crossing.
+    await this.applyVisibilityTransitionSideEffects(
+      [assetId],
+      AssetVisibility.Hidden,
+      new Map([[assetId, AssetVisibility.Timeline]]),
+    );
   }
 
   @OnEvent({ name: 'AssetShow' })
   async onAssetShow({ assetId }: ArgOf<'AssetShow'>): Promise<void> {
-    await this.applyVisibilityTransitionSideEffects([assetId], AssetVisibility.Timeline);
+    await this.applyVisibilityTransitionSideEffects(
+      [assetId],
+      AssetVisibility.Timeline,
+      new Map([[assetId, AssetVisibility.Hidden]]),
+    );
   }
 
   async updateAll(auth: AuthDto, dto: AssetBulkUpdateDto): Promise<void> {
@@ -329,12 +346,22 @@ export class AssetService extends BaseService {
       await this.assetRepository.updateDateTimeOriginal(ids, dateTimeRelative, timeZone ?? extractedTimeZone?.name);
     }
 
+    // correctness-8: capture PRIOR visibilities before the write so the transition helper can tell a
+    // genuine boundary crossing from a no-op re-affirm (e.g. Hidden -> Hidden, Timeline -> Archive).
+    const priorVisibilities = new Map<string, AssetVisibility>();
+    if (visibility !== undefined) {
+      const priorAssets = await this.assetRepository.getByIds(ids);
+      for (const priorAsset of priorAssets) {
+        priorVisibilities.set(priorAsset.id, priorAsset.visibility);
+      }
+    }
+
     if (Object.keys(assetDto).length > 0) {
       await this.assetRepository.updateAll(ids, assetDto);
     }
 
     if (visibility !== undefined) {
-      await this.applyVisibilityTransitionSideEffects(ids, visibility);
+      await this.applyVisibilityTransitionSideEffects(ids, visibility, priorVisibilities);
     }
 
     await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
@@ -353,28 +380,45 @@ export class AssetService extends BaseService {
    * the emits therefore leaves a RECOVERABLE state (re-run converges), not a corrupted one. A periodic
    * reconciliation sweep (grants/tombstones vs. live rows) is a possible follow-up; not required here.
    */
-  private async applyVisibilityTransitionSideEffects(ids: string[], visibility: AssetVisibility): Promise<void> {
-    if (visibility === AssetVisibility.Locked) {
-      await this.albumRepository.removeAssetsFromAll(ids);
+  private async applyVisibilityTransitionSideEffects(
+    ids: string[],
+    nextVisibility: AssetVisibility,
+    priorVisibilities: Map<string, AssetVisibility | undefined>,
+  ): Promise<void> {
+    const shareable = (v: AssetVisibility | undefined) =>
+      v === AssetVisibility.Timeline || v === AssetVisibility.Archive;
+
+    if (nextVisibility === AssetVisibility.Timeline || nextVisibility === AssetVisibility.Archive) {
+      // Restore: only assets whose PRIOR was non-shareable (Hidden/Locked) cross back in. A shareable→
+      // shareable move (e.g. Timeline↔Archive, unarchive re-affirm) is not a crossing → no emit.
+      const restoreIds = ids.filter((id) => !shareable(priorVisibilities.get(id)));
+      if (restoreIds.length > 0) {
+        await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(restoreIds);
+        await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(restoreIds);
+        // Library restore is automatic (the visibility UPDATE bumped asset.updateId) — no emit.
+      }
+      return;
     }
 
-    // Slice 4.B DIRECT-path purge/restore (see updateAll history).
-    if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
-      await this.sharedSpaceRepository.emitDirectAssetVisibilityPurge(ids);
-    } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
-      await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(ids);
+    // nextVisibility is non-shareable (Hidden or Locked).
+    if (nextVisibility === AssetVisibility.Locked) {
+      // Strip album membership exactly once — skip assets already Locked (re-lock = no-op).
+      const lockIds = ids.filter((id) => priorVisibilities.get(id) !== AssetVisibility.Locked);
+      if (lockIds.length > 0) {
+        await this.albumRepository.removeAssetsFromAll(lockIds);
+      }
     }
 
-    // Slice 1 ALBUM-path purge/restore. Locked is covered by removeAssetsFromAll above.
-    if (visibility === AssetVisibility.Hidden) {
-      await this.sharedSpaceRepository.emitAlbumAssetVisibilityPurge(ids);
-    } else if (visibility === AssetVisibility.Timeline || visibility === AssetVisibility.Archive) {
-      await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(ids);
-    }
-
-    // Slice 2 LIBRARY-path purge. Restore is automatic (the visibility UPDATE bumps asset.updateId).
-    if (visibility === AssetVisibility.Hidden || visibility === AssetVisibility.Locked) {
-      await this.sharedSpaceRepository.emitLibraryAssetVisibilityPurge(ids);
+    // Purge: only assets whose PRIOR was shareable cross out. Re-hide (Hidden→Hidden), Hidden→Locked and
+    // Locked→Hidden are non-shareable→non-shareable → no duplicate purge (already purged when first hidden).
+    const purgeIds = ids.filter((id) => shareable(priorVisibilities.get(id)));
+    if (purgeIds.length > 0) {
+      await this.sharedSpaceRepository.emitDirectAssetVisibilityPurge(purgeIds);
+      if (nextVisibility === AssetVisibility.Hidden) {
+        // Locked's album removal is handled by removeAssetsFromAll above → no album tombstone for Locked.
+        await this.sharedSpaceRepository.emitAlbumAssetVisibilityPurge(purgeIds);
+      }
+      await this.sharedSpaceRepository.emitLibraryAssetVisibilityPurge(purgeIds);
     }
   }
 

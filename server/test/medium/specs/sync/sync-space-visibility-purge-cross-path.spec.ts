@@ -9,9 +9,24 @@
 // (Slice 2) in concert, proving the three mechanisms converge on one device.
 import { Kysely } from 'kysely';
 import { AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AccessRepository } from 'src/repositories/access.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
+import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
+import { AssetJobRepository } from 'src/repositories/asset-job.repository';
+import { AssetRepository } from 'src/repositories/asset.repository';
+import { EventRepository } from 'src/repositories/event.repository';
+import { JobRepository } from 'src/repositories/job.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { MapRepository } from 'src/repositories/map.repository';
+import { OcrRepository } from 'src/repositories/ocr.repository';
+import { SharedLinkAssetRepository } from 'src/repositories/shared-link-asset.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { StackRepository } from 'src/repositories/stack.repository';
+import { StorageRepository } from 'src/repositories/storage.repository';
+import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
-import { SyncTestContext } from 'test/medium.factory';
+import { AssetService } from 'src/services/asset.service';
+import { newMediumService, SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
@@ -20,6 +35,29 @@ const setup = async (db?: Kysely<DB>) => {
   const ctx = new SyncTestContext(db || defaultDatabase);
   const { auth, user, session } = await ctx.newSyncAuthUser();
   return { auth, user, session, ctx };
+};
+
+// Drives asset.service.updateAll directly (not the raw SharedSpaceRepository emit methods) so the
+// correctness-8 boundary-crossing GATE in applyVisibilityTransitionSideEffects is actually exercised —
+// the raw emit* methods always fire unconditionally; the gating lives one layer up, in AssetService.
+const setupAssetService = (db?: Kysely<DB>) => {
+  const { sut, ctx } = newMediumService(AssetService, {
+    database: db || defaultDatabase,
+    real: [
+      AssetRepository,
+      AssetEditRepository,
+      AssetJobRepository,
+      AlbumRepository,
+      AccessRepository,
+      SharedLinkAssetRepository,
+      SharedSpaceRepository,
+      StackRepository,
+      UserRepository,
+    ],
+    mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository, OcrRepository, MapRepository],
+  });
+  ctx.getMock(JobRepository).queueAll.mockResolvedValue();
+  return { sut, ctx };
 };
 
 beforeAll(async () => {
@@ -95,5 +133,99 @@ describe('Cross-path visibility purge convergence (X1)', () => {
     expect(directDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
     expect(albumDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
     expect(libraryDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+  });
+});
+
+// correctness-8: applyVisibilityTransitionSideEffects must gate on the PRIOR visibility, not just the
+// target, so a re-affirm (already-Hidden -> Hidden) or a shareable-to-shareable move (Timeline -> Archive)
+// writes no duplicate/spurious tombstone, and a mixed bulk request only touches the assets that actually
+// cross the shareable boundary. RED reasoning (pre-fix): the old helper branched only on the target
+// visibility, so it unconditionally re-purged an already-Hidden asset and unconditionally bumped the
+// updateId of an already-shareable asset on every call.
+describe('Boundary-crossing purge gate (correctness-8)', () => {
+  it('re-hiding an already-Hidden direct+album asset writes NO new tombstone (idempotent re-affirm)', async () => {
+    const { ctx } = await setup();
+    const owner = await ctx.newSyncAuthUser();
+    const { sut: assetSut } = setupAssetService(ctx.database);
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Hidden });
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+    const { album } = await ctx.newAlbum({ ownerId: owner.user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    // Re-affirm Hidden -> Hidden: no boundary crossed, so no tombstone should be written on either table.
+    await assetSut.updateAll(owner.auth, { ids: [asset.id], visibility: AssetVisibility.Hidden });
+
+    const directAudit = await ctx.database
+      .selectFrom('shared_space_asset_audit')
+      .selectAll()
+      .where('assetId', '=', asset.id)
+      .execute();
+    const albumAudit = await ctx.database
+      .selectFrom('shared_space_album_asset_audit')
+      .selectAll()
+      .where('assetId', '=', asset.id)
+      .execute();
+
+    expect(directAudit, 'no direct-path tombstone on a no-op re-affirm').toHaveLength(0);
+    expect(albumAudit, 'no album-path tombstone on a no-op re-affirm').toHaveLength(0);
+  });
+
+  it('a Timeline -> Archive move (both shareable) delivers no spurious re-upsert to an already-synced member', async () => {
+    const { ctx } = await setup();
+    const owner = await ctx.newSyncAuthUser();
+    const member = await ctx.newSyncAuthUser();
+    const { sut: assetSut } = setupAssetService(ctx.database);
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Timeline });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.user.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+    const initial = await ctx.syncStream(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(member.auth, initial);
+    await ctx.assertSyncIsComplete(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    // Timeline -> Archive: neither side of the transition crosses the shareable boundary.
+    await assetSut.updateAll(owner.auth, { ids: [asset.id], visibility: AssetVisibility.Archive });
+
+    const next = await ctx.syncStream(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const upserts = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetV1);
+    const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1);
+    expect(upserts, 'no spurious re-upsert on a shareable-to-shareable move').toHaveLength(0);
+    expect(deletes, 'no purge on a shareable-to-shareable move').toHaveLength(0);
+  });
+
+  it('a mixed bulk request purges only the asset that crosses the boundary, not the one already Hidden', async () => {
+    const { ctx } = await setup();
+    const owner = await ctx.newSyncAuthUser();
+    const { sut: assetSut } = setupAssetService(ctx.database);
+
+    const { asset: crossing } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Timeline });
+    const { asset: alreadyHidden } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Hidden });
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: crossing.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: alreadyHidden.id });
+
+    await assetSut.updateAll(owner.auth, {
+      ids: [crossing.id, alreadyHidden.id],
+      visibility: AssetVisibility.Hidden,
+    });
+
+    const auditRows = await ctx.database
+      .selectFrom('shared_space_asset_audit')
+      .selectAll()
+      .where('assetId', 'in', [crossing.id, alreadyHidden.id])
+      .execute();
+
+    expect(auditRows.map((r) => r.assetId)).toEqual([crossing.id]);
   });
 });
