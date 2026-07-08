@@ -116,6 +116,29 @@ export class AlbumService extends BaseService {
       }
     }
 
+    // rbac-6: the album OWNER (and only the owner) sees the list of shared spaces this album is
+    // linked into, so they can review + revoke links (a space editor can link an owner's album).
+    // Non-owner callers — including album editors/viewers and space-only readers — get no list.
+    // A shared-link visitor is explicitly excluded even though checkOwnerAccess would return true
+    // for one (shared-link AuthDto.user.id resolves to the link creator/album owner for access
+    // checks) — a public link is not an authenticated owner session and must never expose the
+    // owner-only space-link list to whoever holds the link URL.
+    let isAlbumOwner = false;
+    if (!auth.sharedLink) {
+      const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, new Set([id]));
+      isAlbumOwner = ownerIds.has(id);
+    }
+    let sharedSpaceLinks: AlbumResponseDto['sharedSpaceLinks'];
+    if (isAlbumOwner) {
+      const links = await this.sharedSpaceRepository.getAlbumSpaceLinks(id);
+      sharedSpaceLinks = links.map((link) => ({
+        spaceId: link.spaceId,
+        spaceName: link.spaceName,
+        linkedById: link.linkedById,
+        showInTimeline: link.showInTimeline,
+      }));
+    }
+
     return {
       ...mapped,
       startDate: asDateTimeString(albumMetadataForIds?.startDate ?? undefined),
@@ -125,6 +148,7 @@ export class AlbumService extends BaseService {
       // Note: contributorCounts still exposes contributor userIds for space-only readers — outside
       // security-8's stated albumUsers-shape scope; flagged for a follow-up, not changed here.
       contributorCounts: isShared ? await this.albumRepository.getContributorCounts(album.id) : undefined,
+      sharedSpaceLinks,
     };
   }
 

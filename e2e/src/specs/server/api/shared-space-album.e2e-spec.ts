@@ -3,11 +3,13 @@ import {
   AlbumUserRole,
   AssetMediaResponseDto,
   AssetVisibility,
+  getAlbumInfo,
   LoginResponseDto,
+  SharedSpaceResponseDto,
   SharedSpaceRole,
 } from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
-import { app, utils } from 'src/utils';
+import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -664,5 +666,76 @@ describe('rbac-3: visibility writes are restricted to owned assets', () => {
   it('editor CAN still set a non-visibility field on the victim asset (existing policy) → 204', async () => {
     const { status } = await bulkUpdateAssets(editor.accessToken, { ids: [victimAsset.id], isFavorite: true });
     expect(status).toBe(204);
+  });
+});
+
+// rbac-6 (CI-deferred — Docker down): the album owner can see + revoke every shared-space link to
+// their album, even without space membership; non-owners never see the list.
+describe('rbac-6 — album-link ownership controls', () => {
+  let albumOwner: LoginResponseDto; // owns the album; NOT a member of the space
+  let spaceEditor: LoginResponseDto; // space owner + album editor → performs the link
+  let stranger: LoginResponseDto; // no relationship to album or space
+  let spaceA: SharedSpaceResponseDto;
+  let spaceB: SharedSpaceResponseDto;
+  let album: AlbumResponseDto;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    const admin = await utils.adminSetup();
+    [albumOwner, spaceEditor, stranger] = await Promise.all([
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac6-owner')),
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac6-editor')),
+      utils.userSetup(admin.accessToken, createUserDto.create('rbac6-stranger')),
+    ]);
+
+    const asset = await utils.createAsset(albumOwner.accessToken);
+    album = await utils.createAlbum(albumOwner.accessToken, {
+      albumName: 'Owner Album',
+      albumUsers: [{ userId: spaceEditor.userId, role: AlbumUserRole.Editor }],
+      assetIds: [asset.id],
+    });
+
+    // spaceEditor owns both spaces (space owner is an Editor+); albumOwner is NOT a member of either.
+    spaceA = await utils.createSpace(spaceEditor.accessToken, { name: 'Space A' });
+    spaceB = await utils.createSpace(spaceEditor.accessToken, { name: 'Space B' });
+    await utils.linkSpaceAlbum(spaceEditor.accessToken, spaceA.id, album.id);
+    await utils.linkSpaceAlbum(spaceEditor.accessToken, spaceB.id, album.id);
+  });
+
+  it('shows the album owner every space link (multi-space), with showInTimeline', async () => {
+    const info = await getAlbumInfo({ id: album.id }, { headers: asBearerAuth(albumOwner.accessToken) });
+    expect(info.sharedSpaceLinks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ spaceId: spaceA.id, spaceName: 'Space A', showInTimeline: true }),
+        expect.objectContaining({ spaceId: spaceB.id, spaceName: 'Space B', showInTimeline: true }),
+      ]),
+    );
+    expect(info.sharedSpaceLinks).toHaveLength(2);
+  });
+
+  it('does NOT show sharedSpaceLinks to a space member who is not the album owner', async () => {
+    // spaceEditor is a space owner + album editor but NOT the album owner.
+    const info = await getAlbumInfo({ id: album.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+    expect(info.sharedSpaceLinks).toBeUndefined();
+  });
+
+  it('lets the album owner (not a space member) unlink one space, leaving the other + the album intact', async () => {
+    await request(app)
+      .delete(`/shared-spaces/${spaceA.id}/albums/${album.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`)
+      .expect(204);
+
+    const info = await getAlbumInfo({ id: album.id }, { headers: asBearerAuth(albumOwner.accessToken) });
+    expect(info.sharedSpaceLinks).toEqual([expect.objectContaining({ spaceId: spaceB.id, spaceName: 'Space B' })]);
+    // The album itself is untouched.
+    expect(info.id).toBe(album.id);
+    expect(info.assetCount).toBe(1);
+  });
+
+  it('rejects unlink from a non-owner non-member (403)', async () => {
+    await request(app)
+      .delete(`/shared-spaces/${spaceB.id}/albums/${album.id}`)
+      .set('Authorization', `Bearer ${stranger.accessToken}`)
+      .expect(403);
   });
 });

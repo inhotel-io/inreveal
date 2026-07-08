@@ -8053,6 +8053,65 @@ describe(SharedSpaceService.name, () => {
     });
   });
 
+  describe('unlinkAlbum — owner arm (rbac-6)', () => {
+    it('allows the album owner to unlink even without space membership', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(void 0); // not a space member
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId])); // owns the album
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
+    });
+
+    it('rejects unlink from a non-owner non-member', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      mocks.sharedSpace.getMember.mockResolvedValue(void 0);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await expect(sut.unlinkAlbum(auth, newUuid(), newUuid())).rejects.toThrow(ForbiddenException);
+      expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
+    });
+
+    it('rejects unlink from a space Viewer who does not own the album', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer }),
+      );
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await expect(sut.unlinkAlbum(auth, spaceId, albumId)).rejects.toThrow(ForbiddenException);
+      expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
+    });
+
+    it('still allows a space Editor who is NOT the album owner to unlink (space-editor path not weakened)', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
+      );
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledWith(spaceId, albumId);
+      // Editor path short-circuits before the owner check.
+      expect(mocks.access.album.checkOwnerAccess).not.toHaveBeenCalled();
+    });
+  });
+
   describe('updateAlbumLink', () => {
     it('should call setAlbumShowInTimeline with the dto value when user is Editor', async () => {
       const auth = factory.auth({ user: { isAdmin: false } });

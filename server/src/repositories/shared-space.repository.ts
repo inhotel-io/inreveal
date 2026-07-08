@@ -613,6 +613,25 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // rbac-6: the album owner's view of every space this album is linked into, so they can
+  // review + revoke links. Intentionally NOT decorated with @GenerateSql — decorating it would
+  // require a `make sql` regen against a scratch migrated DB, which is out of scope for this slice.
+  getAlbumSpaceLinks(albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+      .select([
+        'shared_space_album.spaceId as spaceId',
+        'shared_space.name as spaceName',
+        'shared_space_album.addedById as linkedById',
+        'shared_space_album.showInTimeline as showInTimeline',
+      ])
+      .where('shared_space_album.albumId', '=', albumId)
+      .orderBy('shared_space.name', 'asc')
+      .orderBy('shared_space_album.spaceId', 'asc')
+      .execute();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
   hasAlbumLink(spaceId: string, albumId: string) {
     return this.db

@@ -29,6 +29,7 @@ class SharedSpaceLinkedAlbumDto {
     this.order = const Optional.absent(),
     required this.ownerId,
     required this.shared,
+    this.sharedSpaceLinks = const Optional.present(const []),
     required this.showInTimeline,
     this.startDate = const Optional.absent(),
     required this.updatedAt,
@@ -101,6 +102,8 @@ class SharedSpaceLinkedAlbumDto {
   /// Is shared album
   bool shared;
 
+  Optional<List<AlbumSharedSpaceLinkResponseDto>?> sharedSpaceLinks;
+
   /// Include this album in the space timeline
   bool showInTimeline;
 
@@ -134,6 +137,7 @@ class SharedSpaceLinkedAlbumDto {
     other.order == order &&
     other.ownerId == ownerId &&
     other.shared == shared &&
+    _deepEquality.equals(other.sharedSpaceLinks, sharedSpaceLinks) &&
     other.showInTimeline == showInTimeline &&
     other.startDate == startDate &&
     other.updatedAt == updatedAt;
@@ -157,12 +161,13 @@ class SharedSpaceLinkedAlbumDto {
     (order == null ? 0 : order!.hashCode) +
     (ownerId.hashCode) +
     (shared.hashCode) +
+    (sharedSpaceLinks.hashCode) +
     (showInTimeline.hashCode) +
     (startDate == null ? 0 : startDate!.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, ownerId=$ownerId, shared=$shared, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
+  String toString() => 'SharedSpaceLinkedAlbumDto[addedById=$addedById, albumName=$albumName, albumThumbnailAssetId=$albumThumbnailAssetId, assetCount=$assetCount, contributorCounts=$contributorCounts, createdAt=$createdAt, description=$description, endDate=$endDate, hasSharedLink=$hasSharedLink, id=$id, isActivityEnabled=$isActivityEnabled, lastModifiedAssetTimestamp=$lastModifiedAssetTimestamp, linkedAt=$linkedAt, order=$order, ownerId=$ownerId, shared=$shared, sharedSpaceLinks=$sharedSpaceLinks, showInTimeline=$showInTimeline, startDate=$startDate, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -202,6 +207,10 @@ class SharedSpaceLinkedAlbumDto {
     }
       json[r'ownerId'] = this.ownerId;
       json[r'shared'] = this.shared;
+    if (this.sharedSpaceLinks.isPresent) {
+      final value = this.sharedSpaceLinks.value;
+      json[r'sharedSpaceLinks'] = value;
+    }
       json[r'showInTimeline'] = this.showInTimeline;
     if (this.startDate.isPresent) {
       final value = this.startDate.value;
@@ -236,6 +245,7 @@ class SharedSpaceLinkedAlbumDto {
         order: json.containsKey(r'order') ? Optional.present(AssetOrder.fromJson(json[r'order'])) : const Optional.absent(),
         ownerId: mapValueOfType<String>(json, r'ownerId')!,
         shared: mapValueOfType<bool>(json, r'shared')!,
+        sharedSpaceLinks: json.containsKey(r'sharedSpaceLinks') ? Optional.present(AlbumSharedSpaceLinkResponseDto.listFromJson(json[r'sharedSpaceLinks'])) : const Optional.absent(),
         showInTimeline: mapValueOfType<bool>(json, r'showInTimeline')!,
         startDate: json.containsKey(r'startDate') ? Optional.present(mapDateTime(json, r'startDate', r'')) : const Optional.absent(),
         updatedAt: mapDateTime(json, r'updatedAt', r'')!,

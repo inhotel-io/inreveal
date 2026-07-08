@@ -585,6 +585,16 @@ export type ContributorCountResponseDto = {
     /** User ID */
     userId: string;
 };
+export type AlbumSharedSpaceLinkResponseDto = {
+    /** User who linked the album into the space */
+    linkedById: string | null;
+    /** Whether the album appears in the aggregated space timeline */
+    showInTimeline: boolean;
+    /** Shared space ID this album is linked into */
+    spaceId: string;
+    /** Shared space name */
+    spaceName: string;
+};
 export type AlbumResponseDto = {
     /** Album name */
     albumName: string;
@@ -612,6 +622,7 @@ export type AlbumResponseDto = {
     order?: AssetOrder;
     /** Is shared album */
     shared: boolean;
+    sharedSpaceLinks?: AlbumSharedSpaceLinkResponseDto[];
     /** Start date (earliest asset) */
     startDate?: string;
     /** Last update date */
@@ -2779,6 +2790,7 @@ export type SharedSpaceLinkedAlbumDto = {
     ownerId: string;
     /** Is shared album */
     shared: boolean;
+    sharedSpaceLinks?: AlbumSharedSpaceLinkResponseDto[];
     /** Include this album in the space timeline */
     showInTimeline: boolean;
     /** Start date (earliest asset) */

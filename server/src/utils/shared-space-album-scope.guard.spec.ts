@@ -274,6 +274,9 @@ const VIS_ALLOWLIST: Record<string, string> = {
   'shared-space.repository.ts::getLinkedAlbums': 'returns album metadata rows for management UI; no asset content',
   'shared-space.repository.ts::getSpacesLinkedToAlbum': 'returns space-album link metadata (ids/flags), not asset rows',
   'shared-space.repository.ts::getSpacesLinkedToLibrary': 'returns library-link metadata (ids/flags), not asset rows',
+  // rbac-6: album owner's management view of every space this album is linked into —
+  // returns spaceId/spaceName/linkedById/showInTimeline only, never asset rows.
+  'shared-space.repository.ts::getAlbumSpaceLinks': 'returns space-album link metadata for the owner; no asset content',
 
   // — Anti-join membership gates: read direct/library/album rows to check that an
   //   asset is NOT already reachable via another space path (removal / face cleanup).

@@ -422,6 +422,7 @@ Class | Method | HTTP request | Description
  - [AdminOnboardingUpdateDto](doc//AdminOnboardingUpdateDto.md)
  - [AlbumNameDto](doc//AlbumNameDto.md)
  - [AlbumResponseDto](doc//AlbumResponseDto.md)
+ - [AlbumSharedSpaceLinkResponseDto](doc//AlbumSharedSpaceLinkResponseDto.md)
  - [AlbumStatisticsResponseDto](doc//AlbumStatisticsResponseDto.md)
  - [AlbumUserAddDto](doc//AlbumUserAddDto.md)
  - [AlbumUserCreateDto](doc//AlbumUserCreateDto.md)

@@ -81,6 +81,7 @@ part 'model/add_users_dto.dart';
 part 'model/admin_onboarding_update_dto.dart';
 part 'model/album_name_dto.dart';
 part 'model/album_response_dto.dart';
+part 'model/album_shared_space_link_response_dto.dart';
 part 'model/album_statistics_response_dto.dart';
 part 'model/album_user_add_dto.dart';
 part 'model/album_user_create_dto.dart';

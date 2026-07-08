@@ -671,7 +671,17 @@ export class SharedSpaceService extends BaseService {
   }
 
   async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
-    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
+    // revoke a link to their own album, even without space membership (otherwise an owner cannot
+    // discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
+    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
+    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
+    if (!isSpaceEditor) {
+      const ownedAlbums = await this.checkAccess({ auth, permission: Permission.AlbumDelete, ids: [albumId] });
+      if (!ownedAlbums.has(albumId)) {
+        throw new ForbiddenException('Insufficient role');
+      }
+    }
 
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
