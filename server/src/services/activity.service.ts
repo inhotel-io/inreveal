@@ -14,11 +14,21 @@ import {
 import { AuthDto } from 'src/dtos/auth.dto';
 import { Permission } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
+import { hasDirectAlbumReadAccess } from 'src/utils/access';
 
 @Injectable()
 export class ActivityService extends BaseService {
   async getAll(auth: AuthDto, dto: ActivitySearchDto): Promise<ActivityResponseDto[]> {
     await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
+
+    // C1: a caller who reaches the album ONLY through shared-space membership (not the album owner or a
+    // shared album_user) must not see album-level activity (comments/likes with no asset) — the historical
+    // thread, commenter identities and like list. Asset-level activity on visible assets (already gated in
+    // activityRepository.search) is unaffected. A shared-link caller has explicit album access → treated as
+    // direct (also avoids an owner-lookup on the shared-link path).
+    const hasDirectAccess =
+      !!auth.sharedLink || (await hasDirectAlbumReadAccess(this.accessRepository, auth.user.id, dto.albumId));
+
     const activities = await this.activityRepository.search({
       userId: dto.userId,
       albumId: dto.albumId,
@@ -26,9 +36,15 @@ export class ActivityService extends BaseService {
       isLiked: dto.type && dto.type === ReactionType.LIKE,
     });
 
-    return activities.map((activity) => mapActivity(activity));
+    const visible = hasDirectAccess ? activities : activities.filter((activity) => activity.assetId !== null);
+
+    return visible.map((activity) => mapActivity(activity));
   }
 
+  // Scope note: getStatistics gates on the same AlbumRead but returns only aggregate {comments, likes}
+  // counts — no identities/content — so it is outside C1's identity/content-leak scope. Restricting the
+  // counts would need an SQL predicate change + `make sql` regen (no DB available). Left unchanged
+  // deliberately.
   async getStatistics(auth: AuthDto, dto: ActivityDto): Promise<ActivityStatisticsResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
     return await this.activityRepository.getStatistics({ albumId: dto.albumId, assetId: dto.assetId });

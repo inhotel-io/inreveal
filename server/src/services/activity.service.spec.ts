@@ -56,6 +56,52 @@ describe(ActivityService.name, () => {
 
       expect(mocks.activity.search).toHaveBeenCalledWith({ assetId, albumId, isLiked: false });
     });
+
+    it('drops album-level activity for a space-only reader; keeps asset-level activity on visible assets (C1)', async () => {
+      const [albumId, assetId, userId] = newUuids();
+      const albumLevel = getForActivity(ActivityFactory.create({ albumId, assetId: null, userId }));
+      const assetLevel = getForActivity(ActivityFactory.create({ albumId, assetId, userId }));
+
+      // AlbumRead granted ONLY via the space-linked arm (not owner, not shared album_user).
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.search.mockResolvedValue([albumLevel, assetLevel]);
+
+      const result = await sut.getAll(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(result.map((a) => a.assetId)).toEqual([assetId]);
+      expect(result.some((a) => a.assetId === null)).toBe(false);
+    });
+
+    it('keeps album-level activity for the album owner (direct access wins over the space arm) (C1)', async () => {
+      const [albumId, assetId, userId] = newUuids();
+      const albumLevel = getForActivity(ActivityFactory.create({ albumId, assetId: null, userId }));
+      const assetLevel = getForActivity(ActivityFactory.create({ albumId, assetId, userId }));
+
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.search.mockResolvedValue([albumLevel, assetLevel]);
+
+      const result = await sut.getAll(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(result).toHaveLength(2);
+      expect(result.some((a) => a.assetId === null)).toBe(true);
+    });
+
+    it('keeps album-level activity for a shared album participant who is also a space member (C1)', async () => {
+      const [albumId, userId] = newUuids();
+      const albumLevel = getForActivity(ActivityFactory.create({ albumId, assetId: null, userId }));
+
+      // Not owner, but a shared album_user (Viewer+) — participant path wins.
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.search.mockResolvedValue([albumLevel]);
+
+      const result = await sut.getAll(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(result).toHaveLength(1);
+    });
   });
 
   describe('getStatistics', () => {

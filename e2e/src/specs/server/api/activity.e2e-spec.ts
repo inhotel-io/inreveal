@@ -5,6 +5,7 @@ import {
   AssetMediaResponseDto,
   LoginResponseDto,
   ReactionType,
+  SharedSpaceRole,
   createActivity as create,
   createAlbum,
   removeAssetFromAlbum,
@@ -373,6 +374,49 @@ describe('/activities', () => {
         .set('Authorization', `Bearer ${admin.accessToken}`);
       expect(status).toEqual(200);
       expect(body).toEqual([]);
+    });
+  });
+
+  describe('GET /activities (space-linked album) — album-level activity denied to space-only readers (C1)', () => {
+    it('space Viewer sees asset-level activity on a visible asset but NOT album-level comments', async () => {
+      const spaceOwner = admin; // album owner
+      const spaceViewer = await utils.userSetup(admin.accessToken, createUserDto.create('c1-space-viewer'));
+      const c1Asset = await utils.createAsset(spaceOwner.accessToken);
+      const c1Album = await utils.createAlbum(spaceOwner.accessToken, {
+        albumName: 'C1 Album',
+        assetIds: [c1Asset.id],
+      });
+
+      // album-level comment (no assetId) + asset-level comment (assetId set)
+      await createActivity(
+        { albumId: c1Album.id, type: ReactionType.Comment, comment: 'album-level secret' },
+        spaceOwner.accessToken,
+      );
+      await createActivity(
+        { albumId: c1Album.id, assetId: c1Asset.id, type: ReactionType.Comment, comment: 'on the photo' },
+        spaceOwner.accessToken,
+      );
+
+      const space = await utils.createSpace(spaceOwner.accessToken, { name: 'C1 Space' });
+      await utils.addSpaceMember(spaceOwner.accessToken, space.id, {
+        userId: spaceViewer.userId,
+        role: SharedSpaceRole.Viewer,
+      });
+      await utils.linkSpaceAlbum(spaceOwner.accessToken, space.id, c1Album.id);
+
+      const asMember = await request(app)
+        .get('/activities')
+        .query({ albumId: c1Album.id })
+        .set('Authorization', `Bearer ${spaceViewer.accessToken}`);
+      expect(asMember.status).toBe(200);
+      expect(asMember.body.map((a: { assetId: string | null }) => a.assetId)).toEqual([c1Asset.id]);
+      expect(asMember.body.some((a: { comment?: string }) => a.comment === 'album-level secret')).toBe(false);
+
+      const asOwner = await request(app)
+        .get('/activities')
+        .query({ albumId: c1Album.id })
+        .set('Authorization', `Bearer ${spaceOwner.accessToken}`);
+      expect(asOwner.body).toHaveLength(2); // owner sees both
     });
   });
 });
