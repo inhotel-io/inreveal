@@ -1538,8 +1538,13 @@ export class SharedSpaceAlbumLinkSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, spaceId: string) {
     return this.backfillQuery('shared_space_album', options)
+      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
       .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
       .where('shared_space_album.spaceId', '=', spaceId)
+      // Slice 8 (correctness-3): never stream a soft-deleted album's link row; the
+      // trigger tombstones it via shared_space_album_audit, and this stops getUpserts/
+      // getBackfill re-adding it before restore.
+      .where('album.deletedAt', 'is', null)
       .stream();
   }
 
@@ -1558,8 +1563,13 @@ export class SharedSpaceAlbumLinkSync extends BaseSync {
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
     return this.upsertQuery('shared_space_album', options)
+      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
       .select(SHARED_SPACE_ALBUM_SYNC_COLUMNS)
       .where('shared_space_album.spaceId', 'in', (eb) => accessibleSpaces(eb, options.userId))
+      // Slice 8 (correctness-3): exclude soft-deleted albums so a stale updateId bump
+      // cannot re-add a tombstoned link row (convergence). Restore bumps updateId and
+      // clears deletedAt → the row re-delivers.
+      .where('album.deletedAt', 'is', null)
       .stream();
   }
 }

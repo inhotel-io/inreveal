@@ -164,3 +164,60 @@ describe('SharedSpaceAlbumLinkSync.getDeletes', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe('SharedSpaceAlbumLinkSync — soft-deleted album exclusion (Slice 8)', () => {
+  it('getUpserts excludes a soft-deleted album link row but keeps live ones', async () => {
+    const { ctx, db, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { album: live } = await ctx.newAlbum({ ownerId: owner.id });
+    const { album: trashed } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: live.id, addedById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: trashed.id, addedById: owner.id });
+
+    await db.updateTable('album').set({ deletedAt: new Date() }).where('id', '=', trashed.id).execute();
+
+    const stream = sut.getUpserts({ nowId: NOW_ID, userId: owner.id });
+    const result: any[] = [];
+    for await (const row of stream) {result.push(row);}
+    const albumIds = result.map((r: any) => r.albumId);
+    expect(albumIds).toContain(live.id);
+    expect(albumIds).not.toContain(trashed.id);
+  });
+
+  it('getBackfill excludes a soft-deleted album link row but keeps live ones', async () => {
+    const { ctx, db, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { album: live } = await ctx.newAlbum({ ownerId: owner.id });
+    const { album: trashed } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: live.id, addedById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: trashed.id, addedById: owner.id });
+
+    await db.updateTable('album').set({ deletedAt: new Date() }).where('id', '=', trashed.id).execute();
+
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, space.id);
+    const result: any[] = [];
+    for await (const row of stream) {result.push(row);}
+    const albumIds = result.map((r: any) => r.albumId);
+    expect(albumIds).toContain(live.id);
+    expect(albumIds).not.toContain(trashed.id);
+  });
+
+  it('re-includes the link row after the album is restored', async () => {
+    const { ctx, db, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    await db.updateTable('album').set({ deletedAt: new Date() }).where('id', '=', album.id).execute();
+    await db.updateTable('album').set({ deletedAt: null }).where('id', '=', album.id).execute();
+
+    const stream = sut.getUpserts({ nowId: NOW_ID, userId: owner.id });
+    const result: any[] = [];
+    for await (const row of stream) {result.push(row);}
+    expect(result.map((r: any) => r.albumId)).toContain(album.id);
+  });
+});
