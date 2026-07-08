@@ -502,7 +502,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
         ])
         ..where(
           _db.remoteAssetEntity.deletedAt.isNull() &
-              _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+              (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                      _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
               _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
               (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
                   _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
@@ -548,7 +549,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
       ])
       ..where(
         _db.remoteAssetEntity.deletedAt.isNull() &
-            _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+            (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                    _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             (_db.sharedSpaceAssetEntity.assetId.isNotNull() |
                 _db.sharedSpaceLibraryEntity.libraryId.isNotNull() |
@@ -608,7 +610,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
           ])
           ..where(
             _db.remoteAssetEntity.deletedAt.isNull() &
-                _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+                (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                        _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
                 _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
                 membership,
           )
@@ -654,7 +657,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
         ])
         ..where(
           _db.remoteAssetEntity.deletedAt.isNull() &
-              _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+              (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                      _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
               _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
               _db.sharedSpaceAlbumAssetEntity.assetId.isNotNull(),
         );
@@ -679,7 +683,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
       ])
       ..where(
         _db.remoteAssetEntity.deletedAt.isNull() &
-            _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+            (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                    _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             _db.sharedSpaceAlbumAssetEntity.assetId.isNotNull(),
       )
@@ -716,7 +721,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
           ])
           ..where(
             _db.remoteAssetEntity.deletedAt.isNull() &
-                _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) &
+                (_db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.timeline) |
+                        _db.remoteAssetEntity.visibility.equalsValue(AssetVisibility.archive)) &
                 _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
                 membership,
           )
