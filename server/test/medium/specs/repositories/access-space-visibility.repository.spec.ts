@@ -656,22 +656,22 @@ describe('checkSharedSpaceAccess (PersonRead) — visibility widening (rbac-7)',
 // Pin this so a future change to either arm can't silently let Locked leak through the union.
 // ---------------------------------------------------------------------------
 
+const seedPartnerAndSpaceAsset = async (visibility: AssetVisibility) => {
+  const { ctx, accessRepo } = setup();
+  const { user: owner } = await ctx.newUser();
+  const { user: partner } = await ctx.newUser();
+  await ctx.newPartner({ sharedById: owner.id, sharedWithId: partner.id });
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: partner.id, role: 'viewer' });
+
+  const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+
+  return { accessRepo, partner, asset };
+};
+
 describe('C6 partner × space-linked visibility invariant', () => {
-  const seedPartnerAndSpaceAsset = async (visibility: AssetVisibility) => {
-    const { ctx, accessRepo } = setup();
-    const { user: owner } = await ctx.newUser();
-    const { user: partner } = await ctx.newUser();
-    await ctx.newPartner({ sharedById: owner.id, sharedWithId: partner.id });
-    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: partner.id, role: 'viewer' });
-
-    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility });
-    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
-
-    return { accessRepo, partner, asset };
-  };
-
   it('Locked X is blocked by BOTH arms (the private tier never leaks through the union)', async () => {
     const { accessRepo, partner, asset } = await seedPartnerAndSpaceAsset(AssetVisibility.Locked);
 

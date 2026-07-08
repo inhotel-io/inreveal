@@ -4,9 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 // Note: co-located under src/schema/ (not server/test/) so it runs under the server:unit vitest
 // config, which only globs `src/**/*.spec.ts` — mirrors sync-gallery-migrations.spec.ts.
-const repoRoot = join(__dirname, '..', '..', '..');
-const sqlPath = join(repoRoot, 'scripts', 'revert-to-immich.sql');
-const migrationsGalleryDir = join(repoRoot, 'server', 'src', 'schema', 'migrations-gallery');
+// vitest runs with cwd = server/, so resolve paths from there (avoids __dirname / import.meta).
+const serverRoot = process.cwd();
+const sqlPath = join(serverRoot, '..', 'scripts', 'revert-to-immich.sql');
+const migrationsGalleryDir = join(serverRoot, 'src', 'schema', 'migrations-gallery');
 
 const sql = readFileSync(sqlPath, 'utf8');
 
@@ -18,11 +19,11 @@ const droppedForkTables = [...sql.matchAll(/DROP TABLE IF EXISTS "([^"]+)" CASCA
 
 // The step-9 guard IN-list is the parenthesised block after `tablename IN (`.
 const guardBlock = sql.slice(sql.indexOf('AND tablename IN ('));
-const guardTables = [...guardBlock.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+const guardTables = new Set([...guardBlock.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
 
 describe('revert-to-immich.sql', () => {
   it('lists every dropped shared_space fork table in the step-9 fork_tables_left guard', () => {
-    const missing = droppedForkTables.filter((t) => !guardTables.includes(t));
+    const missing = droppedForkTables.filter((t) => !guardTables.has(t));
     expect(missing).toEqual([]);
   });
 
