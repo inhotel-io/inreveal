@@ -3738,6 +3738,31 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  // C5 investigation resolved SAFE: the album arm carries the same trash (asset.deletedAt IS NULL)
+  // and visibility predicates as the direct/library arms, symmetrically, on every count/preview
+  // query. Pin it so a future album-arm rewrite can't silently start over/under-surfacing trashed
+  // album assets.
+  describe('C5 album-arm trash parity', () => {
+    it('a soft-deleted album asset drops out of getAssetCount / getRecentAssets / isAssetInSpace', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'C5TrashParity' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, thumbhash: Buffer.from('thumb1') });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: true });
+
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(1);
+      await expect(sut.isAssetInSpace(space.id, asset.id)).resolves.toBe(true);
+
+      await ctx.softDeleteAsset(asset.id);
+
+      await expect(sut.getAssetCount(space.id)).resolves.toBe(0);
+      await expect(sut.isAssetInSpace(space.id, asset.id)).resolves.toBe(false);
+      await expect(sut.getRecentAssets(space.id, 4)).resolves.toEqual([]);
+    });
+  });
+
   describe('people projection — album-linked space', () => {
     it('getSpaceRepresentativeFaces returns album-linked faces', async () => {
       const { ctx, sut } = setup();
