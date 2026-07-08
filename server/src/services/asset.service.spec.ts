@@ -877,6 +877,60 @@ describe(AssetService.name, () => {
 
       expect(mocks.map.reverseGeocode).not.toHaveBeenCalled();
     });
+
+    it('purges direct/album/library space paths when a single PUT sets visibility Hidden (security-4)', async () => {
+      const asset = AssetFactory.create({ visibility: AssetVisibility.Timeline });
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), visibility: AssetVisibility.Hidden });
+
+      await sut.update(AuthFactory.create({ id: asset.ownerId }), asset.id, { visibility: AssetVisibility.Hidden });
+
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
+    });
+
+    it('removes from all albums AND purges when a single PUT sets visibility Locked (security-4)', async () => {
+      const asset = AssetFactory.create({ visibility: AssetVisibility.Timeline });
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), visibility: AssetVisibility.Locked });
+
+      await sut.update(AuthFactory.create({ id: asset.ownerId }), asset.id, { visibility: AssetVisibility.Locked });
+
+      expect(mocks.album.removeAssetsFromAll).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled(); // Locked → removeAssetsFromAll covers albums
+    });
+
+    it('restores direct/album space paths when a single PUT sets visibility Timeline (security-4)', async () => {
+      const asset = AssetFactory.create({ visibility: AssetVisibility.Hidden });
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), visibility: AssetVisibility.Timeline });
+
+      await sut.update(AuthFactory.create({ id: asset.ownerId }), asset.id, { visibility: AssetVisibility.Timeline });
+
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityRestore).toHaveBeenCalledWith([asset.id]);
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+    });
+
+    it('does not run any visibility transition when a single PUT omits visibility (security-4)', async () => {
+      const asset = AssetFactory.create();
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), isFavorite: true });
+
+      await sut.update(AuthFactory.create({ id: asset.ownerId }), asset.id, { isFavorite: true });
+
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateAll', () => {

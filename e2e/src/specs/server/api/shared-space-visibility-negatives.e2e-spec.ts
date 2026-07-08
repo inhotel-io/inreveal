@@ -13,13 +13,62 @@
  * 400 responses on Hidden/Locked are confirmed to be gate failures, not setup bugs.
  */
 
-import { AlbumUserRole, AssetVisibility, LoginResponseDto, SharedSpaceRole, updateAssets } from '@immich/sdk';
+import {
+  AlbumUserRole,
+  AssetVisibility,
+  LoginResponseDto,
+  SharedSpaceRole,
+  SyncRequestType,
+  updateAsset,
+  updateAssets,
+} from '@immich/sdk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { createUserDto } from 'src/fixtures';
 import { app, asBearerAuth, testAssetDir, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
+
+interface SyncLine {
+  type: string;
+  ack: string;
+  data: Record<string, unknown>;
+}
+
+const parseSyncStream = (text: string): SyncLine[] =>
+  text
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as SyncLine);
+
+/** POST /sync/stream and return the parsed NDJSON lines, for the given access token. */
+const syncStream = async (accessToken: string, types: SyncRequestType[], reset = false): Promise<SyncLine[]> => {
+  const response = await request(app)
+    .post('/sync/stream')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .send({ types, reset })
+    .buffer(true)
+    .parse((res, callback) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk: string) => {
+        data += chunk;
+      });
+      res.on('end', () => {
+        callback(null, data);
+      });
+    });
+  expect(response.status).toBe(200);
+  return parseSyncStream(response.body as unknown as string);
+};
+
+const syncAckAll = async (accessToken: string, lines: SyncLine[]): Promise<void> => {
+  const acks = lines.filter((l) => l.type !== 'SyncCompleteV1' && l.ack).map((l) => l.ack);
+  if (acks.length === 0) {
+    return;
+  }
+  await request(app).post('/sync/ack').set('Authorization', `Bearer ${accessToken}`).send({ acks }).expect(204);
+};
 
 const mapMarkerIds = async (albumId: string, token: string): Promise<string[]> => {
   const { status, body } = await request(app)
@@ -479,6 +528,78 @@ describe('shared-space visibility negatives (Slice 11)', () => {
         .get(`/albums/${album.id}`)
         .set('Authorization', `Bearer ${participant.accessToken}`);
       expect(asParticipant.body.albumUsers.length).toBeGreaterThan(1); // participant path wins
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PUT /assets/:id visibility — single endpoint emits the same purge as bulk (security-4)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('PUT /assets/:id visibility — single endpoint emits the same purge as bulk (security-4)', () => {
+    it('single PUT {visibility:hidden} tombstones an album-linked asset for a synced member, same as bulk', async () => {
+      // owner uploads A (single-PUT target) and B (bulk-PUT sibling), links an album containing both into a
+      // space with a synced Viewer member, syncs once to simulate an already-synced device.
+      const assetA = await utils.createAsset(owner.accessToken);
+      const assetB = await utils.createAsset(owner.accessToken);
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'Security4 SingleVsBulk',
+        assetIds: [assetA.id, assetB.id],
+      });
+      const spaceId = await freshSpaceWithViewer('security4-single-vs-bulk');
+      await linkAlbum(spaceId, album.id);
+
+      const initial = await syncStream(member.accessToken, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      await syncAckAll(member.accessToken, initial);
+
+      // Single-asset PUT for A, bulk PUT for B — both flip Timeline -> Hidden.
+      const singleRes = await updateAsset(
+        { id: assetA.id, updateAssetDto: { visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(owner.accessToken) },
+      );
+      expect(singleRes.visibility).toBe(AssetVisibility.Hidden);
+      await updateAssets(
+        { assetBulkUpdateDto: { ids: [assetB.id], visibility: AssetVisibility.Hidden } },
+        { headers: asBearerAuth(owner.accessToken) },
+      );
+
+      const next = await syncStream(member.accessToken, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      const deletes = next.filter((l) => l.type === 'SharedSpaceAlbumToAssetDeleteV1');
+      const pairs = deletes.map((d) => ({ albumId: d.data.albumId, assetId: d.data.assetId }));
+
+      // Byte-for-byte: the single-endpoint tombstone for A has the same shape as the bulk tombstone for B.
+      expect(pairs).toContainEqual({ albumId: album.id, assetId: assetA.id });
+      expect(pairs).toContainEqual({ albumId: album.id, assetId: assetB.id });
+    });
+
+    it('single PUT {visibility:locked} removes A from ALL the owner albums AND tombstones it (security-4)', async () => {
+      const assetA = await utils.createAsset(owner.accessToken);
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 'Security4 SingleLocked',
+        assetIds: [assetA.id],
+      });
+      const spaceId = await freshSpaceWithViewer('security4-single-locked');
+      await linkAlbum(spaceId, album.id);
+
+      const initial = await syncStream(member.accessToken, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      await syncAckAll(member.accessToken, initial);
+
+      await updateAsset(
+        { id: assetA.id, updateAssetDto: { visibility: AssetVisibility.Locked } },
+        { headers: asBearerAuth(owner.accessToken) },
+      );
+
+      // GET /albums/:id no longer lists A (removeAssetsFromAll ran through the single-PUT path too).
+      const { status, body } = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+      expect(status).toBe(200);
+      expect((body.assets as Array<{ id: string }>).map((a) => a.id)).not.toContain(assetA.id);
+
+      // The member's sync still receives the delete (via the album_asset_audit trigger fired by
+      // removeAssetsFromAll — no shared_space_album_asset_audit tombstone needed for Locked).
+      const next = await syncStream(member.accessToken, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      const deletes = next.filter((l) => l.type === 'SharedSpaceAlbumToAssetDeleteV1');
+      expect(deletes.some((d) => d.data.albumId === album.id && d.data.assetId === assetA.id)).toBe(true);
     });
   });
 });

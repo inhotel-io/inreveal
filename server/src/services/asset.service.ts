@@ -251,6 +251,14 @@ export class AssetService extends BaseService {
       throw new BadRequestException('Asset not found');
     }
 
+    // security-4: the single-asset PUT previously wrote `visibility` straight through, skipping every
+    // #757 transition side-effect the bulk path runs — member devices kept hidden/locked bytes forever and
+    // Locked assets stayed in the owner's albums. Route it through the same helper so a single PUT is
+    // byte-for-byte equivalent to a one-id bulk update. No-op for non-space assets (the emits match nothing).
+    if (dto.visibility !== undefined) {
+      await this.applyVisibilityTransitionSideEffects([id], dto.visibility);
+    }
+
     return mapAsset(asset, { auth });
   }
 
@@ -316,6 +324,19 @@ export class AssetService extends BaseService {
     await this.jobRepository.queueAll(ids.map((id) => ({ name: JobName.SidecarWrite, data: { id } })));
   }
 
+  /**
+   * Runs every #757 visibility-transition side-effect (removeAssetsFromAll on Locked + the direct/album/
+   * library space purge/restore emits). Shared by updateAll (bulk), update (single) and the AssetHide/
+   * AssetShow event handlers (motion photos).
+   *
+   * correctness-6 — NOT wrapped in a Kysely transaction: the UPDATE, removeAssetsFromAll and each emit run
+   * on a DIFFERENT repository's own `this.db` handle, so a single `transaction()` would hit the
+   * `this.db`-inside-`transaction()` pool deadlock (#595). Resilience instead comes from (a) idempotent
+   * tombstones — re-running emits the same audit rows harmlessly (Task 4's boundary-crossing check makes a
+   * re-affirm a genuine no-op), and (b) a re-flip re-emitting the tombstone. A crash between the UPDATE and
+   * the emits therefore leaves a RECOVERABLE state (re-run converges), not a corrupted one. A periodic
+   * reconciliation sweep (grants/tombstones vs. live rows) is a possible follow-up; not required here.
+   */
   private async applyVisibilityTransitionSideEffects(ids: string[], visibility: AssetVisibility): Promise<void> {
     if (visibility === AssetVisibility.Locked) {
       await this.albumRepository.removeAssetsFromAll(ids);
