@@ -607,6 +607,18 @@ describe(SearchRepository.name, () => {
       // Visibility gate must appear alongside the space membership check.
       expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
     });
+
+    it('searchAssetBuilder plain-album branch (no timelineSpaceIds) gates on Archive+Timeline visibility (security-1)', () => {
+      // albumSharedSpaceScope's FIRST OR-branch (plain non-shared-space album assets) had NO
+      // visibility gate, so a Hidden asset reachable only via a linked album leaked. With ONLY
+      // albumIds set (no timelineSpaceIds, no userIds) that branch is the sole album predicate —
+      // it must now carry the flat visibility gate.
+      const sql = buildAssetSearchSql({
+        albumIds: ['11111111-1111-1111-1111-111111111111'],
+      });
+
+      expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
+    });
   });
 
   describe('searchAssetBuilder rating semantics', () => {

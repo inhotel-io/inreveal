@@ -610,6 +610,11 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
   return qb.where((eb) =>
     eb.or([
       eb.and([
+        // Fork RBAC (Slice 1 / security-1): the plain-album branch (assets NOT reached via a
+        // direct shared_space_asset / shared_space_library) had no visibility gate, so a Hidden or
+        // Locked asset reachable only through a linked album leaked to album searchers. Gate it flat
+        // (Archive+Timeline, no owner exception) to match the album grid's withDefaultVisibility.
+        spaceVisibilityGate(eb),
         eb.not(eb.exists(eb.selectFrom('shared_space_asset').whereRef('shared_space_asset.assetId', '=', 'asset.id'))),
         eb.not(
           eb.exists(
