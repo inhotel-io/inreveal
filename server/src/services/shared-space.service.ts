@@ -2874,30 +2874,53 @@ export class SharedSpaceService extends BaseService {
     };
   }
 
+  // C2: after a transient failure in a best-effort face-people projection handler, enqueue the
+  // durable per-space reconcile (SharedSpaceFaceMatchAll → paged re-projection + dedup recount +
+  // deleteOrphanedPersons) so the projection converges. Idempotent (jobId is per-space); never throws.
+  private async enqueueSpaceFaceProjectionReconcile(spaceIds: string[]): Promise<void> {
+    const uniqueSpaceIds = [...new Set(spaceIds)];
+    if (uniqueSpaceIds.length === 0) {
+      return;
+    }
+    try {
+      await this.jobRepository.queueAll(
+        uniqueSpaceIds.map((spaceId) => ({ name: JobName.SharedSpaceFaceMatchAll as const, data: { spaceId } })),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to enqueue space face-projection reconcile for spaces ${uniqueSpaceIds.join(', ')}: ${error}`,
+      );
+    }
+  }
+
   // Space people sync is a best-effort side effect of an album mutation. EventRepository.onEvent
   // awaits handlers inline and does not isolate their errors, so a throw here would bubble up and
   // fail the user's album add/remove. Guard the whole body in try/catch: face matches are also
-  // recoverable via the post-detection backfill, so logging and moving on is correct.
+  // recoverable via the post-detection backfill, so logging and moving on is correct. On failure,
+  // fall back to the durable per-space reconcile (C2) so the projection still converges.
   @OnEvent({ name: 'AlbumAssetsAdd' })
   async onAlbumAssetsAdd({ albumId, assetIds }: ArgOf<'AlbumAssetsAdd'>): Promise<void> {
     if (assetIds.length === 0) {
       return;
     }
+    let faceEnabledSpaceIds: string[];
     try {
       const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
-      const jobs = spaces
-        .filter((space) => space.faceRecognitionEnabled)
-        .flatMap((space) =>
-          assetIds.map((assetId) => ({
-            name: JobName.SharedSpaceFaceMatch as const,
-            data: { spaceId: space.spaceId, assetId },
-          })),
-        );
+      faceEnabledSpaceIds = spaces.filter((space) => space.faceRecognitionEnabled).map((space) => space.spaceId);
+    } catch (error) {
+      this.logger.error(`Failed to resolve spaces for album ${albumId} face-people sync: ${error}`);
+      return;
+    }
+    try {
+      const jobs = faceEnabledSpaceIds.flatMap((spaceId) =>
+        assetIds.map((assetId) => ({ name: JobName.SharedSpaceFaceMatch as const, data: { spaceId, assetId } })),
+      );
       if (jobs.length > 0) {
         await this.jobRepository.queueAll(jobs);
       }
     } catch (error) {
       this.logger.error(`Failed to sync space people after adding assets to album ${albumId}: ${error}`);
+      await this.enqueueSpaceFaceProjectionReconcile(faceEnabledSpaceIds);
     }
   }
 
@@ -2911,41 +2934,46 @@ export class SharedSpaceService extends BaseService {
     if (!affectedSpacePersons || affectedSpacePersons.length === 0) {
       return;
     }
-    try {
-      // Group personIds by spaceId: one recount + orphan-cleanup pass per space.
-      const spacePersonMap = new Map<string, string[]>();
-      for (const { spaceId, personId } of affectedSpacePersons) {
-        let ids = spacePersonMap.get(spaceId);
-        if (!ids) {
-          ids = [];
-          spacePersonMap.set(spaceId, ids);
-        }
-        ids.push(personId);
+    // Group personIds by spaceId: one recount + orphan-cleanup pass per space.
+    const spacePersonMap = new Map<string, string[]>();
+    for (const { spaceId, personId } of affectedSpacePersons) {
+      let ids = spacePersonMap.get(spaceId);
+      if (!ids) {
+        ids = [];
+        spacePersonMap.set(spaceId, ids);
       }
+      ids.push(personId);
+    }
+    try {
       for (const [spaceId, personIds] of spacePersonMap) {
         await this.sharedSpaceRepository.recountPersons(personIds);
         await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       }
     } catch (error) {
       this.logger.error(`Failed to sync space people after deleting asset ${assetId}: ${error}`);
+      await this.enqueueSpaceFaceProjectionReconcile([...spacePersonMap.keys()]);
     }
   }
 
   @OnEvent({ name: 'AlbumDelete' })
   async onAlbumDelete({ albumId }: ArgOf<'AlbumDelete'>): Promise<void> {
+    let faceEnabledSpaceIds: string[];
     try {
       const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+      faceEnabledSpaceIds = spaces.filter((space) => space.faceRecognitionEnabled).map((space) => space.spaceId);
+    } catch (error) {
+      this.logger.error(`Failed to resolve spaces for album ${albumId} face-people sync: ${error}`);
+      return;
+    }
+    try {
       let anyOrphanWork = false;
-      for (const space of spaces) {
-        if (!space.faceRecognitionEnabled) {
-          continue;
-        }
-        const orphaned = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(space.spaceId, albumId);
+      for (const spaceId of faceEnabledSpaceIds) {
+        const orphaned = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
         if (orphaned.length === 0) {
           continue;
         }
-        await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
-        await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
+        await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphaned);
+        await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
         anyOrphanWork = true;
       }
       if (anyOrphanWork) {
@@ -2953,6 +2981,7 @@ export class SharedSpaceService extends BaseService {
       }
     } catch (error) {
       this.logger.error(`Failed to sync space people after deleting album ${albumId}: ${error}`);
+      await this.enqueueSpaceFaceProjectionReconcile(faceEnabledSpaceIds);
     }
   }
 
@@ -2961,19 +2990,23 @@ export class SharedSpaceService extends BaseService {
     if (assetIds.length === 0) {
       return;
     }
+    let faceEnabledSpaceIds: string[];
     try {
       const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
+      faceEnabledSpaceIds = spaces.filter((space) => space.faceRecognitionEnabled).map((space) => space.spaceId);
+    } catch (error) {
+      this.logger.error(`Failed to resolve spaces for album ${albumId} face-people sync: ${error}`);
+      return;
+    }
+    try {
       let anyOrphanWork = false;
-      for (const space of spaces) {
-        if (!space.faceRecognitionEnabled) {
-          continue;
-        }
-        const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(space.spaceId, assetIds);
+      for (const spaceId of faceEnabledSpaceIds) {
+        const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, assetIds);
         if (orphaned.length === 0) {
           continue;
         }
-        await this.sharedSpaceRepository.removePersonFacesByAssetIds(space.spaceId, orphaned);
-        await this.sharedSpaceRepository.deleteOrphanedPersons(space.spaceId);
+        await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphaned);
+        await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
         anyOrphanWork = true;
       }
       if (anyOrphanWork) {
@@ -2981,6 +3014,7 @@ export class SharedSpaceService extends BaseService {
       }
     } catch (error) {
       this.logger.error(`Failed to sync space people after removing assets from album ${albumId}: ${error}`);
+      await this.enqueueSpaceFaceProjectionReconcile(faceEnabledSpaceIds);
     }
   }
 }

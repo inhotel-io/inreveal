@@ -10541,6 +10541,24 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.getSpacesLinkedToAlbum).not.toHaveBeenCalled();
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
     });
+
+    it('enqueues a SharedSpaceFaceMatchAll reconcile per face-enabled space when queueAll fails', async () => {
+      const albumId = newUuid();
+      const spaceA = newUuid();
+      const spaceB = newUuid();
+      mocks.sharedSpace.getSpacesLinkedToAlbum.mockResolvedValue([
+        { spaceId: spaceA, faceRecognitionEnabled: true },
+        { spaceId: spaceB, faceRecognitionEnabled: false },
+      ] as any);
+      // First queueAll (the face-match enqueue) throws; the reconcile enqueue (2nd call) succeeds.
+      mocks.job.queueAll.mockRejectedValueOnce(new Error('transient'));
+
+      await expect(sut.onAlbumAssetsAdd({ albumId, assetIds: [newUuid()] })).resolves.toBeUndefined();
+
+      expect(mocks.job.queueAll).toHaveBeenLastCalledWith([
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: spaceA } },
+      ]);
+    });
   });
 
   describe('onAlbumAssetsRemove', () => {
@@ -10638,6 +10656,28 @@ describe(SharedSpaceService.name, () => {
       await sut.onAssetDelete({ assetId: newUuid(), userId: newUuid() });
       expect(mocks.sharedSpace.recountPersons).not.toHaveBeenCalled();
       expect(mocks.sharedSpace.deleteOrphanedPersons).not.toHaveBeenCalled();
+    });
+
+    it('enqueues a SharedSpaceFaceMatchAll reconcile per affected space when recount fails', async () => {
+      const spaceA = newUuid();
+      const spaceB = newUuid();
+      mocks.sharedSpace.recountPersons.mockRejectedValueOnce(new Error('transient'));
+
+      await expect(
+        sut.onAssetDelete({
+          assetId: newUuid(),
+          userId: newUuid(),
+          affectedSpacePersons: [
+            { spaceId: spaceA, personId: newUuid() },
+            { spaceId: spaceB, personId: newUuid() },
+          ],
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: spaceA } },
+        { name: JobName.SharedSpaceFaceMatchAll, data: { spaceId: spaceB } },
+      ]);
     });
   });
 
