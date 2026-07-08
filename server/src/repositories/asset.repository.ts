@@ -295,7 +295,13 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.albumId, (qb) =>
       qb
         .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-        .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+        .where('album_asset.albumId', '=', asUuid(options.albumId!))
+        // Fork RBAC (Slice 1 / security-3 defense-in-depth): an explicit visibility=HIDDEN/LOCKED
+        // bypasses the top-level withDefaultVisibility (which only fires when visibility is
+        // undefined). Flat-gate the album arm so Hidden/Locked album assets never surface via the
+        // timeline bucket, even if the service-level guard is bypassed. Idempotent for the default
+        // album grid view (withDefaultVisibility is the same Archive+Timeline predicate).
+        .where((eb) => spaceVisibilityGate(eb)),
     )
     .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
       qb.where((eb) =>
@@ -1361,12 +1367,19 @@ export class AssetRepository {
           .where(truncatedDate(options.orderBy, bucketSize), '=', timeBucket.replace(/^[+-]/, ''))
           .$if(!!options.albumId, (qb) =>
             qb.where((eb) =>
-              eb.exists(
-                eb
-                  .selectFrom('album_asset')
-                  .whereRef('album_asset.assetId', '=', 'asset.id')
-                  .where('album_asset.albumId', '=', asUuid(options.albumId!)),
-              ),
+              eb.and([
+                eb.exists(
+                  eb
+                    .selectFrom('album_asset')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+                ),
+                // Fork RBAC (Slice 1 / security-3 defense-in-depth) — inline copy of the
+                // withTimeBucketAssetFilters albumId gate. Keep in sync with that helper: an
+                // explicit visibility=HIDDEN/LOCKED bypasses withDefaultVisibility above, so the
+                // album arm needs its own flat gate to never surface Hidden/Locked album assets.
+                spaceVisibilityGate(eb),
+              ]),
             ),
           )
           .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
