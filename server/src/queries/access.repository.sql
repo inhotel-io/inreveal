@@ -397,7 +397,7 @@ where
       "asset_face"
       inner join "asset" on "asset"."id" = "asset_face"."assetId"
       and "asset"."deletedAt" is null
-      and "asset"."visibility" = $2
+      and "asset"."visibility" in ($2, $3)
     where
       "asset_face"."personId" = "person"."id"
       and "asset_face"."deletedAt" is null
@@ -410,7 +410,7 @@ where
             "shared_space_asset"
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
           where
-            "shared_space_member"."userId" = $3::uuid
+            "shared_space_member"."userId" = $4::uuid
             and "shared_space_asset"."assetId" = "asset"."id"
         )
         or exists (
@@ -420,7 +420,7 @@ where
             "shared_space_library"
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
           where
-            "shared_space_member"."userId" = $4::uuid
+            "shared_space_member"."userId" = $5::uuid
             and "shared_space_library"."libraryId" = "asset"."libraryId"
         )
         or exists (
@@ -433,7 +433,7 @@ where
             and "album"."deletedAt" is null
             inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
           where
-            "shared_space_member"."userId" = $5::uuid
+            "shared_space_member"."userId" = $6::uuid
             and "album_asset"."assetId" = "asset"."id"
         )
       )
