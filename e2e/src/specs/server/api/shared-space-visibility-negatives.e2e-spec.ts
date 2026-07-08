@@ -446,14 +446,16 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       expect(status).toBe(400);
     });
 
-    it('albumId + visibility=locked → 400 for a Viewer member', async () => {
+    it('albumId + visibility=locked → 401 for a Viewer member (elevated permission required first)', async () => {
       const { album } = await setupLinkedAlbum('bucket-album-locked-neg');
 
       const { status } = await request(app)
         .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&visibility=locked`)
         .set('Authorization', `Bearer ${member.accessToken}`);
 
-      expect(status).toBe(400);
+      // Locked visibility hits requireElevatedPermission (401) before the albumId reject (400) — a
+      // non-elevated Viewer is refused either way; the leak is blocked. (Hidden → 400, see above.)
+      expect(status).toBe(401);
     });
 
     it('albumId (default visibility) → 200 with the Timeline asset present, Hidden absent', async () => {
