@@ -61,10 +61,19 @@ the touched package(s).
 Two existing pieces of code are the correct templates the leaky/broken surfaces should copy:
 
 - **`applySuggestionScope`** (`search.repository.ts`) — the template for the album-read
-  visibility gate: it ANDs the album arm with `(asset.ownerId = caller OR spaceVisibilityGate)`.
-  Slices 1–2 replicate this at every leaky album read surface.
+  visibility gate. **Important:** `spaceVisibilityGate(eb, column?)` is a *pure predicate*
+  (`visibility IN [Archive,Timeline]`) — it takes **no** `userId`; a caller composes any `own OR gate`
+  at the call site. `applySuggestionScope`'s `own OR gate` shape is correct for **filter/facet**
+  scoping, but the album **content** read surfaces (search-by-album, timeline bucket, map-markers,
+  download) must use a **flat** `spaceVisibilityGate` / `withDefaultVisibility` with **no** owner
+  exception: the album grid (`album.repository.ts` `withAssets`→`withDefaultVisibility`) already
+  hides the owner's own Hidden/Locked assets, so an `own OR` at these surfaces would let the owner
+  see Hidden in map/search/download but not in the grid — an inconsistency. Slices 1–2 add the
+  **flat** gate (only the non-album `userIds` search path keeps its existing `own OR`).
 - **`LibraryAssetSync`** (`sync.repository.ts`) — the template for a convergent, visibility-gated
-  sync stream (gates on the *current* asset row). Slice 4 makes the link-row streams match.
+  sync stream (gates on the *current* asset row; restore converges automatically via the `updateId`
+  bump, while purge still needs the explicit delete/tombstone arm). Slice 4 makes the link-row
+  streams match.
 
 ---
 
@@ -141,11 +150,18 @@ direct/library paths have. Bytes stay blocked, but metadata leaks — defeating 
   `albumId`; the repo `albumId` arm (`asset.repository.ts:293-299,1341-1371`) is a bare
   `album_asset` EXISTS with no owner/space gate.
 
-**Fix.**
-- `albumSharedSpaceScope`: accept the caller `userId`; AND the first OR-branch with
-  `(asset.ownerId = caller OR spaceVisibilityGate)`, mirroring `applySuggestionScope`.
-- `timeBucketChecks`: include `dto.albumId` in the private-visibility (Hidden/Locked) rejection.
-- Repo `albumId` arm: add `(own OR spaceVisibilityGate)`, mirroring the `spaceId` arm.
+**Fix.** (Use a **flat** `spaceVisibilityGate` — no owner exception — to stay consistent with the
+album grid; see §0.4.)
+- `albumSharedSpaceScope` (`utils/database.ts`): AND the first OR-branch (the plain-album branch)
+  with a flat `spaceVisibilityGate(eb)`, excluding Hidden/Locked album assets for everyone via the
+  album path. The non-album `userIds` search path keeps its own `own OR gate` and is unchanged — an
+  owner still finds their Hidden assets through a non-album search.
+- `timeBucketChecks` (`timeline.service.ts`): include `dto.albumId` in the private-visibility
+  (Hidden/Locked) rejection — mirror the existing `spaceId`/`spacePersonId` guard so
+  `albumId + visibility=hidden` is refused before it reaches the repo.
+- Repo `albumId` arm (`asset.repository.ts`): add a flat `spaceVisibilityGate` so an explicit
+  `visibility=Hidden` can't bypass the top-level `withDefaultVisibility` (which only fires when the
+  request's `visibility` is undefined).
 
 **TDD — write first (red), then implement (green):**
 
@@ -156,12 +172,15 @@ direct/library paths have. Bytes stay blocked, but metadata leaks — defeating 
   2. Same setup: Viewer `GET /timeline/bucket?albumId=<album>&visibility=hidden` → **no A id,
      no thumbhash, no city/country, no lat/lon**. `visibility=default` (timeline) sibling → present.
 - **Medium** (`search`/`timeline` repository specs against testcontainers DB): assert the SQL
-  predicate excludes Hidden album assets for a non-owner and includes them for the owner.
+  predicate excludes Hidden/Locked album assets for **both** non-owner and owner on the album path
+  (flat gate), while the non-album `userIds` search path still returns the owner's Hidden assets.
 - **Unit:** `timeBucketChecks` returns the elevated-permission requirement when `albumId` +
   private visibility is requested by a non-owner.
 
 **Edge cases (each an explicit assertion):**
-- **Owner** requesting their own Hidden album assets still **sees** them (the `own OR` arm).
+- **Owner** requesting their own Hidden assets **via the album path** does **not** see them — this
+  matches the album grid (`withDefaultVisibility`), which already hides the owner's Hidden/Locked.
+  (The owner still finds them via the non-album `userIds` search path — assert that path is untouched.)
 - **Archived** album asset (Timeline vs Archive): visible to members via `spaceVisibilityGate`
   (Archive is shareable) — not accidentally stripped.
 - **Locked** album asset: never present (Locked assets are removed from albums; assert none leak).
@@ -184,44 +203,56 @@ Same gate pattern as slice 1, applied to the lower-severity sibling surfaces. In
 
 **Fixes:**
 - **security-2 (MED)** — `getAlbumMapMarkers` (`map.repository.ts:76-81,174-193`) joins
-  `album_asset → asset_exif` with no visibility filter. Apply `spaceVisibilityGate`
-  (`own OR gate`) so members don't get lat/lon + city/state/country of Hidden album assets.
-- **C1 (MED, net-new)** — `activity.repository.search()` (`activity.repository.ts:20-54`)
-  visibility gate is `(asset.visibility IN DEFAULT) OR asset.id IS NULL`; **album-level comments
-  have `assetId IS NULL` and pass unconditionally**. `GET /activities?albumId=<space-linked>` then
-  leaks the whole historical comment thread + commenter identities + like list to non-participant
-  space members. Fix: when `AlbumRead` is space-derived, gate the `assetId IS NULL` arm too (deny
-  album-level activity, or strip comment text/identities for space-derived reads).
-- **security-8 (LOW)** — `GET /albums/:id` (`album.service.ts:99-118`, `mapAlbum`) returns
-  participant id/name/profileImage/role to non-participant space members (email already redacted).
-  `getLinkedAlbums` correctly omits `albumUsers`. Fix: for space-derived `AlbumRead`, strip
-  `albumUsers` down to the owner's display name (match `getLinkedAlbums`).
-- **rbac-7 (LOW)** — `PersonRead` shared-space arm (`access.repository.ts:697-727`) uses
-  `visibility = Timeline` equality instead of `spaceVisibilityGate`, so a person only on Archived
-  space assets is shown in the grid but denied `PersonRead`. Fix: replace the equality with
-  `spaceVisibilityGate` / `IN spaceVisibleAssetVisibilities`.
-- **rbac-8 (LOW)** — `downloadAlbumId` gate (`download.repository.ts:28-34`) applies
-  `spaceVisibilityGate` unconditionally, stripping Hidden rows from the **owner's own** archive
-  export. Fix: pass `userId`, allow `asset.ownerId = caller` through (`own OR gate`).
+  `album_asset → asset_exif` with **no** visibility filter at all (the only genuinely ungated album
+  content-read surface — the sibling `getMapMarkers` is gated). Apply a **flat** `spaceVisibilityGate`
+  (no owner exception, consistent with the grid) so **no one** gets lat/lon + city/state/country of
+  Hidden/Locked album assets via this endpoint.
+- **C1 (MED, net-new) — fix at the ACCESS layer, not the SQL gate.** `GET /activities?albumId=<space-linked>`
+  object-gates on `AlbumRead` (`activity.service.ts:21`), now granted to any space member via
+  `checkSpaceLinkedAlbumReadAccess` — the whole historical comment thread + commenter identities +
+  like list leaks to non-participant space members. **Patching `activity.repository.search()`'s
+  `(… OR asset.id IS NULL)` branch does not work** — album-level comments legitimately have
+  `assetId IS NULL` (no asset to gate). Instead, in `activity.service` deny (or strip) activity when
+  `AlbumRead` was granted **only** via the space-linked arm (caller is not owner / shared-viewer /
+  album participant). Asset-level activity on *visible* assets is unaffected.
+- **security-8 (LOW, PII shape — not a visibility leak)** — `GET /albums/:id`
+  (`album.service.ts:99-118`, `mapAlbum`) returns participant id/name/profileImage/role to
+  non-participant space members (email already redacted). `getLinkedAlbums` correctly omits
+  `albumUsers`. Fix: for space-derived `AlbumRead`, strip `albumUsers` down to the owner's display
+  name (match `getLinkedAlbums`).
+- **rbac-7 (LOW) — a deny-only fix that WIDENS access, NOT a leak.** `PersonRead` shared-space arm
+  (`access.repository.ts:697-727`) uses `visibility = Timeline` equality, which is *stricter* than
+  `spaceVisibilityGate`. A person appearing only on **Archived** space assets shows in the grid but
+  is *denied* `PersonRead` (rep-face picker/thumbnail 403). The fix **widens** to Timeline+Archive
+  (`IN spaceVisibleAssetVisibilities`) to match what the grid shows — it grants *more* and never
+  admits Hidden/Locked. Keep it framed as a deny-fix so it isn't lumped with the leak-closing gates.
+- **rbac-8 (LOW) — resolved as NO CHANGE (documented).** `downloadAlbumId`
+  (`download.repository.ts:28-34`) already applies a flat `spaceVisibilityGate`, so the owner's
+  album-archive export omits their own Hidden rows. Adding an `own OR` exception would let the owner
+  *download* Hidden while the grid *hides* it — an inconsistency. The current flat gate **matches the
+  album grid** (`withDefaultVisibility`). Correct resolution: **leave it as-is**, add a one-line
+  comment, and pin the behavior with a regression test. (No functional change.)
 
 **TDD — write first:**
 - **e2e negatives:**
-  - Viewer `GET /albums/:id/map-markers` on a space-linked album → **no coordinates** for Hidden
-    assets; owner still gets them.
+  - `GET /albums/:id/map-markers` on a space-linked album → **no coordinates** for Hidden/Locked
+    assets, for **both** a Viewer member **and** the owner (flat gate, consistent with the grid).
   - Non-participant space member `GET /activities?albumId=<space-linked>` → **no album-level
-    comments, no commenter identities**; an actual album participant still sees them.
+    comments, no commenter identities**; an owner / shared-viewer / album participant still sees them;
+    asset-level activity on a *visible* asset is unaffected.
   - Non-participant space member `GET /albums/:id` → `albumUsers` reduced to owner display name
     (no other participant ids/roles/profile images); a participant sees the full list.
-- **Medium/unit:** `PersonRead` granted for a person on Archived-only space assets; `getPersonsBySpaceId`
-  regression stays gated. `downloadAlbumId` includes owner's Hidden rows, excludes non-owner's.
+- **Medium/unit:** `PersonRead` **granted** for a person on Archived-only space assets (rbac-7
+  widening); `getPersonsBySpaceId` regression stays gated (no Hidden/Locked). `downloadAlbumId`
+  regression test pins the no-change behavior (owner's Hidden omitted, matching the grid).
 
 **Edge cases:**
 - Asset-level comments (`assetId` set) on a **visible** asset still returned (don't over-deny C1).
 - Album participant who is *also* a space member: still sees participants/activity (participant
   path wins over space-derived stripping).
 - `getLinkedAlbums` output unchanged (already correct — regression only).
-- Owner download includes Hidden; **Locked** still excluded (can't be in album); motion parts
-  still download (unchanged).
+- Owner album download **omits** their own Hidden (matches the grid — rbac-8 no-change); **Locked**
+  can't be in an album; motion parts still download (unchanged).
 
 ---
 
@@ -242,14 +273,26 @@ Locked assets in albums.
 - **correctness-8** — the helper compares **prior** visibility to next and only emits for assets
   actually crossing the shareable boundary (fetch prior visibilities first). Prevents duplicate
   tombstones on re-hide and O(join-rows) fan-out on no-op re-affirm (e.g. bulk favorite+visibility).
-- **correctness-6** — wrap the visibility `UPDATE` + `removeAssetsFromAll` + `emit*` in **one**
-  Kysely transaction so a crash can't leave Hidden-without-tombstone (respect the
-  `this.db`-in-transaction gotcha). If a single transaction is impractical across repos, add a
-  reconciliation path instead and document why.
-- **gaps-5** — align **album + direct** purge tombstones to be **owner-gated** like library
-  already is (`emitAlbumAssetVisibilityPurge` + `SharedSpaceAlbumToAssetSync.getDeletes` +
-  the direct arm get an `asset.ownerId != userId` filter). Owner never receives a delete for their
-  own hidden asset; unblocks the deferred "owner sees own hidden" design.
+- **correctness-6** — a single Kysely transaction is **infeasible**: the `UPDATE`,
+  `removeAssetsFromAll`, and the `emit*` calls each run on a *different* repository's own `this.db`
+  handle, so wrapping them would hit the `this.db`-inside-`transaction()` pool-deadlock (#595); a
+  real transaction would need a `trx` executor threaded through five methods across three repos. So
+  do **not** wrap. Instead rely on ordering + **idempotent tombstones** (correctness-8 already makes
+  re-emit safe) plus a lightweight reconciliation path (or accept that a re-flip re-emits). Document
+  the chosen resiliency approach; drop the transaction requirement.
+- **gaps-5** — align **album + direct** purge tombstones to be **owner-gated** like library already
+  is: add an `asset.ownerId != userId` filter to `emitAlbumAssetVisibilityPurge` (~`:425`), the
+  album `getDeletes` arm (`SharedSpaceAlbumToAssetSync`, ~`:1563` — note the library owner-gate at
+  `~:1319` is a *different* arm), and the direct arm. Effect is to stop **over-purge** (owner
+  receiving a delete for their own asset), not a byte leak; unblocks the deferred "owner sees own
+  hidden" design.
+- **Additional bypass writer (confirmed by review of `metadata.service.ts`)** — the motion-photo
+  path writes visibility directly via `assetRepository.update`/`create` and skips the space purge:
+  hiding an unlinked motion video (Timeline→Hidden, ~`:891-894`) and motion assets *created* Hidden
+  (~`:849-861`). A motion video in a space-linked library going Hidden would therefore never be
+  tombstoned. Route these through the same helper (or emit the purge via the existing `AssetHide`
+  event). `classification.service` (Archive↔Timeline) and `trash.repository.restoreAll` do **not**
+  cross the shareable boundary and need no change.
 
 **TDD — write first:**
 - **e2e (the security-4 proof):** owner links album (with asset A) into a space with a synced
@@ -259,8 +302,10 @@ Locked assets in albums.
 - **Medium:** helper emits exactly once per boundary-crossing asset; re-hiding an already-Hidden
   asset emits **zero** new tombstones (correctness-8); owner's own device gets **no** delete for
   album/direct assets (gaps-5).
-- **Unit:** `update()` invokes the helper iff `dto.visibility` is present and changed; a crash
-  simulated mid-transaction (mock throwing after UPDATE) leaves **no** partial state (correctness-6).
+- **Unit:** `update()` invokes the helper iff `dto.visibility` is present and changed; the
+  motion-photo hide path (`metadata.service`) also routes through it. A crash simulated between the
+  `UPDATE` and the emits leaves a **recoverable** state — assert the reconciliation/idempotency path
+  re-emits the tombstone, not transactional atomicity (correctness-6).
 
 **Edge cases:**
 - `PUT` with `visibility` **unchanged** → no emit, no album removal.
@@ -269,6 +314,8 @@ Locked assets in albums.
 - Restore (Hidden→Timeline) via single endpoint → emits **restore**, re-adds to member devices.
 - Bulk `updateAll` with mixed visibility + favorite → only boundary-crossers emit (no fan-out).
 - Locked transition removes from albums exactly once; re-locking a Locked asset → no-op.
+- Motion video in a space-linked library flipped Hidden → purge tombstone emitted (via the
+  helper/`AssetHide` event), same as a bulk flip.
 
 ---
 
@@ -324,7 +371,11 @@ rejects unknown values → 400 for the whole request → client throws before an
 outage** on app-ahead-of-server (releases are independent).
 
 - **Fix (client):** gate the 5 request types behind a `serverVersion >= SemVer(...)` check,
-  mirroring the existing pattern.
+  mirroring the collection-if pattern (`sync_api.repository.dart:77`, `assetOcrV1`). **The version
+  constant must be the fork-server version that shipped the Phase-2B `SharedSpaceAlbum*` request-type
+  enum values** — determine it in the slice plan (fork-version-gate precedent exists at
+  `sync_stream.service.dart:142`, `> 2.7.5`); do **not** copy `3.0.0` from the OCR gate.
+  `serverVersion` comes from the server version endpoint.
 - **Fix (server, defense-in-depth):** make the server **filter** unknown request types instead of
   rejecting the whole request (so future skew degrades gracefully). Decide during the slice plan
   whether to ship both; the client gate is mandatory, the server filter is strongly recommended.
@@ -369,32 +420,46 @@ then holds `AssetUpdate` over the owner's assets via `checkSpaceEditAccess`. Alb
 - **Fix:** require `Permission.AssetShare` (owner ∪ partner) on `dto.assetIds` in `addAssets`.
 
 **rbac-3 (HIGH) — Editor flips other members' visibility, fleet-wide destructive.**
-`AssetUpdate = owner ∪ checkSpaceEditAccess`, and `visibility` is in the bulk update schema
-(`asset.dto.ts:9-31`) with no owner-only restriction. An Editor sets another member's Timeline
-asset → Locked: `removeAssetsFromAll` strips it from all the owner's albums, it lands behind the
-owner's PIN, and #757 tombstones it off every member device.
+`AssetUpdate = owner ∪ checkSpaceEditAccess` (editor/owner over other members' **direct + library**
+assets — the library arm is the biggest surface). `visibility` is on the **bulk**
+`AssetBulkUpdateBaseSchema` and `livePhotoVideoId` is on the **single-asset** `UpdateAssetSchema`
+(`asset.dto.ts`), both with no owner-only restriction. An Editor sets another member's Timeline asset
+→ Locked: `removeAssetsFromAll` strips it from all the owner's albums and #757 tombstones it off
+every device.
 
-- **Fix:** restrict `visibility` (and likely `livePhotoVideoId`) changes to **owned** ids. Split
-  the id set by owner-vs-space-edit access; reject visibility mutation on non-owned ids
-  (400/403 or silently drop from the visibility mutation while allowing other fields). Chosen
-  mechanism: **split the id-set**, not a new permission.
+- **Fix — patch BOTH write paths:** `updateAll()` (bulk, `visibility`) **and** `update()` (single,
+  `visibility` **and** `livePhotoVideoId`). There is no existing per-asset split — `updateAll` does
+  one all-or-nothing `AssetUpdate` check — so compute the **owned** subset explicitly via an
+  owner-scoped `checkAccess` (the primitive behind `AssetDelete`/`checkOwnerAccess`; a library-backed
+  asset owned by another user is correctly **not** owned). Reject (or strip) `visibility`/
+  `livePhotoVideoId` on non-owned ids. **Critically, the split must run BEFORE** `removeAssetsFromAll`
+  + the purge emits (`updateAll` ~`:313-343`) — otherwise the destructive cascade fires before the
+  guard and the guard is cosmetic. Chosen mechanism: **split the id-set**, not a new permission.
+- **Scope note (decision surfaced):** the same `AssetUpdate` gate also lets a space editor write
+  non-owned metadata via `upsertBulkMetadata`/`upsertMetadata`/`deleteMetadataByKey`/
+  `deleteBulkMetadata`. Whether to also restrict those to owned ids is a scope call — **default here
+  is visibility + livePhotoVideoId only** (the review's rbac-3), leaving general metadata-edit as the
+  documented, pinned space-editor capability. Flip if you want all structural writes owner-only.
 
 **TDD — write first:**
 - **e2e:**
   - Viewer of a space linking album X `POST /shared-spaces/:own/assets {assetIds:[X-asset]}` → **403**
     (was allowed). Owner/partner adding their own assets → still 200.
-  - Space Editor `PUT /assets {ids:[other-member-asset], visibility:locked}` → **rejected** for the
-    non-owned id; the asset stays in the owner's albums, no tombstone emitted. Editor editing a
-    **non-visibility** field on the same asset (if still permitted) → behaves per existing policy.
-- **Unit:** `addAssets` calls the access check with `AssetShare` not `AssetRead`; the visibility
-  split correctly partitions owned vs space-edit ids.
+  - Space Editor `PUT /assets {ids:[other-member-asset], visibility:locked}` (bulk) → **rejected**
+    for the non-owned id; the asset stays in the owner's albums, **no** tombstone emitted (assert the
+    cascade did not fire). Same via the **single** `PUT /assets/:id {visibility}` and
+    `{livePhotoVideoId}` on a non-owned id → rejected.
+  - Editor editing a **non-visibility** field on the same asset → behaves per existing policy.
+- **Unit:** `addAssets` calls the access check with `AssetShare` not `AssetRead`; the owner-subset
+  split partitions owned vs space-edit ids; a **library-backed** non-owned asset is treated as
+  non-owned.
 
 **Edge cases:**
 - Mixed bulk (`ids` = some owned + some others) with `visibility` set → only owned ids get the
   visibility change; others rejected/skipped deterministically (define which, assert it).
 - Owner flipping their own assets → unchanged.
 - Partner-shared asset add via `addAssets` → allowed (AssetShare includes partner).
-- `livePhotoVideoId` mutation on non-owned id → same restriction as visibility.
+- `livePhotoVideoId` (single-asset path only) mutation on non-owned id → same restriction as visibility.
 - Editor editing owned-by-editor asset visibility → allowed.
 
 ---
@@ -448,17 +513,25 @@ metadata-edit). Residual is only the mixed-bulk UX inconsistency.
 
 **Closes:** correctness-3 (=albums-4), albums-2, albums-3, albums-9.
 
-Migration- and trigger-heavy. All about soft-delete / restore of an album (and the trash window)
-diverging web from mobile.
+Migration- and trigger-heavy. **Scope note:** individual albums are *hard*-deleted; album
+**soft-delete only occurs in the user-deletion window** (`user-admin.service.ts` trashes/restores a
+user's albums via `softDeleteAll`/`restoreAll` = an `UPDATE deletedAt`). So this slice is really the
+*user-delete/restore* window, not a per-album trash flow — scope the trigger to that transition;
+don't invent a per-album trash UI.
 
 **correctness-3 / albums-4 (MED) — soft-delete emits no sync deletes.** Album soft-delete is an
-`UPDATE` (owner account trashed); grant/audit triggers fire on `DELETE`, none on album `UPDATE`.
-Members keep the album + assets until the delayed hard delete (days later); web hides it
-immediately. `SharedSpaceAlbumLinkSync.getUpserts` also lacks a `deletedAt` filter.
+`UPDATE`; grant/audit triggers fire on `DELETE`, none on album `UPDATE`. Members keep the album +
+assets until the delayed hard delete (days later); web hides it immediately.
+`SharedSpaceAlbumLinkSync.getUpserts` also lacks a `deletedAt` filter.
 
-- **Fix:** on soft-delete (`deletedAt` NULL→NOT NULL) and restore, emit gated
-  `shared_space_album_user_audit` + link tombstones; add `album.deletedAt IS NULL` to
-  `SharedSpaceAlbumLinkSync`. New statement trigger on `album UPDATE OF deletedAt`.
+- **Fix (two distinct pieces, both required):** (a) a new statement trigger
+  `AFTER UPDATE OF "deletedAt" ON album` (join `old ⋈ new` on `id`, act only on real NULL↔NOT-NULL
+  transitions, since a batch `UPDATE` can carry unchanged rows) that on soft-delete tombstones the
+  grants (`shared_space_album_user_audit`) and on restore re-creates them — this piece also carries
+  albums-2/albums-3. **AND** (b) add `album.deletedAt IS NULL` to `SharedSpaceAlbumLinkSync.getUpserts`
+  (+ a link tombstone / `shared_space_album.updateId` bump on soft-delete) — it is
+  `accessibleSpaces`-scoped and **not** grant-driven, so the trigger in (a) does **not** stop it
+  streaming a soft-deleted album's link row. Both are needed to hide the album on mobile immediately.
 
 **albums-2 (MED) — grant over-revocation during trash window is irreversible.**
 `user_has_album_path` branches 2/3 require `album.deletedAt IS NULL`. A gated delete-side event
@@ -514,10 +587,13 @@ arm is never revoked. A promoted co-Owner can `removeMember` the creator (no las
 REST then denies them but sync keeps delivering. `user_has_album_path` branch 3 also preserves
 their grants.
 
-- **Fix (chosen):** **forbid removing/demoting the space creator's membership** (add a guard in
-  `removeMember`/role-change), **and** drop reliance on the `createdById` arm for sync scoping
-  (creator is always inserted as a member, so membership alone suffices). Emit member-scoped delete
-  tombstones if a removal path remains reachable.
+- **Fix (chosen — both parts, or the split-brain persists):** (a) **forbid removing/demoting the
+  space creator's membership** (guard in `removeMember`/role-change), **and** (b) drop reliance on the
+  immutable `createdById` arm in `accessibleSpaces` (the creator is always inserted as an Owner
+  member, so membership alone suffices). Doing only (a) leaves the `createdById` read-path; doing only
+  (b) still lets a co-Owner strip the creator's grants while `getCreatedAfter` (keyed on the member
+  `createId`) can never re-backfill them — the two paths contradict unless both are fixed. Emit
+  member-scoped delete tombstones if any removal path remains reachable.
 
 **albums-6 (MED) — a member's own album stays linked after they leave, unrevokable by them.**
 `removeMember` does nothing to `shared_space_album` rows the departing member added; `unlinkAlbum`
@@ -528,13 +604,20 @@ needs current-space Editor membership, so the ex-member can't unlink. Remaining 
   owns the album` (or add the owner-side unlink from slice 7 as the recourse — cross-reference).
 
 **correctness-4 (MED) — TOCTOU race in gated grant-revocation triggers.**
-`NOT user_has_album_path(...)` is `STABLE` under READ COMMITTED. Two concurrent unlink/remove
-transactions each see the other's path and skip the audit → grant survives, no delete emitted →
-device keeps the album forever. Same race in the library path.
+`user_has_album_path(...)` is `STABLE LANGUAGE SQL`; under READ COMMITTED it evaluates against the
+query snapshot, so a delete-side gate and a concurrent create-side grant INSERT aren't serialized →
+grant survives with no delete emitted. Same race in the library path.
 
-- **Fix:** `pg_advisory_xact_lock(hash(albumId||userId))` before the gate in the revocation
-  triggers (album + library paths), serializing concurrent path re-checks. Alternatively a
-  reconciliation job — but the advisory lock is the chosen primary fix.
+- **Fix (broader than a one-liner — weigh against the reconciliation-job alternative):** the lock
+  **cannot** go in `user_has_album_path` (SQL + STABLE = no side effects); it goes in the calling
+  **plpgsql** triggers. These are `FOR EACH STATEMENT` triggers over transition tables spanning many
+  `(albumId, userId)` pairs, so take a **per-pair** `pg_advisory_xact_lock` in a pre-loop iterating
+  the pairs in a **deterministic `ORDER BY`** (else two multi-pair statements deadlock), keyed via a
+  64-bit `hashtextextended(albumId::text || userId::text, 0)`. The **same** lock must also be taken
+  on the **create-side** triggers (grant INSERT) and the new **restore** trigger — locking only the
+  delete side does not close the race. Given the complexity, a periodic **reconciliation job**
+  (sweep grants vs. live paths) is a legitimate lower-risk alternative; pick one in the slice plan
+  and justify. Advisory-lock collisions are benign.
 
 **TDD — write first (medium):**
 - **Medium:** attempt to `removeMember` the creator → **rejected**; demote creator → rejected.
@@ -583,15 +666,20 @@ under `foreign_keys=OFF`). A stale `shared_space_album_asset` + link row joined 
 stream ungated while the asset stream is gated → member gets membership rows for assets Hidden at
 link/backfill time but never the asset rows → "42 photos" on the shelf, 37 in detail.
 
-- **Fix (chosen — client-side, safer for checkpoint semantics):** count via a `remote_asset` join
-  with the detail view's predicate rather than counting membership rows directly.
+- **Fix (chosen — client-side, safer for checkpoint semantics):** count via a `remote_asset` **join**
+  applying the detail view's full predicate (`deletedAt IS NULL` **and** `visibility IN
+  (timeline, archive)` after mobile-6) rather than counting membership rows directly — otherwise the
+  badge still overstates the visible count.
 
 **mobile-6 (LOW) — space queries filter `visibility == timeline`, hiding Archived.** The server
-streams Timeline **and** Archive to non-owners; mobile stores archived assets but all five space
-queries require `visibility == timeline` → archived space/album assets show on web, absent on mobile.
+streams Timeline **and** Archive to non-owners; mobile stores archived assets but the space queries
+require `visibility == timeline` → archived space/album assets show on web, absent on mobile.
 
-- **Fix:** change the predicate to `visibility IN (timeline, archive)` for the **space/space-album**
-  queries only (5 sites in `timeline.repository.dart`).
+- **Fix:** change the predicate to `visibility IN (timeline, archive)` for the space/space-album
+  queries only — **6 predicate sites** in `timeline.repository.dart` (not 5): `_watchSharedSpaceBucket`
+  (**both** the `groupBy==none` and `groupBy!=none` branches), `_getSharedSpaceBucketAssets`,
+  `_watchSpaceAlbumBucket` (**both** branches), `_getSpaceAlbumBucketAssets`. Missing any one leaves
+  that surface dropping archived-but-shared assets.
 
 **TDD — write first (`flutter test`):**
 - Drift repo test: after a revocation/purge handler + `pruneAssets`, orphaned `remote_asset`/
@@ -607,7 +695,11 @@ queries require `visibility == timeline` → archived space/album assets show on
 - Thumbnail byte cache eviction verified (or explicitly deferred with a follow-up note if the
   cache layer can't be driven from a unit test).
 - `reset()` under `foreign_keys=OFF` doesn't error on the added tables.
-- mobile-6 predicate change doesn't leak Hidden (only timeline+archive, never hidden/locked).
+- mobile-6 predicate change doesn't leak Hidden (only timeline+archive, never hidden/locked); assert
+  **all 6** sites changed (a single missed `==timeline` re-hides archived assets on that surface).
+- Full album delete (`deleteAlbumMetadata`) currently leaves orphan `shared_space_album_link_entity`
+  rows (masked by the shelf `innerJoin`) — low severity; the fixed `reset()` clears them and the
+  server should emit `SharedSpaceAlbumLinkDeleteV1` per link. Note it; fix only if cheap.
 
 ---
 
