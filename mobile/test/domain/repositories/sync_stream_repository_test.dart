@@ -1018,6 +1018,93 @@ void main() {
         expect(await db.libraryEntity.select().get(), hasLength(1));
         expect(await db.remoteAssetEntity.select().get(), hasLength(1));
       });
+
+      test('preserves an asset also present in shared_space_album_asset (album path — mobile-2)', () async {
+        await sut.updateLibraryAssetsV1([
+          makeLibraryAsset(id: 'album-add', checksum: 'cA1', ownerId: 'user-foreign', libraryId: 'library-1'),
+        ]);
+        // The asset is a member of a space-linked album (no FK on assetId, so this
+        // join row can reference the library asset directly).
+        await sut.updateSharedSpaceAlbumToAssetsV1([
+          SyncAlbumToAssetV1(albumId: 'album-1', assetId: 'album-add'),
+        ]);
+
+        await sut.deleteLibrariesV1([SyncLibraryDeleteV1(libraryId: 'library-1')], currentUserId: 'user-1');
+
+        final rows = await db.remoteAssetEntity.select().get();
+        expect(rows.map((r) => r.id), ['album-add']);
+      });
+
+      test('preserves an asset also present in remote_album_asset (classic album — pre-existing gap)', () async {
+        await sut.updateLibraryAssetsV1([
+          makeLibraryAsset(id: 'classic-add', checksum: 'cC1', ownerId: 'user-foreign', libraryId: 'library-1'),
+        ]);
+        // A personal (classic) album that also contains the asset. remote_album_asset
+        // has FKs to remote_album AND remote_asset, so both must exist first.
+        await sut.updateAlbumsV2([
+          SyncAlbumV2(
+            id: 'classic-album-1',
+            name: 'Classic',
+            description: '',
+            isActivityEnabled: true,
+            order: AssetOrder.asc,
+            thumbnailAssetId: null,
+            createdAt: DateTime(2026, 6, 1),
+            updatedAt: DateTime(2026, 6, 1),
+          ),
+        ]);
+        await sut.updateAlbumToAssetsV1([SyncAlbumToAssetV1(albumId: 'classic-album-1', assetId: 'classic-add')]);
+
+        await sut.deleteLibrariesV1([SyncLibraryDeleteV1(libraryId: 'library-1')], currentUserId: 'user-1');
+
+        final rows = await db.remoteAssetEntity.select().get();
+        expect(rows.map((r) => r.id), ['classic-add']);
+      });
+
+      test('deletes a Hidden foreign asset reachable only via the removed library (no accidental retention)', () async {
+        // Visibility is NOT part of the sweep predicate — an asset with no album/space/
+        // partner/owner path is still swept regardless of Hidden.
+        await sut.updateLibraryAssetsV1([
+          SyncAssetV1(
+            id: 'hidden-orphan',
+            checksum: 'cH1',
+            originalFileName: 'hidden-orphan.jpg',
+            type: AssetTypeEnum.IMAGE,
+            ownerId: 'user-foreign',
+            isFavorite: false,
+            fileCreatedAt: DateTime(2024, 1, 1),
+            fileModifiedAt: DateTime(2024, 1, 1),
+            localDateTime: DateTime(2024, 1, 1),
+            createdAt: DateTime(2024, 1, 1),
+            visibility: AssetVisibility.hidden,
+            width: 100,
+            height: 100,
+            deletedAt: null,
+            duration: null,
+            libraryId: 'library-1',
+            livePhotoVideoId: null,
+            stackId: null,
+            thumbhash: null,
+            isEdited: false,
+          ),
+        ]);
+
+        await sut.deleteLibrariesV1([SyncLibraryDeleteV1(libraryId: 'library-1')], currentUserId: 'user-1');
+
+        expect(await db.remoteAssetEntity.select().get(), isEmpty);
+      });
+
+      test('empty album/space-album sets: orphan sweep still deletes (no regression from new exclusions)', () async {
+        await sut.updateLibraryAssetsV1([
+          makeLibraryAsset(id: 'orphan-empty', checksum: 'cE1', ownerId: 'user-foreign', libraryId: 'library-1'),
+        ]);
+        expect(await db.sharedSpaceAlbumAssetEntity.select().get(), isEmpty);
+        expect(await db.remoteAlbumAssetEntity.select().get(), isEmpty);
+
+        await sut.deleteLibrariesV1([SyncLibraryDeleteV1(libraryId: 'library-1')], currentUserId: 'user-1');
+
+        expect(await db.remoteAssetEntity.select().get(), isEmpty);
+      });
     });
 
     test('SharedSpaceLibraryV1 arriving before LibraryV1 still inserts the join row', () async {

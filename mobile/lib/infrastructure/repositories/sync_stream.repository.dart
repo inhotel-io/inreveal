@@ -792,13 +792,19 @@ class SyncStreamRepository extends DriftDatabaseRepository {
           await _db.libraryEntity.deleteWhere((row) => row.id.equals(libraryId));
         }
 
-        // Sweep orphan library assets in chunks to stay under the SQLite
-        // parameter limit. Preserves user-owned, partner-shared, and direct-add
-        // (shared_space_asset) paths. Uses snake_case because Drift generates
-        // snake_case table/column names from camelCase Dart identifiers — see
-        // remote_asset.entity.dart for the `libraryId` column declaration that
-        // becomes `library_id`. The chunks all run inside the same transaction
-        // so the entire sweep is still atomic with the libraryEntity deletes.
+        // Sweep orphan library assets in chunks to stay under the SQLite parameter
+        // limit. Preserves every path that still legitimately reaches the asset:
+        // user-owned, partner-shared, direct-add (shared_space_asset), space-album
+        // membership (shared_space_album_asset) and classic-album membership
+        // (remote_album_asset). mobile-2: unlinking a library while an asset is also
+        // in a linked album must NOT delete the shared remote_asset row, or the asset
+        // vanishes from album detail + the space timeline (the "swap a library link
+        // for curated album links" workflow the feature encourages). remote_album_asset
+        // is the adjacent pre-existing classic-album gap. Uses snake_case because Drift
+        // generates snake_case table/column names from camelCase Dart identifiers — see
+        // remote_asset.entity.dart for the `libraryId` column that becomes `library_id`.
+        // The chunks all run inside the same transaction so the entire sweep stays
+        // atomic with the libraryEntity deletes.
         for (var offset = 0; offset < libraryIds.length; offset += _kSweepChunkSize) {
           final chunk = libraryIds.sublist(offset, (offset + _kSweepChunkSize).clamp(0, libraryIds.length));
           final placeholders = chunk.map((_) => '?').join(',');
@@ -812,6 +818,8 @@ class SyncStreamRepository extends DriftDatabaseRepository {
                 SELECT shared_by_id FROM partner_entity WHERE shared_with_id = ?
               )
               AND id NOT IN (SELECT asset_id FROM shared_space_asset_entity)
+              AND id NOT IN (SELECT asset_id FROM shared_space_album_asset_entity)
+              AND id NOT IN (SELECT asset_id FROM remote_album_asset_entity)
             ''',
             [...chunk, currentUserId, currentUserId],
           );
