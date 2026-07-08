@@ -642,10 +642,13 @@ describe('rbac-3: visibility writes are restricted to owned assets', () => {
     expect(getStatus).toBe(200);
     expect(body.visibility).toBe(AssetVisibility.Timeline);
 
+    // The cascade did NOT fire, so victimAsset is still an album member. Assert on assetCount:
+    // a freshly-uploaded asset isn't populated into the `assets` array until async processing
+    // completes, but assetCount reflects the album_asset row immediately.
     const { body: album } = await request(app)
       .get(`/albums/${victimAlbum.id}`)
       .set('Authorization', `Bearer ${victim.accessToken}`);
-    expect((album.assets as Array<{ id: string }>).map((a) => a.id)).toContain(victimAsset.id);
+    expect(album.assetCount).toBe(1);
   });
 
   it('editor cannot single-PUT the victim asset to Hidden → 403', async () => {

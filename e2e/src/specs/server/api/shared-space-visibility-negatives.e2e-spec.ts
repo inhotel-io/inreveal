@@ -132,8 +132,8 @@ describe('shared-space visibility negatives (Slice 11)', () => {
     request(app).put(`/shared-spaces/${spaceId}/albums/${albumId}`).set('Authorization', `Bearer ${owner.accessToken}`);
 
   /** Upload a GPS-tagged fixture (thompson-springs.jpg — see reference_test_asset_exif_content) as owner. */
-  const uploadGpsAsset = async () => {
-    const filepath = join(testAssetDir, 'metadata/gps-position/thompson-springs.jpg');
+  const uploadGpsAsset = async (rel = 'metadata/gps-position/thompson-springs.jpg') => {
+    const filepath = join(testAssetDir, rel);
     return utils.createAsset(owner.accessToken, {
       assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
     });
@@ -479,8 +479,11 @@ describe('shared-space visibility negatives (Slice 11)', () => {
 
   describe('GET /albums/:id/map-markers (space-linked) — Hidden/Locked coordinates absent (security-2)', () => {
     it('Hidden album asset has no map marker for a Viewer member OR the owner (flat gate)', async () => {
-      const gps = await uploadGpsAsset();
-      const hidden = await uploadGpsAsset();
+      // Two DISTINCT GPS files: uploading the same file twice would dedup into one asset (shared
+      // checksum), so flipping `hidden` to Hidden would also hide `gps`. Different files keep them
+      // separate — `gps` stays Timeline (marker present) while `hidden` is stripped by the gate.
+      const gps = await uploadGpsAsset('metadata/gps-position/thompson-springs.jpg');
+      const hidden = await uploadGpsAsset('metadata/dates/datetimeoriginal-gps.jpg');
       const album = await utils.createAlbum(owner.accessToken, {
         albumName: 'MapMarkerHiddenNeg',
         assetIds: [gps.id, hidden.id],
@@ -592,12 +595,14 @@ describe('shared-space visibility negatives (Slice 11)', () => {
         { headers: asBearerAuth(owner.accessToken) },
       );
 
-      // GET /albums/:id no longer lists A (removeAssetsFromAll ran through the single-PUT path too).
+      // GET /albums/:id no longer counts A (removeAssetsFromAll ran through the single-PUT path too).
+      // Assert on assetCount rather than the `assets` array: the raw endpoint omits `assets` here
+      // (A is now Locked → elevated-only), but assetCount reflects the album_asset row deletion.
       const { status, body } = await request(app)
         .get(`/albums/${album.id}`)
         .set('Authorization', `Bearer ${owner.accessToken}`);
       expect(status).toBe(200);
-      expect((body.assets as Array<{ id: string }>).map((a) => a.id)).not.toContain(assetA.id);
+      expect(body.assetCount).toBe(0);
 
       // The member's sync still receives the delete (via the album_asset_audit trigger fired by
       // removeAssetsFromAll — no shared_space_album_asset_audit tombstone needed for Locked).
